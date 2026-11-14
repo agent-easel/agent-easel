@@ -1,5 +1,15 @@
 import type { Browser } from "@e2e-dev/web";
-import { expect, type Screen } from "e2e";
+import { expect, type App, type Screen } from "e2e";
+import { copyAgentDefinition } from "./agents.ts";
+
+export type StudioFixtures = { app: App; screen: Screen; browser: Browser };
+
+export async function openStudioAgent({ app, screen }: StudioFixtures, name: string) {
+  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", name);
+  await app.open(`/studio/agents/${agent.id}`);
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(name);
+  return agent;
+}
 
 /** Known removal leaves recovery available while refusing definition commands. */
 export async function expectRetainedDefinition(
@@ -12,13 +22,6 @@ export async function expectRetainedDefinition(
   ).toBeVisible();
   for (const name of actions)
     await expect(screen.getByRole("button", name, { exact: true })).toBeDisabled();
-}
-
-/** Uses the browser's granted clipboard rather than substituting a clipboard adapter. */
-export async function copyStudioDraft(screen: Screen, browser: Browser) {
-  await screen.getByRole("button", "Copy as JSON", { exact: true }).tap();
-  await expect(screen.getByText("Copied to clipboard.", { exact: true })).toBeVisible();
-  return browser.evaluate("navigator.clipboard.readText().then(JSON.parse)");
 }
 
 /** A removed Agent exit leaves its existing wire visible as a broken connection. */
