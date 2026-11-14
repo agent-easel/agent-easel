@@ -152,6 +152,8 @@ export interface ConfirmationClick {
   readonly operating: () => boolean;
   /** The clicker's current Discord access to the thread, checked only when needed. */
   readonly access: Effect.Effect<"permitted" | "denied" | "unavailable", unknown>;
+  /** Whether the last affirmative check still has qualified evidence; no external I/O. */
+  readonly accessCurrent: () => boolean;
 }
 
 export const isConfirmation = (customId: string) => customId.startsWith(BUTTON_PREFIX);
@@ -452,18 +454,8 @@ export function makeChatActions(
     });
 
   /** Shared Start may wait on external preflight; taking a click is not Run acceptance. */
-  const acceptance = (row: ProposalRow, click: ConfirmationClick): StartAuthorization => ({
-    check: Effect.gen(function* () {
-      if (!click.operating())
-        return failure("conflict", "Chat control is Off. Nothing was started.");
-      const access = yield* click.access;
-      if (access === "unavailable")
-        return failure("conflict", "Discord access could not be confirmed. Nothing was started.");
-      if (access === "denied")
-        return failure("validation", "Discord no longer permits this confirmation.");
-      return { ok: true, value: undefined };
-    }),
-    commit: Effect.gen(function* () {
+  const acceptance = (row: ProposalRow, click: ConfirmationClick): StartAuthorization => {
+    const local = Effect.gen(function* () {
       const current = (yield* proposal(row.id))!;
       if (current.state !== "accepting")
         return failure("validation", "This confirmation is no longer valid.");
@@ -482,9 +474,31 @@ export function makeChatActions(
         );
       if (!(yield* scopeGranted(current)))
         return failure("validation", "Access no longer permits this Start.");
-      return { ok: true, value: undefined };
-    }),
-  });
+      return { ok: true as const, value: undefined };
+    });
+    return {
+      check: Effect.gen(function* () {
+        const allowed = yield* local;
+        if (!allowed.ok) return allowed;
+        if (!click.operating())
+          return failure("conflict", "Chat control is Off. Nothing was started.");
+        // A denied or unresolved Discord check refuses this attempt, not the live consent.
+        const access = yield* click.access;
+        if (access === "unavailable")
+          return failure("conflict", "Discord access could not be confirmed. Nothing was started.");
+        if (access === "denied")
+          return failure("conflict", "Discord no longer permits this confirmation.");
+        return { ok: true as const, value: undefined };
+      }),
+      commit: Effect.gen(function* () {
+        const allowed = yield* local;
+        if (!allowed.ok) return allowed;
+        return click.accessCurrent()
+          ? allowed
+          : failure("conflict", "Discord access changed before Factory accepted the Start.");
+      }),
+    };
+  };
 
   /** Performs a consumed proposal under its action identity, outside any transaction. */
   const perform = (row: ProposalRow, actionId: string, click: ConfirmationClick) =>

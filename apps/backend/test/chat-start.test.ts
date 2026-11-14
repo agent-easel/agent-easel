@@ -12,6 +12,7 @@ import {
   isStatusCard,
   proposedStart,
   pendingStart,
+  privateStartingWorld,
   runsOf,
   START_PROMPT,
   startCall,
@@ -263,6 +264,95 @@ it("completing Start preflight after access revocation accepts no Run", async (c
 
   // Assert
   expect(await pending.answer).toBe(ANSWERS.rejected);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.launchCalls).toBe(0);
+});
+
+it("completing Start preflight after a Gateway gap refreshes the requester's lost guild access", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const button = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, button);
+  const lookups = world.discord.requested("GET", /guilds\/\d+\/members\//).length;
+  world.discord.removeGuildMember(PARTICIPANT_ID);
+  world.discord.interruptSessions();
+  await world.discord.readied(2);
+
+  // Act
+  pending.release();
+
+  // Assert
+  expect(await pending.answer).toContain("Try again before the review expires");
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.launchCalls).toBe(0);
+  expect(world.discord.requested("GET", /guilds\/\d+\/members\//).length).toBeGreaterThan(lookups);
+});
+
+it("completing Start preflight refreshes a public thread's current parent-channel permissions", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const button = await proposedStart(world, "600000000000000001", 2);
+  const pending = await pendingStart(world, button);
+  world.discord.hideChannelFrom(ALLOWED_CHANNEL, PARTICIPANT_ID);
+
+  // Act
+  pending.release();
+
+  // Assert
+  expect(await pending.answer).toContain("Try again before the review expires");
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+  expect(world.t3.launchCalls).toBe(0);
+});
+
+it("a Discord denial after Start preflight leaves the same consent usable when membership returns", async (c) => {
+  // Arrange
+  const world = await privateStartingWorld(c);
+  const pending = await pendingStart(world, world.button, world.clickOptions);
+  world.discord.removeThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  pending.release();
+  const firstAnswer = await pending.answer;
+  world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  delete world.t3.beforeLaunchInspection;
+
+  // Act
+  const answer = await clicked(
+    world.discord,
+    world.button,
+    "610000000000000091",
+    2,
+    world.clickOptions,
+  );
+
+  // Assert
+  expect(firstAnswer).toContain("Try again before the review expires");
+  expect(answer).toBe(ANSWERS.accepted);
+  expect(await runsOf(world.factory)).toHaveLength(1);
+  expect(confirmations(world.discord)).toHaveLength(1);
+});
+
+it("restoring Discord membership cannot revive a consent revoked by Factory during Start preflight", async (c) => {
+  // Arrange
+  const world = await privateStartingWorld(c);
+  const pending = await pendingStart(world, world.button, world.clickOptions);
+  world.discord.removeThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  await savedAccess(world.factory, [], []);
+  pending.release();
+  await pending.answer;
+  world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id]);
+  delete world.t3.beforeLaunchInspection;
+
+  // Act
+  const answer = await clicked(
+    world.discord,
+    world.button,
+    "610000000000000091",
+    2,
+    world.clickOptions,
+  );
+
+  // Assert
+  expect(answer).not.toBe(ANSWERS.accepted);
   expect(await runsOf(world.factory)).toStrictEqual([]);
   expect(world.t3.launchCalls).toBe(0);
 });

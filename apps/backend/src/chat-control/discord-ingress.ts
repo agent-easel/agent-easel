@@ -214,11 +214,23 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
     Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
       const guild = client.guilds.cache.get(conversation.guildId);
       const channel = yield* Effect.result(
-        Effect.tryPromise(() => client.channels.fetch(conversation.threadId)),
+        Effect.tryPromise(() => client.channels.fetch(conversation.threadId, { force: true })),
       );
       if (!guild || channel._tag === "Failure" || !channel.success?.isThread())
         return "unavailable";
       const thread = channel.success;
+      const parent = yield* Effect.result(
+        Effect.tryPromise(() =>
+          client.channels.fetch(conversation.parentChannelId, { force: true }),
+        ),
+      );
+      if (
+        parent._tag === "Failure" ||
+        !parent.success ||
+        (parent.success.type !== ChannelType.GuildText &&
+          parent.success.type !== ChannelType.GuildAnnouncement)
+      )
+        return "unavailable";
       const member = yield* Effect.result(
         Effect.tryPromise(() => guild.members.fetch({ user: userId, force: true, cache: false })),
       );
@@ -342,28 +354,40 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       return invocation;
     });
 
-  /** Whether the requester may act in `thread` now, from the interaction and maintained evidence. */
+  /**
+   * Each evaluation establishes current Discord access. The immutable interaction permissions
+   * can refuse its click, but cannot authorize acceptance after waiting on external preflight.
+   */
   const requesterAccess = (
     interaction:
       | ChatInputCommandInteraction<"cached" | "raw">
       | ButtonInteraction<"cached" | "raw">,
     thread: ThreadChannel,
-  ) =>
-    Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
+  ) => {
+    let qualified: EvidenceToken | undefined;
+    const check = Effect.gen(function* (): Effect.fn.Return<Access, unknown> {
+      qualified = undefined;
       const userId = interaction.user.id;
       if (!thread.parentId || !(yield* permittedProjects(userId, thread.parentId))) return "denied";
-      // Discord computes these for the channel the command was used in, including overwrites.
       if (!interaction.memberPermissions?.has(PermissionFlagsBits.ViewChannel)) return "denied";
-      if (thread.type !== ChannelType.PrivateThread) return "permitted";
       const token = evidence.token(interaction.guildId);
-      const membership = yield* privateThreadMember(thread, userId);
-      if (membership !== "permitted") return membership;
-      return evidence.isCurrent(token) &&
-        session.operating() &&
-        (yield* permittedProjects(userId, thread.parentId))
-        ? "permitted"
-        : "denied";
+      const access = yield* refreshedAccess(
+        {
+          applicationId,
+          guildId: interaction.guildId,
+          parentChannelId: thread.parentId,
+          threadId: thread.id,
+        },
+        userId,
+      );
+      if (access !== "permitted") return access;
+      if (!(yield* permittedProjects(userId, thread.parentId))) return "denied";
+      if (!evidence.isCurrent(token) || !session.operating()) return "unavailable";
+      qualified = token;
+      return "permitted";
     });
+    return { check, current: () => qualified !== undefined && evidence.isCurrent(qualified) };
+  };
 
   /**
    * Acknowledges an interaction privately at once, since the acknowledgement is due within three
@@ -394,7 +418,7 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       const { channel, thread } = place;
       let reply: keyof typeof RESET_REPLIES = channel ? "not-thread" : "unavailable";
       if (thread) {
-        const access = yield* requesterAccess(interaction, thread);
+        const access = yield* requesterAccess(interaction, thread).check;
         reply = access === "permitted" ? "cleared" : access;
         if (access === "permitted" && session.operating())
           yield* generations.clear({
@@ -420,13 +444,15 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
       if (deferred._tag === "None") return;
       const channel = interaction.channel;
       const thread = channel?.isThread() ? channel : null;
+      const requester = thread ? requesterAccess(interaction, thread) : undefined;
       const answer = yield* session.confirm({
         customId: interaction.customId,
         userId: interaction.user.id,
         threadId: interaction.channelId,
         applicationId,
         operating: session.operating,
-        access: thread ? requesterAccess(interaction, thread) : Effect.succeed("unavailable"),
+        access: requester?.check ?? Effect.succeed("unavailable"),
+        accessCurrent: () => requester?.current() ?? false,
       });
       if (answer.kind === "ephemeral")
         return yield* Effect.ignore(

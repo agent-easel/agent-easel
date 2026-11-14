@@ -209,7 +209,7 @@ export function startAction(operations: StartOperations) {
               issues: issues.slice(0, MAX_ISSUES).map((issue) => issue.message),
             } satisfies RejectedFacts,
           };
-        // Factory is shutting down: Start decided nothing.
+        // A temporary refusal before acceptance (including Discord access) keeps consent live.
         if (code === "conflict" && issues.length === 0) return { kind: "unavailable" };
         return yield* reconcile(actionId);
       }),

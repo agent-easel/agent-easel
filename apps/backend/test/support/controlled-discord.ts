@@ -245,6 +245,7 @@ export async function startControlledDiscord() {
   const heldResumes: [GatewaySession, WebSocket][] = [];
   /** Users who left every server; Discord answers Unknown Member for them. */
   const departed = new Set<string>();
+  const hiddenChannels = new Map<string, Set<string>>();
   let gatewayAvailable = true;
   let typingAvailable = true;
   let commandsAvailable = true;
@@ -523,7 +524,21 @@ export async function startControlledDiscord() {
         if (thread) return { status: 200, body: threadPayload(thread) };
         const guild = parentOf(match[1]!);
         return guild
-          ? { status: 200, body: { id: match[1], type: 0, guild_id: guild.id, name: "channel" } }
+          ? {
+              status: 200,
+              body: {
+                id: match[1],
+                type: 0,
+                guild_id: guild.id,
+                name: "channel",
+                permission_overwrites: [...(hiddenChannels.get(match[1]!) ?? [])].map((id) => ({
+                  id,
+                  type: 1,
+                  allow: "0",
+                  deny: "1024",
+                })),
+              },
+            }
           : unknownChannel;
       },
     ],
@@ -806,6 +821,16 @@ export async function startControlledDiscord() {
             removed_member_ids: [userId],
           },
         });
+    },
+    /** A moderator restores membership without an event the bot's intents do not guarantee. */
+    addThreadMember(threadId: string, userId: string) {
+      threads.get(threadId)!.members.add(userId);
+    },
+    /** A member-specific channel overwrite denies View Channel; REST carries the current policy. */
+    hideChannelFrom(channelId: string, userId: string) {
+      const hidden = hiddenChannels.get(channelId) ?? new Set<string>();
+      hidden.add(userId);
+      hiddenChannels.set(channelId, hidden);
     },
     /** Messages Discord created, in order. */
     created,

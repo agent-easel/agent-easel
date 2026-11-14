@@ -7,6 +7,7 @@ import { invocation, operatingService, THREAD } from "./chat-conversation.ts";
 import { chatWorlds, runConversation } from "./chat-runs.ts";
 import {
   buttonEvent,
+  PARTICIPANT_ID,
   type ControlledDiscord,
   type CreatedMessage,
   type InteractionAnswer,
@@ -160,7 +161,11 @@ export async function clicked(
   customId: string,
   id: string,
   answers: number,
-  options: { readonly userId?: string; readonly permissions?: bigint } = {},
+  options: {
+    readonly userId?: string;
+    readonly permissions?: bigint;
+    readonly thread?: Parameters<typeof buttonEvent>[0]["thread"];
+  } = {},
 ) {
   const message = discord.created.find((entry) => buttonOf(entry) === customId);
   discord.deliver(
@@ -182,6 +187,7 @@ export async function clicked(
 export async function pendingStart(
   world: Pick<Awaited<ReturnType<typeof startingWorld>>, "discord" | "t3">,
   customId: string,
+  options: Parameters<typeof clicked>[4] = {},
 ) {
   let release = () => {};
   let entered = () => {};
@@ -191,9 +197,32 @@ export async function pendingStart(
     entered();
     await held;
   };
-  const answer = clicked(world.discord, customId, "610000000000000090", 1);
+  const answer = clicked(world.discord, customId, "610000000000000090", 1, options);
   await inspecting;
   return { answer, release };
+}
+
+/** A reviewed Start in a private thread; only Discord membership changes in the consent tests. */
+export async function privateStartingWorld(c: TestContext) {
+  const world = await startingWorld(c);
+  const thread = { id: "500000000000000090", parentId: ALLOWED_CHANNEL, private: true };
+  world.discord.addThread({
+    ...thread,
+    guildId: discordGuild.id,
+    name: "private work",
+    members: [PARTICIPANT_ID],
+  });
+  world.model.script(startCall(world, START_PROMPT));
+  world.discord.deliver(
+    invocation("300000000000000090", {
+      channelId: thread.id,
+      content: `start this:\n${START_PROMPT}`,
+    }),
+  );
+  await world.discord.createdMessages(2);
+  const button = buttonOf(world.discord.created[1]!);
+  assert(button !== undefined);
+  return { ...world, button, clickOptions: { thread } };
 }
 
 /** The Runs Factory shows in navigation, as identity and title. */

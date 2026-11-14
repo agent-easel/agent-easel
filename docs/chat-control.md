@@ -516,10 +516,14 @@ button was pressed earlier.
 
 The Start uses the shared Start operation with the action's own identity as its request ID, so the
 same validation, readiness checks and current-definition acceptance apply and a repeated attempt can
-only recover the same Run. External preflight is not acceptance: after it, Factory refreshes Discord
-access and checks the live consent, expiry, On state, application and Project grants inside the Run
+only recover the same Run. External preflight is not acceptance: after it, Factory refreshes the
+requester's guild membership and thread/parent-channel permissions from Discord, including private-thread
+membership, and checks the live consent, expiry, On state, application and Project grants inside the Run
 acceptance transaction. Revocation permanently fences a pending acceptance even if access is later
-regranted; work already accepted remains attributable and recoverable. A definitive rejection, which proves nothing was started, uses the
+regranted; work already accepted remains attributable and recoverable. Discord denial or unresolved
+access after preflight refuses only that click and leaves otherwise-live consent at its original
+expiry; it cannot restore consent voided by a Factory Access or application change. A definitive local
+rejection, which proves nothing was started, uses the
 consent up. A duplicate or racing click, a lost answer and a restart reconcile that same request: an
 attempt left without a recorded outcome is looked up by its request ID when Factory starts, and
 returns its consent (still bound to the original expiry) only when no Run was accepted. A repeated
