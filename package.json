@@ -15,7 +15,7 @@
     "scenarios:catalog": "node --conditions=factory-source scripts/dev/scenario-catalog.ts",
     "check:scenarios": "node --conditions=factory-source scripts/dev/scenario-catalog.ts --check",
     "db:reset": "node --conditions=factory-source scripts/dev/server.ts --reset",
-    "test:e2e": "e2e run",
+    "test:e2e": "pnpm build && e2e run",
     "desktop:package": "pnpm build && pnpm --filter @t3-factory/desktop package",
     "desktop:package:release": "pnpm build && pnpm --filter @t3-factory/desktop package --release",
     "desktop:package:beta": "pnpm build && pnpm --filter @t3-factory/desktop package --beta",
@@ -25,11 +25,12 @@
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "lint": "vp lint",
-    "fallow": "fallow --fail-on-issues",
+    "fallow": "fallow dead-code --fail-on-issues --quiet && fallow dupes --fail-on-issues --quiet && fallow health --complexity --fail-on-issues --quiet",
     "check:git-attribution": "node scripts/check-git-attribution.mjs",
     "check:ui-evidence": "node scripts/check-ui-evidence.mjs",
     "prepare": "vp config --no-agent",
-    "check": "pnpm format:check && pnpm check:scenarios && pnpm fallow && pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+    "check:static": "pnpm format:check && pnpm check:scenarios && pnpm fallow && pnpm lint && pnpm typecheck",
+    "check": "pnpm check:static && pnpm test && pnpm build"
   },
   "devDependencies": {
     "@e2e-dev/web": "0.15.4",

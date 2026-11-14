@@ -15,8 +15,9 @@ Run from the repository root. `e2e.config.ts` drives `tests/*.e2e.ts`;
 ## Launch
 
 Run `pnpm install --frozen-lockfile`, then build and run the smoke check below.
-The runner starts an isolated fixture on an allocated loopback port, waits for HTTP readiness and stops it afterward. `pnpm build` is required
-after application edits; `pnpm e2e:screenshots` builds automatically.
+The runner starts an isolated fixture on an allocated loopback port, waits for HTTP readiness and stops it afterward. Run `pnpm build`
+after application edits before a direct `pnpm exec e2e` run or MCP session; `pnpm test:e2e` and `pnpm e2e:screenshots` build first.
+The fixture refuses to start (`APP_UNREACHABLE`, its log names the cause) when `apps/frontend/dist` is missing or older than the UI sources.
 The fixture serves the production frontend and real SQLite backend in a fresh
 OS temporary directory. It seeds development Runs plus authoring Agents and Flows against a controlled T3
 simulator. Host and remote browser journeys share this Factory; the remote helper

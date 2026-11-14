@@ -24,11 +24,11 @@ The hook first checks attribution in the commits being pushed, then runs
 | 6 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
 | 7 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; runs last so no earlier step can depend on build output |
 
-During implementation, use focused tests and cheap static checks for feedback.
+Steps 1–5 are `pnpm check:static` (about 15 seconds, no build output needed).
+During implementation, use focused tests and `pnpm check:static` for feedback.
 The successful pre-push hook is the final full local gate: do not run `pnpm check`
 or repeat all its constituent commands immediately before pushing the unchanged
-tree. When handing back unpublished implementation work, run the cheap static
-steps (`pnpm format:check`, `pnpm check:scenarios`, `pnpm fallow`, `pnpm lint`)
+tree. When handing back unpublished implementation work, run `pnpm check:static`
 and the affected suite. Reuse matching completed results and record which state
 they covered. A source-only reviewer inspects code and existing evidence;
 implementation gates belong to the implementer, and CI observation and operational
@@ -37,6 +37,10 @@ diagnosis belong to the PR completion stage.
 The hook checks the working tree, including uncommitted changes, not only the
 pushed commits; commit or discard local changes before pushing so the result
 matches what you push.
+
+Claude Code sessions in this repository also run `scripts/agent-edit-check.mjs`
+after every file edit (`.claude/settings.json`): it formats the edited file and
+returns its `vp lint` findings to the agent, so steps 1 and 4 fail less often at push.
 
 `pnpm test:e2e` is **not** in the hook. Run it before opening a PR that touches
 UI or a user journey; see [testing policy](testing.md#behavior-tests-vs-e2e-journeys).
@@ -103,13 +107,16 @@ change is visible to every type-check at once. The emitting configurations
 resolution and compile against the built declarations of their dependencies; the
 desktop bundle likewise consumes compiled backend output.
 
-`pnpm fallow` scans the repository and fails on any finding (including warnings)
+`pnpm fallow` runs fallow's dead-code, duplication and complexity analyses over
+the repository, prints only findings, and fails on any finding (including warnings)
 or source parse failure. There is no baseline: every change must preserve zero
 fallow findings. Limits are fallow's defaults (cyclomatic complexity 20,
 cognitive complexity 15 per function, no duplicated blocks); see `.fallowrc.jsonc`.
 
-Use `pnpm fallow` for JSON or SARIF reports too: bare fallow does not enforce
-rule exit codes in these formats. Health recommendations are advisory, not rule warnings.
+For JSON or SARIF reports, pass `--fail-on-issues` to each analysis
+(`pnpm exec fallow dead-code --fail-on-issues --format json`): bare fallow does not enforce
+rule exit codes in these formats. Health recommendations (`pnpm exec fallow health`) are
+advisory, not rule warnings, and stay out of the gate's output.
 
 ### Git identity and squash input
 
