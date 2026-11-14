@@ -315,7 +315,10 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 The current protocol is **12**, and both sides require at least **9**. Protocol 12 added the
 Studio definitions live subscription (`WatchDefinitions`) and the `agentGeneration` of a Flow validation; a client subscribes only when the server's
-handshake declares at least 12, and handshakes again after a live reconnect so a server that changed its protocol switches Studio's source.
+handshake declares at least 12, and handshakes again after a fresh live connection,
+including a return from a hidden or minimized window without an observed outage,
+so a server that changed its protocol switches Studio's source in place, retaining
+unsaved drafts and the canvas view.
 Toward a protocol 9–11 server Studio keeps refreshing after its own writes, on navigation and on retry and says **Live Studio refresh requires a server update**;
 a server that declares 12 but whose subscription fails stays synchronizing, without that fallback. Protocol 11 added the Flow's
 current revision to Run detail; a client shows that a Flow changed since Start only when the

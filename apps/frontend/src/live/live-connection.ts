@@ -52,6 +52,7 @@ function liveOwner(): LiveOwner {
     },
     random: Math.random,
     classify: () => void recheckAccess(),
+    reconnected: () => transport.liveReconnected(),
     publish: (delivery) => transport.setLiveDelivery(delivery),
   });
   created.setVisible(windowVisible());

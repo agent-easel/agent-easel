@@ -9,6 +9,7 @@ import {
 import { GripVertical } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
+import { useServerWatchesDefinitions } from "../client-scope.ts";
 import {
   addWire,
   canConnect,
@@ -542,6 +543,8 @@ export function FlowCanvas({
   onEdit,
   onChange,
 }: FlowCanvasProps) {
+  // The protocol notice changes canvas height, not the user's chosen view.
+  const liveDefinitions = useServerWatchesDefinitions();
   const gestures = useAuthoringGestures({ ref, graph, placementRef, onEdit, onChange });
   const content = authoringContent({ graph, agents, selected, onSelect, gestures });
   return (
@@ -564,6 +567,7 @@ export function FlowCanvas({
         onDelete: onDeleteWire,
       }}
       resize="refit"
+      resizeKey={liveDefinitions}
       covered={{ top: READINESS_HEIGHT, right: reservedRight }}
       arrangement={{ busy, saved: savedGraph, commit: onChange, onArranging }}
       gesture={gestures.gesture}
@@ -575,9 +579,7 @@ export function FlowCanvas({
         hint: "Pan empty canvas · zoom · fit · auto-arrange. Graph coordinates stay saved.",
       }}
     >
-      {graph.blocks.length === 0 && (
-        <FirstBlockHint flowInputs={flowInputPositions(graph, gestures.move.drag)} />
-      )}
+      <FirstBlockHint graph={graph} drag={gestures.move.drag} />
     </CanvasSurface>
   );
 }
@@ -592,7 +594,9 @@ function flowInputPositions(graph: FlowGraph, drag: MoveDrag | null) {
  * Shown beside a new Flow's input, in canvas units, until its first block is added. It is
  * centred in the 900-unit authoring area, which widens with the Flow input dragged right.
  */
-function FirstBlockHint({ flowInputs }: { flowInputs: readonly BlockPosition[] }) {
+function FirstBlockHint({ graph, drag }: { graph: FlowGraph; drag: MoveDrag | null }) {
+  if (graph.blocks.length) return null;
+  const flowInputs = flowInputPositions(graph, drag);
   return (
     <div
       className="pointer-events-none absolute top-40 w-80 -translate-x-1/2 text-center"

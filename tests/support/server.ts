@@ -317,16 +317,30 @@ async function remoteFactory(protocol?: { protocol: number; minimumPeerProtocol:
     connectionRetryMs: 1000,
     ...(protocol ? { protocol, applicationVersion: "9.0.0" } : {}),
   });
-  return { home, server, t3, anchor: server.remoteAccess.trustAnchor()! };
+  return { home, config, server, t3, anchor: server.remoteAccess.trustAnchor()! };
 }
 
-const current = { home, server, t3, anchor: server.remoteAccess.trustAnchor()! };
+const current = { home, config, server, t3, anchor: server.remoteAccess.trustAnchor()! };
 const older = await remoteFactory({ protocol: 1, minimumPeerProtocol: 1 });
 // A compatible server from before live Studio delivery: clients keep Studio's manual refresh.
 const beforeLiveStudio = await remoteFactory({
   protocol: FACTORY_DEFINITIONS_PROTOCOL - 1,
   minimumPeerProtocol: FACTORY_MINIMUM_PEER_PROTOCOL,
 });
+let studioProtocol = FACTORY_DEFINITIONS_PROTOCOL - 1;
+/** A real restart retains the older peer's saved definitions and approved clients. */
+async function restartStudioServer(protocol: number) {
+  if (protocol === studioProtocol) return;
+  await beforeLiveStudio.server.close();
+  beforeLiveStudio.server = await startServer(beforeLiveStudio.config, {
+    t3: beforeLiveStudio.t3,
+    connectionRetryMs: 1000,
+    protocol: { protocol, minimumPeerProtocol: FACTORY_MINIMUM_PEER_PROTOCOL },
+    applicationVersion: "9.0.0",
+  });
+  beforeLiveStudio.anchor = beforeLiveStudio.server.remoteAccess.trustAnchor()!;
+  studioProtocol = protocol;
+}
 // A server a release ahead that no longer accepts this client's protocol.
 const newer = await remoteFactory({
   protocol: FACTORY_PROTOCOL + 1,
@@ -644,10 +658,20 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
     target = older;
     dropRemoteLiveSockets();
   },
-  "/__fixture/before-live-studio": () => {
+  "/__fixture/before-live-studio": async () => {
+    await restartStudioServer(FACTORY_DEFINITIONS_PROTOCOL - 1);
     target = beforeLiveStudio;
     dropRemoteLiveSockets();
   },
+  "/__fixture/upgrade-studio": () => restartStudioServer(FACTORY_DEFINITIONS_PROTOCOL),
+  "/__fixture/studio-reconnect-plan": async () =>
+    requireSuccess(
+      await beforeLiveStudio.server.factory.createFlow({ name: "Visibility reconnect plan" }),
+    ),
+  "/__fixture/studio-external-flow": async () =>
+    requireSuccess(
+      await beforeLiveStudio.server.factory.createFlow({ name: "Live after visibility reconnect" }),
+    ),
   "/__fixture/incompatible": () => {
     target = newer;
     dropRemoteLiveSockets();

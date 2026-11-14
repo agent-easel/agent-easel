@@ -98,6 +98,38 @@ it("hiding and showing the window repeatedly keeps at most one socket open", () 
   expect(live.openSockets()).toBe(1);
 });
 
+it("a successful connection after returning to a hidden window renegotiates without an offline delivery", () => {
+  // Arrange
+  const live = liveHarness();
+  live.owner.acquire(connectionScope);
+  live.sessions[0]!.connected();
+  live.sessions[0]!.subscriptions[0]!.message(snapshot("ready"));
+  live.owner.setVisible(false);
+  live.owner.setVisible(true);
+
+  // Act
+  live.sessions[1]!.connected();
+
+  // Assert
+  expect(live.reconnected).toStrictEqual([2]);
+  expect(live.classified).toStrictEqual([]);
+  expect(live.delivery()).toBe("synchronizing");
+});
+
+it("recovering a failed initial connection also renegotiates the protocol", () => {
+  // Arrange
+  const live = liveHarness();
+  live.owner.acquire(connectionScope);
+  live.sessions[0]!.disconnected();
+  live.elapse();
+
+  // Act
+  live.sessions[1]!.connected();
+
+  // Assert
+  expect(live.reconnected).toStrictEqual([2]);
+});
+
 it("a scope stays subscribed while another holder still uses it", () => {
   // Arrange
   const live = liveHarness();

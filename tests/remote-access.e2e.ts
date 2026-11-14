@@ -266,6 +266,46 @@ test("the current composer requires an updated server before requesting access",
   await app.screenshot("older-server-rejected");
 });
 
+test("returning to Studio after a server upgrade enables live delivery without discarding the draft or viewport", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await remoteFixture(app, "before-live-studio");
+  const plan = (await (await remoteFixture(app, "studio-reconnect-plan")).json()) as { id: string };
+  await approvedBrowser(app, screen, `/studio/flows/${plan.id}`);
+  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 1");
+  await expect(screen.getByText(/Live Studio refresh requires a server update/)).toBeVisible();
+  await screen.getByLabel("Flow name").fill("Unsaved visibility draft");
+  await screen.getByRole("button", "Zoom in", { exact: true }).tap();
+  await screen.getByRole("region", "Flow canvas").press("ArrowRight");
+  const zoom = await screen.getByRole("region", "Flow canvas").getAttribute("data-zoom");
+  const layer = browser.locator('[aria-label="Flow canvas"] > div[style]');
+  const transform = await layer.getAttribute("style");
+  const counted = await screen.getByRole("link", "Flows", { exact: true }).textContent();
+  await browser.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    return document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await remoteFixture(app, "upgrade-studio");
+  await remoteFixture(app, "studio-external-flow");
+
+  // Act
+  await browser.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    return document.dispatchEvent(new Event("visibilitychange"));
+  });
+
+  // Assert
+  await expect(screen.getByText(/Live Studio refresh requires a server update/)).toHaveCount(0);
+  await expect(screen.getByRole("link", "Flows", { exact: true })).not.toHaveText(counted ?? "");
+  await expect(screen.getByLabel("Flow name")).toHaveValue("Unsaved visibility draft");
+  await expect(screen.getByRole("region", "Flow canvas")).toHaveAttribute("data-zoom", zoom!);
+  await expect(layer).toHaveAttribute("style", transform!);
+  await app.screenshot("studio-upgraded-after-visibility-reconnect");
+});
+
 test("an incompatible client recovers when the selected server becomes compatible", async ({
   app,
   screen,

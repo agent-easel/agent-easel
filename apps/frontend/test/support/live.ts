@@ -19,6 +19,7 @@ export function liveHarness() {
   const sessions: FakeSession[] = [];
   const timers = new Set<{ run: () => void; ms: number }>();
   const classified: number[] = [];
+  const reconnected: number[] = [];
   let delivery: LiveDelivery = "current";
   const owner = new LiveOwner({
     open(events) {
@@ -42,6 +43,7 @@ export function liveHarness() {
     },
     random: () => 1,
     classify: () => classified.push(sessions.length),
+    reconnected: () => reconnected.push(sessions.length),
     publish(next) {
       delivery = next;
     },
@@ -50,6 +52,7 @@ export function liveHarness() {
     owner,
     sessions,
     classified,
+    reconnected,
     delivery: () => delivery,
     openSockets: () => sessions.filter((session) => !session.closed).length,
     /** Runs every pending timer once, as if its delay elapsed. */

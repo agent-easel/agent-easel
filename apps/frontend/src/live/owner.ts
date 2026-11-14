@@ -84,6 +84,8 @@ export interface LiveEnvironment {
   random(): number;
   /** Repeated open failures: classify through the HTTP handshake (incompatible, unauthorized). */
   classify(): void;
+  /** A fresh connection after the first may reach a server with another compatible protocol. */
+  reconnected(): void;
   publish(delivery: LiveDelivery): void;
 }
 
@@ -181,6 +183,7 @@ export class LiveOwner {
   private retry: (() => void) | undefined;
   private attempts = 0;
   private openFailures = 0;
+  private openedBefore = false;
   private visible = true;
   private blocked = false;
   private readonly environment: LiveEnvironment;
@@ -258,12 +261,15 @@ export class LiveOwner {
     if (this.session || this.retry || !this.wanted()) return;
     const session: Session = { connected: false, handle: undefined };
     this.session = session;
+    const reconnect = this.openedBefore;
+    this.openedBefore = true;
     const handle = this.environment.open({
       connected: () => {
         if (this.session !== session) return;
         session.connected = true;
         this.openFailures = 0;
         this.changed();
+        if (reconnect) this.environment.reconnected();
       },
       disconnected: () => this.lost(session),
     });

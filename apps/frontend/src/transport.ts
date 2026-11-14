@@ -16,6 +16,7 @@ export type TransportState =
 let state: TransportState = { kind: "online", observedAt: null };
 /** Live scopes held by this window: product mutations wait until every one is current. */
 let liveDelivery: LiveDelivery = "current";
+let liveReconnects = 0;
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -51,6 +52,12 @@ export const transport = {
   /** The gate re-established access; product requests may resume. */
   reset: () => publish({ kind: "online", observedAt: Date.now() }),
   liveDelivery: () => liveDelivery,
+  liveReconnects: () => liveReconnects,
+  /** A socket opened again, including after visibility detached its scopes without going offline. */
+  liveReconnected() {
+    liveReconnects++;
+    notify();
+  },
   setLiveDelivery(next: LiveDelivery) {
     if (next === liveDelivery) return;
     liveDelivery = next;
@@ -68,6 +75,14 @@ export function useTransport(): TransportState {
 
 export function useLiveDelivery(): LiveDelivery {
   return useSyncExternalStore(transport.subscribe, transport.liveDelivery, transport.liveDelivery);
+}
+
+export function useLiveReconnects(): number {
+  return useSyncExternalStore(
+    transport.subscribe,
+    transport.liveReconnects,
+    transport.liveReconnects,
+  );
 }
 
 /** Every request declares this bundle's protocol range before the server runs an operation. */

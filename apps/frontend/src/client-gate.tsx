@@ -29,7 +29,7 @@ import {
 } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
-import { transport, useLiveDelivery, useTransport } from "./transport.ts";
+import { transport, useLiveDelivery, useLiveReconnects, useTransport } from "./transport.ts";
 
 type Gate =
   | { readonly kind: "checking" }
@@ -96,15 +96,11 @@ const recheckMs = 2000;
  * request failing meanwhile; handshaking again republishes the protocol it now declares.
  */
 function useRenegotiateAfterReconnect(check: () => Promise<void>) {
-  const delivery = useLiveDelivery();
-  const [lost, setLost] = useState(false);
-  if (delivery === "offline" && !lost) setLost(true);
-  const reconnected = lost && delivery !== "offline";
+  const reconnects = useLiveReconnects();
   useEffect(() => {
-    if (!reconnected) return;
-    setLost(false);
+    if (!reconnects) return;
     void check();
-  }, [reconnected, check]);
+  }, [reconnects, check]);
 }
 
 export function ClientGate({ children }: { children: ReactNode }) {

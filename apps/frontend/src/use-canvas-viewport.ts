@@ -31,6 +31,8 @@ type CanvasViewportOptions = {
   reservedRight?: number;
   /** Authoring refits on real size changes; a fitted Run keeps its view. */
   resize: "refit" | "preserve";
+  /** A parent layout change with a new key preserves the view; other size changes still refit. */
+  resizeKey?: boolean | undefined;
   /** Accepted local layout identity, stable across status polls. */
   fitRevision?: object | null;
   onTap: () => void;
@@ -184,7 +186,12 @@ function useCanvasFit(
   stopAnimation: () => void,
 ) {
   const { surface, scope, resize, fitRevision } = options;
-  const lastFit = useRef<{ scope: string | null; width: number; height: number } | null>(null);
+  const lastFit = useRef<{
+    scope: string | null;
+    width: number;
+    height: number;
+    resizeKey: boolean | undefined;
+  } | null>(null);
   const surfaceSize = useCallback(() => {
     const current = liveRef.current;
     const element = current.surface.current;
@@ -207,7 +214,12 @@ function useCanvasFit(
           : fitGraphView(bounds ?? current.getBounds(), size.width, size.height, current.padding),
       );
       const rect = size.element.getBoundingClientRect();
-      lastFit.current = { scope: current.scope, width: rect.width, height: rect.height };
+      lastFit.current = {
+        scope: current.scope,
+        width: rect.width,
+        height: rect.height,
+        resizeKey: current.resizeKey,
+      };
     },
     [liveRef, surfaceSize, setView, stopAnimation],
   );
@@ -221,9 +233,17 @@ function useCanvasFit(
       if (
         previous?.scope === scope &&
         (resize === "preserve" ||
+          previous.resizeKey !== liveRef.current.resizeKey ||
           (rect.width === previous.width && rect.height === previous.height))
-      )
+      ) {
+        lastFit.current = {
+          ...previous,
+          width: rect.width,
+          height: rect.height,
+          resizeKey: liveRef.current.resizeKey,
+        };
         return;
+      }
       fit();
     });
     observer.observe(element);
@@ -231,7 +251,7 @@ function useCanvasFit(
       observer.disconnect();
       stopAnimation();
     };
-  }, [surface, scope, resize, fit, stopAnimation]);
+  }, [surface, scope, resize, fit, stopAnimation, liveRef]);
   useLayoutEffect(() => {
     if (scope !== null && fitRevision) fit();
   }, [scope, fitRevision, fit]);
