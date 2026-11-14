@@ -90,7 +90,8 @@ journey if the UI changes afterward. Inspect both image sets yourself, including
 long text and each worker link. The **UI evidence attachments** CI check only
 checks for embedded HTTPS images outside HTML comments and code, accepting alt
 text with nested or escaped brackets; it does not check their content,
-provenance or comparability.
+provenance or comparability. A non-empty reason under `### No UI evidence`
+replaces both images for a frontend change without visible UI impact.
 Human review still owns those judgments.
 
 For Flow readiness, inspect every referenced Agent, including later branches.
