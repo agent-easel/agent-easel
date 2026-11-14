@@ -2,10 +2,12 @@ import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   AppWindow,
+  BotMessageSquare,
   ImageIcon,
   Keyboard,
   Lock,
   MonitorSmartphone,
+  MessagesSquare,
   Palette,
   Plug,
   RadioTower,
@@ -20,6 +22,9 @@ import { AppearanceSettings } from "./appearance-settings.tsx";
 import { DesktopAppSettings } from "./desktop-app-settings.tsx";
 import { RunImageSettings } from "./run-image-settings.tsx";
 import { RunTitleSettings } from "./run-title-settings.tsx";
+import { ChatModelSettings } from "./chat-model-settings.tsx";
+import { ChatDiscordSettings } from "./chat-discord-settings.tsx";
+import { useChatModelAttention, useDiscordAttention } from "../chat-control-attention.ts";
 import { StudioLink } from "./app-link.tsx";
 import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
@@ -89,6 +94,22 @@ const settingsSections: readonly SettingsSection[] = [
     group: "factory",
     visibility: "host",
     content: () => <AccessSettings />,
+  },
+  {
+    tab: "chat-model",
+    label: "Language model",
+    icon: BotMessageSquare,
+    group: "factory",
+    visibility: "host",
+    content: () => <ChatModelSettings />,
+  },
+  {
+    tab: "chat-discord",
+    label: "Discord",
+    icon: MessagesSquare,
+    group: "factory",
+    visibility: "host",
+    content: () => <ChatDiscordSettings />,
   },
   {
     tab: "run-titles",
@@ -260,7 +281,11 @@ function SettingsNav({
 function useSectionAttention(tab: SettingsSection["tab"]) {
   const reportingMarker = reportingTargetsMarker(useReportingState());
   const pendingDevices = usePendingDeviceCount();
+  const discordAttention = useDiscordAttention(tab === "chat-discord");
+  const modelAttention = useChatModelAttention(tab === "chat-model");
   if (tab === "agent-reporting") return reportingMarker;
+  if ((tab === "chat-discord" && discordAttention) || (tab === "chat-model" && modelAttention))
+    return "needs attention";
   if (tab === "devices" && pendingDevices > 0)
     return `${pendingDevices} ${pendingDevices === 1 ? "device" : "devices"} waiting for approval`;
   return undefined;

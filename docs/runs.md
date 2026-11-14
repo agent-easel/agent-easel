@@ -15,6 +15,11 @@ a T3 endpoint that is not on this computer rejects Start with a `workspace.*` is
 action; no Run, Task or worker is created. Correct configuration, accepted Start and accepted Block result are separate
 levels of evidence. A configuration check alone proves neither execution nor report acceptance.
 
+Worktree Runs require T3 to advertise the boolean `workspaceStrategy.startFromOrigin` option.
+Update T3 before using worktree Flows with this Factory version. If its launch schema lacks
+that option, Factory rejects Start with `launch_unsupported`. Project-checkout Flows do not require it.
+T3 owns the fetch and checkout during [worktree preparation](runner.md#run-workspace), after Start is accepted.
+
 - **Screenshots.** Pasting images (Ctrl+V/Cmd+V) at the prompt caret or dropping image files on the prompt field attaches
   them and inserts a clickable reference to each at the caret (a drop uses the last caret position, or the end of the
   prompt). **Attach images** attaches files without inserting references. Images are PNG, JPEG, GIF or WebP files, up to 8
@@ -115,8 +120,8 @@ in the Project checkout with the owner's T3 permissions, its prompt forbidding r
 enforcing it. An approved client sees the same fields read-only with the **Managed on the Factory host** chip. The section
 reads the setting when it opens; changes are not delivered live.
 
-The shared Start operation, used by the composer and by `factory_start_run`, makes the decision, so every Start path behaves
-the same. A Run is eligible only when the setting is on at acceptance and its title provenance is automatic; manual and
+The shared Start operation, used by the composer, by `factory_start_run` and by a confirmed
+[Chat control](chat-control.md#actions) Start, makes the decision, so every Start path behaves the same. A Run is eligible only when the setting is on at acceptance and its title provenance is automatic; manual and
 legacy Runs record no generation. An eligible Run captures the provider instance, model, options, built-in prompt version
 and an absolute deadline 30 seconds after acceptance, and records its generation in the acceptance transaction:
 
@@ -344,7 +349,7 @@ menu items never opens a row preview.
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
   **Problem**: a pending missing report, execution failure or report problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip.
-- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
+- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
 - When Runs exist but none are open, the open list shows **Nothing open** / **You're all caught up.**
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.
@@ -367,6 +372,13 @@ menu items never opens a row preview.
 - An automatically Settled Run returns to Active only when one of its Agents reports; a manually settled or Archived Run is
   never reopened or relaunched. To work on the matter again otherwise, start a **New Run**: it uses the current saved Flow and Agent definitions, not an earlier
   Run's captured revisions.
+
+Authorized [Chat control](chat-control.md#finding-and-reading-runs) participants can also find and read any Run of the
+Projects their Discord channel grants, including Runs started here. Reading in chat changes nothing about the Run, and its
+views here and on approved clients carry no Discord identifiers. A Run started through a chat confirmation also has a
+[status card](chat-control.md#status-cards) in its originating thread, which Factory keeps current from the Run's
+facts, and [notices](chat-control.md#attention-and-lifecycle-notices) there for new Needs input and Problems, for
+becoming Settled or Archived and for returning to Active. Snooze changes only what the card shows.
 
 ### Branches and pull requests
 
@@ -459,7 +471,8 @@ occurrence and atomically saves all outgoing handoffs: double submission cannot 
 recipients get independent deliveries on the existing thread/queue rules; a Human recipient gets a new occurrence. The block stays
 waiting until its last occurrence is answered. Context and delivery text survive restart, are cleared after settlement and
 acknowledgement, and Settled keeps only metadata. Human steps have no T3 thread; an answer carries on the originating
-worker of the message it answered.
+worker of the message it answered. An authorized participant can also answer one occurrence through
+[Chat control](chat-control.md#human-answer-proposals) after a complete review and their own confirmation.
 
 ## Waits
 
@@ -565,7 +578,9 @@ uncertain deliveries keep their recorded state and are not retried.
 An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer. All
 its data stays: its link still opens the read-only history with an **Archived** badge. Any later report from one of its Agents is
 acknowledged as a success that changes nothing and tells the Agent to stop work on the Block; Human answers and Request report are
-refused. Archive does not roll back edits or prevent new direct T3 chats; closing Factory or a browser tab is not Archive. Runs
+refused. Archive does not roll back edits or prevent new direct T3 chats; closing Factory or a browser tab is not Archive.
+An authorized participant can also archive a Run through [Chat control](chat-control.md#archive-proposals), where a request to
+stop a Run means Archive, after a complete review and their own confirmation. Runs
 stopped by an earlier release are Archived after the upgrade, with their recorded Stop history.
 
 ## Restart and shutdown

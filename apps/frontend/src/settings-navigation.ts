@@ -9,10 +9,12 @@ const settingsTabs = [
   "appearance",
   "keyboard",
   "desktop",
+  "chat-model",
+  "chat-discord",
 ] as const;
 export type SettingsSelection = { tab: (typeof settingsTabs)[number] };
 /** A known Settings section, or undefined for removed and unknown ones. */
-export function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
+function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
   return settingsTabs.find((tab) => tab === value);
 }
 export type StudioSelection =
@@ -54,7 +56,26 @@ export function studioMask(selection: StudioSelection) {
     : { to: "/studio/agents" as const };
 }
 export function settingsMask(selection: SettingsSelection) {
-  return { to: "/settings/$" as const, params: { _splat: selection.tab } };
+  return {
+    to: "/settings/$" as const,
+    params: {
+      _splat:
+        selection.tab === "chat-model"
+          ? "chat-control/model"
+          : selection.tab === "chat-discord"
+            ? "chat-control/discord"
+            : selection.tab,
+    },
+  };
+}
+/** The Settings section a location shows, named by its search or masked path. */
+export function settingsTabAt(location: { pathname: string; search: unknown }) {
+  return (
+    validateAppSearch(searchRecord(location.search)).settings?.tab ??
+    settingsTabs.find(
+      (tab) => `/settings/${settingsMask({ tab }).params._splat}` === location.pathname,
+    )
+  );
 }
 export function useSettings() {
   return useSearch({ from: "__root__", select: (search) => search.settings });

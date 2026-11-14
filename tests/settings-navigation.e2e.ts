@@ -21,6 +21,8 @@ test("the desktop host lists every Settings section under Factory, Runs and This
   await expect(factory.getByRole("link", /^T3 connection, /)).toBeVisible();
   await expect(factory.getByRole("link", /^Agent reporting/)).toBeVisible();
   await expect(factory.getByRole("link", /^Devices & access/)).toBeVisible();
+  await expect(factory.getByRole("link", /^Language model/)).toBeVisible();
+  await expect(factory.getByRole("link", /^Discord/)).toBeVisible();
   const runs = sections(screen).getByRole("group", "Runs");
   await expect(runs.getByRole("link", "Run titles", { exact: true })).toBeVisible();
   await expect(runs.getByRole("link", "Run images", { exact: true })).toBeVisible();

@@ -11,7 +11,7 @@ import { RunComposer } from "./routes/run-composer.tsx";
 import { runDraft } from "./run-draft.ts";
 import {
   settingsMask,
-  settingsTab,
+  settingsTabAt,
   studioMask,
   validateAppSearch,
   type SettingsSelection,
@@ -125,7 +125,10 @@ const agentRoute = createRoute({
 const settingsSectionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "settings/$",
-  beforeLoad: ({ params }) => openSettings({ tab: settingsTab(params._splat) ?? "connection" }),
+  beforeLoad: ({ params }) =>
+    openSettings({
+      tab: settingsTabAt({ pathname: `/settings/${params._splat}`, search: {} }) ?? "connection",
+    }),
 });
 const skillsRoute = createRoute({
   getParentRoute: () => rootRoute,
