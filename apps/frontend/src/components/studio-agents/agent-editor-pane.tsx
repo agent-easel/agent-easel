@@ -24,6 +24,8 @@ import type { AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { editedLabel } from "../studio-list.tsx";
 import { flowUsageLabel } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
+import { DefinitionExportControl } from "../definition-export-control.tsx";
+import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 
 type AgentEditorProps = {
   draft: AgentDraftModel;
@@ -33,6 +35,8 @@ type AgentEditorProps = {
   duplicating: boolean;
   onSave: () => Promise<void>;
   onDuplicate?: (() => void) | undefined;
+  /** Absent until the Agent's first save. */
+  exporter?: { model: DefinitionExportModel; state: DefinitionExportSnapshot } | undefined;
   onDeleted: () => void;
 };
 
@@ -139,17 +143,9 @@ function AgentReportingNotice({ providerId }: { providerId: string }) {
   );
 }
 
-function AgentEditorHeader({
-  draft,
-  state,
-  flowUsage,
-  name,
-  saving,
-  onDuplicate,
-  onDeleted,
-  duplicating,
-}: AgentEditorProps & { name: string; saving: boolean }) {
-  const { saved: agent, dirty } = state;
+function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boolean }) {
+  const { state, flowUsage, name, saving } = props;
+  const agent = state.saved;
   const statusLine = agentEditorStatus(agent, flowUsage);
   const saveLabel = agent ? "Save" : "Create Agent";
   return (
@@ -162,30 +158,7 @@ function AgentEditorHeader({
           Agent definition · {agent ? `rev ${agent.revision}` : "new"}
         </span>
         <span className="flex-1" />
-        {onDuplicate && (
-          <MutationGate>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saving || dirty}
-              title={dirty ? "Save your changes before duplicating this Agent." : undefined}
-              aria-label="Duplicate"
-              onClick={onDuplicate}
-            >
-              {duplicating ? "Duplicating…" : "Duplicate…"}
-            </Button>
-          </MutationGate>
-        )}
-        {agent && (
-          <DeleteAgentButton
-            agent={agent}
-            draft={draft}
-            state={state}
-            flowUsage={flowUsage}
-            disabled={saving}
-            onDeleted={onDeleted}
-          />
-        )}
+        {agent && <SavedAgentActions {...props} agent={agent} />}
         <MutationGate>
           <Button type="submit" disabled={saving}>
             {saving ? "Saving…" : saveLabel}
@@ -194,6 +167,48 @@ function AgentEditorHeader({
       </div>
       <p className="mt-1.5 text-2xs text-subtle-foreground">{statusLine}</p>
     </header>
+  );
+}
+
+/** Duplicate…, Export and Delete act on the saved revision, so they exist only after the first save. */
+function SavedAgentActions({
+  agent,
+  draft,
+  state,
+  flowUsage,
+  saving,
+  onDuplicate,
+  exporter,
+  onDeleted,
+  duplicating,
+}: AgentEditorProps & { agent: AgentDefinition; saving: boolean }) {
+  const { dirty } = state;
+  return (
+    <>
+      {onDuplicate && (
+        <MutationGate>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={saving || dirty}
+            title={dirty ? "Save your changes before duplicating this Agent." : undefined}
+            aria-label="Duplicate"
+            onClick={onDuplicate}
+          >
+            {duplicating ? "Duplicating…" : "Duplicate…"}
+          </Button>
+        </MutationGate>
+      )}
+      {exporter && <DefinitionExportControl {...exporter} dirty={dirty} disabled={saving} />}
+      <DeleteAgentButton
+        agent={agent}
+        draft={draft}
+        state={state}
+        flowUsage={flowUsage}
+        disabled={saving}
+        onDeleted={onDeleted}
+      />
+    </>
   );
 }
 

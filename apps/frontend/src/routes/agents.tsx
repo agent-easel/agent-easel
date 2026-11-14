@@ -19,6 +19,8 @@ import { AgentsListPane } from "../components/studio-agents/agents-list-pane.tsx
 import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.tsx";
 import { flowUsageCount } from "@/lib/agent-display";
 import { useReportingState } from "../reporting-state.tsx";
+import { useDefinitionExport } from "../definition-export.ts";
+import { definitionExportNotice } from "../components/definition-export-control.tsx";
 
 type ShownLists = {
   readonly [K in keyof StudioDefinitionsSnapshot]: NonNullable<
@@ -264,11 +266,12 @@ function OpenedAgentEditor({
     agentId,
     reportDraft,
   );
+  const exporter = useDefinitionExport(() => api.exportAgent(agentId));
   async function save() {
     const saved = await draft.save();
     if (saved) onSaved(saved);
   }
-  const notice = state.conflict || duplicateError;
+  const notice = state.conflict || duplicateError || definitionExportNotice(exporter.state);
   return (
     <>
       {notice && (
@@ -281,6 +284,7 @@ function OpenedAgentEditor({
         draft={draft}
         state={state}
         capabilities={capabilities}
+        exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
       />
     </>

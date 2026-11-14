@@ -41,6 +41,10 @@ One immutable saved version of an Agent's name, prompt, execution settings (comp
 The state of an Agent saved without execution settings (`execution: null`). It can be edited, placed and duplicated, but it cannot run until a save chooses an environment, provider and model. It describes a missing choice, not the availability of a saved one.
 _Avoid_: unavailable, unknown.
 
+**Definition export**:
+A JSON file holding the latest saved revision of an Agent in the portable document format, with its model as an optional hint and without environment, server ids, revisions, timestamps or Runs. Exporting never changes the definition or its editor.
+_Avoid_: backup, sync.
+
 **Studio**:
 The modal authoring surface for global Flows and reusable Agent definitions. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.
 _Avoid_: Settings as the Agent editor; a Flows destination in the Run sidebar.

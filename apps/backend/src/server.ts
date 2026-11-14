@@ -342,6 +342,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
       handle: ({ parameters, input }) => answer(() => factory.updateAgent(parameters.id, input)),
     },
     removeAgent: { handle: ({ parameters }) => answer(() => factory.removeAgent(parameters.id)) },
+    exportAgent: { handle: ({ parameters }) => answer(() => factory.exportAgent(parameters.id)) },
   };
 }
 
@@ -624,6 +625,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
     ...(options.connectionRetryMs !== undefined
       ? { connectionRetryMs: options.connectionRetryMs }
       : {}),
+    ...(options.applicationVersion ? { applicationVersion: options.applicationVersion } : {}),
   };
 }
 

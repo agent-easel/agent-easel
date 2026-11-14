@@ -1064,3 +1064,8 @@ export {
   type StartPrompt,
 } from "./run-prompt.ts";
 export { parseAppearancePresentation } from "./appearance.ts";
+export {
+  DEFINITION_REQUEST_LIMIT_BYTES,
+  PORTABLE_DOCUMENT_LIMIT_BYTES,
+  portableDocumentText,
+} from "./portable-document.ts";

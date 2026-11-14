@@ -52,7 +52,7 @@ its next Run, while a Run keeps the exits of the Agent revision it captured. Ren
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
 A persistent 300 px list sits beside the editor with **Search Agents**, **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
+drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Export** (after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
@@ -176,6 +176,50 @@ revision N** (another explicit save, which can conflict again). There is no auto
 the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
 Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; an open Studio view shows it after navigation or retry.
+
+## Definition export
+
+**Export** in the Agent editor header downloads the Agent's latest saved revision as a JSON file named after it (for example
+`code-reviewer.agent.json`); the desktop app saves the same file. A never-saved Agent cannot be exported. With unsaved changes Studio first asks
+"Export the saved revision? Unsaved changes won't be included." (**Export saved revision** / **Keep editing**); either way the editor and its draft are
+unchanged. `GET /api/agents/:id/export` answers `{document, driverKindOmitted}`.
+
+The file is a portable document, version 1:
+
+```json
+{
+  "format": "t3-factory/definitions",
+  "formatVersion": 1,
+  "kind": "agent",
+  "factoryVersion": "0.42.0",
+  "exportedAt": "2026-11-14T10:00:00.000Z",
+  "agents": [
+    {
+      "key": "agent-1",
+      "name": "Code reviewer",
+      "prompt": "Review the change.",
+      "model": {
+        "driverKind": "codex",
+        "providerInstanceId": "codex-main",
+        "modelId": "gpt-6.1-sol",
+        "modelOptions": [{ "id": "reasoning", "value": "high" }]
+      },
+      "exits": [{ "id": "done", "name": "done", "description": "", "messageRequired": false }]
+    }
+  ]
+}
+```
+
+- `format`, `formatVersion` and `kind` identify the document; `factoryVersion` (`source` for a source checkout) and `exportedAt` are informational only.
+- `agents` holds the bundled Agents; an Agent document holds exactly one. Each has a document-local `key` (`[A-Za-z][A-Za-z0-9_-]{0,63}`,
+  unique in the document), so Agent and Flow documents share one Agent entry.
+- `model` is the model hint: present exactly when the Agent has execution settings, otherwise `null`. It keeps the provider instance, model and
+  thinking options whatever their availability, and never the environment. `driverKind` comes from the live T3 catalog; when T3 is disconnected
+  or no longer lists the provider it is omitted, and Studio names the affected Agents.
+- The file never contains environment ids, server or definition ids, revisions, definition timestamps or Runs. Exit ids are kept.
+
+Export refuses, with the reason, a file another installation could not import: a definition whose save request exceeds 2 MB, or a file over
+16 MiB.
 
 ## Validation contract
 

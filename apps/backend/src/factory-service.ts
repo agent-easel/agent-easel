@@ -80,7 +80,12 @@ export const makeFactoryService = (
     const appearance = yield* makeAppearance(t3, connection.getConnection, intervalMs, changes);
     const projects = yield* makeProjects(t3, connection, intervalMs, changes);
     yield* projects.recheckProjects();
-    const definitions = yield* makeDefinitions(t3, connection, changes);
+    const definitions = yield* makeDefinitions(
+      t3,
+      connection,
+      changes,
+      options.applicationVersion ?? "source",
+    );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
@@ -140,6 +145,7 @@ export const makeFactoryService = (
       updateAgent: definitions.updateAgent,
       duplicateAgent: definitions.duplicateAgent,
       removeAgent: definitions.removeAgent,
+      exportAgent: definitions.exportAgent,
       getReportingInstallations: () => reporting.getReportingInstallations(),
       installReporting: (input) => reporting.installReporting(input),
       answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),

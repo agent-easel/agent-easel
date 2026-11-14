@@ -7,15 +7,17 @@ import {
 } from "@t3-factory/flow-layout";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import type {
-  AgentCapabilities,
-  AgentDefinition,
-  FactoryOperations,
-  FlowBlock,
-  FlowDraft,
-  FlowGraph,
-  FlowGraphInput,
-  Result,
+import {
+  PORTABLE_DOCUMENT_FORMAT,
+  PORTABLE_DOCUMENT_VERSION,
+  type AgentCapabilities,
+  type AgentDefinition,
+  type FactoryOperations,
+  type FlowBlock,
+  type FlowDraft,
+  type FlowGraph,
+  type FlowGraphInput,
+  type Result,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
@@ -51,6 +53,7 @@ import {
   readFormerExitNames,
   type AgentRevision,
 } from "./agent-revisions.ts";
+import { definitionExport, portableAgent } from "./portable-definitions.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
@@ -72,6 +75,8 @@ export const makeDefinitions = (
   t3: T3Adapter,
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
   changes: LiveChanges,
+  /** Recorded in exported files for information only. */
+  factoryVersion: string,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -243,6 +248,7 @@ export const makeDefinitions = (
       | "updateAgent"
       | "duplicateAgent"
       | "removeAgent"
+      | "exportAgent"
     > = {
       createFlow(input) {
         const validated = validateCreateFlow(input);
@@ -477,6 +483,24 @@ export const makeDefinitions = (
           ),
         );
       },
+      exportAgent: (id) =>
+        agentOperation((sql, capabilities) =>
+          Effect.gen(function* () {
+            const [agent] = yield* readCurrentAgents(sql, id);
+            if (!agent) return failure("not_found", "This Agent does not exist.");
+            return definitionExport(
+              {
+                format: PORTABLE_DOCUMENT_FORMAT,
+                formatVersion: PORTABLE_DOCUMENT_VERSION,
+                kind: "agent",
+                factoryVersion,
+                exportedAt: yield* currentTime,
+                agents: [portableAgent(agent, "agent-1", capabilities)],
+              },
+              [agent],
+            );
+          }),
+        ),
     };
     return {
       createFlow: (...args: Parameters<typeof operations.createFlow>) =>
@@ -537,6 +561,10 @@ export const makeDefinitions = (
         Effect.suspend(() => operations.removeAgent(...args)).pipe(
           publishOnSuccess,
           Effect.withSpan("Definitions.removeAgent"),
+        ),
+      exportAgent: (...args: Parameters<typeof operations.exportAgent>) =>
+        Effect.suspend(() => operations.exportAgent(...args)).pipe(
+          Effect.withSpan("Definitions.exportAgent"),
         ),
     };
   });

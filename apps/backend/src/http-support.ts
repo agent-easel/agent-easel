@@ -4,6 +4,7 @@ import { HttpServerResponse } from "effect/http";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
 import type { Result } from "@t3-factory/contracts";
+import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { failure } from "./result.ts";
 
 const jsonResultHeaders = {
@@ -50,7 +51,7 @@ export const standardBody: JsonBodyLimit = {
   message: "Send valid JSON up to 16 KiB with application/json.",
 };
 export const definitionBody: JsonBodyLimit = {
-  bytes: 2_000_000,
+  bytes: DEFINITION_REQUEST_LIMIT_BYTES,
   message: "Send valid JSON up to 2 MB with application/json.",
 };
 
