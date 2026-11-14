@@ -12,7 +12,8 @@ it with `pnpm exec vp hooks status`; run `pnpm exec vp hooks enable` if a fresh
 clone or worktree does not trigger the hook.
 
 The hook first checks attribution in the commits being pushed, then runs
-`pnpm check`. It stops at the first failure (cheap static checks first):
+`pnpm check`, which runs these steps through the Vite+ task runner (`vp run`,
+tasks in the root `vite.config.ts` `run`):
 
 | Step | Command | Catches |
 | ---- | --- | --- |
@@ -22,9 +23,22 @@ The hook first checks attribution in the commits being pushed, then runs
 | 4 | `pnpm lint` | Vite+ lint rule violations (`vite.config.ts` `lint`, type-aware, warnings fail) |
 | 5 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
 | 6 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
-| 7 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; runs last so no earlier step can depend on build output |
+| 7 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
 
-Steps 1–5 are `pnpm check:static` (about 15 seconds, no build output needed).
+Steps 1–5 are `pnpm check:static`. They run in parallel and need no build output.
+Steps 6 and 7 start in parallel only after all static steps pass, so the CPU-heavy
+backend suite never competes with them and a static failure stops the gate early.
+The gate stops at the first failing step; run it again after the fix to reach the next one.
+
+`vp run` caches each step by the files it read: an unchanged step replays its
+earlier output instead of running, and a rerun prints `cache miss: '<file>' modified`
+for each step it executes. A repeated gate on an unchanged tree takes seconds, and
+after an edit only the steps that read the changed files run again. `vp run --last-details`
+explains the previous run's misses; `--no-cache` forces execution. A cached step
+receives only environment variables listed in its task's `cache.env` or
+`cache.untrackedEnv` plus Vite+ system defaults, so a script that needs another
+variable becomes a `vite.config.ts` task that lists it.
+
 During implementation, use focused tests and `pnpm check:static` for feedback.
 The successful pre-push hook is the final full local gate: do not run `pnpm check`
 or repeat all its constituent commands immediately before pushing the unchanged
