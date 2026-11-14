@@ -75,7 +75,6 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
   };
   useEffect(() => {
     let active = true;
-    setLoadError("");
     read().then(
       (value) => {
         if (!active) return;
@@ -92,21 +91,22 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
   const save = async (input: Input) => {
     setSaving(true);
     setSaveError("");
-    try {
-      adopt(await update(input));
-    } catch (cause) {
-      if (cause instanceof ApiError) setSaveError(chatControlError(cause, ""));
-      else {
-        const current = await read().catch(() => null);
-        if (current !== null && committed(input, current)) adopt(current);
-        else
-          setSaveError(
-            `${chatControlError(cause, `Factory could not save ${name}.`)} Your edits are kept; save again when Factory answers.`,
-          );
-      }
-    } finally {
-      setSaving(false);
-    }
+    return await update(input)
+      .then(adopt)
+      .catch(async (cause: unknown) => {
+        if (cause instanceof ApiError) setSaveError(chatControlError(cause, ""));
+        else {
+          const current = await read().catch(() => null);
+          if (current !== null && committed(input, current)) adopt(current);
+          else
+            setSaveError(
+              `${chatControlError(cause, `Factory could not save ${name}.`)} Your edits are kept; save again when Factory answers.`,
+            );
+        }
+      })
+      .finally(() => {
+        setSaving(false);
+      });
   };
   const discard = () => {
     if (settings !== null) setDraft(draftOf(settings));
@@ -118,7 +118,10 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
     draft,
     setDraft,
     loadError,
-    reload: () => setLoads((n) => n + 1),
+    reload: () => {
+      setLoadError("");
+      setLoads((n) => n + 1);
+    },
     saving,
     saveError,
     save,

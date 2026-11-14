@@ -58,19 +58,21 @@ export function DeliveryDiagnostics({
   const retry = async (problem: ChatDeliveryProblem) => {
     setBusy(problem.id);
     setError("");
-    try {
-      onSettings(
-        await api.retryChatDelivery({
-          deliveryId: problem.id,
-          duplicateRiskAccepted: problem.state === "unknown",
-        }),
-      );
-      setConfirming(null);
-    } catch (cause) {
-      setError(chatControlError(cause, "Factory could not retry the message."));
-    } finally {
-      setBusy(null);
-    }
+    return await api
+      .retryChatDelivery({
+        deliveryId: problem.id,
+        duplicateRiskAccepted: problem.state === "unknown",
+      })
+      .then((value) => {
+        onSettings(value);
+        setConfirming(null);
+      })
+      .catch((cause: unknown) => {
+        setError(chatControlError(cause, "Factory could not retry the message."));
+      })
+      .finally(() => {
+        setBusy(null);
+      });
   };
   return (
     <section aria-label="Delivery and actions" className="grid gap-3 border-t pt-5">

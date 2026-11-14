@@ -14,12 +14,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { fieldLabelClass } from "@/components/page";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
+import { randomId } from "../lib/ids.ts";
 import { Notice } from "./notice.tsx";
 import { SectionSaveBar, useChatControlSection } from "./chat-control-form.tsx";
 
 interface ChannelDraft {
   /** Stable while the owner edits the row's channel ID. */
-  readonly key: number;
+  readonly key: string;
   readonly channelId: string;
   readonly projectIds: readonly string[];
 }
@@ -30,11 +31,9 @@ export interface AccessDraft {
   readonly channels: readonly ChannelDraft[];
 }
 
-let rowKeys = 0;
-
 const draftOf = ({ access }: DiscordSettings): AccessDraft => ({
   users: access.users.join("\n"),
-  channels: access.channels.map((channel) => ({ ...channel, key: rowKeys++ })),
+  channels: access.channels.map((channel) => ({ ...channel, key: randomId() })),
 });
 
 const saveInput = (draft: AccessDraft, settings: DiscordSettings): UpdateDiscordAccessInput => ({
@@ -112,7 +111,7 @@ export function AccessForm({
   const problem = draftProblem(input);
   const empty =
     input.users.length === 0 || !input.channels.some((channel) => channel.projectIds.length > 0);
-  const setChannel = (key: number, change: Partial<ChannelDraft>) =>
+  const setChannel = (key: string, change: Partial<ChannelDraft>) =>
     onChange({
       ...draft,
       channels: draft.channels.map((channel) =>
@@ -183,7 +182,7 @@ export function AccessForm({
             onClick={() =>
               onChange({
                 ...draft,
-                channels: [...draft.channels, { key: rowKeys++, channelId: "", projectIds: [] }],
+                channels: [...draft.channels, { key: randomId(), channelId: "", projectIds: [] }],
               })
             }
           >
