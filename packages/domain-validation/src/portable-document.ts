@@ -36,6 +36,18 @@ export function portableDocumentText(document: PortableDocument): string {
 const jsonByteLength = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
+/**
+ * Whether a definition's later save request fits the definition limit: its create body plus the
+ * `expectedRevision` every save sends, measured at the largest revision a save may name so the
+ * definition stays savable at any revision it reaches.
+ */
+export function definitionSaveFits(body: object): boolean {
+  return (
+    jsonByteLength({ ...body, expectedRevision: Number.MAX_SAFE_INTEGER }) <=
+    DEFINITION_REQUEST_LIMIT_BYTES
+  );
+}
+
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 /** Shown issue lists stay short however broken a file is. */
 const ISSUE_LIMIT = 20;
@@ -450,14 +462,14 @@ function decodeHint(
   };
 }
 
-/** The issue when an imported Agent's save request would exceed the definition limit. */
+/** The issue when an imported Agent's later save request would exceed the definition limit. */
 function definitionSizeIssue(
   agent: PortableAgent,
   path: string,
   execution: unknown,
 ): ValidationIssue | undefined {
   const { name, prompt, exits } = agent;
-  return jsonByteLength({ name, prompt, execution, exits }) > DEFINITION_REQUEST_LIMIT_BYTES
+  return !definitionSaveFits({ name, prompt, execution, exits })
     ? issue(
         "definition_too_large",
         path,
@@ -574,10 +586,10 @@ function portableBlock(block: FlowBlockInput): PortableFlowBlock {
   return { ...rest, agentKey: agentId } as PortableFlowBlock;
 }
 
-/** A created Agent's id has this length, so the Flow's create request is measured exactly. */
+/** A created Agent's id has this length, so the Flow's save request is measured exactly. */
 const CREATED_AGENT_ID = "00000000-0000-4000-8000-000000000000";
 
-/** The issue when the imported Flow's create request would exceed the definition limit. */
+/** The issue when the imported Flow's later save request would exceed the definition limit. */
 function flowSizeIssue(flow: PortableFlow): ValidationIssue | undefined {
   const blocks = flow.graph.blocks.map((block) => {
     if (block.kind !== "agent") return block;
@@ -585,7 +597,7 @@ function flowSizeIssue(flow: PortableFlow): ValidationIssue | undefined {
     return { ...rest, agentId: agentKey === null ? null : CREATED_AGENT_ID };
   });
   const request = { name: flow.name, graph: { ...flow.graph, blocks }, workspace: flow.workspace };
-  return jsonByteLength(request) > DEFINITION_REQUEST_LIMIT_BYTES
+  return !definitionSaveFits(request)
     ? issue(
         "definition_too_large",
         "flow",

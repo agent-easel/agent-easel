@@ -15,7 +15,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
-  DEFINITION_REQUEST_LIMIT_BYTES,
+  definitionSaveFits,
   hintedSelection,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,
@@ -82,8 +82,6 @@ export function portableFlow(
   return { flow: portable, agents, revisions };
 }
 
-const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
-
 const tooLarge = (path: string, subject: string): ValidationIssue => ({
   code: "definition_too_large",
   path,
@@ -106,14 +104,13 @@ export function definitionExport<Document extends PortableDocument>(
       execution: agent.execution,
       exits: agent.exits,
     };
-    return jsonBytes(request) > DEFINITION_REQUEST_LIMIT_BYTES
-      ? [tooLarge(`agents.${index}`, `Agent "${agent.name}"`)]
-      : [];
+    return definitionSaveFits(request)
+      ? []
+      : [tooLarge(`agents.${index}`, `Agent "${agent.name}"`)];
   });
   if (
     flow &&
-    jsonBytes({ name: flow.name, graph: flow.graph, workspace: flow.workspace }) >
-      DEFINITION_REQUEST_LIMIT_BYTES
+    !definitionSaveFits({ name: flow.name, graph: flow.graph, workspace: flow.workspace })
   )
     issues.push(tooLarge("flow", `Flow "${flow.name}"`));
   if (Buffer.byteLength(portableDocumentText(document)) > PORTABLE_DOCUMENT_LIMIT_BYTES)

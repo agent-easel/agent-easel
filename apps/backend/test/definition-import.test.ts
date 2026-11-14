@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Result } from "@t3-factory/contracts";
+import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { loadConfiguration } from "../src/config.ts";
 import { startServer } from "../src/server.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
@@ -117,6 +118,37 @@ it("a file bundling more than 500 Agents is refused as over the limit", async (c
   assert(!review.ok);
   expect(review.error.code).toBe("too_large");
   expect(review.error.issues.map((issue) => issue.code)).toStrictEqual(["too_many_agents"]);
+});
+
+it("a Flow whose create request fits 2 MB but whose later save would not is refused as over the limit", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const full = "x".repeat(120_000);
+  const checklist = (lastPrompt: string) => ({
+    name: "Long checklist",
+    graph: {
+      blocks: Array.from({ length: 17 }, (_, index) =>
+        continuationStep(`step-${index}`, `Step ${index}`, index < 16 ? full : lastPrompt),
+      ),
+      connections: [],
+      flowInput: flowInput(),
+    },
+    workspace: { mode: "checkout" },
+  });
+  // The create request is 10 bytes under the limit; a save adds `"expectedRevision":…`.
+  const room =
+    DEFINITION_REQUEST_LIMIT_BYTES - 10 - Buffer.byteLength(JSON.stringify(checklist("")));
+  const flow = checklist("x".repeat(room));
+
+  // Act
+  const review = await factory.reviewImport(fileBody({ ...flowFile(), agents: [], flow }));
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.code).toBe("too_large");
+  expect(review.error.issues).toStrictEqual([
+    expect.objectContaining({ code: "definition_too_large", path: "flow" }),
+  ]);
 });
 
 it("an import request over 16 MiB is refused with HTTP 413", async (c) => {
