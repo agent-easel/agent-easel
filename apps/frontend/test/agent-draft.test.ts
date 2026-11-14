@@ -1067,32 +1067,6 @@ it("an Agent removed elsewhere refuses Duplicate", async () => {
   expect(setup.factory.duplicateAgent).not.toHaveBeenCalled();
 });
 
-it("Copy as JSON recovers unfinished edits in the create shape after removal", () => {
-  // Arrange
-  const setup = agentDraft();
-  removedElsewhere(setup);
-  setup.draft.edit({ name: "", prompt: "Unfinished recovery" });
-
-  // Act
-  const recovered = JSON.parse(setup.draft.exportJson());
-
-  // Assert
-  expect(recovered).toEqual({
-    name: "",
-    prompt: "Unfinished recovery",
-    execution: {
-      environmentId: "local",
-      providerInstanceId: "primary",
-      modelId: "first",
-      modelOptions: [
-        { id: "effort", value: "low" },
-        { id: "old", value: true },
-      ],
-    },
-    exits: [{ id: "done", name: "done", description: "", messageRequired: false }],
-  });
-});
-
 it("a retained Agent stays editable while a superseded save reply is pending", () => {
   // Arrange
   const setup = editedAgent();

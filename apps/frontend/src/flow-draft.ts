@@ -365,10 +365,6 @@ export function createFlowDraft(
       forgetCheck();
       publish();
     },
-    /** The current unfinished draft in the create API shape, without saved metadata. */
-    exportJson() {
-      return JSON.stringify(content, null, 2);
-    },
     /** Saves the content against the saved revision; a stale revision enters the conflict. */
     async save() {
       const against = saved;

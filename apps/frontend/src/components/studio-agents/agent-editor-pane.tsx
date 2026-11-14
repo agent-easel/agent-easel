@@ -55,7 +55,7 @@ export function AgentEditorPane(props: AgentEditorProps) {
       >
         <AgentEditorHeader {...props} name={name} saving={saving} />
         {state.removed ? (
-          <StudioRemovedDraft kind="Agent" json={draft.exportJson()} />
+          <StudioRemovedDraft kind="Agent" json={JSON.stringify(state.content, null, 2)} />
         ) : (
           <AgentRevisionPanel draft={draft} state={state} />
         )}

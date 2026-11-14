@@ -640,7 +640,8 @@ function DraftProblems({
   onSelect: (blockId: string | null) => void;
 }) {
   const { conflict } = state;
-  if (state.removed) return <StudioRemovedDraft kind="Flow" json={draft.exportJson()} />;
+  if (state.removed)
+    return <StudioRemovedDraft kind="Flow" json={JSON.stringify(state.content, null, 2)} />;
   return (
     <>
       {state.error && (

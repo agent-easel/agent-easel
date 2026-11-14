@@ -320,7 +320,6 @@ export function createAgentDraft(
       return unsubscribe;
     },
     edit,
-    exportJson: () => JSON.stringify(content, null, 2),
     async duplicate() {
       if (removed || !saved || snapshot.dirty || snapshot.saving || deleting) return;
       const session = source.getSession();

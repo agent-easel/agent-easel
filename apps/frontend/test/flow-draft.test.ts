@@ -903,41 +903,6 @@ it("a hidden clean Flow retains its content when removed elsewhere", async () =>
   expect(draft.getSnapshot().content).toBe(content);
 });
 
-it("a retained Flow exports unfinished content without saved identity or readiness", async () => {
-  // Arrange
-  const { draft, removedElsewhere } = openedFlow();
-  await removedElsewhere();
-  draft.edit({
-    name: "",
-    workspace: { mode: "worktree", base: { kind: "ref", ref: "unfinished/" } },
-  });
-
-  // Act
-  const json = draft.exportJson();
-
-  // Assert
-  expect(JSON.parse(json)).toStrictEqual({
-    name: "",
-    workspace: { mode: "worktree", base: { kind: "ref", ref: "unfinished/" } },
-    graph: {
-      blocks: [
-        {
-          id: "review",
-          name: "Review",
-          kind: "agent",
-          agentId: "agent",
-          position: { x: 200, y: 0 },
-          hiddenExitIds: [],
-          localExits: [],
-          revisitInstruction: "",
-        },
-      ],
-      connections: [],
-      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["review"] },
-    },
-  });
-});
-
 it("a retained Flow refuses Save without sending a write", async () => {
   // Arrange
   const { draft, factory, removedElsewhere } = openedFlow();
