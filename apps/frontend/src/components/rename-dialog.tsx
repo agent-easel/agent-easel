@@ -35,14 +35,16 @@ export function RenameDialog({
     event.preventDefault();
     if (!mutationsAllowed) return;
     setBusy(true);
-    try {
-      await save(title);
-      onClose();
-    } catch (error) {
-      setError(error instanceof Error ? error.message : `Could not rename ${kind}.`);
-    } finally {
-      setBusy(false);
-    }
+    return await save(title)
+      .then(() => {
+        onClose();
+      })
+      .catch((error: unknown) => {
+        setError(error instanceof Error ? error.message : `Could not rename ${kind}.`);
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return (
     <Dialog

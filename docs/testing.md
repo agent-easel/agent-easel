@@ -117,7 +117,7 @@ sleeps. Advancing `TestClock` applies only to Effect time; native timers require
 separate treatment. Do not turn a test of automatic background behavior into a
 manual-reconciliation test just to avoid waiting.
 
-The backend config serializes test files because they exercise real SQLite, process ownership and network resources.
+Backend test files run in parallel, each in its own process: they exercise real SQLite, process ownership and network resources, so every file creates its own temporary home and listens only on ephemeral loopback ports.
 Timeouts are suite-level failure bounds, not synchronization. Fix failures at
 their cause; do not add retries or larger per-test timeouts.
 
@@ -138,8 +138,11 @@ their cause; do not add retries or larger per-test timeouts.
 
 ### PR journey check
 
-The **Controlled UI journeys** PR check runs the complete existing suite with one
-worker after a frozen install, build and Chromium installation. Browser installation
+The **Controlled UI journeys** PR check runs the complete existing suite in three
+parallel shards after a frozen install, build and Chromium installation. Each shard
+is its own runner invocation with one worker and its own freshly seeded fixture, so
+a journey must not depend on state another journey created; the check passes only
+when every shard passes. Browser installation
 and journey execution are separate Actions steps so their durations are distinguishable.
 It runs on PR open, reopen and source synchronization, including drafts and forks,
 without model or production credentials. Becoming ready for review preserves the
@@ -155,7 +158,7 @@ Failed file enumeration fails selection. The final check succeeds only for an
 explicit skip or a successful full run, never a failed selection or unexpected skip.
 
 Failures upload available reports and traces from `.e2e/ci/` and fixture logs from
-`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>`, including hidden files, for
+`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>-shard-<n>`, including hidden files, for
 seven days. Setup failures may occur before those files exist. Download them from
 the Actions run. CI does not replace Before/After UI evidence or prove live provider,
 native desktop or remote-device compatibility. Requiring the check is an owner

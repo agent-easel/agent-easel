@@ -198,7 +198,12 @@ export interface T3Project {
 /** `root` is the project checkout. Worktree strategies name the branch every Run worker shares. */
 type WorkspaceStrategy =
   | { readonly type: "root" }
-  | { readonly type: "worktree"; readonly baseRef: string; readonly branch: string }
+  | {
+      readonly type: "worktree";
+      readonly baseRef: string;
+      readonly branch: string;
+      readonly startFromOrigin?: boolean;
+    }
   | { readonly type: "existing_worktree"; readonly worktreePath: string; readonly branch: string };
 /** Starts the thread's first turn with `message`. */
 export interface LaunchPayload {

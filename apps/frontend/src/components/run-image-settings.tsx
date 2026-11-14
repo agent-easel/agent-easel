@@ -186,18 +186,20 @@ function useImageDeletion(deleted: () => void) {
     if (!pending) return;
     const digests = pending.images.map((image) => image.sha256);
     setBusy(true);
-    try {
-      const skipped = await deleteImages(digests);
-      setNotice(skippedNotice(skipped.length));
-      setPending(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Run images could not be deleted.");
-    } finally {
-      setBusy(false);
-      // A partial or lost answer cannot say which bytes are gone, so the server decides for all.
-      revalidateRunImages(digests);
-      deleted();
-    }
+    return await deleteImages(digests)
+      .then((skipped) => {
+        setNotice(skippedNotice(skipped.length));
+        setPending(null);
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Run images could not be deleted.");
+      })
+      .finally(() => {
+        setBusy(false);
+        // A partial or lost answer cannot say which bytes are gone, so the server decides for all.
+        revalidateRunImages(digests);
+        deleted();
+      });
   };
   return { pending, busy, error, notice, ask, cancel: () => setPending(null), confirm };
 }

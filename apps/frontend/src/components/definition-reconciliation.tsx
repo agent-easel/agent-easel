@@ -50,9 +50,7 @@ export function RevisionComparePanel({
   const [confirming, setConfirming] = useState<number | null>(null);
   const shown = compared?.revision ?? null;
   // A confirmation names one revision; a newer one arriving closes it.
-  useEffect(() => {
-    if (confirming !== null && confirming !== shown) setConfirming(null);
-  }, [confirming, shown]);
+  if (confirming !== null && confirming !== shown) setConfirming(null);
   return (
     <section
       aria-label={`Reconcile ${noun}`}

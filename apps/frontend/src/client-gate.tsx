@@ -106,14 +106,17 @@ function useRenegotiateAfterReconnect(check: () => Promise<void>) {
 export function ClientGate({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<Gate>({ kind: "checking" });
   const current = useTransport();
-  const check = useCallback(async () => {
-    const next = await evaluate();
-    // Once ready, an unreachable server is presented as offline over the last observed state.
-    setGate((previous) =>
-      previous.kind === "ready" && next.kind === "unreachable" ? previous : next,
-    );
-    if (next.kind !== "unreachable") transport.reset();
-  }, []);
+  const check = useCallback(
+    () =>
+      evaluate().then((next) => {
+        // Once ready, an unreachable server is presented as offline over the last observed state.
+        setGate((previous) =>
+          previous.kind === "ready" && next.kind === "unreachable" ? previous : next,
+        );
+        if (next.kind !== "unreachable") transport.reset();
+      }),
+    [],
+  );
   useEffect(() => {
     void check();
   }, [check]);
@@ -258,17 +261,18 @@ function RequestAccessScreen({
     event.preventDefault();
     setBusy(true);
     setError("");
-    try {
-      await api.requestClientAccess({
+    return await api
+      .requestClientAccess({
         label,
         kind: desktopBridge() ? "desktop" : "browser",
+      })
+      .then(() => onRequested())
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "The request could not be sent.");
+      })
+      .finally(() => {
+        setBusy(false);
       });
-      await onRequested();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The request could not be sent.");
-    } finally {
-      setBusy(false);
-    }
   };
   const copy = previousCopy[previous];
   return (

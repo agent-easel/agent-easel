@@ -238,18 +238,21 @@ function useAgentDuplication(agentId: string, library: AgentsLibrary, allowed: b
   async function duplicate() {
     if (duplicating || !allowed) return;
     setDuplicating(true);
-    try {
-      const copy = await library.definitions.duplicateAgent(agentId, {});
-      void library.refreshReporting();
-      if (active.current) void openStudio({ tab: "agents", agentId: copy.id });
-    } catch (cause) {
-      if (active.current)
+    return await library.definitions
+      .duplicateAgent(agentId, {})
+      .then((copy) => {
+        void library.refreshReporting();
+        if (active.current) void openStudio({ tab: "agents", agentId: copy.id });
+      })
+      .catch((cause: unknown) => {
+        if (!active.current) return;
         setError(
           cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
         );
-    } finally {
-      if (active.current) setDuplicating(false);
-    }
+      })
+      .finally(() => {
+        if (active.current) setDuplicating(false);
+      });
   }
   return { error, duplicating, duplicate };
 }
