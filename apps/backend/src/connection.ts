@@ -4,6 +4,7 @@ import { now } from "./time.ts";
 import { newId } from "./ids.ts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
 import type { T3Adapter, T3ConnectionReason } from "./adapters/t3.ts";
@@ -78,9 +79,16 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
     // Once a mutation starts, shutdown drains it before closing the adapter and SQL.
     const serial = <A, E>(action: Effect.Effect<A, E>) =>
       mutex.withPermits(1)(Effect.uninterruptible(action));
+    /** Publishes a check's result: only a different connection, not a later check time, is a change. */
+    const publishCheck = (before: T3Connection) => {
+      if (Equal.equals({ ...before, checkedAt: null }, { ...status, checkedAt: null }))
+        changes.connectionChecked();
+      else changes.connectionChanged();
+    };
     const check = Effect.fn("Connection.check")(function* () {
       if (!saved || closed) return value();
       const endpoint = saved.endpoint;
+      const before = status;
       return yield* Effect.gen(function* () {
         const observation = yield* Effect.tryPromise(() => t3.inspect({ endpoint }));
         const environment = observation.contract?.environmentId;
@@ -121,7 +129,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
           authorizationPending: observation.reason === "approval-pending",
           contract: observation.contract ?? null,
         };
-        changes.connectionChanged();
+        publishCheck(before);
         if (status.state === "ready" && (!observation.authorizationIdentity || !environment)) {
           status = {
             ...status,
@@ -129,7 +137,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
             explanation:
               "T3 did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
           };
-          changes.connectionChanged();
+          publishCheck(before);
         }
         return value();
       }).pipe(
@@ -144,7 +152,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
               explanation:
                 "T3 is unavailable. Start T3 or check the endpoint and network. Factory will reconnect automatically.",
             };
-            changes.connectionChanged();
+            publishCheck(before);
             return value();
           }),
         ),

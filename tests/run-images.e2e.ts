@@ -124,8 +124,10 @@ test("picked screenshots survive reload and every Flow-input worker receives the
     { name: "image-1-screenshot.png", sha256: sha256Hex(files.red.data) },
     { name: "image-2-screenshot.png", sha256: sha256Hex(files.blue.data) },
   ];
-  assert(detail.number !== null);
-  expect(await launchedAttachments(app, detail.number)).toEqual([expected, expected]);
+  const { number } = detail;
+  assert(number !== null);
+  // Workers launch after Start returns, so the fixture's launches arrive asynchronously.
+  await expect.poll(() => launchedAttachments(app, number)).toEqual([expected, expected]);
   await app.screenshot("images-run-started");
 });
 
@@ -176,8 +178,10 @@ test("pasted and dropped screenshots become inline references and Start delivers
     { name: "image-2-screenshot.png", sha256: sha256Hex(files.blue.data) },
     { name: "image-3-diagram.png", sha256: sha256Hex(files.amber.data) },
   ];
-  assert(detail.number !== null);
-  expect(await launchedAttachments(app, detail.number)).toEqual([expected, expected]);
+  const { number } = detail;
+  assert(number !== null);
+  // Workers launch after Start returns, so the fixture's launches arrive asynchronously.
+  await expect.poll(() => launchedAttachments(app, number)).toEqual([expected, expected]);
 });
 
 test("removing an attached thumbnail removes that image and every reference to it", async ({
@@ -267,6 +271,7 @@ test("an image Factory reports missing at Start is uploaded again and the Run st
 }) => {
   // Arrange
   await composeWithImages(app, screen, browser, "UI images missing upload", ["green"]);
+  await expect(thumbnails(screen)).toHaveCount(1);
   let uploads = 0;
   await browser.route("**/api/run-images/*", async (route) => {
     const method = route.request.method;
@@ -294,6 +299,7 @@ test("a T3 without attachment support rejects the image Start and keeps the draf
 }) => {
   // Arrange
   await composeWithImages(app, screen, browser, "UI images unsupported", ["red"]);
+  await expect(thumbnails(screen)).toHaveCount(1);
   await fixture(app, "attachments?supported=false");
 
   // Act

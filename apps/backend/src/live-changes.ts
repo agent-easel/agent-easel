@@ -55,6 +55,14 @@ export function makeLiveChanges() {
     connectionChanged() {
       mark((scope) => scope.kind === "connection" || scope.kind === "launchChoices");
     },
+    /**
+     * A re-check that left the connection as it was and only moved its check time. The catalog
+     * does not show that time, and marking it dirty would make a read that races the next hint
+     * report the composer's data as not current, which holds back every mutation meanwhile.
+     */
+    connectionChecked() {
+      mark((scope) => scope.kind === "connection");
+    },
     /** Theme-color status or presentation changed; nothing else depends on it. */
     appearanceChanged() {
       mark((scope) => scope.kind === "appearance");
