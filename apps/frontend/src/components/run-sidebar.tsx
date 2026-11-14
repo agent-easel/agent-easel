@@ -280,51 +280,12 @@ function useRunActions(searching: boolean, runs: readonly RunNavigationEntry[]) 
   // user may have moved on, so that request focuses the destination only while focus is still
   // on the row, on that Run's fallback, or lost to the page because the holder left. Focus the
   // user moves anywhere else, or a press outside them, such as on page content, revokes it.
-  const [focusAfterRender, setFocusAfterRender] = useState<FocusRequest>();
+  const requestFocus = useRunActionFocus(runs);
   // The navigation a Settle answer arrives at, which tells a lagging entry from a later one.
   const latestRuns = useRef(runs);
   useLayoutEffect(() => {
     latestRuns.current = runs;
   }, [runs]);
-  useLayoutEffect(() => {
-    if (!focusAfterRender) return;
-    const run = runs.find((candidate) => candidate.id === focusAfterRender.runId);
-    if (focusAfterRender.owner && !focusAfterRender.ownerFocused) {
-      document.getElementById(focusAfterRender.owner)?.focus();
-      return setFocusAfterRender({ ...focusAfterRender, ownerFocused: true });
-    }
-    const step = focusStep(focusAfterRender, run);
-    if (step === "drop") return setFocusAfterRender(undefined);
-    if (step === "stopping") return setFocusAfterRender({ ...focusAfterRender, stopping: true });
-    if (step === "wait") return;
-    const target = document.getElementById(focusAfterRender.id);
-    if (!target) return;
-    if (!focusAfterRender.owner || ownsFocus(focusAfterRender.owner, focusAfterRender.runId))
-      target.focus();
-    setFocusAfterRender(undefined);
-  }, [focusAfterRender, runs]);
-  const owner = focusAfterRender?.ownerFocused ? focusAfterRender.owner : undefined;
-  const ownerRun = focusAfterRender?.runId;
-  useEffect(() => {
-    if (!owner || !ownerRun) return;
-    const revoke = () =>
-      setFocusAfterRender((current) => (current?.owner === owner ? undefined : current));
-    const focusIn = (event: FocusEvent) => {
-      if (!closingConfirmation() && !holdsFocus(event.target, owner, ownerRun)) revoke();
-    };
-    // Focus falling to the page is not itself departure: the row also loses it when it moves or
-    // leaves the list. The press that drops focus there is.
-    const holders = `#${CSS.escape(owner)}, [data-focus-fallback="${CSS.escape(ownerRun)}"]`;
-    const press = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(holders)) revoke();
-    };
-    document.addEventListener("focusin", focusIn);
-    document.addEventListener("pointerdown", press, true);
-    return () => {
-      document.removeEventListener("focusin", focusIn);
-      document.removeEventListener("pointerdown", press, true);
-    };
-  }, [owner, ownerRun]);
   const { settle, dialog: settlementDialog } = useSettleRun();
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState<string>();
@@ -343,31 +304,92 @@ function useRunActions(searching: boolean, runs: readonly RunNavigationEntry[]) 
       setBusy(undefined);
     };
     const row = `run-row-${run.id}`;
-    try {
-      let focusAction: RunAction | undefined = action;
-      let owner: Pick<FocusRequest, "owner" | "seen"> = {};
-      if (action === "settle") {
-        const outcome = await settle(run.id, run.settlement === "unresolved", finishRequest);
-        if (!outcome) return;
-        if (outcome.outcome === "stopping")
-          owner = {
-            owner: row,
-            seen: latestRuns.current.find((candidate) => candidate.id === run.id),
-          };
-        else if (outcome.outcome !== "settled") focusAction = undefined;
-      } else await runActions[action](run.id);
-      const id =
-        searching || focusAction === "restore" || !focusAction
-          ? row
-          : `${actionGroup[focusAction]}-toggle`;
-      setFocusAfterRender({ id, runId: run.id, action: focusAction, ...owner });
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : "Could not update the Run.");
-    } finally {
-      finishRequest();
-    }
+    const operation =
+      action === "settle"
+        ? settle(run.id, run.settlement === "unresolved", finishRequest)
+        : runActions[action](run.id).then(() => undefined);
+    return await operation
+      .then((outcome) => {
+        let focusAction: RunAction | undefined = action;
+        let owner: Pick<FocusRequest, "owner" | "seen"> = {};
+        if (action === "settle") {
+          if (!outcome) return;
+          if (outcome.outcome === "stopping")
+            owner = {
+              owner: row,
+              seen: latestRuns.current.find((candidate) => candidate.id === run.id),
+            };
+          else if (outcome.outcome !== "settled") focusAction = undefined;
+        }
+        const id =
+          searching || focusAction === "restore" || !focusAction
+            ? row
+            : `${actionGroup[focusAction]}-toggle`;
+        requestFocus({ id, runId: run.id, action: focusAction, ...owner });
+      })
+      .catch((error: unknown) => {
+        setActionError(error instanceof Error ? error.message : "Could not update the Run.");
+      })
+      .finally(finishRequest);
   };
   return { act, busy, actionError, settlementDialog };
+}
+
+/** Focus progress belongs to the DOM interaction and does not render any UI. */
+function useRunActionFocus(runs: readonly RunNavigationEntry[]) {
+  const [request, setRequest] = useState<FocusRequest>();
+  const pending = useRef<FocusRequest | undefined>(undefined);
+  useLayoutEffect(() => {
+    let focus = pending.current;
+    if (!focus) return;
+    const runId = focus.runId;
+    const run = runs.find((candidate) => candidate.id === runId);
+    if (focus.owner && !focus.ownerFocused) {
+      document.getElementById(focus.owner)?.focus();
+      focus = { ...focus, ownerFocused: true };
+      pending.current = focus;
+    }
+    const step = focusStep(focus, run);
+    if (step === "drop") {
+      pending.current = undefined;
+      return;
+    }
+    if (step === "stopping") {
+      pending.current = { ...focus, stopping: true };
+      return;
+    }
+    if (step === "wait") return;
+    const target = document.getElementById(focus.id);
+    if (!target) return;
+    if (!focus.owner || ownsFocus(focus.owner, focus.runId)) target.focus();
+    pending.current = undefined;
+  }, [request, runs]);
+  useEffect(() => {
+    const owner = request?.owner;
+    const runId = request?.runId;
+    if (!owner || !runId) return;
+    const revoke = () => {
+      if (pending.current?.owner === owner) pending.current = undefined;
+    };
+    const focusIn = (event: FocusEvent) => {
+      if (!closingConfirmation() && !holdsFocus(event.target, owner, runId)) revoke();
+    };
+    // Losing the row can drop focus to the page; only a press there revokes the request.
+    const holders = `#${CSS.escape(owner)}, [data-focus-fallback="${CSS.escape(runId)}"]`;
+    const press = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest(holders)) revoke();
+    };
+    document.addEventListener("focusin", focusIn);
+    document.addEventListener("pointerdown", press, true);
+    return () => {
+      document.removeEventListener("focusin", focusIn);
+      document.removeEventListener("pointerdown", press, true);
+    };
+  }, [request]);
+  return useCallback((next: FocusRequest) => {
+    pending.current = next;
+    setRequest(next);
+  }, []);
 }
 
 /** A focus request after a Run action. A Settle still stopping has an `owner`, the row it

@@ -35,13 +35,14 @@ export function ContinueNow({ arrival, label }: { arrival: WaitArrival; label: s
   async function submit() {
     setBusy(true);
     setError("");
-    try {
-      await api.continueWaitArrival(arrival.id);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not continue this arrival.");
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .continueWaitArrival(arrival.id)
+      .catch((caught: unknown) => {
+        setError(caught instanceof Error ? caught.message : "Could not continue this arrival.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return (
     <>

@@ -181,8 +181,20 @@ passed where a synchronous `void` callback is expected, including React handlers
 and Node event listeners. Handle rejection in the operation or at its owning
 boundary; `void` only marks intentional detachment and does not handle errors.
 
-React Hooks and effect dependencies, import boundaries, unused suppression
-directives and warning failure remain enforced. Fallow owns unused code,
+The frontend build runs the stable Babel React Compiler for React 19, with
+`panicThreshold: "all_errors"`: compiler diagnostics fail the build instead of
+silently leaving affected components or Hooks uncompiled. Keep component code
+within the compiler's supported syntax; asynchronous cleanup uses Promise
+`finally` callbacks where `try/finally` is unsupported.
+
+Vite+ loads the official `eslint-plugin-react-hooks` through Oxlint's JS plugin
+support as `react-hooks-js`, alongside native React JSX checks. Every rule from
+`recommended-latest` is an error, covering Hook ordering and dependencies,
+compiler diagnostics, purity, refs, immutability and state updates in effects or
+render. There are no Hook-rule suppressions or compiler opt-outs.
+
+Import boundaries, unused suppression directives and warning failure remain
+enforced. Fallow owns unused code,
 dependencies, duplication and complexity checks. No findings baseline is allowed.
 
 ## Dependency rules

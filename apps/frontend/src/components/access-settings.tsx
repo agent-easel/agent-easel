@@ -39,14 +39,14 @@ export function AccessSettings() {
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
-    try {
-      await operation();
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The change could not be saved.");
-    } finally {
-      setBusy(false);
-    }
+    return await operation()
+      .then(() => load())
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "The change could not be saved.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   return (
     <div className="grid gap-6" aria-busy={busy}>

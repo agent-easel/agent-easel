@@ -4,13 +4,16 @@ import { api } from "./api.ts";
 
 /** The project catalog, read again when `key` changes; undefined until a read succeeds. */
 export function useProjects(key?: string) {
-  const [projects, setProjects] = useState<readonly FactoryProject[]>();
+  const [catalog, setCatalog] = useState<{
+    key: string | undefined;
+    projects: readonly FactoryProject[] | undefined;
+  }>({ key, projects: undefined });
+  if (catalog.key !== key) setCatalog({ key, projects: undefined });
   useEffect(() => {
     let active = true;
-    setProjects(undefined);
     void api.listProjects().then(
       (catalog) => {
-        if (active) setProjects(catalog.projects);
+        if (active) setCatalog({ key, projects: catalog.projects });
       },
       () => undefined,
     );
@@ -18,5 +21,5 @@ export function useProjects(key?: string) {
       active = false;
     };
   }, [key]);
-  return projects;
+  return catalog.key === key ? catalog.projects : undefined;
 }

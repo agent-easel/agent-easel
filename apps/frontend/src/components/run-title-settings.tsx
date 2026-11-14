@@ -58,7 +58,6 @@ export function RunTitleSettings() {
   const [saveError, setSaveError] = useState("");
   useEffect(() => {
     let active = true;
-    setLoadError("");
     // The setting is not delivered live, so the section reads it whenever it opens.
     api.getRunTitleSetting().then(
       (value) => active && setSetting(value),
@@ -76,13 +75,17 @@ export function RunTitleSettings() {
   const save = async (next: UpdateRunTitleSettingInput) => {
     setSaving(true);
     setSaveError("");
-    try {
-      setSetting(await api.updateRunTitleSetting(next));
-    } catch (cause) {
-      setSaveError(errorMessage(cause, "Factory could not save Run titles."));
-    } finally {
-      setSaving(false);
-    }
+    return await api
+      .updateRunTitleSetting(next)
+      .then((value) => {
+        setSetting(value);
+      })
+      .catch((cause: unknown) => {
+        setSaveError(errorMessage(cause, "Factory could not save Run titles."));
+      })
+      .finally(() => {
+        setSaving(false);
+      });
   };
   return (
     <div className="grid gap-6">
@@ -109,7 +112,10 @@ export function RunTitleSettings() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setLoads((n) => n + 1)}
+              onClick={() => {
+                setLoadError("");
+                setLoads((n) => n + 1);
+              }}
             >
               Retry
             </Button>
