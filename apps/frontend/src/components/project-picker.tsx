@@ -172,15 +172,17 @@ export function useProjectCatalog() {
   async function act(action: () => Promise<unknown>) {
     setBusy(true);
     setError("");
-    try {
-      await action();
-      return true;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Project operation failed.");
-      return false;
-    } finally {
-      setBusy(false);
-    }
+    return await action()
+      .then(() => {
+        return true;
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : "Project operation failed.");
+        return false;
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
 
   return { catalog, error, busy, act, clearError: () => setError("") };

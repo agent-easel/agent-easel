@@ -345,14 +345,17 @@ function HumanResponseForm({
     if (!selected) return;
     setBusy(true);
     setError("");
-    try {
-      await api.answerHumanOccurrence(occurrence.id, { exitId: selected.id, message });
-      setMessage("");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not submit this answer.");
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .answerHumanOccurrence(occurrence.id, { exitId: selected.id, message })
+      .then(() => {
+        setMessage("");
+      })
+      .catch((caught: unknown) => {
+        setError(caught instanceof Error ? caught.message : "Could not submit this answer.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return (
     <form
@@ -486,13 +489,14 @@ export function RequestReport({
   async function submit() {
     setBusy(true);
     setError("");
-    try {
-      await api.requestReport(run.id, { blockId });
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not request report.");
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .requestReport(run.id, { blockId })
+      .catch((caught: unknown) => {
+        setError(caught instanceof Error ? caught.message : "Could not request report.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return (
     <div className="grid gap-2">

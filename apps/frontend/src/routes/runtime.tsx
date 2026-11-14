@@ -29,19 +29,26 @@ export function RuntimeSettings() {
     setBusy(false);
   }, [refreshReporting]);
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let active = true;
+    void refreshReporting().then(() => {
+      if (active) setBusy(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [refreshReporting]);
   const install = async (targetId: string) => {
     setBusy(true);
     setError("");
-    try {
-      await api.installReporting({ targetId });
-      await refreshReporting();
-    } catch (error) {
-      setError(String(error));
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .installReporting({ targetId })
+      .then(() => refreshReporting())
+      .catch((error: unknown) => {
+        setError(String(error));
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   return (
     <section className="space-y-5">

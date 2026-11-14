@@ -87,20 +87,22 @@ function useOpenedFlowDraft(
 
 /** Keeps the last selected block rendered while the floating panel plays its close motion. */
 function usePanelBlock(block: FlowBlock | undefined) {
-  const [closing, setClosing] = useState<FlowBlock | null>(null);
-  const last = useRef<FlowBlock | undefined>(block);
+  const [panel, setPanel] = useState<{ block: FlowBlock | undefined; closing: FlowBlock | null }>({
+    block,
+    closing: null,
+  });
+  if (panel.block !== block) {
+    setPanel({ block, closing: block ? null : (panel.block ?? panel.closing) });
+  }
+  const { closing } = panel;
   useEffect(() => {
-    if (block) {
-      last.current = block;
-      setClosing(null);
-      return;
-    }
-    if (!last.current) return;
-    setClosing(last.current);
-    last.current = undefined;
-    const timer = window.setTimeout(() => setClosing(null), PANEL_CLOSE_MS);
+    if (!closing) return;
+    const timer = window.setTimeout(
+      () => setPanel((current) => ({ ...current, closing: null })),
+      PANEL_CLOSE_MS,
+    );
     return () => window.clearTimeout(timer);
-  }, [block]);
+  }, [closing]);
   return closing;
 }
 
@@ -163,9 +165,7 @@ function useCanvasSelection(
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedWire, setSelectedWire] = useState<FlowWire | null>(null);
   const wire = selectedWire && hasWire(graph, selectedWire) ? selectedWire : null;
-  useEffect(() => {
-    if (selectedWire && !wire) setSelectedWire(null);
-  }, [selectedWire, wire]);
+  if (selectedWire && !wire) setSelectedWire(null);
   /** Selects a block, or with null clears every selection. */
   const select = useCallback((blockId: string | null) => {
     setSelected(blockId);

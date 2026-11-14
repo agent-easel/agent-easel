@@ -102,6 +102,10 @@ test("snoozing a restored Run restores its group expansion and focuses the toggl
   );
   await screen.getByRole("menuitem", "Restore", { exact: true }).tap();
   await expect(toggle).toBeHidden();
+  // The open menu hides background roles before Restore finishes moving and focusing the row.
+  await expect(
+    screen.getByRole("navigation", "Open Runs").getByRole("link").filter({ hasText: snoozedTitle }),
+  ).toBeFocused();
   await actions.secondaryTap();
 
   // Act

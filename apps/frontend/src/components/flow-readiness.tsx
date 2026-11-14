@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, ChevronDown, CircleAlert, CircleDot } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
@@ -69,12 +69,13 @@ export function ReadinessPanel({
   graph: FlowGraph;
   onSelect: (blockId: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const issues = readiness?.issues.length ?? 0;
+  const [expanded, setExpanded] = useState({ readiness, open: issues > 0 });
+  const { open } = expanded;
   // A check that finds problems lists them; a ready or stale result stays compact.
-  useEffect(() => {
-    if (issues > 0) setOpen(true);
-  }, [readiness, issues]);
+  if (expanded.readiness !== readiness) {
+    setExpanded({ readiness, open: issues > 0 || open });
+  }
   const summary = readinessSummary(readiness);
   return (
     <div className="absolute top-4 left-4 z-[5] grid max-w-80 gap-2">
@@ -84,7 +85,7 @@ export function ReadinessPanel({
         className="w-fit bg-card shadow-floating"
         aria-expanded={open}
         aria-controls="flow-readiness"
-        onClick={() => setOpen(!open)}
+        onClick={() => setExpanded({ readiness, open: !open })}
       >
         <summary.Icon aria-hidden className={summary.tone} />
         <span>{summary.label}</span>
