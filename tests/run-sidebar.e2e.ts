@@ -102,6 +102,10 @@ test("snoozing a restored Run restores its group expansion and focuses the toggl
   );
   await screen.getByRole("menuitem", "Restore", { exact: true }).tap();
   await expect(toggle).toBeHidden();
+  // The open menu hides background roles before Restore finishes moving and focusing the row.
+  await expect(
+    screen.getByRole("navigation", "Open Runs").getByRole("link").filter({ hasText: snoozedTitle }),
+  ).toBeFocused();
   await actions.secondaryTap();
 
   // Act
@@ -128,6 +132,7 @@ test("title search combines drafts and all Run states in creation order", async 
   await screen.getByLabel("Initial prompt", { exact: false }).fill("Demo · Sidebar search draft");
   const snoozed = await findRun(app.baseUrl, snoozedTitle);
   await app.open(`/runs/${snoozed.id}`);
+  await expect(screen.getByRole("link", /^Demo · Sidebar search draft\s*Draft$/)).toBeVisible();
   await app.open("/runs/new");
   const titles = await matchingSidebarTitles(app.baseUrl, "Demo ·");
 
@@ -280,6 +285,54 @@ test("expanding Settled shows compact single-line rows without repository metada
   expect(bounds!.height).toBeLessThanOrEqual(36);
   await expect(row).not.toContainText("copy/welcome");
   await app.screenshot("sidebar-compact-settled");
+});
+
+test("expanded Settled stays pinned below the open Runs instead of scrolling them away", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: a viewport shorter than the seeded open Runs.
+  await browser.setViewport({ width: 1440, height: 700 });
+  await app.open("/runs/new");
+  const firstOpen = screen.getByRole("navigation", "Open Runs").getByRole("link").first();
+  const settledRow = screen
+    .getByRole("navigation", "Settled Runs")
+    .getByRole("link", /Demo · Settled · Clearer onboarding copy/);
+
+  // Act
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+
+  // Assert: the open list and the Settled rows are both on screen at once.
+  await expect(settledRow).toBeVisible();
+  const open = await firstOpen.boundingBox();
+  const settled = await settledRow.boundingBox();
+  expect(open!.y).toBeGreaterThanOrEqual(0);
+  expect(settled!.y + settled!.height).toBeLessThanOrEqual(700);
+  await app.screenshot("sidebar-settled-pinned");
+});
+
+test("on a short sidebar the pinned groups yield so an open Run stays fully visible", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/runs/new");
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+  const firstOpen = screen.getByRole("navigation", "Open Runs").getByRole("link").first();
+  const firstGroup = screen.getByRole("button", /^(Snoozed|Settled) \d+$/).first();
+
+  // Act: shrink the window below the open list plus the expanded groups.
+  await browser.setViewport({ width: 1440, height: 220 });
+
+  // Assert: the first open row is whole and above the pinned groups.
+  const open = await firstOpen.boundingBox();
+  const groups = await firstGroup.boundingBox();
+  expect(open!.y).toBeGreaterThanOrEqual(0);
+  expect(open!.y + open!.height).toBeLessThanOrEqual(groups!.y);
+  await app.screenshot("sidebar-short-pinned-groups");
 });
 
 test("the Settled preview exposes repository details omitted from its compact row", async ({

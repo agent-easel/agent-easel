@@ -119,26 +119,30 @@ function useDiscordPage() {
   const check = async (revision: number) => {
     setChecking(true);
     setCheckError("");
-    try {
-      setSettings(await api.checkDiscordConnection({ revision }));
-    } catch (cause) {
-      setCheckError(chatControlError(cause, "Factory could not run the check."));
-    } finally {
-      setChecking(false);
-    }
+    return await api
+      .checkDiscordConnection({ revision })
+      .then(setSettings)
+      .catch((cause: unknown) => {
+        setCheckError(chatControlError(cause, "Factory could not run the check."));
+      })
+      .finally(() => {
+        setChecking(false);
+      });
   };
   const turn = async (on: boolean) => {
     setSwitching(true);
     setSwitchError("");
-    try {
-      setSettings(await api.setChatControlEnabled({ enabled: on }));
-    } catch (cause) {
-      setSwitchError(
-        chatControlError(cause, `Factory could not turn Chat control ${on ? "On" : "Off"}.`),
-      );
-    } finally {
-      setSwitching(false);
-    }
+    return await api
+      .setChatControlEnabled({ enabled: on })
+      .then(setSettings)
+      .catch((cause: unknown) => {
+        setSwitchError(
+          chatControlError(cause, `Factory could not turn Chat control ${on ? "On" : "Off"}.`),
+        );
+      })
+      .finally(() => {
+        setSwitching(false);
+      });
   };
   return {
     ...section,

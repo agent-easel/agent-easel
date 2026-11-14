@@ -164,15 +164,22 @@ export function useUpgrade({ includeServer = true }: { includeServer?: boolean }
   };
 
   const download = async () => {
-    try {
-      if (app?.update.state === "available")
-        void desktop?.downloadUpdate().then((result) => {
+    if (app?.update.state === "available")
+      void desktop
+        ?.downloadUpdate()
+        .then((result) => {
           if (!result.ok) setFailure({ title: "Download failed", message: result.message });
+        })
+        .catch((cause: unknown) => {
+          setFailure({ title: "Download failed", message: describe(cause) });
         });
-      if (remote?.update.state === "available") setServer(await api.downloadServerUpdate());
-    } catch (cause) {
-      setFailure({ title: "Server download failed", message: describe(cause) });
-    }
+    if (remote?.update.state === "available")
+      await api
+        .downloadServerUpdate()
+        .then(setServer)
+        .catch((cause: unknown) => {
+          setFailure({ title: "Server download failed", message: describe(cause) });
+        });
   };
 
   const upgrade = async () => {
@@ -180,21 +187,21 @@ export function useUpgrade({ includeServer = true }: { includeServer?: boolean }
     const localReady = app?.update.state === "downloaded" ? app : null;
     setFailure(null);
     setUpgrading(true);
-    try {
-      if (serverReady) {
+    if (serverReady) {
+      try {
         await api.installServerUpdate().catch((cause: unknown) => {
           // A lost reply may follow an accepted install: the restart itself answers.
           if (!(cause instanceof OfflineError && cause.delivery === "unknown")) throw cause;
         });
         await waitForServer(serverReady.update.version);
+      } catch (cause) {
+        setUpgrading(false);
+        setFailure({
+          title: localReady ? "Server update failed · Client kept" : "Server update failed",
+          message: describe(cause),
+        });
+        return;
       }
-    } catch (cause) {
-      setUpgrading(false);
-      setFailure({
-        title: localReady ? "Server update failed · Client kept" : "Server update failed",
-        message: describe(cause),
-      });
-      return;
     }
     if (!localReady) {
       // A browser receives the upgraded server's UI only by loading it again.

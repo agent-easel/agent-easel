@@ -20,12 +20,14 @@ function attentionStore<Settings extends { readonly needsAttention: boolean }>(
     listeners.add(listener);
     return () => listeners.delete(listener);
   };
+  // Keep the reader in the store's closure when the compiler outlines Hook callbacks.
+  const getSnapshot = () => needsAttention;
   /** `read` reads the host's settings once, for the host only. */
   const useAttention = (shouldRead: boolean) => {
     useEffect(() => {
       if (shouldRead) void read().then(report, () => undefined);
     }, [shouldRead]);
-    return useSyncExternalStore(subscribe, () => needsAttention);
+    return useSyncExternalStore(subscribe, getSnapshot);
   };
   return { report, useAttention };
 }

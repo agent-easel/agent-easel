@@ -329,7 +329,9 @@ const timelineFilterKey = "factory.runTimelineFilter";
 function useTimelineFilter() {
   const [filter, setFilter] = useState<TimelineFilter>(() => {
     try {
-      return localStorage.getItem(timelineFilterKey) === "all" ? "all" : "key";
+      const saved = localStorage.getItem(timelineFilterKey);
+      if (saved === "all") return "all";
+      return "key";
     } catch {
       return "key";
     }

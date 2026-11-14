@@ -37,16 +37,19 @@ export function ArchiveRunDialog({
   async function archive() {
     setBusy(true);
     setError("");
-    try {
-      await api.archiveRun(run.id);
-      onOpenChange(false);
-      onArchived?.();
-      if (pathname === `/runs/${run.id}`) void navigate({ to: "/runs/new" });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not archive the Run.");
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .archiveRun(run.id)
+      .then(() => {
+        onOpenChange(false);
+        onArchived?.();
+        if (pathname === `/runs/${run.id}`) void navigate({ to: "/runs/new" });
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not archive the Run.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return (
     <Dialog

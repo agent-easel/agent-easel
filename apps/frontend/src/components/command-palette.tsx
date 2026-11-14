@@ -40,7 +40,6 @@ function usePaletteCatalog() {
   const [attempt, retry] = useState(0);
   useEffect(() => {
     let active = true;
-    setCatalog(emptyCatalog);
     void Promise.allSettled([api.listRunNavigation(), api.listFlows(), api.listAgents()]).then(
       ([runs, flows, agents]) => {
         if (!active) return;
@@ -58,7 +57,13 @@ function usePaletteCatalog() {
       active = false;
     };
   }, [attempt]);
-  return { ...catalog, retry: () => retry((value) => value + 1) };
+  return {
+    ...catalog,
+    retry: () => {
+      setCatalog(emptyCatalog);
+      retry((value) => value + 1);
+    },
+  };
 }
 
 function PaletteResults({

@@ -267,16 +267,17 @@ function OpenedAgentEditor({
     if (duplicating) return;
     setDuplicating(true);
     setDuplicateError("");
-    try {
-      const copy = await draft.duplicate();
-      if (copy) onDuplicated(copy);
-    } catch (cause) {
-      setDuplicateError(
-        cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
-      );
-    } finally {
-      setDuplicating(false);
-    }
+    await draft
+      .duplicate()
+      .then((copy) => {
+        if (copy) onDuplicated(copy);
+      })
+      .catch((cause: unknown) => {
+        setDuplicateError(
+          cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+        );
+      })
+      .finally(() => setDuplicating(false));
   }
   async function save() {
     const saved = await draft.save();

@@ -111,13 +111,15 @@ function useChatModelPage() {
   const test = async (revision: number) => {
     setTesting(true);
     setTestError("");
-    try {
-      section.setSettings(await api.testChatModel({ revision }));
-    } catch (cause) {
-      setTestError(chatControlError(cause, "Factory could not run the Test."));
-    } finally {
-      setTesting(false);
-    }
+    return await api
+      .testChatModel({ revision })
+      .then(section.setSettings)
+      .catch((cause: unknown) => {
+        setTestError(chatControlError(cause, "Factory could not run the Test."));
+      })
+      .finally(() => {
+        setTesting(false);
+      });
   };
   const { settings, draft } = section;
   useEffect(() => {

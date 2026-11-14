@@ -87,15 +87,18 @@ function useConnectionOperation() {
       setBusy(true);
       setError("");
       setOpened(false);
-      try {
-        setConnection(await operation());
-        return true;
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "The operation could not complete.");
-        return false;
-      } finally {
-        setBusy(false);
-      }
+      return await operation()
+        .then((value) => {
+          setConnection(value);
+          return true;
+        })
+        .catch((cause: unknown) => {
+          setError(cause instanceof Error ? cause.message : "The operation could not complete.");
+          return false;
+        })
+        .finally(() => {
+          setBusy(false);
+        });
     },
     [setConnection],
   );

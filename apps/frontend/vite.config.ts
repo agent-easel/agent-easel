@@ -2,11 +2,16 @@ import "vite-plus/test/config";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { fileURLToPath } from "node:url";
 import { defaultServerConditions, defineConfig } from "vite-plus";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig(({ command }) => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    babel({ presets: [reactCompilerPreset({ panicThreshold: "all_errors" })] }),
+    tailwindcss(),
+  ],
   resolve: {
     ...(command === "serve"
       ? { conditions: ["factory-source", "module", "browser", "development"] }

@@ -170,16 +170,17 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
 /** Reopen a retained Flow only after the blocked navigation has finished cancelling. */
 function useRetainedFlowReopen(blocker: ReturnType<typeof useStudioDraftGuard>) {
   const navigate = useStudioNavigation();
-  const [reopenFlow, setReopenFlow] = useState<string>();
+  const reopenFlow = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!reopenFlow || blocker.status !== "idle") return;
-    setReopenFlow(undefined);
-    void navigate({ tab: "flows", flowId: reopenFlow });
-  }, [reopenFlow, blocker.status, navigate]);
+    if (!reopenFlow.current || blocker.status !== "idle") return;
+    const flowId = reopenFlow.current;
+    reopenFlow.current = undefined;
+    void navigate({ tab: "flows", flowId });
+  }, [blocker.status, navigate]);
   return () => {
     if (blocker.status !== "blocked") return;
     const flow = blocker.drafts.find((draft) => draft.kind === "flow" && draft.removed);
-    if (flow && blocker.drafts.length === 1) setReopenFlow(flow.id);
+    if (flow && blocker.drafts.length === 1) reopenFlow.current = flow.id;
     blocker.reset();
   };
 }
