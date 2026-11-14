@@ -981,6 +981,26 @@ export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow>
   return { agent, flow };
 }
 
+/** Entry worker hands "Done" to block `review`, whose Reviewer Agent Needs a model. */
+export async function modelLessLaterFlow(world: ScenarioWorld): Promise<ReadyFlow> {
+  const agent = await workerAgent(world, "create the entry Agent");
+  const reviewer = stepResult(
+    "create the model-less Reviewer Agent",
+    await world.factory.createAgent({
+      name: "Reviewer",
+      prompt: agent.prompt,
+      execution: null,
+      exits: agent.exits,
+    }),
+  );
+  const flow = await saveFlow(world, "Model-less later Agent", {
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agent.id), agentBlock("review", "Review", reviewer.id)],
+    connections: [connection("worker", "done", "review")],
+  });
+  return { agent, flow };
+}
+
 /*
  * Named Run states of one worker's lifecycle. Each is a fixed sequence of public Factory
  * operations and simulated T3 facts, with bounded observation, documented by its postcondition:

@@ -628,8 +628,7 @@ function FlowNotice({ model }: { model: Composer }) {
         </NoticeStudioLink>
       }
     >
-      Fix its readiness issues in the Flow editor, or pick another Flow. Your project and prompt
-      stay.
+      Fix its readiness issues in Studio, or pick another Flow. Your project and prompt stay.
     </Notice>
   );
 }
@@ -679,9 +678,10 @@ function StartNotice({ model }: { model: Composer }) {
             {(draft.issues.length === 0 ||
               draft.issues.some(
                 (issue) =>
-                  issue.path.startsWith("agents.") &&
-                  !issue.path.split(".").includes("connection") &&
-                  issue.code !== "reporting_installation",
+                  issue.code === "agent_model_required" ||
+                  (issue.path.startsWith("agents.") &&
+                    !issue.path.split(".").includes("connection") &&
+                    issue.code !== "reporting_installation"),
               )) && (
               <NoticeStudioLink selection={{ tab: "agents" }}>
                 Open Studio → Agents

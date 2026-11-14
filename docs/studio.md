@@ -63,10 +63,13 @@ as a disabled choice marked **No Factory reporting yet**, with the reason under 
 
 The Worker is optional. **Clear** empties the selection, and a save whose environment, provider or model is not chosen stores
 no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
-Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library and on the block
-inspector's worker line (which links to the Agent), and its Worker section asks for an environment, provider and model; it opens
+Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
+inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
+execution state; its Worker section asks for an environment, provider and model, it opens
 with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
-states of a saved selection, and a Run never starts with such an Agent. In the API both `execution` and `settingsStatus` are
+states of a saved selection. Every Flow that places such an Agent is not ready (`agent_model_required`, one issue per block,
+"{block}: {agent} needs a model."), so a Run never starts with it; choosing a model in the Agent editor makes those Flows
+ready without saving them again. In the API both `execution` and `settingsStatus` are
 `null`; create and save require the `execution` key, as complete settings or an explicit `null`, so an omitted key or a
 partial object is a validation error. A `null` execution skips the reporting-support check.
 
@@ -163,8 +166,8 @@ are global; Start resolves it against the selected Project ([Runs](runs.md#start
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
-the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a Continuation without a prompt and unreachable blocks. Each names the block, the exit and the problem, and selecting one
-inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph requirements only; live connection, Agent settings availability, project and reporting installation
+the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt and unreachable blocks. Each names the block, the exit and the problem, and selecting one
+inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
 A stale save returns a conflict and keeps local work. **Compare latest revision** shows both drafts: choose the latest saved Flow to discard local changes, or reconcile and **Keep local draft against
@@ -253,9 +256,10 @@ Structural failures return `Result` errors with `code`, `path` and `message`: in
 positions, Flow input targets, dangling or duplicate edges, a Human or Wait connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit) and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB.
 
 Unfinished names, unset Agents, an unconnected Flow input, blocks without exits, local exit name or ID collisions and wires from hidden or removed exits can be saved.
-Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
+Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
 without a duration (`wait_duration_required`) or outside 1 minute to 7 days inclusive after converting its unit, including a zero or negative amount (`wait_duration_range`), a Wait Flow input target, missing saved
-Agents and blocks unreachable from the Flow input, resolving each block against the current saved Agents. Hide entries for exits the Agent no longer has are ignored. A
+Agents and blocks unreachable from the Flow input, resolving each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
+they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
 terminal exit needs no edge; cycles, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
 ### Revisions

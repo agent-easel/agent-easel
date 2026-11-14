@@ -818,10 +818,12 @@ export function flowGraphReferencesAgent(graph: FlowGraphInput, agentId: string)
 }
 
 /**
- * A saved Agent as Flow readiness sees it: its current exits and, for naming a wire whose exit
- * the Agent has since removed, the last name of each exit its earlier revisions had.
+ * A saved Agent as Flow readiness sees it: its name, its current exits, whether it has execution
+ * settings (never their live availability) and, for naming a wire whose exit the Agent has since
+ * removed, the last name of each exit its earlier revisions had.
  */
-export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "exits"> {
+export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "name" | "exits"> {
+  readonly hasExecution: boolean;
   readonly formerExitNames: ReadonlyMap<string, string>;
 }
 
@@ -874,8 +876,10 @@ function blockReadiness(
       `Write the prompt ${label} sends to the conversation it continues.`,
     );
   if (block.kind !== "agent") return;
-  if (!agents.some((agent) => agent.id === block.agentId))
-    add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  const agent = agents.find((candidate) => candidate.id === block.agentId);
+  if (!agent) add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  else if (!agent.hasExecution)
+    add("agent_model_required", `${path}.agentId`, `${label}: ${agent.name} needs a model.`);
   if (!effectiveExits(block, agents).length)
     add("exit_required", path, `Add an exit to ${label} or its Agent.`);
   const inherited = inheritedExits(block, agents);
@@ -990,8 +994,8 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 }
 
 /**
- * Graph readiness against the given saved Agents; live T3, project and provisioning gates remain
- * separate. Issues block Start, never a save.
+ * Graph and saved-Agent readiness against the given saved Agents; live T3 settings availability,
+ * project and provisioning gates remain separate. Issues block Start, never a save.
  */
 export function flowReadiness(
   graph: FlowGraphInput,

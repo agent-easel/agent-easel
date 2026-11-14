@@ -3,8 +3,9 @@
 ## Starting
 
 Open **New Run (+)** (`/runs/new`; the Flow editor's **Start Run** opens a fresh composition with its saved Flow selected). Choose an
-available project, a global ready Flow and a required initial prompt. Factory checks the project and connection, the graph,
-every referenced Agent's settings, reporting installation and explicit-call API compatibility before accepting Start.
+available project, a global ready Flow and a required initial prompt. Factory checks the project and connection, the Flow's
+[readiness](studio.md#saving-and-readiness) against the current saved Agents, every referenced Agent's settings, reporting
+installation and explicit-call API compatibility before accepting Start.
 Failures explain recovery and keep the draft. Start collects setup problems for every referenced Agent,
 including later branches, labels each cause with its Agent and offers reporting, Studio or connection
 repair actions. Agent checks and launch capability inspection use the same Start preflight; no worker
@@ -68,8 +69,8 @@ levels of evidence. A configuration check alone proves neither execution nor rep
 - **Captured definitions.** The Run keeps its immutable input and references the Flow revision it started with, including
   its workspace setting, and the revision of every Agent that Flow references, frozen at Start. Every read and every later activation, also after restart,
   uses those revisions: the full graph and each Agent's prompt, settings and labels. Captured execution settings are always
-  complete: Start refuses a Flow that references an Agent that [Needs a model](../GLOSSARY.md#needs-a-model), and a
-  launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
+  complete: Start rejects a Flow that places an Agent that [Needs a model](../GLOSSARY.md#needs-a-model) through its
+  readiness (`agent_model_required`), and a launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
   Start uses the current saved Agents. Later edits and removals affect only future Runs.
 - **Launch.** Factory launches one top-level worker per Agent block visit, using that Agent's saved provider, model and
   options. Agents connected to the Flow input start in parallel and independently (no Agent is told about the others). There
