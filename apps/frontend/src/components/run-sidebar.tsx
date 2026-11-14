@@ -668,10 +668,11 @@ function RunGroups({
     );
   const empty = navigationEmptyState(loaded, total, matches, open.length, search);
   // Open rows scroll on their own; the groups stay pinned below them with capped heights,
-  // so a long Settled history never pushes open Runs out of view.
+  // so a long Settled history never pushes open Runs out of view. On a short sidebar the
+  // groups yield first: the open list keeps a floor and the groups scroll as one block.
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-2">
+      <div className="min-h-24 flex-1 overflow-y-auto px-2">
         <nav aria-label="Open Runs" className="flex flex-col gap-0.5">
           {query && (
             <p className="px-2 pt-1 pb-1.5 text-2xs leading-tight font-semibold tracking-section text-subtle-foreground uppercase">
@@ -682,7 +683,7 @@ function RunGroups({
           <NavigationEmptyState state={empty} />
         </nav>
       </div>
-      <div className="flex shrink-0 flex-col px-2 py-1.5">
+      <div className="flex min-h-0 flex-col overflow-y-auto px-2 py-1.5">
         <RunGroup
           loaded={loaded}
           searching={!!query}
