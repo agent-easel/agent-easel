@@ -90,7 +90,8 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
     const attachments = yield* uploadLaunchImages(context, launchImages);
     if (!attachments) return;
     if (!(yield* store.reserveDelivery(runRow, launch, support.retryScope))) return;
-    // Derive preparation from the captured Flow so pending launch records need no rewrite.
+    // Keep the stored ref/branch; the captured Flow owns whether T3 fetches origin.
+    // Deriving that option here preserves pending launch records and their fingerprints.
     const workspace = runRow.definitions.flow.workspace;
     const workspaceStrategy =
       payload.workspaceStrategy.type === "worktree"

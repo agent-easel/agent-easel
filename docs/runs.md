@@ -15,6 +15,11 @@ a T3 endpoint that is not on this computer rejects Start with a `workspace.*` is
 action; no Run, Task or worker is created. Correct configuration, accepted Start and accepted Block result are separate
 levels of evidence. A configuration check alone proves neither execution nor report acceptance.
 
+Worktree Runs require T3 to advertise the boolean `workspaceStrategy.startFromOrigin` option.
+Update T3 before using worktree Flows with this Factory version. If its launch schema lacks
+that option, Factory rejects Start with `launch_unsupported`. Project-checkout Flows do not require it.
+T3 owns the fetch and checkout during [worktree preparation](runner.md#run-workspace), after Start is accepted.
+
 - **Screenshots.** Pasting images (Ctrl+V/Cmd+V) at the prompt caret or dropping image files on the prompt field attaches
   them and inserts a clickable reference to each at the caret (a drop uses the last caret position, or the end of the
   prompt). **Attach images** attaches files without inserting references. Images are PNG, JPEG, GIF or WebP files, up to 8
