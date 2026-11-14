@@ -909,6 +909,7 @@ it("a retained Flow exports unfinished content without saved identity or readine
           position: { x: 200, y: 0 },
           hiddenExitIds: [],
           localExits: [],
+          revisitInstruction: "",
         },
       ],
       connections: [],

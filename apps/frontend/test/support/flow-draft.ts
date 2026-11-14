@@ -66,6 +66,7 @@ export function memoryFactory(): MemoryFactory {
           position: { x: 200, y: 0 },
           hiddenExitIds: [],
           localExits: [],
+          revisitInstruction: "",
         },
       ],
       connections: [],

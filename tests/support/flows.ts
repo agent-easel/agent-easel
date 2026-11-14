@@ -52,7 +52,13 @@ export async function saveSingleAgentFlow(
   baseUrl: string | undefined,
   name: string,
   agentName: string,
-  block: { readonly id: string; readonly name: string; readonly x: number; readonly y: number },
+  block: {
+    readonly id: string;
+    readonly name: string;
+    readonly x: number;
+    readonly y: number;
+    readonly revisitInstruction?: string;
+  },
   wiredExit?: string,
 ) {
   const review = { id: "review", kind: "human", name: "Review" };
@@ -75,6 +81,7 @@ export async function saveSingleAgentFlow(
             agentId: agent.id,
             hiddenExitIds: [],
             localExits: [],
+            revisitInstruction: block.revisitInstruction,
             position: { x: block.x, y: block.y },
           },
           ...(wiredExit ? [{ ...review, position: { x: block.x + 360, y: block.y } }] : []),
