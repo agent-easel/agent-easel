@@ -431,6 +431,7 @@ export function createFlowDraft(
         return false;
       } finally {
         removing = false;
+        reconcile();
         publish();
       }
     },

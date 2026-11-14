@@ -959,6 +959,29 @@ it("a submitted Flow removal completes normally when another client removes it t
   expect(draft.getSnapshot()).toMatchObject({ removed: false, dirty: false, removing: false });
 });
 
+it("a failed submitted Flow removal retains a clean draft when another client already removed it", async () => {
+  // Arrange
+  const { draft, factory, removedElsewhere } = openedFlow();
+  const reply = held(factory.removeFlow);
+  const removing = draft.remove();
+  await removedElsewhere();
+
+  // Act
+  reply.fail(new OfflineError("unknown"));
+  const accepted = await removing;
+
+  // Assert
+  expect(accepted).toBe(false);
+  expect(draft.getSnapshot()).toMatchObject({
+    removed: true,
+    dirty: false,
+    removing: false,
+    canSave: false,
+    canStartRun: false,
+    removalError: "",
+  });
+});
+
 it("a removal keeps revision resolution dismissed after a late save conflict", async () => {
   // Arrange
   const { draft, removedElsewhere, reply, saving } = savingFlow();

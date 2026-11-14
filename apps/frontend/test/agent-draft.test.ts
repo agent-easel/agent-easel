@@ -3,6 +3,7 @@ import { expect, it, vi } from "vite-plus/test";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
+import { FACTORY_STUDIO_LIVE_PROTOCOL } from "@t3-factory/domain-validation";
 import {
   agentDraft,
   comparedAgent,
@@ -12,6 +13,7 @@ import {
   editedAgent,
   failedDelete,
   pendingSave,
+  replaceAgentSource,
   removedElsewhere,
   savedElsewhere,
 } from "./support/agent-editor.ts";
@@ -662,6 +664,51 @@ it("a removal elsewhere dismisses the comparison and its confirmation and keeps 
     confirmingLoad: null,
     content: { name: "Edited" },
     dirty: true,
+  });
+});
+
+it("an Agent save reply from a retired source keeps the draft and reports an unknown outcome", async () => {
+  // Arrange
+  const setup = editedAgent();
+  const { reply, saving } = pendingSave(setup);
+  await replaceAgentSource(setup);
+
+  // Act
+  reply.answer(savedAgent({ name: "Edited", revision: 4 }));
+  const accepted = await saving;
+
+  // Assert
+  expect(accepted).toBeUndefined();
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3 },
+    content: { name: "Edited" },
+    dirty: true,
+    saving: false,
+    saveOutcome: "unknown",
+    error: expect.stringMatching(/^Save outcome unknown\./),
+  });
+});
+
+it("an Agent save rejection from a replaced source is unknown even when its protocol is unchanged", async () => {
+  // Arrange
+  const setup = editedAgent();
+  const { reply, saving } = pendingSave(setup);
+  await replaceAgentSource(setup, FACTORY_STUDIO_LIVE_PROTOCOL);
+
+  // Act
+  reply.fail(new ApiError({ code: "conflict", message: "An old source conflict.", issues: [] }));
+  await saving;
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3 },
+    content: { name: "Edited" },
+    dirty: true,
+    saving: false,
+    saveOutcome: "unknown",
+    stale: false,
+    newer: null,
+    error: expect.stringMatching(/^Save outcome unknown\./),
   });
 });
 

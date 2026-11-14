@@ -77,6 +77,7 @@ export function createStudioDefinitions(
 ) {
   let snapshot: StudioDefinitionsSnapshot = { flows: unread, agents: unread, delivery: "live" };
   let implementation: Implementation | undefined;
+  let session = 0;
   const listeners = new Set<() => void>();
 
   /** Publishes changed facts; an unchanged list keeps its identity. */
@@ -174,6 +175,8 @@ export function createStudioDefinitions(
 
   return {
     getSnapshot: () => snapshot,
+    /** Identifies the connected source that a pending write must still belong to. */
+    getSession: () => session,
     subscribe(notify: () => void) {
       listeners.add(notify);
       return () => {
@@ -185,6 +188,7 @@ export function createStudioDefinitions(
      * returned function retires that implementation when Studio closes or the protocol changes.
      */
     open(protocol: number) {
+      ++session;
       const liveDelivery = protocol >= FACTORY_STUDIO_LIVE_PROTOCOL;
       update({ delivery: liveDelivery ? "live" : "refreshed" });
       const opened = liveDelivery ? delivered() : refreshed();

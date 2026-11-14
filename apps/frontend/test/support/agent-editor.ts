@@ -3,8 +3,9 @@ import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 import type { StudioDelivery } from "../../src/studio-definitions.ts";
+import { FACTORY_STUDIO_LIVE_PROTOCOL } from "@t3-factory/domain-validation";
 import { capabilities, savedAgent } from "./agent-draft.ts";
-import { held } from "./flow-draft.ts";
+import { held, settled } from "./flow-draft.ts";
 import {
   liveStudio,
   studioChanged,
@@ -55,17 +56,27 @@ export function agentDraft(
   const factory = memoryAgents();
   const operations = { ...studioFactory(), ...factory };
   operations.listAgents.mockImplementation(async () => [factory.latest()]);
-  const { definitions, studio, socket } =
+  const { definitions, studio, socket, close } =
     delivery === "live"
       ? liveStudio(operations)
       : { ...studioSession(operations), studio: undefined, socket: undefined };
   studio?.message(studioSnapshot({ agents: [savedAgent()], flows: [] }));
   const draft = createAgentDraft(agent, offered, definitions);
   const disconnect = draft.connect();
-  return { draft, factory, studio: studio!, socket, definitions, disconnect };
+  return { draft, factory, studio: studio!, socket, definitions, disconnect, close };
 }
 
 type AgentEditor = ReturnType<typeof agentDraft>;
+
+/** Studio replaces its source implementation while keeping this editor and its draft. */
+export async function replaceAgentSource(
+  setup: AgentEditor,
+  protocol = FACTORY_STUDIO_LIVE_PROTOCOL - 1,
+) {
+  setup.close();
+  setup.definitions.open(protocol);
+  await settled();
+}
 
 /** Studio delivers these Agents as one committed change. */
 export function deliver(

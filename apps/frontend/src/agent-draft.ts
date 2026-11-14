@@ -22,7 +22,10 @@ export type AgentDraftOperations = Pick<
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
-export type AgentDraftSource = Pick<StudioDefinitions, "getSnapshot" | "subscribe" | "refresh"> &
+export type AgentDraftSource = Pick<
+  StudioDefinitions,
+  "getSnapshot" | "getSession" | "subscribe" | "refresh"
+> &
   AgentDraftOperations;
 export type AgentContent = Pick<AgentDefinition, "name" | "prompt" | "execution" | "exits">;
 
@@ -102,6 +105,7 @@ export type AgentSaveOutcome = "pending" | "succeeded" | "rejected" | "not-sent"
 
 /** One save this draft sent: what it submitted, against which revision, and how it ended. */
 interface AgentSave {
+  readonly session: number;
   readonly outcome: AgentSaveOutcome;
   readonly content: AgentContent;
   /** The revision the save expected; null for a Create. */
@@ -368,6 +372,7 @@ export function createAgentDraft(
       }
       const creating = !saved;
       const sent: AgentSave = {
+        session: source.getSession(),
         outcome: "pending",
         content: request.submitted,
         baseline: saved?.revision ?? null,
@@ -378,15 +383,18 @@ export function createAgentDraft(
       publish();
       try {
         const result = await request.save();
+        if (sent.session !== source.getSession()) throw new OfflineError("unknown");
         lastSave = { ...sent, outcome: "succeeded" };
         if (removed) return undefined;
         adopt(result);
         return result;
       } catch (cause) {
-        const failure = saveFailure(cause, creating);
+        const currentCause =
+          sent.session === source.getSession() ? cause : new OfflineError("unknown");
+        const failure = saveFailure(currentCause, creating);
         lastSave = { ...sent, outcome: failure.outcome };
         error = failure.message;
-        if (cause instanceof ApiError && cause.detail.code === "conflict") {
+        if (currentCause instanceof ApiError && currentCause.detail.code === "conflict") {
           stale = true;
           // An older server learns the newer revision only by reading the list again.
           source.refresh();

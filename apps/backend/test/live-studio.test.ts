@@ -87,15 +87,34 @@ it("a removed Flow reaches an existing Studio subscriber as a removal", async (c
   expect(appliedStudio(delivered)?.flows).toStrictEqual([]);
 });
 
-it("rejected definition writes deliver nothing to a Studio subscriber", async (c) => {
+it("a committed Agent is the only Studio change after a rejected Agent removal", async (c) => {
   // Arrange
-  const { factory, flowId, save, review, reviewer } = await reviewedFlow(c);
-  const saved = assertOk(await save(review));
+  const { factory, save, review, reviewer } = await reviewedFlow(c);
+  assertOk(await save(review));
   const studio = subscribe(c, factory.live.watchStudio());
   await studio.until((messages) => messages.length > 0);
 
-  // Act
   const inUse = await factory.removeAgent(reviewer.id);
+  expect(inUse).toMatchObject({ ok: false, error: { code: "conflict" } });
+
+  // Act
+  const created = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
+
+  // Assert
+  // This committed delivery is also the barrier for any earlier rejected-write delivery.
+  await studio.until((messages) => messages.length > 1);
+  expect(studio.messages).toStrictEqual([
+    studio.messages[0],
+    { _tag: "changed", agents: { upserts: [created], removals: [] } },
+  ]);
+});
+
+it("a committed Agent is the only Studio change after a rejected stale Flow save", async (c) => {
+  // Arrange
+  const { factory, flowId, save, review } = await reviewedFlow(c);
+  const saved = assertOk(await save(review));
+  const studio = subscribe(c, factory.live.watchStudio());
+  await studio.until((messages) => messages.length > 0);
   const stale = await factory.updateFlow(flowId, {
     name: "Stale rename",
     expectedRevision: saved.revision - 1,
@@ -103,11 +122,12 @@ it("rejected definition writes deliver nothing to a Studio subscriber", async (c
     graph: saved.graph,
   });
 
-  // Assert
-  expect(inUse).toMatchObject({ ok: false, error: { code: "conflict" } });
   expect(stale).toMatchObject({ ok: false, error: { code: "conflict" } });
-  // A later committed write marks the point by which any earlier delivery would have arrived.
+
+  // Act
   const created = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
+
+  // Assert
   await studio.until((messages) => messages.length > 1);
   expect(studio.messages).toStrictEqual([
     studio.messages[0],
