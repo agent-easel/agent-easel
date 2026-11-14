@@ -113,7 +113,7 @@ export function ExecutionSettingsFields({
                   disabled: true,
                 }),
           }))}
-          emptyLabel="Capabilities unavailable"
+          emptyLabel={emptyChoiceLabel(execution.environmentId, "Choose an environment first")}
           unavailableLabel={`Saved provider (${availability})`}
         />
       </div>
@@ -130,7 +130,7 @@ export function ExecutionSettingsFields({
             id: entry.id,
             label: entry.label ?? entry.id,
           }))}
-          emptyLabel="Capabilities unavailable"
+          emptyLabel={emptyChoiceLabel(execution.providerInstanceId, "Choose a provider first")}
           unavailableLabel={`Saved model (${availability})`}
         />
         {rowTwo.map((descriptor) => (
@@ -192,6 +192,11 @@ function StepLabel({ htmlFor, step, label }: { htmlFor: string; step?: number; l
       {label}
     </Label>
   );
+}
+
+/** A dependent picker with no choices is waiting for its parent choice, not missing capabilities. */
+function emptyChoiceLabel(parentChoice: string, waitingLabel: string): string {
+  return parentChoice ? "Capabilities unavailable" : waitingLabel;
 }
 
 function CapabilityField({

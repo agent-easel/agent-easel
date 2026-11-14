@@ -416,7 +416,7 @@ function EditorToolbar({
           Start Run
         </Button>
       </MutationGate>
-      <DefinitionExportControl {...exporter} dirty={state.dirty} disabled={state.busy} />
+      <DefinitionExportControl {...exporter} dirty={state.dirty} disabled={state.busy} compact />
       <RemoveFlowAction draft={draft} state={state} />
     </div>
   );
