@@ -52,6 +52,12 @@ export function useSettleRun() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const returnFocus = useRef<HTMLElement | null>(null);
+  function close(outcome?: RunSettlementOutcome) {
+    setConfirmation(undefined);
+    setError("");
+    answer.current(outcome);
+    answer.current = () => undefined;
+  }
   async function settle(id: string, retry: boolean, onConfirmation?: () => void) {
     if (busy) return;
     close();
@@ -73,24 +79,21 @@ export function useSettleRun() {
       answer.current = resolve;
     });
   }
-  function close(outcome?: RunSettlementOutcome) {
-    setConfirmation(undefined);
-    setError("");
-    answer.current(outcome);
-    answer.current = () => undefined;
-  }
   async function confirm() {
     if (!confirmation || busy) return;
     setBusy(true);
     setError("");
-    try {
-      const outcome = await api.settleRun(confirmation.run.id, { stopWorkers: true });
-      close(outcome);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not settle the Run.");
-    } finally {
-      setBusy(false);
-    }
+    return await api
+      .settleRun(confirmation.run.id, { stopWorkers: true })
+      .then((outcome) => {
+        close(outcome);
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not settle the Run.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   }
   return {
     settle,
@@ -208,15 +211,17 @@ function RetryRunSettlement({ id, onAttemptFailed }: { id: string; onAttemptFail
     setBusy(true);
     setError("");
     let settling = false;
-    try {
-      const outcome = await settle(id, true);
-      settling = outcome?.outcome === "stopping" || outcome?.outcome === "settled";
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not settle the Run.");
-    } finally {
-      setBusy(false);
-      if (!settling) onAttemptFailed();
-    }
+    return await settle(id, true)
+      .then((outcome) => {
+        settling = outcome?.outcome === "stopping" || outcome?.outcome === "settled";
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not settle the Run.");
+      })
+      .finally(() => {
+        setBusy(false);
+        if (!settling) onAttemptFailed();
+      });
   }
   return (
     <>

@@ -60,14 +60,14 @@ export function DeviceAccessProvider({ children }: { children: ReactNode }) {
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true);
     setError("");
-    try {
-      await operation();
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The change could not be saved.");
-    } finally {
-      setBusy(false);
-    }
+    return await operation()
+      .then(() => load())
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "The change could not be saved.");
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   const access: DeviceAccess = {
     remote,

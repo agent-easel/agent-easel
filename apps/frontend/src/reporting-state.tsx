@@ -82,20 +82,18 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const latest = useRef(0);
   const refresh = useCallback(async () => {
     const ticket = ++latest.current;
-    try {
-      const [targets, agents] = await Promise.all([
-        api.getReportingInstallations(),
-        api.listAgents(),
-      ]);
-      if (active.current && ticket === latest.current) setReads({ targets, agents, error: "" });
-    } catch {
-      if (active.current && ticket === latest.current)
-        setReads({
-          targets: null,
-          agents: null,
-          error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
-        });
-    }
+    await Promise.all([api.getReportingInstallations(), api.listAgents()])
+      .then(([targets, agents]) => {
+        if (active.current && ticket === latest.current) setReads({ targets, agents, error: "" });
+      })
+      .catch(() => {
+        if (active.current && ticket === latest.current)
+          setReads({
+            targets: null,
+            agents: null,
+            error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
+          });
+      });
   }, []);
   useRefreshSchedule(refresh, false);
   return (

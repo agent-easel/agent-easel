@@ -179,18 +179,21 @@ function SelectedAgentEditor({
   async function duplicate() {
     if (duplicating) return;
     setDuplicating(true);
-    try {
-      const copy = await library.definitions.duplicateAgent(agentId, {});
-      void library.refreshReporting();
-      if (active.current) void openStudio({ tab: "agents", agentId: copy.id });
-    } catch (cause) {
-      if (!active.current) return;
-      setDuplicateError(
-        cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
-      );
-    } finally {
-      if (active.current) setDuplicating(false);
-    }
+    return await library.definitions
+      .duplicateAgent(agentId, {})
+      .then((copy) => {
+        void library.refreshReporting();
+        if (active.current) void openStudio({ tab: "agents", agentId: copy.id });
+      })
+      .catch((cause: unknown) => {
+        if (!active.current) return;
+        setDuplicateError(
+          cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+        );
+      })
+      .finally(() => {
+        if (active.current) setDuplicating(false);
+      });
   }
   if (error)
     return (

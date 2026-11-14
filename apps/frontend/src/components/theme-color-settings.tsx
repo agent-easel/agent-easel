@@ -129,15 +129,17 @@ export function ThemeColorSettings() {
   const run = async (operation: () => Promise<T3Appearance>) => {
     setBusy(true);
     setError("");
-    try {
-      await operation();
-      return true;
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The operation could not complete.");
-      return false;
-    } finally {
-      setBusy(false);
-    }
+    return await operation()
+      .then(() => {
+        return true;
+      })
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "The operation could not complete.");
+        return false;
+      })
+      .finally(() => {
+        setBusy(false);
+      });
   };
   const pair = async (pairing: string) => {
     const paired = await run(() => api.pairAppearance({ pairing }));

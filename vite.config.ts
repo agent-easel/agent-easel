@@ -1,4 +1,5 @@
 import { defineConfig } from "vite-plus";
+import reactHooks from "eslint-plugin-react-hooks";
 
 // Generated output and hand-edited Markdown are not formatted or linted.
 const ignorePatterns = [
@@ -211,13 +212,16 @@ export default defineConfig({
       {
         files: ["apps/frontend/**"],
         plugins: ["react"],
+        jsPlugins: [{ name: "react-hooks-js", specifier: "eslint-plugin-react-hooks" }],
         env: { browser: true },
         rules: {
-          "react/rules-of-hooks": "error",
-          "react-hooks/exhaustive-deps": "error",
+          ...Object.fromEntries(
+            Object.keys(reactHooks.configs["recommended-latest"].rules).map((rule) => [
+              rule.replace("react-hooks/", "react-hooks-js/"),
+              "error" as const,
+            ]),
+          ),
           "react/jsx-key": "error",
-          // Data-loading effects deliberately reset error/loading state before fetching.
-          "react/set-state-in-effect": "off",
         },
       },
     ],
