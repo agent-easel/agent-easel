@@ -11,7 +11,10 @@
 <!-- Required for UI changes: embed Before and After screenshots of the affected views.
 Use ### Before and ### After headings with embedded HTTPS images; the UI evidence check
 only verifies their presence. Reference local images under those headings, upload with
-`gh pr edit --body-file <file> --attach <image>`, then run `pnpm check:ui-evidence --pr <number>`. Otherwise write N/A. Follow .agents/skills/verify-t3-factory/SKILL.md#evidence. -->
+`gh pr edit --body-file <file> --attach <image>`, then run `pnpm check:ui-evidence --pr <number>`.
+Follow .agents/skills/verify-t3-factory/SKILL.md#evidence.
+When the change has no visible UI impact, replace the screenshots with a ### No UI evidence
+heading followed by the reason; the check accepts any stated reason in place of images. -->
 
 ## Scope and contracts
 

@@ -60,16 +60,19 @@ function hasHttpsImage(block) {
   return false;
 }
 
+function subsection(section, label) {
+  return (
+    section.match(
+      new RegExp(`^### ${label}\\s*\\n([\\s\\S]*?)(?=^### |$(?![\\s\\S]))`, "m"),
+    )?.[1] ?? ""
+  );
+}
+
 export function checkUiEvidence(body) {
   const section =
     stripCode(body).match(/^## UI screenshots\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)?.[1] ?? "";
-  return ["Before", "After"].filter((label) => {
-    const block =
-      section.match(
-        new RegExp(`^### ${label}\\s*\\n([\\s\\S]*?)(?=^### |$(?![\\s\\S]))`, "m"),
-      )?.[1] ?? "";
-    return !hasHttpsImage(block);
-  });
+  if (subsection(section, "No UI evidence").trim()) return [];
+  return ["Before", "After"].filter((label) => !hasHttpsImage(subsection(section, label)));
 }
 
 function readBody(args) {
@@ -91,7 +94,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     for (const label of checkUiEvidence(readBody(process.argv.slice(2)))) {
       console.error(
-        `::error::UI changes require an embedded HTTPS image under "### ${label}" in "## UI screenshots". See verify-t3-factory Evidence.`,
+        `::error::UI changes require an embedded HTTPS image under "### ${label}" in "## UI screenshots"; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
       );
       process.exitCode = 1;
     }
