@@ -376,7 +376,7 @@ function EditorToolbar({
       </span>
       <Input
         aria-label="Flow name"
-        className="h-8 max-w-80 min-w-24 flex-1 border-transparent bg-transparent text-base font-semibold hover:border-border focus-visible:border-ring"
+        className="field-sizing-content h-8 w-auto max-w-80 min-w-24 border-transparent bg-transparent text-base font-semibold hover:border-border focus-visible:border-ring"
         value={state.content.name}
         disabled={state.busy}
         onChange={(e) => draft.edit({ name: e.target.value })}
