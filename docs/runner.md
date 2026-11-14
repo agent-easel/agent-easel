@@ -75,7 +75,11 @@ workers share one worktree; its project root stays the Run's project identity.
   support (`launch_unsupported` otherwise) and records the Run workspace: the resolved base
   ref, the planned branch, the creator Block (the first Flow-input target) and its state,
   `preparing`, `bound` or `failed`. The creator launches with its first message on
-  `{type: "worktree", baseRef, branch}`. Factory names the branch
+  `{type: "worktree", baseRef, branch, startFromOrigin}`. Factory derives `startFromOrigin`
+  from the captured Flow: `true` for **Default branch**, so T3 fetches from `origin` before
+  creating the worktree, and `false` for **Custom ref**, preserving its local resolution.
+  Worktree support requires T3 to advertise that option. Fetch and checkout failures belong
+  to T3's workspace preparation after Start is accepted. Factory names the branch
   `factory/run-<Run number>-<first 8 characters of the Run id>`, so T3 does not rename it
   after the first turn and Runs of different Factory homes on one repository do not share
   it; T3 rejects the launch if that branch already exists.

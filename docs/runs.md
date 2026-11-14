@@ -9,10 +9,8 @@ Failures explain recovery and keep the draft. Start collects setup problems for 
 including later branches, labels each cause with its Agent and offers reporting, Studio or connection
 repair actions. Agent checks and launch capability inspection use the same Start preflight; no worker
 is launched on rejection. For a Flow whose [workspace setting](studio.md#workspace-setting) is a new worktree, Start
-resolves the base in the selected Project's repository on the Factory host through bounded `git` calls without a shell.
-For **Default branch**, it fetches the branch named by `origin/HEAD` from `origin` before resolving it; a fetch failure
-rejects Start instead of using a stale remote-tracking ref. This refresh does not pull or change the local checkout.
-**Custom ref** resolves from local Git state without fetching. A missing ref, an unset default branch or
+resolves the base in the selected Project's repository on the Factory host: the default branch from `origin/HEAD`, or the
+custom ref verified as a commit, read through bounded `git` calls without a shell. A missing ref, an unset default branch or
 a T3 endpoint that is not on this computer rejects Start with a `workspace.*` issue and the **Open Studio → Flows** repair
 action; no Run, Task or worker is created. Correct configuration, accepted Start and accepted Block result are separate
 levels of evidence. A configuration check alone proves neither execution nor report acceptance.

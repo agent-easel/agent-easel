@@ -90,7 +90,20 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
     const attachments = yield* uploadLaunchImages(context, launchImages);
     if (!attachments) return;
     if (!(yield* store.reserveDelivery(runRow, launch, support.retryScope))) return;
-    const request = attachments.length ? { ...payload, attachments } : payload;
+    // Derive preparation from the captured Flow so pending launch records need no rewrite.
+    const workspace = runRow.definitions.flow.workspace;
+    const workspaceStrategy =
+      payload.workspaceStrategy.type === "worktree"
+        ? {
+            ...payload.workspaceStrategy,
+            startFromOrigin: workspace.mode === "worktree" && workspace.base.kind === "default",
+          }
+        : payload.workspaceStrategy;
+    const request = {
+      ...payload,
+      workspaceStrategy,
+      ...(attachments.length ? { attachments } : {}),
+    };
     yield* recoverOperation(
       Effect.gen(function* () {
         const reference = yield* Effect.tryPromise({
