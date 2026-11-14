@@ -1,5 +1,5 @@
 import { applyRunState } from "./support/scenarios.ts";
-import { repairCodexReporting } from "./support/agents.ts";
+import { copyAgentDefinition, repairCodexReporting } from "./support/agents.ts";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "@e2e-dev/web";
 import { expect } from "e2e";
@@ -72,6 +72,43 @@ test("Start names every blocked Agent including later branches and succeeds afte
   expect(run.reports[0]?.completionEligibleAt).not.toBe(null);
   expect(run.activations).toHaveLength(3);
   await app.screenshot("whole-flow-result-accepted");
+});
+
+test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays blocked", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const agent = await copyAgentDefinition(
+    app.baseUrl,
+    "Demo · Accessibility reviewer",
+    "Model-less accessibility reviewer",
+    { modelLess: true },
+  );
+  await saveFlowCopy(
+    app.baseUrl,
+    "Demo · Parallel review",
+    "Model-less later review",
+    { mode: "checkout" },
+    { accessibility: agent.id },
+  );
+
+  // Act
+  await openComposerWithFlow(app, screen, "Model-less later review · Not ready");
+  await screen.getByLabel("Initial prompt", { exact: false }).fill("UI model-less later Agent");
+
+  // Assert
+  await expect(
+    screen.getByText("Accessibility review: Model-less accessibility reviewer needs a model."),
+  ).toBeVisible();
+  await expect(screen.getByRole("button", "Start", { exact: true })).toBeDisabled();
+  await app.screenshot("model-less-agent-not-ready");
+  expect(await runsTitled(app.baseUrl, "UI model-less later Agent")).toHaveLength(0);
+  await screen.getByRole("link", "Open Model-less later review in Flows", { exact: true }).tap();
+  await expect(screen.getByRole("article", "Block Accessibility review")).toContainText(
+    "Needs a model",
+  );
+  await app.screenshot("model-less-agent-canvas-tag");
 });
 
 test("Agent-scoped runtime contract blockers point to the connection without blaming Agents", async ({

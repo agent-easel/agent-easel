@@ -439,6 +439,35 @@ it("factory_save_flow replaces an Agent block's Revisit instruction and factory_
   ).toStrictEqual({ ready: true, issues: [] });
 });
 
+it("factory_check_flow reports a block whose Agent Needs a model as not ready", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(
+    await factory.createAgent({ ...sampleAgentInput("Reviewer"), execution: null }),
+  );
+  const flow = assertOk(
+    await factory.createFlow({ name: "Review", graph: revisitGraph(agent.id, "") }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_check_flow",
+    arguments: { flowId: flow.id },
+  });
+
+  // Assert
+  expect(toolReply(result)).toStrictEqual({
+    ready: false,
+    issues: [
+      {
+        code: "agent_model_required",
+        path: "graph.blocks.0.agentId",
+        message: "Review: Reviewer needs a model.",
+      },
+    ],
+  });
+});
+
 it("removing an unused Agent replies with its id and the Agent then reads as not found", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);

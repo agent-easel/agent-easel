@@ -86,13 +86,15 @@ export const makeDefinitions = (
       );
     const provideSql = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
       operation.pipe(Effect.provideService(SqlClient.SqlClient, sql));
-    /** Flow readiness resolves blocks against the current saved Agents and their exits. */
+    /** Flow readiness resolves blocks against the current saved Agents, their exits and models. */
     const readinessAgents = Effect.gen(function* () {
       const agents = yield* readCurrentAgents(sql);
       const formerExitNames = yield* readFormerExitNames(sql);
       return agents.map((agent): ReadinessAgent => ({
         id: agent.id,
+        name: agent.name,
         exits: agent.exits,
+        hasExecution: agent.execution !== null,
         formerExitNames: formerExitNames.get(agent.id) ?? new Map(),
       }));
     });

@@ -49,7 +49,7 @@ reporting protocol.
   provider, model and options, the [Run workspace](#run-workspace), and the runtime mode from T3
   and project defaults. Nothing is inherited from another thread. Two Blocks that share
   one Agent still get separate workers. Captured execution settings are always complete: Start
-  refuses an Agent without them, and decoding a Run's captured definitions fails rather than
+  rejects a Flow that places an Agent without them through readiness, and decoding a Run's captured definitions fails rather than
   launch or recover a worker from a model-less revision.
 - The saved launch title is `Factory #<number> · <block position> <Block name>`, sliced to
   200 characters. The number is a durable Run sequence. The position is the 1-based index
