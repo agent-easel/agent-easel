@@ -155,3 +155,31 @@ await test("an image inside an inline code span does not satisfy Before evidence
   // Assert
   assert.deepEqual(missing, ["Before"]);
 });
+
+await test("a stated reason under No UI evidence replaces Before and After images", () => {
+  // Arrange
+  const body = `## UI screenshots
+### No UI evidence
+Only renames an internal frontend type; no rendered output changes.
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, []);
+});
+
+await test("a No UI evidence heading without a reason still requires Before and After images", () => {
+  // Arrange
+  const body = `## UI screenshots
+### No UI evidence
+<!-- State why this change has no visible UI impact. -->
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, ["Before", "After"]);
+});

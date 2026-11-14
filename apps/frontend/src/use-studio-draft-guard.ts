@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { useRouter } from "@tanstack/react-router";
+import type { RefObject } from "react";
 import type { Retained } from "./draft-guard.ts";
 import { validateAppSearch, type StudioSelection } from "./settings-navigation.ts";
+import { useNavigationBlock } from "./use-navigation-block.ts";
 
 /** A draft Studio asks about before discarding: unsaved, or retained after a removal elsewhere. */
 export type StudioDraft = {
@@ -16,10 +16,6 @@ export type StudioDraftGuardInput = {
   flowRef?: RefObject<StudioDraft | undefined>;
   agentRef?: RefObject<StudioDraft | undefined>;
 };
-
-type Decision =
-  | { status: "blocked"; drafts: readonly StudioDraft[]; reset: () => void; proceed: () => void }
-  | { status: "idle" };
 
 function studioSelectionFromLocation(location: {
   pathname: string;
@@ -57,43 +53,10 @@ function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
 }
 
 export function useStudioDraftGuard(input: StudioDraftGuardInput) {
-  const router = useRouter();
-  const pending = useRef<((block: boolean) => void) | undefined>(undefined);
-  const inputRef = useRef(input);
-  useLayoutEffect(() => {
-    inputRef.current = input;
-  }, [input]);
-  const [decision, setDecision] = useState<Decision>({ status: "idle" });
-  const dirty = !!(input.flow || input.agent);
-  useEffect(() => {
-    const unblock = router.history.block({
-      enableBeforeUnload: dirty,
-      blockerFn: async ({ nextLocation }) => {
-        const studio = studioSelectionFromLocation(router.parseLocation(nextLocation));
-        const drafts = liveDrafts(inputRef.current).filter(
-          (draft) => !staysWithDraft(studio, draft),
-        );
-        if (!drafts.length) return false;
-        if (pending.current) return true;
-        const blocked = await new Promise<boolean>((resolve) => {
-          pending.current = resolve;
-          setDecision({
-            status: "blocked",
-            drafts,
-            reset: () => resolve(true),
-            proceed: () => resolve(false),
-          });
-        });
-        pending.current = undefined;
-        setDecision({ status: "idle" });
-        return blocked;
-      },
-    });
-    return () => {
-      pending.current?.(true);
-      pending.current = undefined;
-      unblock();
-    };
-  }, [dirty, router]);
-  return decision;
+  const retained = !!(input.flow || input.agent);
+  return useNavigationBlock(retained, (location) => {
+    const studio = studioSelectionFromLocation(location);
+    const drafts = liveDrafts(input).filter((draft) => !staysWithDraft(studio, draft));
+    return drafts.length ? drafts : undefined;
+  });
 }

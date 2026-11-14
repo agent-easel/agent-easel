@@ -116,6 +116,32 @@ test("an open Flow editor says its Flow was removed elsewhere and disables Save,
   await expect(screen.getByRole("button", "Copy as JSON")).toBeVisible();
 });
 
+test("a clean removed Flow retained behind Agents warns before the browser reloads", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await createFlowElsewhere(app.baseUrl, "Retained clean Studio Flow");
+  await app.open(`/studio/flows/${flowId}`);
+  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 1");
+  await removeFlowElsewhere(app.baseUrl, flowId);
+  await expect(screen.getByText("This Flow was removed elsewhere.", { exact: true })).toBeVisible();
+  await screen.getByRole("link", "Agents", { exact: true }).tap();
+  await expect(screen.getByRole("link", "Sample worker", { exact: true })).toBeVisible();
+  let reloadDialog: string | undefined;
+  await browser.onDialog(async (dialog) => {
+    reloadDialog = dialog.type;
+    await dialog.accept();
+  });
+
+  // Act
+  await browser.reload();
+
+  // Assert
+  expect(reloadDialog).toBe("beforeunload");
+});
+
 test("a fresh link to an absent Agent says it was not found and leads back to the list", async ({
   app,
   screen,
