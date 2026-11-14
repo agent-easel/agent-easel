@@ -22,7 +22,7 @@ import { RunImageSettings } from "./run-image-settings.tsx";
 import { RunTitleSettings } from "./run-title-settings.tsx";
 import { ChatModelSettings } from "./chat-model-settings.tsx";
 import { ChatDiscordSettings } from "./chat-discord-settings.tsx";
-import { useClientScope, useServerInheritsAppearance } from "../client-scope.ts";
+import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { ThemeColorsNote } from "./theme-color-settings.tsx";
 import { RuntimeSettings } from "../routes/runtime.tsx";
@@ -209,17 +209,12 @@ const sectionContent: Record<SettingsSelection["tab"], () => ReactNode> = {
   keyboard: () => <KeyboardSettings />,
   access: () => <AccessSettings />,
   general: () => <GeneralSettings />,
-  application: () => <ApplicationPane />,
+  application: () => <ApplicationSettings appearanceNote={<ThemeColorsNote />} />,
   "run-titles": () => <RunTitleSettings />,
   "run-images": () => <RunImageSettings />,
   "chat-model": () => <ChatModelSettings />,
   "chat-discord": () => <ChatDiscordSettings />,
 };
-
-function ApplicationPane() {
-  const inheritsAppearance = useServerInheritsAppearance();
-  return <ApplicationSettings appearanceNote={inheritsAppearance && <ThemeColorsNote />} />;
-}
 
 function SectionContent({ tab }: { tab: SettingsSelection["tab"] }) {
   return sectionContent[tab]();

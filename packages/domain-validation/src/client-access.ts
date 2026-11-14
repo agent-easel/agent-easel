@@ -15,12 +15,9 @@ export const FACTORY_PROTOCOL = 12;
 /** Protocol 12 Agents may have no execution settings (`execution` and `settingsStatus` null), and
  * create and save require the `execution` key; older clients cannot read or save them. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 12;
-/** The current UI settles through the settlement outcome and reads Wait blocks (protocol 9). */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 9;
-/** Protocol 10 servers deliver theme colors; clients do not subscribe to older servers. */
-export const FACTORY_APPEARANCE_PROTOCOL = 10;
-/** Protocol 11 Run detail carries the Flow's current revision; older servers omit it. */
-export const FACTORY_FLOW_REVISION_PROTOCOL = 11;
+/** The current UI saves Agents without a model and imports and exports definitions, which
+ * protocol 12 servers added; it refuses older servers rather than offer operations they lack. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 12;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

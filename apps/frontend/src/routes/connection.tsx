@@ -2,7 +2,7 @@ import { MutationGate } from "@/client-gate";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { T3Connection } from "@t3-factory/contracts";
 import { Hourglass, Info, TriangleAlert, Unplug, type LucideIcon } from "lucide-react";
-import { useClientScope, useServerInheritsAppearance } from "../client-scope.ts";
+import { useClientScope } from "../client-scope.ts";
 import { ThemeColorSettings } from "@/components/theme-color-settings";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -116,7 +116,6 @@ type Operation = ReturnType<typeof useConnectionOperation>;
 export function ConnectionSettingsPanel() {
   const { connection, presentation } = useConnectionState();
   const host = useClientScope() === "host";
-  const inheritsAppearance = useServerInheritsAppearance();
   const operation = useConnectionOperation();
   return (
     <div className="grid gap-4" aria-live="polite" aria-busy={operation.busy}>
@@ -134,7 +133,7 @@ export function ConnectionSettingsPanel() {
           onRecheck={operation.recheck}
         />
       )}
-      {inheritsAppearance && <ThemeColorSettings />}
+      <ThemeColorSettings />
     </div>
   );
 }

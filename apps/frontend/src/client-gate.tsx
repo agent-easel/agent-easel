@@ -21,12 +21,7 @@ import { Label } from "@/components/ui/label";
 import { fieldLabelClass } from "@/components/page";
 import { GateScreen } from "@/components/gate-screen";
 import { api, ApiError } from "./api.ts";
-import {
-  AppearanceSourceContext,
-  ScopeContext,
-  ServerIdContext,
-  ServerProtocolContext,
-} from "./client-scope.ts";
+import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
@@ -40,7 +35,6 @@ type Gate =
   | {
       readonly kind: "ready";
       readonly scope: "host" | "remote";
-      readonly serverProtocol: number;
       readonly serverId: string | null;
       readonly appearanceSource: AppearanceSource | null;
     };
@@ -67,7 +61,6 @@ async function evaluate(): Promise<Gate> {
     const ready = {
       kind: "ready" as const,
       scope: scope.scope,
-      serverProtocol: server.protocol,
       serverId: scope.serverId ?? null,
       appearanceSource: scope.appearanceSource ?? null,
     };
@@ -142,13 +135,11 @@ export function ClientGate({ children }: { children: ReactNode }) {
     return <RequestAccessScreen previous={gate.previous} onRequested={check} />;
   return (
     <ScopeContext.Provider value={gate.scope}>
-      <ServerProtocolContext.Provider value={gate.serverProtocol}>
-        <ServerIdContext.Provider value={gate.serverId}>
-          <AppearanceSourceContext.Provider value={gate.appearanceSource}>
-            <OfflineBoundary>{children}</OfflineBoundary>
-          </AppearanceSourceContext.Provider>
-        </ServerIdContext.Provider>
-      </ServerProtocolContext.Provider>
+      <ServerIdContext.Provider value={gate.serverId}>
+        <AppearanceSourceContext.Provider value={gate.appearanceSource}>
+          <OfflineBoundary>{children}</OfflineBoundary>
+        </AppearanceSourceContext.Provider>
+      </ServerIdContext.Provider>
     </ScopeContext.Provider>
   );
 }

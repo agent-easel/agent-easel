@@ -82,16 +82,26 @@ it("a protocol 11 client, which cannot read Agents without a model, is told to u
   expect(reply.body.error.message).toMatch(/Update this client/);
 });
 
-it("the current client refuses a protocol-one server before product access", async (c) => {
-  // Arrange
-  const server = await remoteServer(c, { protocol: { protocol: 1, minimumPeerProtocol: 1 } });
-  const current = server.client();
+it.for([
+  [
+    11,
+    {
+      status: 426,
+      body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
+    },
+  ],
+  [12, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+] as const)(
+  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 12",
+  async ([protocol, expected], c) => {
+    // Arrange
+    const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
+    const current = server.client();
 
-  // Act
-  const reply = await current.send("GET", "/api/projects");
+    // Act
+    const reply = await current.send("GET", "/api/client-access");
 
-  // Assert
-  expect(reply.status).toBe(426);
-  assert(!reply.body.ok);
-  expect(reply.body.error.message).toMatch(/Update the Factory server/);
-});
+    // Assert
+    expect(reply).toMatchObject(expected);
+  },
+);
