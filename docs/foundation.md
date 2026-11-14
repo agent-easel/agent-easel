@@ -38,7 +38,7 @@ and restricted OAuth credentials live outside project repositories.
   a SHA-256 fingerprint of the canonical document plus the reviewed selections, the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
-  definition's id and never recreates it. Migration `083` adds the receipt tables and `084` the receipt's Flow; neither changes existing data.
+  definition's id and never recreates it. Migration `083` adds the receipt tables and changes no existing data.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the

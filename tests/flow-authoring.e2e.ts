@@ -599,6 +599,10 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
   );
   await app.screenshot("flow-import-review");
+  await browser.setViewport({ width: 560, height: 1000 });
+  await review.getByRole("group", "Demo · Product engineer").scrollIntoView();
+  await app.screenshot("flow-import-review-narrow");
+  await browser.setViewport({ width: 1600, height: 1000 });
   await review.getByRole("button", "Confirm import", { exact: true }).tap();
   await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
   await screen.getByRole("button", "Discard changes", { exact: true }).tap();

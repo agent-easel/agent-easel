@@ -136,8 +136,9 @@ export function ExecutionSettingsFields({
         {rowTwo.map((descriptor) => (
           <ModelOptionField
             key={descriptor.id}
+            id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
+            label={`${prefix}${descriptor.label}`}
             step={4}
-            prefix={prefix}
             descriptor={descriptor}
             options={execution.modelOptions}
             onChange={(value) => settings.setOption(descriptor.id, value)}
@@ -149,8 +150,9 @@ export function ExecutionSettingsFields({
       {extraOptions.map((descriptor, index) => (
         <ModelOptionField
           key={descriptor.id}
+          id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
+          label={`${prefix}${descriptor.label}`}
           step={5 + index}
-          prefix={prefix}
           descriptor={descriptor}
           options={execution.modelOptions}
           onChange={(value) => settings.setOption(descriptor.id, value)}
@@ -182,10 +184,11 @@ export function ExecutionSettingsFields({
   );
 }
 
-function StepLabel({ htmlFor, step, label }: { htmlFor: string; step: number; label: string }) {
+/** A field label, numbered when the field is one step of the Worker section. */
+function StepLabel({ htmlFor, step, label }: { htmlFor: string; step?: number; label: string }) {
   return (
     <Label htmlFor={htmlFor} className={cn(fieldLabelClass, "gap-1")}>
-      <span aria-hidden>{step} ·</span>
+      {step !== undefined && <span aria-hidden>{step} ·</span>}
       {label}
     </Label>
   );
@@ -239,8 +242,10 @@ function CapabilityField({
   );
 }
 
-function ModelOptionField({
-  prefix,
+/** One model option: its label above a select, or beside a checkbox for a boolean option. */
+export function ModelOptionField({
+  id,
+  label,
   step,
   descriptor,
   options,
@@ -248,19 +253,19 @@ function ModelOptionField({
   saving,
   hint,
 }: {
-  prefix: string;
-  step: number;
+  id: string;
+  label: string;
+  step?: number;
   descriptor: AgentModelOptionDescriptor;
   options: readonly AgentModelOptionValue[];
   onChange: (value: AgentModelOptionValue["value"]) => void;
   saving: boolean;
   hint?: string;
 }) {
-  const id = `${prefix ? "coordinator-" : ""}option-${descriptor.id}`;
   const value = optionValue(options, descriptor);
   return (
     <div className={cn("grid gap-1.5", descriptor.type === "boolean" && "flex items-center gap-2")}>
-      <StepLabel htmlFor={id} step={step} label={`${prefix}${descriptor.label}`} />
+      <StepLabel htmlFor={id} {...(step === undefined ? {} : { step })} label={label} />
       {descriptor.type === "boolean" ? (
         <Checkbox
           id={id}
@@ -271,7 +276,7 @@ function ModelOptionField({
       ) : (
         <ModelOptionSelect
           id={id}
-          label={`${prefix}${descriptor.label}`}
+          label={label}
           descriptor={descriptor}
           value={value}
           onChange={onChange}

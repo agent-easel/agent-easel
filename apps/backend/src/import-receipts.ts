@@ -22,17 +22,16 @@ export const readImportReceipt = Effect.fnUntraced(function* (
 ) {
   const [receipt] = yield* sql<{
     fingerprint: string;
-  }>`SELECT fingerprint FROM definition_import_receipts WHERE request_id=${requestId}`;
+    flow_id: string | null;
+  }>`SELECT fingerprint, flow_id FROM definition_import_receipts WHERE request_id=${requestId}`;
   if (!receipt) return undefined;
   const rows = yield* sql<{ key: string; id: string }>`
     SELECT agent_key AS key, agent_id AS id FROM definition_import_receipt_agents
     WHERE request_id=${requestId} ORDER BY ordinal`;
   const agents = rows.map(({ key, id }) => ({ key, id }));
-  const [flow] = yield* sql<{ id: string }>`
-    SELECT flow_id AS id FROM definition_import_receipt_flows WHERE request_id=${requestId}`;
   return {
     fingerprint: receipt.fingerprint,
-    result: { agents, flowId: flow?.id ?? null },
+    result: { agents, flowId: receipt.flow_id },
   } satisfies ImportReceipt;
 });
 
@@ -56,8 +55,8 @@ export const writeImportReceipt = Effect.fnUntraced(function* (
   createdAt: string,
   result: ImportResult,
 ) {
-  yield* sql`INSERT INTO definition_import_receipts (request_id, fingerprint, created_at)
-    VALUES (${requestId}, ${fingerprint}, ${createdAt})`;
+  yield* sql`INSERT INTO definition_import_receipts (request_id, fingerprint, flow_id, created_at)
+    VALUES (${requestId}, ${fingerprint}, ${result.flowId}, ${createdAt})`;
   yield* Effect.forEach(
     result.agents,
     (agent, ordinal) =>
@@ -65,7 +64,4 @@ export const writeImportReceipt = Effect.fnUntraced(function* (
         VALUES (${requestId}, ${ordinal}, ${agent.key}, ${agent.id})`,
     { discard: true },
   );
-  if (result.flowId !== null)
-    yield* sql`INSERT INTO definition_import_receipt_flows (request_id, flow_id)
-      VALUES (${requestId}, ${result.flowId})`;
 });

@@ -11,7 +11,6 @@ import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,7 +22,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ChoiceMenu } from "@/components/choice-menu";
-import { optionValue } from "@t3-factory/domain-validation";
 import {
   importModelChoices,
   useDefinitionImport,
@@ -31,7 +29,7 @@ import {
   type DefinitionImportSnapshot,
   type ImportRow,
 } from "../definition-import.ts";
-import { ModelOptionSelect } from "./execution-settings-fields.tsx";
+import { ModelOptionField } from "./execution-settings-fields.tsx";
 import { workspaceSummary } from "./flow-workspace-control.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 
@@ -332,10 +330,15 @@ function ImportModelRow({
     ?.models.find((entry) => entry.id === selection?.modelId);
   const pickerId = `import-model-${row.key}`;
   const reason = unmatchedReason(row, capabilities);
+  // The group names its Agent, so the row's option fields keep the Worker section's plain labels.
   return (
-    <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
+    <div
+      role="group"
+      aria-labelledby={`${pickerId}-name`}
+      className="grid gap-1.5 rounded-lg border px-3 py-2.5"
+    >
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <Label htmlFor={pickerId} className="text-sm font-medium">
+        <Label id={`${pickerId}-name`} htmlFor={pickerId} className="text-sm font-medium">
           {row.name}
         </Label>
         <Badge variant={row.match.status === "matched" ? "success" : "secondary"}>
@@ -366,37 +369,21 @@ function ImportModelRow({
         disabled={disabled}
         placeholder="Needs a model"
       />
-      {selection &&
-        chosenModel?.options?.map((descriptor) => {
-          const id = `import-option-${row.key}-${descriptor.id}`;
-          const value = optionValue(selection.modelOptions, descriptor);
-          return (
-            <div key={descriptor.id} className="flex items-center gap-2">
-              <Label htmlFor={id} className="text-xs">
-                {descriptor.label}
-              </Label>
-              {descriptor.type === "boolean" ? (
-                <Checkbox
-                  id={id}
-                  checked={Boolean(value)}
-                  onCheckedChange={(checked) =>
-                    model.setOption(row.key, descriptor.id, checked === true)
-                  }
-                  disabled={disabled}
-                />
-              ) : (
-                <ModelOptionSelect
-                  id={id}
-                  label={`${descriptor.label} for ${row.name}`}
-                  descriptor={descriptor}
-                  value={value}
-                  onChange={(next) => model.setOption(row.key, descriptor.id, next)}
-                  saving={disabled}
-                />
-              )}
-            </div>
-          );
-        })}
+      {selection && chosenModel?.options && (
+        <div className="grid grid-cols-1 gap-3 pt-1.5 sm:grid-cols-2">
+          {chosenModel.options.map((descriptor) => (
+            <ModelOptionField
+              key={descriptor.id}
+              id={`import-option-${row.key}-${descriptor.id}`}
+              label={descriptor.label}
+              descriptor={descriptor}
+              options={selection.modelOptions}
+              onChange={(next) => model.setOption(row.key, descriptor.id, next)}
+              saving={disabled}
+            />
+          ))}
+        </div>
+      )}
       {row.droppedOptions.length > 0 && (
         <p className="text-xs text-attention">
           Dropped because the chosen model does not accept them: {optionsText(row.droppedOptions)}.
