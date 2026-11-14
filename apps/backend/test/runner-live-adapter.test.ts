@@ -233,6 +233,31 @@ it("T3's workspace strategy schema supports worktree launches", async (c) => {
   expect(support.supported).toBe(true);
 });
 
+it("Start rejects worktree support that cannot express whether T3 fetches origin", async (c) => {
+  // Arrange
+  const { adapter, external, schema } = await launchFixture(c);
+  const strategy = (
+    schema.properties as { workspaceStrategy: { properties: Record<string, unknown> } }
+  ).workspaceStrategy;
+  delete strategy.properties.startFromOrigin;
+  const { f, t3, input } = await prepared(c, {
+    workspace: { mode: "worktree", base: { kind: "default" } },
+  });
+  t3.inspectLaunchSupport = (_target, workspace) =>
+    adapter.inspectLaunchSupport({ endpoint: external.endpoint }, workspace);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toMatchObject([
+    { code: "launch_unsupported", path: "connection.contract" },
+  ]);
+  expect(await f.listRuns(input.projectId)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
 it("worktree launch support is refused when the strategy cannot name an existing worktree", async (c) => {
   // Arrange
   const { adapter, external, schema } = await launchFixture(c);

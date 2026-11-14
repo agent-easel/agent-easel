@@ -31,14 +31,14 @@ and restricted OAuth credentials live outside project repositories.
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
   exit names are not kept. Migration `081` gave every Agent block of every stored Flow revision,
   including those Runs captured, an empty Revisit instruction in place; other block kinds have
-  none. Migration `082` made an Agent revision's execution columns nullable together (all present
+  none. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a SHA-256 fingerprint of the canonical document plus the reviewed selections, the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
-  definition's id and never recreates it. Migration `083` adds the receipt tables and changes no existing data.
+  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the
@@ -55,6 +55,26 @@ and restricted OAuth credentials live outside project repositories.
   records when that request was sent, the thread T3 launched, when it reached its outcome and the claims for its one
   Stop and one T3 thread settlement. Migration `080` adds the setting off and gives existing Runs no generation. No
   other data changes.
+- [Chat control](chat-control.md) keeps its state in SQLite: the On/Off switch and one row per Settings section
+  (Language model, Discord connection, Access), each with its own revision so sections save independently, and
+  Test or check evidence apart from runtime health. Secrets never enter SQLite: the model key and the bot token
+  each live in an owner-only credential file the section's row names. A save stages the file durably, then
+  commits the row in one transaction, so restart never mixes a configuration with another revision's secret,
+  and files no committed row names are removed. Conversation memory, read handles and markers of handled
+  Discord events or unfinished invocations belong to a conversation generation or expire, and clearing a
+  conversation deletes them. Chat actions do not depend on conversation turns: proposals with their
+  requester-bound consent and original expiry, attempts identified by the shared operation's request identity,
+  the originating thread of each chat-started Run and owed Discord deliveries with their persisted intent and
+  outcome survive clearing, Off and restarts. Human answers and Archives record the request they were applied
+  under, so a chat action proves its own effect. Migrations `082` to `091` keep every existing row (rebuilt
+  tables copy their values), start with Chat control Off and empty sections, give existing Runs no originating
+  thread and post nothing about earlier Run activity.
+  Chat control's state also records the Discord application its operating connection authenticated as, which
+  owns the conversations, consent and messages; no Application ID is configured. Migration `092` carries a
+  formerly configured Application ID over as that recorded application, turns a stored identity-mismatch check
+  into a verified check of the application Discord reported, keeps a rejection for another application's token
+  until Retry and keeps every other value. Migration `093` records the message carrying each new review's
+  button, so its button can be shown disabled once unusable; existing proposals have none and are never edited.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.
 - A Block reuses its worker conversation across visits. Exact execution identity, report
@@ -131,7 +151,9 @@ project reconcile, whose own publications would otherwise leave that read not cu
 Subscription registration precedes the snapshot read. A relevant hint during that read
 triggers a fresh read, up to three reads. A delivery is current only when no relevant
 change arrived while it was read and no later read failed; a scope counts as synchronized,
-and mutations are enabled, only while its latest applied delivery is current. A snapshot
+and new commands are enabled, only while its latest applied delivery is current. A command
+admitted then, such as Start with its image uploads, is not cancelled halfway by a later
+catch-up, but sends nothing once the client is offline. A snapshot
 or a later read raced by another commit stays unsynchronized until its catch-up arrives, and
 a failed re-read keeps the last value, marks the scope unsynchronized and retries. An unknown
 Run is final for that Run only, as is a Run beyond the view's capacity of 20 Runs per window;
