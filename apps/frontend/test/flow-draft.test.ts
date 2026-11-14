@@ -1,13 +1,13 @@
 import { expect, it } from "vite-plus/test";
 import { OfflineError } from "../src/transport.ts";
+import { createFlowDraft } from "../src/flow-draft.ts";
 import {
   editedFlow,
   held,
   hiddenFlow,
   interactingFlow,
   lostReply,
-  createdFlow,
-  missingFlow,
+  unlistedFlow,
   olderServerRefusedFlow,
   settled,
   notReady,
@@ -744,13 +744,13 @@ it("a readiness check answered after the editor was hidden is dropped", async ()
 
 it("a Flow missing from Studio's first current saved Flows is not found", () => {
   // Arrange
-  const { draft } = missingFlow();
+  const { definitions, factory } = unlistedFlow();
 
   // Act
-  const opened = draft.getSnapshot();
+  const draft = createFlowDraft("flow", definitions, factory);
 
   // Assert
-  expect(opened).toMatchObject({
+  expect(draft.getSnapshot()).toMatchObject({
     status: "failed",
     saved: null,
     removed: false,
@@ -761,17 +761,37 @@ it("a Flow missing from Studio's first current saved Flows is not found", () => 
 
 it("a created Flow opens from its create answer before Studio receives it live", () => {
   // Arrange
-  const { draft } = createdFlow();
+  const { definitions, factory } = unlistedFlow();
 
   // Act
-  const opened = draft.getSnapshot();
+  const draft = createFlowDraft("flow", definitions, factory, factory.latest());
 
   // Assert
-  expect(opened).toMatchObject({
+  expect(draft.getSnapshot()).toMatchObject({
     status: "loaded",
     saved: { revision: 1 },
     removed: false,
     error: "",
+  });
+});
+
+it("a Create answer cannot reopen a Flow Studio already delivered and then removed", () => {
+  // Arrange
+  const { definitions, factory, changed } = unlistedFlow();
+  const created = factory.latest();
+  changed({ flows: { upserts: [created], removals: [] } });
+  changed({ flows: { upserts: [], removals: [created.id] } });
+
+  // Act
+  const draft = createFlowDraft(created.id, definitions, factory, created);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    status: "failed",
+    saved: null,
+    error: "Flow not found.",
+    canSave: false,
+    canStartRun: false,
   });
 });
 

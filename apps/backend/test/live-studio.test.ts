@@ -157,20 +157,25 @@ it("an Agent save delivers the new readiness of a Flow whose revision did not ch
   });
 });
 
-it("coalesced Studio deliveries converge to the public Agent and Flow reads", async (c) => {
+it("competing Agent and Flow writes coalesce to the public Studio reads", async (c) => {
   // Arrange
   const { factory, save, review, editReviewer } = await reviewedFlow(c);
+  const planner = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
+  assertOk(await save(review));
   const studio = subscribe(c, factory.live.watchStudio());
   await studio.until((messages) => messages.length > 0);
 
   // Act
-  const planner = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
-  assertOk(await save(review));
-  assertOk(await editReviewer(reviewerExits));
-  assertOk(await factory.removeAgent(planner.id));
-  assertOk(await factory.createFlow({ name: "Second change" }));
+  const [edited, removed, created] = await Promise.all([
+    editReviewer(reviewerExits),
+    factory.removeAgent(planner.id),
+    factory.createFlow({ name: "Second change" }),
+  ]);
 
   // Assert
+  assertOk(edited);
+  assertOk(removed);
+  assertOk(created);
   const expected = await publicStudio(factory);
   await studio.until((messages) => isDeepStrictEqual(appliedStudio(messages), expected));
   expect(expected.agents[0]?.name).toBe("Reviewer");

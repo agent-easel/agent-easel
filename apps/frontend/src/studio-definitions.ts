@@ -78,6 +78,8 @@ export function createStudioDefinitions(
   let snapshot: StudioDefinitionsSnapshot = { flows: unread, agents: unread, delivery: "live" };
   let implementation: Implementation | undefined;
   let session = 0;
+  // A Create reply may bridge only its first delivery, never a later removal or navigation.
+  const observed = { flows: new Set<string>(), agents: new Set<string>() };
   const listeners = new Set<() => void>();
 
   /** Publishes changed facts; an unchanged list keeps its identity. */
@@ -87,6 +89,10 @@ export function createStudioDefinitions(
     const agents =
       change.agents && !sameRead(change.agents, snapshot.agents) ? change.agents : snapshot.agents;
     const delivery = change.delivery ?? snapshot.delivery;
+    if (flows.synchronized && agents.synchronized) {
+      flows.value?.forEach((flow) => observed.flows.add(flow.id));
+      agents.value?.forEach((agent) => observed.agents.add(agent.id));
+    }
     if (flows === snapshot.flows && agents === snapshot.agents && delivery === snapshot.delivery)
       return;
     snapshot = { flows, agents, delivery };
@@ -177,6 +183,8 @@ export function createStudioDefinitions(
     getSnapshot: () => snapshot,
     /** Identifies the connected source that a pending write must still belong to. */
     getSession: () => session,
+    /** Whether Studio has already shown the definition in its joint current lists. */
+    hasObserved: (list: StudioList, id: string) => observed[list].has(id),
     subscribe(notify: () => void) {
       listeners.add(notify);
       return () => {

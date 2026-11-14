@@ -323,7 +323,15 @@ export function createAgentDraft(
     exportJson: () => JSON.stringify(content, null, 2),
     async duplicate() {
       if (removed || !saved || snapshot.dirty || snapshot.saving || deleting) return;
-      return source.duplicateAgent(saved.id, {});
+      const session = source.getSession();
+      try {
+        const copy = await source.duplicateAgent(saved.id, {});
+        if (session !== source.getSession()) throw new OfflineError("unknown");
+        return copy;
+      } catch (cause) {
+        if (session !== source.getSession()) throw new OfflineError("unknown");
+        throw cause;
+      }
     },
     setEnvironmentId(id: string) {
       edit({ execution: { ...content.execution, environmentId: id } });
