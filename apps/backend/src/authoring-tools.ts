@@ -47,7 +47,7 @@ const agentFields = {
   execution: {
     type: ["object", "null"],
     description:
-      "Required. Ids from factory_get_agent_capabilities: environment, provider instance (one with reporting.supported), model and model option values; or null for an Agent without a model, which saves but cannot run until a save gives it one.",
+      "Required. Ids from factory_get_agent_capabilities: environment, provider instance (one with reporting.supported), model and model option values (an empty list when choosing none); or null for an Agent without a model, which saves but cannot run until a save gives it one.",
     properties: {
       environmentId: { type: "string" },
       providerInstanceId: { type: "string" },
@@ -61,7 +61,7 @@ const agentFields = {
         },
       },
     },
-    required: ["environmentId", "providerInstanceId", "modelId"],
+    required: ["environmentId", "providerInstanceId", "modelId", "modelOptions"],
   },
   exits: { type: "array", items: exit, description: "The Agent's exits; at least one." },
 };

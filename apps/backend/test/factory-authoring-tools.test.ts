@@ -236,34 +236,37 @@ it("factory_save_agent without the execution key is refused and keeps the model"
   });
 });
 
-it("factory_save_agent with a partial execution is refused and keeps the model", async (c) => {
-  // Arrange
-  const { factory, client } = await authoringMcpClient(c);
-  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
-  const { modelId: _modelId, ...partial } = sampleAgentInput("Coder").execution;
+it.for([
+  ["modelId", { code: "invalid_model", path: "execution.modelId" }],
+  ["modelOptions", { code: "invalid_option", path: "execution.modelOptions" }],
+] as const)(
+  "factory_save_agent with an execution missing %s is refused and keeps the model and its options",
+  async ([missing, issue], c) => {
+    // Arrange
+    const { factory, client } = await authoringMcpClient(c);
+    const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+    const { [missing]: _missing, ...partial } = sampleAgentInput("Coder").execution;
 
-  // Act
-  const result = await client.callTool({
-    name: "factory_save_agent",
-    arguments: {
-      ...sampleAgentInput("Coder"),
-      agentId: saved.id,
-      expectedRevision: saved.revision,
-      execution: partial,
-    },
-  });
+    // Act
+    const result = await client.callTool({
+      name: "factory_save_agent",
+      arguments: {
+        ...sampleAgentInput("Coder"),
+        agentId: saved.id,
+        expectedRevision: saved.revision,
+        execution: partial,
+      },
+    });
 
-  // Assert
-  expect(result.isError).toBe(true);
-  expect(toolReply(result)).toMatchObject({
-    code: "validation",
-    issues: [{ code: "invalid_model", path: "execution.modelId" }],
-  });
-  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
-    revision: saved.revision,
-    execution: saved.execution,
-  });
-});
+    // Assert
+    expect(result.isError).toBe(true);
+    expect(toolReply(result)).toMatchObject({ code: "validation", issues: [issue] });
+    expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+      revision: saved.revision,
+      execution: saved.execution,
+    });
+  },
+);
 
 it("a stale Flow save whose graph is too large to arrange is refused as a conflict before any layout", async (c) => {
   // Arrange

@@ -42,6 +42,8 @@ function invalid(code: string, path: string, message: string): Result<never> {
 const EXECUTION_REQUIRED =
   "Send execution settings with an environment, provider, model and thinking options, or null for an Agent without a model.";
 const INVALID_OPTION = "Thinking options must use supported id and value pairs.";
+const MODEL_OPTIONS_REQUIRED =
+  "Send the model's thinking options as a list, empty when it has none.";
 
 function parseModelOption(
   option: unknown,
@@ -130,6 +132,9 @@ export function validateExecutionSettings(execution: unknown): Result<AgentExecu
   if (!providerInstanceId.ok) return providerInstanceId;
   const modelId = parseExecutionReference(execution, "modelId", "invalid_model", "Choose a model.");
   if (!modelId.ok) return modelId;
+  // Unlike a Run title model, an omitted list is partial settings, never "no options".
+  if (!("modelOptions" in execution) || !Array.isArray(execution.modelOptions))
+    return invalid("invalid_option", "execution.modelOptions", MODEL_OPTIONS_REQUIRED);
   const modelOptions = parseModelOptions(execution, "execution");
   if (!modelOptions.ok) return modelOptions;
   return {
