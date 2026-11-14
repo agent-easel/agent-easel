@@ -1,4 +1,4 @@
-import { resolveAgentModel } from "@t3-factory/domain-validation";
+import { optionAvailability, resolveAgentModel } from "@t3-factory/domain-validation";
 import type { T3ProviderCapability } from "./adapters/t3.ts";
 import { providerReporting } from "./reporting-drivers.ts";
 import { failure } from "./result.ts";
@@ -6,9 +6,6 @@ import type {
   AgentCapabilities,
   AgentExecutionSettingsStatus,
   AgentExecutionSettings,
-  AgentModelCapability,
-  AgentModelOptionValue,
-  AgentSettingAvailability,
   AgentSettingStatus,
   Result,
 } from "@t3-factory/contracts";
@@ -84,23 +81,6 @@ export function agentSettingsStatus(
       state: optionAvailability(model, option),
     })),
   };
-}
-
-/** Whether the catalog model offers this option with the selected value. */
-export function optionAvailability(
-  model: AgentModelCapability | undefined,
-  selected: AgentModelOptionValue,
-): AgentSettingAvailability {
-  const descriptor = model?.options?.find((entry) => entry.id === selected.id);
-  if (!descriptor) return "unavailable";
-  if (descriptor.values)
-    return descriptor.values.includes(selected.value) ? "available" : "unavailable";
-  if (descriptor.type === "boolean")
-    return typeof selected.value === "boolean" ? "available" : "unavailable";
-  if (typeof selected.value !== "string") return "unavailable";
-  return descriptor.choices?.some((choice) => choice.id === selected.value)
-    ? "available"
-    : "unavailable";
 }
 
 export function emptyCapabilities(explanation: string, checkedAt: string): AgentCapabilities {

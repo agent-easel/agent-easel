@@ -3,13 +3,16 @@ import type {
   AgentCapabilities,
   AgentDefinition,
   AgentExecutionSettings,
-  AgentModelOptionDescriptor,
   AgentModelOptionValue,
   AgentEnvironment,
   AgentProviderCapability,
   AgentModelCapability,
 } from "@t3-factory/contracts";
-import { validateCreateAgent, validateUpdateAgent } from "@t3-factory/domain-validation";
+import {
+  buildOptions,
+  validateCreateAgent,
+  validateUpdateAgent,
+} from "@t3-factory/domain-validation";
 import { api, ApiError } from "./api.ts";
 import { randomId } from "./lib/ids.ts";
 
@@ -33,29 +36,6 @@ function savedExecution(selection: AgentExecutionSettings): AgentExecutionSettin
   return selection.environmentId && selection.providerInstanceId && selection.modelId
     ? selection
     : null;
-}
-
-export function optionValue(
-  options: readonly AgentModelOptionValue[],
-  descriptor: AgentModelOptionDescriptor,
-) {
-  const selected = options.find((entry) => entry.id === descriptor.id);
-  if (selected) return selected.value;
-  if (descriptor.default !== undefined) return descriptor.default;
-  if (descriptor.values) return descriptor.values[0] ?? "";
-  if (descriptor.type === "boolean") return false;
-  return descriptor.choices?.[0]?.id ?? "";
-}
-
-export function buildOptions(
-  descriptors: readonly AgentModelOptionDescriptor[] | undefined,
-  current: readonly AgentModelOptionValue[],
-): AgentModelOptionValue[] {
-  if (!descriptors?.length) return [];
-  return descriptors.map((descriptor) => ({
-    id: descriptor.id,
-    value: optionValue(current, descriptor),
-  }));
 }
 
 function withOptionValue(

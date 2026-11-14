@@ -785,6 +785,7 @@ export {
   type StartPrompt,
 } from "./run-prompt.ts";
 export { parseAppearancePresentation } from "./appearance.ts";
+export { buildOptions, hintedSelection, optionAvailability, optionValue } from "./model-options.ts";
 export {
   validateCreateAgent,
   validateDuplicateAgent,

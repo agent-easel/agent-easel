@@ -1,4 +1,5 @@
-import { optionValue, type AgentDraftModel, type AgentDraftSnapshot } from "../agent-draft.ts";
+import { optionValue } from "@t3-factory/domain-validation";
+import type { AgentDraftModel, AgentDraftSnapshot } from "../agent-draft.ts";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,

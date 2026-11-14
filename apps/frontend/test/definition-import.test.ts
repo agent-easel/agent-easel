@@ -15,7 +15,14 @@ const document = {
       key: "agent-1",
       name: "Code reviewer",
       prompt: "Review the change.",
-      model: { providerInstanceId: "elsewhere", modelId: "first", modelOptions: [] },
+      model: {
+        providerInstanceId: "elsewhere",
+        modelId: "first",
+        modelOptions: [
+          { id: "effort", value: "high" },
+          { id: "old", value: false },
+        ],
+      },
       exits: [],
     },
   ],
@@ -30,7 +37,9 @@ const reviewed: ImportReview = {
       promptLength: 18,
       exitCount: 0,
       hint: document.agents[0]!.model,
+      match: { status: "unmatched" },
       proposed: null,
+      droppedOptions: [],
     },
   ],
   capabilities,
@@ -48,22 +57,26 @@ async function reviewedImport() {
   return { model, operations };
 }
 
-it("picking a catalog model for a row selects it in the connected environment with its default options", async () => {
+it("changing a row's model keeps the hint options it accepts and recomputes the dropped ones", async () => {
   // Arrange
   const { model } = await reviewedImport();
-
-  // Act
   model.select("agent-1", { providerInstanceId: "primary", modelId: "first" });
 
+  // Act
+  model.select("agent-1", { providerInstanceId: "primary", modelId: "second" });
+
   // Assert
-  expect(model.getSnapshot().review?.rows[0]?.selection).toStrictEqual({
-    environmentId: "local",
-    providerInstanceId: "primary",
-    modelId: "first",
-    modelOptions: [
-      { id: "effort", value: "low" },
-      { id: "old", value: true },
-    ],
+  expect(model.getSnapshot().review?.rows[0]).toMatchObject({
+    selection: {
+      environmentId: "local",
+      providerInstanceId: "primary",
+      modelId: "second",
+      modelOptions: [
+        { id: "effort", value: "high" },
+        { id: "new", value: false },
+      ],
+    },
+    droppedOptions: [{ id: "old", value: false }],
   });
 });
 

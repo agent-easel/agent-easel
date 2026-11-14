@@ -4,14 +4,17 @@ import type {
   CreateAgentInput,
   DefinitionExport,
   ImportReview,
+  ImportReviewAgent,
   PortableAgent,
   PortableAgentDocument,
   PortableDocument,
+  PortableModelHint,
   Result,
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
   DEFINITION_REQUEST_LIMIT_BYTES,
+  hintedSelection,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,
   resolveAgentModel,
@@ -95,9 +98,53 @@ export function definitionExport(
 }
 
 /**
- * What an import would create. Every Agent starts as Needs a model; the review's picker offers the
- * catalog read here.
+ * The proposal for one hint from the connected environment's catalog. Candidates are
+ * reporting-capable instances of the hint's driver kind offering its exact model; the instance of
+ * the same name wins, otherwise a sole candidate. A hint without a driver kind matches only that
+ * same-named instance. Nothing matches while the catalog is not ready.
  */
+function matchModelHint(
+  hint: PortableModelHint | null,
+  capabilities: AgentCapabilities,
+): Pick<ImportReviewAgent, "match" | "proposed" | "droppedOptions"> {
+  if (hint === null) return { match: { status: "no_model" }, proposed: null, droppedOptions: [] };
+  const environmentId =
+    capabilities.state === "ready" ? capabilities.environments[0]?.environmentId : undefined;
+  const candidates =
+    environmentId === undefined
+      ? []
+      : capabilities.providers.flatMap((provider) => {
+          const model = provider.models.find((entry) => entry.id === hint.modelId);
+          const eligible =
+            hint.driverKind === undefined
+              ? provider.providerInstanceId === hint.providerInstanceId
+              : provider.driverKind === hint.driverKind;
+          return model && eligible && provider.reporting.supported ? [{ provider, model }] : [];
+        });
+  const winner =
+    candidates.find(({ provider }) => provider.providerInstanceId === hint.providerInstanceId) ??
+    (candidates.length === 1 ? candidates[0] : undefined);
+  if (environmentId === undefined || winner === undefined)
+    return {
+      match:
+        candidates.length > 1
+          ? {
+              status: "ambiguous",
+              candidates: candidates.map(({ provider }) => provider.providerInstanceId),
+            }
+          : { status: "unmatched" },
+      proposed: null,
+      droppedOptions: [],
+    };
+  const { selection, droppedOptions } = hintedSelection(
+    { environmentId, providerInstanceId: winner.provider.providerInstanceId },
+    winner.model,
+    hint.modelOptions,
+  );
+  return { match: { status: "matched" }, proposed: selection, droppedOptions };
+}
+
+/** What an import would create, with each Agent's model proposal from the catalog read here. */
 export function importReview(
   document: PortableDocument,
   capabilities: AgentCapabilities,
@@ -110,7 +157,7 @@ export function importReview(
       promptLength: agent.prompt.length,
       exitCount: agent.exits.length,
       hint: agent.model,
-      proposed: null,
+      ...matchModelHint(agent.model, capabilities),
     })),
     capabilities,
   };

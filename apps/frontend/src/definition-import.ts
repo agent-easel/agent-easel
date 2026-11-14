@@ -8,8 +8,8 @@ import type {
   ImportReview,
   ImportReviewAgent,
 } from "@t3-factory/contracts";
+import { hintedSelection } from "@t3-factory/domain-validation";
 import { api, ApiError } from "./api.ts";
-import { buildOptions } from "./agent-draft.ts";
 import { randomId } from "./lib/ids.ts";
 
 /** The Factory calls an import makes; the HTTP client in the app, fakes in tests. */
@@ -24,6 +24,8 @@ export interface ImportFile {
 export interface ImportRow extends ImportReviewAgent {
   /** What Confirm saves for this Agent; null is Needs a model. */
   readonly selection: AgentExecutionSettings | null;
+  /** The hint's options the selected model does not accept; empty without a selection. */
+  readonly droppedOptions: ImportReviewAgent["droppedOptions"];
   /** Why the last commit refused this row's selection; empty otherwise. */
   readonly refusal: string;
 }
@@ -148,19 +150,25 @@ export function createDefinitionImport(
     async retry() {
       if (snapshot.file && !snapshot.review && !snapshot.reviewing) await review(snapshot.file);
     },
-    /** Picks a catalog model with its default options, or Needs a model with null. */
+    /**
+     * Picks a catalog model, keeping the hint's options it accepts and listing the dropped rest,
+     * or Needs a model with null.
+     */
     select(key: string, choice: Pick<ImportModelChoice, "providerInstanceId" | "modelId"> | null) {
       const capabilities = snapshot.review?.capabilities;
       const environmentId = capabilities?.environments[0]?.environmentId;
       const model = capabilities?.providers
         .find((provider) => provider.providerInstanceId === choice?.providerInstanceId)
         ?.models.find((entry) => entry.id === choice?.modelId);
-      editRow(key, () => ({
-        selection:
-          choice && environmentId && model
-            ? { environmentId, ...choice, modelOptions: buildOptions(model.options, []) }
-            : null,
-      }));
+      editRow(key, ({ hint }) =>
+        choice && environmentId && model
+          ? hintedSelection(
+              { environmentId, providerInstanceId: choice.providerInstanceId },
+              model,
+              hint?.modelOptions ?? [],
+            )
+          : { selection: null, droppedOptions: [] },
+      );
     },
     setOption(key: string, id: string, value: AgentModelOptionValue["value"]) {
       editRow(key, ({ selection }) => ({

@@ -14,11 +14,14 @@ import type {
   StartTitleProvenance,
   ValidationIssue,
 } from "@t3-factory/contracts";
-import { resolveAgentModel, validateUpdateRunTitleSetting } from "@t3-factory/domain-validation";
+import {
+  optionAvailability,
+  resolveAgentModel,
+  validateUpdateRunTitleSetting,
+} from "@t3-factory/domain-validation";
 import type { StartPrompt } from "@t3-factory/domain-validation";
 import { LaunchRejected, type LaunchPayload, type T3Adapter } from "./adapters/t3.ts";
 import type { EffectOperations } from "./effect-operations.ts";
-import { optionAvailability } from "./agents.ts";
 import { reportingInstallationProblem } from "./explicit-readiness.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { failure } from "./result.ts";

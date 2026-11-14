@@ -125,7 +125,7 @@ it("an import request over 16 MiB is refused with HTTP 413", async (c) => {
   expect(body.error.code).toBe("too_large");
 });
 
-it("reviewing a file shows its instruction inventory and hint with Needs a model and writes nothing", async (context) => {
+it("reviewing a file shows its instruction inventory and proposes the single catalog model offering its hint, writing nothing", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
 
@@ -143,12 +143,116 @@ it("reviewing a file shows its instruction inventory and hint with Needs a model
         promptLength: exportedAgent().prompt.length,
         exitCount: 2,
         hint: exportedAgent().model,
-        proposed: null,
+        match: { status: "matched" },
+        proposed: controlledExecution(),
+        droppedOptions: [],
       },
     ],
     capabilities: { state: "ready" },
   });
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("the provider instance named in the hint wins over another instance offering the model", async (context) => {
+  // Arrange
+  const { factory, t3 } = await openFactoryWithApprovedT3(context);
+  t3.controlledProviders.push({
+    ...t3.controlledProviders[0]!,
+    providerInstanceId: "codex-elsewhere",
+  });
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile()));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({
+    match: { status: "matched" },
+    proposed: controlledExecution(undefined, { providerInstanceId: "codex-elsewhere" }),
+  });
+});
+
+it("several matching instances without the hint's name leave the Agent ambiguous, naming them", async (context) => {
+  // Arrange
+  const { factory, t3 } = await openFactoryWithApprovedT3(context);
+  t3.controlledProviders.push({ ...t3.controlledProviders[0]!, providerInstanceId: "codex-work" });
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile()));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({
+    match: { status: "ambiguous", candidates: ["codex-main", "codex-work"] },
+    proposed: null,
+  });
+});
+
+it("an instance of another driver kind is never matched, even with the hint's instance name", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const model = {
+    ...exportedAgent().model!,
+    driverKind: "claudeAgent",
+    providerInstanceId: "codex-main",
+  };
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile(exportedAgent({ model }))));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({ match: { status: "unmatched" }, proposed: null });
+});
+
+it("a hint without a driver kind does not fall back to the single instance offering its model", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { driverKind: _omitted, ...model } = exportedAgent().model!;
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile(exportedAgent({ model }))));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({ match: { status: "unmatched" }, proposed: null });
+});
+
+it("with the catalog not ready nothing is matched", async (context) => {
+  // Arrange
+  const factory = await (await factoryHarness(context)).open({ t3: new ControlledT3() });
+  const model = { ...exportedAgent().model!, providerInstanceId: "codex-main" };
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile(exportedAgent({ model }))));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({ match: { status: "unmatched" }, proposed: null });
+});
+
+it("a match keeps the hint options its model accepts and lists the dropped rest", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const model = {
+    ...exportedAgent().model!,
+    modelOptions: [
+      { id: "reasoning", value: "high" },
+      { id: "verbosity", value: "low" },
+    ],
+  };
+
+  // Act
+  const review = await factory.reviewImport(fileBody(agentFile(exportedAgent({ model }))));
+
+  // Assert
+  assert(review.ok);
+  expect(review.value.agents[0]).toMatchObject({
+    proposed: controlledExecution(undefined, {
+      modelOptions: [{ id: "reasoning", value: "high" }],
+    }),
+    droppedOptions: [{ id: "verbosity", value: "low" }],
+  });
 });
 
 it("a commit creates a new Agent at revision 1 with its exact name and exactly the reviewed selection", async (context) => {

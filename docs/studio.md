@@ -231,9 +231,19 @@ what is created. Studio sends the file's bytes to `POST /api/imports/review`, wh
 
 - a trust notice: imported instructions run with the user's T3 capabilities when a Run that uses them starts, and importing does not start a Run;
 - the instruction inventory: each Agent's name, prompt length and exit count, never its prompt text;
-- one row per Agent with its model hint as text (or "No model in file") and a picker of the live Worker catalog for the connected environment,
-  limited to reporting-capable providers, with the chosen model's thinking options. Every row starts as **Needs a model** with nothing
-  preselected.
+- one row per Agent labelled **Matched**, **Ambiguous** (naming the candidates), **Unmatched** or **No model in file**, with its model hint
+  and the reason as text, and a picker of the live Worker catalog for the connected environment, limited to reporting-capable providers, with
+  the chosen model's thinking options. A Matched row starts with the matched model, which can be kept, changed to any listed model or set to
+  **Needs a model**; every other row starts as **Needs a model** with nothing preselected. The row lists the hint's options that the chosen
+  model does not accept and recomputes them whenever the choice changes.
+
+The review matches each hint against the connected environment's live catalog. Candidates are reporting-capable provider instances of the
+hint's `driverKind` that offer its exact `modelId`. The candidate with the hint's `providerInstanceId` wins; otherwise a single candidate wins;
+several candidates leave the Agent Ambiguous and none leaves it Unmatched. A hint without `driverKind` matches only a reporting-capable instance
+with the same `providerInstanceId` and `modelId`, with no single-candidate fallback. Factory never matches across driver kinds or takes the
+first listed candidate, and matches nothing while the catalog is unavailable. A match uses the connected environment's id and keeps the hint's
+options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
+review applies the same option rule.
 
 Names, prompts and exits arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
 enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a

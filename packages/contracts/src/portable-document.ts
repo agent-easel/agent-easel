@@ -57,6 +57,14 @@ export interface DefinitionExport<Document extends PortableEnvelope = PortableAg
   readonly driverKindOmitted: readonly Pick<PortableAgent, "key" | "name">[];
 }
 
+/**
+ * How the review matched a bundled Agent's hint against the connected environment's live catalog.
+ * Only `matched` proposes a model; `candidates` names the provider instances that tied.
+ */
+export type ImportModelMatch =
+  | { readonly status: "matched" | "unmatched" | "no_model" }
+  | { readonly status: "ambiguous"; readonly candidates: readonly string[] };
+
 /** One bundled Agent as the import review shows it: its instruction inventory, never prompt text. */
 export interface ImportReviewAgent {
   readonly key: string;
@@ -64,8 +72,11 @@ export interface ImportReviewAgent {
   readonly promptLength: number;
   readonly exitCount: number;
   readonly hint: PortableModelHint | null;
+  readonly match: ImportModelMatch;
   /** The selection the review starts from; null is Needs a model. */
   readonly proposed: AgentExecutionSettings | null;
+  /** The hint's options the proposed model does not accept; empty without a proposal. */
+  readonly droppedOptions: readonly AgentModelOptionValue[];
 }
 
 /** What an import would create, computed without writing anything. */

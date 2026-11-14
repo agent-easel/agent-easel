@@ -1,8 +1,14 @@
 import { useRef } from "react";
 import { ShieldAlert, Upload } from "lucide-react";
-import type { AgentCapabilities, ImportResult, PortableModelHint } from "@t3-factory/contracts";
+import type {
+  AgentCapabilities,
+  AgentModelOptionValue,
+  ImportResult,
+  PortableModelHint,
+} from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -16,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ChoiceMenu } from "@/components/choice-menu";
-import { optionValue } from "../agent-draft.ts";
+import { optionValue } from "@t3-factory/domain-validation";
 import {
   importModelChoices,
   useDefinitionImport,
@@ -219,15 +225,42 @@ function ImportReviewContent({
   );
 }
 
-function hintText(hint: PortableModelHint | null): string {
-  if (!hint) return "No model in file.";
-  const options = hint.modelOptions.map((option) => `${option.id} ${String(option.value)}`);
+const optionsText = (options: readonly AgentModelOptionValue[]) =>
+  options.map((option) => `${option.id} ${String(option.value)}`).join(", ");
+
+function hintText(hint: PortableModelHint): string {
   return [
     `Exported model: ${hint.modelId} on ${hint.providerInstanceId}`,
     hint.driverKind ? ` (${hint.driverKind})` : "",
-    options.length > 0 ? `, ${options.join(", ")}` : "",
+    hint.modelOptions.length > 0 ? `, ${optionsText(hint.modelOptions)}` : "",
     ".",
   ].join("");
+}
+
+const matchLabel = {
+  matched: "Matched",
+  ambiguous: "Ambiguous",
+  unmatched: "Unmatched",
+  no_model: "No model in file",
+} as const;
+
+/** Why the review proposed no model for this row; nothing for a match. */
+function unmatchedReason(row: ImportRow, capabilities: AgentCapabilities): string {
+  const { match, hint } = row;
+  if (match.status === "ambiguous") {
+    const names = match.candidates.map(
+      (id) =>
+        capabilities.providers.find((provider) => provider.providerInstanceId === id)
+          ?.displayName ?? id,
+    );
+    return `Several providers offer this model: ${names.join(", ")}. Choose one.`;
+  }
+  if (match.status !== "unmatched" || !hint) return "";
+  if (capabilities.state !== "ready")
+    return "Nothing was matched because the T3 catalog is unavailable.";
+  return hint.driverKind
+    ? `No reporting-capable ${hint.driverKind} provider here offers ${hint.modelId}.`
+    : `The file names no driver kind, so only a reporting-capable provider named ${hint.providerInstanceId} offering ${hint.modelId} could match.`;
 }
 
 const choiceId = (providerInstanceId: string, modelId: string) =>
@@ -250,15 +283,20 @@ function ImportModelRow({
     .find((provider) => provider.providerInstanceId === selection?.providerInstanceId)
     ?.models.find((entry) => entry.id === selection?.modelId);
   const pickerId = `import-model-${row.key}`;
+  const reason = unmatchedReason(row, capabilities);
   return (
     <div className="grid gap-1.5 rounded-lg border px-3 py-2.5">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <Label htmlFor={pickerId} className="text-sm font-medium">
           {row.name}
         </Label>
+        <Badge variant={row.match.status === "matched" ? "success" : "secondary"}>
+          {matchLabel[row.match.status]}
+        </Badge>
         {!selection && <NeedsModel />}
       </div>
-      <p className="text-xs text-muted-foreground">{hintText(row.hint)}</p>
+      {row.hint && <p className="text-xs text-muted-foreground">{hintText(row.hint)}</p>}
+      {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
       <ChoiceMenu
         id={pickerId}
         label={`Model for ${row.name}`}
@@ -311,6 +349,11 @@ function ImportModelRow({
             </div>
           );
         })}
+      {row.droppedOptions.length > 0 && (
+        <p className="text-xs text-attention">
+          Dropped because the chosen model does not accept them: {optionsText(row.droppedOptions)}.
+        </p>
+      )}
       {choices.length === 0 && (
         <p className="text-xs text-muted-foreground">
           {capabilities.state === "ready"

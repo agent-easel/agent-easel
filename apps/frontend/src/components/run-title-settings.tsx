@@ -16,7 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ChoiceMenu, type MenuChoice } from "@/components/choice-menu";
 import { fieldLabelClass } from "@/components/page";
-import { buildOptions, optionValue } from "../agent-draft.ts";
+import { buildOptions, optionValue } from "@t3-factory/domain-validation";
 import { api, ApiError } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { useClientScope } from "../client-scope.ts";
