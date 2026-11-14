@@ -103,7 +103,29 @@ export async function liveProjectRepositories(context: TestContext) {
   const worktree = join(root, "execution");
   await git("git", ["-C", first, "worktree", "add", "-b", "execution", worktree]);
 
-  return { factory, adapter, root, first, second, p, alias, worktree };
+  return { factory, adapter, root, first, second, p, alias, worktree, git };
+}
+
+export async function staleProjectRepository(context: TestContext) {
+  const fixture = await liveProjectRepositories(context);
+  const { first, second, git } = fixture;
+  const readRef = async (ref: string) =>
+    (await git("git", ["-C", second, "rev-parse", "--verify", ref])).stdout.trim();
+  const originalCommit = await readRef("main");
+  await git("git", [
+    "-C",
+    first,
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "--allow-empty",
+    "-m",
+    "advance origin",
+  ]);
+  const currentCommit = (await git("git", ["-C", first, "rev-parse", "HEAD"])).stdout.trim();
+  return { ...fixture, originalCommit, currentCommit, readRef };
 }
 
 export const reportReadSchema = {

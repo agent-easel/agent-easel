@@ -1341,8 +1341,26 @@ export class LiveT3Adapter implements T3Adapter {
     const ref =
       base.kind === "ref"
         ? base.ref
-        : await git(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+        : await git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
     if (!ref) return null;
+    if (base.kind === "default") {
+      const prefix = "refs/remotes/origin/";
+      if (!ref.startsWith(prefix)) return null;
+      // Fetch this branch even when origin's configured fetch refspec excludes it.
+      await promisify(execFile)(
+        "git",
+        [
+          "-C",
+          workspaceRoot,
+          "fetch",
+          "--no-tags",
+          "--",
+          "origin",
+          `+refs/heads/${ref.slice(prefix.length)}:${ref}`,
+        ],
+        { timeout: 30_000 },
+      );
+    }
     const commit = await git([
       "rev-parse",
       "--verify",
@@ -1350,7 +1368,8 @@ export class LiveT3Adapter implements T3Adapter {
       "--end-of-options",
       `${ref}^{commit}`,
     ]);
-    return commit ? ref : null;
+    if (!commit) return null;
+    return base.kind === "default" ? ref.slice("refs/remotes/".length) : ref;
   }
   async createProject(target: T3ProjectTarget): Promise<T3Project> {
     return this.projectSession(target.endpoint, async (client) => {

@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { rm } from "node:fs/promises";
-import { liveProjectRepositories } from "./support/boundaries-setup.ts";
+import { liveProjectRepositories, staleProjectRepository } from "./support/boundaries-setup.ts";
+import { prepared } from "./support/prepared-runner.ts";
 
 it("a repository symlink resolves to the existing project", async (context) => {
   // Arrange
@@ -52,15 +53,53 @@ it("a deleted repository clone loses project readiness", async (context) => {
   expect(result.value.ready).toBe(false);
 });
 
-it("a worktree default base resolves to the clone's origin default branch", async (context) => {
+it("a worktree default base refreshes origin while leaving the local default branch unchanged", async (context) => {
   // Arrange
-  const { adapter, second } = await liveProjectRepositories(context);
+  const { adapter, second, originalCommit, currentCommit, readRef } =
+    await staleProjectRepository(context);
 
   // Act
   const ref = await adapter.resolveBaseRef(second, { kind: "default" });
 
   // Assert
   expect(ref).toBe("origin/main");
+  expect(await readRef("origin/main")).toBe(currentCommit);
+  expect(await readRef("main")).toBe(originalCommit);
+});
+
+it("an unreachable origin rejects Start without creating a Run, Task or worker from a stale default base", async (context) => {
+  // Arrange
+  const { adapter, first, second } = await staleProjectRepository(context);
+  const { f, t3, input } = await prepared(context, {
+    workspace: { mode: "worktree", base: { kind: "default" } },
+  });
+  t3.resolveBaseRef = (_workspaceRoot, base) => adapter.resolveBaseRef(second, base);
+  await rm(first, { recursive: true });
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toMatchObject([
+    { code: "workspace_ref_unreadable", path: "workspace.base" },
+  ]);
+  expect(await f.listRuns(input.projectId)).toStrictEqual({ ok: true, value: [] });
+  expect(await f.listTasks(input.projectId)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
+it("a custom local worktree base remains usable without contacting origin", async (context) => {
+  // Arrange
+  const { adapter, first, second, originalCommit, readRef } = await staleProjectRepository(context);
+  await rm(first, { recursive: true });
+
+  // Act
+  const ref = await adapter.resolveBaseRef(second, { kind: "ref", ref: "main" });
+
+  // Assert
+  expect(ref).toBe("main");
+  expect(await readRef("main")).toBe(originalCommit);
 });
 
 it("a repository without an origin default branch has no worktree default base", async (context) => {
