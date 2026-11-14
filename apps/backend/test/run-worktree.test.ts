@@ -11,7 +11,7 @@ import {
   worktreeReviewFlow,
 } from "./support/scenarios.ts";
 
-it("a worktree Start launches exactly one worktree-creating worker from the resolved base ref", async (c) => {
+it("a default-base worktree Start asks T3 to fetch origin for its single creator", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
   t3.worktreeMetadataPending = true;
@@ -27,6 +27,28 @@ it("a worktree Start launches exactly one worktree-creating worker from the reso
     type: "worktree",
     baseRef: "origin/main",
     branch: expect.stringMatching(/^factory\/run-1-[0-9a-f]{8}$/),
+    startFromOrigin: true,
+  });
+});
+
+it("a custom local worktree base asks T3 to preserve the local ref", async (c) => {
+  // Arrange
+  const { f, t3, input } = await prepared(c, {
+    workspace: { mode: "worktree", base: { kind: "ref", ref: "main" } },
+  });
+  t3.refs.add("main");
+  assert((await f.startRun(input)).ok);
+
+  // Act
+  await f.reconcileRuns();
+
+  // Assert
+  const [creator] = [...t3.launches.values()].map((launch) => launch.payload);
+  expect(creator!.workspaceStrategy).toStrictEqual({
+    type: "worktree",
+    baseRef: "main",
+    branch: expect.stringMatching(/^factory\/run-1-[0-9a-f]{8}$/),
+    startFromOrigin: false,
   });
 });
 

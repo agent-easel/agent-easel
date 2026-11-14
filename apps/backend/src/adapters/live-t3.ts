@@ -237,6 +237,7 @@ const expressesWorktreeLaunches = (props: Record<string, SchemaProperty>) => {
   return (
     ["worktree", "existing_worktree"].every((type) => fields.type?.enum?.includes(type)) &&
     ["baseRef", "branch", "worktreePath"].every((field) => fields[field]?.type === "string") &&
+    fields.startFromOrigin?.type === "boolean" &&
     Array.isArray(strategyRequired) &&
     strategyRequired.every((field) => field === "type")
   );
