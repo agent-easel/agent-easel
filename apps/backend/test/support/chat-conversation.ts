@@ -160,7 +160,9 @@ export const clockedConversation = (c: TestContext) =>
     const factory = yield* harness.service({
       t3,
       discordApiUrl: discord.apiUrl,
-      connectionRetryMs: 60_000,
+      // TestClock.adjust runs every periodic connection, appearance and Project recheck it passes;
+      // a daily interval keeps multi-day conversation tests from running thousands of them.
+      connectionRetryMs: 24 * 60 * 60_000,
     });
     yield* factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" });
     const project = yield* factory.addRepository({ path: root });

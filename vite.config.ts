@@ -32,6 +32,20 @@ const backendImportRestrictions = [
 ];
 
 export default defineConfig({
+  run: {
+    cache: { scripts: true },
+    tasks: {
+      "gate:static": {
+        command: "true",
+        dependsOn: ["format:check", "check:scenarios", "fallow", "lint", "typecheck"],
+        cache: false,
+      },
+      // Tests and the build start only after the static checks pass: they would compete with
+      // them for CPU, and a static failure makes their result moot.
+      "gate:dynamic": { command: "true", dependsOn: ["test", "build"], cache: false },
+      "gate:check": { command: "vp run gate:static && vp run gate:dynamic", cache: false },
+    },
+  },
   fmt: {
     printWidth: 100,
     ignorePatterns,
