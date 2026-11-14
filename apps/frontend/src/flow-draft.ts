@@ -17,7 +17,7 @@ export type FlowContent = Pick<FlowDraft, "name" | "workspace" | "graph">;
 /** Studio's saved definitions, which hold this Flow's saved revisions, and its Flow writes. */
 export type FlowDraftSource = Pick<
   StudioDefinitions,
-  "getSnapshot" | "subscribe" | "refresh" | "updateFlow" | "removeFlow"
+  "getSnapshot" | "hasObserved" | "subscribe" | "refresh" | "updateFlow" | "removeFlow"
 >;
 
 /** The Factory operations one Flow draft uses beyond Studio's; the HTTP client in the app. */
@@ -313,7 +313,7 @@ export function createFlowDraft(
     }
   }
   const unresolved = () => conflict.status !== "none";
-  if (created) adopt(created);
+  if (created && !source.hasObserved("flows", created.id)) adopt(created);
   reconcile();
   snapshot = current();
   function reject(cause: unknown, fallback: string) {

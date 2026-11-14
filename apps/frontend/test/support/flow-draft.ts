@@ -191,22 +191,11 @@ function flowDraft(factory = memoryFactory()) {
   };
 }
 
-/** The editor of a Flow that Studio's current saved Flows do not include, as from a fresh link. */
-export function missingFlow() {
+/** Studio has delivered an empty Flow list; a Create answer may precede its first delivery. */
+export function unlistedFlow() {
   const factory = memoryFactory();
-  const { definitions } = liveFlowStudio(factory, []);
-  const draft = createFlowDraft("flow", definitions, factory);
-  draft.open();
-  return { draft };
-}
-
-/** The editor of a Flow whose create answer arrived before Studio received it live. */
-export function createdFlow() {
-  const factory = memoryFactory();
-  const { definitions } = liveFlowStudio(factory, []);
-  const draft = createFlowDraft("flow", definitions, factory, factory.latest());
-  draft.open();
-  return { draft };
+  const { definitions, changed } = liveFlowStudio(factory, []);
+  return { definitions, factory, changed };
 }
 
 /** The Flow editor shows a loaded, clean Flow. */

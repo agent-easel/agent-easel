@@ -689,6 +689,46 @@ it("an Agent save reply from a retired source keeps the draft and reports an unk
   });
 });
 
+it("an Agent Duplicate reply from a retired source cannot acknowledge or open the copy", async () => {
+  // Arrange
+  const setup = agentDraft();
+  const reply = held(setup.factory.duplicateAgent);
+  const duplicating = setup.draft.duplicate();
+  await replaceAgentSource(setup);
+
+  // Act
+  reply.answer(savedAgent({ id: "copy", name: "Reviewer copy" }));
+
+  // Assert
+  await expect(duplicating).rejects.toMatchObject({ delivery: "unknown" });
+  expect(setup.draft.getSnapshot().saved?.id).toBe("agent");
+});
+
+it("an Agent Duplicate rejection from a replaced source is unknown even with the same protocol", async () => {
+  // Arrange
+  const setup = agentDraft();
+  const reply = held(setup.factory.duplicateAgent);
+  const duplicating = setup.draft.duplicate();
+  await replaceAgentSource(setup, FACTORY_STUDIO_LIVE_PROTOCOL);
+
+  // Act
+  reply.fail(new ApiError({ code: "not_found", message: "An old source rejection.", issues: [] }));
+
+  // Assert
+  await expect(duplicating).rejects.toMatchObject({ delivery: "unknown" });
+});
+
+it("an Agent Duplicate answered by its current source returns the new copy", async () => {
+  // Arrange
+  const setup = agentDraft();
+
+  // Act
+  const copy = await setup.draft.duplicate();
+
+  // Assert
+  expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
+});
+
 it("an Agent save rejection from a replaced source is unknown even when its protocol is unchanged", async () => {
   // Arrange
   const setup = editedAgent();

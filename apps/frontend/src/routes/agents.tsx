@@ -148,7 +148,8 @@ function useOpenedAgent(
   acknowledged: AgentDefinition | null,
 ) {
   const creating = agentId === "new";
-  const listed = library.agents?.find((entry) => entry.id === agentId) ?? acknowledged;
+  const pending = library.definitions.hasObserved("agents", agentId) ? null : acknowledged;
+  const listed = library.agents?.find((entry) => entry.id === agentId) ?? pending;
   const [opened, setOpened] = useState<AgentDefinition | null>(null);
   if (!creating && !opened && listed) setOpened(listed);
   if (creating) return { agent: null, unavailable: false };
