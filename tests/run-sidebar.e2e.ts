@@ -102,6 +102,10 @@ test("snoozing a restored Run restores its group expansion and focuses the toggl
   );
   await screen.getByRole("menuitem", "Restore", { exact: true }).tap();
   await expect(toggle).toBeHidden();
+  // The open menu hides background roles before Restore finishes moving and focusing the row.
+  await expect(
+    screen.getByRole("navigation", "Open Runs").getByRole("link").filter({ hasText: snoozedTitle }),
+  ).toBeFocused();
   await actions.secondaryTap();
 
   // Act
@@ -128,6 +132,7 @@ test("title search combines drafts and all Run states in creation order", async 
   await screen.getByLabel("Initial prompt", { exact: false }).fill("Demo · Sidebar search draft");
   const snoozed = await findRun(app.baseUrl, snoozedTitle);
   await app.open(`/runs/${snoozed.id}`);
+  await expect(screen.getByRole("heading", snoozedTitle, { exact: true })).toBeVisible();
   await app.open("/runs/new");
   const titles = await matchingSidebarTitles(app.baseUrl, "Demo ·");
 

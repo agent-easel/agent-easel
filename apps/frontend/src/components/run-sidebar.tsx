@@ -2,7 +2,7 @@ import { useSettleRun } from "./settle-run.tsx";
 import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { publishSidebarNavigation, type SidebarRunAction } from "../sidebar-navigation.ts";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
 import {
@@ -356,20 +356,25 @@ function useRunActionFocus(runs: readonly RunNavigationEntry[]) {
     }
     if (step === "stopping") {
       pending.current = { ...focus, stopping: true };
-      return;
     }
-    if (step === "wait") return;
-    const target = document.getElementById(focus.id);
-    if (!target) return;
-    if (!focus.owner || ownsFocus(focus.owner, focus.runId)) target.focus();
-    pending.current = undefined;
-  }, [request, runs]);
-  useEffect(() => {
-    const owner = request?.owner;
-    const runId = request?.runId;
-    if (!owner || !runId) return;
+    if (step === "focus") {
+      const target = document.getElementById(focus.id);
+      if (target) {
+        if (!focus.owner || ownsFocus(focus.owner, runId)) target.focus();
+        pending.current = undefined;
+        return;
+      }
+    }
+    const owner = focus.owner;
+    if (!owner) return;
+    // Track ownership only while this request still waits for its destination. The layout
+    // effect's cleanup releases these listeners before navigation advances or replaces it.
+    const tracking = new AbortController();
     const revoke = () => {
-      if (pending.current?.owner === owner) pending.current = undefined;
+      if (pending.current?.owner === owner) {
+        pending.current = undefined;
+        tracking.abort();
+      }
     };
     const focusIn = (event: FocusEvent) => {
       if (!closingConfirmation() && !holdsFocus(event.target, owner, runId)) revoke();
@@ -379,13 +384,10 @@ function useRunActionFocus(runs: readonly RunNavigationEntry[]) {
     const press = (event: PointerEvent) => {
       if (!(event.target instanceof Element) || !event.target.closest(holders)) revoke();
     };
-    document.addEventListener("focusin", focusIn);
-    document.addEventListener("pointerdown", press, true);
-    return () => {
-      document.removeEventListener("focusin", focusIn);
-      document.removeEventListener("pointerdown", press, true);
-    };
-  }, [request]);
+    document.addEventListener("focusin", focusIn, { signal: tracking.signal });
+    document.addEventListener("pointerdown", press, { capture: true, signal: tracking.signal });
+    return () => tracking.abort();
+  }, [request, runs]);
   return useCallback((next: FocusRequest) => {
     pending.current = next;
     setRequest(next);
