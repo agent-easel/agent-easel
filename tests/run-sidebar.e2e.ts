@@ -128,6 +128,7 @@ test("title search combines drafts and all Run states in creation order", async 
   await screen.getByLabel("Initial prompt", { exact: false }).fill("Demo · Sidebar search draft");
   const snoozed = await findRun(app.baseUrl, snoozedTitle);
   await app.open(`/runs/${snoozed.id}`);
+  await expect(screen.getByRole("link", /^Demo · Sidebar search draft\s*Draft$/)).toBeVisible();
   await app.open("/runs/new");
   const titles = await matchingSidebarTitles(app.baseUrl, "Demo ·");
 
