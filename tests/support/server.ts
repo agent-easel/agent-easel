@@ -22,7 +22,7 @@ import {
   enableRunTitlesWithCheapModel,
 } from "../../apps/backend/test/support/scenarios.ts";
 import assert from "node:assert/strict";
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -69,6 +69,10 @@ const config = await loadConfiguration({
   FACTORY_REMOTE_HOST: "127.0.0.1",
   FACTORY_REMOTE_PORT: "0",
 });
+// Claim the runner's browser port before an ephemeral fixture listener can receive it.
+let fixtureReady = false;
+const proxy = createServer(handleRequest);
+await new Promise<void>((resolve) => proxy.listen(config.port, "127.0.0.1", resolve));
 const t3 = new PersistentT3(home, false);
 // Chat control reaches this controlled Discord instead of discord.com; it knows one bot.
 const discord = await startControlledDiscord();
@@ -690,7 +694,12 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
   }),
 };
 
-const proxy = createServer((incoming, outgoing) => {
+function handleRequest(incoming: IncomingMessage, outgoing: ServerResponse) {
+  if (!fixtureReady) {
+    outgoing.writeHead(503);
+    outgoing.end();
+    return;
+  }
   const url = new URL(incoming.url ?? "/", "http://fixture");
   const fixture = incoming.method === "POST" ? fixtureRoutes[url.pathname] : undefined;
   if (fixture) {
@@ -746,7 +755,7 @@ const proxy = createServer((incoming, outgoing) => {
     return;
   }
   proxyFixture(incoming, outgoing, target.server.remoteAddress()!.port, { ca: target.anchor });
-});
+}
 proxy.on("upgrade", (incoming: IncomingMessage, socket: Duplex) => {
   if (!incoming.headers.cookie?.includes("fixture_remote=1")) {
     hostLiveSockets.add(socket);
@@ -768,7 +777,7 @@ proxy.on("upgrade", (incoming: IncomingMessage, socket: Duplex) => {
     liveSnapshotDelayMs,
   );
 });
-await new Promise<void>((resolve) => proxy.listen(config.port, "127.0.0.1", resolve));
+fixtureReady = true;
 let advancing: Promise<void> | undefined;
 const timer = setInterval(() => {
   advancing ??= t3.advance().finally(() => {
