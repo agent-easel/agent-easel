@@ -15,7 +15,25 @@ import { randomId } from "./lib/ids.ts";
 
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<typeof api, "createAgent" | "updateAgent" | "removeAgent">;
-export type AgentContent = Pick<AgentDefinition, "name" | "prompt" | "execution" | "exits">;
+/** Draft content. The Worker picker may hold unchosen (empty) ids; saving converts it. */
+export interface AgentContent extends Pick<AgentDefinition, "name" | "prompt" | "exits"> {
+  readonly execution: AgentExecutionSettings;
+}
+
+const NO_WORKER: AgentExecutionSettings = {
+  environmentId: "",
+  providerInstanceId: "",
+  modelId: "",
+  modelOptions: [],
+};
+
+/** Complete settings once an environment, provider and model are chosen; otherwise the Agent is
+ * saved without a model, never with a partial selection. */
+function savedExecution(selection: AgentExecutionSettings): AgentExecutionSettings | null {
+  return selection.environmentId && selection.providerInstanceId && selection.modelId
+    ? selection
+    : null;
+}
 
 export function optionValue(
   options: readonly AgentModelOptionValue[],
@@ -62,8 +80,14 @@ function initialExecution(capabilities: AgentCapabilities | null): AgentExecutio
   };
 }
 
+/** A model-less Agent opens with nothing chosen; only a new Agent preselects a provider. */
 function contentOf(agent: AgentDefinition): AgentContent {
-  return { name: agent.name, prompt: agent.prompt, execution: agent.execution, exits: agent.exits };
+  return {
+    name: agent.name,
+    prompt: agent.prompt,
+    execution: agent.execution ?? NO_WORKER,
+    exits: agent.exits,
+  };
 }
 
 function saveRequest(
@@ -71,13 +95,14 @@ function saveRequest(
   draft: AgentContent,
   operations: AgentDraftOperations,
 ): { error: string } | { save: () => Promise<AgentDefinition> } {
+  const content = { ...draft, execution: savedExecution(draft.execution) };
   if (agent) {
-    const validation = validateUpdateAgent({ ...draft, expectedRevision: agent.revision });
+    const validation = validateUpdateAgent({ ...content, expectedRevision: agent.revision });
     if (!validation.ok) return { error: validation.error.message };
     const input = validation.value;
     return { save: () => operations.updateAgent(agent.id, input) };
   }
-  const validation = validateCreateAgent(draft);
+  const validation = validateCreateAgent(content);
   if (!validation.ok) return { error: validation.error.message };
   const input = validation.value;
   return { save: () => operations.createAgent(input) };
@@ -92,6 +117,8 @@ export interface AgentDraftSnapshot {
     readonly selectedProvider: AgentProviderCapability | undefined;
     readonly selectedModel: AgentModelCapability | undefined;
   };
+  /** Saving now would store no model: the Worker selection is empty or incomplete. */
+  readonly needsModel: boolean;
   readonly dirty: boolean;
   readonly saving: boolean;
   readonly error: string;
@@ -143,6 +170,7 @@ export function createAgentDraft(
       deleting,
       deleteError,
       choices: { environments, providers, selectedProvider, selectedModel },
+      needsModel: savedExecution(content.execution) === null,
       dirty: JSON.stringify(content) !== JSON.stringify(baseline),
     };
   }
@@ -166,6 +194,9 @@ export function createAgentDraft(
     edit,
     setEnvironmentId(id: string) {
       edit({ execution: { ...content.execution, environmentId: id } });
+    },
+    clearWorker() {
+      edit({ execution: NO_WORKER });
     },
     clearDeleteError() {
       deleteError = "";

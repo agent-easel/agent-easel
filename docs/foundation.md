@@ -31,7 +31,9 @@ and restricted OAuth credentials live outside project repositories.
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
   exit names are not kept. Migration `081` gave every Agent block of every stored Flow revision,
   including those Runs captured, an empty Revisit instruction in place; other block kinds have
-  none.
+  none. Migration `082` made an Agent revision's execution columns nullable together (all present
+  or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
+  its restored immutability guards with every revision id, number and Run reference intact.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the

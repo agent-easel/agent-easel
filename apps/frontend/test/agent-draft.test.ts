@@ -66,6 +66,23 @@ it("a new Agent leaves worker settings unset without T3 capabilities", () => {
   });
 });
 
+it("an Agent saved without a model opens with no Worker choice preselected", () => {
+  // Arrange
+  const agent = savedAgent({ execution: null });
+
+  // Act
+  const { draft } = agentDraft(agent);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    content: {
+      execution: { environmentId: "", providerInstanceId: "", modelId: "", modelOptions: [] },
+    },
+    needsModel: true,
+    dirty: false,
+  });
+});
+
 it("saved worker settings that T3 no longer offers are kept without substitution", () => {
   // Arrange
   const agent = savedAgent({
@@ -211,18 +228,19 @@ it("editing worker settings leaves unsaved changes", () => {
 
 it("restoring the saved field values clears unsaved changes", () => {
   // Arrange
-  const agent = savedAgent();
+  const execution = {
+    environmentId: "local",
+    providerInstanceId: "primary",
+    modelId: "first",
+    modelOptions: [],
+  };
+  const agent = savedAgent({ execution });
   const { draft } = agentDraft(agent);
   draft.edit({ name: "Changed", prompt: "New instructions", exits: [] });
   draft.setEnvironmentId("another-machine");
 
   // Act
-  draft.edit({
-    name: agent.name,
-    prompt: agent.prompt,
-    exits: agent.exits,
-    execution: agent.execution,
-  });
+  draft.edit({ name: agent.name, prompt: agent.prompt, exits: agent.exits, execution });
 
   // Assert
   expect(draft.getSnapshot().dirty).toBe(false);
@@ -284,6 +302,41 @@ it("an accepted create adopts the new Agent identity and revision", async () => 
   expect(factory.updateAgent).not.toHaveBeenCalled();
   expect(saved).toMatchObject({ id: "agent", revision: 1 });
   expect(draft.getSnapshot()).toMatchObject({ saved, dirty: false });
+});
+
+it("a new Agent saves without a model when no provider supports Factory reporting", async () => {
+  // Arrange
+  const offered = { ...capabilities, providers: [capabilities.providers[0]!] };
+  const { draft, factory } = agentDraft(null, offered);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.createAgent).toHaveBeenCalledWith(expect.objectContaining({ execution: null }));
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { execution: null, settingsStatus: null },
+    needsModel: true,
+    dirty: false,
+    error: "",
+  });
+});
+
+it("clearing the Worker selection saves the Agent without a model", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft();
+  draft.clearWorker();
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.updateAgent).toHaveBeenCalledWith(
+    "agent",
+    expect.objectContaining({ execution: null, expectedRevision: 3 }),
+  );
+  expect(draft.getSnapshot()).toMatchObject({ saved: { execution: null }, dirty: false });
 });
 
 it("a stale save keeps edits unsaved and shows a notice identified by Factory's conflict code", async () => {

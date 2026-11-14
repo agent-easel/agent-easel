@@ -16,12 +16,13 @@ import type {
 /**
  * A save may not choose a provider T3 offers but Factory cannot take reports from, as Studio's
  * menu prevents. Providers T3 does not list right now are an availability matter for settings
- * status, not a save error.
+ * status, not a save error, and an Agent without a model chooses no provider.
  */
 export function unsupportedReportingFailure(
-  execution: AgentExecutionSettings,
+  execution: AgentExecutionSettings | null,
   capabilities: AgentCapabilities,
 ): Result<never> | undefined {
+  if (execution === null) return undefined;
   const provider = capabilities.providers.find(
     (entry) => entry.providerInstanceId === execution.providerInstanceId,
   );

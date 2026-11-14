@@ -8,7 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import type {
   AgentCapabilities,
-  RunDefinitions,
+  CapturedAgent,
   AuthorizationContext,
   FactoryOperations,
   ProjectCatalog,
@@ -63,7 +63,7 @@ function readyCapabilities(cap: Result<AgentCapabilities>) {
 /** Keep the connected local environment, a supported reporting harness and every chosen setting. */
 function validatedHarness(
   context: AuthorizationContext,
-  agent: RunDefinitions["agents"][number],
+  agent: CapturedAgent,
   capabilities: AgentCapabilities,
 ) {
   if (
@@ -166,10 +166,7 @@ const openRuntimeSetup = Effect.fn(function* (
     yield* semaphore.withPermits(1)(Effect.void);
   });
   yield* Effect.addFinalizer(() => close);
-  const selection = Effect.fn(function* (
-    input: unknown,
-    capturedAgent?: RunDefinitions["agents"][number],
-  ) {
+  const selection = Effect.fn(function* (input: unknown, capturedAgent?: CapturedAgent) {
     const i = object(input);
     if (typeof i.projectId !== "string" || typeof i.agentId !== "string")
       blocked("selection_required", "runtime.selection", "Choose a saved project and Agent.");
@@ -188,6 +185,12 @@ const openRuntimeSetup = Effect.fn(function* (
     const { connection, context } = readyConnection(c);
     const p = availableProject(ps, i.projectId);
     if (!a.ok) blocked("agent_unavailable", "agent", "Choose an existing Agent.");
+    if (a.value.execution === null)
+      blocked(
+        "execution_required",
+        "agent.execution",
+        `Choose an environment, provider and model for ${a.value.name} in Studio → Agents.`,
+      );
     const driver = validatedHarness(context, a.value, readyCapabilities(cap));
     const root = yield* boundary(() => t3.resolveRepository(p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
@@ -196,7 +199,7 @@ const openRuntimeSetup = Effect.fn(function* (
   /** Explicit reporting: the connected contract, an installed Factory MCP and report support. */
   const readiness = Effect.fn(function* (
     input: unknown,
-    capturedAgent?: RunDefinitions["agents"][number],
+    capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
     yield* Effect.gen(function* () {
@@ -240,7 +243,7 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   return {
     close: () => close,
-    recheckAgent: (projectId: string, agent: RunDefinitions["agents"][number]) =>
+    recheckAgent: (projectId: string, agent: CapturedAgent) =>
       serial(() => readiness({ projectId, agentId: agent.id }, agent)),
     recheckRuntime: (i: unknown) => serial(() => readiness(i)),
   };

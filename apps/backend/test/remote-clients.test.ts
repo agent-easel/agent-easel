@@ -66,13 +66,15 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   });
 });
 
-it("a client older than the server's supported protocol is told to update itself", async (c) => {
+it("a protocol 11 client, which cannot read Agents without a model, is told to update itself while the current client is served", async (c) => {
   // Arrange
-  const server = await remoteServer(c, { protocol: { protocol: 3, minimumPeerProtocol: 2 } });
-  const old = server.client("desktop", { protocol: 1, minimum: 1 });
+  const server = await remoteServer(c);
+  const current = await server.approved("Laptop");
+  assert((await current.send("GET", "/api/agents")).body.ok);
+  const old = server.client("desktop", { protocol: 11, minimum: 9 });
 
   // Act
-  const reply = await old.send("GET", "/api/flows");
+  const reply = await old.send("GET", "/api/agents");
 
   // Assert
   expect(reply.status).toBe(426);

@@ -167,6 +167,104 @@ it("an Agent save choosing a provider without Factory reporting support is refus
   });
 });
 
+it("factory_create_agent with execution null creates an Agent that factory_get_agent reads without execution or settings status", async (c) => {
+  // Arrange
+  const { client } = await authoringMcpClient(c);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_agent",
+    arguments: { ...sampleAgentInput("Coder"), execution: null },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const created = toolReply(result);
+  expect(
+    toolReply(
+      await client.callTool({ name: "factory_get_agent", arguments: { agentId: created.id } }),
+    ),
+  ).toMatchObject({ id: created.id, revision: 1, execution: null, settingsStatus: null });
+});
+
+it("factory_save_agent with execution null saves the next revision without a model", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_agent",
+    arguments: {
+      ...sampleAgentInput("Coder"),
+      agentId: saved.id,
+      expectedRevision: saved.revision,
+      execution: null,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+    revision: saved.revision + 1,
+    execution: null,
+    settingsStatus: null,
+  });
+});
+
+it("factory_save_agent without the execution key is refused and keeps the model", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const { execution: _execution, ...withoutExecution } = sampleAgentInput("Coder");
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_agent",
+    arguments: { ...withoutExecution, agentId: saved.id, expectedRevision: saved.revision },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "execution_required", path: "execution" }],
+  });
+  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+    revision: saved.revision,
+    execution: saved.execution,
+  });
+});
+
+it("factory_save_agent with a partial execution is refused and keeps the model", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const { modelId: _modelId, ...partial } = sampleAgentInput("Coder").execution;
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_agent",
+    arguments: {
+      ...sampleAgentInput("Coder"),
+      agentId: saved.id,
+      expectedRevision: saved.revision,
+      execution: partial,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "invalid_model", path: "execution.modelId" }],
+  });
+  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+    revision: saved.revision,
+    execution: saved.execution,
+  });
+});
+
 it("a stale Flow save whose graph is too large to arrange is refused as a conflict before any layout", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);

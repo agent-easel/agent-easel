@@ -1,5 +1,5 @@
 import { vi } from "vite-plus/test";
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, SavedAgent } from "@t3-factory/contracts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 
 export const capabilities: AgentCapabilities = {
@@ -76,8 +76,9 @@ export const capabilities: AgentCapabilities = {
   ],
 };
 
-export function savedAgent(change: Partial<AgentDefinition> = {}): AgentDefinition {
-  return {
+/** A saved Agent; one saved with `execution: null` has no settings status, as Factory returns it. */
+export function savedAgent(change: Partial<SavedAgent> = {}): AgentDefinition {
+  const agent = {
     id: "agent",
     revision: 3,
     name: "Reviewer",
@@ -94,14 +95,20 @@ export function savedAgent(change: Partial<AgentDefinition> = {}): AgentDefiniti
     exits: [{ id: "done", name: "done", description: "", messageRequired: false }],
     createdAt: "2026-11-10T08:00:00.000Z",
     updatedAt: "2026-11-10T08:00:00.000Z",
-    settingsStatus: {
-      environment: { state: "available" },
-      provider: { state: "available" },
-      model: { state: "available" },
-      options: [],
-    },
     ...change,
   };
+  return agent.execution
+    ? {
+        ...agent,
+        execution: agent.execution,
+        settingsStatus: {
+          environment: { state: "available" },
+          provider: { state: "available" },
+          model: { state: "available" },
+          options: [],
+        },
+      }
+    : { ...agent, execution: null, settingsStatus: null };
 }
 
 function memoryAgents() {

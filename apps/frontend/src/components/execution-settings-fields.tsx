@@ -11,11 +11,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ChoiceMenu, type MenuChoice } from "@/components/choice-menu";
 import { cn } from "@/lib/utils";
+import { NeedsModel } from "./needs-model.tsx";
 
 type ExecutionSettingsState = AgentDraftSnapshot["choices"] &
+  Pick<AgentDraftSnapshot, "needsModel"> &
   Pick<
     AgentDraftModel,
-    "setEnvironmentId" | "chooseProvider" | "chooseModel" | "setOption" | "removeOption"
+    | "setEnvironmentId"
+    | "chooseProvider"
+    | "chooseModel"
+    | "setOption"
+    | "removeOption"
+    | "clearWorker"
   > & { readonly execution: AgentExecutionSettings };
 
 export function ExecutionSettingsFields({
@@ -41,12 +48,28 @@ export function ExecutionSettingsFields({
   const extraOptions = optionFields.slice(1);
   return (
     <section aria-labelledby={`${role}-execution-heading`} className="grid gap-3">
-      <h2 id={`${role}-execution-heading`} className="text-sm font-semibold">
-        {role === "worker" ? "Worker" : "Coordinator"}
-      </h2>
-      {!execution.environmentId && (
-        <p role="status" className="text-xs text-attention">
-          Choose a local environment, provider and model to configure the {role}.
+      <div className="flex items-center gap-2">
+        <h2 id={`${role}-execution-heading`} className="text-sm font-semibold">
+          {role === "worker" ? "Worker" : "Coordinator"}
+        </h2>
+        <span className="flex-1" />
+        {execution.environmentId && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={settings.clearWorker}
+            aria-label={`Clear ${role} selection`}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+      {settings.needsModel && (
+        <p role="status" className="text-xs">
+          <NeedsModel /> · Choose an environment, provider and model; without them this Agent saves
+          but cannot run.
         </p>
       )}
       {capabilities?.state === "ready" &&

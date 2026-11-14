@@ -2,6 +2,7 @@ import { entryMessagesTooLong } from "./runner-block-workers.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
 import type {
+  CapturedAgent,
   FactoryOperations,
   FactoryProject,
   FlowDraft,
@@ -416,9 +417,9 @@ export function openRunnerStart(
   function readyAgents(
     flow: FlowDraft,
     projectId: string,
-  ): Effect.Effect<Result<RunDefinitions["agents"][number][]>, unknown> {
+  ): Effect.Effect<Result<CapturedAgent[]>, unknown> {
     return Effect.gen(function* () {
-      const agents: RunDefinitions["agents"][number][] = [];
+      const agents: CapturedAgent[] = [];
       const issues: ValidationIssue[] = [];
       const ids = new Set(
         flow.graph.blocks.flatMap((block) =>
@@ -432,6 +433,15 @@ export function openRunnerStart(
             code: "agent_unavailable",
             path: `agents.${id}`,
             message: `Agent ${id}: ${agent.error.message}`,
+          });
+          continue;
+        }
+        // A Run captures only complete execution settings, so a model-less Agent is refused here.
+        if (agent.value.execution === null) {
+          issues.push({
+            code: "execution_required",
+            path: `agents.${id}.execution`,
+            message: `${agent.value.name}: choose an environment, provider and model in Studio → Agents.`,
           });
           continue;
         }

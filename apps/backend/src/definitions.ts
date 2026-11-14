@@ -54,13 +54,14 @@ import {
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
-const toAgent = (
-  agent: AgentRevision,
-  capabilities: AgentCapabilities | null,
-): AgentDefinition => ({
-  ...agent,
-  settingsStatus: agentSettingsStatus(agent.execution, capabilities),
-});
+const toAgent = (agent: AgentRevision, capabilities: AgentCapabilities | null): AgentDefinition =>
+  agent.execution === null
+    ? { ...agent, execution: null, settingsStatus: null }
+    : {
+        ...agent,
+        execution: agent.execution,
+        settingsStatus: agentSettingsStatus(agent.execution, capabilities),
+      };
 const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
   readiness: flowReadiness(flow.graph, agents),

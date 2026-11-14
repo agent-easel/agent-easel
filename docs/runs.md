@@ -67,7 +67,9 @@ levels of evidence. A configuration check alone proves neither execution nor rep
   [settles](#settled-runs) or is [archived](#archive).
 - **Captured definitions.** The Run keeps its immutable input and references the Flow revision it started with, including
   its workspace setting, and the revision of every Agent that Flow references, frozen at Start. Every read and every later activation, also after restart,
-  uses those revisions: the full graph and each Agent's prompt, settings and labels. Agent edits need no Flow save: the next
+  uses those revisions: the full graph and each Agent's prompt, settings and labels. Captured execution settings are always
+  complete: Start refuses a Flow that references an Agent that [Needs a model](../GLOSSARY.md#needs-a-model), and a
+  launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
   Start uses the current saved Agents. Later edits and removals affect only future Runs.
 - **Launch.** Factory launches one top-level worker per Agent block visit, using that Agent's saved provider, model and
   options. Agents connected to the Flow input start in parallel and independently (no Agent is told about the others). There

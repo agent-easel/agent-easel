@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { AgentExecutionSettings, BlockExit, RunDefinitions } from "@t3-factory/contracts";
+import type { AgentExecutionSettings, BlockExit, SavedAgent } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
 
 /** A saved Agent revision as Studio and Start read it; settings availability is derived separately. */
-export type AgentRevision = RunDefinitions["agents"][number];
+export type AgentRevision = SavedAgent;
 
 type RevisionRow = {
   id: string;
@@ -12,10 +12,10 @@ type RevisionRow = {
   revision: number;
   name: string;
   prompt: string;
-  environment_id: string;
-  provider_instance_id: string;
-  model_id: string;
-  model_options_json: string;
+  environment_id: string | null;
+  provider_instance_id: string | null;
+  model_id: string | null;
+  model_options_json: string | null;
   saved_at: string;
   created_at: string;
 };
@@ -39,8 +39,9 @@ export const appendAgentRevision = Effect.fnUntraced(function* (
       model_options_json, saved_at
     ) VALUES (
       ${revisionId}, ${agent.id}, ${agent.revision}, ${agent.name}, ${agent.prompt},
-      ${execution.environmentId}, ${execution.providerInstanceId}, ${execution.modelId},
-      ${JSON.stringify(execution.modelOptions)}, ${agent.updatedAt}
+      ${execution?.environmentId ?? null}, ${execution?.providerInstanceId ?? null},
+      ${execution?.modelId ?? null},
+      ${execution ? JSON.stringify(execution.modelOptions) : null}, ${agent.updatedAt}
     )`;
   yield* Effect.forEach(
     agent.exits,
@@ -123,16 +124,25 @@ const toRevision = (row: RevisionRow, exits: readonly ExitRow[]): AgentRevision 
   name: row.name,
   prompt: row.prompt,
   revision: row.revision,
-  execution: {
-    environmentId: row.environment_id,
-    providerInstanceId: row.provider_instance_id,
-    modelId: row.model_id,
-    modelOptions: JSON.parse(row.model_options_json) as AgentExecutionSettings["modelOptions"],
-  },
+  execution: toExecution(row),
   exits: exits.map(toExit),
   createdAt: row.created_at,
   updatedAt: row.saved_at,
 });
+
+/** The schema stores execution columns all or none, so one null column means no settings. */
+const toExecution = (row: RevisionRow): AgentExecutionSettings | null =>
+  row.environment_id === null ||
+  row.provider_instance_id === null ||
+  row.model_id === null ||
+  row.model_options_json === null
+    ? null
+    : {
+        environmentId: row.environment_id,
+        providerInstanceId: row.provider_instance_id,
+        modelId: row.model_id,
+        modelOptions: JSON.parse(row.model_options_json) as AgentExecutionSettings["modelOptions"],
+      };
 
 /** The current saved revision number, absent once the Agent is removed. */
 export const currentAgentRevisionNumber = Effect.fnUntraced(function* (

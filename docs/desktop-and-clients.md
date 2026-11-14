@@ -312,7 +312,12 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **11**, and both sides require at least **9**. Protocol 11 added the Flow's
+The current protocol is **12**. Servers require clients of at least **12**, and clients require servers of at least **9**.
+Protocol 12 lets an Agent have no execution settings (`execution` and `settingsStatus` are `null`) and
+requires the `execution` key on Agent create and save. Older clients cannot read such an Agent, so the server
+refuses them before product screens mount and they must update; their credentials and stored data are kept. A
+current client still works with a protocol 9 to 11 server, which never returns such an Agent and refuses saving
+one without a model. Protocol 11 added the Flow's
 current revision to Run detail; a client shows that a Flow changed since Start only when the
 server's handshake declares at least 11, so a protocol 9 or 10 server's Runs show no revision
 notice. Protocol 10 added the

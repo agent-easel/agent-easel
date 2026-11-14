@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type {
-  AgentDefinition,
+  AgentExecutionSettings,
   ReportingInstallation,
   Result,
   RuntimeReadiness,
@@ -34,7 +34,7 @@ export function reportingInstallationProblem(
 
 export const explicitReadiness = Effect.fn(function* (
   readiness: Result<RuntimeReadiness>,
-  execution: AgentDefinition["execution"],
+  execution: AgentExecutionSettings,
   installations: () => Effect.Effect<Result<readonly ReportingInstallation[]>, unknown>,
 ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
   if (!readiness.ok) return readiness;

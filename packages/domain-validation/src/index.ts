@@ -211,7 +211,8 @@ function invalid(code: string, path: string, message: string): Result<never> {
   return { ok: false, error: { code: "validation", message, issues: [{ code, path, message }] } };
 }
 
-const EXECUTION_REQUIRED = "Choose an environment, provider, model and thinking options.";
+const EXECUTION_REQUIRED =
+  "Send execution settings with an environment, provider, model and thinking options, or null for an Agent without a model.";
 const INVALID_OPTION = "Thinking options must use supported id and value pairs.";
 
 function parseModelOption(
@@ -273,12 +274,13 @@ function parseExecutionReference(
   );
 }
 
-function parseExecution(input: unknown): Result<AgentExecutionSettings> {
-  const execution =
-    typeof input === "object" && input !== null && "execution" in input
-      ? input.execution
-      : undefined;
-  return validateExecutionSettings(execution);
+/** The key is required: an explicit null saves an Agent that Needs a model, so an omitted key
+ * never clears a model silently. */
+function parseExecution(input: unknown): Result<AgentExecutionSettings | null> {
+  if (typeof input !== "object" || input === null || !("execution" in input))
+    return invalid("execution_required", "execution", EXECUTION_REQUIRED);
+  if (input.execution === null) return { ok: true, value: null };
+  return validateExecutionSettings(input.execution);
 }
 
 export function validateExecutionSettings(execution: unknown): Result<AgentExecutionSettings> {

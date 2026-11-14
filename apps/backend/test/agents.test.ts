@@ -28,6 +28,27 @@ it("saved Agent definitions survive restart with execution settings and exits in
   expect(recovered.value.exits).toStrictEqual(reviewExits);
 });
 
+it("an Agent saved without a model reads back after restart with no execution settings or settings status", async (context) => {
+  // Arrange
+  const { harness, factory } = await openFactoryWithApprovedT3(context);
+  const created = await factory.createAgent(sampleAgentInput());
+  assert(created.ok);
+  const cleared = await factory.updateAgent(created.value.id, {
+    ...sampleAgentInput(),
+    execution: null,
+    expectedRevision: created.value.revision,
+  });
+  assert(cleared.ok);
+  await factory.close();
+
+  // Act
+  const recovered = await readAgentAfterRestart(harness, created.value.id);
+
+  // Assert
+  expect(recovered).toStrictEqual({ ok: true, value: cleared.value });
+  expect(cleared.value).toMatchObject({ revision: 2, execution: null, settingsStatus: null });
+});
+
 it("renaming an Agent exit appends a revision that keeps the exit's identity", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
@@ -124,8 +145,8 @@ it("listAgents preserves saved execution when capabilities are unavailable", asy
   // Assert
   assert(listed.ok);
   const original = listed.value.find((agent) => agent.id === saved.value.id);
-  expect(original?.execution.modelId).toBe("gpt-6.1-sol");
-  expect(original?.settingsStatus.model.state).toBe("unknown");
+  expect(original?.execution?.modelId).toBe("gpt-6.1-sol");
+  expect(original?.settingsStatus?.model.state).toBe("unknown");
 });
 
 it("Agent input missing required fields is rejected without creating a definition", async (context) => {

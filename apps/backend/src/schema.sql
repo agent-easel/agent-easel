@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: revisit_instructions
+-- Newest applied migration: optional_agent_execution
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -24,17 +24,23 @@ CREATE TRIGGER immutable_agent_revision_exit_delete BEFORE DELETE ON agent_revis
 
 CREATE TRIGGER immutable_agent_revision_exit_update BEFORE UPDATE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
 
-CREATE TABLE agent_revisions (
+CREATE TABLE "agent_revisions" (
   id TEXT PRIMARY KEY NOT NULL,
   agent_id TEXT NOT NULL REFERENCES agents(id),
   revision INTEGER NOT NULL CHECK (revision > 0),
   name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
   prompt TEXT NOT NULL CHECK (length(prompt) <= 120000),
-  environment_id TEXT NOT NULL CHECK (length(trim(environment_id)) > 0),
-  provider_instance_id TEXT NOT NULL CHECK (length(trim(provider_instance_id)) > 0),
-  model_id TEXT NOT NULL CHECK (length(trim(model_id)) > 0),
-  model_options_json TEXT NOT NULL CHECK (json_valid(model_options_json)),
+  environment_id TEXT CHECK (length(trim(environment_id)) > 0),
+  provider_instance_id TEXT CHECK (length(trim(provider_instance_id)) > 0),
+  model_id TEXT CHECK (length(trim(model_id)) > 0),
+  model_options_json TEXT CHECK (json_valid(model_options_json)),
   saved_at TEXT NOT NULL,
+  -- Execution settings are complete or absent (the Agent Needs a model), never partial.
+  CHECK (
+    (environment_id IS NULL) = (provider_instance_id IS NULL)
+    AND (environment_id IS NULL) = (model_id IS NULL)
+    AND (environment_id IS NULL) = (model_options_json IS NULL)
+  ),
   UNIQUE (agent_id, revision)
 );
 

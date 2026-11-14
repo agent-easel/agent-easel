@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { MutationGate } from "@/client-gate";
 import { Bot, Search } from "lucide-react";
 import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@t3-factory/contracts";
@@ -9,6 +10,7 @@ import { agentRuntimeMeta, flowUsageCount, flowUsageLabel } from "@/lib/agent-di
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
+import { NeedsModel } from "../needs-model.tsx";
 
 export function AgentsListPane({
   agents,
@@ -151,8 +153,10 @@ function AgentListRows({
           <AgentListItemLink
             id={agent.id}
             name={agent.name}
-            meta={agentRuntimeMeta(agent, capabilities)}
-            providerId={agent.execution.providerInstanceId}
+            meta={
+              agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
+            }
+            {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
             usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}
             selected={selectedId === agent.id}
           />
@@ -172,7 +176,7 @@ function AgentListItemLink({
 }: {
   id: string;
   name: string;
-  meta: string;
+  meta: ReactNode;
   usage?: string;
   selected: boolean;
   providerId?: string;

@@ -43,7 +43,7 @@ catalogs load or fail (errors name the section and offer Retry).
 ## Agent definitions
 
 Open **Studio → Agents** (`/studio/agents`) to create, edit or duplicate reusable definitions; an existing one opens at `/studio/agents/:agentId` and a new one at `/studio/agents/new`. A
-definition stores a name, plain-text prompt, T3 environment, provider, model, thinking options and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
+definition stores a name, plain-text prompt, optional execution settings (T3 environment, provider, model and thinking options) and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
 defaults. Definitions are global and Runs supply project context.
 
 **Exits.** An Agent declares the exits its worker can finish with, managed in a compact table under the Prompt: **Name**, **Description**, **Message required** and a remove action. **+ Add exit** adds a row; **Save** stores the edited exits in a new Agent revision. Each exit has a stable ID; names
@@ -58,8 +58,17 @@ editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
 Availability is separate from verified execution support. A provider without Factory reporting support (Codex, Claude, Cursor and Grok have it) stays in the provider menu
-as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected and the Agent needs a supported provider before it can run. Omitted thinking-option lists use defaults; malformed lists are rejected. Factory launches each Block worker with these saved settings
+as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Omitted thinking-option lists use defaults; malformed lists are rejected. Factory launches each Block worker with these saved settings
 ([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings and `settingsStatus` their availability.
+
+The Worker is optional. **Clear** empties the selection, and a save whose environment, provider or model is not chosen stores
+no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
+Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library and on the block
+inspector's worker line (which links to the Agent), and its Worker section asks for an environment, provider and model; it opens
+with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
+states of a saved selection, and a Run never starts with such an Agent. In the API both `execution` and `settingsStatus` are
+`null`; create and save require the `execution` key, as complete settings or an explicit `null`, so an omitted key or a
+partial object is a validation error. A `null` execution skips the reporting-support check.
 
 The list and editor also show the provider's [reporting installation status](t3-integration.md#agent-reporting).
 The editor follows the current provider choice, explains installation problems and links to **Settings → Agent reporting**.

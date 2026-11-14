@@ -6,7 +6,7 @@ import {
   releasedUpgradeData,
 } from "./support/released-upgrade.ts";
 
-it("upgrading v0.2.0 keeps clients and definitions in the project checkout, with an empty Revisit instruction on every Agent block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run and leaves Generate Run titles off", async (c) => {
+it("upgrading v0.2.0 keeps clients and definitions with their execution settings in the project checkout, with an empty Revisit instruction on every Agent block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run and leaves Generate Run titles off", async (c) => {
   // Arrange
   const fixture = await releasedUpgradeData(c);
   expect(fixture.pendingStop.closedAt).toBeNull();
@@ -76,4 +76,33 @@ it("upgrading v0.2.0 keeps clients and definitions in the project checkout, with
     fixture.stopped.task.id,
     fixture.closed.task.id,
   ]);
+});
+
+it("after upgrading v0.2.0 the released Agent saves without a model while its captured Runs keep their execution", async (c) => {
+  // Arrange
+  const fixture = await releasedUpgradeData(c);
+  const factory = await fixture.h.open({ t3: fixture.t3, connectionRetryMs: 60_000 });
+  const upgraded = await factory.getAgent(fixture.agent.id);
+  assert(upgraded.ok);
+
+  // Act
+  const saved = await factory.updateAgent(fixture.agent.id, {
+    name: upgraded.value.name,
+    prompt: upgraded.value.prompt,
+    execution: null,
+    exits: upgraded.value.exits,
+    expectedRevision: upgraded.value.revision,
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value).toMatchObject({
+    revision: fixture.agent.revision + 1,
+    execution: null,
+    settingsStatus: null,
+  });
+  expect(await factory.getRun(fixture.stopped.id)).toStrictEqual({
+    ok: true,
+    value: currentRun(fixture.stopped, "archived", fixture.flow.revision),
+  });
 });

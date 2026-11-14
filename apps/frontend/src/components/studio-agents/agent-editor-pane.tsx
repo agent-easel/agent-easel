@@ -39,7 +39,7 @@ type AgentEditorProps = {
 export function AgentEditorPane(props: AgentEditorProps) {
   const { capabilities, draft, state } = props;
   const { name, prompt, exits, execution } = state.content;
-  const settings = { ...state.choices, ...draft, execution };
+  const settings = { ...state.choices, ...draft, execution, needsModel: state.needsModel };
   const saving = state.saving || props.duplicating;
   const error = state.error;
   return (

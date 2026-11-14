@@ -15,12 +15,14 @@ export function workerMessage(body: string) {
   );
 }
 
+/** The worker launch T3 received for the named Block. */
+export function blockLaunch(t3: ControlledT3, blockName: string) {
+  return [...t3.launches.values()].find((entry) => entry.payload.title.endsWith(` ${blockName}`));
+}
+
 /** The Block id Factory stated in a worker's launch message, as an Agent reads it. */
 export function launchedBlockId(t3: ControlledT3, blockName = "Entry worker") {
-  const launch = [...t3.launches.values()].find((entry) =>
-    entry.payload.title.endsWith(` ${blockName}`),
-  );
-  return launchBlockId(launch?.payload.message ?? "");
+  return launchBlockId(blockLaunch(t3, blockName)?.payload.message ?? "");
 }
 
 /** Resolves once T3 receives the next thread settlement, which Factory sends in the background
