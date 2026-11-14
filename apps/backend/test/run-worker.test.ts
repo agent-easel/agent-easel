@@ -1,5 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
-import { blockLaunch, launchedBlockId, workerMessage } from "./support/run-worker.ts";
+import {
+  blockLaunch,
+  clearStoredExecution,
+  launchedBlockId,
+  workerMessage,
+} from "./support/run-worker.ts";
 import {
   REVISIT_INSTRUCTION,
   allTurnsEnd,
@@ -874,4 +879,23 @@ it("after its Agent is saved without a model, a Run's held handoff launches the 
   expect(run.value.definitions.agents).toStrictEqual([
     expect.objectContaining({ revision: f.agent.revision, execution: f.agent.execution }),
   ]);
+});
+
+it("a Run whose captured Agent revision lost its model refuses to recover after a restart and launches no worker", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  await f.f.close();
+  clearStoredExecution(f.h.databasePath, f.agent.id);
+
+  // Act
+  const reopening = f.h.open({ t3: f.t3 });
+
+  // Assert
+  await expect(reopening).rejects.toThrow(
+    `Run ${f.runId} captured an Agent revision without a model`,
+  );
+  expect(blockLaunch(f.t3, "Parallel work")).toBeUndefined();
+  expect(f.t3.launches.size).toBe(1);
 });
