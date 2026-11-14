@@ -20,6 +20,7 @@ import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.t
 import { flowUsageCount } from "@/lib/agent-display";
 import { useReportingState } from "../reporting-state.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
+import { importedSelection } from "../definition-import.ts";
 import { definitionExportNotice } from "../components/definition-export-control.tsx";
 
 type ShownLists = {
@@ -111,7 +112,7 @@ export function StudioAgentsPage({
         query={query}
         onQueryChange={setQuery}
         onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
-        onImported={(result) => void openStudio({ tab: "agents", agentId: result.agents[0]!.id })}
+        onImported={(result) => void openStudio(importedSelection(result))}
         error={library.error}
         onRetry={library.retry}
         loading={library.agents === null || library.flows === null}

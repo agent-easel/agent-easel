@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: definition_import_receipts
+-- Newest applied migration: definition_import_receipt_flows
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -123,6 +123,15 @@ CREATE TABLE definition_import_receipt_agents (
 CREATE TRIGGER immutable_definition_import_receipt_agent_delete BEFORE DELETE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
 CREATE TRIGGER immutable_definition_import_receipt_agent_update BEFORE UPDATE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TABLE definition_import_receipt_flows (
+  request_id TEXT PRIMARY KEY NOT NULL REFERENCES definition_import_receipts(request_id),
+  flow_id TEXT NOT NULL UNIQUE REFERENCES flows(id)
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_flow_delete BEFORE DELETE ON definition_import_receipt_flows BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_flow_update BEFORE UPDATE ON definition_import_receipt_flows BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
 CREATE TABLE definition_import_receipts (
   request_id TEXT PRIMARY KEY NOT NULL CHECK (length(request_id) BETWEEN 1 AND 256),

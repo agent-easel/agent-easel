@@ -163,6 +163,8 @@ are global; Start resolves it against the selected Project ([Runs](runs.md#start
 
 ### Saving and readiness
 
+The editor header also offers **Export** (see [Definition export](#definition-export)).
+
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
@@ -182,10 +184,12 @@ Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) p
 
 ## Definition export
 
-**Export** in the Agent editor header downloads the Agent's latest saved revision as a JSON file named after it (for example
-`code-reviewer.agent.json`); the desktop app saves the same file. A never-saved Agent cannot be exported. With unsaved changes Studio first asks
-"Export the saved revision? Unsaved changes won't be included." (**Export saved revision** / **Keep editing**); either way the editor and its draft are
-unchanged. `GET /api/agents/:id/export` answers `{document, driverKindOmitted}`.
+**Export** in the Agent editor header downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
+Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
+example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
+a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."
+(**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
+`GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
 The file is a portable document, version 1:
 
@@ -221,16 +225,67 @@ The file is a portable document, version 1:
   or no longer lists the provider it is omitted, and Studio names the affected Agents.
 - The file never contains environment ids, server or definition ids, revisions, definition timestamps or Runs. Exit ids are kept.
 
-Export refuses, with the reason, a file another installation could not import: a definition whose save request exceeds 2 MB, or a file over
-16 MiB.
+A Flow document has `kind: "flow"` and a `flow` beside `agents`:
+
+```json
+{
+  "format": "t3-factory/definitions",
+  "formatVersion": 1,
+  "kind": "flow",
+  "factoryVersion": "0.42.0",
+  "exportedAt": "2026-11-14T10:00:00.000Z",
+  "flow": {
+    "name": "Reviewed change",
+    "graph": {
+      "blocks": [
+        {
+          "id": "review",
+          "name": "Code review",
+          "kind": "agent",
+          "position": { "x": 240, "y": 0 },
+          "agentKey": "agent-1",
+          "hiddenExitIds": [],
+          "localExits": [],
+          "revisitInstruction": ""
+        },
+        { "id": "approve", "name": "Approve", "kind": "human", "position": { "x": 480, "y": 0 } }
+      ],
+      "connections": [{ "sourceBlockId": "review", "exitId": "done", "targetBlockId": "approve" }],
+      "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] }
+    },
+    "workspace": { "mode": "worktree", "base": { "kind": "default" } }
+  },
+  "agents": [
+    {
+      "key": "agent-1",
+      "name": "Code reviewer",
+      "prompt": "Review the change.",
+      "model": null,
+      "exits": [{ "id": "done", "name": "done", "description": "", "messageRequired": false }]
+    }
+  ]
+}
+```
+
+- `flow` holds the Flow's name, saved graph and workspace setting: block and exit ids, positions, wires, hidden exits, Flow-local exits,
+  Revisit instructions, Waits, Human steps and Continuations, exactly as saved.
+- Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
+  carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
+  missing or removed. There is no fallback to local ids or names.
+
+Export refuses, with the reason, a file another installation could not import: an Agent or Flow whose save request exceeds 2 MB, or a file
+over 16 MiB.
 
 ### Import
 
 **Import** on the Agents list and on the Flows list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
 what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
 
-- a trust notice: imported instructions run with the user's T3 capabilities when a Run that uses them starts, and importing does not start a Run;
-- the instruction inventory: each Agent's name, prompt length and exit count, never its prompt text;
+- a trust notice: imported instructions (Agent prompts, and for a Flow file Continuation prompts and Revisit instructions) run with the user's T3
+  capabilities when a Run that uses them starts, and importing does not start a Run;
+- for a Flow file, the workspace in full: the project checkout, or a new worktree from the default branch or from the exact custom ref;
+- the instruction inventory, never instruction text: each Agent's name, prompt length and exit count and, for a Flow file, each Continuation's
+  block name and prompt length and each non-empty Revisit instruction's block name and length;
 - one row per Agent labelled **Matched**, **Ambiguous** (naming the candidates), **Unmatched** or **No model in file**, with its model hint
   and the reason as text, and a picker of the live Worker catalog for the connected environment, limited to reporting-capable providers, with
   the chosen model's thinking options. A Matched row starts with the matched model, which can be kept, changed to any listed model or set to
@@ -245,12 +300,15 @@ first listed candidate, and matches nothing while the catalog is unavailable. A 
 options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
 review applies the same option rule.
 
-Names, prompts and exits arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
+Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
 enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
 model). Confirm sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`) and a request id
 the dialog generated for this import. The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
-exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names in one
-transaction, never reuses or updates an existing Agent and never starts a Run. On success Studio opens the imported Agent.
+exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names and, for a
+Flow file, the Flow at revision 1 with each `agentKey` replaced by the new Agent's id, all in one transaction. It never reuses or updates an
+existing Agent or Flow and never starts a Run. A block whose `agentKey` is `null` arrives without an Agent, which readiness reports as a
+missing Agent reference. On success Studio opens the imported Flow, or the Agent of an Agent file; an unrelated Flow draft with unsaved
+changes still asks **Keep editing** / **Discard changes** first.
 
 - If a chosen provider is listed by T3 but has lost Factory reporting support, the whole commit is refused, the affected Agents are named and
   their rows return to the review for another choice. A provider T3 does not list, including while the catalog is unavailable, never refuses a
@@ -260,13 +318,14 @@ transaction, never reuses or updates an existing Agent and never starts a Run. O
   independent copies. See [import receipts](foundation.md#persistence-model).
 
 Validation runs in order: the `format` marker and `formatVersion` first, then the Agent count, unknown or missing fields at every level, closed
-references (well-formed, unique keys; an Agent file holds exactly one Agent), then the Agent validators on each definition and each definition's
-prospective save request against 2 MB. Flow files cannot be imported yet. The distinct rejections are:
+references (well-formed, unique keys; an Agent file holds exactly one Agent; in a Flow file every `agentKey` is a bundled Agent's key or `null`
+and every bundled Agent is used by a block), then the Agent and Flow validators and each definition's prospective save request against 2 MB.
+The distinct rejections are:
 
 - not JSON (the file is not UTF-8 JSON);
 - not a Factory export (no `t3-factory/definitions` marker);
 - unsupported format version N, which asks to update Factory when N is newer;
-- an invalid definition, field-addressed (for example `agents.0.prompt`) and naming the Agent;
+- an invalid definition, field-addressed (for example `agents.0.prompt` or `flow.graph.blocks.2.position`) and naming the Agent or block;
 - over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
 
 Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Try again**.

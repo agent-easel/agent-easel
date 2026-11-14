@@ -5,9 +5,11 @@ import type {
   DefinitionExport,
   ImportReview,
   ImportReviewAgent,
+  ImportReviewFlow,
   PortableAgent,
-  PortableAgentDocument,
   PortableDocument,
+  PortableFlow,
+  PortableFlowBlock,
   PortableModelHint,
   Result,
   ValidationIssue,
@@ -21,6 +23,7 @@ import {
 } from "@t3-factory/domain-validation";
 import type { AgentRevision } from "./agent-revisions.ts";
 import { unsupportedReportingFailure } from "./agents.ts";
+import type { FlowRevision } from "./flow-revisions.ts";
 import { failure } from "./result.ts";
 
 /** The bundled entry of a saved Agent. The hint keeps the exporter's model but never its environment. */
@@ -47,16 +50,55 @@ export function portableAgent(
   };
 }
 
+/**
+ * A saved Flow with the latest saved revision of each distinct Agent its blocks reference, keyed
+ * `agent-N` in the order the blocks first place them. A block whose Agent is unset, missing or
+ * removed carries `agentKey: null`. `revisions` are the bundled Agents in key order.
+ */
+export function portableFlow(
+  flow: FlowRevision,
+  currentAgents: readonly AgentRevision[],
+  capabilities: AgentCapabilities,
+) {
+  const current = new Map(currentAgents.map((agent) => [agent.id, agent]));
+  const keys = new Map<string, string>();
+  const revisions: AgentRevision[] = [];
+  const blocks = flow.graph.blocks.map((block): PortableFlowBlock => {
+    if (block.kind !== "agent") return block;
+    const { agentId, ...rest } = block;
+    const agent = agentId === null ? undefined : current.get(agentId);
+    if (agent && !keys.has(agent.id)) {
+      keys.set(agent.id, `agent-${keys.size + 1}`);
+      revisions.push(agent);
+    }
+    return { ...rest, agentKey: agent ? keys.get(agent.id)! : null };
+  });
+  const portable: PortableFlow = {
+    name: flow.name,
+    graph: { ...flow.graph, blocks },
+    workspace: flow.workspace,
+  };
+  const agents = revisions.map((agent) => portableAgent(agent, keys.get(agent.id)!, capabilities));
+  return { flow: portable, agents, revisions };
+}
+
 const jsonBytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
 
+const tooLarge = (path: string, subject: string): ValidationIssue => ({
+  code: "definition_too_large",
+  path,
+  message: `${subject} is larger than the 2 MB a definition may be.`,
+});
+
 /**
- * The export, or a refusal when import could not accept its file: each definition's save request
- * must fit the definition limit and the whole file the import limit.
+ * The export, or a refusal when import could not accept its file: each definition's save request,
+ * the Flow's included, must fit the definition limit and the whole file the import limit.
  */
-export function definitionExport(
-  document: PortableAgentDocument,
+export function definitionExport<Document extends PortableDocument>(
+  document: Document,
   agents: readonly AgentRevision[],
-): Result<DefinitionExport> {
+  flow?: FlowRevision,
+): Result<DefinitionExport<Document>> {
   const issues = agents.flatMap((agent, index): ValidationIssue[] => {
     const request: CreateAgentInput = {
       name: agent.name,
@@ -65,15 +107,15 @@ export function definitionExport(
       exits: agent.exits,
     };
     return jsonBytes(request) > DEFINITION_REQUEST_LIMIT_BYTES
-      ? [
-          {
-            code: "definition_too_large",
-            path: `agents.${index}`,
-            message: `Agent "${agent.name}" is larger than the 2 MB a definition may be.`,
-          },
-        ]
+      ? [tooLarge(`agents.${index}`, `Agent "${agent.name}"`)]
       : [];
   });
+  if (
+    flow &&
+    jsonBytes({ name: flow.name, graph: flow.graph, workspace: flow.workspace }) >
+      DEFINITION_REQUEST_LIMIT_BYTES
+  )
+    issues.push(tooLarge("flow", `Flow "${flow.name}"`));
   if (Buffer.byteLength(portableDocumentText(document)) > PORTABLE_DOCUMENT_LIMIT_BYTES)
     issues.push({
       code: "document_too_large",
@@ -144,6 +186,24 @@ function matchModelHint(
   return { match: { status: "matched" }, proposed: selection, droppedOptions };
 }
 
+/** The Flow's workspace and the instructions its blocks carry, by block name and length. */
+function reviewFlow({ name, graph, workspace }: PortableFlow): ImportReviewFlow {
+  return {
+    name,
+    workspace,
+    continuations: graph.blocks.flatMap((block) =>
+      block.kind === "continuation"
+        ? [{ blockName: block.name, promptLength: block.prompt.length }]
+        : [],
+    ),
+    revisitInstructions: graph.blocks.flatMap((block) =>
+      block.kind === "agent" && block.revisitInstruction.length > 0
+        ? [{ blockName: block.name, length: block.revisitInstruction.length }]
+        : [],
+    ),
+  };
+}
+
 /** What an import would create, with each Agent's model proposal from the catalog read here. */
 export function importReview(
   document: PortableDocument,
@@ -151,6 +211,7 @@ export function importReview(
 ): ImportReview {
   return {
     kind: document.kind,
+    flow: document.kind === "flow" ? reviewFlow(document.flow) : null,
     agents: document.agents.map((agent) => ({
       key: agent.key,
       name: agent.name,

@@ -31,6 +31,33 @@ export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {
   ...envelope,
 });
 
+/** A version-1 Flow file: a Code review block of `exportedAgent()` whose pass reaches a Human step. */
+export const flowFile = () => ({
+  ...agentFile(),
+  kind: "flow",
+  flow: {
+    name: "Reviewed change",
+    graph: {
+      blocks: [
+        {
+          id: "review",
+          name: "Code review",
+          kind: "agent",
+          position: { x: 240, y: 0 },
+          agentKey: "agent-1",
+          hiddenExitIds: [],
+          localExits: [],
+          revisitInstruction: "",
+        },
+        { id: "approve", name: "Approve", kind: "human", position: { x: 480, y: 0 } },
+      ],
+      connections: [{ sourceBlockId: "review", exitId: "pass", targetBlockId: "approve" }],
+      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["review"] },
+    },
+    workspace: { mode: "worktree", base: { kind: "default" } },
+  },
+});
+
 /** The bytes a chosen file sends to review: JSON text as written, or a value as exported. */
 export const fileBody = (content: unknown): RawBody => ({
   mimeType: "application/json",
@@ -47,16 +74,16 @@ export const reviewedCommit = (requestId = "import-1", execution = controlledExe
 });
 
 /**
- * A Factory whose import receipts cannot be written, so a commit fails after it created its
+ * A Factory that cannot insert rows into `table`, so a commit fails after it created earlier
  * definitions in the same transaction.
  */
-export async function factoryFailingImportReceipts(context: TestContext) {
+export async function factoryFailingInserts(context: TestContext, table: string) {
   const harness = await factoryHarness(context);
   const first = await harness.open({ t3: new ControlledT3() });
   await first.close();
   const database = new DatabaseSync(harness.databasePath);
   database.exec(
-    "CREATE TRIGGER failing_import_receipt BEFORE INSERT ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'receipt storage failed'); END",
+    `CREATE TRIGGER failing_insert BEFORE INSERT ON ${table} BEGIN SELECT RAISE(ABORT, 'storage failed'); END`,
   );
   database.close();
   return harness.open({ t3: new ControlledT3() });

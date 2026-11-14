@@ -4,6 +4,7 @@ import type {
   AgentCapabilities,
   AgentModelOptionValue,
   ImportResult,
+  ImportReviewFlow,
   PortableModelHint,
 } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
@@ -31,6 +32,7 @@ import {
   type ImportRow,
 } from "../definition-import.ts";
 import { ModelOptionSelect } from "./execution-settings-fields.tsx";
+import { workspaceSummary } from "./flow-workspace-control.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 
 /**
@@ -155,14 +157,17 @@ function ImportReviewContent({
   review: NonNullable<DefinitionImportSnapshot["review"]>;
   onConfirm: () => void;
 }) {
-  const { rows, capabilities } = review;
+  const { rows, capabilities, flow } = review;
+  const agentCount = rows.length === 1 ? "one new Agent" : `${rows.length} new Agents`;
   return (
     <>
       <DialogHeader>
         <DialogTitle>Review the import</DialogTitle>
         <DialogDescription>
-          {rows.length === 1 ? "One new Agent" : `${rows.length} new Agents`} will be created with
-          the names, prompts and exits in {state.file?.name}. Only model choices can change here.
+          {flow
+            ? `A new Flow “${flow.name}” and ${agentCount} will be created with the graph, names, prompts and exits in ${state.file?.name}.`
+            : `${rows.length === 1 ? "One new Agent" : `${rows.length} new Agents`} will be created with the names, prompts and exits in ${state.file?.name}.`}{" "}
+          Only model choices can change here.
         </DialogDescription>
       </DialogHeader>
       <div className="grid min-h-0 content-start gap-4 overflow-y-auto">
@@ -170,10 +175,15 @@ function ImportReviewContent({
           <ShieldAlert aria-hidden />
           <AlertTitle>Imported instructions run with your T3 capabilities</AlertTitle>
           <AlertDescription>
-            When you start a Run, its workers follow these Agent prompts with everything your T3
-            environment allows. Importing does not start a Run; read the prompts in Studio first.
+            When you start a Run, its workers follow these{" "}
+            {flow
+              ? "Agent prompts, Continuation prompts and Revisit instructions"
+              : "Agent prompts"}{" "}
+            with everything your T3 environment allows. Importing does not start a Run; read them in
+            Studio first.
           </AlertDescription>
         </Alert>
+        {flow && <ImportFlowWorkspace flow={flow} />}
         <section aria-labelledby="import-inventory" className="grid gap-2">
           <h3 id="import-inventory" className="text-sm font-semibold">
             Instructions in this file
@@ -188,22 +198,40 @@ function ImportReviewContent({
                 </span>
               </li>
             ))}
+            {flow?.continuations.map((continuation, index) => (
+              <li key={`continuation-${index}`} className="flex flex-wrap gap-x-2">
+                <span className="font-medium">{continuation.blockName}</span>
+                <span className="text-muted-foreground">
+                  Continuation prompt {continuation.promptLength.toLocaleString()} characters
+                </span>
+              </li>
+            ))}
+            {flow?.revisitInstructions.map((revisit, index) => (
+              <li key={`revisit-${index}`} className="flex flex-wrap gap-x-2">
+                <span className="font-medium">{revisit.blockName}</span>
+                <span className="text-muted-foreground">
+                  Revisit instruction {revisit.length.toLocaleString()} characters
+                </span>
+              </li>
+            ))}
           </ul>
         </section>
-        <section aria-labelledby="import-models" className="grid gap-3">
-          <h3 id="import-models" className="text-sm font-semibold">
-            Models
-          </h3>
-          {rows.map((row) => (
-            <ImportModelRow
-              key={row.key}
-              model={model}
-              row={row}
-              capabilities={capabilities}
-              disabled={state.committing}
-            />
-          ))}
-        </section>
+        {rows.length > 0 && (
+          <section aria-labelledby="import-models" className="grid gap-3">
+            <h3 id="import-models" className="text-sm font-semibold">
+              Models
+            </h3>
+            {rows.map((row) => (
+              <ImportModelRow
+                key={row.key}
+                model={model}
+                row={row}
+                capabilities={capabilities}
+                disabled={state.committing}
+              />
+            ))}
+          </section>
+        )}
       </div>
       <div className="grid gap-3">
         <ImportProblem state={state} />
@@ -222,6 +250,26 @@ function ImportReviewContent({
         </DialogFooter>
       </div>
     </>
+  );
+}
+
+/** Where the imported Flow's workers will act, with a custom ref shown exactly. */
+function ImportFlowWorkspace({ flow }: { flow: ImportReviewFlow }) {
+  const { workspace } = flow;
+  return (
+    <section aria-labelledby="import-workspace" className="grid gap-1">
+      <h3 id="import-workspace" className="text-sm font-semibold">
+        Workspace
+      </h3>
+      <p className="text-sm break-all">{workspaceSummary(workspace)}</p>
+      <p className="text-xs text-muted-foreground">
+        {workspace.mode === "checkout"
+          ? "Workers edit the selected project's checkout, shared with other Runs."
+          : workspace.base.kind === "default"
+            ? "Each Run gets its own worktree from the project repository's default branch."
+            : "Each Run gets its own worktree from this Git ref."}
+      </p>
+    </section>
   );
 }
 

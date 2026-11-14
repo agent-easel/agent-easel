@@ -1,4 +1,5 @@
 import { operation } from "./operation.ts";
+import type { DefinitionExport, PortableFlowDocument } from "./portable-document.ts";
 import type { ValidationIssue } from "./result.ts";
 
 /** Flows: the graphs of Blocks that Runs execute. */
@@ -140,5 +141,10 @@ export const flowOperations = {
     method: "PUT",
     path: "/api/flows/:id",
     body: "json",
+  }),
+  /** The latest saved revision with each Agent it references as a portable document. */
+  exportFlow: operation<never, DefinitionExport<PortableFlowDocument>>()({
+    method: "GET",
+    path: "/api/flows/:id/export",
   }),
 };

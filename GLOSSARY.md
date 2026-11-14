@@ -42,7 +42,7 @@ The state of an Agent saved without execution settings (`execution: null`). It c
 _Avoid_: unavailable, unknown.
 
 **Definition export**:
-A JSON file holding the latest saved revision of an Agent in the portable document format, with its model as an optional hint and without environment, server ids, revisions, timestamps or Runs. Exporting never changes the definition or its editor.
+A JSON file holding the latest saved revision of an Agent, or of a Flow with each Agent it uses bundled once, in the portable document format, with its model as an optional hint and without environment, server ids, revisions, timestamps or Runs. Exporting never changes the definition or its editor.
 _Avoid_: backup, sync.
 
 **Import receipt**:

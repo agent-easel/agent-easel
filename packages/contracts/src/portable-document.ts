@@ -4,7 +4,7 @@
  * definition timestamps or Runs.
  */
 import type { AgentCapabilities, AgentExecutionSettings, AgentModelOptionValue } from "./agent.ts";
-import type { BlockExit } from "./flow.ts";
+import type { BlockExit, FlowBlock, FlowGraph, FlowWorkspace } from "./flow.ts";
 import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
@@ -47,11 +47,33 @@ export interface PortableAgentDocument extends PortableEnvelope {
   readonly agents: readonly [PortableAgent];
 }
 
+/**
+ * A Flow document's block. An Agent block names its Agent by document key, never by a local id or
+ * name; `agentKey` is null when the exported block had no Agent or its Agent was missing.
+ */
+export type PortableFlowBlock =
+  | (Omit<Extract<FlowBlock, { kind: "agent" }>, "agentId"> & { readonly agentKey: string | null })
+  | Exclude<FlowBlock, { kind: "agent" }>;
+
+/** The Flow of a Flow document: its name, positioned graph and workspace setting. */
+export interface PortableFlow {
+  readonly name: string;
+  readonly graph: Omit<FlowGraph, "blocks"> & { readonly blocks: readonly PortableFlowBlock[] };
+  readonly workspace: FlowWorkspace;
+}
+
+export interface PortableFlowDocument extends PortableEnvelope {
+  readonly kind: "flow";
+  readonly flow: PortableFlow;
+  /** The latest saved revision of each distinct Agent the blocks reference, each exactly once. */
+  readonly agents: readonly PortableAgent[];
+}
+
 /** Every document kind an import reads. */
-export type PortableDocument = PortableAgentDocument;
+export type PortableDocument = PortableAgentDocument | PortableFlowDocument;
 
 /** What an export answers: the file's document and what it could not keep. */
-export interface DefinitionExport<Document extends PortableEnvelope = PortableAgentDocument> {
+export interface DefinitionExport<Document extends PortableDocument = PortableDocument> {
   readonly document: Document;
   /** Bundled Agents whose model hint omits `driverKind` because the live catalog did not list it. */
   readonly driverKindOmitted: readonly Pick<PortableAgent, "key" | "name">[];
@@ -79,9 +101,23 @@ export interface ImportReviewAgent {
   readonly droppedOptions: readonly AgentModelOptionValue[];
 }
 
+/**
+ * A Flow document's Flow as the import review shows it: the workspace in full and the instructions
+ * its blocks carry, by block name and length, never their text.
+ */
+export interface ImportReviewFlow {
+  readonly name: string;
+  readonly workspace: FlowWorkspace;
+  readonly continuations: readonly { readonly blockName: string; readonly promptLength: number }[];
+  /** Only the non-empty Revisit instructions. */
+  readonly revisitInstructions: readonly { readonly blockName: string; readonly length: number }[];
+}
+
 /** What an import would create, computed without writing anything. */
 export interface ImportReview {
   readonly kind: PortableDocument["kind"];
+  /** Null for an Agent file. */
+  readonly flow: ImportReviewFlow | null;
   readonly agents: readonly ImportReviewAgent[];
   /** The live catalog the review read; its picker offers only reporting-capable providers. */
   readonly capabilities: AgentCapabilities;
@@ -98,6 +134,8 @@ export interface CommitImportInput {
 /** The definitions an import created, by document key. They may have been removed since. */
 export interface ImportResult {
   readonly agents: readonly { readonly key: string; readonly id: string }[];
+  /** The created Flow; null for an Agent file. */
+  readonly flowId: string | null;
 }
 
 /** Import of a portable document: a review that writes nothing, then an all-or-nothing commit. */

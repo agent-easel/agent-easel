@@ -28,6 +28,11 @@ import { BlockLibrary } from "../components/block-library.tsx";
 import { FlowCanvas, type DropAt } from "../components/flow-canvas.tsx";
 import { IssueLink, ReadinessPanel } from "../components/flow-readiness.tsx";
 import { FlowWorkspaceControl } from "../components/flow-workspace-control.tsx";
+import {
+  DefinitionExportControl,
+  definitionExportNotice,
+} from "../components/definition-export-control.tsx";
+import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
   hasWire,
@@ -223,6 +228,7 @@ export function FlowDetail({
   const canvas = useRef<HTMLElement>(null);
   const placement = useRef<DropAt | null>(null);
   const { draft, state } = useOpenedFlowDraft(id, definitions, active, reportDraft);
+  const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { agents, agentError } = useLibraryAgents(definitions);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { saved, error, readiness } = state;
@@ -255,7 +261,14 @@ export function FlowDetail({
   return (
     <CanvasLayout>
       <h1 className="sr-only">{name}</h1>
-      <EditorToolbar draft={draft} state={state} revision={saved.revision} flowId={id} />
+      <EditorToolbar
+        draft={draft}
+        state={state}
+        revision={saved.revision}
+        flowId={id}
+        exporter={exporter}
+      />
+      <ExportNotice notice={definitionExportNotice(exporter.state)} />
       <DraftProblems draft={draft} state={state} onSelect={select} />
       <div inert={state.busy} className="flex min-h-0 flex-1">
         <BlockLibrary
@@ -341,11 +354,13 @@ function EditorToolbar({
   state,
   revision,
   flowId,
+  exporter,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
   revision: number;
   flowId: string;
+  exporter: ReturnType<typeof useDefinitionExport>;
 }) {
   const { openFlowComposer } = useComposerNavigation();
   return (
@@ -401,8 +416,19 @@ function EditorToolbar({
           Start Run
         </Button>
       </MutationGate>
+      <DefinitionExportControl {...exporter} dirty={state.dirty} disabled={state.busy} />
       <RemoveFlowAction draft={draft} state={state} />
     </div>
+  );
+}
+
+/** What the last export needs to say, such as a refusal or an omitted driver kind. */
+function ExportNotice({ notice }: { notice: string }) {
+  if (!notice) return null;
+  return (
+    <p role="status" className="shrink-0 border-b px-4 py-2 text-sm text-attention">
+      {notice}
+    </p>
   );
 }
 

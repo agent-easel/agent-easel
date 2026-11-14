@@ -30,6 +30,7 @@ const document = {
 const file = { name: "code-reviewer.agent.json", text: JSON.stringify(document) };
 const reviewed: ImportReview = {
   kind: "agent",
+  flow: null,
   agents: [
     {
       key: "agent-1",
@@ -49,7 +50,7 @@ async function reviewedImport() {
   const operations = {
     reviewImport: vi.fn(() => Promise.resolve(reviewed)),
     commitImport: vi.fn<(input: CommitImportInput) => Promise<ImportResult>>(() =>
-      Promise.resolve({ agents: [{ key: "agent-1", id: "imported" }] }),
+      Promise.resolve({ agents: [{ key: "agent-1", id: "imported" }], flowId: null }),
     ),
   };
   const model = createDefinitionImport(operations, () => "request-1");
@@ -88,7 +89,7 @@ it("Confirm commits every row as reviewed even when every Agent needs a model", 
   const result = await model.confirm();
 
   // Assert
-  expect(result).toStrictEqual({ agents: [{ key: "agent-1", id: "imported" }] });
+  expect(result).toStrictEqual({ agents: [{ key: "agent-1", id: "imported" }], flowId: null });
   expect(operations.commitImport).toHaveBeenCalledWith({
     requestId: "request-1",
     document,

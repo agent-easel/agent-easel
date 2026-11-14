@@ -14,9 +14,10 @@ function downloadFile(name: string, text: string) {
   setTimeout(() => URL.revokeObjectURL(url));
 }
 
-/** A file name from the definition's name, e.g. `code-reviewer.agent.json`. */
+/** A file name from the Flow's or Agent's name, e.g. `code-reviewer.agent.json`. */
 function exportFileName({ document }: DefinitionExport): string {
-  const slug = document.agents[0].name
+  const name = document.kind === "flow" ? document.flow.name : document.agents[0].name;
+  const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
+import { readFile } from "node:fs/promises";
+import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
 import { test } from "@e2e-dev/web";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
@@ -559,4 +560,73 @@ test("removing a Flow with unsaved changes returns to the Flow list without a di
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toHaveCount(0);
   await expect(screen.getByRole("link", new RegExp(name))).toHaveCount(0);
+});
+
+test("an exported Flow imported through the review arrives as a new Flow with a new Agent and opens past an unrelated draft's discard guard", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: a saved Flow with Continuations and a custom worktree ref, then unsaved edits.
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const name = `Export journey ${crypto.randomUUID().slice(0, 8)}`;
+  const workspace = { mode: "worktree", base: { kind: "ref", ref: "release/2.0" } } as const;
+  const id = await saveFlowCopy(app.baseUrl, "Demo · Grill, spec and tickets", name, workspace);
+  const source = (await (
+    await fetch(new URL(`/api/flows/${id}`, app.baseUrl))
+  ).json()) as Result<FlowDraft>;
+  assert(source.ok);
+  await app.open(`/studio/flows/${id}`);
+  await screen.getByLabel("Flow name").fill(`${name} edited`);
+  await screen.getByRole("button", "Export", { exact: true }).tap();
+  const confirmation = screen.getByRole("dialog", "Export the saved revision?");
+  await expect(confirmation).toContainText("Unsaved changes won't be included.");
+  const download = await browser.waitForDownload(() =>
+    confirmation.getByRole("button", "Export saved revision", { exact: true }).tap(),
+  );
+  const exported = JSON.parse(
+    await readFile(download.absolutePath, "utf8"),
+  ) as PortableFlowDocument;
+  await screen.getByRole("link", "All Flows").tap();
+
+  // Act: import the file through the review, confirm, and discard the unrelated draft.
+  await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
+  const review = screen.getByRole("dialog", "Review the import");
+  await expect(review).toContainText("New worktree · release/2.0");
+  await expect(review).toContainText("Continuation prompt");
+  await expect(review).toContainText("Imported instructions run with your T3 capabilities");
+  await browser.evaluate(
+    "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
+  );
+  await app.screenshot("flow-import-review");
+  await review.getByRole("button", "Confirm import", { exact: true }).tap();
+  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await screen.getByRole("button", "Discard changes", { exact: true }).tap();
+
+  // Assert: the file holds the saved revision; the imported Flow opens with its own new Agent.
+  assert.equal(download.suggestedFilename, `${name.toLowerCase().replaceAll(" ", "-")}.flow.json`);
+  assert.equal(exported.flow.name, name);
+  assert.equal(exported.agents.length, 1);
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+  await expect(screen.getByRole("article", "Block Tickets")).toBeVisible();
+  const importedId = new URL(await browser.url()).pathname.split("/").at(-1)!;
+  assert.notEqual(importedId, id);
+  const imported = (await (
+    await fetch(new URL(`/api/flows/${importedId}`, app.baseUrl))
+  ).json()) as Result<FlowDraft>;
+  assert(imported.ok);
+  assert.deepEqual(imported.value.workspace, workspace);
+  assert.deepEqual(
+    imported.value.graph.blocks.map((block) => block.id),
+    source.value.graph.blocks.map((block) => block.id),
+  );
+  assert.deepEqual(imported.value.graph.connections, source.value.graph.connections);
+  const [sourceWorker, importedWorker] = [source.value, imported.value].map((flow) =>
+    flow.graph.blocks.find((block) => block.kind === "agent"),
+  );
+  assert(sourceWorker?.kind === "agent" && importedWorker?.kind === "agent");
+  assert.notEqual(importedWorker.agentId, sourceWorker.agentId);
+  const agent = await readAgentDefinition(app.baseUrl, importedWorker.agentId!);
+  assert.equal(agent.name, exported.agents[0]!.name);
+  await app.screenshot("flow-imported");
 });

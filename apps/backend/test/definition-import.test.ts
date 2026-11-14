@@ -9,13 +9,29 @@ import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
   agentFile,
   exportedAgent,
-  factoryFailingImportReceipts,
+  factoryFailingInserts,
   fileBody,
+  flowFile,
   reviewedCommit,
 } from "./support/definition-import.ts";
-import { assertOk, openFactoryWithApprovedT3 } from "./support/domain-setup.ts";
+import {
+  assertOk,
+  openFactoryWithApprovedT3,
+  reviewerExits,
+  sampleAgentInput,
+} from "./support/domain-setup.ts";
 import { factoryHarness } from "./support/factory.ts";
-import { controlledExecution } from "./support/scenarios.ts";
+import {
+  agentBlock,
+  blockExit,
+  connection,
+  continuationStep,
+  controlledExecution,
+  flowInput,
+  humanStep,
+  WAIT_OUTPUT,
+  waitBlock,
+} from "./support/scenarios.ts";
 
 it("a file that is not JSON is rejected as not JSON and nothing is created", async (context) => {
   // Arrange
@@ -319,7 +335,7 @@ it("a selection whose provider has no Factory reporting rejects the whole commit
 
 it("a commit that fails after creating its Agent rolls back and leaves no Agent", async (context) => {
   // Arrange
-  const factory = await factoryFailingImportReceipts(context);
+  const factory = await factoryFailingInserts(context, "definition_import_receipts");
 
   // Act
   const committed = await factory.commitImport(reviewedCommit());
@@ -328,6 +344,99 @@ it("a commit that fails after creating its Agent rolls back and leaves no Agent"
   assert(!committed.ok);
   expect(committed.error.code).toBe("internal");
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("a committed Flow file arrives as exported with its Agents' keys replaced by the new Agents", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const coder = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const reviewer = assertOk(
+    await factory.createAgent({ ...sampleAgentInput("Reviewer"), exits: reviewerExits }),
+  );
+  const created = assertOk(await factory.createFlow({ name: "Reviewed change" }));
+  const escalate = blockExit("escalate", "escalate", "A person decides.");
+  const saved = assertOk(
+    await factory.updateFlow(created.id, {
+      name: created.name,
+      expectedRevision: created.revision,
+      workspace: { mode: "worktree", base: { kind: "ref", ref: "release/2.0" } },
+      graph: {
+        flowInput: flowInput(["coder"], { x: 10, y: 20 }),
+        blocks: [
+          agentBlock("coder", "Coder", coder.id, { x: 200, y: 20 }),
+          agentBlock(
+            "review",
+            "Code review",
+            reviewer.id,
+            { x: 420, y: 20 },
+            ["pass"],
+            [escalate],
+            "Check only the requested fixes.",
+          ),
+          humanStep("decide", "Decide", { x: 640, y: 20 }),
+          waitBlock("cool-off", "Cool off", { amount: 2, unit: "hours" }, { x: 860, y: 20 }),
+          continuationStep("polish", "Polish", "Polish the wording.", { x: 1080, y: 20 }),
+          { ...agentBlock("unset", "Unset", "", { x: 200, y: 240 }), agentId: null },
+        ],
+        connections: [
+          connection("coder", "done", "review"),
+          connection("review", "fail", "coder"),
+          connection("review", "escalate", "decide"),
+          connection("decide", "approve", "cool-off"),
+          connection("cool-off", WAIT_OUTPUT, "polish"),
+        ],
+      },
+    }),
+  );
+  const { document } = assertOk(await factory.exportFlow(created.id));
+
+  // Act
+  const committed = assertOk(
+    await factory.commitImport({
+      requestId: "import-flow",
+      document,
+      selections: { "agent-1": controlledExecution(), "agent-2": null },
+    }),
+  );
+
+  // Assert
+  const ids = new Map(committed.agents.map(({ key, id }) => [key, id]));
+  const imported = new Map([
+    [coder.id, ids.get("agent-1")],
+    [reviewer.id, ids.get("agent-2")],
+  ]);
+  const flow = assertOk(await factory.getFlow(committed.flowId!));
+  expect(flow).toMatchObject({
+    name: "Reviewed change",
+    revision: 1,
+    workspace: saved.workspace,
+    graph: {
+      ...saved.graph,
+      blocks: saved.graph.blocks.map((block) =>
+        block.kind === "agent" && block.agentId !== null
+          ? { ...block, agentId: imported.get(block.agentId) }
+          : block,
+      ),
+    },
+  });
+});
+
+it("a Flow commit that fails after creating its Agents rolls back and leaves no Agent or Flow", async (context) => {
+  // Arrange
+  const factory = await factoryFailingInserts(context, "flow_revision_connections");
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow",
+    document: flowFile(),
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(!committed.ok);
+  expect(committed.error.code).toBe("internal");
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [] });
 });
 
 it("retrying a commit with the same request id and content returns the original result without a copy", async (context) => {

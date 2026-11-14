@@ -1,4 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
+import type { StudioSelection } from "./settings-navigation.ts";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
@@ -60,6 +61,12 @@ export function importModelChoices(capabilities: AgentCapabilities): ImportModel
       })),
     );
 }
+
+/** What Studio opens after an import: the imported Flow, or the Agent of an Agent file. */
+export const importedSelection = (result: ImportResult): StudioSelection =>
+  result.flowId === null
+    ? { tab: "agents", agentId: result.agents[0]!.id }
+    : { tab: "flows", flowId: result.flowId };
 
 const idle: DefinitionImportSnapshot = {
   file: null,

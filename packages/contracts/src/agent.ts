@@ -1,7 +1,7 @@
 /** Agents: reusable definitions of how an Agent block's work runs, and their operations. */
 import type { BlockExit } from "./flow.ts";
 import { operation } from "./operation.ts";
-import type { DefinitionExport } from "./portable-document.ts";
+import type { DefinitionExport, PortableAgentDocument } from "./portable-document.ts";
 
 export interface AgentModelOptionValue {
   readonly id: string;
@@ -152,7 +152,7 @@ export const agentOperations = {
   }),
   removeAgent: operation()({ method: "DELETE", path: "/api/agents/:id" }),
   /** The latest saved revision as a portable document. */
-  exportAgent: operation<never, DefinitionExport>()({
+  exportAgent: operation<never, DefinitionExport<PortableAgentDocument>>()({
     method: "GET",
     path: "/api/agents/:id/export",
   }),

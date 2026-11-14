@@ -323,6 +323,7 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
       body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateFlow(parameters.id, input)),
     },
+    exportFlow: { handle: ({ parameters }) => answer(() => factory.exportFlow(parameters.id)) },
   };
 }
 

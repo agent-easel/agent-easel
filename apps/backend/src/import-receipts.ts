@@ -28,7 +28,12 @@ export const readImportReceipt = Effect.fnUntraced(function* (
     SELECT agent_key AS key, agent_id AS id FROM definition_import_receipt_agents
     WHERE request_id=${requestId} ORDER BY ordinal`;
   const agents = rows.map(({ key, id }) => ({ key, id }));
-  return { fingerprint: receipt.fingerprint, result: { agents } } satisfies ImportReceipt;
+  const [flow] = yield* sql<{ id: string }>`
+    SELECT flow_id AS id FROM definition_import_receipt_flows WHERE request_id=${requestId}`;
+  return {
+    fingerprint: receipt.fingerprint,
+    result: { agents, flowId: flow?.id ?? null },
+  } satisfies ImportReceipt;
 });
 
 /** The original result for the same content; other content under a used request id conflicts. */
@@ -60,4 +65,7 @@ export const writeImportReceipt = Effect.fnUntraced(function* (
         VALUES (${requestId}, ${ordinal}, ${agent.key}, ${agent.id})`,
     { discard: true },
   );
+  if (result.flowId !== null)
+    yield* sql`INSERT INTO definition_import_receipt_flows (request_id, flow_id)
+      VALUES (${requestId}, ${result.flowId})`;
 });

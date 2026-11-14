@@ -18,6 +18,7 @@ import {
   type FlowGraph,
   type FlowGraphInput,
   type ImportResult,
+  type PortableFlow,
   type Result,
 } from "@t3-factory/contracts";
 import {
@@ -60,6 +61,7 @@ import {
   definitionExport,
   importReview,
   portableAgent,
+  portableFlow,
   unsupportedSelections,
 } from "./portable-definitions.ts";
 import {
@@ -249,6 +251,30 @@ export const makeDefinitions = (
         }),
       );
     }
+    /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
+     * block and exit ids, positions and the workspace arrive as exported. */
+    const importFlow = Effect.fnUntraced(function* (
+      flow: PortableFlow,
+      agentIds: ReadonlyMap<string, string>,
+      now: string,
+    ) {
+      const id = yield* newId;
+      const blocks = flow.graph.blocks.map((block): FlowBlock => {
+        if (block.kind !== "agent") return block;
+        const { agentKey, ...rest } = block;
+        return { ...rest, agentId: agentKey === null ? null : agentIds.get(agentKey)! };
+      });
+      yield* sql`INSERT INTO flows (id, created_at) VALUES (${id}, ${now})`;
+      yield* appendFlowRevision(sql, {
+        id,
+        revision: 1,
+        name: flow.name,
+        graph: { ...flow.graph, blocks },
+        workspace: flow.workspace,
+        savedAt: now,
+      });
+      return id;
+    });
     const operations: Pick<
       EffectOperations<FactoryOperations>,
       | "createFlow"
@@ -265,6 +291,7 @@ export const makeDefinitions = (
       | "duplicateAgent"
       | "removeAgent"
       | "exportAgent"
+      | "exportFlow"
       | "reviewImport"
       | "commitImport"
     > = {
@@ -519,6 +546,27 @@ export const makeDefinitions = (
             );
           }),
         ),
+      exportFlow: (id) =>
+        agentOperation((sql, capabilities) =>
+          Effect.gen(function* () {
+            const [flow] = yield* readCurrentFlows(sql, id);
+            if (!flow) return flowNotFound();
+            const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
+            return definitionExport(
+              {
+                format: PORTABLE_DOCUMENT_FORMAT,
+                formatVersion: PORTABLE_DOCUMENT_VERSION,
+                kind: "flow",
+                factoryVersion,
+                exportedAt: yield* currentTime,
+                flow: portable.flow,
+                agents: portable.agents,
+              },
+              portable.revisions,
+              flow,
+            );
+          }),
+        ),
       reviewImport(file) {
         const document = parsePortableFile(file.data);
         if (!document.ok) return Effect.succeed(document);
@@ -567,7 +615,16 @@ export const makeDefinitions = (
                     return { key: entry.key, id };
                   }),
                 );
-                const result: ImportResult = { agents };
+                const document = commit.document;
+                const flowId =
+                  document.kind === "flow"
+                    ? yield* importFlow(
+                        document.flow,
+                        new Map(agents.map((a) => [a.key, a.id])),
+                        now,
+                      )
+                    : null;
+                const result: ImportResult = { agents, flowId };
                 yield* writeImportReceipt(sql, commit.requestId, fingerprint, now, result);
                 return { ok: true as const, value: result };
               }),
@@ -639,6 +696,10 @@ export const makeDefinitions = (
       exportAgent: (...args: Parameters<typeof operations.exportAgent>) =>
         Effect.suspend(() => operations.exportAgent(...args)).pipe(
           Effect.withSpan("Definitions.exportAgent"),
+        ),
+      exportFlow: (...args: Parameters<typeof operations.exportFlow>) =>
+        Effect.suspend(() => operations.exportFlow(...args)).pipe(
+          Effect.withSpan("Definitions.exportFlow"),
         ),
       reviewImport: (...args: Parameters<typeof operations.reviewImport>) =>
         Effect.suspend(() => operations.reviewImport(...args)).pipe(
