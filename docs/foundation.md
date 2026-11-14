@@ -34,6 +34,11 @@ and restricted OAuth credentials live outside project repositories.
   none. Migration `082` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
+- A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
+  a SHA-256 fingerprint of the canonical document plus the reviewed selections, and the created Agent ids by document key. A commit reads
+  receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the original result, while another
+  fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
+  Agent's id and never recreates it. Migration `083` adds the receipt tables and changes no existing data.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the

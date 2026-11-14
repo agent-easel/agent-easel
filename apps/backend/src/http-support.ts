@@ -4,7 +4,10 @@ import { HttpServerResponse } from "effect/http";
 import * as HttpIncomingMessage from "effect/http/HttpIncomingMessage";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
 import type { Result } from "@t3-factory/contracts";
-import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
+import {
+  DEFINITION_REQUEST_LIMIT_BYTES,
+  PORTABLE_DOCUMENT_LIMIT_BYTES,
+} from "@t3-factory/domain-validation";
 import { failure } from "./result.ts";
 
 const jsonResultHeaders = {
@@ -25,6 +28,7 @@ export function resultResponse(
         not_found: 404,
         conflict: 409,
         missing_images: 409,
+        too_large: 413,
         incompatible: 426,
         internal: 500,
       }[result.error.code];
@@ -45,6 +49,8 @@ export function sendFaviconResponse(
 export interface JsonBodyLimit {
   readonly bytes: number;
   readonly message: string;
+  /** When set, a body that cannot be read within `bytes` answers 413 `too_large` with this message. */
+  readonly tooLarge?: string;
 }
 export const standardBody: JsonBodyLimit = {
   bytes: 16_384,
@@ -54,6 +60,21 @@ export const definitionBody: JsonBodyLimit = {
   bytes: DEFINITION_REQUEST_LIMIT_BYTES,
   message: "Send valid JSON up to 2 MB with application/json.",
 };
+/** Import review and commit: a portable document up to the import limit. */
+export const importBody: JsonBodyLimit = {
+  bytes: PORTABLE_DOCUMENT_LIMIT_BYTES,
+  message: "Send valid JSON up to 16 MiB with application/json.",
+  tooLarge: "This file is larger than the 16 MiB an import accepts.",
+};
+
+const unreadableBody = (limit: JsonBodyLimit) =>
+  resultResponse(
+    limit.tooLarge
+      ? failure("too_large", limit.tooLarge, [
+          { code: "document_too_large", path: "document", message: limit.tooLarge },
+        ])
+      : failure("validation", limit.message),
+  );
 
 /** Keep malformed-body handling at the transport boundary, including JSON null. */
 export function readJsonBody(
@@ -75,12 +96,7 @@ export function readJsonBody(
       Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.fromInputUnsafe(limit.bytes)),
       Effect.catchCause(() => Effect.succeed(undefined)),
     );
-    if (text === undefined) {
-      return {
-        kind: "invalid" as const,
-        response: resultResponse(failure("validation", limit.message)),
-      };
-    }
+    if (text === undefined) return { kind: "invalid" as const, response: unreadableBody(limit) };
     try {
       return { kind: "ok" as const, value: JSON.parse(text) };
     } catch {
@@ -116,11 +132,7 @@ export function readRawBody(
       Effect.provideService(HttpIncomingMessage.MaxBodySize, ByteSize.fromInputUnsafe(limit.bytes)),
       Effect.catchCause(() => Effect.succeed(undefined)),
     );
-    if (buffer === undefined)
-      return {
-        kind: "invalid" as const,
-        response: resultResponse(failure("validation", limit.message)),
-      };
+    if (buffer === undefined) return { kind: "invalid" as const, response: unreadableBody(limit) };
     const mimeType = (request.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
     return { kind: "ok" as const, value: { mimeType, data: new Uint8Array(buffer) } };
   });

@@ -51,7 +51,7 @@ are distinct and non-empty. A new Agent starts with one exit, `done`, which need
 its next Run, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with **Search Agents**, **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
+A persistent 300 px list sits beside the editor with **Search Agents**, **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
 drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Export** (after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
@@ -90,7 +90,7 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 
 ## Flow authoring
 
-Open **Studio → Flows** (`/studio/flows`), choose **New Flow** and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
+Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
 filters or assigns them, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
 ### Canvas and block configuration
@@ -223,6 +223,43 @@ The file is a portable document, version 1:
 
 Export refuses, with the reason, a file another installation could not import: a definition whose save request exceeds 2 MB, or a file over
 16 MiB.
+
+### Import
+
+**Import** on the Agents list and on the Flows list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
+what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
+
+- a trust notice: imported instructions run with the user's T3 capabilities when a Run that uses them starts, and importing does not start a Run;
+- the instruction inventory: each Agent's name, prompt length and exit count, never its prompt text;
+- one row per Agent with its model hint as text (or "No model in file") and a picker of the live Worker catalog for the connected environment,
+  limited to reporting-capable providers, with the chosen model's thinking options. Every row starts as **Needs a model** with nothing
+  preselected.
+
+Names, prompts and exits arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
+enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
+model). Confirm sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`) and a request id
+the dialog generated for this import. The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
+exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names in one
+transaction, never reuses or updates an existing Agent and never starts a Run. On success Studio opens the imported Agent.
+
+- If a chosen provider is listed by T3 but has lost Factory reporting support, the whole commit is refused, the affected Agents are named and
+  their rows return to the review for another choice. A provider T3 does not list, including while the catalog is unavailable, never refuses a
+  commit.
+- Every Confirm in one dialog reuses its request id. When the answer is lost, Confirm again returns the original result instead of a copy; the
+  same id with different content is refused as a conflict. Choosing a file again starts a new import, so two deliberate imports create two
+  independent copies. See [import receipts](foundation.md#persistence-model).
+
+Validation runs in order: the `format` marker and `formatVersion` first, then the Agent count, unknown or missing fields at every level, closed
+references (well-formed, unique keys; an Agent file holds exactly one Agent), then the Agent validators on each definition and each definition's
+prospective save request against 2 MB. Flow files cannot be imported yet. The distinct rejections are:
+
+- not JSON (the file is not UTF-8 JSON);
+- not a Factory export (no `t3-factory/definitions` marker);
+- unsupported format version N, which asks to update Factory when N is newer;
+- an invalid definition, field-addressed (for example `agents.0.prompt`) and naming the Agent;
+- over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
+
+Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Try again**.
 
 ## Validation contract
 

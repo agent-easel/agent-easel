@@ -3,7 +3,9 @@ import { useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import type { ImportResult } from "@t3-factory/contracts";
 import type { StudioRead } from "../studio-definitions.ts";
+import { DefinitionImportControl } from "./definition-import-control.tsx";
 
 /**
  * A Studio list read's value once a read answered after this page was entered, so entering a
@@ -24,6 +26,7 @@ export function StudioListHeader({
   onQueryChange,
   onCreate,
   createLabel,
+  onImported,
 }: {
   title: string;
   description: string;
@@ -31,6 +34,7 @@ export function StudioListHeader({
   onQueryChange: (query: string) => void;
   onCreate: () => void;
   createLabel: string;
+  onImported: (result: ImportResult) => void;
 }) {
   return (
     <header className="flex flex-wrap items-center gap-4">
@@ -52,6 +56,7 @@ export function StudioListHeader({
           className="bg-muted pl-9"
         />
       </div>
+      <DefinitionImportControl onImported={onImported} />
       <MutationGate>
         <Button onClick={onCreate}>
           <Plus aria-hidden strokeWidth={1.5} />

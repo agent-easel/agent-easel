@@ -1,9 +1,12 @@
 import type {
   AgentCapabilities,
+  CommitImportInput,
   CreateAgentInput,
   DefinitionExport,
+  ImportReview,
   PortableAgent,
   PortableAgentDocument,
+  PortableDocument,
   Result,
   ValidationIssue,
 } from "@t3-factory/contracts";
@@ -14,6 +17,7 @@ import {
   resolveAgentModel,
 } from "@t3-factory/domain-validation";
 import type { AgentRevision } from "./agent-revisions.ts";
+import { unsupportedReportingFailure } from "./agents.ts";
 import { failure } from "./result.ts";
 
 /** The bundled entry of a saved Agent. The hint keeps the exporter's model but never its environment. */
@@ -88,4 +92,52 @@ export function definitionExport(
         .map(({ key, name }) => ({ key, name })),
     },
   };
+}
+
+/**
+ * What an import would create. Every Agent starts as Needs a model; the review's picker offers the
+ * catalog read here.
+ */
+export function importReview(
+  document: PortableDocument,
+  capabilities: AgentCapabilities,
+): ImportReview {
+  return {
+    kind: document.kind,
+    agents: document.agents.map((agent) => ({
+      key: agent.key,
+      name: agent.name,
+      promptLength: agent.prompt.length,
+      exitCount: agent.exits.length,
+      hint: agent.model,
+      proposed: null,
+    })),
+    capabilities,
+  };
+}
+
+/**
+ * The ordinary save rule over every selection at once: a listed provider without Factory reporting
+ * rejects the whole commit and names each affected Agent. A provider the catalog does not list,
+ * including while it is unavailable, never rejects.
+ */
+export function unsupportedSelections(
+  { document, selections }: CommitImportInput,
+  capabilities: AgentCapabilities,
+): Result<never> | undefined {
+  const refused = document.agents.flatMap((agent) => {
+    const refusal = unsupportedReportingFailure(selections[agent.key] ?? null, capabilities);
+    return refusal && !refusal.ok ? [{ agent, explanation: refusal.error.message }] : [];
+  });
+  if (refused.length === 0) return undefined;
+  const names = refused.map(({ agent }) => `"${agent.name}"`).join(", ");
+  return failure(
+    "validation",
+    `Choose another model for ${names}: Factory cannot take reports from the chosen provider.`,
+    refused.map(({ agent, explanation }) => ({
+      code: "harness_unsupported",
+      path: `selections.${agent.key}.providerInstanceId`,
+      message: `Agent "${agent.name}": ${explanation}`,
+    })),
+  );
 }

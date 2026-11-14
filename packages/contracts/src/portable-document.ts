@@ -3,8 +3,9 @@
  * reads. It holds only portable definition data: no environment, server ids, revisions,
  * definition timestamps or Runs.
  */
-import type { AgentModelOptionValue } from "./agent.ts";
+import type { AgentCapabilities, AgentExecutionSettings, AgentModelOptionValue } from "./agent.ts";
 import type { BlockExit } from "./flow.ts";
+import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
 export const PORTABLE_DOCUMENT_VERSION = 1;
@@ -46,9 +47,59 @@ export interface PortableAgentDocument extends PortableEnvelope {
   readonly agents: readonly [PortableAgent];
 }
 
+/** Every document kind an import reads. */
+export type PortableDocument = PortableAgentDocument;
+
 /** What an export answers: the file's document and what it could not keep. */
 export interface DefinitionExport<Document extends PortableEnvelope = PortableAgentDocument> {
   readonly document: Document;
   /** Bundled Agents whose model hint omits `driverKind` because the live catalog did not list it. */
   readonly driverKindOmitted: readonly Pick<PortableAgent, "key" | "name">[];
 }
+
+/** One bundled Agent as the import review shows it: its instruction inventory, never prompt text. */
+export interface ImportReviewAgent {
+  readonly key: string;
+  readonly name: string;
+  readonly promptLength: number;
+  readonly exitCount: number;
+  readonly hint: PortableModelHint | null;
+  /** The selection the review starts from; null is Needs a model. */
+  readonly proposed: AgentExecutionSettings | null;
+}
+
+/** What an import would create, computed without writing anything. */
+export interface ImportReview {
+  readonly kind: PortableDocument["kind"];
+  readonly agents: readonly ImportReviewAgent[];
+  /** The live catalog the review read; its picker offers only reporting-capable providers. */
+  readonly capabilities: AgentCapabilities;
+}
+
+export interface CommitImportInput {
+  /** Client-generated per import; a retry with the same content returns the original result. */
+  readonly requestId: string;
+  readonly document: PortableDocument;
+  /** The reviewed choice for every bundled Agent by key: complete settings, or null (Needs a model). */
+  readonly selections: Readonly<Record<string, AgentExecutionSettings | null>>;
+}
+
+/** The definitions an import created, by document key. They may have been removed since. */
+export interface ImportResult {
+  readonly agents: readonly { readonly key: string; readonly id: string }[];
+}
+
+/** Import of a portable document: a review that writes nothing, then an all-or-nothing commit. */
+export const definitionImportOperations = {
+  /** The chosen file's bytes, exactly as read. */
+  reviewImport: operation<RawBody, ImportReview>()({
+    method: "POST",
+    path: "/api/imports/review",
+    body: "bytes",
+  }),
+  commitImport: operation<CommitImportInput, ImportResult>()({
+    method: "POST",
+    path: "/api/imports",
+    body: "json",
+  }),
+};

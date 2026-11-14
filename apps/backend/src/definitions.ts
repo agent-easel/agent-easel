@@ -17,12 +17,15 @@ import {
   type FlowDraft,
   type FlowGraph,
   type FlowGraphInput,
+  type ImportResult,
   type Result,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
   flowReadiness,
+  parsePortableFile,
   type ReadinessAgent,
+  validateCommitImport,
   validateCreateAgent,
   validateCreateFlow,
   validateDuplicateAgent,
@@ -53,7 +56,18 @@ import {
   readFormerExitNames,
   type AgentRevision,
 } from "./agent-revisions.ts";
-import { definitionExport, portableAgent } from "./portable-definitions.ts";
+import {
+  definitionExport,
+  importReview,
+  portableAgent,
+  unsupportedSelections,
+} from "./portable-definitions.ts";
+import {
+  importFingerprint,
+  readImportReceipt,
+  replayedImport,
+  writeImportReceipt,
+} from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
@@ -251,6 +265,8 @@ export const makeDefinitions = (
       | "duplicateAgent"
       | "removeAgent"
       | "exportAgent"
+      | "reviewImport"
+      | "commitImport"
     > = {
       createFlow(input) {
         const validated = validateCreateFlow(input);
@@ -503,6 +519,62 @@ export const makeDefinitions = (
             );
           }),
         ),
+      reviewImport(file) {
+        const document = parsePortableFile(file.data);
+        if (!document.ok) return Effect.succeed(document);
+        return loadCapabilities().pipe(
+          Effect.map((capabilities) => ({
+            ok: true as const,
+            value: importReview(document.value, capabilities),
+          })),
+        );
+      },
+      commitImport(input) {
+        const validated = validateCommitImport(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const commit = validated.value;
+        const fingerprint = importFingerprint(commit);
+        // A receipt answers before the catalog is read, so a replay never depends on T3.
+        const replay = readImportReceipt(sql, commit.requestId).pipe(
+          Effect.map((receipt) => receipt && replayedImport(receipt, fingerprint)),
+        );
+        return provideSql<ImportResult>(
+          Effect.gen(function* () {
+            const replayed = yield* replay;
+            if (replayed) return replayed;
+            const capabilities = yield* loadCapabilities();
+            return yield* sql.withTransaction(
+              Effect.gen(function* () {
+                // Checked again: a retry of the same request may have committed meanwhile.
+                const raced = yield* replay;
+                if (raced) return raced;
+                const unsupported = unsupportedSelections(commit, capabilities);
+                if (unsupported) return unsupported;
+                const now = yield* currentTime;
+                const agents = yield* Effect.forEach(commit.document.agents, (entry) =>
+                  Effect.gen(function* () {
+                    const id = yield* newId;
+                    yield* sql`INSERT INTO agents (id, created_at) VALUES (${id}, ${now})`;
+                    yield* appendAgentRevision(sql, {
+                      id,
+                      name: entry.name,
+                      prompt: entry.prompt,
+                      execution: commit.selections[entry.key] ?? null,
+                      exits: entry.exits,
+                      revision: 1,
+                      updatedAt: now,
+                    });
+                    return { key: entry.key, id };
+                  }),
+                );
+                const result: ImportResult = { agents };
+                yield* writeImportReceipt(sql, commit.requestId, fingerprint, now, result);
+                return { ok: true as const, value: result };
+              }),
+            );
+          }),
+        );
+      },
     };
     return {
       createFlow: (...args: Parameters<typeof operations.createFlow>) =>
@@ -567,6 +639,15 @@ export const makeDefinitions = (
       exportAgent: (...args: Parameters<typeof operations.exportAgent>) =>
         Effect.suspend(() => operations.exportAgent(...args)).pipe(
           Effect.withSpan("Definitions.exportAgent"),
+        ),
+      reviewImport: (...args: Parameters<typeof operations.reviewImport>) =>
+        Effect.suspend(() => operations.reviewImport(...args)).pipe(
+          Effect.withSpan("Definitions.reviewImport"),
+        ),
+      commitImport: (...args: Parameters<typeof operations.commitImport>) =>
+        Effect.suspend(() => operations.commitImport(...args)).pipe(
+          publishOnSuccess,
+          Effect.withSpan("Definitions.commitImport"),
         ),
     };
   });

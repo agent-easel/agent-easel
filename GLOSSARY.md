@@ -45,6 +45,10 @@ _Avoid_: unavailable, unknown.
 A JSON file holding the latest saved revision of an Agent in the portable document format, with its model as an optional hint and without environment, server ids, revisions, timestamps or Runs. Exporting never changes the definition or its editor.
 _Avoid_: backup, sync.
 
+**Import receipt**:
+The durable record of one committed import: the client's request id, a fingerprint of the document and reviewed model choices, and the definitions it created. A retry with the same content returns the original result instead of a copy.
+_Avoid_: import history, provenance.
+
 **Studio**:
 The modal authoring surface for global Flows and reusable Agent definitions. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.
 _Avoid_: Settings as the Agent editor; a Flows destination in the Run sidebar.

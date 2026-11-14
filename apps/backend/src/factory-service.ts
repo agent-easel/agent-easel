@@ -146,6 +146,8 @@ export const makeFactoryService = (
       duplicateAgent: definitions.duplicateAgent,
       removeAgent: definitions.removeAgent,
       exportAgent: definitions.exportAgent,
+      reviewImport: definitions.reviewImport,
+      commitImport: definitions.commitImport,
       getReportingInstallations: () => reporting.getReportingInstallations(),
       installReporting: (input) => reporting.installReporting(input),
       answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),

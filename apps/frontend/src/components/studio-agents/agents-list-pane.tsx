@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { MutationGate } from "@/client-gate";
 import { Bot, Search } from "lucide-react";
-import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@t3-factory/contracts";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  FlowDraft,
+  ImportResult,
+} from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { NeedsModel } from "../needs-model.tsx";
+import { DefinitionImportControl } from "../definition-import-control.tsx";
 
 export function AgentsListPane({
   agents,
@@ -20,6 +26,7 @@ export function AgentsListPane({
   query,
   onQueryChange,
   onCreate,
+  onImported,
   error,
   onRetry,
   loading,
@@ -33,6 +40,7 @@ export function AgentsListPane({
   query: string;
   onQueryChange: (query: string) => void;
   onCreate: () => void;
+  onImported: (result: ImportResult) => void;
   error: string;
   onRetry: () => void;
   loading: boolean;
@@ -52,6 +60,7 @@ export function AgentsListPane({
           </span>
         )}
         <span className="flex-1" />
+        <DefinitionImportControl size="sm" onImported={onImported} />
         <MutationGate>
           <Button size="sm" aria-label="New Agent" onClick={onCreate}>
             + Add agent

@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: optional_agent_execution
+-- Newest applied migration: definition_import_receipts
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -110,6 +110,29 @@ CREATE TABLE coordinator_question_replies (
 
 CREATE TRIGGER immutable_coordinator_answer BEFORE UPDATE ON coordinator_question_replies
 BEGIN SELECT RAISE(ABORT,'Coordinator answer is immutable'); END;
+
+CREATE TABLE definition_import_receipt_agents (
+  request_id TEXT NOT NULL REFERENCES definition_import_receipts(request_id),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  agent_key TEXT NOT NULL,
+  agent_id TEXT NOT NULL UNIQUE REFERENCES agents(id),
+  PRIMARY KEY (request_id, ordinal),
+  UNIQUE (request_id, agent_key)
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_agent_delete BEFORE DELETE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_agent_update BEFORE UPDATE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TABLE definition_import_receipts (
+  request_id TEXT PRIMARY KEY NOT NULL CHECK (length(request_id) BETWEEN 1 AND 256),
+  fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
+  created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_delete BEFORE DELETE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_update BEFORE UPDATE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
 CREATE TABLE "effect_sql_migrations" (
   migration_id integer PRIMARY KEY NOT NULL,

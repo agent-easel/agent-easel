@@ -111,6 +111,7 @@ export function StudioAgentsPage({
         query={query}
         onQueryChange={setQuery}
         onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
+        onImported={(result) => void openStudio({ tab: "agents", agentId: result.agents[0]!.id })}
         error={library.error}
         onRetry={library.retry}
         loading={library.agents === null || library.flows === null}

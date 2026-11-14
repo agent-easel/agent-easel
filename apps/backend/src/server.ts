@@ -9,6 +9,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { HttpServerRequest as HttpServerRequestType } from "effect/http/HttpServerRequest";
 import {
   agentOperations,
+  definitionImportOperations,
   flowOperations,
   projectOperations,
   projectServerOperations,
@@ -36,6 +37,7 @@ import {
 } from "./client-transport.ts";
 import {
   definitionBody,
+  importBody,
   readJsonBody,
   readRawBody,
   resultResponse,
@@ -122,6 +124,7 @@ function apiRoutes(factory: Factory) {
     ...projectRoutes(factory),
     ...flowRoutes(factory),
     ...agentRoutes(factory),
+    ...importRoutes(factory),
   };
 }
 
@@ -343,6 +346,19 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
     },
     removeAgent: { handle: ({ parameters }) => answer(() => factory.removeAgent(parameters.id)) },
     exportAgent: { handle: ({ parameters }) => answer(() => factory.exportAgent(parameters.id)) },
+  };
+}
+
+function importRoutes(factory: Factory): RouteEntries<typeof definitionImportOperations> {
+  return {
+    reviewImport: {
+      body: importBody,
+      handle: ({ input }) => answer(() => factory.reviewImport(input)),
+    },
+    commitImport: {
+      body: importBody,
+      handle: ({ input }) => answer(() => factory.commitImport(input), 201),
+    },
   };
 }
 

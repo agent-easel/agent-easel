@@ -13,6 +13,7 @@ import {
   useVisitValue,
 } from "../components/studio-list.tsx";
 import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
+import { useStudioNavigation } from "../settings-navigation.ts";
 
 export function FlowList({
   definitions,
@@ -21,6 +22,7 @@ export function FlowList({
   definitions: StudioDefinitions;
   onCreate: () => void;
 }) {
+  const openStudio = useStudioNavigation();
   const flows = useStudioRead(definitions, "flows");
   const items = useVisitValue(flows);
   const error = flows.error ? "Could not load Flows. Check that Factory is running." : "";
@@ -38,6 +40,7 @@ export function FlowList({
         onQueryChange={setQuery}
         onCreate={onCreate}
         createLabel="New Flow"
+        onImported={(result) => void openStudio({ tab: "agents", agentId: result.agents[0]!.id })}
       />
       {items && items.length > 0 && filtered?.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Flows match your search.</p>
