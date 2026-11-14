@@ -282,6 +282,31 @@ test("expanding Settled shows compact single-line rows without repository metada
   await app.screenshot("sidebar-compact-settled");
 });
 
+test("expanded Settled stays pinned below the open Runs instead of scrolling them away", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: a viewport shorter than the seeded open Runs.
+  await browser.setViewport({ width: 1440, height: 700 });
+  await app.open("/runs/new");
+  const firstOpen = screen.getByRole("navigation", "Open Runs").getByRole("link").first();
+  const settledRow = screen
+    .getByRole("navigation", "Settled Runs")
+    .getByRole("link", /Demo · Settled · Clearer onboarding copy/);
+
+  // Act
+  await screen.getByRole("button", /^Settled \d+$/).tap();
+
+  // Assert: the open list and the Settled rows are both on screen at once.
+  await expect(settledRow).toBeVisible();
+  const open = await firstOpen.boundingBox();
+  const settled = await settledRow.boundingBox();
+  expect(open!.y).toBeGreaterThanOrEqual(0);
+  expect(settled!.y + settled!.height).toBeLessThanOrEqual(700);
+  await app.screenshot("sidebar-settled-pinned");
+});
+
 test("the Settled preview exposes repository details omitted from its compact row", async ({
   app,
   screen,
