@@ -66,7 +66,9 @@ Release/beta journeys and the local pre-push gate are unchanged.
 
 For frontend changes, **UI evidence attachments** runs
 `scripts/check-ui-evidence.mjs --pr <number>` to check the PR body's Before and
-After image links. Run the same check locally with
+After image links. A frontend change without visible UI impact, which still
+triggers the check, states why under `### No UI evidence` instead; the check
+accepts any non-empty reason and leaves its judgment to review. Run the same check locally with
 `pnpm check:ui-evidence --body-file <path>` (`-` for stdin) or
 `pnpm check:ui-evidence --pr <number>`. It does not inspect image content or prove the final UI;
 follow the [verification evidence requirements](../.agents/skills/verify-t3-factory/SKILL.md#evidence).
