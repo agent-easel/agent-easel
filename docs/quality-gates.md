@@ -127,10 +127,11 @@ or source parse failure. There is no baseline: every change must preserve zero
 fallow findings. Limits are fallow's defaults (cyclomatic complexity 20,
 cognitive complexity 15 per function, no duplicated blocks); see `.fallowrc.jsonc`.
 
-For JSON or SARIF reports, pass `--fail-on-issues` to each analysis
-(`pnpm exec fallow dead-code --fail-on-issues --format json`): bare fallow does not enforce
-rule exit codes in these formats. Health recommendations (`pnpm exec fallow health`) are
-advisory, not rule warnings, and stay out of the gate's output.
+The gate runs `fallow dead-code`, `fallow dupes` and `fallow health --complexity`, each
+with `--fail-on-issues`. For JSON or SARIF reports, run the same three with `--format json`
+or `--format sarif`: bare fallow does not enforce rule exit codes in these formats. The rest
+of `fallow health` (file scores, hotspots, refactoring targets) is advisory, not rule
+warnings, and the gate does not print it.
 
 ### Git identity and squash input
 
