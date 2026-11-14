@@ -406,7 +406,9 @@ test("an approved client's Settings has no Chat control section or search entry"
   await app.open("/__fixture/remote-browser");
   await openApproved(app, "/settings/run-titles");
   const sections = screen.getByRole("navigation", "Settings sections");
-  await expect(sections.getByRole("link", "Run titles", { exact: true })).toBeVisible();
+  await expect(
+    sections.getByRole("link", "Run titles, Managed on the Factory host", { exact: true }),
+  ).toBeVisible();
   await expect(sections.getByRole("link", /^Language model/)).toHaveCount(0);
   await expect(sections.getByRole("link", /^Discord/)).toHaveCount(0);
 
