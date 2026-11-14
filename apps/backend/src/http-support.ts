@@ -49,7 +49,7 @@ export const standardBody: JsonBodyLimit = {
   bytes: 16_384,
   message: "Send valid JSON up to 16 KiB with application/json.",
 };
-export const flowDocumentBody: JsonBodyLimit = {
+export const definitionBody: JsonBodyLimit = {
   bytes: 2_000_000,
   message: "Send valid JSON up to 2 MB with application/json.",
 };

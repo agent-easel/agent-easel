@@ -351,7 +351,7 @@ An open harness session keeps the tool list it read at start; new tools reach th
 
 Factory MCP is stateless Streamable HTTP on the host-local listener only: the approved-client
 listener answers `/mcp` with `host_only`, and a request whose `Origin` is not the listener's own
-origin is refused, so a cross-origin browser page cannot drive it. Requests may be up to 2 MB to accommodate whole Flow graphs.
+origin is refused, so a cross-origin browser page cannot drive it. Requests may be up to 2 MB to accommodate whole Agent and Flow definitions.
 Alongside the [authoring tools](#authoring-tools), its Block runtime tools are
 `factory_get_block({ blockId })`, read-only `factory_get_run({ blockId })`,
 read-only `factory_get_run_image({ blockId, imageId })` and

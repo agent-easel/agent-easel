@@ -35,7 +35,7 @@ import {
   RequestLimiter,
 } from "./client-transport.ts";
 import {
-  flowDocumentBody,
+  definitionBody,
   readJsonBody,
   readRawBody,
   resultResponse,
@@ -307,17 +307,17 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
   return {
     listFlows: { handle: () => answer(() => factory.listFlows()) },
     createFlow: {
-      body: standardBody,
+      body: definitionBody,
       handle: ({ input }) => answer(() => factory.createFlow(input), 201),
     },
     validateFlow: {
-      body: flowDocumentBody,
+      body: definitionBody,
       handle: ({ input }) => answer(() => factory.validateFlow(input)),
     },
     getFlow: { handle: ({ parameters }) => answer(() => factory.getFlow(parameters.id)) },
     removeFlow: { handle: ({ parameters }) => answer(() => factory.removeFlow(parameters.id)) },
     updateFlow: {
-      body: flowDocumentBody,
+      body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateFlow(parameters.id, input)),
     },
   };
@@ -328,7 +328,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
     getAgentCapabilities: { handle: () => answer(() => factory.getAgentCapabilities()) },
     listAgents: { handle: () => answer(() => factory.listAgents()) },
     createAgent: {
-      body: standardBody,
+      body: definitionBody,
       handle: ({ input }) => answer(() => factory.createAgent(input), 201),
     },
     getAgent: { handle: ({ parameters }) => answer(() => factory.getAgent(parameters.id)) },
@@ -338,7 +338,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
         answer(() => factory.duplicateAgent(parameters.id, input), 201),
     },
     updateAgent: {
-      body: standardBody,
+      body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateAgent(parameters.id, input)),
     },
     removeAgent: { handle: ({ parameters }) => answer(() => factory.removeAgent(parameters.id)) },
