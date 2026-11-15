@@ -9,6 +9,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
 import type { T3Adapter, T3ConnectionReason } from "./adapters/t3.ts";
 import type { LiveChanges } from "./live-changes.ts";
+import { isLocalEndpoint } from "./endpoint-local.ts";
 
 type ContextRow = {
   id: string;
@@ -276,10 +277,7 @@ function parseEndpoint(input: unknown): Result<string> {
       url.password ||
       url.search ||
       url.hash ||
-      !(
-        url.protocol === "https:" ||
-        (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
-      )
+      !(url.protocol === "https:" || (url.protocol === "http:" && isLocalEndpoint(url.href)))
     )
       throw new Error();
     return { ok: true, value: url.href };

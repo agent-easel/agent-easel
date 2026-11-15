@@ -21,7 +21,6 @@ import {
   type RunNavigationEntry,
   type RunViewLiveMessage,
   type StudioDefinitions,
-  type StudioListChanges,
   type StudioLiveMessage,
   type T3Appearance,
   type T3Connection,
@@ -126,15 +125,24 @@ function connectionDiff(sent: T3Connection, current: T3Connection): ConnectionLi
 const appearanceDiff = (sent: T3Appearance, current: T3Appearance): AppearanceLiveMessage[] =>
   Equal.equals(sent, current) ? [] : [{ _tag: "changed", appearance: current }];
 
+/** Complete replacements and removals of one list by stable id; undefined when nothing changed. */
+function listChanges<A extends { readonly id: string }>(
+  sent: readonly A[],
+  current: readonly A[],
+): { upserts: A[]; removals: string[] } | undefined {
+  const previous = new Map(sent.map((entity) => [entity.id, entity]));
+  const upserts = current.filter((entity) => !Equal.equals(previous.get(entity.id), entity));
+  const present = new Set(current.map((entity) => entity.id));
+  const removals = sent.filter((entity) => !present.has(entity.id)).map((entity) => entity.id);
+  return upserts.length || removals.length ? { upserts, removals } : undefined;
+}
+
 function navigationDiff(
   sent: readonly RunNavigationEntry[],
   current: readonly RunNavigationEntry[],
 ): NavigationLiveMessage[] {
-  const previous = new Map(sent.map((row) => [row.id, row]));
-  const upserts = current.filter((row) => !Equal.equals(previous.get(row.id), row));
-  const present = new Set(current.map((row) => row.id));
-  const removals = sent.filter((row) => !present.has(row.id)).map((row) => row.id);
-  return upserts.length || removals.length ? [{ _tag: "changed", upserts, removals }] : [];
+  const changes = listChanges(sent, current);
+  return changes ? [{ _tag: "changed", ...changes }] : [];
 }
 
 const nonHeaderFields = new Set<string>([
@@ -277,33 +285,17 @@ function launchChoicesDiff(
   sent: LaunchChoices,
   current: LaunchChoices,
 ): LaunchChoicesLiveMessage[] {
-  const previous = new Map(sent.flows.map((flow) => [flow.id, flow]));
-  const upserts = current.flows.filter((flow) => !Equal.equals(previous.get(flow.id), flow));
-  const present = new Set(current.flows.map((flow) => flow.id));
-  const removals = sent.flows.filter((flow) => !present.has(flow.id)).map((flow) => flow.id);
-  const flowsChanged = upserts.length > 0 || removals.length > 0;
+  const flows = listChanges(sent.flows, current.flows);
   const { catalog, observed } = catalogDiff(sent.catalog, current.catalog);
   const messages: LaunchChoicesLiveMessage[] = [];
-  if (catalog || flowsChanged)
+  if (catalog || flows)
     messages.push({
       _tag: "changed",
       ...(catalog ? { catalog } : {}),
-      ...(flowsChanged ? { flows: { upserts, removals } } : {}),
+      ...(flows ? { flows } : {}),
     });
   if (observed) messages.push({ _tag: "observed", projects: observed });
   return messages;
-}
-
-/** Complete replacements and removals of one list by stable id; undefined when nothing changed. */
-function listChanges<A extends { readonly id: string }>(
-  sent: readonly A[],
-  current: readonly A[],
-): StudioListChanges<A> | undefined {
-  const previous = new Map(sent.map((entity) => [entity.id, entity]));
-  const upserts = current.filter((entity) => !Equal.equals(previous.get(entity.id), entity));
-  const present = new Set(current.map((entity) => entity.id));
-  const removals = sent.filter((entity) => !present.has(entity.id)).map((entity) => entity.id);
-  return upserts.length || removals.length ? { upserts, removals } : undefined;
 }
 
 function studioDiff(sent: StudioDefinitions, current: StudioDefinitions): StudioLiveMessage[] {

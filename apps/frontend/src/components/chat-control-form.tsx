@@ -5,6 +5,7 @@ import { MutationGate } from "../client-gate.tsx";
 import { dayAndTime } from "./execution-state.tsx";
 import { ReadFailure } from "./notice.tsx";
 import { SettingsDraftDialog, type useSettingsDraftGuard } from "./settings-draft-guard.tsx";
+import { SettingsPage } from "./settings-page.tsx";
 
 /** The operation's message with its distinct issue messages, or `fallback` for a lost answer. */
 export const chatControlError = (cause: unknown, fallback: string) =>
@@ -130,8 +131,9 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
 }
 
 /**
- * A Chat control Settings page: heading and introduction, then its sections once the host's
- * settings are read, with the dialog that guards their unsaved edits.
+ * A Chat control Settings page on the shared Settings page template: its sections once the
+ * host's settings are read, with the dialog that guards their unsaved edits. The pages are listed
+ * only on the host, the one client that can change them, so they show no host-managed chip.
  */
 export function ChatControlPage({
   title,
@@ -150,11 +152,7 @@ export function ChatControlPage({
   children: ReactNode | null;
 }) {
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-2">
-        <h2 className="text-title font-semibold text-foreground">{title}</h2>
-        <p className="text-sm text-muted-foreground">{intro}</p>
-      </div>
+    <SettingsPage title={title} description={intro}>
       {loadError && <ReadFailure message={loadError} onRetry={onRetry} />}
       {children !== null ? (
         <MutationGate>{children}</MutationGate>
@@ -166,6 +164,6 @@ export function ChatControlPage({
         )
       )}
       <SettingsDraftDialog decision={decision} />
-    </div>
+    </SettingsPage>
   );
 }
