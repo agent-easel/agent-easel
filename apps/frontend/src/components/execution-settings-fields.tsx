@@ -304,6 +304,7 @@ export function ModelOptionSelect({
   onChange,
   saving,
   hint,
+  className,
 }: {
   id: string;
   label: string;
@@ -312,6 +313,7 @@ export function ModelOptionSelect({
   onChange: (value: AgentModelOptionValue["value"]) => void;
   saving: boolean;
   hint?: string;
+  className?: string;
 }) {
   const { values } = descriptor;
   // Published value domains may mix types (e.g. [false, "auto"]); JSON keeps each typed.
@@ -338,6 +340,7 @@ export function ModelOptionSelect({
       disabled={saving}
       placeholder="Choose…"
       {...(hint ? { hint } : {})}
+      {...(className ? { className } : {})}
     />
   );
 }

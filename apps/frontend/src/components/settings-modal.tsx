@@ -3,31 +3,33 @@ import { Link } from "@tanstack/react-router";
 import {
   AppWindow,
   BotMessageSquare,
-  MessagesSquare,
   ImageIcon,
   Keyboard,
+  Lock,
   MonitorSmartphone,
+  MessagesSquare,
+  Palette,
   Plug,
+  RadioTower,
   Search,
-  SlidersHorizontal,
   Sparkle,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { KeyboardSettings } from "./keyboard-settings.tsx";
-import { AccessSettings } from "./access-settings.tsx";
-import { ApplicationSettings } from "./application-settings.tsx";
-import { GeneralSettings } from "./general-settings.tsx";
+import { AccessSettings, DeviceAccessProvider, usePendingDeviceCount } from "./access-settings.tsx";
+import { AppearanceSettings } from "./appearance-settings.tsx";
+import { DesktopAppSettings } from "./desktop-app-settings.tsx";
 import { RunImageSettings } from "./run-image-settings.tsx";
 import { RunTitleSettings } from "./run-title-settings.tsx";
 import { ChatModelSettings } from "./chat-model-settings.tsx";
 import { ChatDiscordSettings } from "./chat-discord-settings.tsx";
+import { useChatModelAttention, useDiscordAttention } from "../chat-control-attention.ts";
+import { StudioLink } from "./app-link.tsx";
 import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
-import { ThemeColorsNote } from "./theme-color-settings.tsx";
 import { RuntimeSettings } from "../routes/runtime.tsx";
-import { reportingSummary, useReportingState } from "../reporting-state.tsx";
-import { useChatModelAttention, useDiscordAttention } from "../chat-control-attention.ts";
+import { reportingTargetsMarker, useReportingState } from "../reporting-state.tsx";
 import { SettingsPanel } from "./screen-layout.tsx";
 import { ConnectionSettingsPanel } from "../routes/connection.tsx";
 import {
@@ -48,176 +50,117 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { WorkspaceDialogHeader } from "./workspace-dialog-header.tsx";
 
-const settingsGroups = ["SETTINGS", "CHAT CONTROL", "STORAGE"] as const;
-type SettingsGroup = (typeof settingsGroups)[number];
+type ClientScope = ReturnType<typeof useClientScope>;
+
+/** Settings are grouped by whose settings they are: the whole Factory, its Runs or this device. */
+const settingsGroups = [
+  { id: "factory", label: "Factory" },
+  { id: "runs", label: "Runs" },
+  { id: "device", label: "This device" },
+] as const;
 
 type SettingsSection = {
   tab: SettingsSelection["tab"];
-  title: string;
+  label: string;
   icon: LucideIcon;
-  /** The nav group the section is listed under. */
-  group: SettingsGroup;
-  /** Extra words the nav search matches besides the title. */
-  keywords: readonly string[];
+  group: (typeof settingsGroups)[number]["id"];
+  /** Where the section applies; absent sections are not listed at all. */
+  visibility?: "desktop" | "host";
+  /** Changed only on the Factory host; other clients see it locked and read-only. */
+  managedOnHost?: boolean;
+  content: () => ReactNode;
 };
 
-const connectionSection: SettingsSection = {
-  tab: "connection",
-  title: "T3 connection",
-  icon: Plug,
-  group: "SETTINGS",
-  keywords: ["connection", "address", "endpoint", "authorization", "version", "recheck"],
-};
+/** Settings sections in nav order; Flows and Agents live in Studio. */
+const settingsSections: readonly SettingsSection[] = [
+  {
+    tab: "connection",
+    label: "T3 connection",
+    icon: Plug,
+    group: "factory",
+    content: () => <ConnectionSettingsPanel />,
+  },
+  {
+    tab: "agent-reporting",
+    label: "Agent reporting",
+    icon: RadioTower,
+    group: "factory",
+    content: () => <RuntimeSettings />,
+  },
+  {
+    tab: "devices",
+    label: "Devices & access",
+    icon: MonitorSmartphone,
+    group: "factory",
+    visibility: "host",
+    content: () => <AccessSettings />,
+  },
+  {
+    tab: "chat-model",
+    label: "Language model",
+    icon: BotMessageSquare,
+    group: "factory",
+    visibility: "host",
+    content: () => <ChatModelSettings />,
+  },
+  {
+    tab: "chat-discord",
+    label: "Discord",
+    icon: MessagesSquare,
+    group: "factory",
+    visibility: "host",
+    content: () => <ChatDiscordSettings />,
+  },
+  {
+    tab: "run-titles",
+    label: "Run titles",
+    icon: Sparkle,
+    group: "runs",
+    managedOnHost: true,
+    content: () => <RunTitleSettings />,
+  },
+  {
+    tab: "run-images",
+    label: "Run images",
+    icon: ImageIcon,
+    group: "runs",
+    content: () => <RunImageSettings />,
+  },
+  {
+    tab: "appearance",
+    label: "Appearance",
+    icon: Palette,
+    group: "device",
+    content: () => <AppearanceSettings />,
+  },
+  {
+    tab: "keyboard",
+    label: "Keyboard shortcuts",
+    icon: Keyboard,
+    group: "device",
+    content: () => <KeyboardSettings />,
+  },
+  {
+    tab: "desktop",
+    label: "Desktop app",
+    icon: AppWindow,
+    group: "device",
+    visibility: "desktop",
+    content: () => <DesktopAppSettings />,
+  },
+];
+const defaultSection = settingsSections[0]!;
 
-/** Settings sections in nav order; Settings holds connection and reporting (Agents live in Studio). */
-const reportingSection: SettingsSection = {
-  tab: "runtime",
-  title: "Agent reporting",
-  icon: Plug,
-  group: "SETTINGS",
-  keywords: ["MCP", "Codex", "Claude", "install"],
-};
-const keyboardSection: SettingsSection = {
-  tab: "keyboard",
-  title: "Keyboard shortcuts",
-  icon: Keyboard,
-  group: "SETTINGS",
-  keywords: ["keys", "bindings", "hotkeys", "commands", "palette", "zoom"],
-};
-const accessSection: SettingsSection = {
-  tab: "access",
-  title: "Devices & access",
-  icon: MonitorSmartphone,
-  group: "SETTINGS",
-  keywords: ["remote", "clients", "approve", "revoke", "LAN", "Tailscale", "certificate"],
-};
-const generalSection: SettingsSection = {
-  tab: "general",
-  title: "General",
-  icon: SlidersHorizontal,
-  group: "SETTINGS",
-  keywords: ["menu bar", "icon", "tray", "macOS", "appearance"],
-};
-const applicationSection: SettingsSection = {
-  tab: "application",
-  title: "Application",
-  icon: AppWindow,
-  group: "SETTINGS",
-  keywords: [
-    "appearance",
-    "theme",
-    "light",
-    "dark",
-    "role",
-    "server",
-    "client",
-    "login",
-    "startup",
-    "updates",
-    "channel",
-    "beta",
-  ],
-};
-
-const runTitlesSection: SettingsSection = {
-  tab: "run-titles",
-  title: "Run titles",
-  icon: Sparkle,
-  group: "SETTINGS",
-  keywords: ["generate", "generated", "title", "name", "model", "provider"],
-};
-
-const runImagesSection: SettingsSection = {
-  tab: "run-images",
-  title: "Run images",
-  icon: ImageIcon,
-  group: "STORAGE",
-  keywords: ["storage", "disk", "space", "screenshots", "attachments", "delete", "files"],
-};
-
-const chatModelSection: SettingsSection = {
-  tab: "chat-model",
-  title: "Language model",
-  icon: BotMessageSquare,
-  group: "CHAT CONTROL",
-  keywords: [
-    "chat control",
-    "chat",
-    "bot",
-    "LLM",
-    "AI SDK",
-    "OpenAI",
-    "Anthropic",
-    "base URL",
-    "key",
-    "test",
-  ],
-};
-
-const chatDiscordSection: SettingsSection = {
-  tab: "chat-discord",
-  title: "Discord",
-  icon: MessagesSquare,
-  group: "CHAT CONTROL",
-  keywords: [
-    "chat control",
-    "chat",
-    "bot",
-    "Discord",
-    "application",
-    "token",
-    "public key",
-    "Gateway",
-    "check",
-    "invite",
-    "access",
-    "allowed users",
-    "channels",
-    "on",
-    "off",
-    "reset",
-  ],
-};
-
-/** Approvals and Chat control exist only on the host panel; General only in the desktop app. */
-function useSections(): readonly SettingsSection[] {
-  const scope = useClientScope();
-  return [
-    connectionSection,
-    reportingSection,
-    keyboardSection,
-    ...(scope === "host" ? [accessSection] : []),
-    ...(desktopBridge() ? [generalSection] : []),
-    applicationSection,
-    runTitlesSection,
-    ...(scope === "host" ? [chatModelSection, chatDiscordSection] : []),
-    runImagesSection,
-  ];
+function sectionApplies(section: SettingsSection, scope: ClientScope) {
+  if (section.visibility === "host") return scope === "host";
+  if (section.visibility === "desktop") return !!desktopBridge();
+  return true;
 }
 
 function matchingSections(sections: readonly SettingsSection[], query: string) {
   const needle = query.trim().toLowerCase();
   if (!needle) return sections;
-  return sections.filter((section) =>
-    [section.title, ...section.keywords].some((text) => text.toLowerCase().includes(needle)),
-  );
-}
-
-const sectionContent: Record<SettingsSelection["tab"], () => ReactNode> = {
-  connection: () => <ConnectionSettingsPanel />,
-  runtime: () => <RuntimeSettings />,
-  keyboard: () => <KeyboardSettings />,
-  access: () => <AccessSettings />,
-  general: () => <GeneralSettings />,
-  application: () => <ApplicationSettings appearanceNote={<ThemeColorsNote />} />,
-  "run-titles": () => <RunTitleSettings />,
-  "run-images": () => <RunImageSettings />,
-  "chat-model": () => <ChatModelSettings />,
-  "chat-discord": () => <ChatDiscordSettings />,
-};
-
-function SectionContent({ tab }: { tab: SettingsSelection["tab"] }) {
-  return sectionContent[tab]();
+  return sections.filter((section) => section.label.toLowerCase().includes(needle));
 }
 
 /** Figma Settings/ModalShell: breadcrumb header, section nav and the selected section's pane. */
@@ -225,12 +168,13 @@ export function SettingsModal() {
   const openSettings = useSettingsNavigation();
   const [query, setQuery] = useState("");
   const selectedTab = useSettings()?.tab;
-  const sections = useSections();
-  const current = sections.find((section) => section.tab === selectedTab) ?? connectionSection;
+  const scope = useClientScope();
+  const sections = settingsSections.filter((section) => sectionApplies(section, scope));
+  const current = sections.find((section) => section.tab === selectedTab) ?? defaultSection;
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const close = () => void openSettings(undefined);
-  return (
+  const dialog = (
     <Dialog
       open
       onOpenChange={(open) => {
@@ -249,8 +193,8 @@ export function SettingsModal() {
           content.current?.focus();
         }}
         onEscapeKeyDown={(event) => {
-          // Esc in a filled nav search clears it; anywhere else it closes Settings.
-          if (query && event.target === search.current) {
+          // While the nav search is filled, Esc clears it first; the next Esc closes Settings.
+          if (query) {
             event.preventDefault();
             setQuery("");
           }
@@ -258,8 +202,8 @@ export function SettingsModal() {
       >
         <WorkspaceDialogHeader
           title="Settings"
-          section={current.title}
-          description="Configure T3 connection, Agent reporting, keyboard shortcuts, device access, appearance, the desktop application, Run title generation, Chat control and stored Run images."
+          section={current.label}
+          description="Settings for the whole Factory, its Runs and this device."
           onClose={close}
         />
         <div className="flex min-h-0 flex-1 max-sm:flex-col">
@@ -270,13 +214,12 @@ export function SettingsModal() {
             searchRef={search}
             onQueryChange={setQuery}
           />
-          <SettingsPanel className="min-w-0 flex-1 max-sm:px-4">
-            <SectionContent tab={current.tab} />
-          </SettingsPanel>
+          <SettingsPanel className="min-w-0 flex-1 max-sm:px-4">{current.content()}</SettingsPanel>
         </div>
       </DialogContent>
     </Dialog>
   );
+  return scope === "host" ? <DeviceAccessProvider>{dialog}</DeviceAccessProvider> : dialog;
 }
 
 function SettingsNav({
@@ -298,12 +241,15 @@ function SettingsNav({
       <SettingsSearchField inputRef={searchRef} value={query} onChange={onQueryChange} />
       <nav aria-label="Settings sections" className="grid gap-0.5">
         {settingsGroups.map((group) => {
-          const grouped = visible.filter((section) => section.group === group);
+          const grouped = visible.filter((section) => section.group === group.id);
           if (grouped.length === 0) return null;
           return (
-            <div key={group} role="group" aria-label={group} className="grid gap-0.5">
-              <p className="pt-3 pb-1 pl-2 text-2xs font-semibold tracking-section text-subtle-foreground">
-                {group}
+            <div key={group.id} role="group" aria-label={group.label} className="grid gap-0.5">
+              <p
+                aria-hidden
+                className="pt-3 pb-1 pl-2 text-2xs font-semibold tracking-section text-subtle-foreground uppercase"
+              >
+                {group.label}
               </p>
               {grouped.map((section) => (
                 <SettingsNavItem
@@ -322,21 +268,44 @@ function SettingsNav({
         )}
       </nav>
       <div className="mt-auto grid gap-0.5 pl-2 text-2xs tracking-label text-muted-foreground max-sm:hidden">
-        <p>Flows and Agents are edited in Studio.</p>
+        <p>
+          Flows and Agents live in <StudioLink selection={{ tab: "flows" }}>Studio</StudioLink>.
+        </p>
         <p>Opened from ⚙ in the Run sidebar · Esc closes</p>
       </div>
     </aside>
   );
 }
 
+/** Why a section needs action, from data Settings already reads; undefined when it does not. */
+function useSectionAttention(tab: SettingsSection["tab"]) {
+  const reportingMarker = reportingTargetsMarker(useReportingState());
+  const pendingDevices = usePendingDeviceCount();
+  const discordAttention = useDiscordAttention(tab === "chat-discord");
+  const modelAttention = useChatModelAttention(tab === "chat-model");
+  if (tab === "agent-reporting") return reportingMarker;
+  if ((tab === "chat-discord" && discordAttention) || (tab === "chat-model" && modelAttention))
+    return "needs attention";
+  if (tab === "devices" && pendingDevices > 0)
+    return `${pendingDevices} ${pendingDevices === 1 ? "device" : "devices"} waiting for approval`;
+  return undefined;
+}
+
 function SettingsNavItem({ section, active }: { section: SettingsSection; active: boolean }) {
   const options = useSettingsOptions({ tab: section.tab });
-  const state = useNavItemState(section.tab);
+  const { presentation } = useConnectionState();
+  const status = connectionStatusLabel(presentation);
+  const attention = useSectionAttention(section.tab);
+  const scope = useClientScope();
+  const locked = section.managedOnHost === true && scope === "remote";
+  let marker = attention;
+  if (section.tab === "connection") marker = status;
+  else if (!attention && locked) marker = "Managed on the Factory host";
   const Icon = section.icon;
   return (
     <Link
       {...options}
-      aria-label={state.label ? `${section.title}, ${state.label}` : section.title}
+      aria-label={marker ? `${section.label}, ${marker}` : section.label}
       aria-current={active ? "page" : undefined}
       className={cn(
         "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -344,38 +313,19 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
       )}
     >
       <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
-      <span className="min-w-0 flex-1 truncate">{section.title}</span>
-      {state.indicator}
+      <span className="min-w-0 flex-1 truncate">{section.label}</span>
+      {section.tab === "connection" && (
+        <ConnectionStateDot presentation={presentation} label={status} />
+      )}
+      {attention && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />}
+      {locked && (
+        <Lock aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" strokeWidth={1.5} />
+      )}
     </Link>
   );
 }
 
-const attentionDot = <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />;
-
-/** What a navigation item adds to its name and shows after it: a status or an attention dot. */
-function useNavItemState(tab: SettingsSelection["tab"]): { label: string; indicator: ReactNode } {
-  const { presentation } = useConnectionState();
-  const reporting = reportingSummary(useReportingState());
-  // The Chat control items exist only on the host, so only the host reads their state.
-  const discordAttention = useDiscordAttention(tab === "chat-discord");
-  const modelAttention = useChatModelAttention(tab === "chat-model");
-  if (tab === "connection") {
-    const status = connectionStatusLabel(presentation);
-    return {
-      label: status,
-      indicator: <ConnectionStateDot presentation={presentation} label={status} />,
-    };
-  }
-  if (tab === "runtime" && reporting.state === "attention")
-    return { label: reporting.label, indicator: attentionDot };
-  if (tab === "chat-discord" && discordAttention)
-    return { label: "needs attention", indicator: attentionDot };
-  if (tab === "chat-model" && modelAttention)
-    return { label: "needs attention", indicator: attentionDot };
-  return { label: "", indicator: null };
-}
-
-/** Nav search over section titles and keywords; Escape in the field clears it. */
+/** Nav search over section labels; Escape in the field clears it. */
 function SettingsSearchField({
   inputRef,
   value,

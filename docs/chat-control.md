@@ -1,8 +1,8 @@
 # Chat control
 
-Chat control is administered only on the Factory host, in the **Settings → Chat control** group.
+Chat control is administered only on the Factory host, in the **Factory** group of Settings.
 It is Off on every new and upgraded installation. This document describes what is implemented
-today: the **Language model** and **Discord** pages. Approved clients do not see the group or its
+today: the **Language model** and **Discord** pages. Approved clients do not see these pages or their
 search entries, and the server refuses its operations on the approved-client listener with
 `host_only`, whether the client reads, saves, tests or checks. The local browser and the desktop
 server administer it through the same host operations.
@@ -579,7 +579,7 @@ unproven, Factory asks again with the same nonce at most twice, within one minut
 request. A returned message ID reconciles that create. A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
 window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
-and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Chat control → Discord lists
+and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Discord lists
 these current problems, with their destination and time, and confirmed actions whose outcome is
 still being reconciled. Retry of an unknown message first warns that Discord may show it twice;
 each Retry is one attempt, never repeats the action, and a new unknown outcome needs a new choice.
