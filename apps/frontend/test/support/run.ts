@@ -1,4 +1,4 @@
-import type { RunAttention, RunBlock, RunDetail } from "@t3-factory/contracts";
+import type { RunAttention, RunBlock, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 
 /** A pending attention matter of `kind` on `blockId`. */
 export const attention = (blockId: string, kind: RunAttention["kind"]): RunAttention => ({
@@ -112,5 +112,32 @@ export function runDetail(): RunDetail {
     intents: [],
     rootWork: [],
     events: [event(1), event(2)],
+  };
+}
+
+/** The navigation entry of an Active Run that is neither Snoozed nor settling. */
+export function runEntry(): RunNavigationEntry {
+  return {
+    id: "run",
+    number: 1,
+    title: "Run",
+    titleProvenance: "automatic",
+    titleGeneration: null,
+    createdAt: "2026-11-08T00:00:00Z",
+    creationKey: "run",
+    lastActivityAt: "2026-11-08T00:00:00Z",
+    flowName: "Flow",
+    repositories: [],
+    project: {
+      id: "project",
+      title: "Project",
+      workspaceRoot: "/project",
+      availability: "available",
+    },
+    lifecycle: "active",
+    settlement: null,
+    blocks: [],
+    presentation: { snoozed: false, woke: false },
+    attention: { needsInput: false, problem: false, matters: [] },
   };
 }

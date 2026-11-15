@@ -1,5 +1,6 @@
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { RunSidebar } from "./run-sidebar.tsx";
+import { RunActionsHost } from "./run-actions.tsx";
 import { SidebarFooter } from "./sidebar-footer.tsx";
 import { SettingsModal } from "./settings-modal.tsx";
 import { Page, PageHeader } from "./page.tsx";
@@ -41,6 +42,7 @@ function AppShell() {
       </div>
       {settings && <SettingsModal />}
       {studio && <StudioModal selection={studio} />}
+      <RunActionsHost />
     </div>
   );
 }
