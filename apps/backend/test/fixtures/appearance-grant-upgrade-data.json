@@ -1,0 +1,645 @@
+{
+  "format": 1,
+  "sourceCommit": "904f66d997bc2c891d86889d70adbc04bc6bb75a",
+  "schema": [
+    "CREATE TABLE \"effect_sql_migrations\" (\n  migration_id integer PRIMARY KEY NOT NULL,\n  created_at datetime NOT NULL DEFAULT current_timestamp,\n  name VARCHAR(255) NOT NULL\n)",
+    "CREATE TABLE flows (\n  id TEXT PRIMARY KEY NOT NULL,\n  created_at TEXT NOT NULL, removed_at TEXT)",
+    "CREATE TABLE t3_authorization_contexts (\n  id TEXT PRIMARY KEY,\n  endpoint TEXT NOT NULL,\n  authorization_identity TEXT NOT NULL,\n  environment_id TEXT NOT NULL,\n  created_at TEXT NOT NULL\n)",
+    "CREATE TABLE t3_connection (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  endpoint TEXT NOT NULL,\n  context_id TEXT REFERENCES t3_authorization_contexts(id)\n)",
+    "CREATE TABLE agents (\n  id TEXT PRIMARY KEY NOT NULL,\n  created_at TEXT NOT NULL, removed_at TEXT)",
+    "CREATE TABLE projects (\n  id TEXT PRIMARY KEY,\n  endpoint TEXT NOT NULL,\n  environment_id TEXT NOT NULL,\n  project_id TEXT NOT NULL,\n  title TEXT NOT NULL,\n  workspace_root TEXT NOT NULL,\n  availability TEXT NOT NULL,\n  observed_at TEXT NOT NULL, project_icon_json TEXT, favicon_path TEXT,\n  UNIQUE(endpoint, environment_id, project_id)\n)",
+    "CREATE TABLE project_selection (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  project_id TEXT REFERENCES projects(id)\n)",
+    "CREATE TABLE runner_owner (\n  singleton INTEGER PRIMARY KEY CHECK(singleton=1),\n  token TEXT NOT NULL,\n  pid INTEGER NOT NULL,\n  acquired_at TEXT NOT NULL\n)",
+    "CREATE TABLE tasks (\n  id TEXT PRIMARY KEY,\n  project_id TEXT NOT NULL REFERENCES projects(id),\n  title TEXT NOT NULL,\n  created_at TEXT NOT NULL\n)",
+    "CREATE TABLE run_blocks (\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  name TEXT NOT NULL,\n  state TEXT NOT NULL DEFAULT 'not-started',\n  thread_id TEXT,\n  execution_id TEXT,\n  link TEXT,\n  engine_status TEXT,\n  report_status TEXT,\n  pending_request_count INTEGER,\n  observed_at TEXT,\n  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT,\n  PRIMARY KEY(run_id,block_id),\n  UNIQUE(run_id,thread_id)\n)",
+    "CREATE TABLE operation_intents (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  kind TEXT NOT NULL,\n  cause TEXT NOT NULL,\n  target_json TEXT NOT NULL,\n  request_key TEXT NOT NULL UNIQUE,\n  payload_json TEXT,\n  fingerprint TEXT NOT NULL,\n  context_id TEXT NOT NULL REFERENCES t3_authorization_contexts(id),\n  retry_scope TEXT,\n  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','reserved','uncertain','acknowledged','cancelled')),\n  reserved_by TEXT,\n  reserved_at TEXT,\n  result_json TEXT,\n  problem TEXT,\n  reconciled_at TEXT, report_id TEXT REFERENCES runtime_reports(id), source_block_id TEXT, exit_id TEXT, occurrence_id TEXT REFERENCES human_occurrences(id), recovery_attempt INTEGER NOT NULL DEFAULT 0, recovery_not_before TEXT, binding_id TEXT REFERENCES run_thread_bindings(id), wait_arrival_id TEXT REFERENCES wait_arrivals(id), origin_activation_id TEXT REFERENCES run_activations(id),\n  UNIQUE(run_id,cause),\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE run_events (\n  sequence INTEGER PRIMARY KEY AUTOINCREMENT,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT,\n  kind TEXT NOT NULL,\n  source_key TEXT NOT NULL,\n  observed_at TEXT NOT NULL, execution_id TEXT, cause_id TEXT, source_at TEXT, engine_status TEXT, binding_id TEXT REFERENCES run_thread_bindings(id),\n  UNIQUE(run_id,source_key)\n)",
+    "CREATE TABLE run_attention (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  execution_id TEXT NOT NULL,\n  kind TEXT NOT NULL,\n  source_key TEXT NOT NULL,\n  native_request_id TEXT,\n  occurrence_id TEXT,\n  appeared_at TEXT NOT NULL,\n  settled_at TEXT,\n  settlement_reason TEXT, message TEXT, binding_id TEXT REFERENCES run_thread_bindings(id),\n  UNIQUE(run_id,source_key),\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE run_closures (\n  run_id TEXT PRIMARY KEY REFERENCES runs(id),\n  outcome TEXT NOT NULL CHECK(outcome IN ('finished','stopped')),\n  generation INTEGER NOT NULL,\n  confirmed_at TEXT NOT NULL,\n  frontier_json TEXT NOT NULL\n, root_frontier_json TEXT)",
+    "CREATE TABLE run_presentation (\n  run_id TEXT PRIMARY KEY REFERENCES runs(id),\n  snoozed INTEGER NOT NULL DEFAULT 0 CHECK(snoozed IN (0,1)),\n  woke INTEGER NOT NULL DEFAULT 0 CHECK(woke IN (0,1)),\n  CHECK(NOT (snoozed=1 AND woke=1))\n)",
+    "CREATE TABLE run_snooze_attention (\n  run_id TEXT NOT NULL REFERENCES run_presentation(run_id),\n  attention_id TEXT NOT NULL REFERENCES run_attention(id),\n  PRIMARY KEY(run_id,attention_id)\n)",
+    "CREATE TABLE client_grants (\n  id TEXT PRIMARY KEY,\n  label TEXT NOT NULL,\n  kind TEXT NOT NULL CHECK (kind IN ('desktop', 'browser')),\n  status TEXT NOT NULL CHECK (status IN ('pending', 'approved', 'denied', 'revoked')),\n  secret_hash TEXT NOT NULL,\n  verification_code TEXT NOT NULL,\n  requested_at TEXT NOT NULL,\n  decided_at TEXT,\n  last_seen_at TEXT\n)",
+    "CREATE TABLE \"activation_messages\" (\n  activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),\n  request_key TEXT NOT NULL UNIQUE,\n  input_fingerprint TEXT NOT NULL,\n  state TEXT NOT NULL DEFAULT 'planned' CHECK(state='planned')\n, accepted_json TEXT)",
+    "CREATE TABLE \"run_thread_bindings\" (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  environment_id TEXT NOT NULL,\n  thread_id TEXT NOT NULL,\n  role TEXT NOT NULL CHECK(role IN ('direct-worker','coordinator','worker','descendant')),\n  parent_binding_id TEXT REFERENCES run_thread_bindings(id), link TEXT,\n  UNIQUE(run_id,environment_id,thread_id),\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE \"run_executions\" (\n  run_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  thread_id TEXT NOT NULL,\n  execution_id TEXT NOT NULL,\n  engine_status TEXT,\n  report_status TEXT,\n  observed_at TEXT, ordinal INTEGER, source_at TEXT, problem TEXT, native_request_count INTEGER, binding_id TEXT REFERENCES run_thread_bindings(id), activation_id TEXT REFERENCES run_activations(id),\n  PRIMARY KEY(run_id,thread_id,execution_id),\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE \"t3_thread_settlements\" (\n  run_id TEXT NOT NULL,\n  thread_id TEXT NOT NULL,\n  execution_id TEXT NOT NULL,\n  attempted_at TEXT NOT NULL,\n  PRIMARY KEY(run_id,thread_id,execution_id),\n  FOREIGN KEY(run_id,thread_id,execution_id) REFERENCES run_executions(run_id,thread_id,execution_id)\n)",
+    "CREATE TABLE \"repeated_visits\" (\n  activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),\n  original_activation_id TEXT NOT NULL REFERENCES run_activations(id))",
+    "CREATE TABLE run_coordinators (\n  run_id TEXT PRIMARY KEY REFERENCES runs(id),\n  selection_json TEXT NOT NULL,\n  request_key TEXT NOT NULL UNIQUE,\n  payload_json TEXT,\n  fingerprint TEXT NOT NULL,\n  retry_scope TEXT,\n  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','reserved','uncertain','acknowledged','cancelled')),\n  reserved_by TEXT,\n  reserved_at TEXT,\n  thread_id TEXT UNIQUE,\n  execution_id TEXT,\n  link TEXT,\n  engine_status TEXT,\n  problem TEXT,\n  created_at TEXT NOT NULL,\n  acknowledged_at TEXT\n, instruction_version INTEGER NOT NULL DEFAULT 0 CHECK(instruction_version IN (0,1)), freshness TEXT NOT NULL DEFAULT 'unknown', observed_at TEXT, pending_request_count INTEGER, queued_count INTEGER)",
+    "CREATE TABLE run_coordinator_commands (\n  activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),\n  run_id TEXT NOT NULL REFERENCES run_coordinators(run_id),\n  request_key TEXT NOT NULL UNIQUE,\n  invocation_json TEXT NOT NULL,\n  invocation_fingerprint TEXT NOT NULL,\n  plan_json TEXT NOT NULL,\n  send_key TEXT NOT NULL UNIQUE,\n  send_json TEXT,\n  send_fingerprint TEXT,\n  retry_scope TEXT,\n  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','reserved','uncertain','issued','accepted')),\n  parent_execution_id TEXT,\n  accepted_json TEXT,\n  thread_id TEXT UNIQUE,\n  execution_id TEXT,\n  problem TEXT,\n  intent_id TEXT REFERENCES operation_intents(id), cancelled_at TEXT)",
+    "CREATE TABLE coordinator_question_replies (\n  attention_id TEXT PRIMARY KEY REFERENCES run_attention(id),\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  request_id TEXT NOT NULL,\n  message TEXT NOT NULL,\n  intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),\n  activation_id TEXT NOT NULL REFERENCES run_activations(id),\n  binding_id TEXT NOT NULL REFERENCES run_thread_bindings(id),\n  UNIQUE(run_id,request_id)\n)",
+    "CREATE TABLE run_root_obligations (\n  run_id TEXT NOT NULL REFERENCES run_coordinators(run_id),\n  thread_id TEXT NOT NULL,\n  kind TEXT NOT NULL CHECK(kind IN ('member','execution','native','remote','command','followup')),\n  reference TEXT NOT NULL,\n  PRIMARY KEY(run_id,thread_id,kind,reference)\n)",
+    "CREATE TABLE run_root_cancelled_controls (\n  run_id TEXT NOT NULL REFERENCES run_coordinators(run_id),\n  source_execution_id TEXT NOT NULL,\n  PRIMARY KEY(run_id,source_execution_id)\n)",
+    "CREATE TABLE run_control_recoveries (\n run_id TEXT NOT NULL REFERENCES run_coordinators(run_id),\n source_execution_id TEXT NOT NULL,\n thread_id TEXT NOT NULL,\n activation_id TEXT REFERENCES run_coordinator_commands(activation_id),\n request_key TEXT NOT NULL UNIQUE,\n payload_json TEXT NOT NULL,\n retry_scope TEXT,\n state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','reserved','uncertain','acknowledged')),\n acknowledgement_json TEXT,\n completed_execution_id TEXT,\n PRIMARY KEY(run_id,source_execution_id)\n)",
+    "CREATE TABLE \"run_root_stop_intents\" (\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  cause TEXT NOT NULL,\n  thread_id TEXT NOT NULL,\n  payload_json TEXT NOT NULL,\n  state TEXT NOT NULL CHECK(state IN ('pending','reserved','uncertain','acknowledged')),\n  PRIMARY KEY(run_id,cause)\n)",
+    "CREATE TABLE flow_revisions (\n  id TEXT PRIMARY KEY NOT NULL,\n  flow_id TEXT NOT NULL REFERENCES flows(id),\n  revision INTEGER NOT NULL CHECK (revision > 0),\n  name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),\n  input_x REAL NOT NULL,\n  input_y REAL NOT NULL,\n  saved_at TEXT NOT NULL, workspace_mode TEXT NOT NULL DEFAULT 'checkout'\n  CHECK (workspace_mode IN ('checkout', 'worktree')), workspace_base_ref TEXT\n  CHECK (workspace_base_ref IS NULL\n    OR (workspace_mode = 'worktree' AND length(workspace_base_ref) BETWEEN 1 AND 255)),\n  UNIQUE (flow_id, revision)\n)",
+    "CREATE TABLE flow_revision_exits (\n  flow_revision_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  exit_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  name TEXT NOT NULL,\n  description TEXT NOT NULL,\n  message_required INTEGER NOT NULL CHECK (message_required IN (0, 1)),\n  PRIMARY KEY (flow_revision_id, block_id, exit_id),\n  UNIQUE (flow_revision_id, block_id, ordinal),\n  FOREIGN KEY (flow_revision_id, block_id) REFERENCES flow_revision_blocks(flow_revision_id, block_id)\n)",
+    "CREATE TABLE flow_revision_input_targets (\n  flow_revision_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  block_id TEXT NOT NULL,\n  PRIMARY KEY (flow_revision_id, ordinal),\n  UNIQUE (flow_revision_id, block_id),\n  FOREIGN KEY (flow_revision_id, block_id) REFERENCES flow_revision_blocks(flow_revision_id, block_id)\n)",
+    "CREATE TABLE agent_revisions (\n  id TEXT PRIMARY KEY NOT NULL,\n  agent_id TEXT NOT NULL REFERENCES agents(id),\n  revision INTEGER NOT NULL CHECK (revision > 0),\n  name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),\n  prompt TEXT NOT NULL CHECK (length(prompt) <= 120000),\n  environment_id TEXT NOT NULL CHECK (length(trim(environment_id)) > 0),\n  provider_instance_id TEXT NOT NULL CHECK (length(trim(provider_instance_id)) > 0),\n  model_id TEXT NOT NULL CHECK (length(trim(model_id)) > 0),\n  model_options_json TEXT NOT NULL CHECK (json_valid(model_options_json)),\n  saved_at TEXT NOT NULL,\n  UNIQUE (agent_id, revision)\n)",
+    "CREATE TABLE run_agent_revisions (\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  agent_id TEXT NOT NULL,\n  agent_revision_id TEXT NOT NULL,\n  PRIMARY KEY (run_id, agent_id),\n  FOREIGN KEY (agent_id, agent_revision_id) REFERENCES agent_revisions(agent_id, id)\n)",
+    "CREATE TABLE runs (\n  id TEXT PRIMARY KEY,\n  task_id TEXT NOT NULL REFERENCES tasks(id),\n  request_id TEXT NOT NULL UNIQUE,\n  request_fingerprint TEXT NOT NULL,\n  input TEXT NOT NULL,\n  context_id TEXT NOT NULL REFERENCES t3_authorization_contexts(id),\n  workspace_root TEXT NOT NULL,\n  gate_open INTEGER NOT NULL DEFAULT 1 CHECK(gate_open IN (0,1)),\n  generation INTEGER NOT NULL DEFAULT 0,\n  started_at TEXT NOT NULL,\n  title TEXT NOT NULL DEFAULT '',\n  number INTEGER,\n  created_at TEXT NOT NULL DEFAULT '',\n  creation_key TEXT NOT NULL DEFAULT '',\n  flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id)\n, settled_at TEXT, archived_at TEXT, block_settlement_enabled INTEGER NOT NULL DEFAULT 0 CHECK(block_settlement_enabled IN (0,1)), prompt_segments_json TEXT)",
+    "CREATE TABLE run_activations (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  cause TEXT NOT NULL,\n  phase TEXT NOT NULL DEFAULT 'delegating' CHECK(phase IN ('delegating','waiting-worker','assessing','reported','finished')),\n  created_at TEXT NOT NULL,\n  problem TEXT,\n  agent_revision_id TEXT NOT NULL REFERENCES agent_revisions(id),\n  UNIQUE(run_id,cause),\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE runtime_reports (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  execution_id TEXT,\n  fingerprint TEXT NOT NULL,\n  status TEXT NOT NULL CHECK(status IN ('waiting','finished')),\n  exit_id TEXT,\n  recipients_json TEXT NOT NULL,\n  pending_message TEXT,\n  acknowledgement_json TEXT NOT NULL,\n  accepted_at TEXT NOT NULL,\n  completion_eligible_at TEXT,\n  activation_id TEXT REFERENCES run_activations(id),\n  result_message TEXT,\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE result_releases (\n  report_id TEXT PRIMARY KEY REFERENCES runtime_reports(id),\n  activation_id TEXT NOT NULL REFERENCES run_activations(id),\n  generation INTEGER NOT NULL,\n  context_id TEXT NOT NULL,\n  released_at TEXT NOT NULL\n)",
+    "CREATE TABLE \"report_recoveries\" (\n  intent_id TEXT PRIMARY KEY REFERENCES operation_intents(id),\n  attention_id TEXT UNIQUE REFERENCES run_attention(id),\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  source_execution_id TEXT NOT NULL,\n  requested_at TEXT NOT NULL,\n  settled_at TEXT,\n  thread_scope TEXT,\n  FOREIGN KEY(run_id,thread_scope,source_execution_id) REFERENCES run_executions(run_id,thread_id,execution_id)\n)",
+    "CREATE TABLE human_occurrences (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  incoming_intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),\n  state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','answered','withdrawn','cancelled')),\n  pending_context TEXT,\n  appeared_at TEXT NOT NULL,\n  settled_at TEXT,\n  exit_id TEXT,\n  answer_fingerprint TEXT,\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE worker_repositories (\n  binding_id TEXT PRIMARY KEY NOT NULL REFERENCES run_thread_bindings(id),\n  branch TEXT,\n  updated_at TEXT NOT NULL\n)",
+    "CREATE TABLE worker_pull_requests (\n  binding_id TEXT NOT NULL REFERENCES worker_repositories(binding_id),\n  host TEXT NOT NULL,\n  repository TEXT NOT NULL,\n  number INTEGER NOT NULL CHECK (number > 0),\n  url TEXT NOT NULL,\n  state TEXT CHECK (state IN ('open', 'closed', 'merged')),\n  PRIMARY KEY (binding_id, host, repository, number)\n)",
+    "CREATE TABLE run_workspaces (\n  run_id TEXT PRIMARY KEY REFERENCES runs(id),\n  base_ref TEXT NOT NULL CHECK (length(base_ref) BETWEEN 1 AND 255),\n  planned_branch TEXT NOT NULL CHECK (length(planned_branch) > 0),\n  creator_block_id TEXT NOT NULL,\n  state TEXT NOT NULL DEFAULT 'preparing' CHECK (state IN ('preparing', 'bound', 'failed')),\n  worktree_path TEXT,\n  branch TEXT,\n  bound_at TEXT,\n  FOREIGN KEY (run_id, creator_block_id) REFERENCES run_blocks(run_id, block_id),\n  CHECK ((state = 'bound') = (worktree_path IS NOT NULL AND branch IS NOT NULL AND bound_at IS NOT NULL))\n)",
+    "CREATE TABLE staged_images (\n  sha256 TEXT PRIMARY KEY CHECK (length(sha256) = 64),\n  mime_type TEXT NOT NULL CHECK (mime_type IN ('image/png', 'image/jpeg', 'image/gif', 'image/webp')),\n  size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 10485760),\n  staged_at TEXT NOT NULL\n)",
+    "CREATE TABLE run_images (\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  image_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 1),\n  sha256 TEXT NOT NULL REFERENCES staged_images(sha256),\n  name TEXT NOT NULL,\n  mime_type TEXT NOT NULL,\n  size_bytes INTEGER NOT NULL,\n  PRIMARY KEY (run_id, ordinal),\n  UNIQUE (run_id, image_id),\n  UNIQUE (run_id, sha256)\n)",
+    "CREATE TABLE agent_revision_exits (\n  agent_revision_id TEXT NOT NULL REFERENCES agent_revisions(id),\n  exit_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),\n  description TEXT NOT NULL,\n  message_required INTEGER NOT NULL CHECK (message_required IN (0, 1)),\n  PRIMARY KEY (agent_revision_id, exit_id),\n  UNIQUE (agent_revision_id, ordinal)\n)",
+    "CREATE TABLE flow_revision_hidden_exits (\n  flow_revision_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  exit_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  PRIMARY KEY (flow_revision_id, block_id, exit_id),\n  UNIQUE (flow_revision_id, block_id, ordinal),\n  FOREIGN KEY (flow_revision_id, block_id) REFERENCES flow_revision_blocks(flow_revision_id, block_id)\n)",
+    "CREATE TABLE \"flow_revision_connections\" (\n  flow_revision_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  source_block_id TEXT NOT NULL,\n  exit_id TEXT NOT NULL,\n  target_block_id TEXT NOT NULL,\n  PRIMARY KEY (flow_revision_id, ordinal),\n  UNIQUE (flow_revision_id, source_block_id, exit_id, target_block_id),\n  FOREIGN KEY (flow_revision_id, source_block_id)\n    REFERENCES flow_revision_blocks(flow_revision_id, block_id),\n  FOREIGN KEY (flow_revision_id, target_block_id)\n    REFERENCES flow_revision_blocks(flow_revision_id, block_id)\n)",
+    "CREATE TABLE \"working_reports\" (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  activation_id TEXT NOT NULL REFERENCES run_activations(id),\n  execution_id TEXT,\n  fingerprint TEXT NOT NULL,\n  message TEXT NOT NULL,\n  acknowledgement_json TEXT NOT NULL,\n  accepted_at TEXT NOT NULL,\n  replaced_at TEXT,\n  FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)\n)",
+    "CREATE TABLE continuation_visits (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  incoming_intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),\n  kind TEXT NOT NULL CHECK (kind IN ('prompt', 'pass-through')),\n  source_block_id TEXT,\n  binding_id TEXT REFERENCES run_thread_bindings(id),\n  activation_id TEXT UNIQUE REFERENCES run_activations(id),\n  state TEXT NOT NULL CHECK (state IN ('queued', 'sent', 'forwarded', 'cancelled')),\n  arrived_at TEXT NOT NULL,\n  forwarded_at TEXT,\n  CHECK ((kind = 'prompt') = (activation_id IS NOT NULL)),\n  FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id)\n)",
+    "CREATE TABLE \"flow_revision_blocks\" (\n  flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),\n  block_id TEXT NOT NULL,\n  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),\n  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait')),\n  name TEXT NOT NULL,\n  -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.\n  agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),\n  -- The prompt a Continuation sends once per Run; empty only in a draft.\n  prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),\n  x REAL NOT NULL,\n  y REAL NOT NULL,\n  -- A Wait's duration; both are null while the draft has none. Any finite amount saves:\n  -- readiness owns the range, judged on the normalized duration.\n  wait_amount REAL,\n  wait_unit TEXT CHECK (wait_unit IS NULL OR wait_unit IN ('minutes', 'hours', 'days')),\n  CHECK ((wait_amount IS NULL) = (wait_unit IS NULL)),\n  CHECK (kind = 'wait' OR wait_amount IS NULL),\n  PRIMARY KEY (flow_revision_id, block_id),\n  UNIQUE (flow_revision_id, ordinal)\n)",
+    "CREATE TABLE wait_arrivals (\n  id TEXT PRIMARY KEY,\n  run_id TEXT NOT NULL REFERENCES runs(id),\n  block_id TEXT NOT NULL,\n  incoming_intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),\n  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'forwarded', 'cancelled')),\n  forwarded_by TEXT CHECK (forwarded_by IN ('timer', 'user')),\n  message TEXT,\n  binding_id TEXT REFERENCES run_thread_bindings(id),\n  origin_activation_id TEXT REFERENCES run_activations(id),\n  started_at TEXT NOT NULL,\n  deadline_at TEXT NOT NULL,\n  settled_at TEXT,\n  CHECK ((state = 'forwarded') = (forwarded_by IS NOT NULL)),\n  CHECK ((state = 'pending') = (settled_at IS NULL)),\n  CHECK (origin_activation_id IS NULL OR binding_id IS NOT NULL),\n  FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id)\n)",
+    "CREATE TABLE run_settlements (\n  run_id TEXT PRIMARY KEY REFERENCES runs(id),\n  requested_at TEXT NOT NULL,\n  attempt INTEGER NOT NULL CHECK (attempt >= 1),\n  attempt_owner TEXT NOT NULL,\n  attempted_at TEXT NOT NULL,\n  stop_pass_at TEXT\n)",
+    "CREATE TABLE run_settlement_workers (\n  run_id TEXT NOT NULL REFERENCES run_settlements(run_id),\n  attempt INTEGER NOT NULL CHECK (attempt >= 1),\n  thread_id TEXT NOT NULL,\n  block_id TEXT NOT NULL,\n  state TEXT NOT NULL CHECK (state IN ('stopping', 'finished', 'unresolved')),\n  problem TEXT,\n  stop_key TEXT UNIQUE,\n  stop_requested_at TEXT,\n  stop_outcome TEXT CHECK (stop_outcome IN ('acknowledged', 'failed', 'unsupported')),\n  stop_problem TEXT,\n  PRIMARY KEY (run_id, attempt, thread_id),\n  FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id)\n)",
+    "CREATE TABLE appearance_snapshot (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  endpoint TEXT NOT NULL,\n  presentation TEXT NOT NULL\n)",
+    "CREATE TABLE factory_server (\n  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),\n  id TEXT NOT NULL\n)"
+  ],
+  "postDataSchema": [
+    "CREATE INDEX flows_listing ON flows (created_at DESC, id ASC)",
+    "CREATE UNIQUE INDEX one_reservation_per_run ON operation_intents(run_id) WHERE state='reserved'\n",
+    "CREATE INDEX client_grants_status ON client_grants(status, requested_at)\n",
+    "CREATE TRIGGER immutable_execution_identity BEFORE UPDATE OF run_id,block_id,thread_id,execution_id ON run_executions\nWHEN NEW.run_id IS NOT OLD.run_id OR NEW.block_id IS NOT OLD.block_id OR NEW.thread_id IS NOT OLD.thread_id OR NEW.execution_id IS NOT OLD.execution_id\nBEGIN SELECT RAISE(ABORT, 'Execution identity is immutable'); END",
+    "CREATE TRIGGER immutable_coordinator_answer BEFORE UPDATE ON coordinator_question_replies\nBEGIN SELECT RAISE(ABORT,'Coordinator answer is immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_update BEFORE UPDATE ON flow_revisions BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_delete BEFORE DELETE ON flow_revisions BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_exit_update BEFORE UPDATE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_input_target_update BEFORE UPDATE ON flow_revision_input_targets BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_input_target_delete BEFORE DELETE ON flow_revision_input_targets BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER retained_flow_delete BEFORE DELETE ON flows BEGIN SELECT RAISE(ABORT, 'Flows are removed, not deleted'); END",
+    "CREATE TRIGGER immutable_agent_revision_update BEFORE UPDATE ON agent_revisions BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END",
+    "CREATE TRIGGER immutable_agent_revision_delete BEFORE DELETE ON agent_revisions BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END",
+    "CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END",
+    "CREATE UNIQUE INDEX agent_revisions_identity ON agent_revisions(agent_id, id)\n",
+    "CREATE TRIGGER immutable_run_agent_revision_update BEFORE UPDATE ON run_agent_revisions BEGIN SELECT RAISE(ABORT, 'Run definition revisions are immutable'); END",
+    "CREATE UNIQUE INDEX runs_number_unique ON runs(number) WHERE number IS NOT NULL\n",
+    "CREATE TRIGGER immutable_run_flow_revision BEFORE UPDATE OF flow_revision_id ON runs\nBEGIN SELECT RAISE(ABORT, 'Run definition revisions are immutable'); END",
+    "CREATE TRIGGER immutable_activation_agent_revision BEFORE UPDATE OF agent_revision_id ON run_activations\nBEGIN SELECT RAISE(ABORT, 'Run definition revisions are immutable'); END",
+    "CREATE TRIGGER immutable_activation_report BEFORE UPDATE OF activation_id,result_message,execution_id,fingerprint,status,exit_id,acknowledgement_json ON runtime_reports\nWHEN OLD.activation_id IS NOT NULL\nBEGIN SELECT RAISE(ABORT, 'Activation results are immutable'); END",
+    "CREATE TRIGGER immutable_execution_membership BEFORE UPDATE OF binding_id,activation_id ON run_executions\nWHEN OLD.binding_id IS NOT NULL AND (NEW.binding_id IS NOT OLD.binding_id OR NEW.activation_id IS NOT OLD.activation_id)\nBEGIN SELECT RAISE(ABORT, 'Execution membership is immutable'); END",
+    "CREATE TRIGGER immutable_run_closure_delete BEFORE DELETE ON run_closures BEGIN SELECT RAISE(ABORT, 'Closure evidence is immutable'); END",
+    "CREATE TRIGGER immutable_run_agent_revision_delete BEFORE DELETE ON run_agent_revisions BEGIN SELECT RAISE(ABORT, 'Run definition revisions are immutable'); END",
+    "CREATE UNIQUE INDEX run_blocks_public_id ON run_blocks(public_id)\n",
+    "CREATE TRIGGER immutable_run_closure_update BEFORE UPDATE ON run_closures BEGIN SELECT RAISE(ABORT, 'Closure evidence is immutable'); END",
+    "CREATE INDEX runtime_reports_activation ON runtime_reports(activation_id)\n",
+    "CREATE INDEX result_releases_activation ON result_releases(activation_id)\n",
+    "CREATE TRIGGER wake_run_on_new_attention AFTER INSERT ON run_attention\nWHEN NEW.settled_at IS NULL\nBEGIN\n  UPDATE run_presentation SET snoozed=0,woke=1\n  WHERE run_id=NEW.run_id AND snoozed=1\n    AND NOT EXISTS(SELECT 1 FROM run_snooze_attention WHERE run_id=NEW.run_id AND attention_id=NEW.id);\nEND",
+    "CREATE TRIGGER wake_run_on_increased_native_attention AFTER UPDATE OF pending_request_count ON run_blocks\nWHEN NEW.pending_request_count > OLD.pending_request_count\nBEGIN\n  UPDATE run_presentation SET snoozed=0,woke=1\n  WHERE run_id=NEW.run_id AND snoozed=1\n    AND EXISTS(SELECT 1 FROM run_attention WHERE run_id=NEW.run_id AND block_id=NEW.block_id\n      AND kind='native-request' AND settled_at IS NULL);\nEND",
+    "CREATE INDEX run_images_sha256 ON run_images(sha256)\n",
+    "CREATE TRIGGER immutable_run_images_update BEFORE UPDATE ON run_images BEGIN SELECT RAISE(ABORT, 'Run images are immutable'); END",
+    "CREATE TRIGGER immutable_run_images_delete BEFORE DELETE ON run_images BEGIN SELECT RAISE(ABORT, 'Run images are immutable'); END",
+    "CREATE TRIGGER immutable_run_prompt_segments BEFORE UPDATE OF prompt_segments_json ON runs\nWHEN OLD.prompt_segments_json IS NOT NULL\nBEGIN SELECT RAISE(ABORT, 'Run prompt segments are immutable'); END",
+    "CREATE TRIGGER immutable_agent_revision_exit_update BEFORE UPDATE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END",
+    "CREATE TRIGGER immutable_agent_revision_exit_delete BEFORE DELETE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_hidden_exit_update BEFORE UPDATE ON flow_revision_hidden_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_hidden_exit_delete BEFORE DELETE ON flow_revision_hidden_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_connection_update BEFORE UPDATE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_connection_delete BEFORE DELETE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_exit_delete BEFORE DELETE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE UNIQUE INDEX one_current_working_report ON working_reports(activation_id) WHERE replaced_at IS NULL\n",
+    "CREATE UNIQUE INDEX one_prompt_per_continuation ON continuation_visits(run_id, block_id) WHERE kind = 'prompt'\n",
+    "CREATE INDEX run_activity_by_run ON run_events(run_id, observed_at DESC)\nWHERE kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')\n",
+    "CREATE TRIGGER immutable_flow_revision_block_update BEFORE UPDATE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE TRIGGER immutable_flow_revision_block_delete BEFORE DELETE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+    "CREATE INDEX wait_arrivals_pending ON wait_arrivals(deadline_at) WHERE state = 'pending'\n"
+  ],
+  "tables": [
+    {
+      "table": "effect_sql_migrations",
+      "rows": [
+        {
+          "migration_id": 1,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "flows"
+        },
+        {
+          "migration_id": 2,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "t3_connection"
+        },
+        {
+          "migration_id": 4,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "agents"
+        },
+        {
+          "migration_id": 5,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "projects"
+        },
+        {
+          "migration_id": 7,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "runtime_setup"
+        },
+        {
+          "migration_id": 8,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "runner"
+        },
+        {
+          "migration_id": 9,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "reports_attention"
+        },
+        {
+          "migration_id": 10,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "handoffs"
+        },
+        {
+          "migration_id": 11,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "human_occurrences"
+        },
+        {
+          "migration_id": 12,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_closure"
+        },
+        {
+          "migration_id": 13,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "stop"
+        },
+        {
+          "migration_id": 14,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "structured_reports"
+        },
+        {
+          "migration_id": 15,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "project_icons"
+        },
+        {
+          "migration_id": 16,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "project_favicons"
+        },
+        {
+          "migration_id": 17,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_titles"
+        },
+        {
+          "migration_id": 18,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_presentation"
+        },
+        {
+          "migration_id": 19,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "native_attention_wake"
+        },
+        {
+          "migration_id": 20,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "flow_input"
+        },
+        {
+          "migration_id": 21,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "explicit_results"
+        },
+        {
+          "migration_id": 23,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "report_recovery"
+        },
+        {
+          "migration_id": 24,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "thread_settlements"
+        },
+        {
+          "migration_id": 25,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "conversation_waiting"
+        },
+        {
+          "migration_id": 26,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "client_access"
+        },
+        {
+          "migration_id": 27,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "agent_coordinator"
+        },
+        {
+          "migration_id": 28,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_start"
+        },
+        {
+          "migration_id": 29,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_lifecycle"
+        },
+        {
+          "migration_id": 30,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_conversation"
+        },
+        {
+          "migration_id": 31,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_revisits"
+        },
+        {
+          "migration_id": 32,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_recovery"
+        },
+        {
+          "migration_id": 33,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_stop"
+        },
+        {
+          "migration_id": 34,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "coordinator_release"
+        },
+        {
+          "migration_id": 35,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "native_obligations"
+        },
+        {
+          "migration_id": 36,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "remote_obligations"
+        },
+        {
+          "migration_id": 38,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "peer_stop"
+        },
+        {
+          "migration_id": 39,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "activation_context"
+        },
+        {
+          "migration_id": 40,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "local_execution_evidence"
+        },
+        {
+          "migration_id": 41,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_coordinator"
+        },
+        {
+          "migration_id": 42,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "flow_coordinator"
+        },
+        {
+          "migration_id": 43,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "hybrid_commands"
+        },
+        {
+          "migration_id": 44,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "context_grants"
+        },
+        {
+          "migration_id": 45,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_root_frontier"
+        },
+        {
+          "migration_id": 46,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "assessment_checkpoints"
+        },
+        {
+          "migration_id": 47,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_root_settlements"
+        },
+        {
+          "migration_id": 48,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_workers"
+        },
+        {
+          "migration_id": 49,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "current_execution_contract"
+        },
+        {
+          "migration_id": 50,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "factory_block_workers"
+        },
+        {
+          "migration_id": 51,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_creation_order"
+        },
+        {
+          "migration_id": 52,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "flow_revisions"
+        },
+        {
+          "migration_id": 53,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "agent_revisions"
+        },
+        {
+          "migration_id": 54,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_revisions"
+        },
+        {
+          "migration_id": 55,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "remove_run_snapshots"
+        },
+        {
+          "migration_id": 56,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "worker_conversation_replies"
+        },
+        {
+          "migration_id": 57,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "worker_native_continuations"
+        },
+        {
+          "migration_id": 58,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "block_id_reporting"
+        },
+        {
+          "migration_id": 59,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "worker_thread_completion"
+        },
+        {
+          "migration_id": 60,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "result_replacement"
+        },
+        {
+          "migration_id": 61,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "working_reports"
+        },
+        {
+          "migration_id": 62,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "settled_runs"
+        },
+        {
+          "migration_id": 63,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "archived_runs"
+        },
+        {
+          "migration_id": 64,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "retire_waiting_reports"
+        },
+        {
+          "migration_id": 65,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "flow_workspace"
+        },
+        {
+          "migration_id": 66,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "worker_repositories"
+        },
+        {
+          "migration_id": 67,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_workspaces"
+        },
+        {
+          "migration_id": 68,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_prepared_workers"
+        },
+        {
+          "migration_id": 69,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "block_thread_settlement"
+        },
+        {
+          "migration_id": 70,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "retire_prepared_workers"
+        },
+        {
+          "migration_id": 71,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "run_images"
+        },
+        {
+          "migration_id": 72,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "agent_exits"
+        },
+        {
+          "migration_id": 73,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "drop_retired_history"
+        },
+        {
+          "migration_id": 74,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "glossary_table_names"
+        },
+        {
+          "migration_id": 75,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "continuation_blocks"
+        },
+        {
+          "migration_id": 76,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "wait_blocks"
+        },
+        {
+          "migration_id": 77,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "manual_settlement"
+        },
+        {
+          "migration_id": 78,
+          "created_at": "2026-11-15 10:53:25",
+          "name": "appearance_snapshot"
+        }
+      ]
+    },
+    {
+      "table": "t3_authorization_contexts",
+      "rows": [
+        {
+          "id": "319e32e7-a153-4feb-96a7-c5239da01f2b",
+          "endpoint": "http://127.0.0.1:3773/mcp",
+          "authorization_identity": "controlled-grant-2",
+          "environment_id": "controlled-environment",
+          "created_at": "2026-11-15T10:53:25.861Z"
+        }
+      ]
+    },
+    {
+      "table": "t3_connection",
+      "rows": [
+        {
+          "singleton": 1,
+          "endpoint": "http://127.0.0.1:3773/mcp",
+          "context_id": "319e32e7-a153-4feb-96a7-c5239da01f2b"
+        }
+      ]
+    },
+    {
+      "table": "appearance_snapshot",
+      "rows": [
+        {
+          "singleton": 1,
+          "endpoint": "http://127.0.0.1:3773/mcp",
+          "presentation": "{\"revision\":\"2ba5d561b82ebe70\",\"environmentId\":\"controlled-environment\",\"grant\":{\"id\":\"controlled-appearance-grant-1\",\"expiresAt\":\"2026-12-15T10:53:25.861Z\"},\"resolverPin\":\"d2c25950b4d9183ea342d5d5fc14c326b9e0172a\",\"theme\":{\"id\":\"ocean\",\"name\":\"Ocean\"},\"modes\":{\"light\":{\"kind\":\"inherited\",\"colors\":{\"background\":\"#f5f7f8\",\"foreground\":\"#241523\",\"card\":\"#edeff1\",\"card-foreground\":\"#241523\",\"popover\":\"#edeff1\",\"popover-foreground\":\"#241523\",\"muted\":\"#e9ebed\",\"muted-foreground\":\"#665e67\",\"subtle-foreground\":\"#716972\",\"emphasis-foreground\":\"#453a45\",\"accent\":\"#e1e3e4\",\"accent-foreground\":\"#241523\",\"secondary\":\"#e1e3e4\",\"secondary-foreground\":\"#241523\",\"sidebar\":\"#e4ecf2\",\"sidebar-foreground\":\"#241523\",\"sidebar-accent\":\"#d4dce2\",\"sidebar-accent-foreground\":\"#241523\",\"sidebar-border\":\"#cdd4dc\",\"sidebar-ring\":\"#2672af\",\"primary\":\"#2672af\",\"primary-hover\":\"#0c609c\",\"primary-foreground\":\"#fffaff\",\"brand-soft\":\"rgb(38 114 175 / 0.08)\",\"brand-soft-border\":\"rgb(38 114 175 / 0.45)\",\"link\":\"#226eab\",\"border\":\"#cdd4dc\",\"border-strong\":\"#b9bdc6\",\"border-hover\":\"#a8aab3\",\"input\":\"#c0c9d4\",\"ring\":\"#2672af\",\"overlay\":\"rgb(36 21 35 / 0.28)\",\"destructive\":\"#d2171c\",\"success\":\"#0a7b38\",\"attention\":\"#ae4e00\",\"status-working\":\"#0d738f\",\"status-waiting\":\"#4f46e5\",\"status-stopped\":\"#6a6972\",\"brand-cyan\":\"#0d738f\"}},\"dark\":{\"kind\":\"inherited\",\"colors\":{\"background\":\"#17212b\",\"foreground\":\"#fffaff\",\"card\":\"#333b45\",\"card-foreground\":\"#fffaff\",\"popover\":\"#333b45\",\"popover-foreground\":\"#fffaff\",\"muted\":\"#212b35\",\"muted-foreground\":\"#a1a4ab\",\"subtle-foreground\":\"#a4a4ac\",\"emphasis-foreground\":\"#d0cfd5\",\"accent\":\"#2a3540\",\"accent-foreground\":\"#fffaff\",\"secondary\":\"#2a3540\",\"secondary-foreground\":\"#fffaff\",\"sidebar\":\"#1e2d3b\",\"sidebar-foreground\":\"#fffaff\",\"sidebar-accent\":\"#2d3c4b\",\"sidebar-accent-foreground\":\"#fffaff\",\"sidebar-border\":\"#405567\",\"sidebar-ring\":\"#70b9ee\",\"primary\":\"#70b9ee\",\"primary-hover\":\"#5da6da\",\"primary-foreground\":\"#241523\",\"brand-soft\":\"rgb(112 185 238 / 0.14)\",\"brand-soft-border\":\"rgb(112 185 238 / 0.6)\",\"link\":\"#70b9ee\",\"border\":\"#405567\",\"border-strong\":\"#576979\",\"border-hover\":\"#6a7988\",\"input\":\"#4f677b\",\"ring\":\"#70b9ee\",\"overlay\":\"rgb(23 33 43 / 0.8)\",\"destructive\":\"#ff7b74\",\"success\":\"#22c55e\",\"attention\":\"#f59e0b\",\"status-working\":\"#22d3ee\",\"status-waiting\":\"#8f9cff\",\"status-stopped\":\"#a2a3ac\",\"brand-cyan\":\"#22d3ee\"}}}}"
+        }
+      ]
+    },
+    {
+      "table": "factory_server",
+      "rows": [
+        {
+          "singleton": 1,
+          "id": "a3adeb01599a718944733d93bdb91c5c"
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "t3": {
+      "available": true,
+      "authorized": true,
+      "identity": "controlled-grant-2",
+      "environmentId": "controlled-environment",
+      "compatible": true
+    },
+    "presentation": {
+      "revision": "2ba5d561b82ebe70",
+      "environmentId": "controlled-environment",
+      "grant": {
+        "id": "controlled-appearance-grant-1",
+        "expiresAt": "2026-12-15T10:53:25.861Z"
+      },
+      "resolverPin": "d2c25950b4d9183ea342d5d5fc14c326b9e0172a",
+      "theme": {
+        "id": "ocean",
+        "name": "Ocean"
+      },
+      "modes": {
+        "light": {
+          "kind": "inherited",
+          "colors": {
+            "background": "#f5f7f8",
+            "foreground": "#241523",
+            "card": "#edeff1",
+            "card-foreground": "#241523",
+            "popover": "#edeff1",
+            "popover-foreground": "#241523",
+            "muted": "#e9ebed",
+            "muted-foreground": "#665e67",
+            "subtle-foreground": "#716972",
+            "emphasis-foreground": "#453a45",
+            "accent": "#e1e3e4",
+            "accent-foreground": "#241523",
+            "secondary": "#e1e3e4",
+            "secondary-foreground": "#241523",
+            "sidebar": "#e4ecf2",
+            "sidebar-foreground": "#241523",
+            "sidebar-accent": "#d4dce2",
+            "sidebar-accent-foreground": "#241523",
+            "sidebar-border": "#cdd4dc",
+            "sidebar-ring": "#2672af",
+            "primary": "#2672af",
+            "primary-hover": "#0c609c",
+            "primary-foreground": "#fffaff",
+            "brand-soft": "rgb(38 114 175 / 0.08)",
+            "brand-soft-border": "rgb(38 114 175 / 0.45)",
+            "link": "#226eab",
+            "border": "#cdd4dc",
+            "border-strong": "#b9bdc6",
+            "border-hover": "#a8aab3",
+            "input": "#c0c9d4",
+            "ring": "#2672af",
+            "overlay": "rgb(36 21 35 / 0.28)",
+            "destructive": "#d2171c",
+            "success": "#0a7b38",
+            "attention": "#ae4e00",
+            "status-working": "#0d738f",
+            "status-waiting": "#4f46e5",
+            "status-stopped": "#6a6972",
+            "brand-cyan": "#0d738f"
+          }
+        },
+        "dark": {
+          "kind": "inherited",
+          "colors": {
+            "background": "#17212b",
+            "foreground": "#fffaff",
+            "card": "#333b45",
+            "card-foreground": "#fffaff",
+            "popover": "#333b45",
+            "popover-foreground": "#fffaff",
+            "muted": "#212b35",
+            "muted-foreground": "#a1a4ab",
+            "subtle-foreground": "#a4a4ac",
+            "emphasis-foreground": "#d0cfd5",
+            "accent": "#2a3540",
+            "accent-foreground": "#fffaff",
+            "secondary": "#2a3540",
+            "secondary-foreground": "#fffaff",
+            "sidebar": "#1e2d3b",
+            "sidebar-foreground": "#fffaff",
+            "sidebar-accent": "#2d3c4b",
+            "sidebar-accent-foreground": "#fffaff",
+            "sidebar-border": "#405567",
+            "sidebar-ring": "#70b9ee",
+            "primary": "#70b9ee",
+            "primary-hover": "#5da6da",
+            "primary-foreground": "#241523",
+            "brand-soft": "rgb(112 185 238 / 0.14)",
+            "brand-soft-border": "rgb(112 185 238 / 0.6)",
+            "link": "#70b9ee",
+            "border": "#405567",
+            "border-strong": "#576979",
+            "border-hover": "#6a7988",
+            "input": "#4f677b",
+            "ring": "#70b9ee",
+            "overlay": "rgb(23 33 43 / 0.8)",
+            "destructive": "#ff7b74",
+            "success": "#22c55e",
+            "attention": "#f59e0b",
+            "status-working": "#22d3ee",
+            "status-waiting": "#8f9cff",
+            "status-stopped": "#a2a3ac",
+            "brand-cyan": "#22d3ee"
+          }
+        }
+      }
+    },
+    "source": {
+      "environmentId": "controlled-environment",
+      "grantId": "controlled-appearance-grant-1",
+      "resolverPin": "d2c25950b4d9183ea342d5d5fc14c326b9e0172a"
+    }
+  }
+}

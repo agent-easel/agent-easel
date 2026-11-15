@@ -8,12 +8,9 @@ import {
 import type { AppearancePresentation, T3Appearance } from "@t3-factory/contracts";
 import { oceanPresentation, memoryStorage } from "./support/inherited-colors.ts";
 
-const NOW = Date.parse("2026-11-11T12:00:00.000Z");
-const LATER = "2026-12-11T12:00:00.000Z";
 /** The source the cached Ocean snapshot came from, as its server declares it. */
 const SOURCE = {
   environmentId: "environment-1",
-  grantId: "grant-1",
   resolverPin: "d2c25950b4d9183ea342d5d5fc14c326b9e0172a",
 };
 
@@ -22,29 +19,28 @@ const GROVE_SOURCE = { ...SOURCE, environmentId: "environment-2" };
 const following = (presentation: AppearancePresentation): T3Appearance => ({
   state: "following",
   explanation: "",
-  grant: null,
   presentation,
 });
 
 it("a client reopening on the same Factory server reuses both halves of its cached theme colors", () => {
   // Arrange
   const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
 
   // Act
-  const cached = cachedColors(storage, "server-a", SOURCE, NOW);
+  const cached = cachedColors(storage, "server-a", SOURCE);
 
   // Assert
-  expect(cached).toStrictEqual(oceanPresentation(LATER));
+  expect(cached).toStrictEqual(oceanPresentation());
 });
 
 it("theme colors cached from one Factory server are not shown on another", () => {
   // Arrange
   const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
 
   // Act
-  const cached = cachedColors(storage, "server-b", SOURCE, NOW);
+  const cached = cachedColors(storage, "server-b", SOURCE);
 
   // Assert
   expect(cached).toBe(null);
@@ -53,15 +49,14 @@ it("theme colors cached from one Factory server are not shown on another", () =>
 it.each([
   ["has no theme-color source any more", null],
   ["follows another T3 environment", { ...SOURCE, environmentId: "environment-2" }],
-  ["was paired again with another grant", { ...SOURCE, grantId: "grant-2" }],
   ["resolves palettes at another pin", { ...SOURCE, resolverPin: "another-pin" }],
 ])("cached theme colors are not shown when the server %s", (_, source) => {
   // Arrange
   const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
 
   // Act
-  const cached = cachedColors(storage, "server-a", source, NOW);
+  const cached = cachedColors(storage, "server-a", source);
 
   // Assert
   expect(cached).toBe(null);
@@ -69,7 +64,7 @@ it.each([
 
 it("a mounted client keeps the published theme colors when the server declares the same source again", () => {
   // Arrange
-  const ocean = following(oceanPresentation(LATER));
+  const ocean = following(oceanPresentation());
   const shown = { declared: SOURCE, cached: null, published: ocean, refused: null };
 
   // Act
@@ -81,7 +76,7 @@ it("a mounted client keeps the published theme colors when the server declares t
 
 it("a mounted client keeps its cached theme colors through an outage of the same source", () => {
   // Arrange
-  const cached = oceanPresentation(LATER);
+  const cached = oceanPresentation();
   const shown = { declared: SOURCE, cached, published: null, refused: null };
 
   // Act
@@ -94,15 +89,14 @@ it("a mounted client keeps its cached theme colors through an outage of the same
 it.each([
   ["has no theme-color source any more", null],
   ["follows another T3 environment", { ...SOURCE, environmentId: "environment-2" }],
-  ["was paired again with another grant", { ...SOURCE, grantId: "grant-2" }],
 ])(
   "a mounted client drops theme colors its live delivery still holds when the server %s",
   (_, source) => {
     // Arrange
-    const ocean = following(oceanPresentation(LATER));
+    const ocean = following(oceanPresentation());
     const shown = {
       declared: SOURCE,
-      cached: oceanPresentation(LATER),
+      cached: oceanPresentation(),
       published: ocean,
       refused: null,
     };
@@ -122,7 +116,7 @@ it.each([
 
 it("theme colors dropped for a replaced source do not return while live delivery still holds them", () => {
   // Arrange
-  const ocean = following(oceanPresentation(LATER));
+  const ocean = following(oceanPresentation());
   const live = { value: ocean, synchronized: true };
   const replaced = followColors(
     { declared: SOURCE, cached: null, published: ocean, refused: null },
@@ -139,9 +133,9 @@ it("theme colors dropped for a replaced source do not return while live delivery
 
 it("a mounted client takes what the server publishes after its source was replaced", () => {
   // Arrange
-  const ocean = following(oceanPresentation(LATER));
+  const ocean = following(oceanPresentation());
   const grove = following({
-    ...oceanPresentation(LATER),
+    ...oceanPresentation(),
     environmentId: GROVE_SOURCE.environmentId,
   });
   const replaced = followColors(
@@ -157,22 +151,10 @@ it("a mounted client takes what the server publishes after its source was replac
   expect(followed.published).toBe(grove);
 });
 
-it("cached theme colors are not reused once their grant has expired", () => {
-  // Arrange
-  const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation("2026-11-11T12:00:00.000Z"));
-
-  // Act
-  const cached = cachedColors(storage, "server-a", SOURCE, NOW);
-
-  // Assert
-  expect(cached).toBe(null);
-});
-
 it("a cached snapshot whose colors were altered in storage is not applied", () => {
   // Arrange
   const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
   const stored = storage.getItem("factory.inherited-colors");
   assert(stored);
   storage.setItem(
@@ -181,7 +163,7 @@ it("a cached snapshot whose colors were altered in storage is not applied", () =
   );
 
   // Act
-  const cached = cachedColors(storage, "server-a", SOURCE, NOW);
+  const cached = cachedColors(storage, "server-a", SOURCE);
 
   // Assert
   expect(cached).toBe(null);
@@ -190,13 +172,13 @@ it("a cached snapshot whose colors were altered in storage is not applied", () =
 it("the server ending inheritance removes the cached theme colors", () => {
   // Arrange
   const storage = memoryStorage();
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
 
   // Act
   forgetColors(storage);
 
   // Assert
-  expect(cachedColors(storage, "server-a", SOURCE, NOW)).toBe(null);
+  expect(cachedColors(storage, "server-a", SOURCE)).toBe(null);
   expect(storage.items.size).toBe(0);
 });
 
@@ -205,7 +187,7 @@ it("the cache keeps one snapshot with both modes and no per-mode entries", () =>
   const storage = memoryStorage();
 
   // Act
-  rememberColors(storage, "server-a", oceanPresentation(LATER));
+  rememberColors(storage, "server-a", oceanPresentation());
 
   // Assert
   expect([...storage.items.keys()]).toStrictEqual(["factory.inherited-colors"]);

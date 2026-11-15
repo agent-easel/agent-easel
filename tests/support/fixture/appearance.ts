@@ -1,5 +1,4 @@
 import { upstreamPublishedTheme } from "../../../apps/backend/test/support/t3-theme-fixture.ts";
-import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 
 /**
@@ -14,34 +13,30 @@ const publishedThemeFiles = [
   { ...nightfallThemeFile, id: "future", name: "Future", version: 2 },
 ];
 
-/** Theme colors of the host's controlled T3 environment. */
-export function appearanceFixture({ factory, t3 }: Host) {
+/** Theme colors of the host's controlled T3 environment, as `t3_theme_read` serves them. */
+export function appearanceFixture({ t3 }: Host) {
   return {
     actions: {
-      publish: () => t3.appearance.publishThemes(publishedThemeFiles),
+      publish() {
+        t3.appearance.themes = publishedThemeFiles;
+      },
       /** `t3 theme set <id>` on the environment; the id need not be published. */
       setDefaultTheme({ theme }: { theme: string }) {
-        t3.appearance.setDefaultTheme(theme);
+        t3.appearance.defaultTheme = theme;
       },
-      async pair() {
-        requireSuccess(await factory.pairAppearance({ pairing: t3.appearance.pairingCode }));
-      },
-      pairingCode: () => ({ code: t3.appearance.pairingCode }),
-      /** `t3 auth session revoke` from another T3 process: open subscriptions keep streaming. */
-      revoke() {
-        t3.appearance.sessionValid = false;
+      /** A T3 build that lists no `t3_theme_read`. */
+      unsupported() {
+        t3.appearance.supported = false;
       },
     },
     /**
-     * No grant, no published themes, T3's default theme Ocean and a session T3 still accepts.
-     * T3's grant map is the adapter's credential store, so Factory holds a grant exactly when it
-     * has an entry, including one paired through the UI.
+     * A T3 with `t3_theme_read`, no published themes and no default theme, so journeys see
+     * Factory's own colors until they choose a T3 theme.
      */
-    async reset() {
-      if (t3.appearance.grants.size > 0) requireSuccess(await factory.disconnectAppearance());
-      t3.appearance.sessionValid = true;
-      if (t3.appearance.themes.length > 0) t3.appearance.publishThemes([]);
-      if (t3.appearance.defaultTheme !== "ocean") t3.appearance.setDefaultTheme("ocean");
+    reset() {
+      t3.appearance.supported = true;
+      t3.appearance.themes = [];
+      t3.appearance.defaultTheme = "";
     },
   };
 }

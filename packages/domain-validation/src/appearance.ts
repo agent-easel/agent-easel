@@ -34,18 +34,15 @@ function parseMode(value: unknown): AppearanceModeResult | null {
  * known fields and color formats; anything else makes the whole snapshot unusable.
  */
 export function parseAppearancePresentation(value: unknown): AppearancePresentation | null {
-  if (!isRecord(value) || !isRecord(value.grant) || !isRecord(value.theme)) return null;
+  if (!isRecord(value) || !isRecord(value.theme)) return null;
   if (!isRecord(value.modes)) return null;
-  const { revision, environmentId, resolverPin, grant, theme } = value;
+  const { revision, environmentId, resolverPin, theme } = value;
   const light = parseMode(value.modes.light);
   const dark = parseMode(value.modes.dark);
   if (
     !isText(revision) ||
     !isText(environmentId) ||
     !isText(resolverPin) ||
-    !isText(grant.id) ||
-    !isText(grant.expiresAt) ||
-    Number.isNaN(Date.parse(grant.expiresAt)) ||
     !isText(theme.id) ||
     !isText(theme.name) ||
     !light ||
@@ -55,7 +52,6 @@ export function parseAppearancePresentation(value: unknown): AppearancePresentat
   return {
     revision,
     environmentId,
-    grant: { id: grant.id, expiresAt: grant.expiresAt },
     resolverPin,
     theme: { id: theme.id, name: theme.name },
     modes: { light, dark },

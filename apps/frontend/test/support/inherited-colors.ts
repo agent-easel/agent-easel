@@ -21,11 +21,10 @@ const colors = Object.fromEntries(
 ) as Record<AppearanceColorToken, string>;
 
 /** Ocean as a server published it: Dark inherited, Light on Factory's baseline. */
-export function oceanPresentation(expiresAt: string): AppearancePresentation {
+export function oceanPresentation(): AppearancePresentation {
   return {
     revision: "ocean-revision",
     environmentId: "environment-1",
-    grant: { id: "grant-1", expiresAt },
     resolverPin: "d2c25950b4d9183ea342d5d5fc14c326b9e0172a",
     theme: { id: "ocean", name: "Ocean" },
     modes: {

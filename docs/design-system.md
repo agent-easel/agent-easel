@@ -23,7 +23,7 @@ system palette in either mode; meaning stays carried by labels and icons.
 
 ### T3 theme colors
 
-When the host pairs [theme colors](t3-integration.md#theme-colors), every color token can come
+With [theme colors](t3-integration.md#theme-colors), every color token can come
 from the T3 environment's default theme instead of the baseline, separately per mode: the local
 mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline. Only
 colors change; typography, geometry, radii, shadows and motion stay Factory's.

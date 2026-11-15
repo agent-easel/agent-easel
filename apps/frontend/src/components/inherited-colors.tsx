@@ -11,8 +11,6 @@ import {
 } from "../inherited-colors-cache.ts";
 import { useLiveAppearance } from "../live/live-connection.ts";
 
-const expiryCheckMs = 60_000;
-
 /**
  * Shows one server's theme colors while product screens are mounted: its cached snapshot of
  * the source the server declared at the access check until live delivery answers, then exactly
@@ -26,7 +24,7 @@ function FollowInheritedColors({ serverId }: { serverId: string }) {
   const source = useAppearanceSource();
   const [followed, setFollowed] = useState<FollowedColors>(() => ({
     declared: source,
-    cached: cachedColors(profileStorage(), serverId, source, Date.now()),
+    cached: cachedColors(profileStorage(), serverId, source),
     published: null,
     refused: null,
   }));
@@ -43,21 +41,8 @@ function FollowInheritedColors({ serverId }: { serverId: string }) {
   }, [published, serverId]);
   useEffect(() => {
     if (!presentation) return;
-    const expiresAt = Date.parse(presentation.grant.expiresAt);
-    // An offline client keeps the colors only while their grant is still valid.
-    const expire = () => {
-      if (Date.now() < expiresAt) return false;
-      applyInheritedColors(null);
-      forgetColors(profileStorage());
-      return true;
-    };
-    if (expire()) return;
     applyInheritedColors(presentation);
-    const timer = setInterval(expire, expiryCheckMs);
-    return () => {
-      clearInterval(timer);
-      applyInheritedColors(null);
-    };
+    return () => applyInheritedColors(null);
   }, [presentation]);
   return null;
 }

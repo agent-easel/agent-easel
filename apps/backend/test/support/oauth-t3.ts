@@ -64,6 +64,7 @@ export async function oauthT3(
     capabilities?: (args: Record<string, unknown>) => unknown;
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
     attachments?: boolean;
+    themeRead?: (args: Record<string, unknown>) => unknown;
   } = {},
 ) {
   /** Bytes received on signed upload addresses, with the Authorization header each POST carried. */
@@ -209,6 +210,14 @@ export async function oauthT3(
       : []),
     ...(options.send ? [{ name: "t3_thread_send", inputSchema: options.sendSchema! }] : []),
     ...(options.launch ? [{ name: "t3_thread_launch", inputSchema: options.launchSchema! }] : []),
+    ...(options.themeRead
+      ? [
+          {
+            name: "t3_theme_read",
+            inputSchema: { type: "object", properties: { themeId: { type: "string" } } },
+          },
+        ]
+      : []),
     ...(options.attachments
       ? [
           {
@@ -269,6 +278,7 @@ export async function oauthT3(
     ["t3_thread_wait", structuredTool(options.wait)],
     ["t3_thread_read", structuredTool(options.runtimeActivity)],
     ["orchestrator_capabilities", structuredTool(options.capabilities)],
+    ["t3_theme_read", structuredTool(options.themeRead)],
     [
       "t3_attachment_prepare_upload",
       options.attachments ? structuredTool(prepareUpload) : undefined,

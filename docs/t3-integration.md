@@ -63,8 +63,7 @@ connection and Factory launches no onboarding workload.
 ## Credentials and reauthorization
 
 OAuth registration, tokens, discovery, PKCE and pending callback state live in `credentials/t3-<endpoint SHA-256>.json`
-under the data home, apart from configuration and SQLite (directory 0700, files 0600, atomic writes). The separate
-[theme-color grant](#theme-colors) has its own file beside it. Credentials and
+under the data home, apart from configuration and SQLite (directory 0700, files 0600, atomic writes). Credentials and
 callback URLs never appear in API responses, prompts or history; OAuth error bodies are sanitized.
 
 A pending approval can restore its listener after a backend restart within the approval window. Completed grants are
@@ -76,46 +75,21 @@ the current one and keep mismatches unresolved: reauthorization is never permiss
 
 ## Theme colors
 
-Factory can optionally use the color palette of the **environment default theme** of the T3 connection's
-environment (`t3 theme set`), not the theme an individual T3 window shows. Each client keeps its own
+Factory uses the color palette of the **environment default theme** of the T3 connection's environment
+(`t3 theme set`), not the theme an individual T3 window shows. Each client keeps its own
 [Light or Dark choice](desktop-and-clients.md#appearance) and shows that mode's half of the palette.
 T3 keeps owning theme selection and editing; Factory has no theme catalog or editor.
 
-**Pairing (host only).** **Settings → Appearance → Theme colors** on the host explains before pairing that the grant
-uses T3's `orchestration:read` scope, which also reads T3 conversations, threads and settings, that T3 ends it
-after its session lifetime (30 days by default) and that it can be revoked in T3 at any time. The owner creates
-pairing material on the T3 computer with `t3 auth pairing create --scope orchestration:read --json` (paste its
-`credential`) or `t3 pair --scope orchestration:read` (paste its `/pair#token=` link; a link must belong to the
-connection's T3 address). Without `--scope`, a T3 pairing carries T3's full default scope set; Factory always
-requests exactly `orchestration:read` in the token exchange and discards any other grant. Pairing needs an
-authorized T3 connection: the first configuration snapshot must report the environment id of the connection's
-authorization context, otherwise Factory discards the grant and refuses. It also refuses, and discards the
-grant, when the saved endpoint or its environment changed while T3 answered. Approved remote clients see, under
-**Settings → Appearance**, what their mode shows and why; pairing and **Disconnect theme colors** answer
-`host_only` for them.
-
-**Grant and credentials.** The appearance grant is a separate T3 session, never the MCP OAuth credential, which
-T3 refuses outside `/mcp`. Its token lives in `credentials/t3-appearance-<endpoint SHA-256>.json` with the same
-protections as the OAuth file and never appears in responses, live delivery or logs. T3 issues no refresh token:
-Factory tracks the expiry itself, warns in Settings seven days before it, ends inheritance at expiry and requires
-pairing again; it never renews or opens consent on its own. Disconnect deletes Factory's copy only; T3 keeps the
-session until it expires or the owner revokes it in T3 (`t3 auth session revoke`).
-
-**Following the default.** Factory reads T3's WebSocket configuration subscription
-(`subscribeServerConfig` with `environmentThemes`, protocol 2) through a short-lived ticket and keeps only the
-environment id, the default theme id and the published theme definitions. Every snapshot replaces that state; later
-settings and theme updates apply as they arrive. T3 streams the default and the definitions separately and without
-ordering, so a newly selected theme whose definition has not arrived keeps the colors shown so far for at most five
-seconds (**Waiting for T3 to send its default theme**); after that Factory's colors are used with a diagnostic, and
-the definition is followed whenever it does arrive. A definition T3 removes while it is the default is not waited
-for. A T3 revocation made from another process does not close an
-open socket, so Factory asks T3's session endpoint whether the grant still authenticates on every close and on
-every connection-check interval while connected. An unauthenticated answer ends the grant as revoked (as expired
-within a minute of its expiry); a request that cannot reach T3 is a transient outage. A closed subscription shows
-**Connecting** and reopens on the next interval, never in a loop with T3's closes. A socket can also stop
-delivering without closing. T3 sends nothing while the theme is unchanged, so Factory sends the protocol's Ping
-every 30 seconds; a subscription that delivered no frame since the previous Ping is ended and handled like a
-closed one. Controlled tests cover this; a real half-open network path is not exercised.
+**Reading the default.** Factory reads the theme with T3's `t3_theme_read` MCP tool over the authorized T3
+connection, so theme colors need no pairing or credential of their own. Each pass lists T3's tools, reads the
+environment identity and the default theme id, and, when that id names a published theme, reads that theme's file.
+It keeps only the environment id, the default theme id and that definition. Factory reads on startup, whenever the
+saved endpoint or its authorization context changes, and on every connection-check interval; a change made in T3
+appears by the next interval, since the tool pushes no updates. A T3 that lists no `t3_theme_read` (builds before
+November 2026) shows **Not supported** and Factory's colors. Factory once paired a separate `orchestration:read`
+session for theme colors; a backend deletes any token of that session it still stores, and T3 keeps the session
+until it expires or the owner revokes it (`t3 auth session revoke`). Host and approved clients see, under
+**Settings → Appearance**, what their mode shows and why; there are no theme-color actions.
 
 **Resolution.** Built-in T3 themes (`t3-chat`, `grove`, `ocean`, `ember`, `iris` and their legacy aliases) and
 published theme definitions resolve through one bounded resolver ported from T3 Code (MIT, © 2026 T3 Tools Inc.)
@@ -149,21 +123,21 @@ Support limits of published definitions:
 - **Parity.** Verified against upstream output for seeds in both appearances, overrides, partial and complete
   colors and variants, to the six decimals T3 writes; other inputs are not claimed.
 
-**Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, an unverifiable or
-mismatched environment, expiry, revocation and disconnect all show Factory's colors for the selected mode with
-the reason in Settings. During a transient outage the last presentation stays while its grant is locally valid
-and no revocation was observed. A changed endpoint or connection environment discards it at once. Theme colors
+**Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
+`t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
+and a mismatched environment all show Factory's colors for the selected mode with
+the reason in Settings. During a transient outage the last presentation of the same endpoint and environment stays.
+A changed endpoint or connection environment discards it at once. Theme colors
 never change connection readiness, Start, execution or Run attention.
 
 **Stored snapshot.** The backend keeps the presentation it publishes as one snapshot in its database, with both
-modes together and no credential, and deletes it whenever it stops publishing one (expiry, observed revocation,
-disconnect, another endpoint or environment, no inherited default). A starting backend adopts that snapshot
-before T3 answers only when it was stored for the saved endpoint and still carries the connection's
-environment, the stored grant's identity and expiry and the current resolver pin, and only while the grant is
-active and unexpired; so a host restarted while T3 is unreachable keeps its colors. Nothing is adopted later in
-the process: returning to an earlier endpoint never brings its old colors back. On reconnection Factory checks
-the grant, reads T3's current configuration snapshot and publishes the resulting presentation as one revision;
-T3's settings and theme streams stay independent and are not treated as a transaction. Each client also
+modes together and no credential, and deletes it whenever it stops publishing one (another endpoint or
+environment, no inherited default, a T3 without `t3_theme_read`). A starting backend adopts that snapshot before
+T3 answers only when it was stored for the saved endpoint and still carries the connection's environment and the
+current resolver pin; so a host restarted while T3 is unreachable keeps its colors. Nothing is adopted later in
+the process: returning to an earlier endpoint never brings its old colors back. Migration `096` removed the grant reference that
+snapshots stored while theme colors used a paired grant; their colors are kept. On reconnection Factory reads T3's
+current default and publishes the resulting presentation as one revision. Each client also
 [caches the presentation](desktop-and-clients.md#appearance) it received.
 
 ## Agent reporting
@@ -257,8 +231,6 @@ in a native client remains a live compatibility check.
 | `POST /api/connection/recheck` | Check again |
 | `POST /api/connection/authorize` | Start authorization (host only) |
 | `POST /api/connection/authorization/open` | Open consent on the host for the saved endpoint (host and approved clients) |
-| `POST /api/connection/appearance` | Pair [theme colors](#theme-colors) with a T3 pairing code or link (host only) |
-| `DELETE /api/connection/appearance` | Disconnect theme colors (host only) |
 
 Theme-color status and presentation reach clients through live delivery only.
 

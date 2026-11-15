@@ -1,191 +1,117 @@
 import { expect, it } from "@effect/vitest";
-import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
-import { AppearancePairingRejected } from "../src/adapters/t3.ts";
-import { appearanceT3, livenessClock } from "./support/appearance-t3.ts";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import type { TestContext } from "@effect/vitest";
+import { LiveT3Adapter } from "../src/adapters/live-t3.ts";
+import { latestAppearance } from "./support/appearance.ts";
+import { factoryHarness } from "./support/factory.ts";
+import { subscribe } from "./support/live.ts";
+import { oauthT3 } from "./support/oauth-t3.ts";
+import { upstreamPublishedTheme } from "./support/t3-theme-fixture.ts";
 
-it("pairing stores an owner-only orchestration:read grant and returns no token", async (context) => {
+/** T3's published "Nightfall" file as `t3_theme_read` returns it: without its id. */
+const { id: _id, ...nightfallFile } = upstreamPublishedTheme("seed-dark").wire;
+
+/** A Factory whose only T3 credential is the approved MCP OAuth grant of `external`. */
+async function authorizedFactory(
+  context: TestContext,
+  external: Awaited<ReturnType<typeof oauthT3>>,
+  credentialsDirectory?: (directory: string) => Promise<void>,
+) {
+  const harness = await factoryHarness(context);
+  const directory = join(dirname(harness.databasePath), "credentials");
+  await credentialsDirectory?.(directory);
+  let approval = "";
+  const adapter = new LiveT3Adapter({
+    credentialsDirectory: directory,
+    callbackPort: 0,
+    openBrowser: async (url) => {
+      approval = url;
+    },
+  });
+  const factory = await harness.open({ t3: adapter });
+  await factory.configureConnection({ endpoint: external.endpoint });
+  await factory.authorizeConnection();
+  expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
+  await factory.recheckConnection();
+  return { factory, adapter, directory };
+}
+
+it("Factory follows T3's published default theme over the authorized T3 connection without another pairing", async (context) => {
   // Arrange
-  const t3 = await appearanceT3(context);
+  const reads: unknown[] = [];
+  const external = await oauthT3({
+    themeRead: (args) => {
+      reads.push(args);
+      return args.themeId === "nightfall"
+        ? { current: "nightfall", published: [], theme: nightfallFile, guide: "" }
+        : {
+            current: "nightfall",
+            builtIn: ["t3-chat", "ocean"],
+            published: [{ id: "nightfall", name: "Nightfall", hasCss: false }],
+            guide: "",
+          };
+    },
+  });
+  context.onTestFinished(() => external.close());
 
   // Act
-  const grant = await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
+  const { factory } = await authorizedFactory(context, external);
 
   // Assert
-  const [file] = await readdir(t3.credentialsDirectory);
-  const path = join(t3.credentialsDirectory, file!);
-  expect(JSON.stringify(grant)).not.toContain(t3.state.token);
-  expect((await stat(path)).mode & 0o777).toBe(0o600);
-  expect(await readFile(path, "utf8")).toContain(t3.state.token);
-  expect(await t3.adapter.readAppearanceGrant(t3.target)).toStrictEqual({
-    status: "active",
-    grant,
+  const live = subscribe(context, factory.live.watchAppearance());
+  const messages = await live.until(
+    (received) => latestAppearance(received)?.state === "following",
+  );
+  expect(latestAppearance(messages)?.presentation?.theme).toStrictEqual({
+    id: "nightfall",
+    name: "Nightfall",
   });
+  expect(latestAppearance(messages)?.presentation?.modes.dark.kind).toBe("inherited");
+  expect(reads).toContainEqual({ themeId: "nightfall" });
 });
 
-it("a pairing T3 answers with more than orchestration:read is discarded", async (context) => {
+it("a T3 that lists no t3_theme_read reads as unsupported rather than as an outage", async (context) => {
   // Arrange
-  const t3 = await appearanceT3(context);
-  t3.state.grantedScope = "orchestration:read orchestration:operate";
+  const external = await oauthT3();
+  context.onTestFinished(() => external.close());
+  const { adapter } = await authorizedFactory(context, external);
 
   // Act
-  const paired = t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
+  const read = await adapter.readTheme({ endpoint: external.endpoint });
 
   // Assert
-  await expect(paired).rejects.toStrictEqual(new AppearancePairingRejected("unexpected-grant"));
-  expect(await t3.adapter.readAppearanceGrant(t3.target)).toBe(null);
-});
-
-it("the configuration subscription acknowledges each chunk and follows the default theme", async (context) => {
-  // Arrange
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  const stream = await t3.adapter.watchAppearance(t3.target);
-  const snapshot = await stream.next();
-
-  // Act
-  t3.setDefaultTheme("ember");
-
-  // Assert: T3 holds the update until the snapshot's chunk is acknowledged.
-  expect(await stream.next()).toStrictEqual({ type: "default", defaultTheme: "ember" });
-  expect(snapshot).toStrictEqual({
-    type: "snapshot",
-    environmentId: "env-live-1",
-    defaultTheme: "ocean",
-  });
-  stream.close();
+  expect(read).toBe(null);
 });
 
 it("a default theme id outside T3's published form reaches Factory cut and unable to name a theme", async (context) => {
   // Arrange
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  const stream = await t3.adapter.watchAppearance(t3.target);
-  await stream.next();
-
-  // Act
-  t3.setDefaultTheme("ocean".repeat(1000));
-
-  // Assert
-  expect(await stream.next()).toStrictEqual({
-    type: "default",
-    defaultTheme: `${"ocean".repeat(1000).slice(0, 48)}…`,
+  const external = await oauthT3({
+    themeRead: () => ({ current: "ocean".repeat(12), builtIn: [], published: [], guide: "" }),
   });
-  stream.close();
-});
-
-it("a subscription that stops delivering without closing is ended, so Factory checks the grant and subscribes again", async (context) => {
-  // Arrange
-  const clock = livenessClock(context);
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  const stream = await t3.adapter.watchAppearance(t3.target);
-  await stream.next();
-  t3.state.silent = true;
+  context.onTestFinished(() => external.close());
+  const { adapter } = await authorizedFactory(context, external);
 
   // Act
-  clock.pass(2);
+  const read = await adapter.readTheme({ endpoint: external.endpoint });
 
   // Assert
-  expect(await stream.next()).toBe(null);
+  expect(read?.defaultTheme).toBe(`${"ocean".repeat(12).slice(0, 48)}…`);
+  expect(read?.themes).toStrictEqual([]);
 });
 
-it("a quiet subscription whose T3 still answers stays open", async (context) => {
+it("the token of the former separately paired theme-color grant is deleted", async (context) => {
   // Arrange
-  const clock = livenessClock(context);
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  const stream = await t3.adapter.watchAppearance(t3.target);
-  await stream.next();
-  const firstAnswer = t3.answeredPing();
-  clock.pass(1);
-  await firstAnswer;
-  // The answer reaches Factory while it makes its usual grant check.
-  await t3.adapter.checkAppearanceGrant(t3.target);
-  const secondAnswer = t3.answeredPing();
+  const external = await oauthT3();
+  context.onTestFinished(() => external.close());
+  const leftover = `t3-appearance-${"0".repeat(64)}.json`;
 
   // Act
-  clock.pass(1);
-
-  // Assert
-  await secondAnswer;
-  expect(t3.openSubscriptions()).toBe(1);
-  stream.close();
-});
-
-it("the published theme set keeps bounded definitions and drops entries that are not themes", async (context) => {
-  // Arrange
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  const stream = await t3.adapter.watchAppearance(t3.target);
-  await stream.next();
-
-  // Act
-  t3.publishThemes([
-    {
-      id: "dusk",
-      version: 1,
-      name: "Dusk",
-      appearance: "dark",
-      canvas: "#1a1423",
-      accent: "#f59e0b",
-      colors: { focus: "#ffffff", futureRole: "#000000" },
-      variants: { light: { canvas: "#fff8eb" } },
-      collection: { id: "ignored", label: "Ignored" },
-    },
-    { id: "Not An Id", name: "Dropped", appearance: "dark", canvas: "#000", accent: "#fff" },
-    {
-      id: "long-color",
-      name: "Long color",
-      appearance: "dark",
-      colors: { canvas: "#".repeat(65) },
-    },
-    "not a theme",
-  ]);
-
-  // Assert
-  expect(await stream.next()).toStrictEqual({
-    type: "themes",
-    themes: [
-      {
-        id: "dusk",
-        name: "Dusk",
-        definition: {
-          appearance: "dark",
-          seeds: { canvas: "#1a1423", accent: "#f59e0b" },
-          colors: { focus: "#ffffff", futureRole: "#000000" },
-          variant: { canvas: "#fff8eb" },
-        },
-      },
-      { id: "long-color", name: "Long color", definition: null },
-    ],
+  const { directory } = await authorizedFactory(context, external, async (directory) => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, leftover), JSON.stringify({ token: "former-theme-token" }));
   });
-  stream.close();
-});
-
-it("a grant T3 no longer authenticates is refused rather than treated as an outage", async (context) => {
-  // Arrange
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  t3.state.authenticated = false;
-
-  // Act
-  const checked = await t3.adapter.checkAppearanceGrant(t3.target);
 
   // Assert
-  expect(checked).toBe("refused");
-});
-
-it("a grant check that cannot reach T3 rejects instead of refusing the grant", async (context) => {
-  // Arrange
-  const t3 = await appearanceT3(context);
-  await t3.adapter.pairAppearance(t3.target, t3.state.pairingCode);
-  await t3.stop();
-
-  // Act
-  const checked = t3.adapter.checkAppearanceGrant(t3.target);
-
-  // Assert
-  await expect(checked).rejects.toThrow();
-  expect((await t3.adapter.readAppearanceGrant(t3.target))?.status).toBe("active");
+  expect(await readdir(directory)).not.toContain(leftover);
 });

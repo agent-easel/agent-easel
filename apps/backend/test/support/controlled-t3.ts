@@ -498,27 +498,11 @@ export class ControlledT3 implements T3Adapter {
     if (!this.capabilitiesAvailable) throw new Error("Capabilities are temporarily unavailable");
     return this.controlledProviders;
   }
-  /** Theme-color pairing and configuration subscription of the same environment. */
-  readonly appearance = new ControlledAppearance(this.environmentId, () => this.available);
-  async pairAppearance(target: T3Endpoint, pairingCode: string) {
-    const grant = this.appearance.pair(target.endpoint, pairingCode);
-    await this.appearance.exchangeAnswer;
-    return grant;
-  }
-  async readAppearanceGrant(target: T3Endpoint) {
-    return this.appearance.grants.get(target.endpoint) ?? null;
-  }
-  async checkAppearanceGrant(target: T3Endpoint) {
-    return this.appearance.check(target.endpoint);
-  }
-  async endAppearanceGrant(target: T3Endpoint, reason: "expired" | "revoked") {
-    return this.appearance.end(target.endpoint, reason);
-  }
-  async forgetAppearanceGrant(target: T3Endpoint) {
-    this.appearance.forget(target.endpoint);
-  }
-  async watchAppearance(target: T3Endpoint) {
-    return this.appearance.watch(target.endpoint);
+  /** `t3_theme_read` of the same environment. */
+  readonly appearance = new ControlledAppearance();
+  async readTheme(_target: T3Endpoint) {
+    if (!this.available || !this.authorized) throw new Error("Unavailable");
+    return this.appearance.read(this.environmentId);
   }
   approve(identity = "controlled-grant-2") {
     this.identity = identity;
