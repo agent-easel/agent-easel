@@ -1011,6 +1011,34 @@ export const reviewConditionFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+/** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, whose
+ * Escalate (from arrival 2) and Otherwise both go to the Final Condition, whose Otherwise is
+ * unwired. */
+export const chainedConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Chained conditions", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      gate(escalateFromSecond),
+      conditionBlock("final", "Final", [], { x: 800, y: 0 }),
+    ],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("second", "done", "gate"),
+      connection("gate", "escalate", "final"),
+      connection("gate", OTHERWISE, "final"),
+    ],
+  }));
+
+/** Entry worker's "Done" goes to the Gate, whose Otherwise always returns it to Entry worker. */
+export const selfLoopConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Condition self-loop", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), gate()],
+    connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "worker")],
+  }));
+
 /** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" goes to
  * Follow-up. */
 export const fanOutFlow: ReadyFlowShape = (world) =>
@@ -1595,6 +1623,43 @@ export function arrivalsNumbered(world: ScenarioWorld, runId: string, count: num
       run.conditions.some((condition) => condition.arrivals === count),
     ),
   );
+}
+
+/** On the chained Condition Flow: Entry worker's result, then Second entry's, reached the Gate and
+ * then the Final Condition, so each has numbered two arrivals. */
+export function chainedConditionArrivals(world: ScenarioWorld, start: unknown) {
+  return reach("two arrivals at both chained Conditions", async () => {
+    const [first, second] = await twoWorkersStarted(world, start);
+    await resultReported(world, first, { message: "First branch." });
+    await arrivalsNumbered(world, first.runId, 1);
+    await resultReported(world, second, { message: "Second branch." });
+    await observeFor("observe both arrivals at both Conditions", world, first.runId, (run) =>
+      run.conditions.every((condition) => condition.arrivals === 2),
+    );
+    return [first, second] as const;
+  });
+}
+
+/** On the self-looping Condition Flow, from the worker's current turn: each result it reports
+ * becomes the Gate's next arrival and is sent back to it as its next turn, until the Gate has
+ * numbered `through` arrivals. Returns the worker on the turn that last arrival started. */
+export function conditionLoopedThrough(
+  world: ScenarioWorld,
+  worker: WorkerHandle,
+  through: number,
+) {
+  return reach(`Condition arrivals through ${through}`, async () => {
+    const run = stepResult("read the Run", await world.factory.getRun(worker.runId));
+    let turn = worker;
+    for (let number = run.conditions[0]!.arrivals + 1; number <= through; number++) {
+      const sent = nextSend(world);
+      await resultReported(world, turn, { message: `Pass ${number}.` });
+      await arrivalsNumbered(world, worker.runId, number);
+      await sent;
+      turn = sentTurnBegins(world, worker);
+    }
+    return turn;
+  });
 }
 
 /** Each Condition selection on the Run's timeline, in order. */

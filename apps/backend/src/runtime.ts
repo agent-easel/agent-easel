@@ -27,7 +27,10 @@ function blockUpdate(input: unknown): { publicId: string; report: RuntimeReport 
  * generation owns title submissions. */
 export function createRuntime(
   update: (publicId: string, report: RuntimeReport) => Effect.Effect<RuntimeReply, unknown>,
-  read: (kind: "block" | "run" | "image", input: unknown) => Effect.Effect<RuntimeReply, unknown>,
+  read: (
+    kind: "block" | "run" | "image" | "conditionArrivals",
+    input: unknown,
+  ) => Effect.Effect<RuntimeReply, unknown>,
   setRunTitle: (input: unknown) => Effect.Effect<RuntimeReply, unknown>,
 ) {
   return {
@@ -35,6 +38,7 @@ export function createRuntime(
     block: (input: unknown) => read("block", input),
     run: (input: unknown) => read("run", input),
     image: (input: unknown) => read("image", input),
+    conditionArrivals: (input: unknown) => read("conditionArrivals", input),
     submit: Effect.fn(function* (input: unknown) {
       const call = blockUpdate(input);
       if ("code" in call) return reportDiagnostic(call);

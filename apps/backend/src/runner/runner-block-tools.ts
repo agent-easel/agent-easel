@@ -1,5 +1,10 @@
 import * as Effect from "effect/Effect";
-import type { RunDetail, RunImageMimeType } from "@t3-factory/contracts";
+import type {
+  ConditionArrivalPage,
+  Result,
+  RunDetail,
+  RunImageMimeType,
+} from "@t3-factory/contracts";
 import { effectiveExits } from "@t3-factory/domain-validation";
 import type { RunStore } from "./run-store/run-store.ts";
 import { OPEN_TRANSITIONS, type RuntimeReply } from "../runtime-types.ts";
@@ -24,17 +29,28 @@ const imageIdentity = (row: ImageRow): NonNullable<RuntimeReply["image"]> => ({
   sizeBytes: row.size_bytes,
 });
 
-/** Block, Run and image reads addressed by the Block id from the worker's message. */
+/** The arguments each read accepts beside the Block id. */
+const READ_FIELDS = {
+  block: [],
+  run: [],
+  image: ["imageId"],
+  conditionArrivals: ["conditionBlockId", "limit", "cursor"],
+} as const satisfies Record<string, readonly string[]>;
+
+/** Block, Run, image and Condition evidence reads addressed by the Block id from the worker's
+ * message; a Condition evidence read names a Condition of that Block's Run. */
 export function openBlockTools(
   store: RunStore,
   getRun: (id: string) => Effect.Effect<{ ok: true; value: RunDetail } | { ok: false }, unknown>,
   images: RunImages,
 ) {
-  return (kind: "block" | "run" | "image", input: unknown): Effect.Effect<RuntimeReply, unknown> =>
+  return (kind: keyof typeof READ_FIELDS, input: unknown): Effect.Effect<RuntimeReply, unknown> =>
     Effect.gen(function* () {
-      const publicId = blockIdArgument(input, kind === "image" ? ["imageId"] : []);
+      const publicId = blockIdArgument(input, READ_FIELDS[kind]);
       if (typeof publicId !== "string") return reportDiagnostic(publicId);
       const fields = (input as { arguments: Record<string, unknown> }).arguments;
+      if (kind === "conditionArrivals")
+        return yield* readConditionArrivals(store, publicId, fields);
       if (kind === "image") {
         if (!("imageId" in fields)) return reportDiagnostic({ code: "IMAGE_ID_REQUIRED" });
         if (typeof fields.imageId !== "string" || !fields.imageId)
@@ -69,6 +85,45 @@ function readImage(store: RunStore, images: RunImages, runId: string, imageId: s
         Effect.succeed(reportDiagnostic({ code: "IMAGE_READ_FAILED", image })),
       ),
     );
+  });
+}
+
+/** One page of Condition evidence for a Condition of the Block's Run: the page the HTTP read
+ * answers, or the reason it was refused. */
+function readConditionArrivals(
+  store: RunStore,
+  publicId: string,
+  fields: Readonly<Record<string, unknown>>,
+) {
+  return Effect.gen(function* () {
+    if (!("conditionBlockId" in fields))
+      return reportDiagnostic({ code: "CONDITION_BLOCK_ID_REQUIRED" });
+    const { conditionBlockId, limit, cursor } = fields;
+    if (typeof conditionBlockId !== "string" || ("cursor" in fields && typeof cursor !== "string"))
+      return reportDiagnostic({ code: "INVALID_ARGUMENT" });
+    const block = yield* store.locateBlock(publicId);
+    if (!block) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
+    const pageSize = !("limit" in fields)
+      ? undefined
+      : typeof limit === "number"
+        ? limit
+        : Number.NaN;
+    return conditionArrivalsReply(
+      yield* store.listConditionArrivals(
+        block.run_id,
+        conditionBlockId,
+        pageSize,
+        cursor as string | undefined,
+      ),
+    );
+  });
+}
+
+function conditionArrivalsReply(page: Result<ConditionArrivalPage>): RuntimeReply {
+  if (page.ok) return { code: "CONDITION_ARRIVALS", ...page.value };
+  if (page.error.code === "not_found") return reportDiagnostic({ code: "UNKNOWN_CONDITION" });
+  return reportDiagnostic({
+    code: page.error.issues[0]?.path === "limit" ? "INVALID_LIMIT" : "INVALID_CURSOR",
   });
 }
 
@@ -171,6 +226,7 @@ function runView(detail: RunDetail): RuntimeReply {
     title: detail.title,
     input: detail.input,
     state: detail.lifecycle,
+    conditions: detail.conditions,
     blocks: detail.blocks.map((block) => ({
       blockId: block.blockId,
       name: block.name,

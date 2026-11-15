@@ -511,6 +511,19 @@ selected output and acceptance time), which is the most recent route, not proof 
 records one **arrival *N* → *output*** row per arrival with the Condition icon. A Condition is never Needs input or a Problem
 and does not wake a Snoozed Run.
 
+A Condition's evidence is a separate bounded read of one Run and Condition
+(`GET /api/runs/:runId/conditions/:blockId/arrivals`, with optional `limit` and `cursor`), available to every client that can
+read the Run. It lists numbered arrivals in ascending arrival number, each with its acceptance time, source block and producing
+worker, matched captured rule (id and name) or Otherwise, selected output and each recipient of that output with its delivery's
+current disposition: `pending` until delivered, then `acknowledged` or `cancelled`. An unwired selection lists no recipients.
+Decisions never change; dispositions are read again on every page, so they are current rather than a snapshot from selection
+time. A page holds 50 arrivals by default and `limit` accepts whole numbers from 1 to 100; any other value is a validation error.
+A first page fixes its window at the highest arrival number committed at that read (`highWater`), and its `nextCursor` continues
+only that window, so arrivals numbered later never shift a page; reading without a cursor opens a new window that includes them.
+A cursor is opaque and bound to its Run and Condition: one for another Run or Condition, an altered one or one beyond the
+committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
+selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
+
 ## Continuations
 
 A Continuation continues the conversation of the worker whose message reaches it. The first message in a Run queues its prompt on that

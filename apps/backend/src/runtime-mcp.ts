@@ -4,6 +4,7 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/server";
+import { CONDITION_ARRIVAL_PAGE_DEFAULT, CONDITION_ARRIVAL_PAGE_MAX } from "@t3-factory/contracts";
 import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
 import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
@@ -70,11 +71,40 @@ const tools: Tool[] = [
   },
   {
     name: "factory_get_run",
-    description: "Read the Run your Block belongs to, with each Block's state and latest result.",
+    description:
+      "Read the Run your Block belongs to, with each Block's state and latest result, and each Condition's summary {blockId, arrivals, pending, latest} without its arrival history.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },
       required: ["blockId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_get_condition_arrivals",
+    description:
+      "Read one page of a Condition's numbered arrivals in your Block's Run, oldest first: each arrival's number, acceptance time, source block and worker, matched rule {id, name} or null for Otherwise, selected output, and each recipient's current disposition (pending, acknowledged or cancelled; none when the output is unwired). A selected route is not proof its recipient received it. The first page fixes the window at the highest arrival number then; pass its nextCursor to continue that window, and omit cursor to see newer arrivals. Read-only and safe to repeat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        blockId: blockIdProperty,
+        conditionBlockId: {
+          type: "string",
+          description: "The Condition's blockId from the conditions factory_get_run lists.",
+        },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: CONDITION_ARRIVAL_PAGE_MAX,
+          description: `Arrivals per page, 1 to ${CONDITION_ARRIVAL_PAGE_MAX}; ${CONDITION_ARRIVAL_PAGE_DEFAULT} when omitted.`,
+        },
+        cursor: {
+          type: "string",
+          description:
+            "The nextCursor of the previous page for this Condition; omit it for a first page.",
+        },
+      },
+      required: ["blockId", "conditionBlockId"],
       additionalProperties: false,
     },
   },
@@ -102,6 +132,7 @@ const operations = {
   factory_get_block: "block",
   factory_get_run: "run",
   factory_get_run_image: "image",
+  factory_get_condition_arrivals: "conditionArrivals",
   factory_set_run_title: "title",
 } as const;
 
@@ -111,6 +142,7 @@ export interface RuntimeTools {
   block(input: unknown): Promise<RuntimeReply>;
   run(input: unknown): Promise<RuntimeReply>;
   image(input: unknown): Promise<RuntimeReply>;
+  conditionArrivals(input: unknown): Promise<RuntimeReply>;
   title(input: unknown): Promise<RuntimeReply>;
 }
 

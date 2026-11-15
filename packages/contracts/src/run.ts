@@ -669,6 +669,45 @@ export interface ConditionSummary {
   readonly latest: (ConditionSelection & { readonly acceptedAt: string }) | null;
 }
 
+/** Condition evidence page sizes: the default and the largest allowed; the smallest is 1. */
+export const CONDITION_ARRIVAL_PAGE_DEFAULT = 50;
+export const CONDITION_ARRIVAL_PAGE_MAX = 100;
+
+/**
+ * Where one recipient's delivery of a Condition selection stands now: `pending` until it is
+ * delivered (also while queued, being sent or unconfirmed), then `acknowledged` or `cancelled`.
+ */
+export type ConditionRecipientDisposition = "pending" | "acknowledged" | "cancelled";
+
+/** One numbered Condition arrival: its fixed decision, with each recipient's current disposition. */
+export interface ConditionArrivalEvidence extends ConditionSelection {
+  readonly id: string;
+  readonly acceptedAt: string;
+  /** The Flow block whose result, answer or forwarding delivered it. */
+  readonly sourceBlockId: string | null;
+  /** The worker whose message it carries, when known. */
+  readonly origin: WorkerProvenance | null;
+  /** The captured rule whose output was selected; null when Otherwise was. */
+  readonly rule: { readonly id: string; readonly name: string } | null;
+  /** Every recipient of the selected output; empty when that output is unwired. */
+  readonly recipients: readonly {
+    readonly blockId: string;
+    readonly disposition: ConditionRecipientDisposition;
+  }[];
+}
+
+/**
+ * One page of a Condition's arrivals in a Run, in ascending arrival number. A first page fixes its
+ * window at the highest arrival number committed then (`highWater`); its `nextCursor`, null on the
+ * window's last page, continues that window only, so a later arrival appears after a new first
+ * page read.
+ */
+export interface ConditionArrivalPage {
+  readonly arrivals: readonly ConditionArrivalEvidence[];
+  readonly highWater: number;
+  readonly nextCursor: string | null;
+}
+
 export const runOperations = {
   listRunNavigation: operation<never, readonly RunNavigationEntry[]>()({
     method: "GET",
@@ -733,6 +772,16 @@ export const runOperations = {
   continueWaitArrival: operation<never, RunDetail>()({
     method: "POST",
     path: "/api/wait-arrivals/:id/continue",
+  }),
+  /**
+   * One page of a Condition's arrivals in the Run. `limit` is a whole number from 1 to
+   * `CONDITION_ARRIVAL_PAGE_MAX`, empty for the default; `cursor` is empty for a first page, or
+   * the previous page's `nextCursor` for this Run and Condition.
+   */
+  listConditionArrivals: operation<never, ConditionArrivalPage>()({
+    method: "GET",
+    path: "/api/runs/:runId/conditions/:blockId/arrivals",
+    query: ["limit", "cursor"],
   }),
   listAttention: operation<never, readonly RunAttention[]>()({
     method: "GET",

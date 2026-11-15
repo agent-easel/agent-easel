@@ -1,4 +1,9 @@
-import type { BlockExit, RunImageMimeType } from "@t3-factory/contracts";
+import type {
+  BlockExit,
+  ConditionArrivalEvidence,
+  ConditionSummary,
+  RunImageMimeType,
+} from "@t3-factory/contracts";
 
 type RuntimeImage = {
   readonly imageId: string;
@@ -56,6 +61,12 @@ export type RuntimeReply = {
     readonly state: string;
     readonly result: string | null;
   }[];
+  /** The Run's constant-size Condition summaries, not their histories. */
+  readonly conditions?: readonly ConditionSummary[];
+  /** One Condition evidence page: its arrivals, window high-water and next cursor. */
+  readonly arrivals?: readonly ConditionArrivalEvidence[];
+  readonly highWater?: number;
+  readonly nextCursor?: string | null;
 };
 
 const NEXT: Record<RuntimeReport["status"], string> = {
@@ -74,6 +85,7 @@ export const SUCCESS_CODES: readonly string[] = [
   "BLOCK",
   "RUN",
   "IMAGE",
+  "CONDITION_ARRIVALS",
   "TITLE_APPLIED",
 ];
 

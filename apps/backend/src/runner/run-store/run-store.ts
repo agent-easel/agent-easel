@@ -9,6 +9,7 @@ import { now } from "../../time.ts";
 import { openRunActivations } from "./activations.ts";
 import { openRunArchive } from "./archive.ts";
 import { openRunConditions } from "./conditions.ts";
+import { openConditionEvidence } from "./condition-evidence.ts";
 import { openRunContinuations } from "./continuations.ts";
 import { openRunDeliveries } from "./deliveries.ts";
 import { openRunHuman } from "./human.ts";
@@ -26,6 +27,7 @@ import { openRunWaits } from "./waits.ts";
 
 export type { Delivery, Handoff } from "./records.ts";
 export { passedThrough } from "./release.ts";
+export { queryPageLimit } from "./condition-evidence.ts";
 export type { StartPlan, StartWorkspace } from "./start.ts";
 export type { RequestReportSettlement } from "./request-report.ts";
 export type { BoundWorker, SettlementWorkerRecord } from "./manual-settlement.ts";
@@ -80,6 +82,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     ...openRunActivations(database),
     ...openRunContinuations(database),
     ...openRunConditions(database),
+    ...openConditionEvidence(database),
     ...openRunDeliveries(database),
     ...openRunStart(database),
     ...openRunWorkspace(database),
