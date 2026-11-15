@@ -100,6 +100,9 @@ export function discordFixture({
         );
       },
     },
-    reset() {},
+    reset() {
+      discord.setCommandsAvailable(true);
+      discord.clearFaults();
+    },
   };
 }
