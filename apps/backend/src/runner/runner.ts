@@ -1,5 +1,4 @@
 import { openBlockTools } from "./runner-block-tools.ts";
-import { openRunnerRecovery } from "./runner-recovery.ts";
 import { settleRecoveries } from "./runner-recovery-settlement.ts";
 import { releaseContinuationResults } from "./runner-continuations.ts";
 import { openRunNavigation } from "./run-navigation.ts";
@@ -13,14 +12,10 @@ import { failure } from "../result.ts";
 import type { RunnerOptions, RunRow } from "./runner-types.ts";
 import { openRunStore } from "./run-store/run-store.ts";
 import { openRunnerDispatch } from "./runner-dispatch.ts";
-import { openRunnerHuman } from "./runner-human.ts";
-import { openRunnerWaits } from "./runner-waits.ts";
 import { openRunnerObservation } from "./runner-observation.ts";
-import { openRunnerQueries } from "./runner-queries.ts";
-import { openRunnerReports } from "./runner-reports.ts";
 import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
-import { openRunnerArchive } from "./runner-archive.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
+import { openRunActions } from "./run-actions.ts";
 import { makeRunLanes } from "./runner-lanes.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { makeWaitTimers } from "./runner-wait-timers.ts";
@@ -42,7 +37,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   const scope = yield* Effect.scope;
   const store = yield* openRunStore(owner, changes);
   const { readRun: row, getRun, listAttention } = store;
-  const { listTasks, updateTask } = openRunnerQueries(store);
   let closed = false;
   const starts = Semaphore.makeUnsafe(1);
   const sweeps = Semaphore.makeUnsafe(1);
@@ -69,7 +63,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       });
       yield* fork(titles.reconcileTitleGeneration(runId));
     });
-  const { consumeBlockUpdate } = openRunnerReports(store, lifecycle);
   const { observe } = openRunnerObservation(store, t3);
   const { dispatchIntent } = openRunnerDispatch(
     store,
@@ -90,16 +83,17 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     followTitleGeneration,
     images,
   );
-  const { answerHumanOccurrence } = openRunnerHuman(store, lifecycle);
-  const { continueWaitArrival } = openRunnerWaits(store, lifecycle, waitTimers.cancel);
-  const archive = openRunnerArchive(store, t3, lifecycle, liveContextId);
-  const settle = openRunnerSettle(store, t3, lifecycle, liveContextId);
-  const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settle;
-  // Archive and manual settlement cancel a pending title generation; its cleanup follows.
-  const archiveRun = (id: string, requestId?: string) =>
-    Effect.tap(archive.archiveRun(id, requestId), () => fork(titles.reconcileTitleGeneration(id)));
-  const settleRun = (id: string, input: unknown) =>
-    Effect.tap(settle.settleRun(id, input), () => fork(titles.reconcileTitleGeneration(id)));
+  const settlement = openRunnerSettle(store, t3, lifecycle, liveContextId);
+  const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
+  const actions = openRunActions({
+    store,
+    t3,
+    lifecycle,
+    liveContextId,
+    cancelWaitTimer: waitTimers.cancel,
+    settlement,
+    reconcileTitleGeneration: titles.reconcileTitleGeneration,
+  });
 
   function drive(
     id: string,
@@ -219,12 +213,8 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       .pipe(Effect.uninterruptible);
   yield* Effect.addFinalizer(close);
   return {
-    ...openRunnerRecovery(store, lifecycle, t3, liveContextId),
+    ...actions,
     readFactoryTool: openBlockTools(store, getRun, images),
-    answerHumanOccurrence,
-    continueWaitArrival,
-    archiveRun,
-    settleRun,
     ...openRunNavigation(store),
     listRunNavigation: store.listRunNavigation,
     snoozeRun: store.snoozeRun,
@@ -259,7 +249,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       }),
     listRuns: (projectId: string) =>
       Effect.gen(function* () {
-        const list = yield* listTasks(projectId);
+        const list = yield* actions.listTasks(projectId);
         if (!list.ok) return list;
         return {
           ok: true as const,
@@ -275,8 +265,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           ),
         };
       }),
-    listTasks,
-    updateTask,
     reconcileRuns,
     initialize: () =>
       Effect.gen(function* () {
@@ -296,7 +284,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           scope,
         );
       }),
-    consumeBlockUpdate,
     close,
   };
 });
