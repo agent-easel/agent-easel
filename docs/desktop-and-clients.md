@@ -29,6 +29,8 @@ same conflict in the other direction.
 
 - Closing the last window leaves the server (and its Runs) running. The Dock icon and
   launching the app again reopen the panel.
+- Closing the last window also leaves [notifications and the Dock badge](#notifications-and-dock-badge)
+  running, in both roles; they stop with Quit.
 - **Settings → Desktop app → Show Factory in the menu bar** (desktop only) is off by
   default. When enabled, a menu-bar icon shows the installation's role and status with
   **Open Factory** and **Quit Factory**. The choice is stored per installation and
@@ -105,6 +107,43 @@ the original request key and resolve to the same Run, and Settle or Archive is n
 reported successful without the server's response. Clients and servers interoperate
 across releases when their protocol ranges overlap; see the
 [compatibility range](#protocol-compatibility).
+
+## Notifications and Dock badge
+
+Every desktop installation, in either role, follows its server's Run navigation with its own
+live subscription in the main process, independent of any window: the server role over the
+supervised loopback backend, the client role over the pinned HTTPS connection with its
+credential. A server, role or backend change replaces the subscription; any loss reconnects
+automatically. Browser profiles show no OS notifications, the menu-bar icon keeps showing only
+role and status, and [Chat control](chat-control.md) notices are unaffected.
+
+- **Dock badge**: the number of Runs with at least one pending **Needs input** or **Problem**
+  matter, not the number of matters. Settled Runs and Archived Runs (which leave navigation) do
+  not count. More than 99 Runs show `99+`; none removes the badge. The badge does not depend on
+  notification permission.
+- **Readiness**: only the installation's own subscription qualifies the badge and notifications:
+  an accepted (approved, compatible) connection whose navigation snapshot is applied and
+  current. While it is offline, unauthorized, incompatible, synchronizing after a gap, or the
+  backend is stopped, the badge is cleared and nothing is notified from retained data.
+- **Notifications**: matters that become pending in one committed change share one notification
+  per Run, with `+N more` for the others; a later matter gets its own notification. A rise in a
+  worker's native pending-question count notifies once per increase (1, 2, 1, 2 is two
+  increases). The text is generic: "A Run needs your input" or "A Run has a problem", never a Run
+  or Block name, message, report or question text, or path. Notifications play no sound and the
+  Dock icon never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Permission**: macOS asks the first time a notification would be shown, never at launch. A
+  grant shows what waited; a denial leaves the badge working.
+- **Restart and reconnect**: each installation keeps a ledger of what it announced in
+  `desktop-attention.json` beside its desktop settings, per server. After a restart or reconnect
+  the fresh snapshot catches up with at most one notification per Run for matters still pending
+  that were never announced; matters that appeared and resolved meanwhile are never reported. A
+  notification is recorded as attempted before it is posted, so a crash can lose a banner but
+  never repeats one; one macOS refused is retried only at the next catch-up.
+
+Notifications are posted through `UNUserNotificationCenter` by a small native module, not
+Electron's `Notification` API: Electron withdraws its notifications when the app quits and asks
+for permission on its first call. macOS accepts notifications only from an app registered from a
+non-temporary location, so a package run from a temporary folder badges but cannot notify.
 
 ## Native window appearance
 
