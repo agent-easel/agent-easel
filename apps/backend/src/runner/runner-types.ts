@@ -113,6 +113,18 @@ export type ReportRunRow = Pick<
   | "definitions"
 > & { token: string };
 
+/** Convert the accepted, persisted Run context without reading current connection settings. */
+export function runTarget(
+  runRow: Pick<RunRow, "endpoint" | "environment_id" | "t3_project_id" | "workspace_root">,
+): T3Target {
+  return {
+    endpoint: runRow.endpoint,
+    environmentId: runRow.environment_id,
+    projectId: runRow.t3_project_id,
+    workspaceRoot: runRow.workspace_root,
+  };
+}
+
 export type StoredTarget = T3Target & {
   threadId?: string;
 };

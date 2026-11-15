@@ -30,7 +30,7 @@ import type { RuntimeReply } from "./runtime-types.ts";
 import { appendTimelineEvent } from "./runner/run-store/steps.ts";
 import { recoverOperation } from "./runner/runner-effects.ts";
 import { verifiedLaunchedThread } from "./runner/runner-block-workers.ts";
-import { fingerprint } from "./runner/runner-utils.ts";
+import { fingerprint } from "./fingerprint.ts";
 import { readWorkerThread } from "./runner/worker-thread.ts";
 import { scopedThreadHref } from "./thread-link.ts";
 import { now } from "./time.ts";

@@ -12,8 +12,16 @@ import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
-import type { BlockRow, Checked, RunnerOptions, RunRow, StoredTarget } from "./runner-types.ts";
-import { catalogProject, intactPayload, runTarget, unverified, verified } from "./runner-utils.ts";
+import { intactPayload } from "../fingerprint.ts";
+import {
+  runTarget,
+  type BlockRow,
+  type Checked,
+  type RunnerOptions,
+  type RunRow,
+  type StoredTarget,
+} from "./runner-types.ts";
+import { catalogProject, unverified, verified } from "./runner-utils.ts";
 import { inRunWorkspace, launchStrategy } from "./run-workspace.ts";
 import type { RunImages } from "../run-images.ts";
 /** A Human occurrence or Wait arrival from a durable Human answer, Wait forwarding or pass-through

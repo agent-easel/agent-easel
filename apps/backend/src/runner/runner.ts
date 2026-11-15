@@ -9,15 +9,16 @@ import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
-import type { RunnerOptions, RunRow } from "./runner-types.ts";
+import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
 import { openRunStore } from "./run-store/run-store.ts";
 import { openRunnerDispatch } from "./runner-dispatch.ts";
-import { openRunnerObservation } from "./runner-observation.ts";
 import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
 import { openRunActions } from "./run-actions.ts";
 import { makeRunLanes } from "./runner-lanes.ts";
 import { recoverOperation } from "./runner-effects.ts";
+import { bindRunWorkspace } from "./run-workspace-binding.ts";
+import { readWorkerThread } from "./worker-thread.ts";
 import { makeWaitTimers } from "./runner-wait-timers.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import type { RunImages } from "../run-images.ts";
@@ -63,7 +64,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       });
       yield* fork(titles.reconcileTitleGeneration(runId));
     });
-  const { observe } = openRunnerObservation(store, t3);
   const { dispatchIntent } = openRunnerDispatch(
     store,
     ops,
@@ -95,6 +95,25 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     reconcileTitleGeneration: titles.reconcileTitleGeneration,
   });
 
+  /** Observes a Block's worker thread and derives its execution failure, missing report and
+   * native-request attention from the shared thread-finished rule. */
+  function observe(runRow: RunRow, block: BlockRow, contextId: string | null) {
+    return recoverOperation(
+      Effect.gen(function* () {
+        if (contextId !== runRow.context_id) throw Error("Authorization context changed.");
+        const before = yield* store.readRun(runRow.id);
+        const bound = !!before && (yield* bindRunWorkspace(store, t3, before));
+        const run = bound ? yield* store.readRun(runRow.id) : before;
+        const current = yield* store.readBlock(runRow.id, block.block_id);
+        if (!run || !current?.thread_id) return;
+        const worker = yield* Effect.tryPromise(() =>
+          readWorkerThread(t3, run, current.thread_id!),
+        );
+        yield* store.recordWorkerObservation(run, current, worker);
+      }),
+      () => store.markObservationUnavailable(runRow, block.block_id),
+    );
+  }
   function drive(
     id: string,
     phase: "observe" | "dispatch" | "both" = "both",

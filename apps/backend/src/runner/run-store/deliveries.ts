@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { RunRow } from "../runner-types.ts";
-import { fingerprint } from "../runner-utils.ts";
+import { fingerprint } from "../../fingerprint.ts";
 import { scopedThreadHref } from "../../thread-link.ts";
 import { now } from "../../time.ts";
 import { guardsHold } from "./guards.ts";

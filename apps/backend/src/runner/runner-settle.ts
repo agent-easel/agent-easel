@@ -5,9 +5,9 @@ import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
 import { threadHref } from "../thread-link.ts";
 import type { BoundWorker, RunStore, SettlementWorkerRecord } from "./run-store/run-store.ts";
-import type { RunnerLifecycle, RunRow } from "./runner-types.ts";
+import { runTarget, type RunnerLifecycle, type RunRow } from "./runner-types.ts";
 import { recoverOperation } from "./runner-effects.ts";
-import { fingerprint, runTarget } from "./runner-utils.ts";
+import { fingerprint } from "../fingerprint.ts";
 import { readWorkerThread, type WorkerThread } from "./worker-thread.ts";
 
 /** How long a worker whose Stop T3 acknowledged may stay unfinished before it is unresolved. */

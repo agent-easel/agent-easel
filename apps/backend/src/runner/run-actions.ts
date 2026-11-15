@@ -14,8 +14,8 @@ import type { RunStore, WaitForwarding } from "./run-store/run-store.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryReady } from "./runner-recovery.ts";
 import type { RunnerSettlement } from "./runner-settle.ts";
-import type { RunnerLifecycle } from "./runner-types.ts";
-import { fingerprint, runTarget } from "./runner-utils.ts";
+import { runTarget, type RunnerLifecycle } from "./runner-types.ts";
+import { fingerprint } from "../fingerprint.ts";
 
 /** Why Continue now changed nothing. */
 const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> = {

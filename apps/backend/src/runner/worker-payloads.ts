@@ -2,7 +2,7 @@ import type { BlockExit, RunDefinitions } from "@t3-factory/contracts";
 import { HUMAN_EXITS } from "@t3-factory/domain-validation";
 import type { LaunchPayload, SendPayload, T3Target } from "../adapters/t3.ts";
 import { attachmentName } from "../run-images.ts";
-import { conversationReportInstructions } from "./runner-handoffs.ts";
+import { conversationReportInstructions } from "./report-instructions.ts";
 
 /* Worker messages and launch payloads, pure so the Run store can persist them inside its
  * transactions and orchestration can verify them before a T3 call. */

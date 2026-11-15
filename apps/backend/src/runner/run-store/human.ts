@@ -3,7 +3,7 @@ import { HUMAN_EXITS } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { HumanRow } from "../runner-types.ts";
-import { fingerprint } from "../runner-utils.ts";
+import { fingerprint } from "../../fingerprint.ts";
 import { now } from "../../time.ts";
 import { settleHumanAttention } from "./attention.ts";
 import { guardsHold } from "./guards.ts";
