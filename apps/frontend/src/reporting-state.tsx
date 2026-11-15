@@ -1,15 +1,8 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "./api.ts";
-import { useRefreshSchedule } from "./use-refresh-schedule.ts";
+import { useLiveStudio } from "./live/studio.ts";
+import { useRefreshSchedule } from "./refresh-schedule.ts";
 
 interface ReportingReads {
   targets: readonly ReportingInstallation[] | null;
@@ -71,31 +64,20 @@ const ReportingStateContext = createContext<
 
 /** Shared by Agent definitions, reporting setup and the Settings indicator. */
 export function ReportingStateProvider({ children }: { children: ReactNode }) {
-  const [reads, setReads] = useState<ReportingReads>({ targets: null, agents: null, error: "" });
-  const active = useRef(false);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  const latest = useRef(0);
-  const refresh = useCallback(async () => {
-    const ticket = ++latest.current;
-    await Promise.all([api.getReportingInstallations(), api.listAgents()])
-      .then(([targets, agents]) => {
-        if (active.current && ticket === latest.current) setReads({ targets, agents, error: "" });
-      })
-      .catch(() => {
-        if (active.current && ticket === latest.current)
-          setReads({
-            targets: null,
-            agents: null,
-            error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
-          });
-      });
-  }, []);
-  useRefreshSchedule(refresh, false);
+  const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
+  const agents = useLiveStudio().value?.agents ?? null;
+  const { failure, refresh } = useRefreshSchedule({
+    read: api.getReportingInstallations,
+    apply: setTargets,
+    intervalMs: 30_000,
+  });
+  const reads: ReportingReads = failure
+    ? {
+        targets: null,
+        agents,
+        error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
+      }
+    : { targets, agents, error: "" };
   return (
     <ReportingStateContext.Provider value={{ ...reads, refresh }}>
       {children}
@@ -124,7 +106,9 @@ export function reportingTargetsMarker({
 }
 
 export function reportingSummary(reads: ReportingReads): ReportingStatus {
-  if (reads.error || !reads.targets || !reads.agents) return agentReportingStatus("", reads);
+  if (reads.error || !reads.targets) return agentReportingStatus("", reads);
+  // Installations may arrive before the Studio scope's first Agents.
+  if (!reads.agents) return agentReportingStatus("", { targets: null, error: "" });
   const needsAttention = reads.agents.some(
     (agent) =>
       agent.execution !== null &&

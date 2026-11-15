@@ -4,7 +4,7 @@ import { CommandPalette } from "./components/command-palette.tsx";
 import { shouldHandleShortcut, type ShortcutId } from "./keyboard-shortcuts.ts";
 import { getShortcutPreferences } from "./shortcut-preferences.ts";
 import {
-  studioMask,
+  useOpenStudio,
   useSettingsNavigation,
   validateAppSearch,
   useSettings,
@@ -41,6 +41,7 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
   const settingsOpen = !!useSettings();
   const studioOpen = !!useStudio();
   const settings = useSettingsNavigation();
+  const openStudio = useOpenStudio();
   const { paletteOpen, setPaletteOpen, togglePalette, restoreFocus } = usePalette();
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
   const overlayOpen = paletteOpen || settingsOpen || studioOpen || cheatSheetOpen;
@@ -55,16 +56,6 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         runDraft.openFresh();
     });
   }, [router]);
-
-  const openStudio = useCallback(() => {
-    if (studioOpen) return;
-    void router.navigate({
-      to: pathname,
-      search: { studio: { tab: "flows" } },
-      mask: studioMask({ tab: "flows" }),
-      resetScroll: false,
-    });
-  }, [pathname, router, studioOpen]);
 
   const focusSearch = useCallback(() => {
     getSidebarNavigation().focusSearch();
@@ -86,7 +77,7 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         focusSearch();
       },
       studio: () => {
-        openStudio();
+        openStudio({ tab: "flows" });
       },
       shortcutsCheatSheet: () => {
         setCheatSheetOpen(true);

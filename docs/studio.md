@@ -44,7 +44,7 @@ sheet from the same registry grouping as Settings. Escape closes only the topmos
 (palette, nested dialogs, block configuration, then Studio). Switching from a dirty Flow
 by shortcut or palette uses the same Keep editing / Discard changes guard; opening
 Settings from a clean Studio closes Studio. Palette navigation stays available while
-catalogs load or fail (errors name the section and offer Retry).
+catalogs load or fail (errors name the section).
 
 ## Agent definitions
 
