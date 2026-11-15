@@ -460,6 +460,8 @@ export interface RunDetail extends RunSummary {
   readonly humanOccurrences: readonly HumanOccurrence[];
   readonly waitArrivals: readonly WaitArrival[];
   readonly continuationVisits: readonly ContinuationVisit[];
+  /** One constant-size summary per captured Condition, not its arrival history. */
+  readonly conditions: readonly ConditionSummary[];
   readonly attention: readonly RunAttention[];
   readonly executions: readonly {
     readonly bindingId: string;
@@ -482,6 +484,8 @@ export interface RunDetail extends RunSummary {
     readonly exitId: string | null;
     /** The Wait arrival whose forwarding created this Handoff. */
     readonly waitArrivalId: string | null;
+    /** The Condition arrival whose selection created this Handoff. */
+    readonly conditionArrivalId: string | null;
     readonly origin: WorkerProvenance | null;
     readonly payloadRetained: boolean;
     readonly reference: {
@@ -507,6 +511,8 @@ export interface RunDetail extends RunSummary {
     readonly executionId: string | null;
     readonly causeId: string | null;
     readonly blockId: string | null;
+    /** Only on `condition-selected`: the arrival's number and the output it selected. */
+    readonly condition?: ConditionSelection;
   }[];
 }
 
@@ -642,6 +648,25 @@ export interface WaitArrival {
   /** The absolute deadline, fixed when the arrival was recorded. */
   readonly deadlineAt: string;
   readonly settledAt: string | null;
+}
+
+/** What a Condition selected for one arrival: its arrival number and the output, a rule's id or
+ * `otherwise`. The selection never changes once recorded. */
+export interface ConditionSelection {
+  readonly arrivalNumber: number;
+  readonly outputId: string;
+}
+
+/**
+ * A Condition's routing in a Run so far. `arrivals` counts every distinct delivery numbered at it,
+ * shared by all its incoming wires and workers; `pending` counts deliveries recorded there and not
+ * yet numbered. `latest` is the most recent selection, not every downstream delivery.
+ */
+export interface ConditionSummary {
+  readonly blockId: string;
+  readonly arrivals: number;
+  readonly pending: number;
+  readonly latest: (ConditionSelection & { readonly acceptedAt: string }) | null;
 }
 
 export const runOperations = {

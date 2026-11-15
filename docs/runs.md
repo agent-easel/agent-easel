@@ -501,6 +501,16 @@ early. A forwarded arrival keeps its message only while its recipients still nee
 Needs input or a Problem, and does not wake a Snoozed Run. A Continuation after a Wait continues the thread of the worker
 whose message waited.
 
+## Conditions
+
+Each delivery a [Condition](studio.md#canvas-and-block-configuration) accepts gets the next arrival number at that Condition
+in the Run, whichever wire or worker it came from, and goes unchanged, with its worker, to every recipient of the output its
+rules select ([Runner](runner.md#condition-arrivals)). Run detail carries one constant-size summary per Condition, not its
+history: the arrivals numbered so far, the deliveries waiting there for a number, and the latest selection (arrival number,
+selected output and acceptance time), which is the most recent route, not proof its recipients received it. The timeline
+records one **arrival *N* → *output*** row per arrival with the Condition icon. A Condition is never Needs input or a Problem
+and does not wake a Snoozed Run.
+
 ## Continuations
 
 A Continuation continues the conversation of the worker whose message reaches it. The first message in a Run queues its prompt on that
@@ -519,7 +529,7 @@ Continuation and cancels waiting messages; its worker thread is interrupted with
 ## Settled Runs
 
 A Run **settles** automatically when every visited Block's current visit has its worker's accepted final result and no later
-working report, every Human step is answered, no Wait arrival is pending, no delivery, launch, handoff or send is outstanding, no attention is pending, and
+working report, every Human step is answered, no Wait arrival is pending, no delivery waits at a Condition, no delivery, launch, handoff or send is outstanding, no attention is pending, and
 a fresh read finds every worker thread finished in T3. Never-visited branches need not run. A report or T3 completion alone keeps
 the Run Active. T3 reads are not an atomic cutoff, so direct T3 activity can arrive just before the Run settles; settling does not
 certify result quality or one reviewed revision.
@@ -551,8 +561,9 @@ thread keeps the settlement unresolved until it is removed in T3 or runs; Factor
 that only queued work keeps unfinished.
 
 Settling cancels unsent launches, sends and handoffs (held or released), unsent Request report turns, pending Human occurrences
-without inventing answers, pending Wait arrivals and messages waiting at a Continuation; a cancelled Wait never forwards, also
-after restart. Pending attention settles as `manual-settlement`, activated
+without inventing answers, pending Wait arrivals, deliveries waiting at a Condition for their number and messages waiting at a
+Continuation; a cancelled Wait never forwards, also after restart. A Condition keeps the arrivals it already numbered, and their
+selections, as history. Pending attention settles as `manual-settlement`, activated
 Blocks without a Final result show stopped, and a send whose T3 reply was lost stays uncertain: Factory never resends it and
 keeps no copy of its message. The Run moves to
 **Settled**, Snooze and Woke clear, and Factory best-effort settles the worker threads in T3. The timeline records the
@@ -574,7 +585,8 @@ Runs. History, input, captured definitions and events remain; no transcript or r
 
 **Archive…** in the row menu and in the Run's ··· menu both ask for confirmation, then end the Run for good.
 Archiving closes the handoff gate, cancels unsent launches and handoffs, cancels pending Human steps without inventing answers,
-cancels pending Wait arrivals so no deadline forwards afterwards and clears every arrival's message, settles pending attention
+cancels pending Wait arrivals so no deadline forwards afterwards, cancels deliveries waiting at a Condition for their number
+(numbered arrivals stay history), clears every Wait and Condition arrival's message, settles pending attention
 as `archived` and shows activated blocks that had not finished, including waiting Waits, as stopped. Factory then asks T3 once to
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.

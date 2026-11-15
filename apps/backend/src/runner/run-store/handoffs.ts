@@ -13,15 +13,15 @@ import { appendTimelineEvent } from "./steps.ts";
 /**
  * A delivery's stored worker provenance: the thread binding a Continuation continues and, when
  * known, the Block activation whose result the message is. It is stored on every Handoff and kept
- * when the Handoff becomes a delivery, reaches a Wait, passes through or reaches a Human step,
- * whose answer forwards it.
+ * when the Handoff becomes a delivery, reaches a Wait or Condition, passes through or reaches a
+ * Human step, whose answer forwards it.
  */
 export type StoredProvenance = {
   readonly bindingId: string;
   readonly activationId: string | null;
 };
 
-/** The provenance a stored delivery or Wait arrival carries, if any. */
+/** The provenance a stored delivery, Wait arrival or Condition arrival carries, if any. */
 export const storedProvenance = (row: {
   readonly binding_id: string | null;
   readonly origin_activation_id: string | null;
@@ -40,12 +40,12 @@ export const workerProvenance = (row: {
     : null;
 
 /**
- * The Handoffs a Final result version, a Human answer or a Wait arrival's forwarding creates, named
- * by that record's id. A Final result's Handoffs stay held until its release; the others are
- * released when created.
+ * The Handoffs a Final result version, a Human answer, a Wait arrival's forwarding or a Condition
+ * arrival's selection creates, named by that record's id. A Final result's Handoffs stay held until
+ * its release; the others are released when created.
  */
 export type OutgoingHandoffs = {
-  readonly kind: "report" | "human" | "wait";
+  readonly kind: "report" | "human" | "wait" | "condition";
   readonly id: string;
   readonly blockId: string;
   readonly exitId: string | null;
@@ -88,8 +88,8 @@ export function createHandoffs(
         cause = `${source.kind}:${source.id}/recipient:${blockId}`;
       const payload = JSON.stringify({ message: source.message });
       const inserted =
-        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,binding_id,origin_activation_id)
-          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), blockId })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
+        yield* sql`INSERT INTO operation_intents(id,run_id,block_id,kind,cause,target_json,request_key,payload_json,fingerprint,context_id,report_id,source_block_id,exit_id,occurrence_id,wait_arrival_id,condition_arrival_id,binding_id,origin_activation_id)
+          VALUES(${id},${runRow.id},${blockId},'handoff',${cause},${JSON.stringify({ ...runTarget(runRow), blockId })},${fingerprint(cause)},${payload},${fingerprint(payload)},${runRow.context_id},${ref("report")},${source.blockId},${source.exitId},${ref("human")},${ref("wait")},${ref("condition")},${source.origin?.bindingId ?? null},${source.origin?.activationId ?? null}) ON CONFLICT(run_id,cause) DO NOTHING RETURNING id`;
       if (inserted.length)
         yield* appendTimelineEvent(sql, {
           kind: source.kind === "report" ? "handoff-held" : "handoff-created",
@@ -102,6 +102,26 @@ export function createHandoffs(
     }
     if (source.kind === "report")
       yield* sql`UPDATE runtime_reports SET pending_message=NULL WHERE id=${source.id}`;
+  });
+}
+
+/**
+ * Clears the message of every Wait arrival forwarded and every Condition arrival selected in Run
+ * `runId` that nothing reads any more: each outgoing Handoff carries its own copy until its
+ * recipient records the message, so only a pending Handoff or an Agent visit the arrival started,
+ * while it is its Block's current visit, still reads the arrival's message (as that visit's
+ * input). Outcome, deadline, number, selection and identity stay.
+ */
+export function clearSpentArrivalMessages(sql: SqlClient.SqlClient, runId: string) {
+  return Effect.gen(function* () {
+    yield* sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${runId} AND state='forwarded' AND message IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE i.wait_arrival_id=wait_arrivals.id AND i.kind='handoff' AND i.state='pending')
+      AND NOT EXISTS(SELECT 1 FROM operation_intents i JOIN run_activations a ON a.run_id=i.run_id AND a.cause=i.cause
+        WHERE i.wait_arrival_id=wait_arrivals.id AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
+    yield* sql`UPDATE condition_arrivals SET message=NULL WHERE run_id=${runId} AND state='selected' AND message IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE i.condition_arrival_id=condition_arrivals.id AND i.kind='handoff' AND i.state='pending')
+      AND NOT EXISTS(SELECT 1 FROM operation_intents i JOIN run_activations a ON a.run_id=i.run_id AND a.cause=i.cause
+        WHERE i.condition_arrival_id=condition_arrivals.id AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
   });
 }
 

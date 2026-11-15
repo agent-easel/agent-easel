@@ -25,8 +25,8 @@ type StateWrite =
   | BlockState
   /** Keeps a state listed in `keep`, otherwise writes `otherwise`. */
   | { readonly keep: readonly BlockState[]; readonly otherwise: BlockState }
-  /** Writes `whileArrivalPending` while a Human occurrence or Wait arrival is pending on the
-   * Block. */
+  /** Writes `whileArrivalPending` while a Human occurrence, Wait arrival or Condition arrival is
+   * pending on the Block. */
   | { readonly whileArrivalPending: BlockState; readonly otherwise: BlockState };
 
 /** The Block columns a state write may set beside the state. */
@@ -40,7 +40,7 @@ function stateValue(sql: SqlClient.SqlClient, state: StateWrite) {
   if (typeof state === "string") return sql`${state}`;
   if ("keep" in state)
     return sql`CASE WHEN state IN ${sql.in(state.keep)} THEN state ELSE ${state.otherwise} END`;
-  return sql`CASE WHEN EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=run_blocks.run_id AND h.block_id=run_blocks.block_id AND h.state='pending') OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=run_blocks.run_id AND w.block_id=run_blocks.block_id AND w.state='pending') THEN ${state.whileArrivalPending} ELSE ${state.otherwise} END`;
+  return sql`CASE WHEN EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=run_blocks.run_id AND h.block_id=run_blocks.block_id AND h.state='pending') OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=run_blocks.run_id AND w.block_id=run_blocks.block_id AND w.state='pending') OR EXISTS(SELECT 1 FROM condition_arrivals c WHERE c.run_id=run_blocks.run_id AND c.block_id=run_blocks.block_id AND c.state='pending') THEN ${state.whileArrivalPending} ELSE ${state.otherwise} END`;
 }
 
 /** The only writer of Block state: sets `state` and `columns` on the Blocks `target` reaches. */

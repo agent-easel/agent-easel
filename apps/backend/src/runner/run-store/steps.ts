@@ -66,6 +66,12 @@ export type TimelineEvent = { readonly runId: string; readonly observedAt: strin
       readonly blockId: string;
       readonly arrivalId: string;
     }
+  /** A Condition numbered an arrival and selected its output. */
+  | {
+      readonly kind: "condition-selected";
+      readonly blockId: string;
+      readonly conditionArrivalId: string;
+    }
   | {
       readonly kind: "handoff-released" | "operation-unresolved";
       readonly blockId: string;
@@ -312,6 +318,13 @@ function stored(event: Exclude<TimelineEvent, WaitEvent>) {
           executionId: event.executionId,
           sourceKey: (event.kind === "report-accepted" ? "report:" : "working:") + event.reportId,
           causeId: event.reportId,
+        };
+      case "condition-selected":
+        return {
+          blockId: event.blockId,
+          executionId: null,
+          sourceKey: "condition-selected:" + event.conditionArrivalId,
+          causeId: event.conditionArrivalId,
         };
       case "human-answered":
       case "human-waiting":

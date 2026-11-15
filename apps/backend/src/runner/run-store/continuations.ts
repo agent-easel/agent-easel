@@ -10,9 +10,9 @@ import { writeBlockState } from "./blocks.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { asDelivery } from "./deliveries.ts";
 import { guardsHold, pendingHandoffHolds } from "./guards.ts";
+import { clearSpentArrivalMessages } from "./handoffs.ts";
 import type { DeliveryRecord, Handoff } from "./records.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
-import { clearSpentWaitMessages } from "./waits.ts";
 
 /** A Continuation's prompt visit: `sent` until its response is forwarded, then every later message
  * passes through. */
@@ -28,19 +28,21 @@ const arrivalMessage = (handoff: Handoff) => {
 };
 
 /** The block and exit that wrote a Handoff's message. A Wait forwards its arrival's message
- * unchanged, so a message from a Wait was written by that arrival's source, through consecutive
- * Waits. */
+ * unchanged and a Condition routes it unchanged, so a message from either was written by that
+ * arrival's source, through consecutive Waits and Conditions. */
 const messageAuthor = (sql: SqlClient.SqlClient, handoff: Handoff) =>
   Effect.gen(function* () {
     const [author] = yield* sql<{
       source_block_id: string | null;
       exit_id: string | null;
-    }>`WITH RECURSIVE chain(source_block_id,exit_id,wait_arrival_id) AS (
-        SELECT ${handoff.source_block_id},${handoff.exit_id},${handoff.wait_arrival_id}
+    }>`WITH RECURSIVE chain(source_block_id,exit_id,wait_arrival_id,condition_arrival_id) AS (
+        SELECT ${handoff.source_block_id},${handoff.exit_id},${handoff.wait_arrival_id},${handoff.condition_arrival_id}
         UNION ALL
-        SELECT i.source_block_id,i.exit_id,i.wait_arrival_id FROM chain c JOIN wait_arrivals a ON a.id=c.wait_arrival_id JOIN operation_intents i ON i.id=a.incoming_intent_id
-      ) SELECT source_block_id,exit_id FROM chain WHERE wait_arrival_id IS NULL`;
-    if (!author) return yield* Effect.fail(Error("A forwarded message lost its Wait arrival"));
+        SELECT i.source_block_id,i.exit_id,i.wait_arrival_id,i.condition_arrival_id FROM chain c JOIN operation_intents i ON i.id=COALESCE(
+          (SELECT a.incoming_intent_id FROM wait_arrivals a WHERE a.id=c.wait_arrival_id),
+          (SELECT a.incoming_intent_id FROM condition_arrivals a WHERE a.id=c.condition_arrival_id))
+      ) SELECT source_block_id,exit_id FROM chain WHERE wait_arrival_id IS NULL AND condition_arrival_id IS NULL`;
+    if (!author) return yield* Effect.fail(Error("A forwarded message lost its arrival"));
     return { sourceBlockId: author.source_block_id, exitId: author.exit_id };
   });
 
@@ -86,7 +88,7 @@ export function openRunContinuations(database: RunnerDatabase) {
           yield* writeBlockState(sql, { runId: current.id, blockId: handoff.block_id }, "error", {
             problem,
           });
-          yield* clearSpentWaitMessages(sql, current.id);
+          yield* clearSpentArrivalMessages(sql, current.id);
           yield* advanceGeneration(sql, current.id);
           return undefined;
         }
@@ -118,7 +120,7 @@ export function openRunContinuations(database: RunnerDatabase) {
         yield* writeBlockState(sql, { runId: current.id, blockId: handoff.block_id }, "sent", {
           problem: null,
         });
-        yield* clearSpentWaitMessages(sql, current.id);
+        yield* clearSpentArrivalMessages(sql, current.id);
         yield* advanceGeneration(sql, current.id);
         const [delivery] =
           yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${handoff.id}`;
@@ -205,7 +207,7 @@ export function openRunContinuations(database: RunnerDatabase) {
           intentId: handoff.id,
           observedAt: time,
         });
-        yield* clearSpentWaitMessages(sql, current.id);
+        yield* clearSpentArrivalMessages(sql, current.id);
         yield* advanceGeneration(sql, current.id);
       }),
     );

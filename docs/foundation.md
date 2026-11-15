@@ -38,7 +38,10 @@ and restricted OAuth credentials live outside project repositories.
   Migration `097` widened the Flow revision block kinds to include Condition, rebuilding the block
   table under its restored immutability guards with every stored block unchanged and no Condition
   inferred, and added immutable Condition rule rows; a Condition's Otherwise output is implicit for
-  the kind and not stored.
+  the kind and not stored. Migration `098` added Condition arrivals, keyed by their incoming delivery, with a per-Run,
+  per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
+  rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
+  starts the count of any Condition a Run already captured at 0.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
@@ -87,7 +90,8 @@ and restricted OAuth credentials live outside project repositories.
 - External delivery records retain the exact request, target, key and authorization
   context needed to resolve uncertain outcomes. An acknowledgement is not completion.
   Each delivery also records the [worker provenance](runner.md#worker-provenance) of its message,
-  and each Wait arrival is a durable obligation with an absolute deadline.
+  and each Wait arrival is a durable obligation with an absolute deadline. A Condition delivery is recorded pending in
+  per-Condition order, then numbered and routed in the same transaction.
 - Reports name their Block by the Block id Factory issued; Run and Block identity never come
   from other model-supplied references.
   Attention settlement and the Run's Settled and Archived states remain separate, with cancelled Human work never
@@ -104,7 +108,9 @@ new attempts, and failed Agent work is never retried automatically; see
 are kept indefinitely. A Wait arrival keeps its message while it is pending or needed for
 delivery: after forwarding, until no outgoing Handoff is pending and no current visit of an Agent
 recipient reads it as that visit's input, and never past its cancellation or Archive. Its body is then cleared while
-its outcome, deadline and deduplication identity stay. Other message payloads persist only while needed for pending Human context,
+its outcome, deadline and deduplication identity stay. A Condition arrival follows the same rule once selected; while it waits
+for its number its text stays only in the incoming delivery, and its number, selection, provenance and deduplication identity
+stay. Other message payloads persist only while needed for pending Human context,
 uncertain delivery or recovery, then are cleared while keys, fingerprints and references
 remain. Initial input, including its images, and revision prompts are intentional exceptions;
 staged images no Run references are deleted after 24 hours. The only other image removal is manual

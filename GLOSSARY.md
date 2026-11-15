@@ -78,8 +78,12 @@ _Avoid_: continuity, follow-up block, reusing a worker by copying its conversati
 A Flow-local flow block that routes by arrival number: an ordered list of **From arrival N onward** rules, each with its own named output, followed by the fixed, mandatory **Otherwise** output. The first rule whose number the arrival reaches selects its output; Otherwise is selected when none does and is not an error route. It has no Agent, worker, prompt or reports, cannot be a Flow input target, and does not interpret message text. Written with a capital C it always means this block kind; a lowercase condition is any ordinary requirement or circumstance, such as a readiness or Start condition.
 _Avoid_: Branch, router, switch or decision as the block name; condition for a generic requirement where the block could be meant.
 
+**Condition arrival**:
+One distinct delivery a Condition accepts within a Run, numbered from 1 per Run and Condition and shared by all its incoming wires and workers. A redelivery of the same delivery keeps its number; another delivery with identical text is the next arrival. It records its number, the selected output (the matched rule or Otherwise) and the delivery's worker provenance; the number never resets, and once recorded neither number nor selection changes. An arrival number is not a review or attempt count.
+_Avoid_: Attempt, iteration or review number.
+
 **Worker provenance**:
-The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.
+The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait, Condition or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.
 _Avoid_: delivery origin as a separate term.
 
 **Block exit**:

@@ -8,6 +8,7 @@ import { makeRunLanes } from "../runner-lanes.ts";
 import { now } from "../../time.ts";
 import { openRunActivations } from "./activations.ts";
 import { openRunArchive } from "./archive.ts";
+import { openRunConditions } from "./conditions.ts";
 import { openRunContinuations } from "./continuations.ts";
 import { openRunDeliveries } from "./deliveries.ts";
 import { openRunHuman } from "./human.ts";
@@ -78,6 +79,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
     ...openRunRelease(database),
     ...openRunActivations(database),
     ...openRunContinuations(database),
+    ...openRunConditions(database),
     ...openRunDeliveries(database),
     ...openRunStart(database),
     ...openRunWorkspace(database),

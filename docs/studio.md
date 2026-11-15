@@ -229,7 +229,7 @@ arrival on through Otherwise. A Condition has no Agent, prompt, execution settin
 cannot connect to it. Until Studio's dedicated Condition editing exists, the canvas shows a Condition with its rule count and one
 output port per rule and Otherwise, and its panel lists each output read-only with its threshold and recipients; Conditions are
 authored through the [Flow graph](#graph-shape) or the [MCP authoring tools](t3-integration.md#authoring-tools). The block
-library offers no Condition yet, and a Run does not route through one yet.
+library offers no Condition yet. A Run routes through it as the [Runner](runner.md#condition-arrivals) describes.
 
 ### Automatic layout and canvas view
 

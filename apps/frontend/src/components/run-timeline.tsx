@@ -120,6 +120,15 @@ function waitStarted(run: RunDetail, event: RunEvent): EventPhrase {
   };
 }
 
+function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
+  const selection = event.condition;
+  if (!event.blockId || !selection) return { actorId: event.blockId, text: "selected an output" };
+  return {
+    actorId: event.blockId,
+    text: `arrival ${selection.arrivalNumber} → ${exitLabel(run, event.blockId, selection.outputId)}`,
+  };
+}
+
 const attentionWords: Record<RunAttention["kind"], string> = {
   human: "needs input · your answer",
   "native-request": "needs input · T3 question or permission",
@@ -254,6 +263,7 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
   "continuation-prompt-sent": continuationPromptSent,
   "continuation-forwarded": said("response forwarded"),
   "continuation-passed": continuationPassed,
+  "condition-selected": conditionSelected,
   "operation-unresolved": operationUnresolved,
   "settlement-requested": said("settlement requested · automatic work held"),
   "worker-stop-requested": said("worker Stop requested · awaiting completion confirmation"),

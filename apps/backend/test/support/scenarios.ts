@@ -928,6 +928,89 @@ export const reviewedLoopWaitFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+/** The Condition every Condition Flow shape routes through, with `rules` before its Otherwise. */
+const gate = (rules: ConditionShape["rules"] = []) =>
+  conditionBlock("gate", "Gate", rules, { x: 400, y: 0 });
+/** From arrival 2 onward, the Gate selects its Escalate output. */
+const escalateFromSecond = [conditionRule("escalate", "Escalate", 2)];
+
+/** Entry worker's "Done" goes to the Gate, whose Otherwise hands to Follow-up. */
+export const conditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Condition", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), gate(), followUp(agentId)],
+    connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
+  }));
+
+/** Entry worker's "Done" and Flow-local "Revise" both go to the Gate, whose Otherwise ends the
+ * branch. */
+export const terminalConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Terminal condition", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]), gate()],
+    connections: [connection("worker", "done", "gate"), connection("worker", "revise", "gate")],
+  }));
+
+/** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, which
+ * escalates to a Human Review from arrival 2 and otherwise hands to Follow-up. */
+export const parallelConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Parallel condition", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "Second entry", agentId),
+      gate(escalateFromSecond),
+      reviewStep,
+      followUp(agentId),
+    ],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("second", "done", "gate"),
+      connection("gate", "escalate", "review"),
+      connection("gate", OTHERWISE, "follow-up"),
+    ],
+  }));
+
+/** Entry worker's "Done" goes to the Gate, which escalates to a Human Review from arrival 2 and
+ * otherwise returns it to Entry worker. */
+export const loopConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Condition loop", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), gate(escalateFromSecond), reviewStep],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("gate", "escalate", "review"),
+      connection("gate", OTHERWISE, "worker"),
+    ],
+  }));
+
+/** Entry worker's "Done" goes to the Gate, whose Otherwise hands to both Follow-up and a Human
+ * Review. */
+export const fanOutConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Condition fan-out", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), gate(), followUp(agentId), reviewStep],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("gate", OTHERWISE, "follow-up"),
+      connection("gate", OTHERWISE, "review"),
+    ],
+  }));
+
+/** Entry worker's "Done" goes to a Human Review whose Approve goes to the Gate, whose Otherwise
+ * hands to both the Continuation Spec and Follow-up. */
+export const reviewConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Review then condition", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), reviewStep, gate(), specStep, followUp(agentId)],
+    connections: [
+      connection("worker", "done", "review"),
+      connection("review", "approve", "gate"),
+      connection("gate", OTHERWISE, "spec"),
+      connection("gate", OTHERWISE, "follow-up"),
+    ],
+  }));
+
 /** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" goes to
  * Follow-up. */
 export const fanOutFlow: ReadyFlowShape = (world) =>
@@ -1504,6 +1587,19 @@ export function resultReleasedToWait(world: ScenarioWorld, worker: WorkerHandle)
     return { ...worker, arrival: run.waitArrivals.find((item) => item.state === "pending")! };
   });
 }
+
+/** Factory observed until the Run's Gate has numbered `count` arrivals. */
+export function arrivalsNumbered(world: ScenarioWorld, runId: string, count: number) {
+  return reach(`${count} Condition arrivals numbered`, () =>
+    observeFor("observe the Condition arrivals", world, runId, (run) =>
+      run.conditions.some((condition) => condition.arrivals === count),
+    ),
+  );
+}
+
+/** Each Condition selection on the Run's timeline, in order. */
+export const conditionSelections = (run: RunDetail) =>
+  run.events.flatMap((event) => (event.condition ? [event.condition] : []));
 
 /** The user continued the Wait's pending arrival early with Continue now, and Factory launched the
  * Wait's recipient with the arrival's message. */

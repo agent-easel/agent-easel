@@ -10,12 +10,14 @@ import { readWorkerRepositories } from "./worker-repositories.ts";
 import { recoveryRows } from "./recovery-read.ts";
 import { waitArrival, type WaitArrivalRow } from "./waits.ts";
 import { workerProvenance } from "./handoffs.ts";
-import type {
-  Result,
-  RunAttention,
-  RunDetail,
-  RunWorkspaceDetail,
-  TaskSummary,
+import { readConditionSummaries } from "./conditions.ts";
+import {
+  CONDITION_OTHERWISE_ID,
+  type Result,
+  type RunAttention,
+  type RunDetail,
+  type RunWorkspaceDetail,
+  type TaskSummary,
 } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
@@ -40,6 +42,9 @@ import type {
 
 type RunEventRow = {
   sequence: number;
+  /** Set only for `condition-selected`, from its arrival. */
+  arrival_number: number | null;
+  output_id: string | null;
   kind: string;
   observed_at: string;
   block_id: string | null;
@@ -169,6 +174,7 @@ function runIntent(intent: IntentRow): RunDetail["intents"][number] {
     sourceBlockId: intent.source_block_id,
     exitId: intent.exit_id,
     waitArrivalId: intent.wait_arrival_id,
+    conditionArrivalId: intent.condition_arrival_id,
     origin: workerProvenance(intent),
     payloadRetained: intent.payload_json !== null,
     reference: intent.result_json
@@ -193,6 +199,9 @@ function runEvent(event: RunEventRow): RunDetail["events"][number] {
     executionId: event.execution_id,
     causeId: event.cause_id,
     blockId: event.block_id,
+    ...(event.arrival_number === null || event.output_id === null
+      ? {}
+      : { condition: { arrivalNumber: event.arrival_number, outputId: event.output_id } }),
   };
 }
 
@@ -258,7 +267,7 @@ export function openRunQueries(database: RunnerDatabase) {
         const intents =
           yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
         const events =
-          yield* sql<RunEventRow>`SELECT * FROM run_events WHERE run_id=${id} ORDER BY sequence`;
+          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id WHERE e.run_id=${id} ORDER BY e.sequence`;
         const reports =
           yield* sql<ResultRecord>`SELECT * FROM runtime_reports WHERE run_id=${id} ORDER BY rowid`;
         const executions = yield* sql<ExecutionRow>`SELECT x.*,
@@ -325,6 +334,7 @@ export function openRunQueries(database: RunnerDatabase) {
             executions: executions.map(runExecution),
             humanOccurrences: humans.map(humanOccurrence),
             waitArrivals: waits.map(waitArrival),
+            conditions: yield* readConditionSummaries(sql, id, definitions),
             continuationVisits: continuationVisits.map((visit) => ({
               id: visit.id,
               blockId: visit.block_id,

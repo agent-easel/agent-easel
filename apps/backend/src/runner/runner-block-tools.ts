@@ -48,7 +48,9 @@ export function openBlockTools(
       if (!detail.ok) return { code: "RUNTIME_UNAVAILABLE" };
       if (kind === "run") return runView(detail.value);
       const manifest = yield* store.blockImages(block.run_id);
-      return blockView(detail.value, block.block_id, manifest.map(imageIdentity));
+      const routedId = conditionArrivalId(visitCause(detail.value, block.block_id));
+      const routed = routedId ? yield* store.conditionArrivalMessage(block.run_id, routedId) : null;
+      return blockView(detail.value, block.block_id, manifest.map(imageIdentity), routed);
     }).pipe(Effect.catchCause(() => Effect.succeed<RuntimeReply>({ code: "RUNTIME_UNAVAILABLE" })));
 }
 
@@ -70,10 +72,22 @@ function readImage(store: RunStore, images: RunImages, runId: string, imageId: s
   });
 }
 
+/** The cause of the Block's current visit; empty before its first. */
+function visitCause(detail: RunDetail, blockId: string) {
+  return (
+    detail.activations.filter((activation) => activation.blockId === blockId).at(-1)?.cause ?? ""
+  );
+}
+
+/** The Condition arrival a visit's cause names, if a Condition routed the visit. */
+const conditionArrivalId = (cause: string) => /^condition:([^/]+)/.exec(cause)?.[1];
+
+/** `routed` is the message of the Condition arrival that started the current visit, if one did. */
 function blockView(
   detail: RunDetail,
   blockId: string,
   images: NonNullable<RuntimeReply["inputs"]>["images"],
+  routed: string | null,
 ): RuntimeReply {
   const block = detail.blocks.find((entry) => entry.blockId === blockId);
   const graphBlock = detail.definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
@@ -105,7 +119,7 @@ function blockView(
       input: detail.input,
       images,
       results: incomingResults(detail, cause),
-      feedback: visitFeedback(detail, cause),
+      feedback: conditionArrivalId(cause) ? routed : visitFeedback(detail, cause),
     },
     allowedTransitions: current && detail.gateOpen ? OPEN_TRANSITIONS : [],
   };
@@ -116,6 +130,7 @@ function visitReason(cause: string) {
   if (cause.startsWith("start:")) return "first";
   if (cause.startsWith("human:")) return "Human answer";
   if (cause.startsWith("wait:")) return "Wait";
+  if (cause.startsWith("condition:")) return "Condition";
   return "feedback";
 }
 
