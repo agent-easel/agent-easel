@@ -29,7 +29,8 @@ export interface AgentExecutionSettingsStatus {
   readonly options: readonly { readonly id: string; readonly state: AgentSettingAvailability }[];
 }
 
-interface SavedAgent {
+/** Fields every saved Agent revision has; `execution` decides which revision shape applies. */
+interface AgentFields {
   readonly id: string;
   readonly name: string;
   readonly prompt: string;
@@ -41,7 +42,7 @@ interface SavedAgent {
 }
 
 /** An Agent revision a Run captured; Start accepts only Agents with execution settings. */
-export interface CapturedAgent extends SavedAgent {
+export interface CapturedAgent extends AgentFields {
   readonly execution: AgentExecutionSettings;
 }
 
@@ -49,7 +50,7 @@ export interface CapturedAgent extends SavedAgent {
  * One saved Agent revision. `execution` is complete or null, never partial: an Agent without
  * execution settings Needs a model and cannot run.
  */
-export type AgentDefinition = CapturedAgent | (SavedAgent & { readonly execution: null });
+export type AgentDefinition = CapturedAgent | (AgentFields & { readonly execution: null });
 
 export interface AgentEnvironment {
   readonly environmentId: string;
