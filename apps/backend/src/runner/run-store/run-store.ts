@@ -29,6 +29,12 @@ export type { StartPlan, StartWorkspace } from "./start.ts";
 export type { RequestReportSettlement } from "./request-report.ts";
 export type { BoundWorker, SettlementWorkerRecord } from "./manual-settlement.ts";
 export type { ScheduledWait, WaitForwarding } from "./waits.ts";
+export * as titleGenerations from "./title-generations.ts";
+export type {
+  LaunchedTitleGeneration,
+  TitleGenerationPlan,
+  TitleGenerationRun,
+} from "./title-generations.ts";
 
 /**
  * The Run store owns a Run's execution records and reads. Transitions own their guards,

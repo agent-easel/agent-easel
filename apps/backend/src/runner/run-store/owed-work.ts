@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { cancelTitleGeneration } from "../../run-titles.ts";
+import { cancelTitleGeneration } from "./title-generations.ts";
 import type { HumanRow } from "../runner-types.ts";
 import { settleAttention } from "./attention.ts";
 import { writeBlockState } from "./blocks.ts";
