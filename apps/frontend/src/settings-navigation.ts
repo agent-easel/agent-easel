@@ -112,12 +112,16 @@ export function useStudioNavigation() {
       resetScroll: false,
     });
 }
-/** Opens Studio from outside it; an open Studio keeps its selection. */
+/**
+ * Opens Studio from the keyboard or palette. Opening an open Studio again does nothing, so it
+ * keeps its selection and history; choosing a Flow or Agent shows it.
+ */
 export function useOpenStudio() {
   const studioOpen = !!useStudio();
   const navigate = useStudioNavigation();
   return (selection: StudioSelection) => {
-    if (studioOpen) return;
+    const definition = selection.tab === "flows" ? selection.flowId : selection.agentId;
+    if (studioOpen && !definition) return;
     void navigate(selection);
   };
 }
