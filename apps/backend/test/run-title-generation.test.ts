@@ -730,7 +730,6 @@ it("a title thread Stop requested before a restart is not requested again after 
   // Act
   const restored = await fixture.h.open({ t3: fixture.t3, connectionRetryMs: 60_000 });
   c.onTestFinished(() => restored.close());
-  await restored.reconcileRuns();
 
   // Assert
   expect(titleThreadStops(fixture.t3)).toStrictEqual([
