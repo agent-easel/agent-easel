@@ -1,16 +1,8 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
-import { useRefreshSchedule } from "./use-refresh-schedule.ts";
+import { useRefreshSchedule } from "./refresh-schedule.ts";
 
 interface ReportingReads {
   targets: readonly ReportingInstallation[] | null;
@@ -72,37 +64,22 @@ const ReportingStateContext = createContext<
 
 /** Shared by Agent definitions, reporting setup and the Settings indicator. */
 export function ReportingStateProvider({ children }: { children: ReactNode }) {
-  const [installations, setInstallations] = useState<Pick<ReportingReads, "targets" | "error">>({
-    targets: null,
-    error: "",
-  });
+  const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
   const agents = useLiveStudio().value?.agents ?? null;
-  const active = useRef(false);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  const latest = useRef(0);
-  const refresh = useCallback(async () => {
-    const ticket = ++latest.current;
-    await api
-      .getReportingInstallations()
-      .then((targets) => {
-        if (active.current && ticket === latest.current) setInstallations({ targets, error: "" });
-      })
-      .catch(() => {
-        if (active.current && ticket === latest.current)
-          setInstallations({
-            targets: null,
-            error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
-          });
-      });
-  }, []);
-  useRefreshSchedule(refresh, false);
+  const { failure, refresh } = useRefreshSchedule({
+    read: api.getReportingInstallations,
+    apply: setTargets,
+    intervalMs: 30_000,
+  });
+  const reads: ReportingReads = failure
+    ? {
+        targets: null,
+        agents,
+        error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
+      }
+    : { targets, agents, error: "" };
   return (
-    <ReportingStateContext.Provider value={{ ...installations, agents, refresh }}>
+    <ReportingStateContext.Provider value={{ ...reads, refresh }}>
       {children}
     </ReportingStateContext.Provider>
   );

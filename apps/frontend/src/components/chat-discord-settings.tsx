@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fieldLabelClass } from "@/components/page";
 import { api } from "../api.ts";
+import { useRefreshSchedule } from "../refresh-schedule.ts";
 import { reportDiscordSettings } from "../chat-control-attention.ts";
 import { AccessForm, useAccessSection } from "./chat-discord-access.tsx";
 import { DeliveryDiagnostics } from "./chat-discord-delivery.tsx";
@@ -108,20 +109,23 @@ function useDiscordPage() {
   useEffect(() => {
     if (settings) reportDiscordSettings(settings);
   }, [settings]);
-  useEffect(() => {
-    if (!enabled) return;
-    const timer = setInterval(
-      () => void api.getDiscordSettings().then(setSettings, () => undefined),
-      STATUS_REFRESH_MS,
-    );
-    return () => clearInterval(timer);
-  }, [enabled, setSettings]);
+  const { failure, supersede } = useRefreshSchedule({
+    read: api.getDiscordSettings,
+    apply: setSettings,
+    intervalMs: STATUS_REFRESH_MS,
+    watching: enabled,
+  });
+  /** An action's answer is newer than any background read still in flight. */
+  const answer = (next: DiscordSettings) => {
+    supersede();
+    setSettings(next);
+  };
   const check = async (revision: number) => {
     setChecking(true);
     setCheckError("");
     return await api
       .checkDiscordConnection({ revision })
-      .then(setSettings)
+      .then(answer)
       .catch((cause: unknown) => {
         setCheckError(chatControlError(cause, "Factory could not run the check."));
       })
@@ -134,7 +138,7 @@ function useDiscordPage() {
     setSwitchError("");
     return await api
       .setChatControlEnabled({ enabled: on })
-      .then(setSettings)
+      .then(answer)
       .catch((cause: unknown) => {
         setSwitchError(
           chatControlError(cause, `Factory could not turn Chat control ${on ? "On" : "Off"}.`),
@@ -146,6 +150,14 @@ function useDiscordPage() {
   };
   return {
     ...section,
+    setSettings: answer,
+    save: async (input: UpdateDiscordConnectionInput) => {
+      await section.save(input);
+      supersede();
+    },
+    refreshError: failure
+      ? chatControlError(failure.cause, "Factory could not refresh the connection state.")
+      : "",
     dirty: settings !== null && draft !== null && isDirty(draft, settings),
     checking,
     checkError,
@@ -186,6 +198,7 @@ export function ChatDiscordSettings() {
             settings={settings}
             switching={page.switching}
             switchError={page.switchError}
+            refreshError={page.refreshError}
             onTurn={(on) => void page.turn(on)}
           />
           <DeliveryDiagnostics settings={settings} onSettings={page.setSettings} />
@@ -238,11 +251,13 @@ function ChatControlSwitch({
   settings,
   switching,
   switchError,
+  refreshError,
   onTurn,
 }: {
   settings: DiscordSettings;
   switching: boolean;
   switchError: string;
+  refreshError: string;
   onTurn: (on: boolean) => void;
 }) {
   const on = settings.chatControlEnabled;
@@ -278,6 +293,11 @@ function ChatControlSwitch({
       {switchError && (
         <Alert variant="destructive">
           <AlertDescription>{switchError}</AlertDescription>
+        </Alert>
+      )}
+      {refreshError && (
+        <Alert variant="destructive">
+          <AlertDescription>{refreshError}</AlertDescription>
         </Alert>
       )}
       {on && <OperatingDiagnostics settings={settings} />}

@@ -1,12 +1,12 @@
 import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";
-import { usePolling } from "../use-polling.ts";
+import { useRefreshSchedule } from "../refresh-schedule.ts";
 import {
   SettingsDetailRow,
   SettingsDisclosure,
@@ -43,27 +43,28 @@ const decisionOperations = {
 export function DeviceAccessProvider({ children }: { children: ReactNode }) {
   const [remote, setRemote] = useState<RemoteAccessStatus | null>(null);
   const [clients, setClients] = useState<readonly FactoryClient[]>([]);
-  const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
-  const load = useCallback(async (isActive: () => boolean = () => true) => {
-    try {
-      const [status, list] = await Promise.all([api.getRemoteAccess(), api.listClients()]);
-      if (!isActive()) return;
+  const { failure, refresh } = useRefreshSchedule({
+    read: () => Promise.all([api.getRemoteAccess(), api.listClients()]),
+    apply: ([status, list]) => {
       setRemote(status);
       setClients(list);
-    } catch (cause) {
-      if (isActive())
-        setError(cause instanceof Error ? cause.message : "Access status unavailable.");
-    }
-  }, []);
-  usePolling({ intervalMs: 2000, onPoll: load });
+    },
+    intervalMs: 2000,
+  });
+  const readError = !failure
+    ? ""
+    : failure.cause instanceof Error
+      ? failure.cause.message
+      : "Access status unavailable.";
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true);
-    setError("");
+    setActionError("");
     return await operation()
-      .then(() => load())
+      .then(() => refresh())
       .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : "The change could not be saved.");
+        setActionError(cause instanceof Error ? cause.message : "The change could not be saved.");
       })
       .finally(() => {
         setBusy(false);
@@ -72,7 +73,7 @@ export function DeviceAccessProvider({ children }: { children: ReactNode }) {
   const access: DeviceAccess = {
     remote,
     clients,
-    error,
+    error: actionError || readError,
     busy,
     setRemoteAccess: (enabled) => void act(() => api.setRemoteAccess({ enabled })),
     decide: (id, decision) => void act(() => api[decisionOperations[decision]](id)),

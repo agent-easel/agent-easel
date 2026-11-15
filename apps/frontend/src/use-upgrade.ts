@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { ApplicationUpdate, ServerUpdate, UpdateChannel } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 import { useClientScope } from "./client-scope.ts";
@@ -6,7 +6,7 @@ import type { DesktopState } from "@t3-factory/contracts/desktop-bridge";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { OfflineError } from "./transport.ts";
 import { useDesktopState } from "./desktop-state.ts";
-import { usePolling } from "./use-polling.ts";
+import { useRefreshSchedule } from "./refresh-schedule.ts";
 
 /** One installation the upgrade replaces: this desktop app, the server, or both. */
 export interface UpgradeTarget {
@@ -111,16 +111,13 @@ export function upgradeScope(targets: readonly UpgradeTarget[]) {
 
 function useServerUpdate(enabled: boolean, fast: boolean) {
   const [server, setServer] = useState<ServerUpdate | null>(null);
-  const poll = useCallback(
-    async (isActive: () => boolean) => {
-      if (!enabled) return;
-      // An older server has no update route; it is then simply not an upgrade target.
-      const value = await api.getServerUpdate().catch(() => null);
-      if (isActive()) setServer(value);
-    },
-    [enabled],
-  );
-  usePolling({ intervalMs: fast ? 2000 : 15_000, onPoll: poll });
+  useRefreshSchedule({
+    // An older server has no update route; it is then simply not an upgrade target.
+    read: () => api.getServerUpdate().catch(() => null),
+    apply: setServer,
+    intervalMs: fast ? 2000 : 15_000,
+    watching: enabled,
+  });
   return [enabled ? server : null, setServer] as const;
 }
 
