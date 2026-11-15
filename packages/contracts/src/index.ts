@@ -1,6 +1,7 @@
 export * from "./result.ts";
 export * from "./flow.ts";
 export * from "./agent.ts";
+export * from "./portable-document.ts";
 export * from "./operation.ts";
 export * from "./project.ts";
 export * from "./connection.ts";

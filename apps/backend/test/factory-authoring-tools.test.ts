@@ -167,6 +167,107 @@ it("an Agent save choosing a provider without Factory reporting support is refus
   });
 });
 
+it("factory_create_agent with execution null creates an Agent that factory_get_agent reads without execution or settings status", async (c) => {
+  // Arrange
+  const { client } = await authoringMcpClient(c);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_agent",
+    arguments: { ...sampleAgentInput("Coder"), execution: null },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const created = toolReply(result);
+  expect(
+    toolReply(
+      await client.callTool({ name: "factory_get_agent", arguments: { agentId: created.id } }),
+    ),
+  ).toMatchObject({ id: created.id, revision: 1, execution: null, settingsStatus: null });
+});
+
+it("factory_save_agent with execution null saves the next revision without a model", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_agent",
+    arguments: {
+      ...sampleAgentInput("Coder"),
+      agentId: saved.id,
+      expectedRevision: saved.revision,
+      execution: null,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+    revision: saved.revision + 1,
+    execution: null,
+    settingsStatus: null,
+  });
+});
+
+it("factory_save_agent without the execution key is refused and keeps the model", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const { execution: _execution, ...withoutExecution } = sampleAgentInput("Coder");
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_agent",
+    arguments: { ...withoutExecution, agentId: saved.id, expectedRevision: saved.revision },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "execution_required", path: "execution" }],
+  });
+  expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+    revision: saved.revision,
+    execution: saved.execution,
+  });
+});
+
+it.for([
+  ["modelId", { code: "invalid_model", path: "execution.modelId" }],
+  ["modelOptions", { code: "invalid_option", path: "execution.modelOptions" }],
+] as const)(
+  "factory_save_agent with an execution missing %s is refused and keeps the model and its options",
+  async ([missing, issue], c) => {
+    // Arrange
+    const { factory, client } = await authoringMcpClient(c);
+    const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+    const { [missing]: _missing, ...partial } = sampleAgentInput("Coder").execution;
+
+    // Act
+    const result = await client.callTool({
+      name: "factory_save_agent",
+      arguments: {
+        ...sampleAgentInput("Coder"),
+        agentId: saved.id,
+        expectedRevision: saved.revision,
+        execution: partial,
+      },
+    });
+
+    // Assert
+    expect(result.isError).toBe(true);
+    expect(toolReply(result)).toMatchObject({ code: "validation", issues: [issue] });
+    expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
+      revision: saved.revision,
+      execution: saved.execution,
+    });
+  },
+);
+
 it("a stale Flow save whose graph is too large to arrange is refused as a conflict before any layout", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);
@@ -339,6 +440,35 @@ it("factory_save_flow replaces an Agent block's Revisit instruction and factory_
       await client.callTool({ name: "factory_check_flow", arguments: { flowId: created.id } }),
     ),
   ).toStrictEqual({ ready: true, issues: [] });
+});
+
+it("factory_check_flow reports a block whose Agent Needs a model as not ready", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(
+    await factory.createAgent({ ...sampleAgentInput("Reviewer"), execution: null }),
+  );
+  const flow = assertOk(
+    await factory.createFlow({ name: "Review", graph: revisitGraph(agent.id, "") }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_check_flow",
+    arguments: { flowId: flow.id },
+  });
+
+  // Assert
+  expect(toolReply(result)).toStrictEqual({
+    ready: false,
+    issues: [
+      {
+        code: "agent_model_required",
+        path: "graph.blocks.0.agentId",
+        message: "Review: Reviewer needs a model.",
+      },
+    ],
+  });
 });
 
 it("removing an unused Agent replies with its id and the Agent then reads as not found", async (c) => {

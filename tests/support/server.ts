@@ -38,11 +38,7 @@ import type {
   RunDetail,
 } from "../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../packages/domain-validation/src/index.ts";
-import {
-  FACTORY_MINIMUM_PEER_PROTOCOL,
-  FACTORY_PROTOCOL,
-  FACTORY_STUDIO_LIVE_PROTOCOL,
-} from "../../packages/domain-validation/src/client-access.ts";
+import { FACTORY_PROTOCOL } from "../../packages/domain-validation/src/client-access.ts";
 import { startServer } from "../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../apps/backend/src/config.ts";
 import { ControlledT3 } from "../../apps/backend/test/support/controlled-t3.ts";
@@ -327,11 +323,8 @@ await factory.updateFlow(launchFlow.value.id, {
   },
 });
 
-async function remoteFactory(
-  protocol?: { protocol: number; minimumPeerProtocol: number },
-  home?: string,
-) {
-  home ??= await mkdtemp(join(tmpdir(), "factory-remote-ui-"));
+async function remoteFactory(protocol?: { protocol: number; minimumPeerProtocol: number }) {
+  const home = await mkdtemp(join(tmpdir(), "factory-remote-ui-"));
   const config = await loadConfiguration({
     FACTORY_HOME: home,
     FACTORY_PORT: "0",
@@ -351,22 +344,6 @@ async function remoteFactory(
 
 const current = { home, server, t3, anchor: server.remoteAccess.trustAnchor()! };
 const older = await remoteFactory({ protocol: 1, minimumPeerProtocol: 1 });
-// A compatible server a release behind: it serves the current client but not live Studio.
-const olderCompatibleProtocol = {
-  protocol: FACTORY_STUDIO_LIVE_PROTOCOL - 1,
-  minimumPeerProtocol: FACTORY_MINIMUM_PEER_PROTOCOL,
-};
-let olderCompatible = await remoteFactory(olderCompatibleProtocol);
-/** Restarts the compatible fixture on the same home so existing definitions and approvals survive. */
-async function restartCompatibleServer(protocol?: {
-  protocol: number;
-  minimumPeerProtocol: number;
-}) {
-  dropRemoteLiveSockets();
-  await olderCompatible.server.close();
-  olderCompatible = await remoteFactory(protocol, olderCompatible.home);
-  target = olderCompatible;
-}
 // A server a release ahead that no longer accepts this client's protocol.
 const newer = await remoteFactory({
   protocol: FACTORY_PROTOCOL + 1,
@@ -708,23 +685,6 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
     target = newer;
     dropRemoteLiveSockets();
   },
-  /** A fresh compatible server on an older protocol (9–11), without live Studio delivery. */
-  "/__fixture/older-compatible-server": async () => {
-    dropRemoteLiveSockets();
-    await olderCompatible.server.close();
-    await rm(olderCompatible.home, { recursive: true, force: true });
-    olderCompatible = await remoteFactory(olderCompatibleProtocol);
-    target = olderCompatible;
-  },
-  /**
-   * The owner upgrades the older compatible server in place: the same home, approvals and
-   * definitions, now served at the current protocol behind the same address.
-   */
-  "/__fixture/older-compatible-server/upgrade": async () => {
-    await restartCompatibleServer();
-  },
-  "/__fixture/older-compatible-server/downgrade": () =>
-    restartCompatibleServer(olderCompatibleProtocol),
   // The owner saved a T3 endpoint on the host; T3 approval happens in the host's browser.
   "/__fixture/t3-endpoint": async () => {
     t3.authorized = false;
@@ -856,14 +816,9 @@ async function shutdown() {
   clearInterval(timer);
   proxy.close();
   await advancing;
-  await Promise.all([
-    server.close(),
-    newer.server.close(),
-    older.server.close(),
-    olderCompatible.server.close(),
-  ]);
+  await Promise.all([server.close(), newer.server.close(), older.server.close()]);
   await Promise.all(
-    [home, newer.home, older.home, olderCompatible.home].map((directory) =>
+    [home, newer.home, older.home].map((directory) =>
       rm(directory, { recursive: true, force: true }),
     ),
   );

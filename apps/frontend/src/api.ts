@@ -1,6 +1,7 @@
 import { OfflineError, protocolHeaders, transport, unreachableHeader } from "./transport.ts";
 import {
   agentOperations,
+  definitionImportOperations,
   flowOperations,
   projectOperations,
   connectionOperations,
@@ -118,6 +119,7 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
 export const api = {
   ...operationCalls(agentOperations),
   ...operationCalls(flowOperations),
+  ...operationCalls(definitionImportOperations),
   ...operationCalls(projectOperations),
   ...operationCalls(connectionOperations),
   ...operationCalls(appearanceOperations),

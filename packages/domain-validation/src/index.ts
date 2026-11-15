@@ -2,39 +2,18 @@ import type {
   AgentCapabilities,
   AgentDefinition,
   AgentExecutionSettings,
-  AgentModelOptionValue,
-  CreateAgentInput,
-  CreateFlowInput,
-  DuplicateAgentInput,
   FlowAgentRevisions,
   FlowBlockInput,
   FlowGraphInput,
-  FlowWorkspace,
-  UpdateFlowInput,
   FlowReadiness,
   ProjectIcon,
   ProjectIconColor,
-  Result,
-  RunTitleModel,
   StartTitleProvenance,
-  UpdateAgentInput,
-  UpdateRunTitleSettingInput,
   ValidationIssue,
   WaitDuration,
   WaitUnit,
 } from "@t3-factory/contracts";
-import {
-  CONTINUATION_EXIT,
-  checkExits,
-  effectiveExits,
-  HUMAN_EXITS,
-  WAIT_OUTPUT,
-  inheritedExits,
-  isId,
-  isRecord,
-  parseAgentExits,
-  type IssueReporter,
-} from "./block-exits.ts";
+import { effectiveExits, inheritedExits, type IssueReporter } from "./block-exits.ts";
 
 export const TASK_TITLE_LIMIT = 500;
 
@@ -161,666 +140,18 @@ export function parseProjectIcon(input: unknown): ProjectIcon | null {
   return null;
 }
 
-/** Structural save validation is deliberately separate from execution readiness. */
-function validateFlowName(input: unknown): Result<Pick<CreateFlowInput, "name">> {
-  const name =
-    typeof input === "object" && input !== null && "name" in input ? input.name : undefined;
-  if (typeof name !== "string" || name.trim().length === 0 || name.trim().length > 200) {
-    return {
-      ok: false,
-      error: {
-        code: "validation",
-        message: "Enter a Flow name between 1 and 200 characters.",
-        issues: [
-          {
-            code: "invalid_name",
-            path: "name",
-            message: "Enter a Flow name between 1 and 200 characters.",
-          },
-        ],
-      },
-    };
-  }
-  return { ok: true, value: { name: name.trim() } };
-}
-
-function agentNameIssue(): ValidationIssue {
-  return {
-    code: "invalid_name",
-    path: "name",
-    message: "Enter an Agent name between 1 and 200 characters.",
-  };
-}
-
-function parseTrimmedString(
-  value: unknown,
-  path: string,
-  max: number,
-  code: string,
-  message: string,
-): Result<string> {
-  if (typeof value !== "string" || value.trim().length === 0 || value.trim().length > max) {
-    return {
-      ok: false,
-      error: { code: "validation", message, issues: [{ code, path, message }] },
-    };
-  }
-  return { ok: true, value: value.trim() };
-}
-
-function invalid(code: string, path: string, message: string): Result<never> {
-  return { ok: false, error: { code: "validation", message, issues: [{ code, path, message }] } };
-}
-
-const EXECUTION_REQUIRED = "Choose an environment, provider, model and thinking options.";
-const INVALID_OPTION = "Thinking options must use supported id and value pairs.";
-
-function parseModelOption(
-  option: unknown,
-  index: number,
-  prefix: string,
-): Result<AgentModelOptionValue> {
-  const path = `${prefix}.modelOptions.${index}`;
-  if (typeof option !== "object" || option === null || !("id" in option) || !("value" in option))
-    return invalid("invalid_option", path, INVALID_OPTION);
-  const id = parseTrimmedString(
-    option.id,
-    `${path}.id`,
-    256,
-    "invalid_option",
-    "Each thinking option needs an id.",
-  );
-  if (!id.ok) return id;
-  const value = option.value;
-  if (typeof value === "boolean") return { ok: true, value: { id: id.value, value } };
-  if (typeof value !== "string" || value.length === 0 || value.length > 512)
-    return invalid("invalid_option", `${path}.value`, INVALID_OPTION);
-  return { ok: true, value: { id: id.value, value } };
-}
-
-function parseModelOptions(execution: object, prefix: string): Result<AgentModelOptionValue[]> {
-  if (
-    "modelOptions" in execution &&
-    execution.modelOptions !== undefined &&
-    !Array.isArray(execution.modelOptions)
-  )
-    return invalid("invalid_option", `${prefix}.modelOptions`, INVALID_OPTION);
-  const rawOptions =
-    "modelOptions" in execution && Array.isArray(execution.modelOptions)
-      ? execution.modelOptions
-      : [];
-  const modelOptions: AgentModelOptionValue[] = [];
-  for (const [index, raw] of rawOptions.entries()) {
-    const option = parseModelOption(raw, index, prefix);
-    if (!option.ok) return option;
-    modelOptions.push(option.value);
-  }
-  return { ok: true, value: modelOptions };
-}
-
-function parseExecutionReference(
-  execution: object,
-  field: "environmentId" | "providerInstanceId" | "modelId",
-  code: string,
-  message: string,
-  prefix = "execution",
-): Result<string> {
-  return parseTrimmedString(
-    field in execution ? (execution as Record<string, unknown>)[field] : undefined,
-    `${prefix}.${field}`,
-    512,
-    code,
-    message,
-  );
-}
-
-function parseExecution(input: unknown): Result<AgentExecutionSettings> {
-  const execution =
-    typeof input === "object" && input !== null && "execution" in input
-      ? input.execution
-      : undefined;
-  return validateExecutionSettings(execution);
-}
-
-export function validateExecutionSettings(execution: unknown): Result<AgentExecutionSettings> {
-  if (typeof execution !== "object" || execution === null)
-    return invalid("execution_required", "execution", EXECUTION_REQUIRED);
-  const environmentId = parseExecutionReference(
-    execution,
-    "environmentId",
-    "invalid_environment",
-    "Choose a T3 environment.",
-  );
-  if (!environmentId.ok) return environmentId;
-  const providerInstanceId = parseExecutionReference(
-    execution,
-    "providerInstanceId",
-    "invalid_provider",
-    "Choose a provider or harness.",
-  );
-  if (!providerInstanceId.ok) return providerInstanceId;
-  const modelId = parseExecutionReference(execution, "modelId", "invalid_model", "Choose a model.");
-  if (!modelId.ok) return modelId;
-  const modelOptions = parseModelOptions(execution, "execution");
-  if (!modelOptions.ok) return modelOptions;
-  return {
-    ok: true,
-    value: {
-      environmentId: environmentId.value,
-      providerInstanceId: providerInstanceId.value,
-      modelId: modelId.value,
-      modelOptions: modelOptions.value,
-    },
-  };
-}
-
-function validateRunTitleModel(model: unknown): Result<RunTitleModel> {
-  if (typeof model !== "object" || model === null)
-    return invalid("run_title_model", "model", "Choose a provider instance and model.");
-  const providerInstanceId = parseExecutionReference(
-    model,
-    "providerInstanceId",
-    "invalid_provider",
-    "Choose a provider instance.",
-    "model",
-  );
-  if (!providerInstanceId.ok) return providerInstanceId;
-  const modelId = parseExecutionReference(
-    model,
-    "modelId",
-    "invalid_model",
-    "Choose a model.",
-    "model",
-  );
-  if (!modelId.ok) return modelId;
-  const modelOptions = parseModelOptions(model, "model");
-  if (!modelOptions.ok) return modelOptions;
-  return {
-    ok: true,
-    value: {
-      providerInstanceId: providerInstanceId.value,
-      modelId: modelId.value,
-      modelOptions: modelOptions.value,
-    },
-  };
-}
-
-/**
- * The setting's shape only; whether T3 offers the model is checked against the live catalog.
- * Turning it on needs a model, while a disabled setting may keep one or none.
- */
-export function validateUpdateRunTitleSetting(input: unknown): Result<UpdateRunTitleSettingInput> {
-  const fields =
-    typeof input === "object" && input !== null ? (input as Record<string, unknown>) : {};
-  if (typeof fields.enabled !== "boolean")
-    return invalid("run_title_enabled", "enabled", "Say whether Generate Run titles is on.");
-  if (fields.model === null || fields.model === undefined)
-    return fields.enabled
-      ? invalid(
-          "run_title_model",
-          "model",
-          "Choose a provider instance and model before turning on Generate Run titles.",
-        )
-      : { ok: true, value: { enabled: false, model: null } };
-  const model = validateRunTitleModel(fields.model);
-  if (!model.ok) return model;
-  return { ok: true, value: { enabled: fields.enabled, model: model.value } };
-}
-
-/** Structural save validation is deliberately separate from T3 capability availability. */
-export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
-  const name = parseTrimmedString(
-    typeof input === "object" && input !== null && "name" in input ? input.name : undefined,
-    "name",
-    200,
-    "invalid_name",
-    "Enter an Agent name between 1 and 200 characters.",
-  );
-  if (!name.ok) return name;
-  const prompt = parseTrimmedString(
-    typeof input === "object" && input !== null && "prompt" in input ? input.prompt : undefined,
-    "prompt",
-    120_000,
-    "invalid_prompt",
-    "Enter a prompt up to 120,000 characters.",
-  );
-  if (!prompt.ok) return prompt;
-  const execution = parseExecution(input);
-  if (!execution.ok) return execution;
-  const exits = parseAgentExits(
-    typeof input === "object" && input !== null && "exits" in input ? input.exits : undefined,
-  );
-  if (!exits.ok) return exits;
-  return {
-    ok: true,
-    value: {
-      name: name.value,
-      prompt: prompt.value,
-      execution: execution.value,
-      exits: exits.value,
-    },
-  };
-}
-
-export function validateUpdateAgent(input: unknown): Result<UpdateAgentInput> {
-  const revision =
-    typeof input === "object" && input !== null && "expectedRevision" in input
-      ? input.expectedRevision
-      : undefined;
-  if (typeof revision !== "number" || !Number.isInteger(revision) || revision < 1) {
-    return {
-      ok: false,
-      error: {
-        code: "validation",
-        message: "Include the revision you opened before saving.",
-        issues: [
-          {
-            code: "invalid_revision",
-            path: "expectedRevision",
-            message: "Include the revision you opened before saving.",
-          },
-        ],
-      },
-    };
-  }
-  const base = validateCreateAgent(input);
-  if (!base.ok) return base;
-  return { ok: true, value: { expectedRevision: revision, ...base.value } };
-}
-
-export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInput> {
-  if (input === undefined || input === null) return { ok: true, value: {} };
-  if (typeof input !== "object") {
-    return {
-      ok: false,
-      error: {
-        code: "validation",
-        message: "Send a name or an empty object to duplicate.",
-        issues: [
-          {
-            code: "invalid_body",
-            path: "",
-            message: "Send a name or an empty object to duplicate.",
-          },
-        ],
-      },
-    };
-  }
-  if (!("name" in input) || input.name === undefined) return { ok: true, value: {} };
-  const name = parseTrimmedString(
-    input.name,
-    "name",
-    200,
-    "invalid_name",
-    agentNameIssue().message,
-  );
-  if (!name.ok) return name;
-  return { ok: true, value: { name: name.value } };
-}
-
-export const CANVAS_COORD_MIN = -10000;
-export const CANVAS_COORD_MAX = 10000;
-export const CANVAS_COORD_MESSAGE = `Use finite canvas coordinates from ${CANVAS_COORD_MIN} to ${CANVAS_COORD_MAX}.`;
-
-export const isCanvasPosition = (v: unknown): v is { x: number; y: number } =>
-  isRecord(v) &&
-  [v.x, v.y].every(
-    (c) =>
-      typeof c === "number" && Number.isFinite(c) && c >= CANVAS_COORD_MIN && c <= CANVAS_COORD_MAX,
-  );
-/** Hide entries name inherited exit IDs; whether the Agent still has them is not a save rule. */
-function checkHiddenExits(hidden: unknown, path: string, issue: IssueReporter) {
-  if (
-    !Array.isArray(hidden) ||
-    hidden.length > 100 ||
-    !hidden.every(isId) ||
-    new Set(hidden).size !== hidden.length
-  )
-    issue("invalid_hidden_exits", path, "Hide up to 100 distinct inherited exit IDs.");
-}
-
-/** The fields each block kind may carry beside its id, name, kind and position; an Agent block's
- * Revisit instruction has its own rule, which reports it on any other kind at its field path. A
- * Map, so an untrusted kind such as "toString" never resolves to an Object.prototype member. */
-const KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
-  ["agent", ["agentId", "hiddenExitIds", "localExits"]],
-  ["human", []],
-  ["wait", ["duration"]],
-  ["continuation", ["prompt"]],
-]);
-
-/** An Agent reference, a Wait duration or a Continuation prompt, the fields only one kind has. */
-function checkKindFields(block: Record<string, unknown>, path: string, issue: IssueReporter) {
-  if (block.kind === "agent" && block.agentId !== null && !isId(block.agentId))
-    issue(
-      "invalid_agent_reference",
-      `${path}.agentId`,
-      "Choose a saved Agent or leave the reference empty.",
-    );
-  if (
-    block.kind === "continuation" &&
-    (typeof block.prompt !== "string" || block.prompt.trim().length > CONTINUATION_PROMPT_LIMIT)
-  )
-    issue(
-      "invalid_prompt",
-      `${path}.prompt`,
-      "Enter a Continuation prompt up to 120,000 characters.",
-    );
-  if (block.kind === "wait") checkWaitDuration(block.duration, `${path}.duration`, issue);
-  checkRevisitInstruction(block, `${path}.revisitInstruction`, issue);
-}
-
-/** Only an Agent block has a Revisit instruction, reported at its own path on any other kind;
- * an omitted one saves empty. */
-function checkRevisitInstruction(
-  block: Record<string, unknown>,
-  path: string,
-  issue: IssueReporter,
-) {
-  const instruction = block.revisitInstruction;
-  if (instruction === undefined) return;
-  if (block.kind !== "agent")
-    issue("invalid_revisit_instruction", path, "Only an Agent block has a Revisit instruction.");
-  else if (typeof instruction !== "string" || instruction.trim().length > REVISIT_INSTRUCTION_LIMIT)
-    issue(
-      "invalid_revisit_instruction",
-      path,
-      "Enter a Revisit instruction up to 120,000 characters.",
-    );
-}
-
-function checkBlockFields(
-  block: Record<string, unknown>,
-  path: string,
-  blockIds: Set<string>,
-  issue: IssueReporter,
-) {
-  const kindFields = KIND_FIELDS.get(block.kind);
-  const allowed = ["id", "name", "kind", "position", ...(kindFields ?? [])];
-  if (Object.keys(block).some((key) => key !== "revisitInstruction" && !allowed.includes(key)))
-    issue(
-      "block_overrides_forbidden",
-      path,
-      "Blocks reference saved Agents; local settings and extra fields are not allowed.",
-    );
-  if (!isId(block.id) || blockIds.has(block.id))
-    issue("invalid_block_id", `${path}.id`, "Block IDs must be non-empty and unique.");
-  else blockIds.add(block.id);
-  if (!kindFields)
-    issue("invalid_block_kind", `${path}.kind`, "Use an Agent, Human, Wait or Continuation block.");
-  if (typeof block.name !== "string" || block.name.length > 200)
-    issue("invalid_block_name", `${path}.name`, "Use a block name up to 200 characters.");
-  checkKindFields(block, path, issue);
-  if (block.position !== undefined && !isCanvasPosition(block.position))
-    issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
-}
-
-const WAIT_UNITS: readonly string[] = ["minutes", "hours", "days"] satisfies WaitUnit[];
-
-/** A Wait's duration is null or a finite amount in a known unit; its range is a readiness rule
- * on the normalized duration, so a zero, negative or out-of-range draft still saves. */
-function checkWaitDuration(duration: unknown, path: string, issue: IssueReporter) {
-  if (duration === null) return;
-  if (
-    !isRecord(duration) ||
-    Object.keys(duration).some((key) => key !== "amount" && key !== "unit") ||
-    typeof duration.amount !== "number" ||
-    !Number.isFinite(duration.amount) ||
-    typeof duration.unit !== "string" ||
-    !WAIT_UNITS.includes(duration.unit)
-  )
-    issue(
-      "invalid_wait_duration",
-      path,
-      "Enter a number of minutes, hours or days, or leave the duration empty.",
-    );
-}
-
-/**
- * The exit IDs a connection may leave each block by: a Human block's, Wait's or Continuation's fixed exits,
- * or `inherited` for an Agent block, whose wires may also name Agent exits that readiness resolves.
- */
-type ConnectableExits = Map<string, ReadonlySet<string> | "inherited">;
-const HUMAN_EXIT_IDS: ReadonlySet<string> = new Set(HUMAN_EXITS.map((exit) => exit.id));
-const WAIT_EXIT_IDS: ReadonlySet<string> = new Set([WAIT_OUTPUT.id]);
-const CONTINUATION_EXIT_IDS: ReadonlySet<string> = new Set([CONTINUATION_EXIT.id]);
-const CONTINUATION_PROMPT_LIMIT = 120_000;
-const REVISIT_INSTRUCTION_LIMIT = CONTINUATION_PROMPT_LIMIT;
-
-function checkBlock(
-  block: unknown,
-  path: string,
-  blockIds: Set<string>,
-  exits: ConnectableExits,
-  issue: IssueReporter,
-) {
-  if (!isRecord(block)) {
-    issue("invalid_block", path, "Supply an Agent, Human, Wait or Continuation block.");
-    return;
-  }
-  checkBlockFields(block, path, blockIds, issue);
-  if (block.kind === "agent") {
-    checkHiddenExits(block.hiddenExitIds, `${path}.hiddenExitIds`, issue);
-    checkExits(block.localExits, `${path}.localExits`, false, issue);
-  }
-  if (typeof block.id === "string")
-    exits.set(
-      block.id,
-      block.kind === "human"
-        ? HUMAN_EXIT_IDS
-        : block.kind === "wait"
-          ? WAIT_EXIT_IDS
-          : block.kind === "continuation"
-            ? CONTINUATION_EXIT_IDS
-            : "inherited",
-    );
-}
-
-const GRAPH_FIELDS = ["blocks", "connections", "flowInput"];
-const FLOW_INPUT_FIELDS = ["position", "targetBlockIds"];
-
-/** The Flow input may target only existing Agent or Wait blocks, each at most once; a Wait target
- * is a readiness gap, not a save error. */
-function checkFlowInput(
-  flowInput: unknown,
-  targetableBlockIds: ReadonlySet<string>,
-  issue: IssueReporter,
-) {
-  const path = "graph.flowInput";
-  if (!isRecord(flowInput) || !Array.isArray(flowInput.targetBlockIds)) {
-    issue("invalid_flow_input", path, "Supply the Flow input block with its connected Agents.");
-    return;
-  }
-  if (Object.keys(flowInput).some((key) => !FLOW_INPUT_FIELDS.includes(key)))
-    issue(
-      "flow_input_fields_forbidden",
-      path,
-      "The Flow input block has only a position and targets.",
-    );
-  if (flowInput.position !== undefined && !isCanvasPosition(flowInput.position))
-    issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
-  const targets = new Set<string>();
-  flowInput.targetBlockIds.forEach((target, i) => {
-    if (!isId(target) || targets.has(target) || !targetableBlockIds.has(target))
-      issue(
-        "invalid_flow_input_target",
-        `${path}.targetBlockIds.${i}`,
-        "Connect the Flow input only to Agent blocks in this Flow, each once.",
-      );
-    else targets.add(target);
-  });
-}
-
-const connectable = (exits: ConnectableExits, source: unknown, exitId: unknown) => {
-  const allowed = typeof source === "string" ? exits.get(source) : undefined;
-  if (allowed === undefined) return false;
-  return allowed === "inherited" ? isId(exitId) : typeof exitId === "string" && allowed.has(exitId);
-};
-
-function checkConnections(
-  connections: readonly unknown[],
-  blockIds: ReadonlySet<string>,
-  exits: ConnectableExits,
-  issue: IssueReporter,
-) {
-  const edges = new Set<string>();
-  connections.forEach((edge, i) => {
-    const path = `graph.connections.${i}`;
-    if (
-      !isRecord(edge) ||
-      !connectable(exits, edge.sourceBlockId, edge.exitId) ||
-      typeof edge.targetBlockId !== "string" ||
-      !blockIds.has(edge.targetBlockId)
-    ) {
-      issue("invalid_connection", path, "Connect an existing source exit to an existing block.");
-      return;
-    }
-    const key = JSON.stringify([edge.sourceBlockId, edge.exitId, edge.targetBlockId]);
-    if (edges.has(key))
-      issue("duplicate_connection", path, "This exit is already connected to that block.");
-    edges.add(key);
-  });
-}
-
-function checkGraph(graph: unknown, issue: IssueReporter) {
-  if (!isRecord(graph) || !Array.isArray(graph.blocks) || !Array.isArray(graph.connections)) {
-    issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
-    return;
-  }
-  if (Object.keys(graph).some((key) => !GRAPH_FIELDS.includes(key)))
-    issue(
-      "graph_fields_forbidden",
-      "graph",
-      "A Flow graph has only blocks, connections and the Flow input block.",
-    );
-  const blockIds = new Set<string>();
-  const exits: ConnectableExits = new Map();
-  if (graph.blocks.length > 500 || graph.connections.length > 5000)
-    issue("graph_too_large", "graph", "Use at most 500 blocks and 5000 connections.");
-  graph.blocks.forEach((block, i) =>
-    checkBlock(block, `graph.blocks.${i}`, blockIds, exits, issue),
-  );
-  const targetableBlockIds = new Set(
-    graph.blocks.flatMap((block) =>
-      isRecord(block) && (block.kind === "agent" || block.kind === "wait") && isId(block.id)
-        ? [block.id]
-        : [],
-    ),
-  );
-  checkFlowInput(graph.flowInput, targetableBlockIds, issue);
-  checkConnections(graph.connections, blockIds, exits, issue);
-}
-
-const WORKSPACE_REF_LIMIT = 255;
-
-/** A Git ref Factory passes as one argument: never an option, whitespace or control text. */
-function workspaceRef(value: unknown): string | undefined {
-  const ref = boundedText(value, 1, WORKSPACE_REF_LIMIT);
-  if (!ref || ref.startsWith("-") || /[\s\p{Cc}]/u.test(ref)) return undefined;
-  return ref;
-}
-
-function checkWorkspace(raw: unknown, issue: IssueReporter): FlowWorkspace | undefined {
-  if (!isRecord(raw) || (raw.mode !== "checkout" && raw.mode !== "worktree")) {
-    issue("invalid_workspace", "workspace.mode", "Choose the project checkout or a new worktree.");
-    return undefined;
-  }
-  if (raw.mode === "checkout") return { mode: "checkout" };
-  const base = raw.base;
-  if (isRecord(base) && base.kind === "default")
-    return { mode: "worktree", base: { kind: "default" } };
-  if (!isRecord(base) || base.kind !== "ref") {
-    issue("invalid_workspace_base", "workspace.base", "Choose the default branch or a custom ref.");
-    return undefined;
-  }
-  const ref = workspaceRef(base.ref);
-  if (ref) return { mode: "worktree", base: { kind: "ref", ref } };
-  issue(
-    "invalid_workspace_ref",
-    "workspace.base.ref",
-    `Enter a Git ref up to ${WORKSPACE_REF_LIMIT} characters without spaces or a leading "-".`,
-  );
-  return undefined;
-}
-
-/** A graph supplied at creation is validated exactly as a saved graph. */
-/** Checks a create or save body in one pass, so a reply lists every defect at once. */
-function checkFlowBody(input: unknown, required: boolean) {
-  const name = validateFlowName(input);
-  if (!name.ok) return name;
-  const raw = input as Record<string, unknown>;
-  const issues: ValidationIssue[] = [];
-  const issue: IssueReporter = (code, path, message) => issues.push({ code, path, message });
-  if (
-    required &&
-    (!Number.isSafeInteger(raw.expectedRevision) || (raw.expectedRevision as number) < 1)
-  )
-    issue("invalid_revision", "expectedRevision", "Include the revision you opened.");
-  if (raw.graph !== undefined) checkGraph(raw.graph, issue);
-  else if (required)
-    issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
-  const workspace = raw.workspace === undefined ? undefined : checkWorkspace(raw.workspace, issue);
-  if (issues.length)
-    return {
-      ok: false as const,
-      error: { code: "validation" as const, message: issues[0]!.message, issues },
-    };
-  return {
-    ok: true as const,
-    value: {
-      ...name.value,
-      ...(raw.graph !== undefined ? { graph: trimGraphText(raw.graph as FlowGraphInput) } : {}),
-      ...(workspace ? { workspace } : {}),
-    },
-    expectedRevision: raw.expectedRevision as number,
-  };
-}
-export function validateCreateFlow(input: unknown): Result<CreateFlowInput> {
-  const checked = checkFlowBody(input, false);
-  return checked.ok ? { ok: true, value: checked.value } : checked;
-}
-export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
-  const checked = checkFlowBody(input, true);
-  if (!checked.ok) return checked;
-  const { graph, ...rest } = checked.value;
-  return {
-    ok: true,
-    value: { ...rest, expectedRevision: checked.expectedRevision, graph: graph! },
-  };
-}
-
-/**
- * Local exit names are stored trimmed, as Agent exit names are, so reports match them exactly;
- * Continuation prompts and Revisit instructions are stored trimmed, as Agent prompts are.
- */
-function trimGraphText(graph: FlowGraphInput): FlowGraphInput {
-  return {
-    ...graph,
-    blocks: graph.blocks.map((block) => {
-      if (block.kind === "agent")
-        return {
-          ...block,
-          localExits: block.localExits.map((exit) => ({ ...exit, name: exit.name.trim() })),
-          ...(block.revisitInstruction === undefined
-            ? {}
-            : { revisitInstruction: block.revisitInstruction.trim() }),
-        };
-      if (block.kind === "continuation") return { ...block, prompt: block.prompt.trim() };
-      return block;
-    }),
-  };
-}
-
 /** Whether any Agent block in the graph references the saved Agent definition. */
 export function flowGraphReferencesAgent(graph: FlowGraphInput, agentId: string): boolean {
   return graph.blocks.some((block) => block.kind === "agent" && block.agentId === agentId);
 }
 
 /**
- * A saved Agent as Flow readiness sees it: its current exits and, for naming a wire whose exit
- * the Agent has since removed, the last name of each exit its earlier revisions had.
+ * A saved Agent as Flow readiness sees it: its name, its current exits, whether it has execution
+ * settings (never their live availability) and, for naming a wire whose exit the Agent has since
+ * removed, the last name of each exit its earlier revisions had.
  */
-export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "exits"> {
+export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "name" | "exits"> {
+  readonly hasExecution: boolean;
   readonly formerExitNames: ReadonlyMap<string, string>;
 }
 
@@ -873,8 +204,10 @@ function blockReadiness(
       `Write the prompt ${label} sends to the conversation it continues.`,
     );
   if (block.kind !== "agent") return;
-  if (!agents.some((agent) => agent.id === block.agentId))
-    add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  const agent = agents.find((candidate) => candidate.id === block.agentId);
+  if (!agent) add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  else if (!agent.hasExecution)
+    add("agent_model_required", `${path}.agentId`, `${label}: ${agent.name} needs a model.`);
   if (!effectiveExits(block, agents).length)
     add("exit_required", path, `Add an exit to ${label} or its Agent.`);
   const inherited = inheritedExits(block, agents);
@@ -989,8 +322,8 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 }
 
 /**
- * Graph readiness against the given saved Agents; live T3, project and provisioning gates remain
- * separate. Issues block Start, never a save.
+ * Graph and saved-Agent readiness against the given saved Agents; live T3 settings availability,
+ * project and provisioning gates remain separate. Issues block Start, never a save.
  */
 export function flowReadiness(
   graph: FlowGraphInput,
@@ -1059,9 +392,6 @@ export {
 } from "./block-exits.ts";
 export {
   CLIENT_LABEL_LIMIT,
-  FACTORY_APPEARANCE_PROTOCOL,
-  FACTORY_FLOW_REVISION_PROTOCOL,
-  FACTORY_STUDIO_LIVE_PROTOCOL,
   FACTORY_MINIMUM_PEER_PROTOCOL,
   FACTORY_MINIMUM_SERVER_PROTOCOL,
   FACTORY_PROTOCOL,
@@ -1081,6 +411,31 @@ export {
   type StartPrompt,
 } from "./run-prompt.ts";
 export { parseAppearancePresentation } from "./appearance.ts";
+export { buildOptions, hintedSelection, optionAvailability, optionValue } from "./model-options.ts";
+export {
+  CANVAS_COORD_MAX,
+  CANVAS_COORD_MESSAGE,
+  CANVAS_COORD_MIN,
+  isCanvasPosition,
+  validateCreateFlow,
+  validateUpdateFlow,
+} from "./flow.ts";
+export {
+  validateCreateAgent,
+  validateDuplicateAgent,
+  validateExecutionSettings,
+  validateUpdateAgent,
+  validateUpdateRunTitleSetting,
+} from "./agent.ts";
+export {
+  DEFINITION_REQUEST_LIMIT_BYTES,
+  definitionSaveFits,
+  parsePortableFile,
+  PORTABLE_DOCUMENT_AGENT_LIMIT,
+  PORTABLE_DOCUMENT_LIMIT_BYTES,
+  portableDocumentText,
+  validateCommitImport,
+} from "./portable-document.ts";
 export {
   CHAT_MODEL_BASE_URL_LIMIT,
   CHAT_MODEL_KEY_LIMIT,

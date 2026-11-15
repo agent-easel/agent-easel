@@ -1,9 +1,11 @@
-import { held, settled } from "./support/flow-draft.ts";
+import { held } from "./support/flow-draft.ts";
+import type { AgentDefinition } from "@t3-factory/contracts";
 import { expect, it, vi } from "vite-plus/test";
+import { validateCreateAgent } from "@t3-factory/domain-validation";
+import { createShapedContent } from "../src/agent-draft.ts";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
-import { FACTORY_STUDIO_LIVE_PROTOCOL } from "@t3-factory/domain-validation";
 import {
   agentDraft,
   comparedAgent,
@@ -13,7 +15,6 @@ import {
   editedAgent,
   failedDelete,
   pendingSave,
-  replaceAgentSource,
   removedElsewhere,
   savedElsewhere,
 } from "./support/agent-editor.ts";
@@ -75,6 +76,23 @@ it("a new Agent leaves worker settings unset without T3 capabilities", () => {
   });
 });
 
+it("an Agent saved without a model opens with no Worker choice preselected", () => {
+  // Arrange
+  const agent = savedAgent({ execution: null });
+
+  // Act
+  const { draft } = agentDraft(agent);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    content: {
+      execution: { environmentId: "", providerInstanceId: "", modelId: "", modelOptions: [] },
+    },
+    needsModel: true,
+    dirty: false,
+  });
+});
+
 it("saved worker settings that T3 no longer offers are kept without substitution", () => {
   // Arrange
   const agent = savedAgent({
@@ -95,6 +113,19 @@ it("saved worker settings that T3 no longer offers are kept without substitution
     dirty: false,
     choices: { providers: [], selectedProvider: undefined, selectedModel: undefined },
   });
+});
+
+it("a model-less Agent removed elsewhere recovers as a valid create request without a model", () => {
+  // Arrange
+  const setup = agentDraft(savedAgent({ execution: null }));
+  removedElsewhere(setup);
+
+  // Act
+  const recovered = createShapedContent(setup.draft.getSnapshot().content);
+
+  // Assert
+  expect(recovered.execution).toBeNull();
+  expect(validateCreateAgent(recovered).ok).toBe(true);
 });
 
 it("choosing a provider selects its first model, preserves shared options and defaults the rest", () => {
@@ -220,18 +251,19 @@ it("editing worker settings leaves unsaved changes", () => {
 
 it("restoring the saved field values clears unsaved changes", () => {
   // Arrange
-  const agent = savedAgent();
+  const execution = {
+    environmentId: "local",
+    providerInstanceId: "primary",
+    modelId: "first",
+    modelOptions: [],
+  };
+  const agent = savedAgent({ execution });
   const { draft } = agentDraft(agent);
   draft.edit({ name: "Changed", prompt: "New instructions", exits: [] });
   draft.setEnvironmentId("another-machine");
 
   // Act
-  draft.edit({
-    name: agent.name,
-    prompt: agent.prompt,
-    exits: agent.exits,
-    execution: agent.execution,
-  });
+  draft.edit({ name: agent.name, prompt: agent.prompt, exits: agent.exits, execution });
 
   // Assert
   expect(draft.getSnapshot().dirty).toBe(false);
@@ -293,6 +325,41 @@ it("an accepted create adopts the new Agent identity and revision", async () => 
   expect(factory.updateAgent).not.toHaveBeenCalled();
   expect(saved).toMatchObject({ id: "created", revision: 1 });
   expect(draft.getSnapshot()).toMatchObject({ saved, dirty: false });
+});
+
+it("a new Agent saves without a model when no provider supports Factory reporting", async () => {
+  // Arrange
+  const offered = { ...capabilities, providers: [capabilities.providers[0]!] };
+  const { draft, factory } = agentDraft(null, offered);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.createAgent).toHaveBeenCalledWith(expect.objectContaining({ execution: null }));
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { execution: null, settingsStatus: null },
+    needsModel: true,
+    dirty: false,
+    error: "",
+  });
+});
+
+it("clearing the Worker selection saves the Agent without a model", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft();
+  draft.clearWorker();
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.updateAgent).toHaveBeenCalledWith(
+    "agent",
+    expect.objectContaining({ execution: null, expectedRevision: 3 }),
+  );
+  expect(draft.getSnapshot()).toMatchObject({ saved: { execution: null }, dirty: false });
 });
 
 it("a stale save keeps edits unsaved and blocks saving until the newer revision is resolved", async () => {
@@ -465,9 +532,17 @@ it("a newer revision saved elsewhere replaces the revision a dirty editor names"
 it("a delivery of the saved revision with new settings status keeps the draft and names no revision", () => {
   // Arrange
   const setup = editedAgent();
-  const unavailable = savedAgent({
-    settingsStatus: { ...savedAgent().settingsStatus, provider: { state: "unavailable" } },
-  });
+  const agent = savedAgent();
+  const unavailable: AgentDefinition = {
+    ...agent,
+    execution: agent.execution!,
+    settingsStatus: {
+      environment: { state: "available" },
+      provider: { state: "unavailable" },
+      model: { state: "available" },
+      options: [],
+    },
+  };
 
   // Act
   deliver(setup, [unavailable]);
@@ -499,24 +574,6 @@ it("a stale save is compared with the newer revision once Studio delivers it", a
     comparing: true,
     newer: { revision: 4, name: "Saved elsewhere" },
     error: "Saved elsewhere.",
-  });
-});
-
-it("a stale save on an older server reads Studio's lists again to find the newer revision", async () => {
-  // Arrange
-  const setup = editedAgent("refreshed");
-  await settled();
-  setup.factory.saveElsewhere({ name: "Saved elsewhere" });
-
-  // Act
-  await setup.draft.save();
-
-  // Assert
-  await settled();
-  expect(setup.draft.getSnapshot()).toMatchObject({
-    content: { name: "Edited" },
-    stale: true,
-    newer: { revision: 4, name: "Saved elsewhere" },
   });
 });
 
@@ -667,58 +724,7 @@ it("a removal elsewhere dismisses the comparison and its confirmation and keeps 
   });
 });
 
-it("an Agent save reply from a retired source keeps the draft and reports an unknown outcome", async () => {
-  // Arrange
-  const setup = editedAgent();
-  const { reply, saving } = pendingSave(setup);
-  await replaceAgentSource(setup);
-
-  // Act
-  reply.answer(savedAgent({ name: "Edited", revision: 4 }));
-  const accepted = await saving;
-
-  // Assert
-  expect(accepted).toBeUndefined();
-  expect(setup.draft.getSnapshot()).toMatchObject({
-    saved: { revision: 3 },
-    content: { name: "Edited" },
-    dirty: true,
-    saving: false,
-    saveOutcome: "unknown",
-    error: expect.stringMatching(/^Save outcome unknown\./),
-  });
-});
-
-it("an Agent Duplicate reply from a retired source cannot acknowledge or open the copy", async () => {
-  // Arrange
-  const setup = agentDraft();
-  const reply = held(setup.factory.duplicateAgent);
-  const duplicating = setup.draft.duplicate();
-  await replaceAgentSource(setup);
-
-  // Act
-  reply.answer(savedAgent({ id: "copy", name: "Reviewer copy" }));
-
-  // Assert
-  await expect(duplicating).rejects.toMatchObject({ delivery: "unknown" });
-  expect(setup.draft.getSnapshot().saved?.id).toBe("agent");
-});
-
-it("an Agent Duplicate rejection from a replaced source is unknown even with the same protocol", async () => {
-  // Arrange
-  const setup = agentDraft();
-  const reply = held(setup.factory.duplicateAgent);
-  const duplicating = setup.draft.duplicate();
-  await replaceAgentSource(setup, FACTORY_STUDIO_LIVE_PROTOCOL);
-
-  // Act
-  reply.fail(new ApiError({ code: "not_found", message: "An old source rejection.", issues: [] }));
-
-  // Assert
-  await expect(duplicating).rejects.toMatchObject({ delivery: "unknown" });
-});
-
-it("an Agent Duplicate answered by its current source returns the new copy", async () => {
+it("an Agent Duplicate returns the new copy", async () => {
   // Arrange
   const setup = agentDraft();
 
@@ -727,29 +733,6 @@ it("an Agent Duplicate answered by its current source returns the new copy", asy
 
   // Assert
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
-});
-
-it("an Agent save rejection from a replaced source is unknown even when its protocol is unchanged", async () => {
-  // Arrange
-  const setup = editedAgent();
-  const { reply, saving } = pendingSave(setup);
-  await replaceAgentSource(setup, FACTORY_STUDIO_LIVE_PROTOCOL);
-
-  // Act
-  reply.fail(new ApiError({ code: "conflict", message: "An old source conflict.", issues: [] }));
-  await saving;
-
-  // Assert
-  expect(setup.draft.getSnapshot()).toMatchObject({
-    saved: { revision: 3 },
-    content: { name: "Edited" },
-    dirty: true,
-    saving: false,
-    saveOutcome: "unknown",
-    stale: false,
-    newer: null,
-    error: expect.stringMatching(/^Save outcome unknown\./),
-  });
 });
 
 it("an own save delivered before its reply is acknowledged without a saved-elsewhere notice", async () => {

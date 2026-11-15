@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
 import { prepared } from "./support/prepared-runner.ts";
-import { blockedLaterFlow } from "./support/scenarios.ts";
+import { blockedLaterFlow, modelLessLaterFlow } from "./support/scenarios.ts";
 
 it("Start atomically deduplicates concurrent requests for the same Run", async (c) => {
   // Arrange
@@ -275,6 +275,26 @@ it("Start reports all blocked later Agents while the entry Agent is ready and cr
   expect(result.error.issues.map((issue) => issue.message)).toEqual([
     expect.stringContaining("Code reviewer:"),
     expect.stringContaining("Accessibility reviewer:"),
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
+it("Start refuses a Flow whose later-branch Agent Needs a model through readiness and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, modelLessLaterFlow);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "agent_model_required",
+      path: "graph.blocks.1.agentId",
+      message: "Review: Reviewer needs a model.",
+    },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
   expect(t3.launches.size).toBe(0);

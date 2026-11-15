@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { StudioFixtures } from "./studio.ts";
 import { expect } from "e2e";
 import {
@@ -13,7 +14,6 @@ import { browserRequests, resetBrowserRequests, delayLiveSnapshots } from "./liv
 import { expectRetainedDefinition, expectBrokenAgentWire } from "./studio.ts";
 import { openApproved, remoteFixture } from "./remote-access.ts";
 const block = { id: "worker", name: "Worker", x: 320, y: 120 };
-const notice = "Live Studio refresh requires a server update.";
 const listReads = expect.arrayContaining([expect.stringMatching(/^GET \/api\/(flows|agents)$/)]);
 /** Prerequisite stages replay one continuous editor-open history; tested operations stay in the test Acts. */
 export async function beforeCreatedAgent(fixtures: StudioFixtures, prefix: string) {
@@ -809,133 +809,13 @@ export async function expectCheckedBrokenDependency(
   return { ...state };
 }
 
-export async function beforeOlderCreatedFlow(fixtures: StudioFixtures, prefix: string) {
-  const { app, screen, browser } = fixtures;
-  await browser.setViewport({ width: 1440, height: 1000 });
-  await remoteFixture(app, "older-compatible-server");
-  await app.open("/__fixture/remote-browser");
-  await openApproved(app, "/studio/flows");
-  await expect(screen.getByText(notice)).toBeVisible();
-  await resetBrowserRequests(app);
-  await screen.getByRole("button", "New Flow").first().tap();
-  await screen.getByLabel("Flow name").fill(`Older · ${prefix} · Created here`);
-  return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix };
-}
-
-export async function expectOlderCreatedFlow(
-  state: Awaited<ReturnType<typeof beforeOlderCreatedFlow>>,
-) {
-  const { app, screen, prefix } = state;
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Revision 1");
-  await expect(screen.getByLabel("Flow name")).toHaveValue(`Older · ${prefix} · Created here`);
-  await expect(screen.getByText(notice)).toBeVisible();
-  await expect
-    .poll(() => browserRequests(app))
-    .toEqual(expect.arrayContaining(["POST /api/flows", "GET /api/flows", "GET /api/agents"]));
-  return { ...state };
-}
-
-export async function beforeOlderFlowList(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeOlderCreatedFlow(fixtures, prefix);
-  const { screen } = previous;
-  await screen.getByRole("button", "Create Flow").tap();
-  return expectOlderCreatedFlow({ ...previous });
-}
-
-export async function expectOlderFlowList(state: Awaited<ReturnType<typeof beforeOlderFlowList>>) {
-  const { app, screen, prefix } = state;
-  await expect(
-    screen.getByRole("link", new RegExp(`Older · ${prefix} · Created here`)),
-  ).toBeVisible();
-  await app.screenshot("studio-older-server-notice");
-  return { ...state };
-}
-
-export async function beforeUpgradedStudio(fixtures: StudioFixtures, prefix: string) {
-  const { app, screen, browser } = fixtures;
-  await browser.setViewport({ width: 1920, height: 1000 });
-  await remoteFixture(app, "older-compatible-server");
-  await app.open("/__fixture/remote-browser");
-  await openApproved(app, "/studio/flows");
-  await screen.getByRole("button", "New Flow").first().tap();
-  await screen.getByLabel("Flow name").fill(`Upgrade · ${prefix} · Saved`);
-  await screen.getByRole("button", "Create Flow").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Revision 1");
-  await screen.getByLabel("Flow name").fill(`Upgrade · ${prefix} · Unsaved draft`);
-  await expect(screen.getByText(notice)).toBeVisible();
-  await screen.getByRole("button", "Add Human step", { exact: true }).tap();
-  await screen.getByLabel("Block name", { exact: true }).fill("Kept selection");
-  await screen.getByRole("button", "Zoom in", { exact: true }).tap();
-  const canvas = screen.getByRole("region", "Flow canvas");
-  const layer = browser.locator('[aria-label="Flow canvas"] > div[style]');
-  const view = (await layer.getAttribute("style"))!.split(";")[0]!;
-  const zoom = await canvas.getAttribute("data-zoom");
-  await resetBrowserRequests(app);
-  const expectDraftKept = async () => {
-    await expect(screen.getByLabel("Flow name")).toHaveValue(`Upgrade · ${prefix} · Unsaved draft`);
-    await expect(screen.getByLabel("Block name", { exact: true })).toHaveValue("Kept selection");
-    expect(await layer.getAttribute("style")).toContain(view);
-    await expect(canvas).toHaveAttribute("data-zoom", zoom!);
-  };
-  return {
-    app: fixtures.app,
-    screen: fixtures.screen,
-    browser: fixtures.browser,
-    prefix,
-    canvas,
-    layer,
-    view,
-    zoom,
-    expectDraftKept,
-  };
-}
-
-export async function expectUpgradedStudio(
-  state: Awaited<ReturnType<typeof beforeUpgradedStudio>>,
-) {
-  const { app, screen, expectDraftKept } = state;
-  await expect(screen.getByText(notice)).toHaveCount(0, { timeout: 15_000 });
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeEnabled({
-    timeout: 15_000,
-  });
-  await expectDraftKept();
-  expect(await browserRequests(app)).not.toEqual(listReads);
-  await app.screenshot("studio-upgraded-server-live");
-  return { ...state };
-}
-
-export async function beforeDowngradedStudio(fixtures: StudioFixtures, prefix: string) {
-  const state = await (async () => {
-    const previous = await beforeUpgradedStudio(fixtures, prefix);
-    const { app } = previous;
-    await remoteFixture(app, "older-compatible-server/upgrade");
-    return expectUpgradedStudio({ ...previous });
-  })();
-  const { app } = state;
-  await resetBrowserRequests(app);
-  return { ...state };
-}
-
-export async function expectDowngradedStudio(
-  state: Awaited<ReturnType<typeof beforeDowngradedStudio>>,
-) {
-  const { app, screen, expectDraftKept } = state;
-  await expect(screen.getByText(notice)).toBeVisible();
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeEnabled();
-  await expectDraftKept();
-  expect(await browserRequests(app)).toEqual(
-    expect.arrayContaining(["GET /api/flows", "GET /api/agents"]),
-  );
-  await app.screenshot("studio-downgraded-server-refresh");
-  return { ...state };
-}
-
 /** One independent public save changes the dependency shown by the open canvas. */
 export function renameCanvasAgent(
   baseUrl: string | undefined,
   agent: Awaited<ReturnType<typeof readAgentDefinition>>,
   name: string,
 ) {
+  assert(agent.execution, "The canvas Agent has a model");
   return saveAgentElsewhere(baseUrl, agent, {
     name,
     execution: { ...agent.execution, modelId: "acceptance-unavailable-model" },

@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: chat_confirmation_buttons
+-- Newest applied migration: definition_import_receipts
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -24,17 +24,23 @@ CREATE TRIGGER immutable_agent_revision_exit_delete BEFORE DELETE ON agent_revis
 
 CREATE TRIGGER immutable_agent_revision_exit_update BEFORE UPDATE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
 
-CREATE TABLE agent_revisions (
+CREATE TABLE "agent_revisions" (
   id TEXT PRIMARY KEY NOT NULL,
   agent_id TEXT NOT NULL REFERENCES agents(id),
   revision INTEGER NOT NULL CHECK (revision > 0),
   name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
   prompt TEXT NOT NULL CHECK (length(prompt) <= 120000),
-  environment_id TEXT NOT NULL CHECK (length(trim(environment_id)) > 0),
-  provider_instance_id TEXT NOT NULL CHECK (length(trim(provider_instance_id)) > 0),
-  model_id TEXT NOT NULL CHECK (length(trim(model_id)) > 0),
-  model_options_json TEXT NOT NULL CHECK (json_valid(model_options_json)),
+  environment_id TEXT CHECK (length(trim(environment_id)) > 0),
+  provider_instance_id TEXT CHECK (length(trim(provider_instance_id)) > 0),
+  model_id TEXT CHECK (length(trim(model_id)) > 0),
+  model_options_json TEXT CHECK (json_valid(model_options_json)),
   saved_at TEXT NOT NULL,
+  -- Execution settings are complete or absent (the Agent Needs a model), never partial.
+  CHECK (
+    (environment_id IS NULL) = (provider_instance_id IS NULL)
+    AND (environment_id IS NULL) = (model_id IS NULL)
+    AND (environment_id IS NULL) = (model_options_json IS NULL)
+  ),
   UNIQUE (agent_id, revision)
 );
 
@@ -385,6 +391,30 @@ CREATE TABLE coordinator_question_replies (
 
 CREATE TRIGGER immutable_coordinator_answer BEFORE UPDATE ON coordinator_question_replies
 BEGIN SELECT RAISE(ABORT,'Coordinator answer is immutable'); END;
+
+CREATE TABLE definition_import_receipt_agents (
+  request_id TEXT NOT NULL REFERENCES definition_import_receipts(request_id),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  agent_key TEXT NOT NULL,
+  agent_id TEXT NOT NULL UNIQUE REFERENCES agents(id),
+  PRIMARY KEY (request_id, ordinal),
+  UNIQUE (request_id, agent_key)
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_agent_delete BEFORE DELETE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_agent_update BEFORE UPDATE ON definition_import_receipt_agents BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TABLE definition_import_receipts (
+  request_id TEXT PRIMARY KEY NOT NULL CHECK (length(request_id) BETWEEN 1 AND 256),
+  fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
+  flow_id TEXT UNIQUE REFERENCES flows(id),
+  created_at TEXT NOT NULL
+);
+
+CREATE TRIGGER immutable_definition_import_receipt_delete BEFORE DELETE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
+
+CREATE TRIGGER immutable_definition_import_receipt_update BEFORE UPDATE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
 CREATE TABLE "effect_sql_migrations" (
   migration_id integer PRIMARY KEY NOT NULL,

@@ -68,7 +68,7 @@ it("agent settings mark fastMode unavailable when the live catalog allows only f
 
   // Assert
   assert(saved.ok);
-  expect(saved.value.settingsStatus.options[0]?.state).toBe("unavailable");
+  expect(saved.value.settingsStatus?.options[0]?.state).toBe("unavailable");
 });
 
 it("agent settings mark mixed values outside the live catalog as unavailable", async (c) => {
@@ -90,5 +90,5 @@ it("agent settings mark mixed values outside the live catalog as unavailable", a
 
   // Assert
   assert(saved.ok);
-  expect(saved.value.settingsStatus.options[0]?.state).toBe("unavailable");
+  expect(saved.value.settingsStatus?.options[0]?.state).toBe("unavailable");
 });

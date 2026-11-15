@@ -1,6 +1,6 @@
 import type { ReportDraft, DraftGuardState } from "../draft-guard.ts";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bot, RefreshCw, Workflow } from "lucide-react";
+import { Bot, Workflow } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
   useStudioNavigation,
@@ -18,30 +18,16 @@ import { cn } from "@/lib/utils";
 import { type StudioDraft, useStudioDraftGuard } from "../use-studio-draft-guard.ts";
 import {
   createStudioDefinitions,
-  useStudioDelivery,
   useStudioRead,
   type StudioDefinitions,
 } from "../studio-definitions.ts";
-import { useServerProtocol } from "../client-scope.ts";
 import type { FlowDraft } from "@t3-factory/contracts";
 import { liveOwner } from "../live/live-connection.ts";
 
-/**
- * This Studio session's saved definitions, kept current while Studio is open in the way the
- * connected server's protocol supports. A renegotiated protocol replaces that way over the same
- * session, so pages and drafts stay mounted. On older servers each Studio navigation reads again.
- */
-function useStudioSession(selection: StudioSelection) {
-  const protocol = useServerProtocol();
+/** This Studio session's saved definitions, delivered live while Studio is open. */
+function useStudioSession() {
   const [definitions] = useState(() => createStudioDefinitions(liveOwner()));
-  useLayoutEffect(() => definitions.open(protocol), [definitions, protocol]);
-  const shown = useRef(selection);
-  // Before paint, so a new page never shows the previous page's read as its own.
-  useLayoutEffect(() => {
-    if (shown.current === selection) return;
-    shown.current = selection;
-    definitions.refresh();
-  }, [definitions, selection]);
+  useLayoutEffect(() => definitions.open(), [definitions]);
   return definitions;
 }
 
@@ -73,7 +59,7 @@ function useFlowCreation() {
 
 export function StudioModal({ selection }: { selection: StudioSelection }) {
   const navigate = useStudioNavigation();
-  const definitions = useStudioSession(selection);
+  const definitions = useStudioSession();
   const dialog = useRef<HTMLDivElement>(null);
   const { creating, created, setCreating, finishCreating } = useFlowCreation();
   const [flowDraft, setFlowDraft] = useState<StudioDraft>();
@@ -139,7 +125,6 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
           closeLabel="Back to Runs"
           closeDisabled={creating}
         />
-        <StudioRefreshNotice definitions={definitions} />
         <div className="flex min-h-0 flex-1">
           <StudioSidebar selection={selection} definitions={definitions} />
           <StudioContent
@@ -183,20 +168,6 @@ function useRetainedFlowReopen(blocker: ReturnType<typeof useStudioDraftGuard>) 
     if (flow && blocker.drafts.length === 1) reopenFlow.current = flow.id;
     blocker.reset();
   };
-}
-
-/** Older servers cannot deliver Studio live; their lists refresh after writes, navigation and retry. */
-function StudioRefreshNotice({ definitions }: { definitions: StudioDefinitions }) {
-  if (useStudioDelivery(definitions) === "live") return null;
-  return (
-    <p
-      role="status"
-      className="flex shrink-0 items-center gap-2 border-b bg-background px-4 py-2 text-sm text-muted-foreground"
-    >
-      <RefreshCw aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-attention" />
-      Live Studio refresh requires a server update.
-    </p>
-  );
 }
 
 function discardMessage(drafts: readonly StudioDraft[]) {

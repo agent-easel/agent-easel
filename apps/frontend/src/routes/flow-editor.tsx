@@ -29,6 +29,11 @@ import { BlockLibrary } from "../components/block-library.tsx";
 import { FlowCanvas, type DropAt } from "../components/flow-canvas.tsx";
 import { IssueLink, ReadinessPanel } from "../components/flow-readiness.tsx";
 import { FlowWorkspaceControl } from "../components/flow-workspace-control.tsx";
+import {
+  DefinitionExportControl,
+  definitionExportNotice,
+} from "../components/definition-export-control.tsx";
+import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
   hasWire,
@@ -47,12 +52,11 @@ import {
   type FlowDraftModel,
   type FlowDraftSnapshot,
 } from "../flow-draft.ts";
-import { useStudioRead, useStudioDelivery, type StudioDefinitions } from "../studio-definitions.ts";
-import { useServerProtocol } from "../client-scope.ts";
+import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
 
 /**
  * This editor's Flow draft, following the Flow through Studio's saved definitions and told when
- * the editor is hidden and which protocol the server speaks. Studio's guard learns of
+ * the editor is hidden. Studio's guard learns of
  * changes to unsaved changes from the draft's notification itself, before any render, and only
  * when that fact changes.
  */
@@ -66,9 +70,7 @@ function useOpenedFlowDraft(
   const [draft] = useState(() =>
     createFlowDraft(id, definitions, api, created?.id === id ? created : undefined),
   );
-  const protocol = useServerProtocol();
   useEffect(() => draft.open(), [draft]);
-  useEffect(() => draft.reportProtocol(protocol), [draft, protocol]);
   // Hiding or unmounting a shown editor ends it, so a late readiness answer is not shown.
   useEffect(() => (active ? () => draft.hide() : undefined), [draft, active]);
   useDraftGuard(draft, id, reportDraft);
@@ -291,8 +293,8 @@ export function FlowDetail({
     reportDraft,
     created,
   );
+  const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { agents, agentError } = useLibraryAgents(definitions);
-  const delivery = useStudioDelivery(definitions);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { saved, error, readiness } = state;
   const { graph, name } = state.content;
@@ -313,7 +315,7 @@ export function FlowDetail({
     select(next.id);
   }
   const dropAt: DropAt = (x, y, grab) => placement.current?.(x, y, grab) ?? null;
-  if (!saved) return <FlowLoadState error={error} retry={definitions.refresh} />;
+  if (!saved) return <FlowLoadState error={error} />;
   return (
     <CanvasLayout>
       <h1 className="sr-only">{name}</h1>
@@ -322,8 +324,10 @@ export function FlowDetail({
         state={state}
         revision={saved.revision}
         flowId={id}
+        exporter={exporter}
         fields={interactions.fields}
       />
+      <ExportNotice notice={definitionExportNotice(exporter.state)} />
       <DraftProblems draft={draft} state={state} onSelect={select} />
       <div inert={state.busy} className="flex min-h-0 flex-1" {...interactions.gestures}>
         <BlockLibrary
@@ -342,7 +346,7 @@ export function FlowDetail({
             selected={selected}
             selectedWire={wire}
             reservedRight={reservedRight}
-            scope={{ id, delivery }}
+            scope={id}
             savedGraph={saved.id === id ? saved.graph : undefined}
             busy={state.busy}
             placementRef={placement}
@@ -375,7 +379,7 @@ export function FlowDetail({
 }
 
 /** An absent definition and a retryable read failure offer different recovery actions. */
-function FlowLoadState({ error, retry }: { error: string; retry: () => void }) {
+function FlowLoadState({ error }: { error: string }) {
   const navigate = useStudioNavigation();
   return (
     <Page>
@@ -383,16 +387,9 @@ function FlowLoadState({ error, retry }: { error: string; retry: () => void }) {
         {error === "Flow not found." ? "Flow not found" : error || "Opening Flow…"}
       </p>
       {error && (
-        <div className="flex gap-2">
-          {error !== "Flow not found." && (
-            <Button variant="outline" onClick={() => retry()}>
-              Retry
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => void navigate({ tab: "flows" })}>
-            Back to list
-          </Button>
-        </div>
+        <Button variant="outline" onClick={() => void navigate({ tab: "flows" })}>
+          Back to list
+        </Button>
       )}
     </Page>
   );
@@ -439,12 +436,14 @@ function EditorToolbar({
   state,
   revision,
   flowId,
+  exporter,
   fields,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
   revision: number;
   flowId: string;
+  exporter: ReturnType<typeof useDefinitionExport>;
   /** Reports typing in the toolbar's fields, which a newer revision waits for. */
   fields: ReturnType<typeof useInteractionReports>["fields"];
 }) {
@@ -462,7 +461,7 @@ function EditorToolbar({
       </span>
       <Input
         aria-label="Flow name"
-        className="h-8 max-w-80 min-w-24 flex-1 border-transparent bg-transparent text-base font-semibold hover:border-border focus-visible:border-ring"
+        className="field-sizing-content h-8 w-auto max-w-80 min-w-24 border-transparent bg-transparent text-base font-semibold hover:border-border focus-visible:border-ring"
         value={state.content.name}
         disabled={state.busy}
         onChange={(e) => draft.edit({ name: e.target.value })}
@@ -474,23 +473,7 @@ function EditorToolbar({
       />
       <span className="flex-1" />
       <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
-      <span
-        role="status"
-        aria-label="Flow save status"
-        className={cn(
-          "flex items-center gap-1.5 px-2 text-2xs font-medium whitespace-nowrap",
-          state.dirty || state.removed ? "text-attention" : "text-muted-foreground",
-        )}
-      >
-        {state.dirty || state.removed ? (
-          <CircleDot aria-hidden className="size-3.5" />
-        ) : (
-          <Check aria-hidden className="size-3.5 text-success" />
-        )}
-        {state.removed
-          ? "Removed elsewhere · retained draft"
-          : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${revision}`}
-      </span>
+      <FlowSaveStatus state={state} revision={revision} />
       <Separator orientation="vertical" className="h-5!" />
       <Button
         variant="outline"
@@ -520,8 +503,48 @@ function EditorToolbar({
           Start Run
         </Button>
       </MutationGate>
+      <DefinitionExportControl
+        {...exporter}
+        dirty={state.dirty}
+        disabled={state.busy || state.removed}
+        compact
+      />
       <RemoveFlowAction draft={draft} state={state} />
     </div>
+  );
+}
+
+/** Whether the draft matches its saved revision, or was removed elsewhere. */
+function FlowSaveStatus({ state, revision }: { state: FlowDraftSnapshot; revision: number }) {
+  const attention = state.dirty || state.removed;
+  return (
+    <span
+      role="status"
+      aria-label="Flow save status"
+      className={cn(
+        "flex items-center gap-1.5 px-2 text-2xs font-medium whitespace-nowrap",
+        attention ? "text-attention" : "text-muted-foreground",
+      )}
+    >
+      {attention ? (
+        <CircleDot aria-hidden className="size-3.5" />
+      ) : (
+        <Check aria-hidden className="size-3.5 text-success" />
+      )}
+      {state.removed
+        ? "Removed elsewhere · retained draft"
+        : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${revision}`}
+    </span>
+  );
+}
+
+/** What the last export needs to say, such as a refusal or an omitted driver kind. */
+function ExportNotice({ notice }: { notice: string }) {
+  if (!notice) return null;
+  return (
+    <p role="status" className="shrink-0 border-b px-4 py-2 text-sm text-attention">
+      {notice}
+    </p>
   );
 }
 

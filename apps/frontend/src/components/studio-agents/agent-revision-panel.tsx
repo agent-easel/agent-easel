@@ -14,18 +14,23 @@ import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../ag
 
 const updatedNoticeMs = 4000;
 
+/** One side of the comparison; a saved revision without a model has no execution. */
+type ComparedContent = Omit<AgentContent, "execution"> & {
+  readonly execution: AgentContent["execution"] | null;
+};
+
 /** How one side of the comparison reads: every saved field, read-only, prompt last. */
-function presentation({ name, prompt, execution, exits }: AgentContent) {
-  const options = execution.modelOptions.map(({ id, value }) => `${id}=${String(value)}`);
+function presentation({ name, prompt, execution, exits }: ComparedContent) {
+  const options = (execution?.modelOptions ?? []).map(({ id, value }) => `${id}=${String(value)}`);
   const exitLines = exits.map(
     (exit) =>
       `  ${exit.name || "(unnamed)"}${exit.messageRequired ? " · message required" : ""}${exit.description ? ` — ${exit.description}` : ""}`,
   );
   return [
     `Name: ${name}`,
-    `Environment: ${execution.environmentId || "(none)"}`,
-    `Provider: ${execution.providerInstanceId || "(none)"}`,
-    `Model: ${execution.modelId || "(none)"}`,
+    `Environment: ${execution?.environmentId || "(none)"}`,
+    `Provider: ${execution?.providerInstanceId || "(none)"}`,
+    `Model: ${execution?.modelId || "(none)"}`,
     `Options: ${options.join(", ") || "(none)"}`,
     `Exits:${exitLines.length ? "" : " (none)"}`,
     ...exitLines,
@@ -34,7 +39,7 @@ function presentation({ name, prompt, execution, exits }: AgentContent) {
   ].join("\n");
 }
 
-function Presentation({ title, content }: { title: string; content: AgentContent }) {
+function Presentation({ title, content }: { title: string; content: ComparedContent }) {
   return (
     <div className="min-w-0">
       <h3 className="mb-1.5 text-base font-semibold">{title}</h3>

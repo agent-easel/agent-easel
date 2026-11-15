@@ -1,20 +1,9 @@
 import { MutationGate } from "@/client-gate";
-import { useState } from "react";
 import { Plus, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import type { StudioDelivery, StudioRead } from "../studio-definitions.ts";
-
-/**
- * A Studio list read's value as a page shows it. A live list is the delivered state. A refreshed
- * list shows a value only once a read answered after this page was entered, so entering a page
- * never shows rows read before that visit; later refreshes keep the shown rows.
- */
-export function useVisitValue<V>(read: StudioRead<V>, delivery: StudioDelivery) {
-  const [entered] = useState(read.value);
-  if (delivery === "live") return read.value;
-  return read.value === entered ? null : read.value;
-}
+import type { ImportResult } from "@t3-factory/contracts";
+import { DefinitionImportControl } from "./definition-import-control.tsx";
 
 export const studioRowClass =
   "flex w-full items-center gap-3 rounded-lg border bg-muted px-4 py-3 text-left text-foreground no-underline outline-none transition-colors hover:border-border-hover hover:bg-accent hover:no-underline focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -26,6 +15,7 @@ export function StudioListHeader({
   onQueryChange,
   onCreate,
   createLabel,
+  onImported,
 }: {
   title: string;
   description: string;
@@ -33,6 +23,7 @@ export function StudioListHeader({
   onQueryChange: (query: string) => void;
   onCreate: () => void;
   createLabel: string;
+  onImported: (result: ImportResult) => void;
 }) {
   return (
     <header className="flex flex-wrap items-center gap-4">
@@ -54,6 +45,7 @@ export function StudioListHeader({
           className="bg-muted pl-9"
         />
       </div>
+      <DefinitionImportControl onImported={onImported} />
       <MutationGate>
         <Button onClick={onCreate}>
           <Plus aria-hidden strokeWidth={1.5} />

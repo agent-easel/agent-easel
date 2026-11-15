@@ -1,4 +1,5 @@
 import { operation } from "./operation.ts";
+import type { DefinitionExport, PortableFlowDocument } from "./portable-document.ts";
 import type { ValidationIssue } from "./result.ts";
 
 /** Flows: the graphs of Blocks that Runs execute. */
@@ -115,8 +116,7 @@ export type FlowAgentRevisions = Readonly<Record<string, number | null>>;
 
 /** Readiness of submitted Flow content and the saved Agents it was resolved against. */
 export interface FlowValidation extends FlowReadiness {
-  /** Protocol 12 and later; older servers omit it. */
-  readonly agentRevisions?: FlowAgentRevisions;
+  readonly agentRevisions: FlowAgentRevisions;
 }
 
 export interface FlowDraft {
@@ -149,5 +149,10 @@ export const flowOperations = {
     method: "PUT",
     path: "/api/flows/:id",
     body: "json",
+  }),
+  /** The latest saved revision with each Agent it references as a portable document. */
+  exportFlow: operation<never, DefinitionExport<PortableFlowDocument>>()({
+    method: "GET",
+    path: "/api/flows/:id/export",
   }),
 };

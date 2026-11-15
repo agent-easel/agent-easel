@@ -1,6 +1,7 @@
 /** Agents: reusable definitions of how an Agent block's work runs, and their operations. */
 import type { BlockExit } from "./flow.ts";
 import { operation } from "./operation.ts";
+import type { DefinitionExport, PortableAgentDocument } from "./portable-document.ts";
 
 export interface AgentModelOptionValue {
   readonly id: string;
@@ -28,17 +29,35 @@ export interface AgentExecutionSettingsStatus {
   readonly options: readonly { readonly id: string; readonly state: AgentSettingAvailability }[];
 }
 
-export interface AgentDefinition {
+/**
+ * One saved Agent revision. `execution` is complete or null, never partial: an Agent without
+ * execution settings Needs a model and cannot run.
+ */
+export interface SavedAgent {
   readonly id: string;
   readonly name: string;
   readonly prompt: string;
   readonly revision: number;
-  readonly execution: AgentExecutionSettings;
+  readonly execution: AgentExecutionSettings | null;
   /** Inherited live by every Flow block of this Agent; a Run keeps the revision it captured. */
   readonly exits: readonly BlockExit[];
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly settingsStatus: AgentExecutionSettingsStatus;
+}
+
+/** `settingsStatus` judges saved execution settings, so it is null exactly when they are. */
+export type AgentDefinition = SavedAgent &
+  (
+    | {
+        readonly execution: AgentExecutionSettings;
+        readonly settingsStatus: AgentExecutionSettingsStatus;
+      }
+    | { readonly execution: null; readonly settingsStatus: null }
+  );
+
+/** An Agent revision a Run captured; Start accepts only Agents with execution settings. */
+export interface CapturedAgent extends SavedAgent {
+  readonly execution: AgentExecutionSettings;
 }
 
 export interface AgentEnvironment {
@@ -92,7 +111,8 @@ export interface AgentCapabilities {
 export interface CreateAgentInput {
   readonly name: string;
   readonly prompt: string;
-  readonly execution: AgentExecutionSettings;
+  /** Required: complete settings, or null for an Agent that Needs a model. */
+  readonly execution: AgentExecutionSettings | null;
   readonly exits: readonly BlockExit[];
 }
 
@@ -131,4 +151,9 @@ export const agentOperations = {
     body: "json",
   }),
   removeAgent: operation()({ method: "DELETE", path: "/api/agents/:id" }),
+  /** The latest saved revision as a portable document. */
+  exportAgent: operation<never, DefinitionExport<PortableAgentDocument>>()({
+    method: "GET",
+    path: "/api/agents/:id/export",
+  }),
 };

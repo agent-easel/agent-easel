@@ -2,6 +2,8 @@ import { entryMessagesTooLong } from "./runner-block-workers.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
 import type {
+  AgentDefinition,
+  CapturedAgent,
   FactoryOperations,
   FactoryProject,
   FlowDraft,
@@ -378,13 +380,6 @@ export function openRunnerStart(
       if (!flow.readiness.ready)
         return failure("validation", "Fix Flow readiness before starting.", flow.readiness.issues);
       const agents = yield* readyAgents(flow, target.project.id);
-      // An Agent saved after the Flow read is what this Run captures, so recheck the graph against it.
-      const captured = agents.ok
-        ? flowReadiness(
-            flow.graph,
-            agents.value.map((agent) => ({ ...agent, formerExitNames: new Map() })),
-          )
-        : null;
       const support = yield* Effect.tryPromise({
         try: () => t3.inspectLaunchSupport(target.project, flow.workspace.mode).catch(() => null),
         catch: (error) => error,
@@ -395,7 +390,6 @@ export function openRunnerStart(
         ...attachments,
         ...(!workspace.ok ? workspace.issues : []),
         ...(!agents.ok ? agents.error.issues : []),
-        ...(captured && !captured.ready ? captured.issues : []),
         ...(!support || !support.supported
           ? [
               {
@@ -408,14 +402,7 @@ export function openRunnerStart(
             ]
           : []),
       ];
-      if (
-        attachments.length ||
-        !workspace.ok ||
-        !agents.ok ||
-        !captured?.ready ||
-        !support ||
-        !support.supported
-      )
+      if (attachments.length || !workspace.ok || !agents.ok || !support || !support.supported)
         return failure(
           "validation",
           "Flow execution setup is incomplete. No Run was created.",
@@ -436,9 +423,10 @@ export function openRunnerStart(
   function readyAgents(
     flow: FlowDraft,
     projectId: string,
-  ): Effect.Effect<Result<RunDefinitions["agents"][number][]>, unknown> {
+  ): Effect.Effect<Result<CapturedAgent[]>, unknown> {
     return Effect.gen(function* () {
-      const agents: RunDefinitions["agents"][number][] = [];
+      const read: AgentDefinition[] = [];
+      const agents: CapturedAgent[] = [];
       const issues: ValidationIssue[] = [];
       const ids = new Set(
         flow.graph.blocks.flatMap((block) =>
@@ -447,15 +435,31 @@ export function openRunnerStart(
       );
       for (const id of ids) {
         const agent = yield* ops.getAgent(id);
-        if (!agent.ok) {
+        if (agent.ok) read.push(agent.value);
+        else
           issues.push({
             code: "agent_unavailable",
             path: `agents.${id}`,
             message: `Agent ${id}: ${agent.error.message}`,
           });
-          continue;
-        }
-        const check = yield* checkAgent(projectId, agent.value);
+      }
+      // An Agent saved after the Flow read is what this Run captures, so recheck the graph against
+      // it once every Agent was read; this reports a model-less Agent as `agent_model_required`.
+      if (read.length === ids.size)
+        issues.push(
+          ...flowReadiness(
+            flow.graph,
+            read.map((agent) => ({
+              ...agent,
+              hasExecution: agent.execution !== null,
+              formerExitNames: new Map(),
+            })),
+          ).issues,
+        );
+      for (const agent of read) {
+        // A model-less Agent has no settings to check, so it never also reports them unavailable.
+        if (agent.execution === null) continue;
+        const check = yield* checkAgent(projectId, agent);
         const problems = !check.ok
           ? [
               { code: "agent_readiness", path: "runtime", message: check.error.message },
@@ -465,11 +469,11 @@ export function openRunnerStart(
         issues.push(
           ...problems.map((issue) => ({
             ...issue,
-            path: `agents.${id}.${issue.path}`,
-            message: `${agent.value.name}: ${issue.message}`,
+            path: `agents.${agent.id}.${issue.path}`,
+            message: `${agent.name}: ${issue.message}`,
           })),
         );
-        agents.push(agent.value);
+        agents.push(agent);
       }
       return issues.length
         ? failure("validation", "Flow Agent setup is incomplete.", issues)

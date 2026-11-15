@@ -17,7 +17,7 @@ export type FlowContent = Pick<FlowDraft, "name" | "workspace" | "graph">;
 /** Studio's saved definitions, which hold this Flow's saved revisions, and its Flow writes. */
 export type FlowDraftSource = Pick<
   StudioDefinitions,
-  "getSnapshot" | "hasObserved" | "subscribe" | "refresh" | "updateFlow" | "removeFlow"
+  "getSnapshot" | "hasObserved" | "subscribe" | "updateFlow" | "removeFlow"
 >;
 
 /** The Factory operations one Flow draft uses beyond Studio's; the HTTP client in the app. */
@@ -35,7 +35,7 @@ export type FlowConflict =
 
 /**
  * This editor's last save: `pending` until Factory answers, `unknown` when the connection was
- * lost or the server session changed before the answer could be trusted.
+ * lost before the answer could be trusted.
  */
 export type FlowSaveState = "idle" | "pending" | "succeeded" | "rejected" | "unknown";
 
@@ -133,11 +133,8 @@ export function createFlowDraft(
   let updatedTo: number | null = null;
   let busy = false;
   let saveState: FlowSaveState = "idle";
-  /** What the last save sent, against which revision and in which server session. */
-  let submitted: { content: FlowContent; baseline: number; session: number } | null = null;
-  /** Advances when the server's protocol changes; replies from an earlier session are unknown. */
-  let session = 0;
-  let protocol: number | undefined;
+  /** What the last save sent. */
+  let submitted: FlowContent | null = null;
   let removing = false;
   let deleted = false;
   let removalError = "";
@@ -256,7 +253,7 @@ export function createFlowDraft(
   /** What the save whose answer was lost sent, when `flow` is its revision. */
   function lostSave(flow: FlowDraft) {
     if (saveState !== "unknown" || !submitted) return null;
-    return sameContent(contentOf(flow), submitted.content) ? submitted.content : null;
+    return sameContent(contentOf(flow), submitted) ? submitted : null;
   }
   /** The save whose answer was lost did reach Factory: its revision is this draft's own. */
   function acknowledgeLostSave(flow: FlowDraft, sent: FlowContent) {
@@ -369,35 +366,24 @@ export function createFlowDraft(
     async save() {
       const against = saved;
       if (!against || !snapshot.canSave) return;
-      const sent = { content, baseline: against.revision, session };
-      submitted = sent;
+      submitted = content;
       saveState = "pending";
       updatedTo = null;
-      const lost = (cause?: unknown) =>
-        sent.session !== session || (cause instanceof OfflineError && cause.delivery === "unknown");
       await run(async () => {
         try {
           const accepted = await source.updateFlow(id, {
             ...content,
             expectedRevision: against.revision,
           });
-          if (removed) {
-            saveState = "succeeded";
-            return;
-          }
-          if (lost()) {
-            saveState = "unknown";
-            error = unknownOutcome;
-            return;
-          }
           saveState = "succeeded";
+          if (removed) return;
           adopt(accepted);
         } catch (cause) {
           if (removed) {
             saveState = "rejected";
             return;
           }
-          if (lost(cause)) {
+          if (cause instanceof OfflineError && cause.delivery === "unknown") {
             saveState = "unknown";
             error = unknownOutcome;
             return;
@@ -446,22 +432,15 @@ export function createFlowDraft(
             ...content,
             expectedRevision: against.revision,
           });
-          // An Agent change Studio has not delivered yet also makes the answer stale. Older
-          // servers name no revisions; their answers rely on the request alone.
+          // An Agent change Studio has not delivered yet also makes the answer stale.
           const shown = agentStamp(content.graph, source.getSnapshot().agents.value);
-          const matches = !agentRevisions || canonical(agentRevisions) === shown;
-          if (asked !== readinessRequest || !matches) return;
+          if (asked !== readinessRequest || canonical(agentRevisions) !== shown) return;
           checked = answer;
           agentsChanged = false;
         } catch (cause) {
           if (asked === readinessRequest) reject(cause, "Could not check Flow.");
         }
       });
-    },
-    /** The connected server's protocol; a change starts a new session that fences pending replies. */
-    reportProtocol(next: number) {
-      if (protocol !== undefined && next !== protocol) ++session;
-      protocol = next;
     },
     /** The editor was hidden: a readiness check shown or still in flight no longer applies. */
     hide() {
@@ -470,14 +449,13 @@ export function createFlowDraft(
     },
     /**
      * Shows the latest saved Flow beside the local draft, which stays as it is. Until Studio
-     * holds a newer revision (an older server re-reads its saved Flows), it is shown on arrival.
+     * holds a newer revision, it is shown on arrival.
      */
     compareLatest() {
       if (!unresolved() || busy) return;
       error = "";
       comparing = true;
       reconcile();
-      if (comparing) source.refresh();
       publish();
     },
     /**

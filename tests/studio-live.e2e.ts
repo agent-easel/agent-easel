@@ -76,14 +76,6 @@ import {
   beforeChangedDirtyDependency,
   expectCheckedBrokenDependency,
   beforeCheckedBrokenDependency,
-  expectOlderCreatedFlow,
-  beforeOlderCreatedFlow,
-  expectOlderFlowList,
-  beforeOlderFlowList,
-  expectUpgradedStudio,
-  beforeUpgradedStudio,
-  expectDowngradedStudio,
-  beforeDowngradedStudio,
 } from "./support/studio-live-states.ts";
 const block = { id: "worker", name: "Worker", x: 320, y: 120 };
 afterEach(async ({ app }) => {
@@ -613,64 +605,4 @@ test("checking readiness reports the removed Agent exit", async ({ app, screen, 
 
   // Assert
   await expectCheckedBrokenDependency({ ...state });
-});
-
-test("an older compatible server refreshes Studio lists after its own Create", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeOlderCreatedFlow({ app, screen, browser }, "olderCreatedFlow");
-
-  // Act
-  await screen.getByRole("button", "Create Flow").tap();
-
-  // Assert
-  await expectOlderCreatedFlow({ ...state });
-});
-
-test("navigation on an older compatible server shows the created Flow", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeOlderFlowList({ app, screen, browser }, "olderFlowList");
-
-  // Act
-  await screen.getByRole("link", "All Flows").tap();
-
-  // Assert
-  await expectOlderFlowList({ ...state });
-});
-
-test("upgrading the server starts live Studio without losing the open draft, selection or viewport", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeUpgradedStudio({ app, screen, browser }, "upgradedStudio");
-
-  // Act
-  await remoteFixture(app, "older-compatible-server/upgrade");
-
-  // Assert
-  await expectUpgradedStudio({ ...state });
-});
-
-test("downgrading the server restores HTTP refresh without losing the open draft, selection or viewport", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeDowngradedStudio({ app, screen, browser }, "downgradedStudio");
-
-  // Act
-  await remoteFixture(app, "older-compatible-server/downgrade");
-
-  // Assert
-  await expectDowngradedStudio({ ...state });
 });

@@ -1,4 +1,5 @@
 import { assert } from "@effect/vitest";
+import { DatabaseSync } from "node:sqlite";
 import type { ControlledT3 } from "./controlled-t3.ts";
 import {
   launchBlockId,
@@ -15,12 +16,34 @@ export function workerMessage(body: string) {
   );
 }
 
+/**
+ * Stores every revision of a closed backend's Agent without execution settings, bypassing the
+ * revision immutability guard: the corrupt state a Run's captured revision must never launch from.
+ */
+export function clearStoredExecution(databasePath: string, agentId: string) {
+  const database = new DatabaseSync(databasePath);
+  const guard = "immutable_agent_revision_update";
+  const [{ sql }] = database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+    .all(guard) as [{ sql: string }];
+  database.exec(`DROP TRIGGER ${guard}`);
+  database
+    .prepare(
+      "UPDATE agent_revisions SET environment_id = NULL, provider_instance_id = NULL, model_id = NULL, model_options_json = NULL WHERE agent_id = ?",
+    )
+    .run(agentId);
+  database.exec(sql);
+  database.close();
+}
+
+/** The worker launch T3 received for the named Block. */
+export function blockLaunch(t3: ControlledT3, blockName: string) {
+  return [...t3.launches.values()].find((entry) => entry.payload.title.endsWith(` ${blockName}`));
+}
+
 /** The Block id Factory stated in a worker's launch message, as an Agent reads it. */
 export function launchedBlockId(t3: ControlledT3, blockName = "Entry worker") {
-  const launch = [...t3.launches.values()].find((entry) =>
-    entry.payload.title.endsWith(` ${blockName}`),
-  );
-  return launchBlockId(launch?.payload.message ?? "");
+  return launchBlockId(blockLaunch(t3, blockName)?.payload.message ?? "");
 }
 
 /** Resolves once T3 receives the next thread settlement, which Factory sends in the background

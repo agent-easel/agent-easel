@@ -1,5 +1,6 @@
 import type * as Effect from "effect/Effect";
 import type {
+  CapturedAgent,
   HumanOccurrence,
   Result,
   RunBlock,
@@ -136,6 +137,6 @@ export interface RunnerLifecycle {
 export interface RunnerOptions {
   checkAgent: (
     projectId: string,
-    agent: RunDefinitions["agents"][number],
+    agent: CapturedAgent,
   ) => Effect.Effect<Result<RuntimeReadiness>, unknown>;
 }

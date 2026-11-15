@@ -1,5 +1,6 @@
 import { agentOperations } from "./agent.ts";
 import { flowOperations } from "./flow.ts";
+import { definitionImportOperations } from "./portable-document.ts";
 import { projectOperations, projectServerOperations } from "./project.ts";
 import { connectionOperations } from "./connection.ts";
 import { appearanceOperations, type AppearanceSource } from "./appearance.ts";
@@ -19,6 +20,7 @@ import { serverUpdateOperations } from "./update.ts";
 export const httpOperations = {
   ...agentOperations,
   ...flowOperations,
+  ...definitionImportOperations,
   ...projectOperations,
   ...projectServerOperations,
   ...connectionOperations,
@@ -34,6 +36,7 @@ export const httpOperations = {
 export interface FactoryOperations extends FacadeOperations<
   typeof agentOperations &
     typeof flowOperations &
+    typeof definitionImportOperations &
     typeof projectOperations &
     typeof connectionOperations &
     typeof appearanceOperations &

@@ -127,6 +127,7 @@ export function reportingSummary(reads: ReportingReads): ReportingStatus {
   if (reads.error || !reads.targets || !reads.agents) return agentReportingStatus("", reads);
   const needsAttention = reads.agents.some(
     (agent) =>
+      agent.execution !== null &&
       agentReportingStatus(agent.execution.providerInstanceId, reads).state !== "installed",
   );
   return needsAttention

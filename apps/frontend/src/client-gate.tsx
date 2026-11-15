@@ -21,12 +21,7 @@ import { Label } from "@/components/ui/label";
 import { fieldLabelClass } from "@/components/page";
 import { GateScreen } from "@/components/gate-screen";
 import { api, ApiError } from "./api.ts";
-import {
-  AppearanceSourceContext,
-  ScopeContext,
-  ServerIdContext,
-  ServerProtocolContext,
-} from "./client-scope.ts";
+import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
@@ -40,7 +35,6 @@ type Gate =
   | {
       readonly kind: "ready";
       readonly scope: "host" | "remote";
-      readonly serverProtocol: number;
       readonly serverId: string | null;
       readonly appearanceSource: AppearanceSource | null;
     };
@@ -67,7 +61,6 @@ async function evaluate(): Promise<Gate> {
     const ready = {
       kind: "ready" as const,
       scope: scope.scope,
-      serverProtocol: server.protocol,
       serverId: scope.serverId ?? null,
       appearanceSource: scope.appearanceSource ?? null,
     };
@@ -79,20 +72,14 @@ async function evaluate(): Promise<Gate> {
   }
 }
 
-/** The mounted gate's way to adopt the protocol a recheck found; unset while none is mounted. */
-let adoptProtocol: ((protocol: number) => void) | undefined;
-
 /**
  * A live socket that cannot open says nothing about why; the handshake does. Incompatible or
- * unapproved results hand the window to this gate, which re-evaluates and shows its screen. A
- * compatible server may speak another protocol than before (an upgrade or downgrade behind the
- * same address); product screens then follow the protocol it now declares, without remounting.
+ * unapproved results hand the window to this gate, which re-evaluates and shows its screen.
  */
 export async function recheckAccess() {
   const gate = await evaluate();
   if (gate.kind === "incompatible") transport.incompatible(gate.message);
   if (gate.kind === "request" || gate.kind === "pending") transport.accessLost();
-  if (gate.kind === "ready") adoptProtocol?.(gate.serverProtocol);
 }
 
 const recheckMs = 2000;
@@ -114,17 +101,6 @@ export function ClientGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     void check();
   }, [check]);
-  useEffect(() => {
-    adoptProtocol = (serverProtocol) =>
-      setGate((previous) =>
-        previous.kind === "ready" && previous.serverProtocol !== serverProtocol
-          ? { ...previous, serverProtocol }
-          : previous,
-      );
-    return () => {
-      adoptProtocol = undefined;
-    };
-  }, []);
   useEffect(() => {
     if (current.kind === "access-lost" || current.kind === "incompatible") void check();
   }, [current.kind, check]);
@@ -162,13 +138,11 @@ export function ClientGate({ children }: { children: ReactNode }) {
     return <RequestAccessScreen previous={gate.previous} onRequested={check} />;
   return (
     <ScopeContext.Provider value={gate.scope}>
-      <ServerProtocolContext.Provider value={gate.serverProtocol}>
-        <ServerIdContext.Provider value={gate.serverId}>
-          <AppearanceSourceContext.Provider value={gate.appearanceSource}>
-            <OfflineBoundary>{children}</OfflineBoundary>
-          </AppearanceSourceContext.Provider>
-        </ServerIdContext.Provider>
-      </ServerProtocolContext.Provider>
+      <ServerIdContext.Provider value={gate.serverId}>
+        <AppearanceSourceContext.Provider value={gate.appearanceSource}>
+          <OfflineBoundary>{children}</OfflineBoundary>
+        </AppearanceSourceContext.Provider>
+      </ServerIdContext.Provider>
     </ScopeContext.Provider>
   );
 }

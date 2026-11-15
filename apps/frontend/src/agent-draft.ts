@@ -3,13 +3,16 @@ import type {
   AgentCapabilities,
   AgentDefinition,
   AgentExecutionSettings,
-  AgentModelOptionDescriptor,
   AgentModelOptionValue,
   AgentEnvironment,
   AgentProviderCapability,
   AgentModelCapability,
 } from "@t3-factory/contracts";
-import { validateCreateAgent, validateUpdateAgent } from "@t3-factory/domain-validation";
+import {
+  buildOptions,
+  validateCreateAgent,
+  validateUpdateAgent,
+} from "@t3-factory/domain-validation";
 import { api, ApiError } from "./api.ts";
 import { OfflineError } from "./transport.ts";
 import { randomId } from "./lib/ids.ts";
@@ -22,34 +25,32 @@ export type AgentDraftOperations = Pick<
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
-export type AgentDraftSource = Pick<
-  StudioDefinitions,
-  "getSnapshot" | "getSession" | "subscribe" | "refresh"
-> &
+export type AgentDraftSource = Pick<StudioDefinitions, "getSnapshot" | "subscribe"> &
   AgentDraftOperations;
-export type AgentContent = Pick<AgentDefinition, "name" | "prompt" | "execution" | "exits">;
-
-export function optionValue(
-  options: readonly AgentModelOptionValue[],
-  descriptor: AgentModelOptionDescriptor,
-) {
-  const selected = options.find((entry) => entry.id === descriptor.id);
-  if (selected) return selected.value;
-  if (descriptor.default !== undefined) return descriptor.default;
-  if (descriptor.values) return descriptor.values[0] ?? "";
-  if (descriptor.type === "boolean") return false;
-  return descriptor.choices?.[0]?.id ?? "";
+/** Draft content. The Worker picker may hold unchosen (empty) ids; saving converts it. */
+export interface AgentContent extends Pick<AgentDefinition, "name" | "prompt" | "exits"> {
+  readonly execution: AgentExecutionSettings;
 }
 
-export function buildOptions(
-  descriptors: readonly AgentModelOptionDescriptor[] | undefined,
-  current: readonly AgentModelOptionValue[],
-): AgentModelOptionValue[] {
-  if (!descriptors?.length) return [];
-  return descriptors.map((descriptor) => ({
-    id: descriptor.id,
-    value: optionValue(current, descriptor),
-  }));
+const NO_WORKER: AgentExecutionSettings = {
+  environmentId: "",
+  providerInstanceId: "",
+  modelId: "",
+  modelOptions: [],
+};
+
+/** Complete settings once an environment, provider and model are chosen; otherwise the Agent is
+ * saved without a model, never with a partial selection. */
+function savedExecution(selection: AgentExecutionSettings): AgentExecutionSettings | null {
+  return selection.environmentId && selection.providerInstanceId && selection.modelId
+    ? selection
+    : null;
+}
+
+/** The create API's shape for the draft: an unchosen or partial Worker becomes no model. Saving and a
+ * removed Agent's **Copy as JSON** both use it, so recovered JSON creates the same Agent. */
+export function createShapedContent(content: AgentContent) {
+  return { ...content, execution: savedExecution(content.execution) };
 }
 
 function withOptionValue(
@@ -74,8 +75,14 @@ function initialExecution(capabilities: AgentCapabilities | null): AgentExecutio
   };
 }
 
+/** A model-less Agent opens with nothing chosen; only a new Agent preselects a provider. */
 function contentOf(agent: AgentDefinition): AgentContent {
-  return { name: agent.name, prompt: agent.prompt, execution: agent.execution, exits: agent.exits };
+  return {
+    name: agent.name,
+    prompt: agent.prompt,
+    execution: agent.execution ?? NO_WORKER,
+    exits: agent.exits,
+  };
 }
 
 const sameContent = (a: AgentContent, b: AgentContent) => JSON.stringify(a) === JSON.stringify(b);
@@ -85,16 +92,25 @@ function saveRequest(
   draft: AgentContent,
   operations: AgentDraftOperations,
 ): { error: string } | { submitted: AgentContent; save: () => Promise<AgentDefinition> } {
+  const content = createShapedContent(draft);
+  // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
+  const asContent = (input: typeof content): AgentContent => ({
+    ...input,
+    execution: input.execution ?? NO_WORKER,
+  });
   if (agent) {
-    const validation = validateUpdateAgent({ ...draft, expectedRevision: agent.revision });
+    const validation = validateUpdateAgent({ ...content, expectedRevision: agent.revision });
     if (!validation.ok) return { error: validation.error.message };
     const { expectedRevision: _, ...submitted } = validation.value;
-    return { submitted, save: () => operations.updateAgent(agent.id, validation.value) };
+    return {
+      submitted: asContent(submitted),
+      save: () => operations.updateAgent(agent.id, validation.value),
+    };
   }
-  const validation = validateCreateAgent(draft);
+  const validation = validateCreateAgent(content);
   if (!validation.ok) return { error: validation.error.message };
-  const submitted = validation.value;
-  return { submitted, save: () => operations.createAgent(submitted) };
+  const input = validation.value;
+  return { submitted: asContent(input), save: () => operations.createAgent(input) };
 }
 
 /**
@@ -105,7 +121,6 @@ export type AgentSaveOutcome = "pending" | "succeeded" | "rejected" | "not-sent"
 
 /** One save this draft sent: what it submitted, against which revision, and how it ended. */
 interface AgentSave {
-  readonly session: number;
   readonly outcome: AgentSaveOutcome;
   readonly content: AgentContent;
   /** The revision the save expected; null for a Create. */
@@ -139,6 +154,8 @@ export interface AgentDraftSnapshot {
     readonly selectedProvider: AgentProviderCapability | undefined;
     readonly selectedModel: AgentModelCapability | undefined;
   };
+  /** Saving now would store no model: the Worker selection is empty or incomplete. */
+  readonly needsModel: boolean;
   readonly dirty: boolean;
   /** A save is pending; edits and further writes wait for its reply. */
   readonly saving: boolean;
@@ -230,6 +247,7 @@ export function createAgentDraft(
       deleting,
       deleteError,
       choices: { environments, providers, selectedProvider, selectedModel },
+      needsModel: savedExecution(content.execution) === null,
       dirty: !sameContent(content, baseline),
     };
   }
@@ -322,18 +340,13 @@ export function createAgentDraft(
     edit,
     async duplicate() {
       if (removed || !saved || snapshot.dirty || snapshot.saving || deleting) return;
-      const session = source.getSession();
-      try {
-        const copy = await source.duplicateAgent(saved.id, {});
-        if (session !== source.getSession()) throw new OfflineError("unknown");
-        return copy;
-      } catch (cause) {
-        if (session !== source.getSession()) throw new OfflineError("unknown");
-        throw cause;
-      }
+      return source.duplicateAgent(saved.id, {});
     },
     setEnvironmentId(id: string) {
       edit({ execution: { ...content.execution, environmentId: id } });
+    },
+    clearWorker() {
+      edit({ execution: NO_WORKER });
     },
     /** The transient "Updated to revision N" line has been shown long enough. */
     dismissUpdate() {
@@ -379,7 +392,6 @@ export function createAgentDraft(
       }
       const creating = !saved;
       const sent: AgentSave = {
-        session: source.getSession(),
         outcome: "pending",
         content: request.submitted,
         baseline: saved?.revision ?? null,
@@ -390,33 +402,25 @@ export function createAgentDraft(
       publish();
       try {
         const result = await request.save();
-        if (sent.session !== source.getSession()) throw new OfflineError("unknown");
         lastSave = { ...sent, outcome: "succeeded" };
         if (removed) return undefined;
         adopt(result);
         return result;
       } catch (cause) {
-        const currentCause =
-          sent.session === source.getSession() ? cause : new OfflineError("unknown");
-        const failure = saveFailure(currentCause, creating);
+        const failure = saveFailure(cause, creating);
         lastSave = { ...sent, outcome: failure.outcome };
         error = failure.message;
-        if (currentCause instanceof ApiError && currentCause.detail.code === "conflict") {
-          stale = true;
-          // An older server learns the newer revision only by reading the list again.
-          source.refresh();
-        }
+        if (cause instanceof ApiError && cause.detail.code === "conflict") stale = true;
         return undefined;
       } finally {
         reconcile();
         publish();
       }
     },
-    /** Opens the comparison with the newest saved revision, reading it first if unknown. */
+    /** Opens the comparison with the newest saved revision, which Studio's live lists deliver. */
     compare() {
       if (!newer && !stale) return;
       comparing = true;
-      if (!newer) source.refresh();
       publish();
     },
     /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */

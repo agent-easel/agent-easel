@@ -19,7 +19,9 @@ export interface OperationError {
     | "host_only"
     | "incompatible"
     /** Start referenced images that Factory has not staged; upload them and retry the same request. */
-    | "missing_images";
+    | "missing_images"
+    /** The request is over a size or count limit (HTTP 413); nothing was written. */
+    | "too_large";
   readonly message: string;
   readonly issues: readonly ValidationIssue[];
 }

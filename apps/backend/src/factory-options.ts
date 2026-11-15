@@ -8,6 +8,8 @@ export interface FactoryOptions {
   readonly credentialsDirectory?: string;
   readonly t3?: T3Adapter;
   readonly connectionRetryMs?: number;
+  /** The release this installation runs; source runs omit it. */
+  readonly applicationVersion?: string;
   /** Discord's REST API base for Chat control's Gateway connection; tests use a controlled Discord. */
   readonly discordApiUrl?: string;
 }

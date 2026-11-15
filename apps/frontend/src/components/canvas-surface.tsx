@@ -449,8 +449,6 @@ type CanvasSurfaceProps = {
   wires: WirePresentation;
   /** Whether a container resize refits the view or preserves it. */
   resize: "refit" | "preserve";
-  /** A changed source preserves the view across its status UI's resize. */
-  preserveViewKey?: string | undefined;
   /** Space floating panels cover at the top and at the right; fit frames the graph beside them. */
   covered: { readonly top: number; readonly right: number };
   /** Without blocks, fit frames this area from the Flow input instead of the input alone. */
@@ -688,7 +686,6 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     padding,
     reservedRight: covered.right,
     resize: props.resize,
-    preserveViewKey: props.preserveViewKey,
     fitRevision: layout.arranged,
     onTap: props.onTap,
   });

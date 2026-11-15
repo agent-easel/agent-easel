@@ -694,6 +694,33 @@ it("a definitive Start rejection uses up the consent and posts a not-accepted re
   expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
+it("confirming a Start whose Agent lost its model after the review starts no Run and names the Agent that needs one", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const button = await proposedStart(world, "600000000000000001", 2);
+  const block = world.flow.graph.blocks.find((entry) => entry.kind === "agent");
+  assert(block?.kind === "agent" && block.agentId);
+  const agent = await world.factory.getAgent(block.agentId);
+  assert(agent.ok);
+  const cleared = await world.factory.updateAgent(agent.value.id, {
+    name: agent.value.name,
+    prompt: agent.value.prompt,
+    execution: null,
+    exits: agent.value.exits,
+    expectedRevision: agent.value.revision,
+  });
+  assert(cleared.ok, JSON.stringify(cleared));
+
+  // Act
+  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+
+  // Assert
+  expect(answer).toBe(ANSWERS.rejected);
+  await createdBesidesReports(world.discord, 3);
+  expect(besidesReports(world.discord)[2]!.content).toContain(`${agent.value.name} needs a model.`);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+});
+
 it("a later turn reads the proposal's accepted outcome from Factory's facts instead of proposing again", async (c) => {
   // Arrange
   const world = await startingWorld(c);

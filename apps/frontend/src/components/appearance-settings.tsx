@@ -1,16 +1,15 @@
-import { useClientScope, useServerInheritsAppearance } from "../client-scope.ts";
+import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
 import { SettingsPage } from "./settings-page.tsx";
 import { ThemeColorSettings, ThemeColorsNote } from "./theme-color-settings.tsx";
 
 /**
- * Settings → Appearance: this device's Light or Dark choice, then T3 theme colors where the
- * server provides them (paired on the host; explained on other clients).
+ * Settings → Appearance: this device's Light or Dark choice, then T3 theme colors (paired on the
+ * host; explained on other clients).
  */
 export function AppearanceSettings() {
   const host = useClientScope() === "host";
-  const inheritsAppearance = useServerInheritsAppearance();
   return (
     <SettingsPage
       title="Appearance"
@@ -21,7 +20,7 @@ export function AppearanceSettings() {
       }
     >
       <AppearanceChoice />
-      {inheritsAppearance && (host ? <ThemeColorSettings /> : <ThemeColorsNote />)}
+      {host ? <ThemeColorSettings /> : <ThemeColorsNote />}
     </SettingsPage>
   );
 }

@@ -9,12 +9,10 @@ Studio is an almost full-window dialog with a Settings-style header (**Studio / 
 it for native window controls and 16 px elsewhere; browsers use 16 px margins (8 px when narrow). The 192 px sidebar (144 px narrow) has an **AUTHOR** group with **Flows** and **Agents**, each with its
 definition count. Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
 
-While Studio is open on a protocol 12 server, its Flow and Agent lists, the Agents' runtime summaries
-and saved-Flow usage counts, the sidebar counts and the Flow editor's Agent library follow every
-committed create, save, duplicate and removal live, whichever client or Factory MCP made it, with
-no navigation or retry. On a protocol 9–11 server Studio keeps re-reading these lists after its
-own accepted writes, on navigation and on retry, and shows **Live Studio refresh requires a server
-update.** under its header. Both editors read their definition from these lists and follow its
+While Studio is open, its Flow and Agent lists, the Agents' runtime summaries and saved-Flow usage
+counts, the sidebar counts and the Flow editor's Agent library follow every committed create, save,
+duplicate, removal and import live, whichever client or Factory MCP made it, with no navigation or
+retry. A failed subscription shows the list's error until the automatic retry succeeds. Both editors read their definition from these lists and follow its
 saved revisions ([Agent definitions](#agent-definitions), [Saving and readiness](#saving-and-readiness)).
 
 The current Flow draft survives navigation to the lists and Agents and keeps following its saved revisions while hidden; closing Studio or opening another Flow with unsaved changes asks to **Keep editing** or **Discard changes** (browser Back follows the same
@@ -51,37 +49,49 @@ catalogs load or fail (errors name the section and offer Retry).
 ## Agent definitions
 
 Open **Studio → Agents** (`/studio/agents`) to create, edit or duplicate reusable definitions; an existing one opens at `/studio/agents/:agentId` and a new one at `/studio/agents/new`. A
-definition stores a name, plain-text prompt, T3 environment, provider, model, thinking options and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
+definition stores a name, plain-text prompt, optional execution settings (T3 environment, provider, model and thinking options) and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
 defaults. Definitions are global and Runs supply project context.
 
 **Exits.** An Agent declares the exits its worker can finish with, managed in a compact table under the Prompt: **Name**, **Description**, **Message required** and a remove action. **+ Add exit** adds a row; **Save** stores the edited exits in a new Agent revision. Each exit has a stable ID; names
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with **Search Agents**, **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
+A persistent 300 px list sits beside the editor with **Search Agents**, **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
+drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Export** (after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
 Availability is separate from verified execution support. A provider without Factory reporting support (Codex, Claude, Cursor and Grok have it) stays in the provider menu
-as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected and the Agent needs a supported provider before it can run. Omitted thinking-option lists use defaults; malformed lists are rejected. Factory launches each Block worker with these saved settings
+as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
 ([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings and `settingsStatus` their availability.
+
+The Worker is optional. **Clear** empties the selection, and a save whose environment, provider or model is not chosen stores
+no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
+Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
+inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
+execution state; its Worker section asks for an environment, provider and model, it opens
+with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
+states of a saved selection. Every Flow that places such an Agent is not ready (`agent_model_required`, one issue per block,
+"{block}: {agent} needs a model."), so a Run never starts with it; choosing a model in the Agent editor makes those Flows
+ready without saving them again. In the API both `execution` and `settingsStatus` are
+`null`; create and save require the `execution` key, as complete settings (`environmentId`, `providerInstanceId`, `modelId`
+and a `modelOptions` list) or an explicit `null`, so an omitted key or a partial object, including one without
+`modelOptions`, is a validation error. A `null` execution skips the reporting-support check.
 
 The list and editor also show the provider's [reporting installation status](t3-integration.md#agent-reporting).
 The editor follows the current provider choice, explains installation problems and links to **Settings → Agent reporting**.
 Installed configuration does not establish full execution readiness or live report visibility; Start still checks those gates.
 
 **Saving.** Each accepted create or save appends one immutable Agent revision holding the name, prompt, settings and exits; a stale or invalid save returns an error,
-appends nothing and keeps local edits. Duplicate creates a variant with a new identity from the saved revision, so save edits first.
+appends nothing and keeps local edits. Duplicate creates a variant with a new identity from the saved revision, so save edits first. Create and save bodies may be up to 2 MB, enough for a 120,000-character prompt.
 A save response arriving after leaving refreshes the list without reopening the editor. Mention skills directly in the prompt (for example `$review-code`); there is no skill field or interpolation.
 
 **Revisions saved elsewhere.** An open Agent editor reads its Agent from Studio's saved definitions instead of loading it once. When another client, tab or Factory MCP saves a newer
 revision, an editor without unsaved changes switches to it and briefly shows **Updated to revision N**. An editor with unsaved changes keeps them and the revision they are based on,
 and shows **Revision N was saved elsewhere** until resolved; a later revision replaces N. **Compare latest revision** shows the local draft and saved revision N side by side as two
 read-only blocks (name, worker settings, exits and prompt). **Load latest revision** asks for confirmation, then discards the edits for revision N. **Keep my edits against revision N**
-keeps the draft unsaved against N and sends nothing; the next explicit **Save** writes it as N+1. Save stays disabled until one is chosen. A stale save opens the same comparison
-(on a protocol 9–11 server Studio first re-reads its lists to find the newer revision). There is no merge or field-level diff. The comparison and its confirmation always name the
+keeps the draft unsaved against N and sends nothing; the next explicit **Save** writes it as N+1. Save stays disabled until one is chosen. A stale save opens the same comparison. There is no merge or field-level diff. The comparison and its confirmation always name the
 revision they show: when N+1 arrives an open confirmation closes and the comparison moves to N+1, an action for an older revision does nothing, and a removal dismisses both.
 
 The editor's own saves never raise **saved elsewhere**, whether the save's reply or its delivery arrives first; deliveries during a pending save wait for its reply, and a higher
@@ -93,13 +103,12 @@ has delivered it.
 
 A Create or Duplicate answer bridges only the wait for its first appearance in Studio's current
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
-a definition removed elsewhere. If Studio replaces its source while Duplicate is pending, the
-retired reply cannot open the copy: its outcome is unknown, so check the Agent list before retrying.
+a definition removed elsewhere.
 
 **Removing.** **Delete** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
 rejects Agents placed in the latest revision of any current Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
 removal. An unsaved Flow draft may still reference a removed Agent and needs repair before running. Runs keep the Agent revision they started with, and removing an absent or removed Agent succeeds.
-Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once on protocol 12 servers and after navigation or retry on older ones.
+Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
 
 
 **Removed elsewhere.** If an Agent already open in Studio is removed by another client, its URL and
@@ -123,7 +132,7 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 
 ## Flow authoring
 
-Open **Studio → Flows** (`/studio/flows`), choose **New Flow** and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
+Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
 filters or assigns them, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
 ### Canvas and block configuration
@@ -199,6 +208,8 @@ are global; Start resolves it against the selected Project ([Runs](runs.md#start
 
 ### Saving and readiness
 
+The editor header also offers **Export** (see [Definition export](#definition-export)).
+
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by a change to an Agent the draft places, by the Flow's removal and while
 Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
@@ -206,8 +217,8 @@ content, baseline revision and placed Agent revisions it was requested for: an a
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
-the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a Continuation without a prompt and unreachable blocks. Each names the block, the exit and the problem, and selecting one
-inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph requirements only; live connection, Agent settings availability, project and reporting installation
+the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt and unreachable blocks. Each names the block, the exit and the problem, and selecting one
+inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
 When another client, tab or Factory MCP saves the open Flow, the editor follows it, also when the draft is hidden while Agents are shown. A clean draft switches to the newer revision
@@ -219,15 +230,15 @@ conflict again). Both act only on the revision shown: a newer revision moves the
 
 The editor's own save never shows as saved elsewhere, whether its answer or the live update arrives first; a newer revision saved meanwhile is followed once the save answers, and a removal
 that arrived meanwhile wins over a late success. A rejected save keeps the draft and baseline and shows its error beside any newer-revision notice. When the connection is lost before the
-answer, or the server's protocol changes meanwhile, the editor shows **Save outcome unknown**, keeps the draft and never retries; the saved revision is recognised as its own when it
-arrives. A save refused before sending because Factory is offline says that nothing was sent. On protocol 9–11 servers the comparison re-reads Studio's saved Flows.
+answer, the editor shows **Save outcome unknown**, keeps the draft and never retries; the saved revision is recognised as its own when it
+arrives. A save refused before sending because Factory is offline says that nothing was sent.
 
 ### Removing a Flow
 
 **Remove** in Flow details removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
 the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
-Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once on protocol 12 servers and after navigation or retry on older ones.
+Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
 
 
 **Removed elsewhere.** A Flow already opened in Studio keeps its URL and editable draft when another
@@ -251,6 +262,156 @@ when it is the blocking draft. When both a Flow and an Agent block navigation, t
 and Keep editing preserves the current editor. Ordinary unsaved-change prompts stay unchanged;
 browser close and reload use the standard browser warning. A fresh link to a missing Flow shows
 **Flow not found** with **Back to list**; transport failures instead remain retryable.
+
+## Definition export
+
+**Export** in the Agent editor header downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
+Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
+example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
+a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."
+(**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
+`GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
+
+The file is a portable document, version 1:
+
+```json
+{
+  "format": "t3-factory/definitions",
+  "formatVersion": 1,
+  "kind": "agent",
+  "factoryVersion": "0.42.0",
+  "exportedAt": "2026-11-14T10:00:00.000Z",
+  "agents": [
+    {
+      "key": "agent-1",
+      "name": "Code reviewer",
+      "prompt": "Review the change.",
+      "model": {
+        "driverKind": "codex",
+        "providerInstanceId": "codex-main",
+        "modelId": "gpt-6.1-sol",
+        "modelOptions": [{ "id": "reasoning", "value": "high" }]
+      },
+      "exits": [{ "id": "done", "name": "done", "description": "", "messageRequired": false }]
+    }
+  ]
+}
+```
+
+- `format`, `formatVersion` and `kind` identify the document; `factoryVersion` (`source` for a source checkout) and `exportedAt` are informational only.
+- `agents` holds the bundled Agents; an Agent document holds exactly one. Each has a document-local `key` (`[A-Za-z][A-Za-z0-9_-]{0,63}`,
+  unique in the document), so Agent and Flow documents share one Agent entry.
+- `model` is the model hint: present exactly when the Agent has execution settings, otherwise `null`. It keeps the provider instance, model and
+  thinking options whatever their availability, and never the environment. `driverKind` comes from the live T3 catalog; when T3 is disconnected
+  or no longer lists the provider it is omitted, and Studio names the affected Agents.
+- The file never contains environment ids, server or definition ids, revisions, definition timestamps or Runs. Exit ids are kept.
+
+A Flow document has `kind: "flow"` and a `flow` beside `agents`:
+
+```json
+{
+  "format": "t3-factory/definitions",
+  "formatVersion": 1,
+  "kind": "flow",
+  "factoryVersion": "0.42.0",
+  "exportedAt": "2026-11-14T10:00:00.000Z",
+  "flow": {
+    "name": "Reviewed change",
+    "graph": {
+      "blocks": [
+        {
+          "id": "review",
+          "name": "Code review",
+          "kind": "agent",
+          "position": { "x": 240, "y": 0 },
+          "agentKey": "agent-1",
+          "hiddenExitIds": [],
+          "localExits": [],
+          "revisitInstruction": ""
+        },
+        { "id": "approve", "name": "Approve", "kind": "human", "position": { "x": 480, "y": 0 } }
+      ],
+      "connections": [{ "sourceBlockId": "review", "exitId": "done", "targetBlockId": "approve" }],
+      "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] }
+    },
+    "workspace": { "mode": "worktree", "base": { "kind": "default" } }
+  },
+  "agents": [
+    {
+      "key": "agent-1",
+      "name": "Code reviewer",
+      "prompt": "Review the change.",
+      "model": null,
+      "exits": [{ "id": "done", "name": "done", "description": "", "messageRequired": false }]
+    }
+  ]
+}
+```
+
+- `flow` holds the Flow's name, saved graph and workspace setting: block and exit ids, positions, wires, hidden exits, Flow-local exits,
+  Revisit instructions, Waits, Human steps and Continuations, exactly as saved.
+- Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
+  carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
+  missing or removed. There is no fallback to local ids or names.
+
+Export refuses, with the reason, a file another installation could not import: an Agent or Flow whose save request exceeds 2 MB, or a file
+over 16 MiB.
+
+### Import
+
+**Import** on the Agents list and on the Flows list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
+what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
+
+- a trust notice: imported instructions (Agent prompts, and for a Flow file Continuation prompts and Revisit instructions) run with the user's T3
+  capabilities when a Run that uses them starts, and importing does not start a Run;
+- for a Flow file, the workspace in full: the project checkout, or a new worktree from the default branch or from the exact custom ref;
+- the instruction inventory, never instruction text: each Agent's name, prompt length and exit count and, for a Flow file, each Continuation's
+  block name and prompt length and each non-empty Revisit instruction's block name and length;
+- one row per Agent labelled **Matched**, **Ambiguous** (naming the candidates), **Unmatched** or **No model in file**, with its model hint
+  and the reason as text, and a picker of the live Worker catalog for the connected environment, limited to reporting-capable providers, with
+  the chosen model's thinking options. A Matched row starts with the matched model, which can be kept, changed to any listed model or set to
+  **Needs a model**; every other row starts as **Needs a model** with nothing preselected. The row lists the hint's options that the chosen
+  model does not accept and recomputes them whenever the choice changes.
+
+The review matches each hint against the connected environment's live catalog. Candidates are reporting-capable provider instances of the
+hint's `driverKind` that offer its exact `modelId`. The candidate with the hint's `providerInstanceId` wins; otherwise a single candidate wins;
+several candidates leave the Agent Ambiguous and none leaves it Unmatched. A hint without `driverKind` matches only a reporting-capable instance
+with the same `providerInstanceId` and `modelId`, with no single-candidate fallback. Factory never matches across driver kinds or takes the
+first listed candidate, and matches nothing while the catalog is unavailable. A match uses the connected environment's id and keeps the hint's
+options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
+review applies the same option rule.
+
+Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
+enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
+model). Confirm sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`) and a request id
+the dialog generated for this import. The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
+exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names and, for a
+Flow file, the Flow at revision 1 with each `agentKey` replaced by the new Agent's id, all in one transaction. It never reuses or updates an
+existing Agent or Flow and never starts a Run. A block whose `agentKey` is `null` arrives without an Agent, which readiness reports as a
+missing Agent reference. The commit publishes the same live definition change as a create, so every open Studio lists the new
+definitions. On success Studio opens the imported Flow, or the Agent of an Agent file, once its live lists hold it; an unrelated Flow draft with unsaved
+changes still asks **Keep editing** / **Discard changes** first.
+
+- If a chosen provider is listed by T3 but has lost Factory reporting support, the whole commit is refused, the affected Agents are named and
+  their rows return to the review for another choice. A provider T3 does not list, including while the catalog is unavailable, never refuses a
+  commit.
+- Every Confirm in one dialog reuses its request id. When the answer is lost, Confirm again returns the original result instead of a copy; the
+  same id with different content is refused as a conflict. Choosing a file again starts a new import, so two deliberate imports create two
+  independent copies. See [import receipts](foundation.md#persistence-model).
+
+Validation runs in order: the `format` marker and `formatVersion` first, then the Agent count, unknown or missing fields at every level, closed
+references (well-formed, unique keys; an Agent file holds exactly one Agent; in a Flow file every `agentKey` is a bundled Agent's key or `null`
+and every bundled Agent is used by a block), then the Agent and Flow validators and each definition's prospective save request against 2 MB.
+The distinct rejections are:
+
+- not JSON (the file is not UTF-8 JSON);
+- not a Factory export (no `t3-factory/definitions` marker);
+- unsupported format version N, which asks to update Factory when N is newer;
+- an invalid definition, field-addressed (for example `agents.0.prompt` or `flow.graph.blocks.2.position`) and naming the Agent or block;
+- over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
+- not received completely (`document_unreadable`): the upload broke off before its body arrived. Only a body over the limit is reported as too large.
+
+Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Try again**.
 
 ## Validation contract
 
@@ -284,14 +445,15 @@ Structural failures return `Result` errors with `code`, `path` and `message`: in
 positions, Flow input targets, dangling or duplicate edges, a Human or Wait connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit) and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB.
 
 Unfinished names, unset Agents, an unconnected Flow input, blocks without exits, local exit name or ID collisions and wires from hidden or removed exits can be saved.
-Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
+Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
 without a duration (`wait_duration_required`) or outside 1 minute to 7 days inclusive after converting its unit, including a zero or negative amount (`wait_duration_range`), a Wait Flow input target, missing saved
-Agents and blocks unreachable from the Flow input, resolving each block against the current saved Agents. Hide entries for exits the Agent no longer has are ignored. A
+Agents and blocks unreachable from the Flow input, resolving each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
+they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
 terminal exit needs no edge; cycles, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
 Readiness depends only on the graph and the saved revisions of the Agents it places, because an Agent's exits and former exit names are fixed per revision. Validating unsaved content
 (`POST /api/flows/validate`, Studio's **Check readiness**) therefore also answers `agentRevisions`: the saved revision of each placed Agent by id, `null` for a missing one, against which that
-readiness was resolved, so a client can compare it with the Agents it shows. Servers older than protocol 12 omit it; toward them Studio discards an answer only by its request.
+readiness was resolved, so a client can compare it with the Agents it shows.
 
 ### Revisions
 

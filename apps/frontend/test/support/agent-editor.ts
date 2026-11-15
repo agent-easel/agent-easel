@@ -1,18 +1,10 @@
 import { vi } from "vite-plus/test";
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, SavedAgent } from "@t3-factory/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
-import type { StudioDelivery } from "../../src/studio-definitions.ts";
-import { FACTORY_STUDIO_LIVE_PROTOCOL } from "@t3-factory/domain-validation";
 import { capabilities, savedAgent } from "./agent-draft.ts";
-import { held, settled } from "./flow-draft.ts";
-import {
-  liveStudio,
-  studioChanged,
-  studioFactory,
-  studioSession,
-  studioSnapshot,
-} from "./studio-definitions.ts";
+import { held } from "./flow-draft.ts";
+import { liveStudio, studioChanged, studioFactory, studioSnapshot } from "./studio-definitions.ts";
 
 /** The Agents Factory holds, and the Agent writes Studio sends, in memory. */
 function memoryAgents() {
@@ -20,8 +12,8 @@ function memoryAgents() {
   return {
     latest: () => latest,
     /** Another client saves the Agent, appending its next revision. */
-    saveElsewhere(change: Partial<AgentDefinition>) {
-      latest = { ...latest, ...change, revision: latest.revision + 1 };
+    saveElsewhere(change: Partial<SavedAgent>) {
+      latest = savedAgent({ ...latest, ...change, revision: latest.revision + 1 });
       return latest;
     },
     createAgent: vi.fn<AgentDraftOperations["createAgent"]>(async (content) => {
@@ -44,39 +36,22 @@ function memoryAgents() {
 }
 
 /**
- * An Agent editor over Studio's saved definitions on a server speaking `protocol`: the live
- * Studio subscription has delivered `agents` (the opened Agent by default), and the draft
- * follows it. `null` opens the new-Agent form.
+ * An Agent editor over Studio's saved definitions: the live Studio subscription has delivered
+ * the opened Agent, and the draft follows it. `null` opens the new-Agent form.
  */
 export function agentDraft(
   agent: AgentDefinition | null = savedAgent(),
   offered: AgentCapabilities | null = capabilities,
-  delivery: StudioDelivery = "live",
 ) {
   const factory = memoryAgents();
-  const operations = { ...studioFactory(), ...factory };
-  operations.listAgents.mockImplementation(async () => [factory.latest()]);
-  const { definitions, studio, socket, close } =
-    delivery === "live"
-      ? liveStudio(operations)
-      : { ...studioSession(operations), studio: undefined, socket: undefined };
-  studio?.message(studioSnapshot({ agents: [savedAgent()], flows: [] }));
+  const { definitions, studio, socket, close } = liveStudio({ ...studioFactory(), ...factory });
+  studio.message(studioSnapshot({ agents: [savedAgent()], flows: [] }));
   const draft = createAgentDraft(agent, offered, definitions);
   const disconnect = draft.connect();
-  return { draft, factory, studio: studio!, socket, definitions, disconnect, close };
+  return { draft, factory, studio, socket, definitions, disconnect, close };
 }
 
 type AgentEditor = ReturnType<typeof agentDraft>;
-
-/** Studio replaces its source implementation while keeping this editor and its draft. */
-export async function replaceAgentSource(
-  setup: AgentEditor,
-  protocol = FACTORY_STUDIO_LIVE_PROTOCOL - 1,
-) {
-  setup.close();
-  setup.definitions.open(protocol);
-  await settled();
-}
 
 /** Studio delivers these Agents as one committed change. */
 export function deliver(
@@ -109,12 +84,9 @@ export function echoed(setup: AgentEditor) {
   deliver(setup, [setup.factory.latest()]);
 }
 
-/**
- * An opened Agent with an unsaved name, on a live server or (`refreshed`) an older one whose
- * opening list reads have answered.
- */
-export function editedAgent(delivery: StudioDelivery = "live") {
-  const setup = agentDraft(savedAgent(), capabilities, delivery);
+/** An opened Agent with an unsaved name. */
+export function editedAgent() {
+  const setup = agentDraft();
   setup.draft.edit({ name: "Edited" });
   return setup;
 }

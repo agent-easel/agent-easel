@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { applyInheritedColors } from "../appearance.ts";
-import { useAppearanceSource, useServerId, useServerInheritsAppearance } from "../client-scope.ts";
+import { useAppearanceSource, useServerId } from "../client-scope.ts";
 import {
   cachedColors,
   followColors,
@@ -65,7 +65,5 @@ function FollowInheritedColors({ serverId }: { serverId: string }) {
 /** Approved product screens only: gates and unapproved screens never read or receive theme colors. */
 export function InheritedColors() {
   const serverId = useServerId();
-  return useServerInheritsAppearance() && serverId ? (
-    <FollowInheritedColors key={serverId} serverId={serverId} />
-  ) : null;
+  return serverId ? <FollowInheritedColors key={serverId} serverId={serverId} /> : null;
 }

@@ -1,4 +1,5 @@
-import { optionValue, type AgentDraftModel, type AgentDraftSnapshot } from "../agent-draft.ts";
+import { optionValue } from "@t3-factory/domain-validation";
+import type { AgentDraftModel, AgentDraftSnapshot } from "../agent-draft.ts";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
@@ -11,11 +12,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ChoiceMenu, type MenuChoice } from "@/components/choice-menu";
 import { cn } from "@/lib/utils";
+import { NeedsModel } from "./needs-model.tsx";
 
 type ExecutionSettingsState = AgentDraftSnapshot["choices"] &
+  Pick<AgentDraftSnapshot, "needsModel"> &
   Pick<
     AgentDraftModel,
-    "setEnvironmentId" | "chooseProvider" | "chooseModel" | "setOption" | "removeOption"
+    | "setEnvironmentId"
+    | "chooseProvider"
+    | "chooseModel"
+    | "setOption"
+    | "removeOption"
+    | "clearWorker"
   > & { readonly execution: AgentExecutionSettings };
 
 export function ExecutionSettingsFields({
@@ -41,12 +49,28 @@ export function ExecutionSettingsFields({
   const extraOptions = optionFields.slice(1);
   return (
     <section aria-labelledby={`${role}-execution-heading`} className="grid gap-3">
-      <h2 id={`${role}-execution-heading`} className="text-sm font-semibold">
-        {role === "worker" ? "Worker" : "Coordinator"}
-      </h2>
-      {!execution.environmentId && (
-        <p role="status" className="text-xs text-attention">
-          Choose a local environment, provider and model to configure the {role}.
+      <div className="flex items-center gap-2">
+        <h2 id={`${role}-execution-heading`} className="text-sm font-semibold">
+          {role === "worker" ? "Worker" : "Coordinator"}
+        </h2>
+        <span className="flex-1" />
+        {execution.environmentId && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={settings.clearWorker}
+            aria-label={`Clear ${role} selection`}
+          >
+            Clear
+          </Button>
+        )}
+      </div>
+      {settings.needsModel && (
+        <p role="status" className="text-xs">
+          <NeedsModel /> · Choose an environment, provider and model; without them this Agent saves
+          but cannot run.
         </p>
       )}
       {capabilities?.state === "ready" &&
@@ -89,7 +113,7 @@ export function ExecutionSettingsFields({
                   disabled: true,
                 }),
           }))}
-          emptyLabel="Capabilities unavailable"
+          emptyLabel={emptyChoiceLabel(execution.environmentId, "Choose an environment first")}
           unavailableLabel={`Saved provider (${availability})`}
         />
       </div>
@@ -106,14 +130,15 @@ export function ExecutionSettingsFields({
             id: entry.id,
             label: entry.label ?? entry.id,
           }))}
-          emptyLabel="Capabilities unavailable"
+          emptyLabel={emptyChoiceLabel(execution.providerInstanceId, "Choose a provider first")}
           unavailableLabel={`Saved model (${availability})`}
         />
         {rowTwo.map((descriptor) => (
           <ModelOptionField
             key={descriptor.id}
+            id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
+            label={`${prefix}${descriptor.label}`}
             step={4}
-            prefix={prefix}
             descriptor={descriptor}
             options={execution.modelOptions}
             onChange={(value) => settings.setOption(descriptor.id, value)}
@@ -125,8 +150,9 @@ export function ExecutionSettingsFields({
       {extraOptions.map((descriptor, index) => (
         <ModelOptionField
           key={descriptor.id}
+          id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
+          label={`${prefix}${descriptor.label}`}
           step={5 + index}
-          prefix={prefix}
           descriptor={descriptor}
           options={execution.modelOptions}
           onChange={(value) => settings.setOption(descriptor.id, value)}
@@ -158,13 +184,19 @@ export function ExecutionSettingsFields({
   );
 }
 
-function StepLabel({ htmlFor, step, label }: { htmlFor: string; step: number; label: string }) {
+/** A field label, numbered when the field is one step of the Worker section. */
+function StepLabel({ htmlFor, step, label }: { htmlFor: string; step?: number; label: string }) {
   return (
     <Label htmlFor={htmlFor} className={cn(fieldLabelClass, "gap-1")}>
-      <span aria-hidden>{step} ·</span>
+      {step !== undefined && <span aria-hidden>{step} ·</span>}
       {label}
     </Label>
   );
+}
+
+/** A dependent picker with no choices is waiting for its parent choice, not missing capabilities. */
+function emptyChoiceLabel(parentChoice: string, waitingLabel: string): string {
+  return parentChoice ? "Capabilities unavailable" : waitingLabel;
 }
 
 function CapabilityField({
@@ -215,8 +247,10 @@ function CapabilityField({
   );
 }
 
-function ModelOptionField({
-  prefix,
+/** One model option: its label above a select, or beside a checkbox for a boolean option. */
+export function ModelOptionField({
+  id,
+  label,
   step,
   descriptor,
   options,
@@ -224,19 +258,19 @@ function ModelOptionField({
   saving,
   hint,
 }: {
-  prefix: string;
-  step: number;
+  id: string;
+  label: string;
+  step?: number;
   descriptor: AgentModelOptionDescriptor;
   options: readonly AgentModelOptionValue[];
   onChange: (value: AgentModelOptionValue["value"]) => void;
   saving: boolean;
   hint?: string;
 }) {
-  const id = `${prefix ? "coordinator-" : ""}option-${descriptor.id}`;
   const value = optionValue(options, descriptor);
   return (
     <div className={cn("grid gap-1.5", descriptor.type === "boolean" && "flex items-center gap-2")}>
-      <StepLabel htmlFor={id} step={step} label={`${prefix}${descriptor.label}`} />
+      <StepLabel htmlFor={id} {...(step === undefined ? {} : { step })} label={label} />
       {descriptor.type === "boolean" ? (
         <Checkbox
           id={id}
@@ -247,7 +281,7 @@ function ModelOptionField({
       ) : (
         <ModelOptionSelect
           id={id}
-          label={`${prefix}${descriptor.label}`}
+          label={label}
           descriptor={descriptor}
           value={value}
           onChange={onChange}

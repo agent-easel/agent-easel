@@ -31,7 +31,14 @@ and restricted OAuth credentials live outside project repositories.
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
   exit names are not kept. Migration `081` gave every Agent block of every stored Flow revision,
   including those Runs captured, an empty Revisit instruction in place; other block kinds have
-  none.
+  none. Migration `094` made an Agent revision's execution columns nullable together (all present
+  or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
+  its restored immutability guards with every revision id, number and Run reference intact.
+- A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
+  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays), the created Agent ids by document key and, for a Flow file,
+  the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
+  original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
+  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the
@@ -126,19 +133,15 @@ by host and approved clients, with explicit [host-only boundaries](desktop-and-c
 Run detail, sidebar navigation, shared T3 connection status, [theme colors](t3-integration.md#theme-colors),
 the Run composer's launch choices and Studio's saved definitions use typed Effect RPC streams over WebSocket at `/api/live`;
 commands and other reads remain HTTP operations. A window holds one connection-status subscription,
-one theme-color subscription (only toward protocol 10 servers; it never disables mutations or shows
-synchronizing), one view
+one theme-color subscription (it never disables mutations or shows synchronizing), one view
 subscription carrying navigation and its open Runs, and, while the composer is shown, one
 launch-choices subscription carrying the Project catalog and Flows with their readiness.
-Protocol 12 servers also serve a Studio subscription carrying every current Agent with its
+Servers also serve a Studio subscription carrying every current Agent with its
 settings status and every current Flow with its readiness; Agent usage is derived from those
 Flows. A window holds it only while Studio is open and releases it when Studio closes. Like
 every held scope it gates the window's mutations, so Studio writes, and other product writes,
-wait while it is unsynchronized; drafts stay editable. Toward protocol 9–11 servers Studio
-holds no subscription and re-reads its lists over HTTP instead (see
-[Studio](studio.md#shell)), so that unsupported scope never disables mutations; a server that
-declares protocol 12 and refuses or fails the subscription stays synchronizing, with no HTTP
-fallback, and HTTP answers never mark the scope synchronized. Each read of a view covers navigation and those Runs in one
+wait while it is unsynchronized; drafts stay editable. A refused or failed subscription stays
+synchronizing, with no HTTP fallback, and HTTP answers never mark the scope synchronized. Each read of a view covers navigation and those Runs in one
 read transaction, and its changes travel in one delivery that the window applies at once,
 so one commit's lifecycle, attention and report changes appear together in Run detail and
 the sidebar. Opening or leaving a Run resubscribes the view with a fresh joint snapshot.
@@ -150,8 +153,8 @@ changes. Flow and Agent writes, project observation and selection, discovery pro
 connection transitions mark launch choices; Run changes do not. Each read of launch choices
 covers the catalog and Flows in one read transaction and does not wait for a running
 project reconcile, whose own publications would otherwise leave that read not current.
-Committed Flow and Agent creates, saves, duplicates and removals mark Studio through the same
-definition-change hook; refused writes change nothing. Each read of Studio covers both lists in
+Committed Flow and Agent creates, saves, duplicates, removals and imports mark Studio through the
+same definition-change hook; refused writes change nothing. Each read of Studio covers both lists in
 one read transaction, so every Flow's readiness was resolved against exactly the Agents delivered
 with it. Settings status reflects the T3 capabilities loaded for that read; capability and
 connection changes alone do not mark Studio.
@@ -186,10 +189,8 @@ this is not a fixed byte limit on a Run or a durable delivery log.
 
 Every reconnect or visibility gap starts fresh snapshots for active scopes. There is no
 replay cursor or polling fallback for these consumers, and reconnect never replays commands.
-Each later socket connection also repeats the protocol handshake, because a server upgraded or
-downgraded behind the same address may now declare another protocol. Product screens follow the
-renegotiated protocol without remounting: Studio retires its live subscription or its HTTP
-refresh and starts the other, keeping its shown lists, drafts, selection and canvas view.
+Each later socket connection also repeats the protocol handshake, because a server replaced
+behind the same address may no longer be compatible; an incompatible one shows the update gate.
 Obsolete subscriptions cannot replace the current view. Runner observation, dispatch,
 recovery and handoff scheduling belong to the server: zero subscribers stop no execution,
 and additional subscribers create no additional Runner schedules. See [Run viewing](runs.md#live-viewing)

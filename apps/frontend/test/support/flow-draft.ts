@@ -8,13 +8,9 @@ import type {
   OperationError,
   StudioLiveMessage,
 } from "@t3-factory/contracts";
-import { FACTORY_STUDIO_LIVE_PROTOCOL } from "@t3-factory/domain-validation";
 import { api, ApiError } from "../../src/api.ts";
 import { createFlowDraft } from "../../src/flow-draft.ts";
-import {
-  createStudioDefinitions,
-  type StudioDefinitionsOperations,
-} from "../../src/studio-definitions.ts";
+import { createStudioDefinitions } from "../../src/studio-definitions.ts";
 import { OfflineError } from "../../src/transport.ts";
 import { savedAgent } from "./agent-draft.ts";
 import { envelope, liveHarness } from "./live.ts";
@@ -33,7 +29,7 @@ interface MemoryFactory extends Operations {
 
 const ready: FlowReadiness = { ready: true, issues: [] };
 
-/** Readiness a protocol 12 Factory validated against the saved Agent at revision 3. */
+/** Readiness Factory validated against the saved Agent at revision 3. */
 export const validated = (readiness: FlowReadiness = ready, revision = 3): FlowValidation => ({
   ...readiness,
   agentRevisions: { agent: revision },
@@ -101,9 +97,6 @@ export function memoryFactory(): MemoryFactory {
   };
 }
 
-/** Lets every answer the fakes already gave reach the draft. */
-export const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
-
 /** The next call of `operation` waits until the test answers it. */
 export function held<T>(operation: Mock<(...args: never[]) => Promise<T>>) {
   let answer!: (value: T) => void;
@@ -120,27 +113,17 @@ export function held<T>(operation: Mock<(...args: never[]) => Promise<T>>) {
 type StudioChange = Omit<Extract<StudioLiveMessage, { _tag: "changed" }>, "_tag">;
 
 /**
- * Studio over the Flow Factory holds and one saved Agent, on a server speaking `protocol`, with
- * the window's live owner over scripted sockets. `listFlows` answers an older server's reads
- * with what Factory holds then; the Flow editor sends no other Studio write.
+ * A live Studio, with the window's live owner over scripted sockets, whose first snapshot holds
+ * `flows` and one saved Agent; `changed` delivers more. The Flow editor sends only the Flow writes.
  */
-function flowStudio(factory: MemoryFactory, protocol: number) {
+function liveFlowStudio(factory: MemoryFactory, flows: readonly FlowDraft[]) {
   const live = liveHarness();
-  const listFlows = vi.fn<StudioDefinitionsOperations["listFlows"]>(async () => [factory.latest()]);
   const definitions = createStudioDefinitions(live.owner, {
     ...api,
-    listFlows,
-    listAgents: async () => [savedAgent()],
     updateFlow: factory.updateFlow,
     removeFlow: factory.removeFlow,
   });
-  definitions.open(protocol);
-  return { live, definitions, listFlows };
-}
-
-/** A live Studio whose first snapshot holds `flows` and one saved Agent; `changed` delivers more. */
-function liveFlowStudio(factory: MemoryFactory, flows: readonly FlowDraft[]) {
-  const { live, definitions } = flowStudio(factory, FACTORY_STUDIO_LIVE_PROTOCOL);
+  definitions.open();
   const socket = live.sessions[0]!;
   socket.connected();
   const subscription = socket.subscriptions[0]!;
@@ -163,7 +146,6 @@ function flowDraft(factory = memoryFactory()) {
   const { definitions, socket, changed } = liveFlowStudio(factory, [factory.latest()]);
   const draft = createFlowDraft("flow", definitions, factory);
   draft.open();
-  draft.reportProtocol(FACTORY_STUDIO_LIVE_PROTOCOL);
   return {
     factory,
     draft,
@@ -250,23 +232,4 @@ export function savingFlow() {
   const reply = held(setup.factory.updateFlow);
   const saving = setup.draft.save();
   return { ...setup, reply, saving };
-}
-
-/**
- * The Flow editor of an older server's Studio (protocol 9–11), whose saved Flows are read over
- * HTTP; `listFlows` answers each read with what Factory holds then. Another client saved the
- * Flow unseen, and this editor's save of its rename was refused.
- */
-export async function olderServerRefusedFlow() {
-  const factory = memoryFactory();
-  const olderProtocol = FACTORY_STUDIO_LIVE_PROTOCOL - 1;
-  const { definitions, listFlows } = flowStudio(factory, olderProtocol);
-  const draft = createFlowDraft("flow", definitions, factory);
-  draft.open();
-  draft.reportProtocol(olderProtocol);
-  await settled();
-  draft.edit({ name: "Mine" });
-  factory.saveElsewhere("Theirs");
-  await draft.save();
-  return { draft, listFlows };
 }

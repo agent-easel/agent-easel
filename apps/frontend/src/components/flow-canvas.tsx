@@ -6,7 +6,6 @@ import {
   type CSSProperties,
   type RefObject,
 } from "react";
-import type { StudioDelivery } from "../studio-definitions.ts";
 import { GripVertical } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
@@ -165,17 +164,37 @@ function grip(visible: boolean) {
   );
 }
 
-/** Marks an Agent block that has a Revisit instruction: a neutral tag, never the text and never
- * shaped like an execution state pill. */
-function revisitMarker(id: string) {
-  return (
-    <span
-      id={id}
-      className="rounded-sm border px-1 text-2xs leading-3.5 tracking-label whitespace-nowrap text-muted-foreground"
-    >
-      Revisit instruction
-    </span>
-  );
+const blockTagClass =
+  "min-w-0 truncate rounded-sm border px-1 text-2xs leading-3.5 tracking-label whitespace-nowrap";
+
+/**
+ * Neutral tags on an Agent block's header that mark its definition: an Agent that Needs a model and
+ * a Revisit instruction (never its text). They are never shaped like an execution state pill.
+ */
+function agentBlockTags(block: FlowBlock, agents: readonly AgentDefinition[]) {
+  if (block.kind !== "agent") return { tags: null, describedBy: undefined };
+  const needsModel = agents.find((a) => a.id === block.agentId)?.execution === null;
+  const revisit = !!block.revisitInstruction.trim();
+  const needsModelId = `needs-model-${block.id}`;
+  const revisitId = `revisit-instruction-${block.id}`;
+  return {
+    tags: (
+      <>
+        {needsModel && (
+          <span id={needsModelId} className={cn(blockTagClass, "text-attention")}>
+            Needs a model
+          </span>
+        )}
+        {revisit && (
+          <span id={revisitId} className={cn(blockTagClass, "text-muted-foreground")}>
+            Revisit instruction
+          </span>
+        )}
+      </>
+    ),
+    describedBy:
+      [needsModel && needsModelId, revisit && revisitId].filter(Boolean).join(" ") || undefined,
+  };
 }
 
 /**
@@ -347,17 +366,14 @@ function authoringBlock({
 }): CanvasBlockContent {
   const human = block.kind === "human";
   const name = block.name || "Unnamed block";
-  const markerId =
-    block.kind === "agent" && block.revisitInstruction.trim()
-      ? `revisit-instruction-${block.id}`
-      : undefined;
+  const { tags, describedBy } = agentBlockTags(block, agents);
   const identity = blockIdentity({
     kind: block.kind,
     name,
     ...blockReference(graph, block, agents),
     trailing: (
       <>
-        {markerId && revisitMarker(markerId)}
+        {tags}
         {grip(selected)}
       </>
     ),
@@ -377,7 +393,7 @@ function authoringBlock({
         <DragButton
           className={cn(dragPressClass, "rounded-t-lg")}
           aria-label={`${BLOCK_KINDS[block.kind].name} ${name}`}
-          aria-describedby={markerId}
+          aria-describedby={describedBy}
           aria-pressed={selected}
           {...drag}
           onClick={onSelect}
@@ -456,7 +472,7 @@ type FlowCanvasProps = {
   selectedWire: FlowWire | null;
   /** Width the floating block configuration covers; fit frames the graph beside it. */
   reservedRight: number;
-  scope: { id: string; delivery: StudioDelivery };
+  scope: string;
   savedGraph: FlowGraph | undefined;
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
@@ -550,7 +566,7 @@ export function FlowCanvas({
       ref={ref}
       label="Flow canvas"
       className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px]"
-      scope={savedGraph ? scope.id : null}
+      scope={savedGraph ? scope : null}
       graph={graph}
       agents={agents}
       dimensions={AUTHORING_DIMENSIONS}
@@ -565,7 +581,6 @@ export function FlowCanvas({
         onDelete: onDeleteWire,
       }}
       resize="refit"
-      preserveViewKey={scope.delivery}
       covered={{ top: READINESS_HEIGHT, right: reservedRight }}
       arrangement={{ busy, saved: savedGraph, commit: onChange, onArranging }}
       gesture={gestures.gesture}

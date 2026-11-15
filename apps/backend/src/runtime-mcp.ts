@@ -5,7 +5,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/server";
 import { authoringTools, callAuthoringTool, type AuthoringOperations } from "./authoring-tools.ts";
-import { flowDocumentBody } from "./http-support.ts";
+import { definitionBody } from "./http-support.ts";
 import { callLaunchTool, launchTools, type LaunchOperations } from "./launch-tools.ts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
@@ -188,7 +188,7 @@ export function runtimeMcpHandler(
       return server;
     },
     // A Flow save carries a whole graph, as Studio's Flow document body does.
-    { maxRequestBodySize: flowDocumentBody.bytes },
+    { maxRequestBodySize: definitionBody.bytes },
   );
   return (request) => handler.fetch(request);
 }

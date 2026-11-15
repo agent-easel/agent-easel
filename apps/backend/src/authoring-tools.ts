@@ -45,9 +45,9 @@ const agentFields = {
   name: { type: "string" },
   prompt: { type: "string" },
   execution: {
-    type: "object",
+    type: ["object", "null"],
     description:
-      "Ids from factory_get_agent_capabilities: environment, provider instance (one with reporting.supported), model and model option values.",
+      "Required. Ids from factory_get_agent_capabilities: environment, provider instance (one with reporting.supported), model and model option values (an empty list when choosing none); or null for an Agent without a model, which saves but cannot run until a save gives it one.",
     properties: {
       environmentId: { type: "string" },
       providerInstanceId: { type: "string" },
@@ -61,7 +61,7 @@ const agentFields = {
         },
       },
     },
-    required: ["environmentId", "providerInstanceId", "modelId"],
+    required: ["environmentId", "providerInstanceId", "modelId", "modelOptions"],
   },
   exits: { type: "array", items: exit, description: "The Agent's exits; at least one." },
 };
@@ -148,7 +148,8 @@ export const authoringTools: Tool[] = [
   },
   {
     name: "factory_get_agent",
-    description: "Read one Agent's current revision, model settings, exits and settings status.",
+    description:
+      "Read one Agent's current revision, model settings, exits and settings status. An Agent without a model has execution and settingsStatus null.",
     inputSchema: {
       type: "object",
       properties: { agentId },

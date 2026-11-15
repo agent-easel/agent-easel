@@ -1,6 +1,12 @@
+import type { ReactNode } from "react";
 import { MutationGate } from "@/client-gate";
 import { Bot, Search } from "lucide-react";
-import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@t3-factory/contracts";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  FlowDraft,
+  ImportResult,
+} from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -9,6 +15,8 @@ import { agentRuntimeMeta, flowUsageCount, flowUsageLabel } from "@/lib/agent-di
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
+import { NeedsModel } from "../needs-model.tsx";
+import { DefinitionImportControl } from "../definition-import-control.tsx";
 
 export function AgentsListPane({
   agents,
@@ -18,8 +26,8 @@ export function AgentsListPane({
   query,
   onQueryChange,
   onCreate,
+  onImported,
   error,
-  onRetry,
   loading,
   creatingNew,
 }: {
@@ -31,8 +39,8 @@ export function AgentsListPane({
   query: string;
   onQueryChange: (query: string) => void;
   onCreate: () => void;
+  onImported: (result: ImportResult) => void;
   error: string;
-  onRetry: () => void;
   loading: boolean;
 }) {
   const filtered =
@@ -50,6 +58,7 @@ export function AgentsListPane({
           </span>
         )}
         <span className="flex-1" />
+        <DefinitionImportControl size="sm" onImported={onImported} />
         <MutationGate>
           <Button size="sm" aria-label="New Agent" onClick={onCreate}>
             + Add agent
@@ -91,7 +100,6 @@ export function AgentsListPane({
           capabilities={capabilities}
           selectedId={selectedId}
           error={error}
-          onRetry={onRetry}
           loading={loading}
           count={count}
         />
@@ -112,7 +120,6 @@ function AgentListRows({
   capabilities,
   selectedId,
   error,
-  onRetry,
   loading,
   count,
 }: {
@@ -121,18 +128,12 @@ function AgentListRows({
   capabilities: AgentCapabilities | null;
   selectedId: string | undefined;
   error: string;
-  onRetry: () => void;
   loading: boolean;
   count: number;
 }) {
   return error ? (
     <Alert variant="destructive" className="mb-2">
-      <AlertDescription className="flex flex-wrap items-center gap-2">
-        {error}
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-          Try again
-        </Button>
-      </AlertDescription>
+      <AlertDescription>{error}</AlertDescription>
     </Alert>
   ) : loading ? (
     <p role="status" className="px-1 py-4 text-sm text-muted-foreground">
@@ -151,8 +152,10 @@ function AgentListRows({
           <AgentListItemLink
             id={agent.id}
             name={agent.name}
-            meta={agentRuntimeMeta(agent, capabilities)}
-            providerId={agent.execution.providerInstanceId}
+            meta={
+              agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
+            }
+            {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
             usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}
             selected={selectedId === agent.id}
           />
@@ -172,7 +175,7 @@ function AgentListItemLink({
 }: {
   id: string;
   name: string;
-  meta: string;
+  meta: ReactNode;
   usage?: string;
   selected: boolean;
   providerId?: string;

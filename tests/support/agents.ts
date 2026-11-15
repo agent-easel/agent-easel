@@ -27,11 +27,15 @@ export async function repairCodexReporting(screen: Screen) {
   await screen.getByRole("button", "Close", { exact: true }).tap();
 }
 
-/** A journey owns its Agent, so exit edits cannot change other tests' Flows. */
+/**
+ * A journey owns its Agent, so exit edits cannot change other tests' Flows. A `modelLess` copy
+ * saves no execution settings: it Needs a model.
+ */
 export async function copyAgentDefinition(
   baseUrl: string | undefined,
   source: string,
   name: string,
+  { modelLess = false } = {},
 ) {
   const template = (await listAgentDefinitions(baseUrl)).find((agent) => agent.name === source);
   assert(template);
@@ -42,7 +46,7 @@ export async function copyAgentDefinition(
       body: JSON.stringify({
         name,
         prompt: template.prompt,
-        execution: template.execution,
+        execution: modelLess ? null : template.execution,
         exits: template.exits,
       }),
     })

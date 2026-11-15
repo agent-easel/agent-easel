@@ -49,7 +49,7 @@ export class FactoryLive extends RpcGroup.make(
     error: LiveError,
     stream: true,
   }),
-  /** Protocol 12: Studio's Agents and Flows; servers that declare an older protocol do not serve it. */
+  /** Studio's Agents and Flows (protocol 12). */
   Rpc.make("WatchStudio", {
     success: trusted<LiveEnvelope<StudioLiveMessage>>(),
     error: LiveError,

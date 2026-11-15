@@ -8,8 +8,6 @@ import {
   interactingFlow,
   lostReply,
   unlistedFlow,
-  olderServerRefusedFlow,
-  settled,
   notReady,
   openedFlow,
   comparedFlow,
@@ -597,23 +595,6 @@ it("a rejected save shows a revision saved elsewhere meanwhile beside its error 
   });
 });
 
-it("a save answered after the server's protocol changed has an unknown outcome", async () => {
-  // Arrange
-  const { draft, factory, reply, saving } = savingFlow();
-  draft.reportProtocol(11);
-
-  // Act
-  reply.answer(factory.commit("Mine"));
-  await saving;
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    saved: { revision: 1 },
-    dirty: true,
-    saveState: "unknown",
-  });
-});
-
 it("a clean Flow hidden while Agents are shown adopts a revision saved elsewhere", () => {
   // Arrange
   const { draft, factory, published } = hiddenFlow();
@@ -735,7 +716,7 @@ it("a readiness check answered after the editor was hidden is dropped", async ()
   draft.hide();
 
   // Act
-  answer.answer({ ready: true, issues: [] });
+  answer.answer(validated());
   await checking;
 
   // Assert
@@ -792,39 +773,6 @@ it("a Create answer cannot reopen a Flow Studio already delivered and then remov
     error: "Flow not found.",
     canSave: false,
     canStartRun: false,
-  });
-});
-
-it("on an older server, comparing reads the saved Flows again and shows the newer revision", async () => {
-  // Arrange
-  const { draft } = await olderServerRefusedFlow();
-
-  // Act
-  draft.compareLatest();
-  await settled();
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    content: { name: "Mine" },
-    conflict: { status: "compared", latest: { revision: 2, name: "Theirs" } },
-  });
-});
-
-it("on an older server, a failed comparison read keeps the conflict and reports the failure", async () => {
-  // Arrange
-  const { draft, listFlows } = await olderServerRefusedFlow();
-  listFlows.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-
-  // Act
-  draft.compareLatest();
-  await settled();
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    content: { name: "Mine" },
-    dirty: true,
-    error: "Could not load the latest revision. Try again.",
-    conflict: { status: "detected", revision: null },
   });
 });
 

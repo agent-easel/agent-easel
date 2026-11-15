@@ -5,6 +5,8 @@ import type { StudioLiveMessage } from "@t3-factory/contracts";
 import { assertOk, reviewedFlow, reviewerExits, sampleAgentInput } from "./support/domain-setup.ts";
 import { appliedStudio, liveClient, liveReads, publicStudio, subscribe } from "./support/live.ts";
 import { remoteServer } from "./support/remote-clients.ts";
+import { flowFile } from "./support/definition-import.ts";
+import { controlledExecution } from "./support/scenarios.ts";
 import { makeLiveChanges } from "../src/live-changes.ts";
 import { makeLiveStreams } from "../src/live-streams.ts";
 
@@ -47,6 +49,31 @@ it("a created Agent reaches an existing Studio subscriber without another read",
     _tag: "changed",
     agents: { upserts: [created], removals: [] },
   } satisfies StudioLiveMessage);
+  expect(appliedStudio(delivered)).toStrictEqual(await publicStudio(factory));
+});
+
+it("an imported Flow reaches an existing Studio subscriber with its new Agent in one change", async (c) => {
+  // Arrange
+  const { factory } = await reviewedFlow(c);
+  const studio = subscribe(c, factory.live.watchStudio());
+  await studio.until((messages) => messages.length > 0);
+
+  // Act
+  const imported = assertOk(
+    await factory.commitImport({
+      requestId: "import-flow",
+      document: flowFile(),
+      selections: { "agent-1": controlledExecution() },
+    }),
+  );
+
+  // Assert
+  const delivered = await studio.until((messages) => messages.length > 1);
+  expect(delivered[1]).toMatchObject({
+    _tag: "changed",
+    agents: { upserts: [{ id: imported.agents[0]!.id }], removals: [] },
+    flows: { upserts: [{ id: imported.flowId }], removals: [] },
+  });
   expect(appliedStudio(delivered)).toStrictEqual(await publicStudio(factory));
 });
 

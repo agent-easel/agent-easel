@@ -1,5 +1,5 @@
 import { flowGraphReferencesAgent, resolveAgentModel } from "@t3-factory/domain-validation";
-import type { AgentCapabilities, AgentDefinition, FlowDraft } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentExecutionSettings, FlowDraft } from "@t3-factory/contracts";
 
 export function flowUsageCount(flows: readonly FlowDraft[], agentId: string): number {
   return flows.filter((flow) => flowGraphReferencesAgent(flow.graph, agentId)).length;
@@ -11,11 +11,11 @@ export function flowUsageLabel(count: number): string {
   return `${count} Flows`;
 }
 
+/** The provider, model and thinking options of saved execution settings. */
 export function agentRuntimeMeta(
-  agent: AgentDefinition,
+  execution: AgentExecutionSettings,
   capabilities: AgentCapabilities | null,
 ): string {
-  const { execution } = agent;
   const { provider, model } = resolveAgentModel(execution, capabilities);
   const providerLabel = provider?.displayName ?? execution.providerInstanceId;
   const modelLabel = model?.label ?? execution.modelId;

@@ -15,12 +15,16 @@ async function flowRequest(baseUrl: string | undefined, path: string, init?: Req
   return result.value;
 }
 
-/** Saves a new Flow with a seeded Flow's graph and the given workspace setting. */
+/**
+ * Saves a new Flow with a seeded Flow's graph and the given workspace setting, placing the saved
+ * Agent `blockAgents[blockId]` in each listed Agent block.
+ */
 export async function saveFlowCopy(
   baseUrl: string | undefined,
   source: string,
   name: string,
   workspace: FlowWorkspace,
+  blockAgents: Readonly<Record<string, string>> = {},
 ) {
   const flows = (await flowRequest(baseUrl, "/api/flows")) as FlowDraft[];
   const seeded = flows.find((flow) => flow.name === source);
@@ -33,7 +37,19 @@ export async function saveFlowCopy(
   await flowRequest(baseUrl, `/api/flows/${created.id}`, {
     method: "PUT",
     headers: mutation,
-    body: JSON.stringify({ name, expectedRevision: 1, workspace, graph: seeded.graph }),
+    body: JSON.stringify({
+      name,
+      expectedRevision: 1,
+      workspace,
+      graph: {
+        ...seeded.graph,
+        blocks: seeded.graph.blocks.map((block) =>
+          block.kind === "agent" && blockAgents[block.id]
+            ? { ...block, agentId: blockAgents[block.id] }
+            : block,
+        ),
+      },
+    }),
   });
   return created.id;
 }

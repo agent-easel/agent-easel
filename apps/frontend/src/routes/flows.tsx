@@ -6,13 +6,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StudioLink } from "../components/app-link.tsx";
-import {
-  StudioListHeader,
-  studioRowClass,
-  editedLabel,
-  useVisitValue,
-} from "../components/studio-list.tsx";
-import { useStudioDelivery, useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
+import { StudioListHeader, studioRowClass, editedLabel } from "../components/studio-list.tsx";
+import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
+import { useStudioNavigation } from "../settings-navigation.ts";
+import { openImported } from "../definition-import.ts";
 
 export function FlowList({
   definitions,
@@ -21,8 +18,9 @@ export function FlowList({
   definitions: StudioDefinitions;
   onCreate: () => void;
 }) {
+  const openStudio = useStudioNavigation();
   const flows = useStudioRead(definitions, "flows");
-  const items = useVisitValue(flows, useStudioDelivery(definitions));
+  const items = flows.value;
   const error = flows.error ? "Could not load Flows. Check that Factory is running." : "";
   const [query, setQuery] = useState("");
   const filtered =
@@ -38,16 +36,12 @@ export function FlowList({
         onQueryChange={setQuery}
         onCreate={onCreate}
         createLabel="New Flow"
+        onImported={(result) => void openImported(result, definitions, openStudio)}
       />
       {items && items.length > 0 && filtered?.length === 0 ? (
         <p className="text-sm text-muted-foreground">No Flows match your search.</p>
       ) : (
-        <FlowItems
-          items={filtered}
-          error={error}
-          onRetry={definitions.refresh}
-          onCreate={onCreate}
-        />
+        <FlowItems items={filtered} error={error} onCreate={onCreate} />
       )}
       {items && items.length > 0 && (
         <p className="text-2xs tracking-label text-subtle-foreground">
@@ -62,24 +56,17 @@ export function FlowList({
 function FlowItems({
   items,
   error,
-  onRetry,
   onCreate,
 }: {
   items: readonly FlowDraft[] | null;
   error: string;
-  onRetry: () => void;
   onCreate: () => void;
 }) {
   return (
     <>
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription className="flex flex-wrap items-center gap-2">
-            {error}{" "}
-            <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-              Try again
-            </Button>
-          </AlertDescription>
+          <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : items === null ? (
         <p role="status" className="text-sm text-muted-foreground">

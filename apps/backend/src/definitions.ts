@@ -7,22 +7,28 @@ import {
 } from "@t3-factory/flow-layout";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import type {
-  AgentCapabilities,
-  AgentDefinition,
-  FactoryOperations,
-  FlowBlock,
-  FlowDraft,
-  FlowGraph,
-  FlowGraphInput,
-  Result,
-  StudioDefinitions,
+import {
+  PORTABLE_DOCUMENT_FORMAT,
+  PORTABLE_DOCUMENT_VERSION,
+  type AgentCapabilities,
+  type AgentDefinition,
+  type FactoryOperations,
+  type FlowBlock,
+  type FlowDraft,
+  type FlowGraph,
+  type FlowGraphInput,
+  type ImportResult,
+  type PortableFlow,
+  type Result,
+  type StudioDefinitions,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
   flowAgentRevisions,
   flowReadiness,
+  parsePortableFile,
   type ReadinessAgent,
+  validateCommitImport,
   validateCreateAgent,
   validateCreateFlow,
   validateDuplicateAgent,
@@ -53,16 +59,30 @@ import {
   readFormerExitNames,
   type AgentRevision,
 } from "./agent-revisions.ts";
+import {
+  definitionExport,
+  importReview,
+  portableAgent,
+  portableFlow,
+  unsupportedSelections,
+} from "./portable-definitions.ts";
+import {
+  importFingerprint,
+  readImportReceipt,
+  replayedImport,
+  writeImportReceipt,
+} from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
-const toAgent = (
-  agent: AgentRevision,
-  capabilities: AgentCapabilities | null,
-): AgentDefinition => ({
-  ...agent,
-  settingsStatus: agentSettingsStatus(agent.execution, capabilities),
-});
+const toAgent = (agent: AgentRevision, capabilities: AgentCapabilities | null): AgentDefinition =>
+  agent.execution === null
+    ? { ...agent, execution: null, settingsStatus: null }
+    : {
+        ...agent,
+        execution: agent.execution,
+        settingsStatus: agentSettingsStatus(agent.execution, capabilities),
+      };
 const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
   readiness: flowReadiness(flow.graph, agents),
@@ -73,6 +93,8 @@ export const makeDefinitions = (
   t3: T3Adapter,
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
   changes: LiveChanges,
+  /** Recorded in exported files for information only. */
+  factoryVersion: string,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -87,14 +109,16 @@ export const makeDefinitions = (
       );
     const provideSql = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
       operation.pipe(Effect.provideService(SqlClient.SqlClient, sql));
-    /** Flow readiness resolves blocks against the current saved Agents and their exits. */
+    /** Flow readiness resolves blocks against the current saved Agents, their exits and models. */
     const readinessAgents = Effect.gen(function* () {
       const agents = yield* readCurrentAgents(sql);
       const formerExitNames = yield* readFormerExitNames(sql);
       return agents.map((agent): ReadinessAgent & Pick<AgentRevision, "revision"> => ({
         id: agent.id,
+        name: agent.name,
         revision: agent.revision,
         exits: agent.exits,
+        hasExecution: agent.execution !== null,
         formerExitNames: formerExitNames.get(agent.id) ?? new Map(),
       }));
     });
@@ -230,6 +254,30 @@ export const makeDefinitions = (
         }),
       );
     }
+    /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
+     * block and exit ids, positions and the workspace arrive as exported. */
+    const importFlow = Effect.fnUntraced(function* (
+      flow: PortableFlow,
+      agentIds: ReadonlyMap<string, string>,
+      now: string,
+    ) {
+      const id = yield* newId;
+      const blocks = flow.graph.blocks.map((block): FlowBlock => {
+        if (block.kind !== "agent") return block;
+        const { agentKey, ...rest } = block;
+        return { ...rest, agentId: agentKey === null ? null : agentIds.get(agentKey)! };
+      });
+      yield* sql`INSERT INTO flows (id, created_at) VALUES (${id}, ${now})`;
+      yield* appendFlowRevision(sql, {
+        id,
+        revision: 1,
+        name: flow.name,
+        graph: { ...flow.graph, blocks },
+        workspace: flow.workspace,
+        savedAt: now,
+      });
+      return id;
+    });
     const operations: Pick<
       EffectOperations<FactoryOperations>,
       | "createFlow"
@@ -245,6 +293,10 @@ export const makeDefinitions = (
       | "updateAgent"
       | "duplicateAgent"
       | "removeAgent"
+      | "exportAgent"
+      | "exportFlow"
+      | "reviewImport"
+      | "commitImport"
     > = {
       createFlow(input) {
         const validated = validateCreateFlow(input);
@@ -484,6 +536,110 @@ export const makeDefinitions = (
           ),
         );
       },
+      exportAgent: (id) =>
+        agentOperation((sql, capabilities) =>
+          Effect.gen(function* () {
+            const [agent] = yield* readCurrentAgents(sql, id);
+            if (!agent) return failure("not_found", "This Agent does not exist.");
+            return definitionExport(
+              {
+                format: PORTABLE_DOCUMENT_FORMAT,
+                formatVersion: PORTABLE_DOCUMENT_VERSION,
+                kind: "agent",
+                factoryVersion,
+                exportedAt: yield* currentTime,
+                agents: [portableAgent(agent, "agent-1", capabilities)],
+              },
+              [agent],
+            );
+          }),
+        ),
+      exportFlow: (id) =>
+        agentOperation((sql, capabilities) =>
+          Effect.gen(function* () {
+            const [flow] = yield* readCurrentFlows(sql, id);
+            if (!flow) return flowNotFound();
+            const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
+            return definitionExport(
+              {
+                format: PORTABLE_DOCUMENT_FORMAT,
+                formatVersion: PORTABLE_DOCUMENT_VERSION,
+                kind: "flow",
+                factoryVersion,
+                exportedAt: yield* currentTime,
+                flow: portable.flow,
+                agents: portable.agents,
+              },
+              portable.revisions,
+              flow,
+            );
+          }),
+        ),
+      reviewImport(file) {
+        const document = parsePortableFile(file.data);
+        if (!document.ok) return Effect.succeed(document);
+        return loadCapabilities().pipe(
+          Effect.map((capabilities) => ({
+            ok: true as const,
+            value: importReview(document.value, capabilities),
+          })),
+        );
+      },
+      commitImport(input) {
+        const validated = validateCommitImport(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const commit = validated.value;
+        const fingerprint = importFingerprint(commit);
+        // A receipt answers before the catalog is read, so a replay never depends on T3.
+        const replay = readImportReceipt(sql, commit.requestId).pipe(
+          Effect.map((receipt) => receipt && replayedImport(receipt, fingerprint)),
+        );
+        return provideSql<ImportResult>(
+          Effect.gen(function* () {
+            const replayed = yield* replay;
+            if (replayed) return replayed;
+            const capabilities = yield* loadCapabilities();
+            return yield* sql.withTransaction(
+              Effect.gen(function* () {
+                // Checked again: a retry of the same request may have committed meanwhile.
+                const raced = yield* replay;
+                if (raced) return raced;
+                const unsupported = unsupportedSelections(commit, capabilities);
+                if (unsupported) return unsupported;
+                const now = yield* currentTime;
+                const agents = yield* Effect.forEach(commit.document.agents, (entry) =>
+                  Effect.gen(function* () {
+                    const id = yield* newId;
+                    yield* sql`INSERT INTO agents (id, created_at) VALUES (${id}, ${now})`;
+                    yield* appendAgentRevision(sql, {
+                      id,
+                      name: entry.name,
+                      prompt: entry.prompt,
+                      execution: commit.selections[entry.key] ?? null,
+                      exits: entry.exits,
+                      revision: 1,
+                      updatedAt: now,
+                    });
+                    return { key: entry.key, id };
+                  }),
+                );
+                const document = commit.document;
+                const flowId =
+                  document.kind === "flow"
+                    ? yield* importFlow(
+                        document.flow,
+                        new Map(agents.map((a) => [a.key, a.id])),
+                        now,
+                      )
+                    : null;
+                const result: ImportResult = { agents, flowId };
+                yield* writeImportReceipt(sql, commit.requestId, fingerprint, now, result);
+                return { ok: true as const, value: result };
+              }),
+            );
+          }),
+        );
+      },
     };
     /**
      * Both lists from one read transaction, so every Flow's readiness matches the Agents read
@@ -564,6 +720,23 @@ export const makeDefinitions = (
         Effect.suspend(() => operations.removeAgent(...args)).pipe(
           publishOnSuccess,
           Effect.withSpan("Definitions.removeAgent"),
+        ),
+      exportAgent: (...args: Parameters<typeof operations.exportAgent>) =>
+        Effect.suspend(() => operations.exportAgent(...args)).pipe(
+          Effect.withSpan("Definitions.exportAgent"),
+        ),
+      exportFlow: (...args: Parameters<typeof operations.exportFlow>) =>
+        Effect.suspend(() => operations.exportFlow(...args)).pipe(
+          Effect.withSpan("Definitions.exportFlow"),
+        ),
+      reviewImport: (...args: Parameters<typeof operations.reviewImport>) =>
+        Effect.suspend(() => operations.reviewImport(...args)).pipe(
+          Effect.withSpan("Definitions.reviewImport"),
+        ),
+      commitImport: (...args: Parameters<typeof operations.commitImport>) =>
+        Effect.suspend(() => operations.commitImport(...args)).pipe(
+          publishOnSuccess,
+          Effect.withSpan("Definitions.commitImport"),
         ),
     };
   });

@@ -1,5 +1,5 @@
 /** Runs, their prompt images, Tasks, attention and Human occurrences. */
-import type { AgentDefinition, AgentExecutionSettings, AgentModelOptionValue } from "./agent.ts";
+import type { AgentExecutionSettings, AgentModelOptionValue, CapturedAgent } from "./agent.ts";
 import type { FlowDraft } from "./flow.ts";
 import type { FactoryProject } from "./project.ts";
 import { operation, operationPath } from "./operation.ts";
@@ -197,7 +197,7 @@ export interface RunThreadBinding {
  */
 export interface RunDefinitions {
   readonly flow: Omit<FlowDraft, "readiness">;
-  readonly agents: readonly Omit<AgentDefinition, "settingsStatus">[];
+  readonly agents: readonly CapturedAgent[];
 }
 export interface RunBlock {
   readonly blockId: string;

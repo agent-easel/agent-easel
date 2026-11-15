@@ -32,10 +32,22 @@ A constituent element of a flow: the Flow input block, an agent block, a human s
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
-A reusable worker definition consisting of a prompt, execution settings and its exits, independent of a particular project. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
+A reusable worker definition consisting of a prompt, optional execution settings and its exits, independent of a particular project. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
 
 **Agent revision**:
-One immutable saved version of an Agent's name, prompt, execution settings and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions.
+One immutable saved version of an Agent's name, prompt, execution settings (complete or none) and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
+
+**Needs a model**:
+The state of an Agent saved without execution settings (`execution: null`). It can be edited, placed and duplicated, but it cannot run until a save chooses an environment, provider and model. It describes a missing choice, not the availability of a saved one.
+_Avoid_: unavailable, unknown.
+
+**Definition export**:
+A JSON file holding the latest saved revision of an Agent, or of a Flow with each Agent it uses bundled once, in the portable document format, with its model as an optional hint and without environment, server ids, revisions, timestamps or Runs. Exporting never changes the definition or its editor.
+_Avoid_: backup, sync.
+
+**Import receipt**:
+The durable record of one committed import: the client's request id, a fingerprint of the document and reviewed model choices, and the definitions it created. A retry with the same content returns the original result instead of a copy.
+_Avoid_: import history, provenance.
 
 **Studio**:
 The modal authoring surface for global Flows and reusable Agent definitions. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.

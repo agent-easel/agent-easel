@@ -1,6 +1,11 @@
 import type { TestContext } from "@effect/vitest";
 import type { Factory } from "../../src/index.ts";
-import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import type {
+  AgentExecutionSettingsStatus,
+  CapturedAgent,
+  FlowBlock,
+  FlowGraph,
+} from "@t3-factory/contracts";
 import { factoryHarness } from "./factory.ts";
 import { loadMigrationData, restoreCapturedAdapter } from "./migration-data.ts";
 
@@ -23,8 +28,10 @@ type ReleasedBlock = Pick<FlowBlock, "id" | "name" | "position"> & {
 type ReleasedFlow = Omit<Value<"getFlow">, "workspace" | "graph"> & {
   graph: Omit<FlowGraph, "blocks"> & { blocks: ReleasedBlock[] };
 };
-/** v0.2.0 Agents had no exits. */
-type ReleasedAgent = Omit<Value<"getAgent">, "exits">;
+/** v0.2.0 Agents had no exits and always had execution settings. */
+type ReleasedAgent = Omit<CapturedAgent, "exits"> & {
+  settingsStatus: AgentExecutionSettingsStatus;
+};
 /** v0.2.0 returned a Run's definitions as the snapshot it stored at Start. */
 type ReleasedSnapshot = { flow: ReleasedFlow; agents: ReleasedAgent[] };
 type CurrentRun = Value<"getRun">;

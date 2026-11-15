@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import type {
+  AgentExecutionSettings,
   BlockExit,
   CreateAgentInput,
   FactoryOperations,
@@ -37,8 +38,8 @@ export const blockExit = (
 ): BlockExit => ({ id, name, description, messageRequired });
 export const controlledExecution = (
   environmentId = "controlled-environment",
-  overrides: Partial<CreateAgentInput["execution"]> = {},
-): CreateAgentInput["execution"] => ({
+  overrides: Partial<AgentExecutionSettings> = {},
+): AgentExecutionSettings => ({
   environmentId,
   providerInstanceId: "codex-main",
   modelId: "gpt-6.1-sol",
@@ -516,16 +517,24 @@ export interface SingleWorkerVariant {
 /** The Revisit instruction tests give Entry worker. */
 export const REVISIT_INSTRUCTION = "Verify the fixes and the newly affected scope.";
 
-const workerAgent = (
+/** Saves the Worker Agent a ready Flow runs; it always has a model. */
+async function workerAgent(
   world: ScenarioWorld,
+  step: string,
   exits: readonly BlockExit[] = [blockExit("done", "Done", "Completed")],
-) =>
-  world.factory.createAgent({
-    name: "Worker",
-    prompt: "Follow repository instructions.",
-    execution: controlledExecution(world.t3.environmentId),
-    exits,
-  });
+) {
+  const agent = stepResult(
+    step,
+    await world.factory.createAgent({
+      name: "Worker",
+      prompt: "Follow repository instructions.",
+      execution: controlledExecution(world.t3.environmentId),
+      exits,
+    }),
+  );
+  if (agent.execution === null) stepFailed(step, "the Agent was saved without a model.");
+  return agent;
+}
 
 async function saveFlow(
   world: ScenarioWorld,
@@ -547,10 +556,7 @@ async function saveFlow(
 
 /** Saves the ready single-worker Flow: Flow input to Entry worker (block `worker`) and its Agent. */
 export async function singleWorkerFlow(world: ScenarioWorld, variant: SingleWorkerVariant = {}) {
-  const agent = stepResult(
-    "create the single worker's Agent",
-    await workerAgent(world, variant.exits),
-  );
+  const agent = await workerAgent(world, "create the single worker's Agent", variant.exits);
   const flow = await saveFlow(
     world,
     "Single worker",
@@ -591,7 +597,7 @@ async function workerShape(
   graph: (agentId: string) => FlowGraph,
   workspace?: FlowWorkspace,
 ): Promise<ReadyFlow> {
-  const agent = stepResult(`create the ${name} Agent`, await workerAgent(world));
+  const agent = await workerAgent(world, `create the ${name} Agent`);
   return { agent, flow: await saveFlow(world, name, graph(agent.id), workspace) };
 }
 
@@ -947,7 +953,7 @@ export const worktreeReviewFlow: ReadyFlowShape = (world) =>
 /** Entry worker's "Done" hands to Code reviewer and Accessibility reviewer, whose Agents run on a
  * provider T3 offered while the Flow was saved and no longer offers; Entry worker's stays. */
 export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow> {
-  const agent = stepResult("create the entry Agent", await workerAgent(world));
+  const agent = await workerAgent(world, "create the entry Agent");
   const { t3 } = world;
   t3.controlledProviders.push({
     ...t3.controlledProviders[0]!,
@@ -977,6 +983,26 @@ export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow>
     connections: later.map((_, index) => connection("worker", "done", `later-${index}`)),
   });
   t3.controlledProviders.pop();
+  return { agent, flow };
+}
+
+/** Entry worker hands "Done" to block `review`, whose Reviewer Agent Needs a model. */
+export async function modelLessLaterFlow(world: ScenarioWorld): Promise<ReadyFlow> {
+  const agent = await workerAgent(world, "create the entry Agent");
+  const reviewer = stepResult(
+    "create the model-less Reviewer Agent",
+    await world.factory.createAgent({
+      name: "Reviewer",
+      prompt: agent.prompt,
+      execution: null,
+      exits: agent.exits,
+    }),
+  );
+  const flow = await saveFlow(world, "Model-less later Agent", {
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agent.id), agentBlock("review", "Review", reviewer.id)],
+    connections: [connection("worker", "done", "review")],
+  });
   return { agent, flow };
 }
 

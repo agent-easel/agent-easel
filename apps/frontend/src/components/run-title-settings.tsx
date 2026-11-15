@@ -12,7 +12,7 @@ import type {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { ChoiceMenu, type MenuChoice } from "@/components/choice-menu";
-import { buildOptions, optionValue } from "../agent-draft.ts";
+import { buildOptions, optionValue } from "@t3-factory/domain-validation";
 import { api, ApiError } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { useClientScope } from "../client-scope.ts";

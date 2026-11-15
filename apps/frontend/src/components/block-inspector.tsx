@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StudioLink } from "../components/app-link.tsx";
 import { continuedThread } from "../flow-graph.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
+import { NeedsModel } from "./needs-model.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
 type WaitBlock = Extract<FlowBlock, { kind: "wait" }>;
@@ -78,9 +79,10 @@ function FieldLabel(props: ComponentProps<typeof Label>) {
   );
 }
 
-function agentSummary(agent: AgentDefinition) {
-  const options = agent.execution.modelOptions.map((o) => `${o.id} ${String(o.value)}`);
-  return [agent.execution.providerInstanceId, agent.execution.modelId, ...options].join(" · ");
+function agentSummary({ execution }: AgentDefinition) {
+  if (!execution) return <NeedsModel />;
+  const options = execution.modelOptions.map((o) => `${o.id} ${String(o.value)}`);
+  return [execution.providerInstanceId, execution.modelId, ...options].join(" · ");
 }
 
 function AgentBlockSettings({

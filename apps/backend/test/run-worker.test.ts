@@ -1,5 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
-import { launchedBlockId, workerMessage } from "./support/run-worker.ts";
+import {
+  blockLaunch,
+  clearStoredExecution,
+  launchedBlockId,
+  workerMessage,
+} from "./support/run-worker.ts";
 import {
   REVISIT_INSTRUCTION,
   allTurnsEnd,
@@ -843,4 +848,54 @@ it("a held worker handoff launches exactly one next worker after a backend resta
     }),
   );
   expect(f.t3.launches.size).toBe(2);
+});
+
+it("after its Agent is saved without a model, a Run's held handoff launches the next worker on restart with the model it captured", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  const cleared = await f.f.updateAgent(f.agent.id, {
+    name: f.agent.name,
+    prompt: f.agent.prompt,
+    execution: null,
+    exits: f.agent.exits,
+    expectedRevision: f.agent.revision,
+  });
+  assert(cleared.ok);
+  await f.f.close();
+
+  // Act
+  const reopened = await f.h.open({ t3: f.t3 });
+
+  // Assert
+  expect(blockLaunch(f.t3, "Parallel work")?.payload.modelSelection).toStrictEqual({
+    instanceId: f.agent.execution.providerInstanceId,
+    model: f.agent.execution.modelId,
+    options: { reasoning: "high" },
+  });
+  const run = await reopened.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.definitions.agents).toStrictEqual([
+    expect.objectContaining({ revision: f.agent.revision, execution: f.agent.execution }),
+  ]);
+});
+
+it("a Run whose captured Agent revision lost its model refuses to recover after a restart and launches no worker", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  await f.f.close();
+  clearStoredExecution(f.h.databasePath, f.agent.id);
+
+  // Act
+  const reopening = f.h.open({ t3: f.t3 });
+
+  // Assert
+  await expect(reopening).rejects.toThrow(
+    `Run ${f.runId} captured an Agent revision without a model`,
+  );
+  expect(blockLaunch(f.t3, "Parallel work")).toBeUndefined();
+  expect(f.t3.launches.size).toBe(1);
 });

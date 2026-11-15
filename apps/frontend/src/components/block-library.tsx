@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GripVertical, PanelLeftClose, PanelLeftOpen, Plus, Search } from "lucide-react";
 import type { AgentDefinition, FlowBlock } from "@t3-factory/contracts";
@@ -13,9 +13,10 @@ import { DragButton } from "./drag-button.tsx";
 import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
 import { BLOCK_KINDS } from "./flow-block.tsx";
 import { SectionLabel } from "./page.tsx";
+import { NeedsModel } from "./needs-model.tsx";
 
-function agentDetail(agent: AgentDefinition) {
-  return `${agent.execution.providerInstanceId} · ${agent.execution.modelId}`;
+function agentDetail({ execution }: AgentDefinition) {
+  return execution ? `${execution.providerInstanceId} · ${execution.modelId}` : <NeedsModel />;
 }
 
 export function BlockLibrary({
@@ -173,7 +174,7 @@ function LibraryItem({
   onAdd,
 }: {
   name: string;
-  detail: string;
+  detail: ReactNode;
   kind: FlowBlock["kind"];
   dropAt: DropAt;
   onAdd: (position?: BlockPosition) => void;

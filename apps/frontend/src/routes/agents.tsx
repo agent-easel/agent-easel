@@ -6,17 +6,18 @@ import { useStudioNavigation } from "../settings-navigation.ts";
 import { createAgentDraft, useAgentDraftSnapshot, type AgentDraftSource } from "../agent-draft.ts";
 import { api } from "../api.ts";
 import {
-  useStudioDelivery,
   useStudioRead,
   type StudioDefinitions,
   type StudioDefinitionsSnapshot,
 } from "../studio-definitions.ts";
-import { useVisitValue } from "../components/studio-list.tsx";
 import { useActiveView } from "../use-active-view.ts";
 import { AgentsListPane } from "../components/studio-agents/agents-list-pane.tsx";
 import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.tsx";
 import { flowUsageCount } from "@/lib/agent-display";
 import { useReportingState } from "../reporting-state.tsx";
+import { useDefinitionExport } from "../definition-export.ts";
+import { openImported } from "../definition-import.ts";
+import { definitionExportNotice } from "../components/definition-export-control.tsx";
 import { useServerId } from "../client-scope.ts";
 
 type ShownLists = {
@@ -25,25 +26,24 @@ type ShownLists = {
 
 /**
  * Studio's saved Agents and Flows as the Agents page shows them: entering the page waits until
- * both were delivered or read for this visit, then later updates keep the shown rows. Both lists
- * are shown together, only once both are synchronized, so Agents never appear beside another
- * delivery's or refresh's Flow usage.
+ * both were delivered, then later deliveries replace the shown rows. Both lists are shown
+ * together, only once both are synchronized, so Agents never appear beside another delivery's
+ * Flow usage.
  */
 function useShownLists(definitions: StudioDefinitions) {
   const agentsRead = useStudioRead(definitions, "agents");
   const flowsRead = useStudioRead(definitions, "flows");
-  const delivery = useStudioDelivery(definitions);
-  const visitAgents = useVisitValue(agentsRead, delivery);
-  const visitFlows = useVisitValue(flowsRead, delivery);
+  const agents = agentsRead.value;
+  const flows = flowsRead.value;
   const [shown, setShown] = useState<ShownLists | null>(null);
   const answered = agentsRead.synchronized && flowsRead.synchronized;
   if (
     answered &&
-    visitAgents !== null &&
-    visitFlows !== null &&
-    (shown?.agents !== visitAgents || shown.flows !== visitFlows)
+    agents !== null &&
+    flows !== null &&
+    (shown?.agents !== agents || shown.flows !== flows)
   )
-    setShown({ agents: visitAgents, flows: visitFlows });
+    setShown({ agents, flows });
   const error = agentsRead.error || flowsRead.error ? "Factory could not load Agents." : "";
   return { shown, error };
 }
@@ -77,10 +77,6 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
     error,
     definitions,
     refreshReporting,
-    retry() {
-      definitions.refresh();
-      void refreshReporting();
-    },
   };
 }
 
@@ -110,8 +106,8 @@ export function StudioAgentsPage({
         query={query}
         onQueryChange={setQuery}
         onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
+        onImported={(result) => void openImported(result, definitions, openStudio)}
         error={library.error}
-        onRetry={library.retry}
         loading={library.agents === null || library.flows === null}
       />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -191,11 +187,6 @@ function SelectedAgentEditor({
         <p role="alert" className="text-sm text-destructive">
           {library.error ? "Factory could not load this Agent editor." : "Agent not found"}
         </p>
-        {library.error && (
-          <Button variant="outline" onClick={library.retry}>
-            Retry
-          </Button>
-        )}
         <Button variant="outline" onClick={() => void openStudio({ tab: "agents" })}>
           Back to list
         </Button>
@@ -261,6 +252,7 @@ function OpenedAgentEditor({
   onDeleted: () => void;
 }) {
   const { draft, state } = useOpenedAgentDraft(agent, capabilities, source, agentId, reportDraft);
+  const exporter = useDefinitionExport(() => api.exportAgent(agentId));
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateError, setDuplicateError] = useState("");
   async function duplicate() {
@@ -286,11 +278,12 @@ function OpenedAgentEditor({
       onSaved(saved);
     }
   }
+  const notice = duplicateError || definitionExportNotice(exporter.state);
   return (
     <>
-      {duplicateError && (
+      {notice && (
         <p className="shrink-0 px-6 pt-4 text-sm text-attention md:px-8" role="status">
-          {duplicateError}
+          {notice}
         </p>
       )}
       <AgentEditorPane
@@ -298,6 +291,7 @@ function OpenedAgentEditor({
         draft={draft}
         state={state}
         capabilities={capabilities}
+        exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
         duplicating={duplicating}
         onDuplicate={agent ? () => void duplicate() : undefined}

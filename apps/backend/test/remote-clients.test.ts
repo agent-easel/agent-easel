@@ -66,13 +66,15 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   });
 });
 
-it("a client older than the server's supported protocol is told to update itself", async (c) => {
+it("a protocol 12 client, which cannot read Agents without a model, is told to update itself while the current client is served", async (c) => {
   // Arrange
-  const server = await remoteServer(c, { protocol: { protocol: 3, minimumPeerProtocol: 2 } });
-  const old = server.client("desktop", { protocol: 1, minimum: 1 });
+  const server = await remoteServer(c);
+  const current = await server.approved("Laptop");
+  assert((await current.send("GET", "/api/agents")).body.ok);
+  const old = server.client("desktop", { protocol: 12, minimum: 9 });
 
   // Act
-  const reply = await old.send("GET", "/api/flows");
+  const reply = await old.send("GET", "/api/agents");
 
   // Assert
   expect(reply.status).toBe(426);
@@ -80,16 +82,26 @@ it("a client older than the server's supported protocol is told to update itself
   expect(reply.body.error.message).toMatch(/Update this client/);
 });
 
-it("the current client refuses a protocol-one server before product access", async (c) => {
-  // Arrange
-  const server = await remoteServer(c, { protocol: { protocol: 1, minimumPeerProtocol: 1 } });
-  const current = server.client();
+it.for([
+  [
+    12,
+    {
+      status: 426,
+      body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
+    },
+  ],
+  [13, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+] as const)(
+  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 13",
+  async ([protocol, expected], c) => {
+    // Arrange
+    const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
+    const current = server.client();
 
-  // Act
-  const reply = await current.send("GET", "/api/projects");
+    // Act
+    const reply = await current.send("GET", "/api/client-access");
 
-  // Assert
-  expect(reply.status).toBe(426);
-  assert(!reply.body.ok);
-  expect(reply.body.error.message).toMatch(/Update the Factory server/);
-});
+    // Assert
+    expect(reply).toMatchObject(expected);
+  },
+);
