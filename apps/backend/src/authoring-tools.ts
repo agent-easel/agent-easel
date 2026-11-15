@@ -1,6 +1,13 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
-import type { FactoryOperations, OperationError, Result } from "@t3-factory/contracts";
+import type {
+  AgentExecutionSettingsStatus,
+  FactoryOperations,
+  OperationError,
+  Result,
+  SavedAgent,
+} from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
+import { agentSettingsStatus } from "./agents.ts";
 
 /** The definition operations Studio's API uses; authoring tools call nothing else. */
 export type AuthoringOperations = Pick<
@@ -303,12 +310,77 @@ const removal = (key: "agentId" | "flowId", remove: (id: string) => Promise<Resu
     return removed.ok ? { ok: true, value: { [key]: id, removed: true } } : removed;
   });
 
+/** An Agent in an authoring reply: its saved fields and the settings status the tool judged. */
+type ReportedAgent = SavedAgent & {
+  readonly settingsStatus: AgentExecutionSettingsStatus | null;
+};
+
+/**
+ * Judges settings status from a catalog loaded after the Agent operation succeeds, so the reply
+ * never depends on a status the operation may carry. T3 being down yields an unavailable catalog.
+ */
+async function withSettingsStatus<A, B>(
+  factory: AuthoringOperations,
+  result: Result<A>,
+  reply: (value: A, report: (agent: SavedAgent) => ReportedAgent) => B,
+): Promise<Result<B>> {
+  if (!result.ok) return result;
+  const capabilities = await factory.getAgentCapabilities();
+  if (!capabilities.ok) return capabilities;
+  const catalog = capabilities.value;
+  const report = ({
+    id,
+    name,
+    prompt,
+    revision,
+    execution,
+    exits,
+    createdAt,
+    updatedAt,
+  }: SavedAgent): ReportedAgent => ({
+    id,
+    name,
+    prompt,
+    revision,
+    execution,
+    exits,
+    createdAt,
+    updatedAt,
+    settingsStatus: execution ? agentSettingsStatus(execution, catalog) : null,
+  });
+  return { ok: true, value: reply(result.value, report) };
+}
+
 const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, Call]> => ({
   factory_get_agent_capabilities: ["agent", () => factory.getAgentCapabilities()],
-  factory_list_agents: ["agent", () => factory.listAgents()],
-  factory_get_agent: ["agent", withId("agentId", (id) => factory.getAgent(id))],
-  factory_create_agent: ["agent", (input) => factory.createAgent(input)],
-  factory_save_agent: ["agent", withId("agentId", (id, input) => factory.updateAgent(id, input))],
+  factory_list_agents: [
+    "agent",
+    async () =>
+      withSettingsStatus(factory, await factory.listAgents(), (agents, report) =>
+        agents.map(report),
+      ),
+  ],
+  factory_get_agent: [
+    "agent",
+    withId("agentId", async (id) =>
+      withSettingsStatus(factory, await factory.getAgent(id), (agent, report) => report(agent)),
+    ),
+  ],
+  factory_create_agent: [
+    "agent",
+    async (input) =>
+      withSettingsStatus(factory, await factory.createAgent(input), (agent, report) =>
+        report(agent),
+      ),
+  ],
+  factory_save_agent: [
+    "agent",
+    withId("agentId", async (id, input) =>
+      withSettingsStatus(factory, await factory.updateAgent(id, input), (agent, report) =>
+        report(agent),
+      ),
+    ),
+  ],
   factory_remove_agent: ["agentRemoval", removal("agentId", (id) => factory.removeAgent(id))],
   factory_list_flows: ["flow", () => factory.listFlows()],
   factory_get_flow: ["flow", withId("flowId", (id) => factory.getFlow(id))],
