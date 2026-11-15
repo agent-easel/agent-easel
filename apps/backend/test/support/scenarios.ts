@@ -684,6 +684,18 @@ export const queuedContinuationFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+/** Entry worker's "Done" goes to Spec and to Parallel work, whose "Done" returns to Entry worker. */
+export const revisitBesideContinuationFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Revisit beside continuation", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), specStep, parallelWork(agentId)],
+    connections: [
+      connection("worker", "done", "spec"),
+      connection("worker", "done", "parallel-block"),
+      connection("parallel-block", "done", "worker"),
+    ],
+  }));
+
 /** Entry worker's "Done" hands its result to Parallel work. */
 export const handoffFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Handoff", (agentId) => ({

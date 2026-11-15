@@ -1,5 +1,5 @@
 import type { BlockRow, ReportRunRow } from "../runner-types.ts";
-import type { DeliveryKind, DeliveryState, HandoffState } from "./states.ts";
+import type { DeliveryKind, DeliveryState } from "./states.ts";
 
 /**
  * The one stored record behind a Handoff and the delivery it becomes. A Handoff is stored with
@@ -37,18 +37,13 @@ export type DeliveryRecord = {
   recovery_not_before: string | null;
 };
 
-type DeliveryFields = Omit<DeliveryRecord, "kind" | "state">;
+type DeliveryFields = Omit<DeliveryRecord, "kind">;
 
-/** A Handoff not yet turned into a delivery. Released means a release record exists for its Final
- * result version or, for a Human or Wait source, that the occurrence is answered or the arrival
- * forwarded. */
-export type Handoff = DeliveryFields & { readonly kind: "handoff"; readonly state: HandoffState };
+/** A Handoff not yet turned into a delivery; the Handoff release rule decides when it moves. */
+export type Handoff = DeliveryFields & { readonly kind: "handoff" };
 
 /** A launch or send to a Handoff's recipient, an entry launch or a Request report send. */
-export type Delivery = DeliveryFields & {
-  readonly kind: DeliveryKind;
-  readonly state: DeliveryState;
-};
+export type Delivery = DeliveryFields & { readonly kind: DeliveryKind };
 
 /**
  * A stored result record. It holds a Block activation's Final result versions (`finished`) and,

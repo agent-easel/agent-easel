@@ -7,7 +7,6 @@ import { scopedThreadHref } from "../../thread-link.ts";
 import { now } from "../../time.ts";
 import { guardsHold } from "./guards.ts";
 import type { Delivery, DeliveryRecord, Handoff } from "./records.ts";
-import { handoffReleased } from "./release.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { DeliveryKind } from "./states.ts";
@@ -74,8 +73,6 @@ export function asDelivery(record: DeliveryRecord): Delivery | undefined {
     : undefined;
 }
 
-type UnresolvedRecord = Omit<DeliveryRecord, "kind"> & { kind: "handoff" | DeliveryKind };
-
 export function openRunDeliveries(database: RunnerDatabase) {
   const { owner, mutate } = database;
 
@@ -92,24 +89,12 @@ export function openRunDeliveries(database: RunnerDatabase) {
 
   /** The Run's Handoffs not yet turned into deliveries and its deliveries not yet acknowledged or
    * cancelled, in the order they were recorded. */
-  const dispatchable = (run: Pick<RunRow, "id" | "context_id">) =>
-    database.transaction((sql) =>
-      Effect.gen(function* () {
-        const records =
-          yield* sql<UnresolvedRecord>`SELECT * FROM operation_intents WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') ORDER BY rowid`;
-        const work: (Handoff | Delivery)[] = [];
-        for (const record of records)
-          work.push(
-            record.kind === "handoff"
-              ? {
-                  ...record,
-                  kind: record.kind,
-                  state: (yield* handoffReleased(sql, run, record)) ? "released" : "held",
-                }
-              : { ...record, kind: record.kind },
-          );
-        return work;
-      }),
+  const dispatchable = (run: Pick<RunRow, "id">) =>
+    database.transaction(
+      (sql) =>
+        sql<
+          Handoff | Delivery
+        >`SELECT * FROM operation_intents WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') ORDER BY rowid`,
     );
 
   /** Notes a Handoff or delivery unresolved with `message`; a reserved delivery becomes
