@@ -2,7 +2,6 @@ import { useId } from "react";
 import { Lock, Plus, Trash2 } from "lucide-react";
 import type { AgentDefinition, BlockExit, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import {
-  CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
   effectiveExits,
   inheritedExits,
@@ -19,6 +18,8 @@ import { randomId } from "@/lib/ids";
 import { exitRecipients } from "../flow-graph.ts";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
+/** A Condition's outputs are its rules, edited in `ConditionOutputs`. */
+type ExitBlock = Exclude<FlowBlock, { kind: "condition" }>;
 
 export function BlockExitConfiguration({
   block,
@@ -26,7 +27,7 @@ export function BlockExitConfiguration({
   agents,
   onEdit,
 }: {
-  block: FlowBlock;
+  block: ExitBlock;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
   onEdit: (block: FlowBlock) => void;
@@ -45,45 +46,6 @@ export function BlockExitConfiguration({
       </section>
     );
   if (block.kind === "continuation") return <ContinuationOutput block={block} graph={graph} />;
-  if (block.kind === "condition")
-    return (
-      <section aria-label="Outputs" className="grid gap-2">
-        <h3 className="text-xs font-semibold text-muted-foreground">Outputs</h3>
-        <p className="text-xs text-muted-foreground">
-          Each arrival is numbered from 1. The first rule its number reaches selects that output;
-          otherwise it leaves by Otherwise. Every connected block receives it; with no connection
-          the branch ends.
-        </p>
-        <ul className="grid gap-2">
-          {block.rules.map((rule) => (
-            <li
-              key={rule.id}
-              aria-label={`Output ${rule.name || rule.id}`}
-              className="grid gap-1 rounded-lg border bg-muted px-3 py-2.5"
-            >
-              <span className="min-w-0 break-words font-mono text-xs">{rule.name}</span>
-              <p className="text-xs text-muted-foreground">
-                {rule.fromArrival === null
-                  ? "No arrival number yet"
-                  : `From arrival ${rule.fromArrival} onward`}
-              </p>
-              <Recipients graph={graph} blockId={block.id} exitId={rule.id} />
-            </li>
-          ))}
-          <li
-            aria-label={`Output ${CONDITION_OTHERWISE.name}`}
-            className="grid gap-1 rounded-lg border bg-muted px-3 py-2.5"
-          >
-            <div className="flex items-center gap-2">
-              <span className="min-w-0 flex-1 font-mono text-xs">{CONDITION_OTHERWISE.name}</span>
-              <Lock aria-label="Locked" className="size-3 shrink-0 text-muted-foreground" />
-            </div>
-            <p className="text-xs text-muted-foreground">When no rule matches</p>
-            <Recipients graph={graph} blockId={block.id} exitId={CONDITION_OTHERWISE.id} />
-          </li>
-        </ul>
-      </section>
-    );
   if (block.kind === "human")
     return (
       <section aria-label="Exits · built in" className="grid gap-2">

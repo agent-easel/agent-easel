@@ -116,6 +116,13 @@ export function BlockLibrary({
         dropAt={dropAt}
         onAdd={(position) => onAdd("continuation", undefined, position)}
       />
+      <LibraryItem
+        name="Condition"
+        detail="Routes by arrival number"
+        kind="condition"
+        dropAt={dropAt}
+        onAdd={(position) => onAdd("condition", undefined, position)}
+      />
       <div className="flex items-center">
         <SectionLabel>Saved Agents</SectionLabel>
         <span className="ml-auto text-2xs text-muted-foreground">{agents.length}</span>

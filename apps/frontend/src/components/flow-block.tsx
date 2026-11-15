@@ -28,7 +28,20 @@ export function exitDisplayName(
   exit: Pick<EffectiveExit, "name" | "source">,
   singleOutputLabel = "",
 ) {
-  return isSingleOutput(exit) ? singleOutputLabel : exit.name || "Unnamed exit";
+  if (isSingleOutput(exit)) return singleOutputLabel;
+  return exit.name || (exit.source === "condition" ? "Unnamed output" : "Unnamed exit");
+}
+
+/**
+ * When a Condition output is selected, as its canvas row reads before the output name: from its
+ * rule's arrival onward, or Otherwise's fallback.
+ */
+export function conditionRoute(block: FlowBlock, exitId: string) {
+  const rule = block.kind === "condition" && block.rules.find((item) => item.id === exitId);
+  if (!rule) return "when no rule matches";
+  return rule.fromArrival === null
+    ? "no arrival number yet"
+    : `from arrival ${rule.fromArrival.toLocaleString("en-US")} onward`;
 }
 
 /** Where an exit comes from, and whether finishing on it needs a message. */

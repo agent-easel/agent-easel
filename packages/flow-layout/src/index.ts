@@ -283,6 +283,7 @@ export {
 } from "./dimensions.ts";
 export {
   canvasGraph,
+  CONDITION_UNWIRED_PORTS,
   incomingPortIndex,
   incomingWires,
   type CanvasBlock,

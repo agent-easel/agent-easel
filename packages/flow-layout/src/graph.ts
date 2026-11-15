@@ -19,13 +19,35 @@ export function canvasGraph(
   };
 }
 
+/** A Condition draws a port for at most this many of its unwired rules. */
+export const CONDITION_UNWIRED_PORTS = 8;
+
+/**
+ * A Condition's drawn outputs: every wired rule, its first `CONDITION_UNWIRED_PORTS` unwired rules
+ * and Otherwise, in rule order. A Condition may hold tens of thousands of rules within the
+ * definition size limit; drawing a row for each would make one block hundreds of thousands of
+ * pixels tall, so the rest are edited in its block panel.
+ */
+function conditionCanvasExits(graph: FlowGraph, exits: EffectiveExit[], blockId: string) {
+  const wired = new Set(
+    graph.connections.flatMap((wire) => (wire.sourceBlockId === blockId ? [wire.exitId] : [])),
+  );
+  let unwired = 0;
+  return exits.filter(
+    (exit, index) =>
+      index === exits.length - 1 || wired.has(exit.id) || unwired++ < CONDITION_UNWIRED_PORTS,
+  );
+}
+
 /** Hidden or removed wired exits stay distinct from every usable output port. */
 function canvasExits(
   graph: FlowGraph,
   block: FlowBlock,
   agents: readonly Pick<AgentDefinition, "id" | "exits">[],
 ): CanvasExit[] {
-  const exits: CanvasExit[] = effectiveExits(block, agents);
+  const effective = effectiveExits(block, agents);
+  if (block.kind === "condition") return conditionCanvasExits(graph, effective, block.id);
+  const exits: CanvasExit[] = effective;
   const inherited = inheritedExits(block, agents);
   for (const wire of graph.connections) {
     if (wire.sourceBlockId !== block.id || exits.some((exit) => exit.id === wire.exitId)) continue;

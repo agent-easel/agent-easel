@@ -172,7 +172,7 @@ filters or assigns them, and no connection or project is needed to author. Block
 
 ### Canvas and block configuration
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation** and saved Agent definitions; **Search Agents**, **Collapse**/**Expand library**) and the canvas. Add a block with the row's
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions; **Search Agents**, **Collapse**/**Expand library**) and the canvas. Add a block with the row's
 **Add** action or drag the row onto the canvas (a ghost shows the drop position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow
 input and are selected. Drag a block's header or edit its X/Y fields; wires follow live and the draft changes once, on drop. Escape cancels any drag.
 
@@ -225,11 +225,22 @@ it.
 **From arrival *N* onward → *output***, each with its own stably identified, named output, followed by the fixed, mandatory
 **Otherwise** output, which cannot be renamed, removed or reordered. The first rule the arrival number reaches selects its
 output; when none does, Otherwise is selected, as the normal route rather than an error. A Condition with no rules passes every
-arrival on through Otherwise. A Condition has no Agent, prompt, execution settings, reports or worker, and the Flow input
-cannot connect to it. Until Studio's dedicated Condition editing exists, the canvas shows a Condition with its rule count and one
-output port per rule and Otherwise, and its panel lists each output read-only with its threshold and recipients; Conditions are
-authored through the [Flow graph](#graph-shape) or the [MCP authoring tools](t3-integration.md#authoring-tools). The block
-library offers no Condition yet. A Run routes through it as the [Runner](runner.md#condition-arrivals) describes.
+arrival on through Otherwise, and a new Condition from the library starts that way, ready. A Condition has no Agent, prompt,
+execution settings, reports or worker, and the Flow input cannot connect to it. A Run routes through it as the [Runner](runner.md#condition-arrivals) describes.
+
+Its panel explains **Arrival numbers**: every message reaching the Condition gets the next number in the Run, counted together over
+all its incoming connections and starting at 1; rules are checked from the top and the first whose number is reached (≥, so it
+applies from that arrival onward) selects its output; Otherwise is the normal route when none does; and the number counts arrivals,
+not reviews or attempts, without resetting within the Run. **Add rule** appends a rule with a blank name and no arrival number. Each
+rule row edits its output name and **From arrival** number and offers **Move rule up**, **Move rule down** and **Remove rule** as
+keyboard buttons. Renaming or moving a rule keeps its output and wires; removing it removes its wires in the same edit. An empty
+arrival number stays empty (none) rather than defaulting. An entry that is not a whole number from 1 to 9,007,199,254,740,991 is
+shown as typed and marked invalid, never rounded or saved as another value: **Save Flow** and **Check readiness** stay unavailable
+until it is corrected or cleared. **Otherwise** stays last with its recipients and cannot be renamed, moved or removed. The canvas
+row of each output reads **from arrival *N* onward** with its name, and Otherwise **when no rule matches**. A Condition has no rule
+quota of its own, so within the [2 MB definition limit](#validation) it may hold tens of thousands of rules: the panel renders only
+the rule rows near its visible part as it scrolls, and the canvas draws a port for every wired rule, Otherwise and the first eight
+unwired rules, so the block stays a usable size; a later unwired rule is connected after moving it up.
 
 ### Automatic layout and canvas view
 
@@ -263,7 +274,7 @@ discarded. A clean draft shows the readiness Studio received with its saved revi
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
 the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
-inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
+inspects its block; a Condition rule issue also scrolls to that rule and focuses its name or arrival number. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
 When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions), also when the draft is hidden while

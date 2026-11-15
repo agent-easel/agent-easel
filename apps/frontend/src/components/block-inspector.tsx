@@ -1,4 +1,4 @@
-import { useId, type ComponentProps } from "react";
+import { useId, useState, type ComponentProps } from "react";
 import { CornerDownLeft, ExternalLink, Trash2 } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph, WaitUnit } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { StudioLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
+import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
@@ -20,19 +21,26 @@ export function BlockConfiguration({
   block,
   graph,
   agents,
+  condition,
   onEdit,
   onRemove,
 }: {
   block: FlowBlock;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  /** The editor's part in a Condition's rule editing; used only for a Condition. */
+  condition: ConditionEditing;
   onEdit: (block: FlowBlock) => void;
   onRemove: () => void;
 }) {
   const nameId = useId();
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
+      <div
+        ref={setScroller}
+        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
+      >
         <h2 className="sr-only">Block configuration</h2>
         <div className="grid gap-1.5">
           <FieldLabel htmlFor={nameId}>Block name</FieldLabel>
@@ -56,7 +64,20 @@ export function BlockConfiguration({
         {block.kind === "continuation" && (
           <ContinuationBlockSettings block={block} graph={graph} onEdit={onEdit} />
         )}
-        <BlockExitConfiguration block={block} graph={graph} agents={agents} onEdit={onEdit} />
+        {block.kind === "condition" ? (
+          <>
+            <ArrivalNumbers />
+            <ConditionOutputs
+              block={block}
+              graph={graph}
+              scroller={scroller}
+              editing={condition}
+              onEdit={onEdit}
+            />
+          </>
+        ) : (
+          <BlockExitConfiguration block={block} graph={graph} agents={agents} onEdit={onEdit} />
+        )}
         {block.kind === "continuation" && <OncePerRun />}
         <PositionControls block={block} onEdit={onEdit} />
       </div>
@@ -318,6 +339,29 @@ function OncePerRun() {
         <li>Messages arriving meanwhile wait behind that response.</li>
         <li>
           After that every message passes straight through, with no second prompt, also in loops.
+        </li>
+      </ol>
+    </section>
+  );
+}
+
+/** How a Condition numbers its arrivals and picks the output for each. */
+function ArrivalNumbers() {
+  return (
+    <section aria-label="Arrival numbers" className="grid gap-2">
+      <h3 className="text-xs font-semibold text-muted-foreground">Arrival numbers</h3>
+      <ol className="grid list-inside list-decimal gap-1.5 text-xs text-muted-foreground marker:text-link">
+        <li>
+          Every message reaching this Condition gets the next number in this Run, counted together
+          over all its incoming connections. The first is arrival 1.
+        </li>
+        <li>
+          Rules are checked from the top; the first whose arrival number is reached selects its
+          output. A rule applies from its arrival onward (≥).
+        </li>
+        <li>When no rule matches, Otherwise is selected. It is the normal route, not an error.</li>
+        <li>
+          It counts arrivals at this block, not reviews or attempts, and never resets within a Run.
         </li>
       </ol>
     </section>
