@@ -1,9 +1,4 @@
-import type {
-  Result,
-  RunSettlementOutcome,
-  RunSettlementWorker,
-  SettleRunInput,
-} from "@t3-factory/contracts";
+import type { Result, RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import type { T3Adapter } from "../adapters/t3.ts";
@@ -46,16 +41,6 @@ const CONTEXT_UNAVAILABLE: SettlementRead = {
   stoppable: false,
   problem: "The T3 connection is unavailable or its authorization changed.",
 };
-
-/** A plain object whose only allowed field is an optional boolean `stopWorkers`: a misspelled or
- * misplaced authorization flag is a validation error, never a declined Settle. */
-function validSettleInput(input: unknown): input is SettleRunInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
-  const { stopWorkers, ...rest } = input as Record<string, unknown>;
-  return (
-    !Object.keys(rest).length && (stopWorkers === undefined || typeof stopWorkers === "boolean")
-  );
-}
 
 /** What still keeps an unfinished worker thread from counting as finished. */
 function blocker(worker: WorkerThread) {
@@ -470,36 +455,14 @@ export function openRunnerSettle(
     );
   }
 
-  /**
-   * Manual Settle of an Active or Snoozed Run. Without `stopWorkers` it settles only when fresh
-   * reads confirm every bound worker finished. With it, the Run store closes the gate and records
-   * the attempt before any Stop, the answer shows it stopping, and the first pass follows in the
-   * background. Repeating Settle while stopping changes nothing; `stopWorkers` on an unresolved
-   * settlement starts the next attempt.
-   */
-  function settleRun(
-    id: string,
-    input: unknown,
-  ): Effect.Effect<Result<RunSettlementOutcome>, unknown> {
-    return Effect.gen(function* () {
-      if (lifecycle.isClosed()) return failure("conflict", "Factory is shutting down.");
-      if (!validSettleInput(input))
-        return failure(
-          "validation",
-          "Send the Settle options as an object whose only field, stopWorkers, is true or false.",
-        );
-      const stopWorkers = input.stopWorkers === true;
-      const run = yield* store.readRun(id);
-      if (!run) return failure("not_found", "This Run does not exist.");
-      if (run.archived_at) return failure("conflict", "An archived Run cannot be settled.");
-      if (!stopWorkers) return yield* settleIfFinished(id);
-      const accepted = yield* store.acceptSettlement(id);
-      if (!accepted.ok) return accepted;
-      const outcome = yield* currentOutcome(id);
-      if (accepted.value) yield* lifecycle.fork(advanceSettlement(id));
-      return outcome;
-    });
-  }
-
-  return { settleRun, settleWhenDone, settleFinishedBlockThreads, advanceSettlement };
+  return {
+    settleIfFinished,
+    currentOutcome,
+    advanceSettlement,
+    settleWhenDone,
+    settleFinishedBlockThreads,
+  };
 }
+
+/** The settlement steps the Runner drives and Settle's entry point runs. */
+export type RunnerSettlement = ReturnType<typeof openRunnerSettle>;

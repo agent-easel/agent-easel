@@ -7,8 +7,8 @@ import { readWorkerThread } from "./worker-thread.ts";
 import type { RunnerLifecycle } from "./runner-types.ts";
 
 /* Settlement of accepted missing-report recoveries: the causal chain from the original
- * execution to a successful final report. Acceptance and pre-send eligibility live in
- * runner-recovery.ts. */
+ * execution to a successful final report. Acceptance lives in run-actions.ts and pre-send
+ * eligibility in runner-recovery.ts. */
 /** A later linked execution ends the obligation with an explicit, completed report:
  * a completion-eligible final result, or a historical waiting report accepted before waiting
  * reports were retired, after which later conversation turns own their own reports. */
