@@ -13,7 +13,7 @@ While Studio is open, its Flow and Agent lists, the Agents' runtime summaries an
 counts, the sidebar counts and the Flow editor's Agent library follow every committed create, save,
 duplicate, removal and import live, whichever client or Factory MCP made it, with no navigation or
 retry. A failed subscription shows the list's error until the automatic retry succeeds. Both editors read their definition from these lists and follow its
-saved revisions ([Agent definitions](#agent-definitions), [Saving and readiness](#saving-and-readiness)).
+saved revisions ([Following saved revisions](#following-saved-revisions)).
 
 The current Flow draft survives navigation to the lists and Agents and keeps following its saved revisions while hidden; closing Studio or opening another Flow with unsaved changes asks to **Keep editing** or **Discard changes** (browser Back follows the same
 rule; reload uses the browser's leave warning). Agent edits are guarded independently of a retained Flow draft.
@@ -45,6 +45,48 @@ sheet from the same registry grouping as Settings. Escape closes only the topmos
 by shortcut or palette uses the same Keep editing / Discard changes guard; opening
 Settings from a clean Studio closes Studio. Palette navigation stays available while
 catalogs load or fail (errors name the section and offer Retry).
+
+## Following saved revisions
+
+The Agent editor and the Flow editor follow their open definition's saved revisions by the same
+rules; each editor's differences are listed with it ([Agent definitions](#agent-definitions),
+[Saving and readiness](#saving-and-readiness)). Unsaved changes are the difference from the saved
+revision's content, so editing back to it leaves none.
+
+**Saved elsewhere.** When another client, tab or Factory MCP saves a newer revision, an editor
+without unsaved changes switches to it and briefly shows **Updated to revision N**, which an edit
+ends at once. An editor with unsaved changes keeps them and the revision they are based on,
+and shows **Revision N was saved elsewhere**, naming the newest revision, until it is resolved; a
+later revision replaces N and Save stays disabled meanwhile. The editor follows only Studio's
+synchronized lists.
+A save refused because Factory already holds a newer revision that Studio had not delivered yet
+appends nothing, keeps the local work and raises the same notice.
+
+**Compare, load or keep.** **Compare latest revision** clears the error shown and places the local
+draft and saved revision N side by side as read-only text. When Studio does not hold N yet, as
+after a refused save, the comparison opens once it arrives; if the list fails to load meanwhile,
+the editor says **Could not load the latest revision. Try again.** From the comparison, loading N
+discards the edits, while keeping the draft against N sends nothing and leaves it unsaved against
+N: keeping requires another explicit Save, which writes it as N+1 and can conflict again. Both act
+only on the revision shown: when N+1 arrives the comparison moves to it, an action for an older
+revision does nothing, and a removal dismisses the comparison. There is no merge, field-level diff
+or silent overwrite.
+
+**Own saves.** The editor's own saves never raise **saved elsewhere**, whether the save's reply or
+its delivery arrives first. Deliveries during a pending save wait for its reply, and a higher
+revision than the reply's is then treated as saved elsewhere. A rejected save keeps the draft and
+its baseline and shows its error beside any newer-revision notice. A save refused before sending
+because Factory is offline says that nothing was sent; when the connection is lost after sending,
+the editor shows **Save outcome unknown**. Either way the draft is kept and nothing is retried. An
+unknown save whose content later arrives as a new revision is recognised as the editor's own: a
+draft still holding that content becomes clean at it, and later edits stay unsaved against it.
+
+**Removed elsewhere.** A removal is noticed only after a synchronized list showed the definition,
+so a definition just created or duplicated is not treated as removed before Studio delivers it.
+It is shown at once, also while a save is pending, and wins over that save's late reply. The
+editable draft is kept, the comparison is dismissed and the save error is cleared. The delivery of
+the editor's own submitted removal is not a removal elsewhere. Each editor's removed-elsewhere
+notice and recovery are described with it.
 
 ## Agent definitions
 
@@ -87,19 +129,12 @@ Installed configuration does not establish full execution readiness or live repo
 appends nothing and keeps local edits. Duplicate creates a variant with a new identity from the saved revision, so save edits first. Create and save bodies may be up to 2 MB, enough for a 120,000-character prompt.
 A save response arriving after leaving refreshes the list without reopening the editor. Mention skills directly in the prompt (for example `$review-code`); there is no skill field or interpolation.
 
-**Revisions saved elsewhere.** An open Agent editor reads its Agent from Studio's saved definitions instead of loading it once. When another client, tab or Factory MCP saves a newer
-revision, an editor without unsaved changes switches to it and briefly shows **Updated to revision N**. An editor with unsaved changes keeps them and the revision they are based on,
-and shows **Revision N was saved elsewhere** until resolved; a later revision replaces N. **Compare latest revision** shows the local draft and saved revision N side by side as two
-read-only blocks (name, worker settings, exits and prompt). **Load latest revision** asks for confirmation, then discards the edits for revision N. **Keep my edits against revision N**
-keeps the draft unsaved against N and sends nothing; the next explicit **Save** writes it as N+1. Save stays disabled until one is chosen. A stale save opens the same comparison. There is no merge or field-level diff. The comparison and its confirmation always name the
-revision they show: when N+1 arrives an open confirmation closes and the comparison moves to N+1, an action for an older revision does nothing, and a removal dismisses both.
-
-The editor's own saves never raise **saved elsewhere**, whether the save's reply or its delivery arrives first; deliveries during a pending save wait for its reply, and a higher
-revision than the reply's is then treated as saved elsewhere. A save that a rejection ends shows any newer revision beside its error without rebinding the draft. Offline, Factory
-reports that nothing was sent; a lost reply shows **Save outcome unknown**. Either way the draft is kept and nothing is retried; an unknown save whose content later arrives as
-a new revision is recognised as this editor's own. After an unknown **Create Agent**, which would create a second Agent if repeated, Create stays disabled until **I checked the
-Agent list** is pressed. The new-Agent form ignores other Agents' changes; after its Create, or after **Duplicate…**, the opened Agent follows these rules even before Studio
-has delivered it.
+**Revisions saved elsewhere.** An open Agent editor reads its Agent from Studio's saved definitions instead of loading it once and follows the
+[shared revision rules](#following-saved-revisions). Its comparison shows name, worker settings, exits and prompt as two read-only blocks, with **Loading the latest
+revision…** while it waits for the newest revision. **Load latest revision** asks for confirmation before discarding the edits; **Keep my edits against revision N** keeps
+them. The confirmation names its revision like the comparison: when N+1 arrives it closes, and a removal dismisses it. After an unknown **Create Agent**, which would create a
+second Agent if repeated, Create stays disabled until **I checked the Agent list** is pressed. The new-Agent form ignores other Agents' changes; after its Create, or after
+**Duplicate…**, the opened Agent follows these rules even before Studio has delivered it.
 
 A Create or Duplicate answer bridges only the wait for its first appearance in Studio's current
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
@@ -211,8 +246,8 @@ are global; Start resolves it against the selected Project ([Runs](runs.md#start
 The editor header also offers **Export** (see [Definition export](#definition-export)).
 
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
-validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by a change to an Agent the draft places, by the Flow's removal and while
-Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
+validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by keeping the local draft against one, by a change to an Agent the draft
+places, by the Flow's removal and while Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
 content, baseline revision and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent revisions Studio does not show yet, is
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
@@ -221,17 +256,11 @@ the Agent adds that exit later), a wire from an exit hidden in this Flow or no l
 inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
-When another client, tab or Factory MCP saves the open Flow, the editor follows it, also when the draft is hidden while Agents are shown. A clean draft switches to the newer revision
-and briefly shows **Updated to revision N**; that switch waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text composition,
-and happens afterwards only if the draft is still clean. A draft with unsaved changes keeps them and its baseline revision and shows **Revision N was saved elsewhere**, naming the newest
-revision, with **Compare latest revision**; **Save Flow** stays disabled until it is resolved. A stale save that Studio had not yet seen returns a conflict and keeps local work the same way.
-**Compare latest revision** shows both drafts: choose the latest saved Flow to discard local changes, or reconcile and **Keep local draft against revision N** (another explicit save, which can
-conflict again). Both act only on the revision shown: a newer revision moves the comparison to it, and a removal dismisses it. There is no automatic merge or silent overwrite.
-
-The editor's own save never shows as saved elsewhere, whether its answer or the live update arrives first; a newer revision saved meanwhile is followed once the save answers, and a removal
-that arrived meanwhile wins over a late success. A rejected save keeps the draft and baseline and shows its error beside any newer-revision notice. When the connection is lost before the
-answer, the editor shows **Save outcome unknown**, keeps the draft and never retries; the saved revision is recognised as its own when it
-arrives. A save refused before sending because Factory is offline says that nothing was sent.
+When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions), also when the draft is hidden while
+Agents are shown. A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
+composition, and happens afterwards only if the draft is still clean; a draft with unsaved changes names the newer revision at once. **Compare latest revision** shows both drafts as JSON:
+**Use latest saved Flow** discards local changes, and **Keep local draft against revision N** keeps them for another explicit **Save Flow** after reconciling any differences. A rejected save
+lists Factory's validation issues under its error; selecting one that names a block inspects it.
 
 ### Removing a Flow
 
