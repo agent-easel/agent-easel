@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { StudioLink } from "../components/app-link.tsx";
-import { continuedThread } from "../flow-graph.ts";
+import { continuationReference } from "../block-kind.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 
@@ -258,7 +258,8 @@ function ContinuationBlockSettings({
   onEdit: (block: FlowBlock) => void;
 }) {
   const promptId = useId();
-  const thread = continuedThread(graph, block.id);
+  const reference = continuationReference(block, graph).inspector;
+  const continued = reference.tone === "continued";
   return (
     <>
       <div className="grid gap-1.5">
@@ -284,20 +285,20 @@ function ContinuationBlockSettings({
         <div className="grid gap-1 rounded-lg border bg-muted px-3 py-2.5">
           <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
             <CornerDownLeft aria-hidden className="size-3.5 shrink-0 self-center text-brand-cyan" />
-            {thread ? (
+            {continued ? (
               <>
-                <span>Continues</span>
-                <span className="text-brand-cyan">{thread}</span>
+                <span>{reference.label}</span>
+                <span className="text-brand-cyan">{reference.value}</span>
                 <span className="text-xs text-muted-foreground">
                   · from the incoming connection
                 </span>
               </>
             ) : (
-              <span className="text-muted-foreground">No Agent before it</span>
+              <span className="text-muted-foreground">{reference.value}</span>
             )}
           </p>
           <p className="text-xs text-muted-foreground">
-            {thread
+            {continued
               ? "Same T3 conversation, model and workspace as the worker that sent the message. There is nothing to choose here."
               : "Connect an Agent block, directly or through Human steps, Waits and Continuations, so there is a conversation to continue."}
           </p>

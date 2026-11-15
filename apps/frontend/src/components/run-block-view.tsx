@@ -4,8 +4,8 @@ import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { capturedExits, continuedThread, exitRecipients } from "../flow-graph.ts";
-import { waitDurationText } from "../wait-display.ts";
+import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
+import { capturedExits, exitRecipients } from "../flow-graph.ts";
 import {
   blockVisits,
   continuationPromptVisit,
@@ -13,28 +13,12 @@ import {
   waitingText,
 } from "./execution-canvas.tsx";
 import { clockTime, dayAndTime, StatePill } from "./execution-state.tsx";
-import { BLOCK_KINDS, exitDisplayName } from "./flow-block.tsx";
+import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
 import { pendingRecovery, RequestReport, RunAttentionDetails } from "./run-attention.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
 import { ResultCard } from "./run-result.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
-
-/** Name the kind, and the Agent only where the block's name does not already say it. */
-function blockKindLine(run: RunDetail, block: FlowBlock) {
-  const kind = BLOCK_KINDS[block.kind].name;
-  if (block.kind === "human") return kind;
-  if (block.kind === "wait") return `${kind} · ${waitDurationText(block.duration)}`;
-  if (block.kind === "continuation") {
-    const thread = continuedThread(run.definitions.flow.graph, block.id);
-    return `${kind} · ${thread ? `continues ${thread}` : "no Agent before it"}`;
-  }
-  const agent = block.agentId
-    ? (run.definitions.agents.find((item) => item.id === block.agentId)?.name ??
-      "Unavailable Agent")
-    : "not chosen";
-  return agent === block.name ? kind : `${kind} · ${agent}`;
-}
 
 type Visits = ReturnType<typeof blockVisits>;
 
@@ -389,9 +373,8 @@ function TechnicalDetails({
   threadId: string | null | undefined;
   observationUnavailable: boolean;
 }) {
-  const references = block.kind !== "wait";
-  const observation = block.kind !== "continuation";
-  const hint = [references && "thread · execution", observation && "observation"]
+  const { references, freshness } = BLOCK_KINDS[block.kind].observed;
+  const hint = [references && "thread · execution", freshness && "observation"]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -403,7 +386,7 @@ function TechnicalDetails({
             <p>Exact execution: {recorded.executionId ?? "unresolved"}</p>
           </>
         )}
-        {observation && (
+        {freshness && (
           <p>
             Observation: {observationUnavailable ? "stale" : recorded.freshness}
             {recorded.observedAt ? ` · ${dayAndTime(recorded.observedAt)}` : ""}
@@ -433,10 +416,16 @@ export function RunBlockView({
     content.current?.focus();
   }, [block.id]);
   const KindIcon = BLOCK_KINDS[block.kind].Icon;
-  // A Continuation has no thread of its own: its prompt ran on the thread of its prompt visit.
-  const promptBinding = run.threadBindings.find(
-    (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
-  );
+  const reference = blockReference(block, {
+    graph: run.definitions.flow.graph,
+    agents: run.definitions.agents,
+  }).header;
+  // A block without a worker thread of its own shows the thread its Continuation prompt ran on.
+  const promptBinding = BLOCK_KINDS[block.kind].workerThread
+    ? undefined
+    : run.threadBindings.find(
+        (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
+      );
   const link = recorded.link ?? promptBinding?.link ?? null;
   const threadId = recorded.threadId ?? promptBinding?.threadId;
   return (
@@ -466,9 +455,7 @@ export function RunBlockView({
           />
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <h2 className="truncate text-base leading-4 font-semibold">{block.name}</h2>
-            <p className="truncate text-xs leading-3.5 text-subtle-foreground">
-              {blockKindLine(run, block)}
-            </p>
+            <p className="truncate text-xs leading-3.5 text-subtle-foreground">{reference}</p>
           </div>
           <StatePill state={recorded.state} />
           <Tooltip>
@@ -516,7 +503,7 @@ export function RunBlockView({
           </Button>
         ) : (
           <p className="text-xs text-subtle-foreground">
-            {block.kind === "wait" ? "A Wait has no T3 thread" : "No T3 thread yet"}
+            {BLOCK_KINDS[block.kind].observed.noThread}
           </p>
         )}
       </footer>
