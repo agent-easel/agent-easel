@@ -312,13 +312,14 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 The current protocol is **15**. Servers require clients of at least **14**, and clients require servers of at least **15**.
 Protocol 15 adds two required fields to each navigation attention matter: the worker's native
 pending request count (`null` except for a native request, and until it is observed) and the Block
-name (`null` for a matter that is not about one Block). It also declares the attention kind for the
-**Settle could not stop workers** Problem. A current client refuses protocol 13 and 14 servers,
+name. It also declares the attention kind for the **Settle could not stop workers** Problem, which is
+about the Run: its Block id and Block name are `null`, in navigation matters and in Run detail
+attention. A current client refuses protocol 13 and 14 servers,
 which lack those fields, and shows the update gate naming the server before product screens mount;
 credentials, approvals and stored data are kept. Protocol 14 clients keep working against a
 protocol 15 server: they ignore the added fields, and an attention kind they do not know is left
-out of their Run detail attention and status without failing, while Run navigation still shows
-the Problem the server computes. Updating the server first is therefore safe.
+out of their Run detail attention and status without failing, before its `null` Block id is read,
+while Run navigation still shows the Problem the server computes. Updating the server first is therefore safe.
 Protocol 14 drops the appearance grant from theme-color presentations and sources: colors come from
 `t3_theme_read` over the T3 connection. Protocol 13 clients read the grant unguarded, so servers
 require clients of at least 14. Protocol 13 lets an Agent have no execution settings (`execution` is `null`),

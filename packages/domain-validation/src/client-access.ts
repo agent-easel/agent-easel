@@ -13,9 +13,10 @@ import type {
  */
 export const FACTORY_PROTOCOL = 15;
 /** Protocol 14 theme-color presentations and sources carry no appearance grant, which older
- * clients read unguarded. Protocol 15 only adds attention fields and the `settlement-unresolved`
- * kind, which protocol 14 clients ignore: they parse responses without validation, and their
- * presentation leaves an unknown kind out rather than failing. */
+ * clients read unguarded. Protocol 15 only adds attention fields and the Run-level
+ * `settlement-unresolved` kind, whose Block id is null, which protocol 14 clients ignore: they
+ * parse responses without validation, and their presentation leaves an unknown kind out before
+ * reading its Block rather than failing. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 14;
 /** The current client reads each navigation attention matter's native pending request count and
  * Block name, which protocol 15 servers provide; it refuses older servers rather than miss

@@ -762,7 +762,10 @@ it("a confirmed Settle that cannot stop its worker raises one Run-level Settle c
 it("a retried Settle that ends unresolved again keeps its one Problem without a new appearance", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
-  const f = { ...setup, ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))) };
+  const f = {
+    ...setup,
+    ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
   const before = await f.f.getRun(f.runId);
   assert(before.ok);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
@@ -783,7 +786,10 @@ it("a retried Settle that ends unresolved again keeps its one Problem without a 
 it("archiving a Run whose Settle could not stop workers resolves its Problem", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
-  const f = { ...setup, ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))) };
+  const f = {
+    ...setup,
+    ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
 
   // Act
   const archivedRun = await f.f.archiveRun(f.runId);
@@ -800,7 +806,10 @@ it("archiving a Run whose Settle could not stop workers resolves its Problem", a
 it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
-  const f = { ...setup, ...(await snoozed(setup.world, await workerAtWork(setup.world, setup.input))) };
+  const f = {
+    ...setup,
+    ...(await snoozed(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
   f.t3.stopSupported = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
