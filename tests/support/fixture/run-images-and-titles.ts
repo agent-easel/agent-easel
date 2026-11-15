@@ -33,9 +33,9 @@ export function runImagesAndTitlesFixture(
       async titleDiagnostic() {
         const withdraw = await enableRunTitlesWithCheapModel(factory, t3);
         withdraw();
-        await scenarios.startRun(
-          "Demo · Focused change",
+        await scenarios.ensureRun(
           "run-title-diagnostic",
+          "simple",
           "UI title diagnostic · Tidy the project picker",
         );
       },

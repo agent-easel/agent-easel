@@ -4,6 +4,7 @@ import type { Browser } from "@e2e-dev/web";
 import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import {
+  archiveJourneyRun,
   findRun,
   readHistoryRun,
   runsTitled,
@@ -164,6 +165,7 @@ test("an unfinished prompt reopens as a Draft after reload and Starts exactly on
   await expect(draftRow).toHaveCount(0);
   await expect(journeyRows).toHaveText([/^UI newer draft\s*Draft$/, /UI saved draft/]);
   await app.screenshot("draft-started-once");
+  await archiveJourneyRun(app.baseUrl, started[0]!.id);
 });
 
 test("a reopened Draft continues typing at the end of its prompt", async ({
@@ -239,12 +241,14 @@ test("a Start whose response was lost is recovered after reload without a duplic
   await expect(
     screen.getByRole("heading", "UI recovered lost Start", { exact: true }),
   ).toBeVisible();
-  expect(await runsTitled(app.baseUrl, "UI recovered lost Start")).toHaveLength(1);
+  const recovered = await runsTitled(app.baseUrl, "UI recovered lost Start");
+  expect(recovered).toHaveLength(1);
   await browser.reload();
   await expect(
     screen.getByRole("heading", "UI recovered lost Start", { exact: true }),
   ).toBeVisible();
   await app.screenshot("lost-start-recovered");
+  await archiveJourneyRun(app.baseUrl, recovered[0]!.id);
 });
 
 test("a worker discussing in T3 stays working without Needs input after reload", async ({
@@ -522,6 +526,9 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   // Arrange
   const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
   await settleStoppingWorkers(app.baseUrl, found.id);
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
+    .toBe("settled");
   await app.open(`/runs/${found.id}`);
   const before = await readHistoryRun(app.baseUrl, found.id);
 

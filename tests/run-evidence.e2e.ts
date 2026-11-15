@@ -88,7 +88,7 @@ test("a selected Agent block shows its captured Revisit instruction read-only, a
   await browser.setViewport({ width: 1440, height: 1100 });
   const instruction =
     "On a return, verify the corrections and the newly affected scope; keep earlier dispositions.";
-  await saveSingleAgentFlow(
+  const flow = await saveSingleAgentFlow(
     app.baseUrl,
     "UI revisit · Verify corrections",
     "Demo · Product engineer",
@@ -100,10 +100,7 @@ test("a selected Agent block shows its captured Revisit instruction read-only, a
       revisitInstruction: instruction,
     },
   );
-  const { id } = await fixture.scenarios.ensure({
-    key: "revisit",
-    flow: "UI revisit · Verify corrections",
-  });
+  const { id } = await fixture.scenarios.ensure({ key: "revisit", flow: { id: flow } });
   await app.open(`/runs/${id}`);
   const block = screen.getByRole("article", "Block Review change", { exact: true });
 

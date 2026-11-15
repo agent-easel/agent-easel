@@ -1,10 +1,14 @@
 import { applyRunState } from "./support/scenarios.ts";
-import { copyAgentDefinition, repairCodexReporting } from "./support/agents.ts";
+import {
+  copyAgentDefinition,
+  removeAgentElsewhere,
+  repairCodexReporting,
+} from "./support/agents.ts";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { openComposerWithFlow } from "./support/composer.ts";
-import { saveFlowCopy } from "./support/flows.ts";
-import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
+import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
+import { archiveJourneyRun, findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1100 });
@@ -61,6 +65,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   expect(run.reports[0]?.completionEligibleAt).not.toBe(null);
   expect(run.activations).toHaveLength(3);
   await app.screenshot("whole-flow-result-accepted");
+  await archiveJourneyRun(app.baseUrl, created.id);
 });
 
 test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays blocked", async ({
@@ -74,7 +79,7 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
     "Model-less accessibility reviewer",
     { modelLess: true },
   );
-  await saveFlowCopy(
+  const flow = await saveFlowCopy(
     app.baseUrl,
     "Demo · Parallel review",
     "Model-less later review",
@@ -98,6 +103,8 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
     "Needs a model",
   );
   await app.screenshot("model-less-agent-canvas-tag");
+  await removeFlowElsewhere(app.baseUrl, flow);
+  await removeAgentElsewhere(app.baseUrl, agent.id);
 });
 
 test("Agent-scoped runtime contract blockers point to the connection without blaming Agents", async ({
@@ -132,7 +139,7 @@ test("a worktree Flow whose custom base ref is missing blocks Start with a Studi
   screen,
 }) => {
   // Arrange
-  await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Missing base worktree", {
+  const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Missing base worktree", {
     mode: "worktree",
     base: { kind: "ref", ref: "release/missing" },
   });
@@ -150,4 +157,5 @@ test("a worktree Flow whose custom base ref is missing blocks Start with a Studi
   await app.screenshot("workspace-base-blocker");
   await expect(screen.getByRole("link", "Open Studio → Agents", { exact: true })).toHaveCount(0);
   expect(await runsTitled(app.baseUrl, "UI missing worktree base")).toHaveLength(0);
+  await removeFlowElsewhere(app.baseUrl, flow);
 });

@@ -43,7 +43,7 @@ export async function openFollowedReviewRun(
   key: string,
 ) {
   await browser.setViewport({ width: 1600, height: 1000 });
-  const run = await liveRun(app, key, "Demo · Build, review and decide");
+  const run = await liveRun(app, key, "review");
   await app.open(`/runs/${run}`);
   await expect.poll(() => runCanvasHorizontalOffset(screen, "Implement change")).toBeLessThan(2);
   return screen.getByRole("region", "Execution canvas");

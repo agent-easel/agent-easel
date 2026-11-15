@@ -49,6 +49,15 @@ export async function readHistoryRun(baseUrl: string | undefined, id: string) {
   return saved.value;
 }
 
+/** Archives a Run the journey started, so a later journey in the shard does not list it. */
+export async function archiveJourneyRun(baseUrl: string | undefined, id: string) {
+  const response = await fetch(new URL(`/api/runs/${id}/archive`, baseUrl), {
+    method: "POST",
+    headers: { "X-Factory-Request": "1" },
+  });
+  assert.ok(response.ok, await response.clone().text());
+}
+
 export async function confirmSettlement(screen: Screen) {
   await screen.getByRole("alertdialog").getByRole("button", "Settle", { exact: true }).tap();
 }

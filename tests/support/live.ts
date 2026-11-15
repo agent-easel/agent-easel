@@ -1,10 +1,10 @@
 import { fixtureHandles } from "./fixture/handle.ts";
-import type { FixtureState } from "./fixture/scenarios.ts";
+import type { FixtureState, ScenarioFlow } from "./fixture/scenarios.ts";
 
 type FixtureApp = { baseUrl: string | undefined };
 
-/** Starts this key once, in the named Flow and current authorization context. */
-export const liveRun = async (app: FixtureApp, key: string, flow = "Demo · Focused change") =>
+/** Starts this key once per journey attempt, in `flow` and the current authorization context. */
+export const liveRun = async (app: FixtureApp, key: string, flow: ScenarioFlow = "simple") =>
   (await fixtureHandles(app).scenarios.ensure({ key, flow })).id;
 
 /** A journey supplies module state names, optionally with its own report content. */
