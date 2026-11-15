@@ -38,10 +38,13 @@ import type {
   FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
+import { AttentionCoordinator } from "./attention-coordinator.ts";
+import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
 import { BackendSupervisor } from "./backend.ts";
 import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
+import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
@@ -68,6 +71,10 @@ let store: SettingsStore;
 let approvedClient: ApprovedClient;
 let backend: BackendSupervisor;
 let updates: Updates;
+let attention: AttentionCoordinator;
+let attentionSubscription: AttentionSubscription;
+/** The local backend the attention subscription follows in the server role. */
+let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let menuState: DesktopMenuState | null = null;
@@ -111,6 +118,37 @@ function apiTarget(): ApiTarget {
       : { kind: "host", base: `http://127.0.0.1:${backend.port}` };
   const connection = approvedClient.capture();
   return connection ? { kind: "remote", connection } : null;
+}
+
+/** The running local backend the server role's attention follows. */
+const attentionHostBase = () =>
+  backend.state.state === "running" && backend.port !== null
+    ? `http://127.0.0.1:${backend.port}`
+    : null;
+
+/** The server whose attention this installation follows, independent of any window. */
+function attentionSelection(): AttentionSelection | null {
+  const settings = store.get();
+  if (settings.role === "server") {
+    const base = attentionHostBase();
+    return base ? { server: "server", target: { kind: "host", base } } : null;
+  }
+  const connection = approvedClient.capture();
+  if (!connection || !settings.server) return null;
+  const { url, trust } = settings.server;
+  return { server: `client ${url} ${trust.fingerprint}`, target: { kind: "remote", connection } };
+}
+
+/** Replaces the subscription after a server, role or backend change. */
+function followAttention() {
+  attentionHost = store.get().role === "server" ? attentionHostBase() : null;
+  attentionSubscription.follow(attentionSelection());
+}
+
+/** Quit: alerts stop with the process; delivered notifications stay in Notification Center. */
+function stopAttention() {
+  attentionSubscription.stop();
+  void attention.close();
 }
 
 async function openRunCount(): Promise<number | null> {
@@ -284,6 +322,7 @@ async function chooseRole(role: DesktopRole): Promise<DesktopResult> {
   // Local data stays where it is; nothing is copied to or from another server.
   await approvedClient.chooseRole(role);
   if (role === "server") backend.start();
+  followAttention();
   broadcast();
   return { ok: true };
 }
@@ -294,6 +333,7 @@ async function connectServer(url: string, fingerprint: string): Promise<DesktopR
   } catch (error) {
     return failed(String(error));
   }
+  followAttention();
   broadcast();
   return { ok: true };
 }
@@ -458,6 +498,7 @@ const bridgeHandlers: BridgeHandlers = {
   connectServer: (_frame, url: string, fingerprint: string) => connectServer(url, fingerprint),
   forgetServer: async () => {
     await approvedClient.forget();
+    followAttention();
     broadcast();
     return { ok: true };
   },
@@ -530,6 +571,7 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting) return;
     event.preventDefault();
     const finish = () => {
+      stopAttention();
       approvedClient.close();
       quitting = true;
       app.quit();
@@ -563,6 +605,7 @@ async function start() {
     },
     (state) => {
       if (state.state !== "running") closeLive("The Factory server stopped.");
+      if (store.get().role === "server" && attentionHostBase() !== attentionHost) followAttention();
       broadcast();
     },
     {
@@ -591,11 +634,19 @@ async function start() {
       .stop()
       .catch(() => undefined)
       .finally(() => {
+        stopAttention();
         approvedClient.close();
         quitting = true;
         app.quit();
       });
   });
+  // Alerts run in the main process for the installation's lifetime, with every window closed.
+  attention = await AttentionCoordinator.open(
+    app.getPath("userData"),
+    new MacAlerts(loadNativeNotifications(join(here, "native", "notifications.node")), app.dock!),
+  );
+  attentionSubscription = new AttentionSubscription(attention);
+  followAttention();
   registerUi();
   registerBridge();
   applyMenuState(null);

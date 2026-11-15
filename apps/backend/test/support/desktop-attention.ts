@@ -1,0 +1,68 @@
+import type { TestContext } from "@effect/vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  AttentionCoordinator,
+  type AlertNotification,
+  type DesktopAlertPort,
+} from "../../../desktop/src/attention-coordinator.ts";
+import {
+  AttentionSubscription,
+  type AttentionSelection,
+} from "../../../desktop/src/attention-subscription.ts";
+
+/** The Dock and Notification Center as a desktop installation's coordinator drives them. */
+function recordingAlerts() {
+  const shown: AlertNotification[] = [];
+  const badges: string[] = [];
+  const waiters = new Set<() => void>();
+  const changed = () => {
+    for (const wake of waiters) wake();
+  };
+  const port: DesktopAlertPort = {
+    show: (notification) => {
+      shown.push(notification);
+      changed();
+      return Promise.resolve({ kind: "accepted" });
+    },
+    setBadge: (label) => {
+      badges.push(label);
+      changed();
+    },
+    permission: () => Promise.resolve("granted"),
+    requestPermission: () => Promise.resolve("granted"),
+  };
+  return {
+    port,
+    shown,
+    badges,
+    /** Resolves once `condition` holds for what the installation has shown. */
+    until(condition: () => boolean): Promise<void> {
+      return new Promise((resolve) => {
+        const check = () => {
+          if (!condition()) return;
+          waiters.delete(check);
+          resolve();
+        };
+        waiters.add(check);
+        check();
+      });
+    },
+  };
+}
+
+/** One desktop installation's coordinator, following `selection` with its own subscription. */
+export async function desktopAttention(context: TestContext, selection: AttentionSelection) {
+  const directory = await mkdtemp(join(tmpdir(), "t3-factory-desktop-attention-"));
+  context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
+  const alerts = recordingAlerts();
+  const coordinator = await AttentionCoordinator.open(directory, alerts.port);
+  const subscription = new AttentionSubscription(coordinator);
+  context.onTestFinished(async () => {
+    subscription.stop();
+    await coordinator.close();
+  });
+  subscription.follow(selection);
+  return alerts;
+}

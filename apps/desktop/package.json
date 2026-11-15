@@ -17,6 +17,7 @@
     "@t3-factory/backend": "workspace:*",
     "@t3-factory/contracts": "workspace:*",
     "@t3-factory/domain-validation": "workspace:*",
+    "effect": "4.1.2",
     "electron-updater": "6.8.11",
     "ws": "8.22.1"
   },
