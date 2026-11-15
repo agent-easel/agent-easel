@@ -311,12 +311,12 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-The file is a portable document, version 1:
+Every export writes portable document format version 2, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -350,7 +350,7 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 1,
+  "formatVersion": 2,
   "kind": "flow",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -368,9 +368,21 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
           "localExits": [],
           "revisitInstruction": ""
         },
-        { "id": "approve", "name": "Approve", "kind": "human", "position": { "x": 480, "y": 0 } }
+        {
+          "id": "gate",
+          "name": "Escalate",
+          "kind": "condition",
+          "position": { "x": 480, "y": 0 },
+          "rules": [{ "id": "ask", "name": "Ask a person", "fromArrival": 3 }],
+          "otherwise": { "id": "otherwise" }
+        },
+        { "id": "approve", "name": "Approve", "kind": "human", "position": { "x": 720, "y": 0 } }
       ],
-      "connections": [{ "sourceBlockId": "review", "exitId": "done", "targetBlockId": "approve" }],
+      "connections": [
+        { "sourceBlockId": "review", "exitId": "done", "targetBlockId": "gate" },
+        { "sourceBlockId": "gate", "exitId": "ask", "targetBlockId": "approve" },
+        { "sourceBlockId": "gate", "exitId": "otherwise", "targetBlockId": "review" }
+      ],
       "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] }
     },
     "workspace": { "mode": "worktree", "base": { "kind": "default" } }
@@ -388,13 +400,20 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 ```
 
 - `flow` holds the Flow's name, saved graph and workspace setting: block and exit ids, positions, wires, hidden exits, Flow-local exits,
-  Revisit instructions, Waits, Human steps and Continuations, exactly as saved.
+  Revisit instructions, Waits, Human steps, Continuations and Conditions with their rule ids, names and thresholds, exactly as saved. An
+  unfinished draft keeps its gaps, such as a Wait without a duration or a rule with `"fromArrival": null`.
 - Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
   carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
   missing or removed. There is no fallback to local ids or names.
 
 Export refuses, with the reason, a file another installation could not import: an Agent or Flow whose save request exceeds 2 MB, or a file
 over 16 MiB.
+
+**Format versions.** Import reads versions 1 and 2, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
+version-1 file holding a Condition is rejected at that block as an unknown block kind, as before. Files exported before version 2 import
+unchanged. A newer version is refused and asks to update Factory. Writing version 2 for every export is an intentional compatibility break:
+an installation that reads only version 1 (release 0.6.0 and earlier) refuses every newly exported file, even an ordinary Agent or a Flow
+without a Condition, and asks to be updated before it can import it. Stored definitions, revisions and Run history are not affected.
 
 ### Import
 

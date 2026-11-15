@@ -3,6 +3,7 @@ import type {
   CommitImportInput,
   CreateAgentInput,
   DefinitionExport,
+  ImportedDocument,
   ImportReview,
   ImportReviewAgent,
   ImportReviewFlow,
@@ -203,7 +204,7 @@ function reviewFlow({ name, graph, workspace }: PortableFlow): ImportReviewFlow 
 
 /** What an import would create, with each Agent's model proposal from the catalog read here. */
 export function importReview(
-  document: PortableDocument,
+  document: ImportedDocument,
   capabilities: AgentCapabilities,
 ): ImportReview {
   return {

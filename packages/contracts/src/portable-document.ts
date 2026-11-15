@@ -1,14 +1,17 @@
 /**
- * The portable definition document (version 1): the file a Definition export writes and an import
- * reads. It holds only portable definition data: no environment, server ids, revisions,
- * definition timestamps or Runs.
+ * The portable definition document: the file a Definition export writes (always the current
+ * version) and an import reads (any readable version). It holds only portable definition data: no
+ * environment, server ids, revisions, definition timestamps or Runs.
  */
 import type { AgentCapabilities, AgentExecutionSettings, AgentModelOptionValue } from "./agent.ts";
 import type { BlockExit, FlowBlock, FlowGraph, FlowWorkspace } from "./flow.ts";
 import { operation, type RawBody } from "./operation.ts";
 
 export const PORTABLE_DOCUMENT_FORMAT = "t3-factory/definitions";
-export const PORTABLE_DOCUMENT_VERSION = 1;
+/** The version every export writes. */
+export const PORTABLE_DOCUMENT_VERSION = 2;
+/** The versions an import reads. Version 1 is version 2 without Condition blocks. */
+export type PortableFormatVersion = 1 | typeof PORTABLE_DOCUMENT_VERSION;
 
 /**
  * The exporter's model choice, which a receiving installation may match against its own catalog.
@@ -32,16 +35,18 @@ export interface PortableAgent {
   readonly exits: readonly BlockExit[];
 }
 
-interface PortableEnvelope {
+interface PortableEnvelope<Version extends PortableFormatVersion> {
   readonly format: typeof PORTABLE_DOCUMENT_FORMAT;
-  readonly formatVersion: typeof PORTABLE_DOCUMENT_VERSION;
+  readonly formatVersion: Version;
   /** Informational only; import never interprets it. */
   readonly factoryVersion: string;
   /** Informational only; import never interprets it. */
   readonly exportedAt: string;
 }
 
-export interface PortableAgentDocument extends PortableEnvelope {
+export interface PortableAgentDocument<
+  Version extends PortableFormatVersion = typeof PORTABLE_DOCUMENT_VERSION,
+> extends PortableEnvelope<Version> {
   readonly kind: "agent";
   /** Exactly one Agent. */
   readonly agents: readonly [PortableAgent];
@@ -62,15 +67,25 @@ export interface PortableFlow {
   readonly workspace: FlowWorkspace;
 }
 
-export interface PortableFlowDocument extends PortableEnvelope {
+export interface PortableFlowDocument<
+  Version extends PortableFormatVersion = typeof PORTABLE_DOCUMENT_VERSION,
+> extends PortableEnvelope<Version> {
   readonly kind: "flow";
   readonly flow: PortableFlow;
   /** The latest saved revision of each distinct Agent the blocks reference, each exactly once. */
   readonly agents: readonly PortableAgent[];
 }
 
-/** Every document kind an import reads. */
+/** Every document kind an export writes. */
 export type PortableDocument = PortableAgentDocument | PortableFlowDocument;
+
+/**
+ * A file of any readable version as import decodes it: the current definition model under the
+ * file's own `formatVersion`, which an import receipt's fingerprint covers.
+ */
+export type ImportedDocument =
+  | PortableAgentDocument<PortableFormatVersion>
+  | PortableFlowDocument<PortableFormatVersion>;
 
 /** What an export answers: the file's document and what it could not keep. */
 export interface DefinitionExport<Document extends PortableDocument = PortableDocument> {
@@ -126,7 +141,8 @@ export interface ImportReview {
 export interface CommitImportInput {
   /** Client-generated per import; a retry with the same content returns the original result. */
   readonly requestId: string;
-  readonly document: PortableDocument;
+  /** The file's document as read; any readable version. */
+  readonly document: ImportedDocument;
   /** The reviewed choice for every bundled Agent by key: complete settings, or null (Needs a model). */
   readonly selections: Readonly<Record<string, AgentExecutionSettings | null>>;
 }
