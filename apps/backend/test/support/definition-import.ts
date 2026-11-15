@@ -1,9 +1,10 @@
 import type { TestContext } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
 import type { PortableAgent, RawBody } from "@t3-factory/contracts";
+import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { ControlledT3 } from "./controlled-t3.ts";
 import { factoryHarness } from "./factory.ts";
-import { blockExit, controlledExecution } from "./scenarios.ts";
+import { blockExit, continuationStep, controlledExecution, flowInput } from "./scenarios.ts";
 
 /** The Agent another installation exported: its hint names a provider instance this one lacks. */
 export const exportedAgent = (overrides: Partial<PortableAgent> = {}): PortableAgent => ({
@@ -19,6 +20,31 @@ export const exportedAgent = (overrides: Partial<PortableAgent> = {}): PortableA
   exits: [blockExit("pass", "pass", "The change is ready."), blockExit("fail", "fail", "", true)],
   ...overrides,
 });
+
+const fullPrompt = "x".repeat(120_000);
+
+/** A Flow of Continuation steps whose last prompt fills the definition body as given. */
+const longChecklist = (lastPrompt: string) => ({
+  name: "Long checklist",
+  graph: {
+    blocks: [
+      ...Array.from({ length: 16 }, (_, index) =>
+        continuationStep(`step-${index}`, `Step ${index}`, fullPrompt),
+      ),
+      continuationStep("step-16", "Step 16", lastPrompt),
+    ],
+    connections: [],
+    flowInput: flowInput(),
+  },
+  workspace: { mode: "checkout" },
+});
+
+/** A Flow whose create request is `bytes` under the 2 MB definition limit. */
+export function flowUnderCreateLimitBy(bytes: number) {
+  const room =
+    DEFINITION_REQUEST_LIMIT_BYTES - bytes - Buffer.byteLength(JSON.stringify(longChecklist("")));
+  return longChecklist("x".repeat(room));
+}
 
 /** A version-1 Agent file as Definition export writes it. */
 export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {}) => ({
