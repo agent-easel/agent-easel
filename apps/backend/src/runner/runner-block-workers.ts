@@ -11,8 +11,9 @@ import {
 } from "../adapters/t3.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import type { Delivery, RunStore } from "./run-store/run-store.ts";
-import type { RunRow } from "./runner-types.ts";
-import { intactPayload, runTarget, unverified, verified } from "./runner-utils.ts";
+import { intactPayload } from "../fingerprint.ts";
+import { runTarget, type RunRow } from "./runner-types.ts";
+import { unverified, verified } from "./runner-utils.ts";
 import {
   launchedInWorkspace,
   launchStrategy,

@@ -8,7 +8,3 @@ export type DeliveryKind = "launch" | "send";
 
 /** How a delivery's state is stored. */
 export type DeliveryState = "pending" | "reserved" | "acknowledged" | "uncertain" | "cancelled";
-
-/** A Handoff is held until its source is released; a held Handoff is cancelled when its Final
- * result is replaced or its Run is Archived. */
-export type HandoffState = "held" | "released" | "cancelled";

@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import { newId } from "../../ids.ts";
 import { failure } from "../../result.ts";
 import type { RunRow } from "../runner-types.ts";
-import { runTarget } from "../runner-utils.ts";
+import { runTarget } from "../runner-types.ts";
 import { now } from "../../time.ts";
 import { requestReportPayload } from "../worker-payloads.ts";
 import { settleAttention } from "./attention.ts";
