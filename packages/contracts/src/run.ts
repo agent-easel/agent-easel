@@ -510,14 +510,17 @@ export interface RunDetail extends RunSummary {
   }[];
 }
 
-/** Native questions AND approvals are addressed in T3. No native response body is retained. */
+/** Native questions AND approvals are addressed in T3. No native response body is retained.
+ * A `settlement-unresolved` matter is about the Run: it has no Block, execution or link, and its
+ * blocked workers are the Run's settlement workers that are not resolved. */
 export interface RunAttention {
   readonly bindingId?: string;
   readonly id: string;
   readonly runId: string;
   readonly taskTitle: string;
-  readonly blockId: string;
-  readonly blockName: string;
+  /** Null for a Run-level matter. */
+  readonly blockId: string | null;
+  readonly blockName: string | null;
   readonly executionId: string;
   readonly kind:
     | "human"
@@ -541,7 +544,8 @@ export interface RunAttention {
   readonly message: string | null;
 }
 
-/** Needs input is a pending question or decision. Problem is an execution or report issue. */
+/** Needs input is a pending question or decision. Problem is an execution, report or settlement
+ * issue. */
 export type RunAttentionPresentation = "needs-input" | "problem";
 
 /**
@@ -553,7 +557,8 @@ export interface RunAttentionMatter {
   readonly id: string;
   readonly kind: RunAttention["kind"];
   readonly presentation: RunAttentionPresentation;
-  readonly blockId: string;
+  /** Null for a matter that is not about one Block. */
+  readonly blockId: string | null;
   readonly occurrenceId: string | null;
   readonly nativeRequestId: string | null;
   /** The worker's current native pending request count for a `native-request` matter, null until

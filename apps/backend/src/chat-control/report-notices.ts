@@ -67,7 +67,8 @@ const APPLICATION_NOTICE =
 type MatterRow = {
   matter_id: string;
   kind: MatterKind;
-  block: string;
+  /** Null for a Run-level matter. */
+  block: string | null;
   appeared_at: string;
   resolved: number;
 };

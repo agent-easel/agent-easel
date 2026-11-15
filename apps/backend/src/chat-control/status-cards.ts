@@ -130,7 +130,7 @@ function statusCardText(report: RunReport, replacedApplication: boolean) {
   );
   const problems = report.problems.map(
     (matter) =>
-      `⚠️ ${name(matter.block)} — ${PROBLEMS[matter.kind]} since ${at(matter.appearedAt)}${
+      `⚠️ ${matter.block === null ? "" : `${name(matter.block)} — `}${PROBLEMS[matter.kind]} since ${at(matter.appearedAt)}${
         OBSERVATIONS[matter.observation] ?? ""
       }`,
   );

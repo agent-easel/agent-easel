@@ -83,6 +83,27 @@ function ObservationLine({
   );
 }
 
+/** What a matter is about: its Block, or the Run for a Run-level matter. */
+const attentionSubject = (item: RunAttention) => item.blockName ?? "Run";
+
+/** The workers a Settle could not resolve, each with what keeps it from finishing and its T3
+ * thread, where queued work can be removed. */
+function BlockedWorkers({ run }: { run: RunDetail }) {
+  const blocked = (run.settlement?.workers ?? []).filter((worker) => worker.state === "unresolved");
+  if (!blocked.length) return null;
+  return (
+    <ul aria-label="Blocked workers" className="flex flex-col gap-2">
+      {blocked.map((worker) => (
+        <li key={worker.threadId ?? worker.blockId} className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-medium text-foreground">{worker.blockName}</p>
+          {worker.problem && <p className="text-sm text-muted-foreground">{worker.problem}</p>}
+          {worker.link && <OpenInT3 href={worker.link} />}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function recordedProblem(run: RunDetail, item: RunAttention) {
   return (
     run.executions.find(
@@ -217,7 +238,9 @@ function PendingMatter({
     >
       <div className="flex min-w-0 items-center gap-2">
         {answerable && <AttentionChip presentation={presentation} />}
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">{item.blockName}</h3>
+        <h3 className="truncate text-2xs font-medium text-muted-foreground">
+          {attentionSubject(item)}
+        </h3>
       </div>
       {answerable && (
         <p className="text-sm font-medium text-foreground">{attentionExplanation(item.kind)}</p>
@@ -238,7 +261,8 @@ function PendingMatter({
         </p>
       )}
       {presentation === "problem" && <ProblemDetail run={run} item={item} />}
-      {item.kind === "missing-report" && (
+      {item.kind === "settlement-unresolved" && <BlockedWorkers run={run} />}
+      {item.kind === "missing-report" && item.blockId !== null && (
         <RequestReport
           run={run}
           blockId={item.blockId}
@@ -260,7 +284,9 @@ function PendingMatter({
           )}
         </dl>
       )}
-      <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
+      {item.blockId !== null && (
+        <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
+      )}
       {item.kind === "human" && <PendingHuman run={run} item={item} />}
       {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
     </article>
@@ -294,7 +320,9 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
     <article className="flex flex-col gap-1.5 rounded-lg border bg-muted p-3 text-sm">
       <div className="flex min-w-0 items-center gap-2">
         <AttentionChip presentation={attentionPresentation(item.kind)} />
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">{item.blockName}</h3>
+        <h3 className="truncate text-2xs font-medium text-muted-foreground">
+          {attentionSubject(item)}
+        </h3>
       </div>
       {(item.kind === "report-problem" || item.kind === "conversation-waiting") && item.message && (
         <p className="whitespace-pre-wrap">{item.message}</p>
@@ -325,7 +353,13 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
         Factory is settling this Run and stopping its workers, so it accepts no answers.
       </p>
     );
-  return <HumanResponseForm blockName={item.blockName} occurrence={occurrence} link={item.link} />;
+  return (
+    <HumanResponseForm
+      blockName={attentionSubject(item)}
+      occurrence={occurrence}
+      link={item.link}
+    />
+  );
 }
 
 /** A Human step answers with one of its fixed exits: Approve, or Request changes with a message. */

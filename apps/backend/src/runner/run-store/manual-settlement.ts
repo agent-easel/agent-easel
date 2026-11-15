@@ -16,6 +16,7 @@ import type { BlockState } from "./states.ts";
 import { markSettled } from "./settlement.ts";
 import type { WorkerThread } from "../worker-thread.ts";
 import { recordExecution } from "./observation.ts";
+import { raiseSettlementAttention } from "./attention.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
 /** Every Block state but working. */
@@ -412,8 +413,9 @@ export function openRunManualSettlement(database: RunnerDatabase) {
     );
 
   /** Records each worker's progress in `attempt` from the caller's fresh reads. Guards: owner, not
-   * Archived and the attempt is current on an unsettled Run. Published only when a worker's
-   * progress changed; the generation is not advanced. */
+   * Archived and the attempt is current on an unsettled Run. A settlement that is unresolved now
+   * raises its Problem unless one is pending, never while it is only stopping. Published only when
+   * a worker's progress changed or the Problem was raised; the generation is not advanced. */
   const recordSettlementProgress = (
     run: RunRow,
     attempt: number,
@@ -431,6 +433,13 @@ export function openRunManualSettlement(database: RunnerDatabase) {
             yield* sql`UPDATE run_settlement_workers SET state=${worker.state},problem=${worker.problem} WHERE run_id=${run.id} AND attempt=${attempt} AND thread_id=${worker.thread_id} AND (state IS NOT ${worker.state} OR problem IS NOT ${worker.problem}) AND EXISTS(SELECT 1 FROM run_settlements s JOIN runs r ON r.id=s.run_id WHERE s.run_id=${run.id} AND s.attempt=${attempt} AND r.settled_at IS NULL) RETURNING thread_id`;
           changed ||= rows.length > 0;
         }
+        const [current] = yield* sql<{
+          settled_at: string | null;
+          archived_at: string | null;
+        }>`SELECT settled_at,archived_at FROM runs WHERE id=${run.id}`;
+        const settlement = yield* readRunSettlement(sql, { id: run.id, ...current! });
+        if (settlement?.state === "unresolved")
+          changed = (yield* raiseSettlementAttention(sql, run.id, yield* now)) || changed;
         return changed;
       }),
     );

@@ -1161,6 +1161,22 @@ export function snoozed(world: ScenarioWorld, worker: WorkerHandle) {
   });
 }
 
+/** T3 cannot stop worker threads and the user confirmed Settle with Stop on the worker's Run;
+ * Factory observed the settlement unresolved and raised its Problem. */
+export function settlementUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
+  return reach("settlement unresolved", async () => {
+    world.t3.stopSupported = false;
+    stepResult(
+      "confirm Settle",
+      await world.factory.settleRun(worker.runId, { stopWorkers: true }),
+    );
+    await observeFor("observe the unresolved settlement", world, worker.runId, (run) =>
+      Boolean(unsettled("settlement-unresolved")(run)),
+    );
+    return worker;
+  });
+}
+
 /** The worker's Run was snoozed, then T3 showed a pending native request in its thread; Factory
  * observed the native attention that woke the Run. */
 export function woke(world: ScenarioWorld, worker: WorkerHandle) {

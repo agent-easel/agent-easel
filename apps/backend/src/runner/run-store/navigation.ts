@@ -81,15 +81,15 @@ export function openRunNavigation(database: RunnerDatabase) {
           const pending = yield* sql<{
             id: string;
             run_id: string;
-            block_id: string;
+            block_id: string | null;
             kind: RunAttention["kind"];
             occurrence_id: string | null;
             native_request_id: string | null;
             pending_request_count: number | null;
-            block_name: string;
+            block_name: string | null;
           }>`SELECT a.id,a.run_id,a.block_id,a.kind,a.occurrence_id,a.native_request_id,
           CASE WHEN a.kind='native-request' THEN b.pending_request_count END AS pending_request_count,b.name AS block_name
-          FROM run_attention a JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
+          FROM run_attention a LEFT JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
           WHERE a.settled_at IS NULL ORDER BY a.appeared_at,a.id`;
           const mattersByRun = new Map<
             string,
