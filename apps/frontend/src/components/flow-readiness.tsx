@@ -46,11 +46,16 @@ export function IssueLink({
   );
 }
 
-/** The readiness label: a backend check result, or a prompt to check the changed draft. */
-function readinessSummary(readiness: FlowReadiness | null) {
+/**
+ * The readiness label: a backend check result, or a prompt to check the changed draft or, after
+ * an Agent it places changed, to check it again.
+ */
+function readinessSummary(readiness: FlowReadiness | null, agentsChanged: boolean) {
   if (!readiness)
     return {
-      label: "Draft changed · Check readiness",
+      label: agentsChanged
+        ? "Agents changed — check readiness again"
+        : "Draft changed · Check readiness",
       Icon: CircleDot,
       tone: "text-muted-foreground",
     };
@@ -62,10 +67,12 @@ function readinessSummary(readiness: FlowReadiness | null) {
 /** Readiness summary floating at the canvas's top left; its issue list expands on demand. */
 export function ReadinessPanel({
   readiness,
+  agentsChanged,
   graph,
   onSelect,
 }: {
   readiness: FlowReadiness | null;
+  agentsChanged: boolean;
   graph: FlowGraph;
   onSelect: (blockId: string | null) => void;
 }) {
@@ -76,7 +83,7 @@ export function ReadinessPanel({
   if (expanded.readiness !== readiness) {
     setExpanded({ readiness, open: issues > 0 || open });
   }
-  const summary = readinessSummary(readiness);
+  const summary = readinessSummary(readiness, agentsChanged);
   return (
     <div className="absolute top-4 left-4 z-[5] grid max-w-80 gap-2">
       <Button

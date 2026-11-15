@@ -5,6 +5,7 @@ import {
   type WireSource,
 } from "@t3-factory/flow-layout";
 import {
+  useEffect,
   useImperativeHandle,
   useLayoutEffect,
   useRef,
@@ -448,6 +449,8 @@ type CanvasSurfaceProps = {
   wires: WirePresentation;
   /** Whether a container resize refits the view or preserves it. */
   resize: "refit" | "preserve";
+  /** A changed source preserves the view across its status UI's resize. */
+  preserveViewKey?: string | undefined;
   /** Space floating panels cover at the top and at the right; fit frames the graph beside them. */
   covered: { readonly top: number; readonly right: number };
   /** Without blocks, fit frames this area from the Flow input instead of the input alone. */
@@ -462,6 +465,8 @@ type CanvasSurfaceProps = {
     /** Routes are restored on load only while the graph keeps these saved positions. */
     readonly saved: FlowGraph | undefined;
     readonly commit: (graph: FlowGraph) => void;
+    /** Whether an explicit arrangement is in progress. */
+    readonly onArranging?: (arranging: boolean) => void;
   };
   gesture?: CanvasGesture | null;
   /** Filled with conversions of viewport points to canvas positions. */
@@ -519,10 +524,14 @@ function useSurfaceGraph({
   const arranged = canvasGraph(layout.graph, agents);
   const shown = gestureGraph(arranged, gesture);
   const gesturing = gesture !== null;
-  const { cancel } = layout;
+  const { cancel, pending: arranging } = layout;
   useLayoutEffect(() => {
     if (gesturing) cancel();
   }, [gesturing, cancel]);
+  const onArranging = arrangement?.onArranging;
+  useEffect(() => {
+    onArranging?.(arranging);
+  }, [arranging, onArranging]);
   return {
     layout,
     content,
@@ -679,6 +688,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     padding,
     reservedRight: covered.right,
     resize: props.resize,
+    preserveViewKey: props.preserveViewKey,
     fitRevision: layout.arranged,
     onTap: props.onTap,
   });
