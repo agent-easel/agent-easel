@@ -351,6 +351,29 @@ it.effect(
     }),
 );
 
+it.effect(
+  "T3 rejecting the connection's authorization ends the colors and the theme-color source",
+  (context) =>
+    Effect.gen(function* () {
+      // Arrange
+      const { factory, t3, live } = yield* followingService(context);
+      t3.authorized = false;
+
+      // Act
+      const rechecked = yield* factory.recheckConnection();
+
+      // Assert
+      assert(rechecked.ok);
+      expect(rechecked.value.state).toBe("authorization-required");
+      const messages = yield* Effect.promise(() =>
+        live.until((received) => latestAppearance(received)?.state === "unavailable"),
+      );
+      expect(latestAppearance(messages)?.presentation).toBe(null);
+      expect(latestAppearance(messages)?.explanation).toContain("authorized T3 connection");
+      expect(yield* factory.getAppearanceSource()).toStrictEqual({ ok: true, value: null });
+    }),
+);
+
 it.effect("a transient outage keeps the last colors", (context) =>
   Effect.gen(function* () {
     // Arrange

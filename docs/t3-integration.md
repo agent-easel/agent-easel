@@ -124,7 +124,8 @@ Support limits of published definitions:
   colors and variants, to the six decimals T3 writes; other inputs are not claimed.
 
 **Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
-`t3_theme_read` and an unauthorized or mismatched environment all show Factory's colors for the selected mode with
+`t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
+and a mismatched environment all show Factory's colors for the selected mode with
 the reason in Settings. During a transient outage the last presentation of the same endpoint and environment stays.
 A changed endpoint or connection environment discards it at once. Theme colors
 never change connection readiness, Start, execution or Run attention.
@@ -134,7 +135,8 @@ modes together and no credential, and deletes it whenever it stops publishing on
 environment, no inherited default, a T3 without `t3_theme_read`). A starting backend adopts that snapshot before
 T3 answers only when it was stored for the saved endpoint and still carries the connection's environment and the
 current resolver pin; so a host restarted while T3 is unreachable keeps its colors. Nothing is adopted later in
-the process: returning to an earlier endpoint never brings its old colors back. On reconnection Factory reads T3's
+the process: returning to an earlier endpoint never brings its old colors back. Migration `096` removed the grant reference that
+snapshots stored while theme colors used a paired grant; their colors are kept. On reconnection Factory reads T3's
 current default and publishes the resulting presentation as one revision. Each client also
 [caches the presentation](desktop-and-clients.md#appearance) it received.
 

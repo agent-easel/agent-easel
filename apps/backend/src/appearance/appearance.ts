@@ -131,12 +131,20 @@ export const makeAppearance = (
         changes.appearanceChanged();
       });
 
-    /** The saved endpoint and the environment its authorization context was bound to. */
+    /**
+     * The saved endpoint and the environment its authorization context was bound to. The
+     * connection keeps that context after T3 rejects the grant, so a connection that requires
+     * authorization has no environment: its colors end at once instead of being kept as if T3
+     * were only unreachable.
+     */
     const savedBinding = Effect.map(getConnection(), (connection) => {
       const saved = connection.ok ? connection.value : null;
       return {
         endpoint: saved?.endpoint ?? null,
-        environment: saved?.authorizationContext?.environmentId ?? null,
+        environment:
+          saved?.state === "authorization-required"
+            ? null
+            : (saved?.authorizationContext?.environmentId ?? null),
       };
     });
 

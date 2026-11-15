@@ -64,6 +64,12 @@ Retain genuine schema, migration ledger, snapshots, keys, payloads, fingerprints
 simulate an old release. A replacement baseline must come from the public operations of that released version on disposable data. Keep only the representative rows and observations its assertions
 need; exclude transient process ownership, real credentials and user data. Raw capture scripts and logs stay outside Git.
 
+[`appearance-grant-upgrade-data.json`](appearance-grant-upgrade-data.json) holds the theme-color snapshot of a
+host that followed a separately paired grant, which the baseline lacks; migration `096` removes that grant from the
+stored presentation. [`migration-appearance-upgrade.test.ts`](../migration-appearance-upgrade.test.ts) checks that the
+migration keeps the snapshot's endpoint, environment, resolver pin, theme and both modes without the grant, and that
+the upgraded host shows those colors and declares that source from its first status while T3 is unreachable.
+
 [`migration-flow-exits-upgrade.test.ts`](../migration-flow-exits-upgrade.test.ts) opens the outcome-exit capture and checks, through public reads only, that Agent block exits became Flow-local with the same IDs, the Agent has no exits, Human exits became Approve and Request changes with their wires merged into one fan-out without duplicates, and that the in-progress and settled Runs keep their captured graph in that shape, their reports and their Human answers and handoffs under the new exit IDs.
 
 See the [persistence contract](../../../../docs/foundation.md#sql-migrations) and [testing policy](../../../../docs/testing.md).
@@ -87,3 +93,11 @@ Opening it applies every later migration. The captured Run snapshots are the onl
 
 `flow-exits-upgrade-data.json` captures commit `cd0d25daf1b35326d0f49846ba89421eeea7b667` on `main`, the last build with outcome-based block exits (migration ledger through `071_run_images`). Capture runs that commit's own backend test harness against an empty disposable database with the controlled T3 adapter, using only public operations: connect T3, install reporting, add a synthetic repository and create one Agent, then save a checkout Flow where **Entry worker** (exits `done` and `blocked`, the second requiring feedback) hands to the Human step **Review** with two exits without the feedback flag (`looks-good` and `ship`, both wired to **Deploy**, `ship` also to **Notify**) and two with it (`changes` and `reject`, both wired back to Entry worker). Three Runs of that revision follow: one where Review requested changes and the correction was sent to Entry worker's running thread, one waiting on Review, and one where Review shipped and Deploy and Notify finished until the Run settled. Read the Flow, Agent, Runs and Tasks, close the backend, and capture table and index DDL (indexes load with the tables because foreign keys reference their unique keys), triggers as post-data schema, named-column rows except `runner_owner`, and the controlled adapter state. The capture script and logs stay outside Git.
 
+`appearance-grant-upgrade-data.json` captures released tag `v0.5.0` (commit `904f66d997bc2c891d86889d70adbc04bc6bb75a`), with
+its schema and migration ledger through `078_appearance_snapshot`. Capture ran `v0.5.0`'s own Factory against an empty
+disposable database with its controlled T3 adapter, using only public operations: save the endpoint, check the connection,
+pair theme colors with the controlled pairing code while T3's default theme is Ocean, wait for live delivery to follow Ocean,
+read the connection and theme-color source, close Factory, and capture schema DDL and named-column rows. The runner lock
+row is excluded as transient process ownership. Of the controlled adapter only its availability, authorization,
+compatibility, grant identity and environment are kept; its theme-color double, which held the stand-in grant, is not. The
+capture holds no credential: the grant appears only as its opaque id and expiry inside the stored presentation.
