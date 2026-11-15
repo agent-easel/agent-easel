@@ -93,13 +93,14 @@ const idle: DefinitionImportSnapshot = {
 const UNCERTAIN =
   "Factory could not confirm whether the import finished. Confirm again: a retry returns the same result and never creates a copy.";
 
+/** The headline plus each issue that adds to it, such as the field a single issue names. */
 function rejection(cause: unknown, fallback: string) {
   if (cause instanceof ApiError)
     return {
       error: cause.message,
-      issues: cause.detail.issues.map((issue) =>
-        issue.path ? `${issue.path}: ${issue.message}` : issue.message,
-      ),
+      issues: cause.detail.issues
+        .filter((issue) => issue.message !== cause.message)
+        .map((issue) => (issue.path ? `${issue.path}: ${issue.message}` : issue.message)),
     };
   return { error: cause instanceof Error ? cause.message : fallback, issues: [] };
 }

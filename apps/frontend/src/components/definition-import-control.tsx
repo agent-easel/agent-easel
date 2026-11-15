@@ -104,7 +104,7 @@ function ImportProblem({ state }: { state: DefinitionImportSnapshot }) {
   return (
     <div role="alert" className="grid gap-1 text-sm text-destructive">
       <p>{state.error}</p>
-      {state.issues.length > 1 && (
+      {state.issues.length > 0 && (
         <ul className="list-disc pl-5 text-xs">
           {state.issues.map((issue) => (
             <li key={issue}>{issue}</li>
