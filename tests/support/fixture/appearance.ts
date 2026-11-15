@@ -18,16 +18,6 @@ const publishedThemeFiles = [
 export function appearanceFixture({ factory, t3 }: Host) {
   return {
     actions: {
-      /**
-       * Theme colors: no grant, no published themes, T3's default theme Ocean and a session T3
-       * still accepts.
-       */
-      async reset() {
-        requireSuccess(await factory.disconnectAppearance());
-        t3.appearance.sessionValid = true;
-        t3.appearance.publishThemes([]);
-        t3.appearance.setDefaultTheme("ocean");
-      },
       publish: () => t3.appearance.publishThemes(publishedThemeFiles),
       /** `t3 theme set <id>` on the environment; the id need not be published. */
       setDefaultTheme({ theme }: { theme: string }) {
@@ -42,6 +32,16 @@ export function appearanceFixture({ factory, t3 }: Host) {
         t3.appearance.sessionValid = false;
       },
     },
-    reset() {},
+    /**
+     * No grant, no published themes, T3's default theme Ocean and a session T3 still accepts.
+     * T3's grant map is the adapter's credential store, so Factory holds a grant exactly when it
+     * has an entry, including one paired through the UI.
+     */
+    async reset() {
+      if (t3.appearance.grants.size > 0) requireSuccess(await factory.disconnectAppearance());
+      t3.appearance.sessionValid = true;
+      if (t3.appearance.themes.length > 0) t3.appearance.publishThemes([]);
+      if (t3.appearance.defaultTheme !== "ocean") t3.appearance.setDefaultTheme("ocean");
+    },
   };
 }
