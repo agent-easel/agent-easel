@@ -1,5 +1,3 @@
-import { basename, dirname, join } from "node:path";
-
 /**
  * The Factory Block skill installed beside each harness configuration. It carries the worker's
  * reporting obligations; argument rules and Factory's next step live in the MCP tool descriptions
@@ -66,10 +64,3 @@ A rejected report carries a \`reason\` and a \`next\` step; follow \`next\`. A r
 
 If reporting still fails, say in chat which report you could not make and the error, then end the turn.
 `;
-
-/** Codex keeps the skill next to config.toml. Claude's user config keeps it under `.claude/skills`. */
-export function factorySkillPath(configPath: string, skill: string) {
-  const home = dirname(configPath);
-  const nestedClaude = basename(configPath) === ".claude.json" && basename(home) !== ".claude";
-  return join(home, ...(nestedClaude ? [".claude"] : []), "skills", skill, "SKILL.md");
-}

@@ -3,7 +3,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import { now } from "./time.ts";
-import type { EffectOperations } from "./effect-operations.ts";
+import { boundary, type EffectOperations } from "./effect-operations.ts";
 import * as Effect from "effect/Effect";
 import * as Cause from "effect/Cause";
 import type {
@@ -255,6 +255,3 @@ export class RuntimeSetup extends Context.Service<
 >()("RuntimeSetup") {}
 export const RuntimeSetupLayer = (...args: Parameters<typeof openRuntimeSetup>) =>
   Layer.effect(RuntimeSetup, openRuntimeSetup(...args));
-
-const boundary = <A>(operation: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: operation, catch: (error) => error });
