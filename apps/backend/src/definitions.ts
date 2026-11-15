@@ -88,6 +88,50 @@ const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDra
   readiness: flowReadiness(flow.graph, agents),
 });
 const flowNotFound = () => failure("not_found", "This Flow does not exist.");
+const staleRevision = (kind: "Agent" | "Flow") =>
+  failure(
+    "conflict",
+    `A newer ${kind} revision exists. Keep your edits and reconcile before saving again.`,
+    [
+      {
+        code: "stale_revision",
+        path: "expectedRevision",
+        message: `Compare the latest saved ${kind} with your local draft.`,
+      },
+    ],
+  );
+
+type DefinitionOperations = Pick<
+  EffectOperations<FactoryOperations>,
+  | "createFlow"
+  | "validateFlow"
+  | "updateFlow"
+  | "removeFlow"
+  | "listFlows"
+  | "getFlow"
+  | "getAgentCapabilities"
+  | "listAgents"
+  | "getAgent"
+  | "createAgent"
+  | "updateAgent"
+  | "duplicateAgent"
+  | "removeAgent"
+  | "exportAgent"
+  | "exportFlow"
+  | "reviewImport"
+  | "commitImport"
+>;
+/** The definition writes whose success publishes a live Studio change. */
+const LIVE_PUBLISHING_OPERATIONS: ReadonlySet<keyof DefinitionOperations> = new Set([
+  "createFlow",
+  "updateFlow",
+  "removeFlow",
+  "createAgent",
+  "updateAgent",
+  "duplicateAgent",
+  "removeAgent",
+  "commitImport",
+]);
 
 export const makeDefinitions = (
   t3: T3Adapter,
@@ -184,18 +228,7 @@ export const makeDefinitions = (
       Effect.gen(function* () {
         const [saved] = yield* readCurrentFlows(sql, id);
         if (!saved) return flowNotFound();
-        if (saved.revision !== expectedRevision)
-          return failure(
-            "conflict",
-            "A newer revision exists. Keep your edits and reconcile before saving again.",
-            [
-              {
-                code: "stale_revision",
-                path: "expectedRevision",
-                message: "Compare the latest saved Flow with your local draft.",
-              },
-            ],
-          );
+        if (saved.revision !== expectedRevision) return staleRevision("Flow");
         return { ok: true as const, value: saved };
       });
     const loadCapabilities = Effect.fn("Definitions.loadCapabilities")(function* () {
@@ -278,26 +311,7 @@ export const makeDefinitions = (
       });
       return id;
     });
-    const operations: Pick<
-      EffectOperations<FactoryOperations>,
-      | "createFlow"
-      | "validateFlow"
-      | "updateFlow"
-      | "removeFlow"
-      | "listFlows"
-      | "getFlow"
-      | "getAgentCapabilities"
-      | "listAgents"
-      | "getAgent"
-      | "createAgent"
-      | "updateAgent"
-      | "duplicateAgent"
-      | "removeAgent"
-      | "exportAgent"
-      | "exportFlow"
-      | "reviewImport"
-      | "commitImport"
-    > = {
+    const operations: DefinitionOperations = {
       createFlow(input) {
         const validated = validateCreateFlow(input);
         if (!validated.ok) return Effect.succeed(validated);
@@ -459,19 +473,7 @@ export const makeDefinitions = (
         if (!validated.ok) return Effect.succeed(validated);
         return savedAgentOperation(id, (sql, saved, capabilities) =>
           Effect.gen(function* () {
-            if (saved.revision !== validated.value.expectedRevision)
-              return failure(
-                "conflict",
-                "A newer revision exists. Keep your edits and reconcile before saving again.",
-                [
-                  {
-                    code: "stale_revision",
-                    path: "expectedRevision",
-                    message:
-                      "A newer revision exists. Keep your edits and reconcile before saving again.",
-                  },
-                ],
-              );
+            if (saved.revision !== validated.value.expectedRevision) return staleRevision("Agent");
             const unsupported = unsupportedReportingFailure(
               validated.value.execution,
               capabilities,
@@ -660,83 +662,24 @@ export const makeDefinitions = (
           };
         }),
       ).pipe(Effect.withSpan("Definitions.readStudio"));
-    return {
-      readStudio,
-      createFlow: (...args: Parameters<typeof operations.createFlow>) =>
-        Effect.suspend(() => operations.createFlow(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.createFlow"),
-        ),
-      validateFlow: (...args: Parameters<typeof operations.validateFlow>) =>
-        Effect.suspend(() => operations.validateFlow(...args)).pipe(
-          Effect.withSpan("Definitions.validateFlow"),
-        ),
-      updateFlow: (...args: Parameters<typeof operations.updateFlow>) =>
-        Effect.suspend(() => operations.updateFlow(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.updateFlow"),
-        ),
-      removeFlow: (...args: Parameters<typeof operations.removeFlow>) =>
-        Effect.suspend(() => operations.removeFlow(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.removeFlow"),
-        ),
-      listFlows: (...args: Parameters<typeof operations.listFlows>) =>
-        Effect.suspend(() => operations.listFlows(...args)).pipe(
-          Effect.withSpan("Definitions.listFlows"),
-        ),
-      getFlow: (...args: Parameters<typeof operations.getFlow>) =>
-        Effect.suspend(() => operations.getFlow(...args)).pipe(
-          Effect.withSpan("Definitions.getFlow"),
-        ),
-      getAgentCapabilities: (...args: Parameters<typeof operations.getAgentCapabilities>) =>
-        Effect.suspend(() => operations.getAgentCapabilities(...args)).pipe(
-          Effect.withSpan("Definitions.getAgentCapabilities"),
-        ),
-      listAgents: (...args: Parameters<typeof operations.listAgents>) =>
-        Effect.suspend(() => operations.listAgents(...args)).pipe(
-          Effect.withSpan("Definitions.listAgents"),
-        ),
-      getAgent: (...args: Parameters<typeof operations.getAgent>) =>
-        Effect.suspend(() => operations.getAgent(...args)).pipe(
-          Effect.withSpan("Definitions.getAgent"),
-        ),
-      createAgent: (...args: Parameters<typeof operations.createAgent>) =>
-        Effect.suspend(() => operations.createAgent(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.createAgent"),
-        ),
-      updateAgent: (...args: Parameters<typeof operations.updateAgent>) =>
-        Effect.suspend(() => operations.updateAgent(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.updateAgent"),
-        ),
-      duplicateAgent: (...args: Parameters<typeof operations.duplicateAgent>) =>
-        Effect.suspend(() => operations.duplicateAgent(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.duplicateAgent"),
-        ),
-      removeAgent: (...args: Parameters<typeof operations.removeAgent>) =>
-        Effect.suspend(() => operations.removeAgent(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.removeAgent"),
-        ),
-      exportAgent: (...args: Parameters<typeof operations.exportAgent>) =>
-        Effect.suspend(() => operations.exportAgent(...args)).pipe(
-          Effect.withSpan("Definitions.exportAgent"),
-        ),
-      exportFlow: (...args: Parameters<typeof operations.exportFlow>) =>
-        Effect.suspend(() => operations.exportFlow(...args)).pipe(
-          Effect.withSpan("Definitions.exportFlow"),
-        ),
-      reviewImport: (...args: Parameters<typeof operations.reviewImport>) =>
-        Effect.suspend(() => operations.reviewImport(...args)).pipe(
-          Effect.withSpan("Definitions.reviewImport"),
-        ),
-      commitImport: (...args: Parameters<typeof operations.commitImport>) =>
-        Effect.suspend(() => operations.commitImport(...args)).pipe(
-          publishOnSuccess,
-          Effect.withSpan("Definitions.commitImport"),
-        ),
+    const instrument = (
+      name: keyof DefinitionOperations,
+      operation: (...args: never) => Effect.Effect<Result<unknown>, unknown>,
+    ) => {
+      const publishes = LIVE_PUBLISHING_OPERATIONS.has(name);
+      return (...args: never) =>
+        Effect.suspend(() => operation(...args)).pipe(
+          (run) => (publishes ? publishOnSuccess(run) : run),
+          Effect.withSpan(`Definitions.${name}`),
+        );
     };
+    // Each instrumented operation keeps its own signature; the entry-wise mapping loses the
+    // per-key types, so the result is restored to the declared operations type.
+    const instrumented = Object.fromEntries(
+      (Object.keys(operations) as (keyof DefinitionOperations)[]).map((name) => [
+        name,
+        instrument(name, operations[name]),
+      ]),
+    ) as DefinitionOperations;
+    return { readStudio, ...instrumented };
   });
