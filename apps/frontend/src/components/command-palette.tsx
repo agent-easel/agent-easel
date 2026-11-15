@@ -1,8 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import type { AgentDefinition, FlowDraft, RunNavigationEntry } from "@t3-factory/contracts";
-import { api } from "../api.ts";
 import {
   buildPaletteItems,
   paletteActionShortcut,
@@ -10,59 +8,29 @@ import {
   type PaletteItem,
 } from "../command-palette-items.ts";
 import type { ShortcutId } from "../keyboard-shortcuts.ts";
+import { useLiveNavigation } from "../live/navigation.ts";
+import { useLiveStudio } from "../live/studio.ts";
+import { useOpenStudio, useSettingsNavigation } from "../settings-navigation.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { RunNumber } from "./run-number.tsx";
 import { cn } from "@/lib/utils";
 
-type Catalog = {
-  loading: boolean;
-  failures: string[];
-  runs: readonly RunNavigationEntry[];
-  flows: readonly FlowDraft[];
-  agents: readonly AgentDefinition[];
-};
-const emptyCatalog: Catalog = { loading: true, failures: [], runs: [], flows: [], agents: [] };
-
-function catalogSection<T>(
-  result: PromiseSettledResult<readonly T[]>,
-  name: string,
-  failures: string[],
-) {
-  if (result.status === "fulfilled") return result.value;
-  failures.push(name);
-  return [];
-}
-
-function usePaletteCatalog() {
-  const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
-  const [attempt, retry] = useState(0);
-  useEffect(() => {
-    let active = true;
-    void Promise.allSettled([api.listRunNavigation(), api.listFlows(), api.listAgents()]).then(
-      ([runs, flows, agents]) => {
-        if (!active) return;
-        const failures: string[] = [];
-        setCatalog({
-          loading: false,
-          runs: catalogSection(runs, "Runs", failures),
-          flows: catalogSection(flows, "Flows", failures),
-          agents: catalogSection(agents, "Agents", failures),
-          failures,
-        });
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [attempt]);
+/** Runs come from the navigation scope and Flows and Agents from the Studio scope. */
+function usePaletteScopes() {
+  const navigation = useLiveNavigation();
+  const studio = useLiveStudio();
+  const scopes = [
+    { view: navigation, names: ["Runs"] },
+    { view: studio, names: ["Flows", "Agents"] },
+  ];
   return {
-    ...catalog,
-    retry: () => {
-      setCatalog(emptyCatalog);
-      retry((value) => value + 1);
-    },
+    loading: scopes.some(({ view }) => view.value === null && !view.error),
+    refused: scopes.filter(({ view }) => view.error).flatMap(({ names }) => names),
+    runs: navigation.value ?? [],
+    flows: studio.value?.flows ?? [],
+    agents: studio.value?.agents ?? [],
   };
 }
 
@@ -119,7 +87,7 @@ function PaletteResults({
   });
 }
 
-/** Mounted for each opening, so stale catalog requests and the query cannot leak into a new session. */
+/** Mounted for each opening, so the query and selection cannot leak into a new session. */
 function PaletteContent({
   onActivate,
   onNewRun,
@@ -129,23 +97,33 @@ function PaletteContent({
 }) {
   const { hint } = useShortcutPreferences();
   const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const openStudio = useOpenStudio();
+  const openSettings = useSettingsNavigation();
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const catalog = usePaletteCatalog();
+  const catalog = usePaletteScopes();
   const items = useMemo(
     () =>
       buildPaletteItems({
         navigate,
-        pathname,
+        navigation: { openStudio, openSettings },
         onNewRun,
         runs: catalog.runs,
         flows: catalog.flows,
         agents: catalog.agents,
       }).filter((item) => paletteMatchesQuery(item, query)),
-    [catalog.agents, catalog.flows, catalog.runs, navigate, onNewRun, pathname, query],
+    [
+      catalog.agents,
+      catalog.flows,
+      catalog.runs,
+      navigate,
+      onNewRun,
+      openSettings,
+      openStudio,
+      query,
+    ],
   );
   const index = Math.min(activeIndex, Math.max(0, items.length - 1));
 
@@ -195,15 +173,10 @@ function PaletteContent({
           Loading items… Navigation actions are available.
         </p>
       )}
-      {catalog.failures.length > 0 && (
-        <div className="px-3 py-2 text-xs">
-          <p role="alert">
-            Could not load {catalog.failures.join(", ")}. Navigation actions are still available.
-          </p>
-          <button type="button" className="text-link underline" onClick={catalog.retry}>
-            Retry
-          </button>
-        </div>
+      {catalog.refused.length > 0 && (
+        <p role="alert" className="px-3 py-2 text-xs">
+          Could not load {catalog.refused.join(", ")}. Navigation actions are still available.
+        </p>
       )}
       {!items.length && (
         <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">

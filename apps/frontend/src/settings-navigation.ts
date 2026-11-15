@@ -112,6 +112,15 @@ export function useStudioNavigation() {
       resetScroll: false,
     });
 }
+/** Opens Studio from outside it; an open Studio keeps its selection. */
+export function useOpenStudio() {
+  const studioOpen = !!useStudio();
+  const navigate = useStudioNavigation();
+  return (selection: StudioSelection) => {
+    if (studioOpen) return;
+    void navigate(selection);
+  };
+}
 export function useSettingsNavigation() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
