@@ -3,13 +3,13 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
 import {
   nonFinalRejection,
+  rejected,
   reportedState,
   reportFingerprint,
   reportRoute,
 } from "../report-rules.ts";
 import { readRunDefinitions } from "./run-definitions.ts";
 import type { ReportRunRow } from "../runner-types.ts";
-import { rejected } from "../runner-utils.ts";
 import { resolveBlock, writeBlockState } from "./blocks.ts";
 import {
   acceptedTransition,

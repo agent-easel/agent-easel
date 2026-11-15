@@ -12,7 +12,7 @@ import type {
  * interoperate safely. Application release numbers never decide compatibility.
  */
 export const FACTORY_PROTOCOL = 13;
-/** Protocol 13 Agents may have no execution settings (`execution` and `settingsStatus` null),
+/** Protocol 13 Agents may have no execution settings (`execution` null),
  * create and save require the `execution` key with complete `modelOptions`, and definitions are
  * exported and imported; older clients cannot read or save these Agents. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 13;

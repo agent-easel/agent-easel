@@ -17,6 +17,7 @@ import {
   queuedContinuationFlow,
   report,
   resultReleasedToHumanReview,
+  revisitBesideContinuationFlow,
   resultReported,
   sentTurnBegins,
   workerAtWork,
@@ -213,6 +214,46 @@ it("a message arriving while the prompt is pending waits and passes through afte
     ["spec", true],
     ["spec", false],
   ]);
+  expect(
+    [...f.t3.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
+  ).toHaveLength(1);
+});
+
+it("a revisit is not sent into a finished thread while a Continuation prompt there still owes its result", async (c) => {
+  // Arrange
+  const f = await prepared(c, revisitBesideContinuationFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker);
+  await promptSent(f.world, worker);
+  allTurnsEnd(f.world, sentTurnBegins(f.world, worker));
+  const parallelRun = await observeFor("observe Parallel work", f.world, worker.runId, (detail) =>
+    detail.blocks.some((block) => block.blockId === "parallel-block" && block.threadId),
+  );
+  const parallel = workerHandle(f.world, parallelRun, "parallel-block");
+  await recordLaunchedThread(f.t3, parallel.threadId);
+  assert(
+    (await report(f.world, parallel, {
+      to: "finished",
+      exit: "done",
+      message: "Security notes ready.",
+    })) === "ACCEPTED",
+  );
+  allTurnsEnd(f.world, parallel);
+  await observeFor("observe the prepared revisit", f.world, worker.runId, (detail) =>
+    detail.intents.some((intent) => intent.blockId === "worker" && intent.kind === "send"),
+  );
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  expect(
+    run.value.intents
+      .filter((intent) => intent.blockId === "worker" && intent.kind === "send")
+      .map((intent) => intent.state),
+  ).toStrictEqual(["pending"]);
   expect(
     [...f.t3.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
   ).toHaveLength(1);

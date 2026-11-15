@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
 import type { RunRow, StoredTarget } from "../runner-types.ts";
-import { fingerprint, intactPayload } from "../runner-utils.ts";
+import { fingerprint, intactPayload } from "../../fingerprint.ts";
 import { launchStrategy, type RunWorkspace } from "../run-workspace.ts";
 import { now } from "../../time.ts";
 import {

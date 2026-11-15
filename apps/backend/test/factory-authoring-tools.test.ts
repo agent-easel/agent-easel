@@ -187,6 +187,29 @@ it("factory_create_agent with execution null creates an Agent that factory_get_a
   ).toMatchObject({ id: created.id, revision: 1, execution: null, settingsStatus: null });
 });
 
+it("factory_get_agent reports unknown settings and keeps the saved model while T3 capabilities are unavailable", async (c) => {
+  // Arrange
+  const { factory, t3, client } = await authoringMcpClient(c);
+  const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  t3.capabilitiesAvailable = false;
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_get_agent",
+    arguments: { agentId: saved.id },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const agent = toolReply(result);
+  expect(agent.execution).toStrictEqual(saved.execution);
+  expect(agent.settingsStatus).toMatchObject({
+    environment: { state: "unknown" },
+    provider: { state: "unknown" },
+    model: { state: "unknown" },
+  });
+});
+
 it("factory_save_agent with execution null saves the next revision without a model", async (c) => {
   // Arrange
   const { factory, client } = await authoringMcpClient(c);
@@ -208,7 +231,6 @@ it("factory_save_agent with execution null saves the next revision without a mod
   expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
     revision: saved.revision + 1,
     execution: null,
-    settingsStatus: null,
   });
 });
 

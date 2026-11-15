@@ -227,7 +227,7 @@ it("a new Agent saves without a model when no provider supports Factory reportin
   // Assert
   expect(factory.createAgent).toHaveBeenCalledWith(expect.objectContaining({ execution: null }));
   expect(draft.getSnapshot()).toMatchObject({
-    saved: { execution: null, settingsStatus: null },
+    saved: { execution: null },
     needsModel: true,
     dirty: false,
     error: "",

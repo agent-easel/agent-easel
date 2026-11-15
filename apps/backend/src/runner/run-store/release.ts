@@ -1,13 +1,17 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { RunRow } from "../runner-types.ts";
-import { passedThrough } from "../runner-utils.ts";
 import { now } from "../../time.ts";
 import { guardsHold } from "./guards.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { writeBlockState } from "./blocks.ts";
 import { resultBinding } from "./handoffs.ts";
 import { appendTimelineEvent } from "./steps.ts";
+
+/** A Continuation forwards a passed-through message as it arrived: its Handoffs (cause `pass:`)
+ * are released. */
+export const passedThrough = (source: { readonly cause: string }) =>
+  source.cause.startsWith("pass:");
 
 /** Where a Handoff comes from: a Final result version, a Human occurrence's answer, a Wait
  * arrival's forwarding, or a message a Continuation passed through (cause `pass:`). */
@@ -37,17 +41,6 @@ function resultReleased(sql: SqlClient.SqlClient, contextId: string, reportId: s
     sql`SELECT report_id FROM result_releases WHERE report_id=${reportId} AND context_id=${contextId}`,
     (rows) => rows.length > 0,
   );
-}
-
-/** Whether a Handoff's source is released, as the Run's records show it now. */
-export function handoffReleased(
-  sql: SqlClient.SqlClient,
-  run: Pick<RunRow, "id" | "context_id">,
-  source: HandoffSource,
-) {
-  return source.report_id
-    ? resultReleased(sql, run.context_id, source.report_id)
-    : directSourceReleased(sql, run.id, source);
 }
 
 /** A Final result version's worker thread (for a Continuation, the thread its prompt ran on), and
@@ -99,8 +92,8 @@ function forwardContinuationResponse(
 
 /**
  * The local part of the Handoff release rule. Orchestration asks it before a held Handoff becomes
- * a delivery and again when a delivery from a Final result is reserved, reading in between
- * whether the source worker thread is finished in T3.
+ * a delivery and again when a delivery from a Handoff is reserved, reading in between whether the
+ * source worker thread is finished in T3.
  */
 export function openRunRelease(database: RunnerDatabase) {
   const ownerToken = database.owner.token;
@@ -164,8 +157,8 @@ export function openRunRelease(database: RunnerDatabase) {
   return {
     releaseWait,
     releaseFinalResult,
-    /** Whether the Human answer or Wait forwarding behind a delivery is recorded, read before it
-     * is reserved. */
+    /** Whether the Human answer, Wait forwarding or pass-through behind a Handoff or its delivery
+     * is recorded, read at Handoff preparation and again at reservation. */
     directSourceReleased: (runId: string, source: HandoffSource) =>
       database.transaction((sql) => directSourceReleased(sql, runId, source)),
   };

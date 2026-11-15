@@ -1,8 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { T3Adapter } from "../adapters/t3.ts";
 import type { RunStore } from "./run-store/run-store.ts";
-import type { RunRow } from "./runner-types.ts";
-import { runTarget } from "./runner-utils.ts";
+import { runTarget, type RunRow } from "./runner-types.ts";
 
 /**
  * Binds a worktree Run's worktree once its creator's thread shows both a path and a branch, and in

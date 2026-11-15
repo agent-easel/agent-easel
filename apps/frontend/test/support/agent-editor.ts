@@ -1,5 +1,5 @@
 import { vi } from "vite-plus/test";
-import type { AgentCapabilities, AgentDefinition, SavedAgent } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 import { capabilities, savedAgent } from "./agent-draft.ts";
@@ -12,7 +12,7 @@ function memoryAgents() {
   return {
     latest: () => latest,
     /** Another client saves the Agent, appending its next revision. */
-    saveElsewhere(change: Partial<SavedAgent>) {
+    saveElsewhere(change: Partial<AgentDefinition>) {
       latest = savedAgent({ ...latest, ...change, revision: latest.revision + 1 });
       return latest;
     },

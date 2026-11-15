@@ -24,6 +24,7 @@ import { openRunWorkspace } from "./workspace.ts";
 import { openRunWaits } from "./waits.ts";
 
 export type { Delivery, Handoff } from "./records.ts";
+export { passedThrough } from "./release.ts";
 export type { StartPlan, StartWorkspace } from "./start.ts";
 export type { RequestReportSettlement } from "./request-report.ts";
 export type { BoundWorker, SettlementWorkerRecord } from "./manual-settlement.ts";

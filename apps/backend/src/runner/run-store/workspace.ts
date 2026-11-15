@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { RunRow } from "../runner-types.ts";
-import { runTarget } from "../runner-utils.ts";
+import { runTarget } from "../runner-types.ts";
 import type { RunWorkspace } from "../run-workspace.ts";
 import { now } from "../../time.ts";
 import { createEntryLaunches } from "./activations.ts";
