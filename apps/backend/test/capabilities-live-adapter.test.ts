@@ -59,13 +59,14 @@ it("settings status marks fastMode unavailable when the live catalog allows only
     modelId: "gpt-6.1-sol",
     modelOptions: [{ id: "fastMode", value: true }],
   };
+  const capabilities = await factory.getAgentCapabilities();
+  assert(capabilities.ok);
 
   // Act
-  const capabilities = await factory.getAgentCapabilities();
+  const status = agentSettingsStatus(execution, capabilities.value);
 
   // Assert
-  assert(capabilities.ok);
-  expect(agentSettingsStatus(execution, capabilities.value).options[0]?.state).toBe("unavailable");
+  expect(status.options[0]?.state).toBe("unavailable");
 });
 
 it("settings status marks mixed values outside the live catalog as unavailable", async (c) => {
@@ -77,11 +78,12 @@ it("settings status marks mixed values outside the live catalog as unavailable",
     modelId: "gpt-6.1-sol",
     modelOptions: [{ id: "mixed", value: true }],
   };
+  const capabilities = await factory.getAgentCapabilities();
+  assert(capabilities.ok);
 
   // Act
-  const capabilities = await factory.getAgentCapabilities();
+  const status = agentSettingsStatus(execution, capabilities.value);
 
   // Assert
-  assert(capabilities.ok);
-  expect(agentSettingsStatus(execution, capabilities.value).options[0]?.state).toBe("unavailable");
+  expect(status.options[0]?.state).toBe("unavailable");
 });

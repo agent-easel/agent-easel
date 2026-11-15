@@ -1,4 +1,4 @@
-import { assert, expect, it } from "@effect/vitest";
+import { assert, expect, it, type TestContext } from "@effect/vitest";
 import {
   openFactoryWithApprovedT3,
   readAgentAfterRestart,
@@ -133,29 +133,50 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
   });
 });
 
-it("Agent lists, Agent reads and the Studio snapshot answer from saved definitions without calling T3", async (context) => {
-  // Arrange
+/** A saved Agent with T3 connected but its capability reads failing, and the reads sent so far. */
+async function savedAgentWhileCapabilitiesFail(context: TestContext) {
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   const saved = await factory.createAgent(sampleAgentInput());
   assert(saved.ok);
   t3.capabilitiesAvailable = false;
-  const capabilityReads = t3.capabilityReads;
+  return { factory, t3, agent: saved.value, capabilityReads: t3.capabilityReads };
+}
+
+it("listing Agents answers from saved definitions without calling T3", async (context) => {
+  // Arrange
+  const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
 
   // Act
-  const studio = subscribe(context, factory.live.watchStudio());
-  const [listed, read, [snapshot]] = await Promise.all([
-    factory.listAgents(),
-    factory.getAgent(saved.value.id),
-    studio.until((messages) => messages.length > 0),
-  ]);
+  const listed = await factory.listAgents();
 
   // Assert
-  expect(listed).toStrictEqual({ ok: true, value: [saved.value] });
-  expect(read).toStrictEqual({ ok: true, value: saved.value });
-  expect(snapshot).toStrictEqual({
-    _tag: "snapshot",
-    studio: { agents: [saved.value], flows: [] },
-  });
+  expect(listed).toStrictEqual({ ok: true, value: [agent] });
+  expect(t3.capabilityReads).toBe(capabilityReads);
+});
+
+it("reading an Agent answers from its saved definition without calling T3", async (context) => {
+  // Arrange
+  const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
+
+  // Act
+  const read = await factory.getAgent(agent.id);
+
+  // Assert
+  expect(read).toStrictEqual({ ok: true, value: agent });
+  expect(t3.capabilityReads).toBe(capabilityReads);
+});
+
+it("the Studio snapshot answers from saved definitions without calling T3", async (context) => {
+  // Arrange
+  const { factory, t3, agent, capabilityReads } = await savedAgentWhileCapabilitiesFail(context);
+
+  // Act
+  const [snapshot] = await subscribe(context, factory.live.watchStudio()).until(
+    (messages) => messages.length > 0,
+  );
+
+  // Assert
+  expect(snapshot).toStrictEqual({ _tag: "snapshot", studio: { agents: [agent], flows: [] } });
   expect(t3.capabilityReads).toBe(capabilityReads);
 });
 
