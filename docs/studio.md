@@ -103,8 +103,7 @@ has delivered it.
 
 A Create or Duplicate answer bridges only the wait for its first appearance in Studio's current
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
-a definition removed elsewhere. If Studio replaces its source while Duplicate is pending, the
-retired reply cannot open the copy: its outcome is unknown, so check the Agent list before retrying.
+a definition removed elsewhere.
 
 **Removing.** **Delete** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
 rejects Agents placed in the latest revision of any current Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
