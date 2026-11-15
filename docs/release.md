@@ -65,7 +65,9 @@ After the merge, release-please creates tag `vX.Y.Z` on that exact merge commit 
 
 The product landing page in `apps/landing` is one static HTML page styled with Tailwind and built by Vite; `pnpm --filter @t3-factory/landing dev` serves it locally. The build reads the version from root `package.json`, so the download buttons, structured data and version labels of a build from the release commit name that Release's DMG. `FACTORY_SITE_URL` sets the absolute URL used by the canonical link, Open Graph and Twitter cards, `robots.txt` and `sitemap.xml`; it defaults to the project's GitHub Pages address.
 
-After `publish` succeeds, `pages` builds the page from the release commit with the Pages base URL and deploys it to GitHub Pages, so the page never links a DMG before its assets are public. Beta builds do not change the page. When only `pages` failed, **Re-run failed jobs** deploys again without touching the Release. `pages` deploys only while its tag is the latest published Release, so re-running an older Release never replaces a newer page. Product screenshots and the social card come from the Figma file's Marketing screens; replace the files in `apps/landing/public` when those screens change.
+After `publish` succeeds, `pages` builds the page from the release commit with the Pages base URL and deploys it to GitHub Pages, so the page never links a DMG before its assets are public. Beta builds do not change the page. When only `pages` failed, **Re-run failed jobs** deploys again without touching the Release. `pages` deploys only while its tag is the latest published Release, so re-running an older Release never replaces a newer page.
+
+The page's layout and copy follow the Figma frame "Landing · Feature tour — Nov 2026". That frame uses only instances of the Marketing screen components M07–M12, so the product screenshots are exports of those components, at twice their rendered width on the page. The social card is an export of the Landing page's "Social card · 1200×630" frame. When those components or that frame change, export them again and replace the files in `apps/landing/public`.
 
 ### Retry and failed qualification
 
