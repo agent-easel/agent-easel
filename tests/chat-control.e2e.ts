@@ -90,11 +90,14 @@ beforeEach(async ({ browser }) => {
 });
 
 afterEach(async ({ app }) => {
-  // Journeys share one fixture; a later journey must start without this journey's Runs.
+  // Journeys share one fixture; a later journey must start with Chat control Off and without
+  // this journey's Runs.
   for (const runId of startedRuns.splice(0)) {
     const archived = await hostCall(app.baseUrl, "POST", `/api/runs/${runId}/archive`, undefined);
     assert(archived.ok, JSON.stringify(archived));
   }
+  const off = await hostCall(app.baseUrl, "PUT", "/api/chat-control/enabled", { enabled: false });
+  assert(off.ok, JSON.stringify(off));
   await provider.close();
 });
 
