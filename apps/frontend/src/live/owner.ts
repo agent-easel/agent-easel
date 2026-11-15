@@ -22,7 +22,7 @@ export type LivePart =
   | { readonly kind: "navigation" }
   | { readonly kind: "run"; readonly runId: string }
   | { readonly kind: "launchChoices" }
-  /** Studio's saved Agents and Flows, held while Studio is open. */
+  /** Studio's saved Agents and Flows, held for the window's lifetime. */
   | { readonly kind: "studio" }
   /** Theme colors: optional presentation that never gates mutations. */
   | { readonly kind: "appearance" };

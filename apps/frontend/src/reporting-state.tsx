@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "./api.ts";
+import { useLiveStudio } from "./live/studio.ts";
 import { useRefreshSchedule } from "./use-refresh-schedule.ts";
 
 interface ReportingReads {
@@ -71,7 +72,11 @@ const ReportingStateContext = createContext<
 
 /** Shared by Agent definitions, reporting setup and the Settings indicator. */
 export function ReportingStateProvider({ children }: { children: ReactNode }) {
-  const [reads, setReads] = useState<ReportingReads>({ targets: null, agents: null, error: "" });
+  const [installations, setInstallations] = useState<Pick<ReportingReads, "targets" | "error">>({
+    targets: null,
+    error: "",
+  });
+  const agents = useLiveStudio().value?.agents ?? null;
   const active = useRef(false);
   useEffect(() => {
     active.current = true;
@@ -82,22 +87,22 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const latest = useRef(0);
   const refresh = useCallback(async () => {
     const ticket = ++latest.current;
-    await Promise.all([api.getReportingInstallations(), api.listAgents()])
-      .then(([targets, agents]) => {
-        if (active.current && ticket === latest.current) setReads({ targets, agents, error: "" });
+    await api
+      .getReportingInstallations()
+      .then((targets) => {
+        if (active.current && ticket === latest.current) setInstallations({ targets, error: "" });
       })
       .catch(() => {
         if (active.current && ticket === latest.current)
-          setReads({
+          setInstallations({
             targets: null,
-            agents: null,
             error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
           });
       });
   }, []);
   useRefreshSchedule(refresh, false);
   return (
-    <ReportingStateContext.Provider value={{ ...reads, refresh }}>
+    <ReportingStateContext.Provider value={{ ...installations, agents, refresh }}>
       {children}
     </ReportingStateContext.Provider>
   );
@@ -124,7 +129,9 @@ export function reportingTargetsMarker({
 }
 
 export function reportingSummary(reads: ReportingReads): ReportingStatus {
-  if (reads.error || !reads.targets || !reads.agents) return agentReportingStatus("", reads);
+  if (reads.error || !reads.targets) return agentReportingStatus("", reads);
+  // Installations may arrive before the Studio scope's first Agents.
+  if (!reads.agents) return agentReportingStatus("", { targets: null, error: "" });
   const needsAttention = reads.agents.some(
     (agent) =>
       agent.execution !== null &&
