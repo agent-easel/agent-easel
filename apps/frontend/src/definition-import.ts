@@ -93,13 +93,17 @@ const idle: DefinitionImportSnapshot = {
 const UNCERTAIN =
   "Factory could not confirm whether the import finished. Confirm again: a retry returns the same result and never creates a copy.";
 
-/** The headline plus each issue that adds to it, such as the field a single issue names. */
+/** A whole-file issue that only repeats the headline adds nothing under it. */
+const repeatsHeadline = (issue: { path: string; message: string }, headline: string) =>
+  (issue.path === "" || issue.path === "document") && issue.message === headline;
+
+/** The headline plus every issue that adds to it; a field-addressed issue always keeps its path. */
 function rejection(cause: unknown, fallback: string) {
   if (cause instanceof ApiError)
     return {
       error: cause.message,
       issues: cause.detail.issues
-        .filter((issue) => issue.message !== cause.message)
+        .filter((issue) => !repeatsHeadline(issue, cause.message))
         .map((issue) => (issue.path ? `${issue.path}: ${issue.message}` : issue.message)),
     };
   return { error: cause instanceof Error ? cause.message : fallback, issues: [] };

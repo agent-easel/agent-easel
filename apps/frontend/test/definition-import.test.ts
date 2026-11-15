@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vite-plus/test";
 import type { CommitImportInput, ImportResult, ImportReview } from "@t3-factory/contracts";
+import { ApiError } from "../src/api.ts";
 import { createDefinitionImport } from "../src/definition-import.ts";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities } from "./support/agent-draft.ts";
@@ -96,6 +97,35 @@ it("Confirm commits every row as reviewed even when every Agent needs a model", 
     selections: { "agent-1": null },
   });
   expect(model.getSnapshot().file).toBeNull();
+});
+
+it("a review rejected for one field lists that field's path under the matching headline", async () => {
+  // Arrange
+  const message = 'Agent "Reviewer": Use a description up to 4000 characters.';
+  const model = createDefinitionImport(
+    {
+      reviewImport: vi.fn(() =>
+        Promise.reject(
+          new ApiError({
+            code: "validation",
+            message,
+            issues: [{ code: "invalid_exit", path: "agents.0.exits.0.description", message }],
+          }),
+        ),
+      ),
+      commitImport: vi.fn(),
+    },
+    () => "request-1",
+  );
+
+  // Act
+  await model.choose(file);
+
+  // Assert
+  expect(model.getSnapshot()).toMatchObject({
+    error: message,
+    issues: [`agents.0.exits.0.description: ${message}`],
+  });
 });
 
 it("Confirm after an uncertain commit retries with the same request id", async () => {
