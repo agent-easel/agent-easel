@@ -76,6 +76,8 @@ export function createFlowDraft(
   let readinessRequest = 0;
   /** Drags, wire gestures, Auto-arrange runs and text entry in progress; adoption waits for them. */
   let interactions = 0;
+  /** This editor's removal was accepted; readiness is unknown even before Studio delivers it. */
+  let removedHere = false;
 
   /** The Flow as Studio's saved definitions hold it now; undefined while unknown or absent. */
   function latest() {
@@ -111,7 +113,7 @@ export function createFlowDraft(
         !state.removed
           ? flow.readiness
           : null;
-      const readiness = checked ?? savedReadiness;
+      const readiness = removedHere ? null : (checked ?? savedReadiness);
       return {
         ...state,
         status,
@@ -211,10 +213,16 @@ export function createFlowDraft(
         fallback: "Could not save Flow.",
       });
     },
-    /** Accepted removal clears the guard before the caller navigates away. */
+    /**
+     * Accepted removal clears the guard and readiness before the caller navigates away, before
+     * Studio delivers the absence.
+     */
     async remove() {
       if (checking) return false;
-      return draft.remove(source.removeFlow, "Could not remove Flow.");
+      return draft.remove(async (flowId) => {
+        await source.removeFlow(flowId);
+        removedHere = true;
+      }, "Could not remove Flow.");
     },
     clearRemovalError: draft.clearRemovalError,
     /** Validates the content without saving it. */

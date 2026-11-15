@@ -201,6 +201,18 @@ it("a removal elsewhere clears readiness and dismisses the comparison but keeps 
   });
 });
 
+it("an accepted removal makes a checked Flow's readiness unknown before Studio delivers it", async () => {
+  // Arrange
+  const { draft } = editedFlow("Mine");
+  await draft.check();
+
+  // Act
+  await draft.remove();
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ dirty: false, readiness: null, canStartRun: false });
+});
+
 it("a clean Flow hidden while Agents are shown adopts a revision saved elsewhere", () => {
   // Arrange
   const { draft, factory, published } = hiddenFlow();
