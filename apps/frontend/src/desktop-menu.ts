@@ -9,8 +9,9 @@ import {
 import { executeAppCommand } from "./app-keyboard-commands.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { shortcutDefinitions } from "./keyboard-shortcuts.ts";
-import { getOpenRunCommandSurface, subscribeOpenRunCommandSurface } from "./open-run-keyboard.tsx";
+import { runActions } from "./components/run-actions.tsx";
 import { getShortcutPreferences, subscribeShortcutPreferences } from "./shortcut-preferences.ts";
+import { transport } from "./transport.ts";
 
 /** Registry commands outside the canvas group that have no application menu item. */
 type CommandWithoutMenuItem =
@@ -36,23 +37,18 @@ type _OnlyCommandsWithoutMenuItem = NoneLeft<
   Exclude<CommandWithoutMenuItem, Exclude<NonCanvasCommand, DesktopMenuCommandId>>
 >;
 
-const runActionAvailability = {
-  snoozeRestore: "canSnoozeRestore",
-  settle: "canSettle",
-  archive: "canArchive",
-  rename: "canRename",
-} as const satisfies Partial<Record<DesktopMenuCommandId, string>>;
-
 function menuState(): DesktopMenuState {
   const { bindings } = getShortcutPreferences();
-  const openRun = getOpenRunCommandSurface();
+  // Run action commands share their ids with the Run actions; other commands are always enabled.
+  const available: Partial<Record<DesktopMenuCommandId, boolean>> = runActions.availability(
+    runActions.getSnapshot().openRun,
+  );
   const state = {} as Record<DesktopMenuCommandId, DesktopMenuCommand>;
   for (const id of desktopMenuCommandIds) {
-    const availability = runActionAvailability[id as keyof typeof runActionAvailability];
     state[id] = {
       label: shortcutDefinitions.find((definition) => definition.id === id)!.label,
       binding: bindings[id],
-      enabled: availability ? openRun[availability] : true,
+      enabled: available[id] ?? true,
     };
   }
   return state;
@@ -88,7 +84,9 @@ export function useDesktopMenu() {
     publishChanged();
     const unsubscribe = [
       subscribeShortcutPreferences(publishChanged),
-      subscribeOpenRunCommandSurface(publishChanged),
+      runActions.subscribe(publishChanged),
+      // Run action availability also follows whether mutations are allowed.
+      transport.subscribe(publishChanged),
       bridge.onMenuCommand(executeAppCommand),
     ];
     return () => {

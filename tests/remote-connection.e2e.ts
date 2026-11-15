@@ -1,26 +1,24 @@
-import { beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import {
   elapse,
   hostT3Observations,
   openApproved,
+  openRemoteBrowser,
   openWaitingConnection,
-  remoteFixture,
 } from "./support/remote-access.ts";
 
-// One fixture server per CLI run: these journeys run in order against the host's single
-// controlled T3 connection (saved endpoint → pending approval → approved on the host).
 beforeEach(async ({ app }) => {
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
 });
 
 test("opening authorization from a remote browser starts approval in the host's browser", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "t3-endpoint");
+  await fixture.remoteAccess.t3Endpoint();
   await openApproved(app, "/settings/connection");
   await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
   await expect(screen.getByRole("link", "Devices & access")).toHaveCount(0);
@@ -45,16 +43,17 @@ test("opening authorization from a remote browser starts approval in the host's 
 });
 
 test("the waiting connection screen turns Connected from the live connection, without status reads", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange: longer than two former 2.5 s polling periods passes without any status read.
   await openWaitingConnection(app, screen);
-  await remoteFixture(app, "reset-connection-reads");
+  await fixture.remoteAccess.resetConnectionReads();
   await elapse(6_000);
 
   // Act: the owner approves in T3 on the host; nobody touches this screen.
-  await remoteFixture(app, "t3-approve");
+  await fixture.remoteAccess.t3Approve();
 
   // Assert
   await expect(screen.getByText("Connected", { exact: true }).first()).toBeVisible({

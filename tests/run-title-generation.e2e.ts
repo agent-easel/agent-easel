@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import type {
   Result,
@@ -7,8 +7,8 @@ import type {
   UpdateRunTitleSettingInput,
 } from "../packages/contracts/src/index.ts";
 import { openComposerWithFlow } from "./support/composer.ts";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { openApproved, remoteFixture } from "./support/remote-access.ts";
+import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { applyRunState } from "./support/scenarios.ts";
 
 const titleModel = {
@@ -30,12 +30,6 @@ async function runTitleSetting(baseUrl: string | undefined, input?: UpdateRunTit
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1000 });
-});
-
-// Journeys share one Factory: later Runs keep their automatic titles.
-afterEach(async ({ app }) => {
-  const { model } = await runTitleSetting(app.baseUrl);
-  await runTitleSetting(app.baseUrl, { enabled: false, model });
 });
 
 test("the host turns on Generate Run titles with a provider instance and model from T3", async ({
@@ -94,7 +88,7 @@ test("a Run started while Generate Run titles is on shows Generating title… un
   const run = await findRun(app.baseUrl, automaticTitle);
 
   // Act: the title thread submits its title through factory_set_run_title.
-  await applyRunState(app.baseUrl, run.id, "generated title applied", generatedTitle);
+  await applyRunState(app, run.id, "generated title applied", generatedTitle);
 
   // Assert
   await expect(screen.getByRole("heading", generatedTitle, { exact: true })).toBeVisible();
@@ -111,6 +105,7 @@ test("a Run started while Generate Run titles is on shows Generating title… un
     generatedTitle,
   });
   await app.screenshot("run-title-applied");
+  await archiveJourneyRun(app.baseUrl, run.id);
 });
 
 test("pressing a Run's title line opens its title details with the title thread link and leaves Follow active as it was", async ({
@@ -148,13 +143,13 @@ test("pressing a Run's title line opens its title details with the title thread 
 });
 
 test("an approved client sees Generate Run titles and its latest diagnostic read-only, managed on the Factory host", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "compatible");
-  await remoteFixture(app, "run-titles/diagnostic");
-  await app.open("/__fixture/remote-browser");
+  await fixture.runImagesAndTitles.titleDiagnostic();
+  await openRemoteBrowser(app);
 
   // Act
   await openApproved(app, "/settings/run-titles");

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
 import {

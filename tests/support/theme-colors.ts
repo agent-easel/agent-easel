@@ -1,5 +1,7 @@
 import { expect, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
+import { fixtureHandles } from "./fixture/handle.ts";
+import { approvedBrowserPath, remoteBrowserPath } from "./fixture/seam.ts";
 
 type FixtureApp = { baseUrl: string | undefined; open(path: string): Promise<unknown> };
 
@@ -11,26 +13,27 @@ export const cachedSnapshot = `window.localStorage.getItem("factory.inherited-co
 
 /** Theme-color state of the fixture host's controlled T3, and a second browser address. */
 export function themeColors(app: FixtureApp) {
-  const post = (action: string) =>
-    fetch(new URL(`/__fixture/appearance/${action}`, app.baseUrl), { method: "POST" });
+  const appearance = fixtureHandles(app).appearance;
   const otherAddress = (path: string) => {
     const url = new URL(path, app.baseUrl);
     url.hostname = "localhost";
     return url.href;
   };
   return {
-    reset: () => post("reset"),
-    unsupported: () => post("unsupported"),
+    unsupported: () => appearance.unsupported(),
+    /** `t3 theme set ocean`: the host follows T3's built-in Ocean theme. */
+    followOcean: () => appearance.setDefaultTheme({ theme: "ocean" }),
     /**
-     * A host whose T3 owner published "Nightfall" (dark seeds, no Light variant), "Dusk" (dark
-     * seeds with a Light variant) and "Future" (a newer theme file version).
+     * A host following Ocean whose T3 owner published "Nightfall" (dark seeds, no Light
+     * variant), "Dusk" (dark seeds with a Light variant) and "Future" (a newer theme file
+     * version).
      */
     async withPublishedThemes() {
-      await post("reset");
-      await post("publish");
+      await appearance.publish();
+      await appearance.setDefaultTheme({ theme: "ocean" });
     },
     /** `t3 theme set <id>` on the controlled T3 environment. */
-    setDefaultTheme: (id: string) => post(`default?theme=${id}`),
+    setDefaultTheme: (theme: string) => appearance.setDefaultTheme({ theme }),
     /**
      * The same fixture under `localhost` instead of `127.0.0.1`: another origin, so another
      * browser profile's storage, mode and client access.
@@ -38,8 +41,8 @@ export function themeColors(app: FixtureApp) {
     otherAddress,
     /** Appearance settings of an approved browser profile at the other address, following Ocean. */
     async openApprovedClient(screen: Screen) {
-      await app.open(otherAddress("/__fixture/remote-browser"));
-      await app.open(otherAddress("/__fixture/approved-browser?next=/settings/appearance"));
+      await app.open(otherAddress(remoteBrowserPath));
+      await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
       await expect(screen.getByText("Colors follow T3’s default theme “Ocean”.")).toBeVisible();
     },
     /**
@@ -47,11 +50,10 @@ export function themeColors(app: FixtureApp) {
      * address shows its Appearance settings, so the host panel keeps its own mode.
      */
     async followNightfallInApprovedBrowser() {
-      await post("reset");
-      await post("publish");
-      await post("default?theme=nightfall");
-      await app.open(otherAddress("/__fixture/remote-browser"));
-      await app.open(otherAddress("/__fixture/approved-browser?next=/settings/appearance"));
+      await appearance.publish();
+      await appearance.setDefaultTheme({ theme: "nightfall" });
+      await app.open(otherAddress(remoteBrowserPath));
+      await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
     },
   };
 }
@@ -59,7 +61,7 @@ export function themeColors(app: FixtureApp) {
 /** The host panel's Appearance settings, following T3's Ocean theme in Dark. */
 export async function hostFollowingOcean({ app, browser }: { app: FixtureApp; browser: Browser }) {
   const colors = themeColors(app);
-  await colors.reset();
+  await colors.followOcean();
   await app.open("/settings/appearance");
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
   return colors;
@@ -79,7 +81,7 @@ export async function clientWithCachedOcean({
   browser: Browser;
 }) {
   const colors = themeColors(app);
-  await colors.reset();
+  await colors.followOcean();
   await colors.openApprovedClient(screen);
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
   await expect.poll(() => browser.evaluate(cachedSnapshot)).not.toBe(null);

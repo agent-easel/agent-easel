@@ -1,4 +1,5 @@
-import { test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 
 async function expectStudioViewport(screen: Screen, browser: Browser) {

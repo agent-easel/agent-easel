@@ -118,6 +118,6 @@ export async function failedDelete() {
   setup.factory.updateAgent.mockRejectedValueOnce(new Error("Save unavailable."));
   await setup.draft.save();
   setup.factory.removeAgent.mockRejectedValueOnce(new Error("Agent is still used by a Flow."));
-  await setup.draft.delete();
+  await setup.draft.remove();
   return setup;
 }

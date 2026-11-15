@@ -1,9 +1,9 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import {
   openApproved,
   openIncompatibleApplicationSettings,
-  remoteFixture,
+  openRemoteBrowser,
 } from "./support/remote-access.ts";
 
 const documentAppearance = `document.documentElement.dataset.appearance`;
@@ -46,20 +46,19 @@ test("a browser profile's Light choice survives reload and is applied before the
 });
 
 test("an offline client switches appearance without its server", async ({
+  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await remoteFixture(app, "online");
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
   await openApproved(app, "/runs/new");
   const settings = screen.getByRole("link", /^Settings,/);
   await expect(settings).toBeVisible();
   // Offline retains a view only after the client has completed its first handshake.
   await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
-  await remoteFixture(app, "offline");
+  await fixture.remoteAccess.offline();
   await expect(screen.getByRole("status", "Offline")).toBeVisible({ timeout: 15_000 });
   await settings.tap();
   await screen.getByRole("link", "Appearance", { exact: true }).tap();
@@ -72,7 +71,6 @@ test("an offline client switches appearance without its server", async ({
   // The Settings dialog hides the banner from the accessibility tree; it is still shown.
   expect(await browser.evaluate(`!!document.querySelector('[aria-label="Offline"]')`)).toBe(true);
   await app.screenshot("appearance-offline-light");
-  await remoteFixture(app, "online");
 });
 
 test("an incompatible server's gate offers the appearance choice in local application settings", async ({
@@ -81,9 +79,7 @@ test("an incompatible server's gate offers the appearance choice in local applic
   browser,
 }) => {
   // Arrange
-  await remoteFixture(app, "online");
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
   await openIncompatibleApplicationSettings(app, screen);
 
   // Act
@@ -93,5 +89,4 @@ test("an incompatible server's gate offers the appearance choice in local applic
   await expect.poll(() => browser.evaluate(documentAppearance)).toBe("light");
   await expect(screen.getByRole("dialog", "Local application settings")).toBeVisible();
   await app.screenshot("appearance-gate-light");
-  await remoteFixture(app, "compatible");
 });

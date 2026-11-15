@@ -9,6 +9,7 @@ import { navigationScope } from "../src/live/navigation.ts";
 import { reconnectDelay } from "../src/live/owner.ts";
 import { runScope } from "../src/live/run.ts";
 import { appearanceScope, connectionScope } from "../src/live/scopes.ts";
+import { studioScope } from "../src/live/studio.ts";
 import { changed, checked, envelope, liveHarness, snapshot } from "./support/live.ts";
 import { runDetail } from "./support/run.ts";
 
@@ -310,7 +311,7 @@ it("theme colors that are refused or not current never hold back product mutatio
   // Arrange
   const live = liveHarness();
   live.owner.acquire(connectionScope);
-  live.owner.acquire(appearanceScope);
+  live.owner.acquire(appearanceScope, { gates: false });
   live.sessions[0]?.connected();
   live.sessions[0]?.subscriptions[0]?.message(snapshot("ready"));
 
@@ -328,4 +329,21 @@ it("theme colors that are refused or not current never hold back product mutatio
   ]);
   expect(live.delivery()).toBe("current");
   expect(live.owner.state).toBe("live");
+});
+
+it("Studio's definitions gate mutations only once Studio holds them, not while only read", () => {
+  // Arrange
+  const live = liveHarness();
+  live.owner.acquire(connectionScope);
+  live.owner.acquire(studioScope, { gates: false });
+  live.sessions[0]?.connected();
+  live.sessions[0]?.subscriptions[0]?.message(snapshot("ready"));
+  const whileRead = live.delivery();
+
+  // Act
+  live.owner.acquire(studioScope);
+
+  // Assert
+  expect(whileRead).toBe("current");
+  expect(live.delivery()).toBe("synchronizing");
 });

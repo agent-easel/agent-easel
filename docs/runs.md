@@ -367,7 +367,8 @@ menu items never opens a row preview.
   in the menu shows the current binding from the shortcut registry (default F2). With a Run open in detail, the same
   **Rename Run** command runs from that binding; customization is in [Keyboard shortcuts](keyboard-shortcuts.md).
   Keyboard **Snooze or restore**, **Settle** and **Archive…** apply to the open Run under the same availability rules as
-  these menu items and show registry hints on tooltips where present. Active and Snoozed rows offer Snooze or Restore and
+  these menu items and show registry hints on tooltips where present. While a Run action is running, every row menu
+  disables Snooze or Restore and Settle and the busy row disables its menu; unavailable observations disable no Run action. Active and Snoozed rows offer Snooze or Restore and
   **Settle**; every Run row offers **Archive…**. Draft rows offer Rename and
   **Discard**, which removes the draft from this browser at once without confirmation; discarding the open draft leaves an
   empty composition with the same choices. While a draft's Start is in flight or its outcome is unknown, both are

@@ -1,13 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import { Bot, Play, Settings, Workflow } from "lucide-react";
-import type { AgentDefinition, FlowDraft, RunNavigationEntry } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  FlowDraft,
+  RunNavigationEntry,
+  StudioDefinitions,
+} from "@t3-factory/contracts";
 import type { useNavigate } from "@tanstack/react-router";
-import {
-  settingsMask,
-  studioMask,
-  type SettingsSelection,
-  type StudioSelection,
-} from "./settings-navigation.ts";
+import type { LiveScopeView } from "./live/owner.ts";
+import type { useOpenStudio, useSettingsNavigation } from "./settings-navigation.ts";
 import type { ShortcutId } from "./keyboard-shortcuts.ts";
 
 export const paletteActionShortcut: Partial<Record<string, ShortcutId>> = {
@@ -29,6 +30,37 @@ export type PaletteItem = {
 };
 
 type Navigate = ReturnType<typeof useNavigate>;
+
+/** The palette opens Studio and Settings only through the settings navigation. */
+export type PaletteNavigation = {
+  openStudio: ReturnType<typeof useOpenStudio>;
+  openSettings: ReturnType<typeof useSettingsNavigation>;
+};
+
+/**
+ * The palette's items from the navigation and Studio scopes, with each scope's state named by the
+ * sections it supplies: unread, cached while not current, or refused. Cached items stay listed.
+ */
+export function paletteCatalog(
+  navigation: LiveScopeView<readonly RunNavigationEntry[]>,
+  studio: LiveScopeView<StudioDefinitions>,
+) {
+  const scopes = [
+    { view: navigation, names: ["Runs"] },
+    { view: studio, names: ["Flows", "Agents"] },
+  ];
+  const named = (state: (view: LiveScopeView<unknown>) => boolean) =>
+    scopes.filter(({ view }) => state(view)).flatMap(({ names }) => names);
+  const pending = (view: LiveScopeView<unknown>) => !view.synchronized && !view.error;
+  return {
+    loading: named((view) => view.value === null && pending(view)),
+    synchronizing: named((view) => view.value !== null && pending(view)),
+    refused: named((view) => view.error !== null),
+    runs: navigation.value ?? [],
+    flows: studio.value?.flows ?? [],
+    agents: studio.value?.agents ?? [],
+  };
+}
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
@@ -52,29 +84,14 @@ export function paletteMatchesQuery(item: PaletteItem, query: string) {
 
 export function buildPaletteItems(input: {
   navigate: Navigate;
-  pathname: string;
+  navigation: PaletteNavigation;
   onNewRun: () => void;
   runs: readonly RunNavigationEntry[];
   flows: readonly FlowDraft[];
   agents: readonly AgentDefinition[];
 }): PaletteItem[] {
-  const { navigate, pathname, onNewRun, runs, flows, agents } = input;
-  const openSettings = (tab: SettingsSelection["tab"]) => {
-    void navigate({
-      to: pathname,
-      search: { settings: { tab } },
-      mask: settingsMask({ tab }),
-      resetScroll: false,
-    });
-  };
-  const openStudio = (selection: StudioSelection) => {
-    void navigate({
-      to: pathname,
-      search: { studio: selection },
-      mask: studioMask(selection),
-      resetScroll: false,
-    });
-  };
+  const { navigate, navigation, onNewRun, runs, flows, agents } = input;
+  const { openStudio, openSettings } = navigation;
   const actions: PaletteItem[] = [
     {
       id: "action-new-run",
@@ -108,7 +125,7 @@ export function buildPaletteItems(input: {
       detail: "T3 connection and reporting",
       icon: Settings,
       keywords: "connection reporting preferences",
-      run: () => openSettings("connection"),
+      run: () => void openSettings({ tab: "connection" }),
     },
   ];
   const runItems = runs.map((run) => ({
@@ -135,14 +152,7 @@ export function buildPaletteItems(input: {
     detail: "Flow",
     icon: Workflow,
     keywords: "flow studio",
-    run: () => {
-      void navigate({
-        to: pathname,
-        search: { studio: { tab: "flows", flowId: flow.id } },
-        mask: studioMask({ tab: "flows", flowId: flow.id }),
-        resetScroll: false,
-      });
-    },
+    run: () => openStudio({ tab: "flows", flowId: flow.id }),
   }));
   const agentItems = agents.map((agent) => ({
     id: `agent-${agent.id}`,
@@ -151,14 +161,7 @@ export function buildPaletteItems(input: {
     detail: "Agent definition",
     icon: Bot,
     keywords: "agent studio definition",
-    run: () => {
-      void navigate({
-        to: pathname,
-        search: { studio: { tab: "agents", agentId: agent.id } },
-        mask: studioMask({ tab: "agents", agentId: agent.id }),
-        resetScroll: false,
-      });
-    },
+    run: () => openStudio({ tab: "agents", agentId: agent.id }),
   }));
   return [...actions, ...runItems, ...flowItems, ...agentItems];
 }

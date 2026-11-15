@@ -1,9 +1,11 @@
 import { confirmSettlement } from "./support/run-history.ts";
-import { test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { matchingSidebarTitles } from "./support/sidebar.ts";
 import { elapse } from "./support/remote-access.ts";
+import { browserRequests, liveRun, resetBrowserRequests } from "./support/live.ts";
 import {
   desktopNewRunHint,
   expectFactoryConnected,
@@ -33,6 +35,33 @@ test("palette Enter opens the selected Flow", async ({ app, screen, browser }) =
   // Assert
   await expect(screen.getByRole("dialog", "Command palette")).toBeHidden();
   await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow");
+});
+
+test("a Run created while the palette is open appears in it without a list request", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await app.open("/runs/new");
+  await expect(screen.getByRole("heading", /What should we work on/)).toBeVisible();
+  await resetBrowserRequests(app);
+  await browser.keyboard.press(`${shortcutMod}+k`);
+  await screen.getByLabel("Search commands and items").fill("Live palette");
+  await expect(screen.getByText(/^Loading items/)).toBeHidden();
+  await expect(screen.getByRole("option", /Live palette/)).toHaveCount(0);
+
+  // Act
+  await liveRun(app, "palette");
+
+  // Assert
+  await expect(
+    screen.getByRole("option", /Demo · Live palette · Tidy the project picker/),
+  ).toBeVisible();
+  const listRequests = (await browserRequests(app)).filter((request) =>
+    /^GET \/api\/(run-navigation|flows|agents)$/.test(request),
+  );
+  expect(listRequests).toEqual([]);
 });
 
 test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({

@@ -1,11 +1,10 @@
-import { beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
-import { openApproved, remoteFixture } from "./support/remote-access.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 beforeEach(async ({ app }) => {
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
 });
 
 test("a desktop user turns on the menu bar icon, which is off by default, in Desktop app settings", async ({

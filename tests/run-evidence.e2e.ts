@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { beforeEach, test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { prepareScenarios, scenarioFixture } from "./support/scenarios.ts";
+import { prepareScenarios } from "./support/scenarios.ts";
 
 beforeEach(async ({ app }) => {
-  await prepareScenarios(app.baseUrl);
+  await prepareScenarios(app);
 });
 
 test("long native identities remain readable in the selected Block's Needs input after reload", async ({
@@ -78,6 +79,7 @@ test("a worker whose own turn ended while its subagents still run stays working 
 });
 
 test("a selected Agent block shows its captured Revisit instruction read-only, and its execution canvas block does not", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -86,7 +88,7 @@ test("a selected Agent block shows its captured Revisit instruction read-only, a
   await browser.setViewport({ width: 1440, height: 1100 });
   const instruction =
     "On a return, verify the corrections and the newly affected scope; keep earlier dispositions.";
-  await saveSingleAgentFlow(
+  const flow = await saveSingleAgentFlow(
     app.baseUrl,
     "UI revisit · Verify corrections",
     "Demo · Product engineer",
@@ -98,11 +100,7 @@ test("a selected Agent block shows its captured Revisit instruction read-only, a
       revisitInstruction: instruction,
     },
   );
-  const started = await scenarioFixture(app.baseUrl, "ensure", {
-    key: "revisit",
-    flow: "UI revisit · Verify corrections",
-  });
-  const { id } = (await started.json()) as { id: string };
+  const { id } = await fixture.scenarios.ensure({ key: "revisit", flow: { id: flow } });
   await app.open(`/runs/${id}`);
   const block = screen.getByRole("article", "Block Review change", { exact: true });
 

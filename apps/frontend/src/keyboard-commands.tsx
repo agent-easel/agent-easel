@@ -4,7 +4,7 @@ import { CommandPalette } from "./components/command-palette.tsx";
 import { shouldHandleShortcut, type ShortcutId } from "./keyboard-shortcuts.ts";
 import { getShortcutPreferences } from "./shortcut-preferences.ts";
 import {
-  studioMask,
+  useOpenStudio,
   useSettingsNavigation,
   validateAppSearch,
   useSettings,
@@ -18,7 +18,7 @@ import {
   matchShortcutCommand,
   setAppCommandHandlers,
 } from "./app-keyboard-commands.ts";
-import { getOpenRunCommandSurface } from "./open-run-keyboard.tsx";
+import { runActions } from "./components/run-actions.tsx";
 import { getSidebarNavigation } from "./sidebar-navigation.ts";
 import { toggleRunInspector } from "./run-inspector-preference.ts";
 import { useDesktopMenu } from "./desktop-menu.ts";
@@ -41,6 +41,7 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
   const settingsOpen = !!useSettings();
   const studioOpen = !!useStudio();
   const settings = useSettingsNavigation();
+  const openStudio = useOpenStudio();
   const { paletteOpen, setPaletteOpen, togglePalette, restoreFocus } = usePalette();
   const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
   const overlayOpen = paletteOpen || settingsOpen || studioOpen || cheatSheetOpen;
@@ -55,16 +56,6 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         runDraft.openFresh();
     });
   }, [router]);
-
-  const openStudio = useCallback(() => {
-    if (studioOpen) return;
-    void router.navigate({
-      to: pathname,
-      search: { studio: { tab: "flows" } },
-      mask: studioMask({ tab: "flows" }),
-      resetScroll: false,
-    });
-  }, [pathname, router, studioOpen]);
 
   const focusSearch = useCallback(() => {
     getSidebarNavigation().focusSearch();
@@ -86,7 +77,7 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         focusSearch();
       },
       studio: () => {
-        openStudio();
+        openStudio({ tab: "flows" });
       },
       shortcutsCheatSheet: () => {
         setCheatSheetOpen(true);
@@ -104,20 +95,16 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         stepRun(1);
       },
       snoozeRestore: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.snoozeRestore();
+        void runActions.run(runActions.getSnapshot().openRun, "snoozeRestore");
       },
       settle: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.settle();
+        void runActions.run(runActions.getSnapshot().openRun, "settle");
       },
       archive: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.archive();
+        runActions.openDialog("archive", runActions.getSnapshot().openRun);
       },
       rename: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.rename();
+        runActions.openDialog("rename", runActions.getSnapshot().openRun);
       },
       toggleInspector: toggleRunInspector,
     };

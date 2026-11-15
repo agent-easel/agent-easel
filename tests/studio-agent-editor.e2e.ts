@@ -1,4 +1,4 @@
-import { beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { saveAgentElsewhere } from "./support/agents.ts";
 import {
   expectCleanAgentRevision,

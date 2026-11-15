@@ -28,8 +28,7 @@ import { SettingsDisclosure, SettingsGroup, SettingsPage, SettingsRow } from "./
 
 /** Settings → Keyboard shortcuts: every registry command by group, with its current binding. */
 export function KeyboardSettings() {
-  const { bindings, conflicts, sessionOnly, storageIssue, hint, isConflict } =
-    useShortcutPreferences();
+  const { bindings, conflicts, sessionOnly, storageIssue, isConflict } = useShortcutPreferences();
   const defaults = getDefaultShortcutBindings();
   const [editing, setEditing] = useState<ShortcutId>();
   const [error, setError] = useState<string>();
@@ -90,7 +89,7 @@ export function KeyboardSettings() {
                   control={
                     <>
                       <kbd className="rounded-sm border bg-background px-1.5 py-0.5 font-sans text-2xs leading-none font-medium text-muted-foreground">
-                        {hint(command.id)}
+                        {formatShortcut(bindings[command.id])}
                       </kbd>
                       <Button
                         variant="outline"

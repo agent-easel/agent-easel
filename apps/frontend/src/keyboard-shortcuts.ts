@@ -344,6 +344,30 @@ export function validateShortcutBinding(
     : undefined;
 }
 
+/** The hint a menu or tooltip shows for a command: its binding, or none while unbound. */
+export function shortcutHint(binding: ShortcutBinding | null | undefined) {
+  return binding ? formatShortcut(binding) : undefined;
+}
+
+/** A tooltip text followed by the command's hint, when it has one. */
+export function withShortcutHint(text: string, hint: string | undefined) {
+  return hint ? `${text} · ${hint}` : text;
+}
+
+/** The canvas helper line's key list, naming only bound canvas commands; arrow pan is fixed. */
+export function canvasShortcutHelp(hints: {
+  zoomIn: string | undefined;
+  zoomOut: string | undefined;
+  fit: string | undefined;
+}) {
+  const zoom = [hints.zoomIn, hints.zoomOut].filter(Boolean).join(" / ");
+  const keys = [zoom && `${zoom} zoom`, hints.fit && `${hints.fit} fits`]
+    .filter(Boolean)
+    .join(", ");
+  return keys ? `${keys}; arrows pan` : "arrows pan";
+}
+
+/** A binding as lists of bindings show it, including Unbound. */
 export function formatShortcut(binding: ShortcutBinding | null | undefined) {
   if (!binding) return "Unbound";
   const key =

@@ -1,12 +1,10 @@
-import { useMutationsAllowed } from "@/client-gate";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
 import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
-import { useLocation } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FactoryProject, RunDetail } from "@t3-factory/contracts";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 import {
   Archive,
   Ellipsis,
@@ -18,7 +16,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { RunAttentionDetails } from "../components/run-attention.tsx";
-import { ArchiveRunDialog } from "../components/archive-run-dialog.tsx";
 import { RunNumber } from "../components/run-number.tsx";
 import { NotLiveMarker, RunHeaderStatus } from "../components/run-header-status.tsx";
 import { runFreshness, runStatus, type RunFreshness } from "../run-status.ts";
@@ -28,10 +25,11 @@ import { ExecutionCanvas } from "../components/execution-canvas.tsx";
 import { clockTime, dayAndTime } from "../components/execution-state.tsx";
 import { Notice, NoticeSettingsLink } from "../components/notice.tsx";
 import { useConnectionState } from "../connection-state.tsx";
-import { OpenRunKeyboardHost } from "../open-run-keyboard.tsx";
+import { runActions, useRunActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
@@ -72,36 +70,33 @@ type RunObservation = ReturnType<typeof useRunObservation>;
 
 /**
  * Marks Woke seen once per opened Run, as soon as its live view is current: the command
- * is refused while delivery synchronizes. Canvas selection and viewport stay out of this.
+ * is refused while delivery synchronizes. A Run opened under Settings is marked once Settings
+ * closes; Studio, Settings, canvas selection and viewport changes over it do not mark it again.
  */
 function useRunOpened(id: string, current: boolean) {
-  const location = useLocation();
-  const [seenError, setSeenError] = useState<{ location: typeof location; message: string }>();
-  const unmarked = useRef(false);
+  const settingsOpen = !!useSettings();
+  const [seenError, setSeenError] = useState<{ id: string; message: string }>();
+  // The opening being marked. Its answer applies while the same opening lasts, so Settings or
+  // Studio opening over the Run before the answer arrives does not drop it.
+  const marked = useRef<{ readonly id: string } | undefined>(undefined);
   useEffect(() => {
-    unmarked.current = !location.search.settings;
-  }, [id, location]);
-  useEffect(() => {
-    if (!current || !unmarked.current) return;
-    unmarked.current = false;
-    let active = true;
+    if (!current || settingsOpen || marked.current?.id === id) return;
+    const opening = { id };
+    marked.current = opening;
     void api
       .markRunWokeSeen(id)
       .then(() => {
-        if (active) setSeenError(undefined);
+        if (marked.current === opening) setSeenError(undefined);
       })
       .catch(() => {
-        if (active)
+        if (marked.current === opening)
           setSeenError({
-            location,
+            id,
             message: "Could not mark Woke as seen. Reopen this Run to try again.",
           });
       });
-    return () => {
-      active = false;
-    };
-  }, [id, location, current]);
-  return seenError?.location === location ? seenError.message : "";
+  }, [id, current, settingsOpen]);
+  return seenError?.id === id ? seenError.message : "";
 }
 
 function useEscapeToDeselect(active: boolean, deselect: () => void) {
@@ -117,6 +112,14 @@ function useEscapeToDeselect(active: boolean, deselect: () => void) {
   }, [active, deselect]);
 }
 
+/** Declares this screen's Run to Run actions, so the keyboard and desktop menu act on it. Live
+ * updates replace the subject in place; clearing only on unmount keeps an unchanged native menu
+ * from being rebuilt in between. */
+function useOpenRunActions(entry: RunNavigationEntry | undefined, detail: RunDetail | undefined) {
+  useLayoutEffect(() => runActions.setOpenRun({ entry, detail }), [entry, detail]);
+  useLayoutEffect(() => () => runActions.setOpenRun(undefined), []);
+}
+
 /** What the inspector shows besides the overview: a selected Block, or the Run title, which is not a Block. */
 type Inspected = { readonly blockId: string } | "run-title" | null;
 
@@ -129,13 +132,9 @@ export function RunScreen({ id }: { id: string }) {
   const seenError = useRunOpened(id, !observed.unavailable);
   useEscapeToDeselect(inspected !== null, deselect);
   const { run, error } = observed;
+  useOpenRunActions(navigationRun, run ?? undefined);
   return (
     <CanvasLayout>
-      <OpenRunKeyboardHost
-        unavailable={observed.unavailable}
-        run={run ?? undefined}
-        navigationRun={navigationRun}
-      />
       {run ? (
         <RunDetailView
           observed={observed}
@@ -305,8 +304,7 @@ function RunTopBar({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {inspectorOpen ? "Hide inspector" : "Show inspector"}
-          {inspectorHint !== "Unbound" ? ` · ${inspectorHint}` : ""}
+          {withShortcutHint(inspectorOpen ? "Hide inspector" : "Show inspector", inspectorHint)}
         </TooltipContent>
       </Tooltip>
       {run.lifecycle !== "archived" && <RunActionsMenu run={run} />}
@@ -319,34 +317,30 @@ function RunTopBar({
  * Archive is the menu's only action, so an Archived Run shows no menu.
  */
 function RunActionsMenu({ run }: { run: RunDetail }) {
-  const [archiving, setArchiving] = useState(false);
-  const mutationsAllowed = useMutationsAllowed();
+  const { available } = useRunActions({ detail: run });
   const { hint } = useShortcutPreferences();
   const archiveHint = hint("archive");
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
-            <Ellipsis aria-hidden className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            disabled={!mutationsAllowed}
-            onSelect={() => setArchiving(true)}
-            aria-keyshortcuts={archiveHint === "Unbound" ? undefined : archiveHint}
-          >
-            <Archive aria-hidden strokeWidth={1.5} />
-            Archive…
-            <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-              {archiveHint === "Unbound" ? "" : archiveHint}
-            </span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <ArchiveRunDialog run={run} open={archiving} onOpenChange={setArchiving} />
-    </>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
+          <Ellipsis aria-hidden className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          disabled={!available.archive}
+          onSelect={() => runActions.openDialog("archive", { detail: run })}
+          aria-keyshortcuts={archiveHint}
+        >
+          <Archive aria-hidden strokeWidth={1.5} />
+          Archive…
+          <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
+            {archiveHint}
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

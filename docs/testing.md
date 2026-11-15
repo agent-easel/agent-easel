@@ -136,6 +136,31 @@ their cause; do not add retries or larger per-test timeouts.
   Use AAA when adding or changing E2E tests; the current behavior-test cleanup does
   not require migrating untouched E2E journeys.
 
+### Fixture modules
+
+One fixture process serves every journey in a runner invocation. It proxies the
+browser to Factory and composes **fixture modules** in `tests/support/fixture/`,
+one per concern. A module owns its controlled doubles and setup, its actions, and
+a reset that returns its state to the start-of-journey baseline. A feature that
+needs a controlled world adds or extends its own module and registers it in the
+fixture server, instead of adding setup or flags to the server itself.
+
+Journeys import `test` and its hooks from `tests/support/test.ts`. Before each
+journey, its `fixture` runs the shared reset, which resets every module in a
+fixed order, starting with the host's T3 connection. It then exposes one typed
+handle per module. A handle is the only way journeys and support helpers reach
+fixture actions. It is typed from the module's actions and throws at the call
+with the fixture's error when the fixture rejects a call, including an unknown
+action. A reset compares the live state with its baseline, because journeys also
+change fixture state through the UI. Stored data such as created Runs, approved
+devices and diagnostics is not reset, so a journey creates or selects its own
+records.
+
+The development seed returns the Project, Agents, Flows and Runs it created, keyed
+by stable keys. The Run scenarios module takes Flows by those keys, never by
+display name. Definitions only journeys need are a named scenario set in that
+module, built with the seed's builders.
+
 ### PR journey check
 
 The **Controlled UI journeys** PR check runs the complete existing suite in three
@@ -223,7 +248,7 @@ unverified. Keep private addresses and execution evidence outside Git.
 
 For client approval, revocation, TLS, offline recovery or protocol changes, exercise the approved-client HTTPS listener; Vite's host-local proxy does not prove those boundaries. For live delivery, distinguish snapshot/update and reconnect evidence from ordinary HTTP
 reads. Run detail, sidebar navigation, shared T3 connection status and composer launch
-choices no longer poll, and Studio's lists and editors are not re-read; approvals, updater and client-gate checks retain their existing reads or polling. A
+choices no longer poll, Studio's lists and editors are not re-read, the command palette reads the navigation and Studio scopes, and Agent reporting reads Agents from the Studio scope; approvals, Agent reporting installations, Discord status, updater and client-gate checks read through the frontend refresh schedule, which pauses while the page is hidden. A
 stationary Run trace should separate those consumers and compact observation
 metadata from repeated Run data. Controlled public-stream tests establish delivery and
 Runner independence; they do not establish actual Electron or cross-device transport.

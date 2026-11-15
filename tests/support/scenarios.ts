@@ -1,29 +1,14 @@
-import assert from "node:assert/strict";
-import type { FixtureState } from "./server.ts";
+import { fixtureHandles } from "./fixture/handle.ts";
+import type { FixtureState } from "./fixture/scenarios.ts";
 
-export async function scenarioFixture(
-  baseUrl: string | undefined,
-  action: string,
-  query: Record<string, string> = {},
-) {
-  const url = new URL(`/__fixture/scenarios/${action}`, baseUrl);
-  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
-  const response = await fetch(url, { method: "POST" });
-  assert.ok(response.ok, await response.clone().text());
-  return response;
-}
+type FixtureApp = { baseUrl: string | undefined };
 
-export const prepareScenarios = (baseUrl: string | undefined) =>
-  scenarioFixture(baseUrl, "prepare");
+/** The fixture's own copy of the seeded scenario Runs, keyed by scenario. */
+export const prepareScenarios = (app: FixtureApp) => fixtureHandles(app).scenarios.prepare();
 
 /** Apply exactly the named module state to an existing Run, with caller-owned report content. */
-export const applyRunState = (
-  baseUrl: string | undefined,
-  id: string,
-  state: FixtureState,
-  message?: string,
-) =>
-  scenarioFixture(baseUrl, "transition", {
+export const applyRunState = (app: FixtureApp, id: string, state: FixtureState, message?: string) =>
+  fixtureHandles(app).scenarios.transition({
     id,
     state,
     ...(message === undefined ? {} : { message }),

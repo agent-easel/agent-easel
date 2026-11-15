@@ -1,6 +1,9 @@
 import { demoImages, demoPullRequest, type DemoImage } from "./seed-support.ts";
 import type { ThreadFacts } from "../../apps/backend/test/support/controlled-thread.ts";
 
+/** The demo Agents the seeded Flows place, by stable key. */
+export type DemoAgents = Record<"worker" | "reviewer" | "accessibility", string>;
+/** The ready demo Flows seed scenarios start in, by stable key. */
 export type DemoFlows = Record<
   | "simple"
   | "review"

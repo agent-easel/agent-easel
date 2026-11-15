@@ -166,8 +166,8 @@ Rename), **Window** and **Help** (Factory documentation). Registry commands
 appear once the window shows the connected application. Command labels and
 accelerators come from the [shortcut registry](keyboard-shortcuts.md) and follow the
 user's customized bindings; an unbound command shows no accelerator. **Run** items are
-disabled when the action is unavailable for the Run open in detail, and while no window
-is open. **Check for Updates…** checks this app only, with the result in the sidebar
+disabled when the action is [unavailable](keyboard-shortcuts.md#command-behaviour) for the
+Run open in detail, including while a Run action is running, and while no window is open. **Check for Updates…** checks this app only, with the result in the sidebar
 footer control.
 
 The renderer remains the only executor of registry commands. A key press is handled by

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import {
   CircleAlert,
   CloudOff,
@@ -23,6 +23,7 @@ import { GateScreen } from "@/components/gate-screen";
 import { api, ApiError } from "./api.ts";
 import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
+import { useRefreshSchedule } from "./refresh-schedule.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
 
@@ -87,20 +88,25 @@ const recheckMs = 2000;
 export function ClientGate({ children }: { children: ReactNode }) {
   const [gate, setGate] = useState<Gate>({ kind: "checking" });
   const current = useTransport();
-  const check = useCallback(
-    () =>
-      evaluate().then((next) => {
-        // Once ready, an unreachable server is presented as offline over the last observed state.
-        setGate((previous) =>
-          previous.kind === "ready" && next.kind === "unreachable" ? previous : next,
-        );
-        if (next.kind !== "unreachable") transport.reset();
-      }),
-    [],
-  );
-  useEffect(() => {
-    void check();
-  }, [check]);
+  // Keep probing while checking, waiting, unreachable or offline; reconnection refreshes state.
+  const probing =
+    gate.kind === "pending" ||
+    gate.kind === "unreachable" ||
+    gate.kind === "checking" ||
+    gate.kind === "incompatible" ||
+    current.kind === "offline";
+  const { refresh: check } = useRefreshSchedule({
+    read: evaluate,
+    apply: (next: Gate) => {
+      // Once ready, an unreachable server is presented as offline over the last observed state.
+      setGate((previous) =>
+        previous.kind === "ready" && next.kind === "unreachable" ? previous : next,
+      );
+      if (next.kind !== "unreachable") transport.reset();
+    },
+    intervalMs: recheckMs,
+    watching: probing,
+  });
   useEffect(() => {
     if (current.kind === "access-lost" || current.kind === "incompatible") void check();
   }, [current.kind, check]);
@@ -109,18 +115,6 @@ export function ClientGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (unapproved) forgetColors(profileStorage());
   }, [unapproved]);
-  // Keep probing while waiting, unreachable or offline; reconnection refreshes state.
-  const probing =
-    gate.kind === "pending" ||
-    gate.kind === "unreachable" ||
-    gate.kind === "checking" ||
-    gate.kind === "incompatible" ||
-    current.kind === "offline";
-  useEffect(() => {
-    if (!probing) return;
-    const timer = setInterval(() => void check(), recheckMs);
-    return () => clearInterval(timer);
-  }, [probing, check]);
 
   if (gate.kind === "checking")
     return (

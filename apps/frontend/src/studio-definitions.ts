@@ -46,8 +46,8 @@ const sameRead = <V>(a: StudioRead<V>, b: StudioRead<V>) =>
 
 /**
  * The saved Flows and saved Agents of one Studio session. The server delivers both lists through
- * the window's Studio scope, which is held only while Studio is open and therefore gates
- * mutations like every other held scope. HTTP answers never mark the live scope synchronized.
+ * the window's Studio scope; while Studio is open its hold gates mutations like every other
+ * gating scope. HTTP answers never mark the live scope synchronized.
  */
 export function createStudioDefinitions(
   live: StudioLive,

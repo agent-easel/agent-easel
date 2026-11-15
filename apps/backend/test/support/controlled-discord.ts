@@ -872,6 +872,11 @@ export async function startControlledDiscord() {
     faultEdits(...faults: MessageFault[]) {
       editFaults.push(...faults);
     },
+    /** Later message creates and edits meet no faults until new ones are queued. */
+    clearFaults() {
+      messageFaults.length = 0;
+      editFaults.length = 0;
+    },
     /** Resolves once `matches` holds for Discord's messages, re-checked after every request. */
     messagesWhen(matches: (messages: readonly CreatedMessage[]) => boolean) {
       return changed.wait(() => matches(created));
