@@ -1,8 +1,9 @@
-import { assert, expect, it, type TestContext } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import {
   openFactoryWithApprovedT3,
   readAgentAfterRestart,
   sampleAgentInput,
+  savedAgentWhileCapabilitiesFail,
 } from "./support/domain-setup.ts";
 import { subscribe } from "./support/live.ts";
 
@@ -132,15 +133,6 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
     updatedAt: updated.value.updatedAt,
   });
 });
-
-/** A saved Agent with T3 connected but its capability reads failing, and the reads sent so far. */
-async function savedAgentWhileCapabilitiesFail(context: TestContext) {
-  const { factory, t3 } = await openFactoryWithApprovedT3(context);
-  const saved = await factory.createAgent(sampleAgentInput());
-  assert(saved.ok);
-  t3.capabilitiesAvailable = false;
-  return { factory, t3, agent: saved.value, capabilityReads: t3.capabilityReads };
-}
 
 it("listing Agents answers from saved definitions without calling T3", async (context) => {
   // Arrange
