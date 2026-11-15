@@ -139,8 +139,9 @@ launch-choices subscription carrying the Project catalog and Flows with their re
 Servers also serve a Studio subscription carrying every current Agent with its
 settings status and every current Flow with its readiness; Agent usage is derived from those
 Flows. A window holds it for its lifetime, because Agent reporting state and the command palette
-read it outside Studio. Like every held scope it gates the window's mutations, so Studio writes,
-and other product writes, wait while it is unsynchronized; drafts stay editable. A refused or failed subscription stays
+read it outside Studio; those reads never gate mutations or show synchronizing, like theme colors.
+While Studio is open its hold gates the window's mutations like every other gating scope, so Studio
+writes, and other product writes, wait while it is unsynchronized; drafts stay editable. A refused or failed subscription stays
 synchronizing, with no HTTP fallback, and HTTP answers never mark the scope synchronized. Each read of a view covers navigation and those Runs in one
 read transaction, and its changes travel in one delivery that the window applies at once,
 so one commit's lifecycle, attention and report changes appear together in Run detail and

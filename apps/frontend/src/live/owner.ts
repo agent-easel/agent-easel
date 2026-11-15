@@ -22,9 +22,9 @@ export type LivePart =
   | { readonly kind: "navigation" }
   | { readonly kind: "run"; readonly runId: string }
   | { readonly kind: "launchChoices" }
-  /** Studio's saved Agents and Flows, held for the window's lifetime. */
+  /** Studio's saved Agents and Flows: read for the window's lifetime, gating while Studio is open. */
   | { readonly kind: "studio" }
-  /** Theme colors: optional presentation that never gates mutations. */
+  /** Theme colors: optional presentation, held only for reading. */
   | { readonly kind: "appearance" };
 
 export type LiveWatch =
@@ -127,6 +127,8 @@ type AnyScope = {
 type Entry = {
   readonly scope: AnyScope;
   refs: number;
+  /** Holders that gate mutations; a scope held only for reading never shows synchronizing. */
+  gating: number;
   view: LiveScopeView<unknown>;
   linger: (() => void) | undefined;
   /** The current subscription delivered this scope's snapshot; changes apply only after it. */
@@ -208,16 +210,28 @@ export class LiveOwner {
     return (this.entries.get(key)?.view ?? emptyView) as LiveScopeView<V>;
   }
 
-  acquire<M extends LiveMessage, V>(scope: LiveScope<M, V>): () => void {
+  /**
+   * Holds `scope` until the returned function is called. A holder that only reads (`gates:
+   * false`) receives the same view, but the scope gates mutations only while a gating holder
+   * holds it.
+   */
+  acquire<M extends LiveMessage, V>(
+    scope: LiveScope<M, V>,
+    { gates = true }: { readonly gates?: boolean } = {},
+  ): () => void {
+    const gating = gates ? 1 : 0;
     let entry = this.entries.get(scope.key);
     if (entry) {
       entry.linger?.();
       entry.linger = undefined;
       entry.refs++;
+      entry.gating += gating;
+      if (gates) this.changed();
     } else {
       entry = {
         scope: scope as unknown as AnyScope,
         refs: 1,
+        gating,
         view: emptyView,
         linger: undefined,
         established: false,
@@ -232,8 +246,10 @@ export class LiveOwner {
     return () => {
       if (released) return;
       released = true;
+      held.gating -= gating;
       if (--held.refs === 0)
         held.linger = this.environment.setTimer(() => this.drop(held), releaseLingerMs);
+      if (gates) this.changed();
     };
   }
 
@@ -463,15 +479,10 @@ export class LiveOwner {
     session?.handle?.close();
   }
 
-  /** Theme colors are presentation only: they neither gate mutations nor show synchronizing. */
+  /** Scopes held only for reading neither gate mutations nor show synchronizing. */
   private settled() {
     for (const entry of this.entries.values())
-      if (
-        entry.scope.part.kind !== "appearance" &&
-        !entry.view.synchronized &&
-        !terminal(entry.view.error)
-      )
-        return false;
+      if (entry.gating > 0 && !entry.view.synchronized && !terminal(entry.view.error)) return false;
     return true;
   }
 

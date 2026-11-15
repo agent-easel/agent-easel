@@ -14,5 +14,8 @@ export const studioScope: LiveScope<StudioLiveMessage, StudioDefinitions> = {
   apply: applyStudioChange,
 };
 
-/** The window holds the Studio scope for its lifetime: reporting state and the palette read it. */
-export const useLiveStudio = () => useLiveScope(studioScope);
+/**
+ * Reads Studio's definitions outside Studio, for reporting state and the palette. Readers keep
+ * the scope current without gating mutations; only an open Studio gates them.
+ */
+export const useLiveStudio = () => useLiveScope(studioScope, { gates: false });

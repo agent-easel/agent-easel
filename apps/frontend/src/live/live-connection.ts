@@ -79,14 +79,15 @@ export function liveOwner(): LiveOwner {
  */
 export function useLiveScope<M extends { readonly _tag: string }, V>(
   scope: LiveScope<M, V>,
+  { gates = true }: { readonly gates?: boolean } = {},
 ): LiveScopeView<V> {
   const live = liveOwner();
-  useEffect(() => live.acquire(scope), [live, scope]);
+  useEffect(() => live.acquire(scope, { gates }), [live, scope, gates]);
   return useSyncExternalStore(live.subscribe, () => live.view<V>(scope.key));
 }
 
 /** The backend's authoritative T3 connection status for this window. */
 export const useLiveConnectionStatus = () => useLiveScope(connectionScope);
 
-/** Theme-color status and presentation; mount only for servers that serve it. */
-export const useLiveAppearance = () => useLiveScope(appearanceScope);
+/** Theme-color status and presentation, which never gate mutations; mount only for servers that serve it. */
+export const useLiveAppearance = () => useLiveScope(appearanceScope, { gates: false });
