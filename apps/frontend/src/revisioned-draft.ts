@@ -1,3 +1,4 @@
+import type { ValidationIssue } from "@t3-factory/contracts";
 import { ApiError } from "./api.ts";
 import type { StudioRead } from "./studio-definitions.ts";
 import { OfflineError } from "./transport.ts";
@@ -52,6 +53,8 @@ export interface RevisionedDraftState<D, C> {
   /** How the last save ended; null before the first save. */
   readonly saveOutcome: SaveOutcome | null;
   readonly error: string;
+  /** Factory's validation issues behind `error`. */
+  readonly issues: readonly ValidationIssue[];
   readonly conflict: RevisionConflict<D>;
   /** A clean draft switched to this revision saved elsewhere, until the next change. */
   readonly updatedTo: number | null;
@@ -87,9 +90,9 @@ function outcomeOf(cause: unknown): SaveOutcome {
  * compared and loaded or kept; notices wait while a save is pending; the draft's own saves are
  * recognised as its own, also after a lost reply; a removal is noted only after a synchronized
  * read showed the definition. A draft without a saved revision follows nothing until its own
- * Create. Each editor supplies its content projection, its save and removal calls and its
- * extras, publishes its own snapshot through `view` and calls `reconcile` from its Studio
- * subscription.
+ * Create or a `load`. Each editor supplies its content projection, its save and removal calls
+ * and its extras, publishes its own snapshot through `view` and calls `reconcile` from its
+ * Studio subscription.
  */
 export function createRevisionedDraft<D extends Revisioned, C extends object, S>(config: {
   readonly saved: D | null;
@@ -98,13 +101,18 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** This definition's kind in Studio's saved definitions. */
   readonly list: () => StudioRead<readonly D[]>;
   readonly view: (state: RevisionedDraftState<D, C>) => S;
+  /** While true, a clean draft waits to adopt a newer revision; `reconcile` adopts it later. */
+  readonly hold?: () => boolean;
+  /** Runs whenever a saved revision replaces the draft. */
+  readonly onAdopt?: () => void;
 }) {
-  const { contentOf, list, view } = config;
+  const { contentOf, list, view, hold, onAdopt } = config;
   let saved = config.saved;
   let content = config.content;
   let baseline = content;
   let lastSave: { readonly outcome: SaveOutcome; readonly content: C } | null = null;
   let error = "";
+  let issues: readonly ValidationIssue[] = [];
   let conflict: RevisionConflict<D> = noConflict;
   /** The newer revision a dirty draft names, once Studio holds it. */
   let newest: D | null = null;
@@ -134,6 +142,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       saving,
       saveOutcome: lastSave?.outcome ?? null,
       error,
+      issues,
       conflict,
       updatedTo,
       removed,
@@ -147,6 +156,10 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     snapshot = view(state());
     listeners.forEach((notify) => notify());
   }
+  function showError(message: string, found: readonly ValidationIssue[] = []) {
+    error = message;
+    issues = found;
+  }
   function closeConflict() {
     conflict = noConflict;
     newest = null;
@@ -157,7 +170,16 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     content = contentOf(next);
     baseline = content;
     closeConflict();
-    error = "";
+    showError("");
+    onAdopt?.();
+  }
+  /** Shows why Factory refused a save; a stale save also enters the revision conflict. */
+  function refused(cause: unknown, fallback: string) {
+    if (!(cause instanceof ApiError))
+      return showError(cause instanceof Error ? cause.message : fallback);
+    showError(cause.message, cause.detail.issues);
+    // Reconciling afterwards names the newer revision once Studio holds it.
+    if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */
   function noteAbsence() {
@@ -165,7 +187,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     removed = true;
     closeConflict();
     updatedTo = null;
-    error = "";
+    showError("");
     removalError = "";
     return true;
   }
@@ -179,12 +201,13 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       baseline = contentOf(latest);
     }
     lastSave = { ...lastSave, outcome: "succeeded" };
-    error = "";
+    showError("");
     return true;
   }
   /** A newer revision replaces a clean draft and is named beside a dirty one. */
   function follow(latest: D): boolean {
     if (!isDirty()) {
+      if (hold?.()) return false;
       adopt(latest);
       updatedTo = latest.revision;
       return true;
@@ -204,7 +227,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     let changed = false;
     if (conflict.status === "comparing" && read.error) {
       conflict = { status: "detected", revision: null };
-      error = "Could not load the latest revision. Try again.";
+      showError("Could not load the latest revision. Try again.");
       changed = true;
     }
     if (!read.synchronized || !read.value) return changed;
@@ -248,9 +271,17 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       updatedTo = null;
       publish();
     },
-    /** Refuses a save before sending it, such as invalid content. */
-    refuse(message: string) {
-      error = message;
+    /** Replaces the draft with saved `definition`, such as the one an editor opened. */
+    load(definition: D) {
+      adopt(definition);
+      publish();
+    },
+    /**
+     * Shows a problem the editor found itself, such as invalid content or a failed check, in place
+     * of the last error; an empty message clears it.
+     */
+    report(message: string, found: readonly ValidationIssue[] = []) {
+      showError(message, found);
       publish();
     },
     /**
@@ -261,7 +292,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       if (!state().canSave) return undefined;
       const sent = { outcome: "pending" as const, content: request.submitted };
       lastSave = sent;
-      error = "";
+      showError("");
       updatedTo = null;
       publish();
       try {
@@ -274,11 +305,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         const outcome = outcomeOf(cause);
         lastSave = { ...sent, outcome };
         if (removed) return undefined;
-        if (outcome === "unknown") error = request.unknownMessage;
-        else error = cause instanceof Error ? cause.message : request.fallback;
-        // Reconciling afterwards names the newer revision once Studio holds it.
-        if (cause instanceof ApiError && cause.detail.code === "conflict")
-          conflict = { status: "detected", revision: null };
+        if (outcome === "unknown") showError(request.unknownMessage);
+        else refused(cause, request.fallback);
         return undefined;
       } finally {
         apply();
@@ -289,7 +317,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     acknowledgeUnknownSave() {
       if (lastSave?.outcome !== "unknown") return;
       lastSave = null;
-      error = "";
+      showError("");
       publish();
     },
     /** Removes the saved definition; an accepted removal leaves no unsaved changes. */
@@ -325,7 +353,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     /** Shows the newest revision beside the draft; until Studio holds it, it is shown on arrival. */
     compare() {
       if (conflict.status !== "detected") return;
-      error = "";
+      showError("");
       conflict = newest ? { status: "compared", latest: newest } : { status: "comparing" };
       apply();
       publish();
@@ -340,7 +368,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         saved = latest;
         baseline = contentOf(latest);
         closeConflict();
-        error = "";
+        showError("");
       });
     },
   };

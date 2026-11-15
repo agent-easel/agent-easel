@@ -11,7 +11,6 @@ import type {
 import { api, ApiError } from "../../src/api.ts";
 import { createFlowDraft } from "../../src/flow-draft.ts";
 import { createStudioDefinitions } from "../../src/studio-definitions.ts";
-import { OfflineError } from "../../src/transport.ts";
 import { savedAgent } from "./agent-draft.ts";
 import { envelope, liveHarness } from "./live.ts";
 
@@ -23,8 +22,6 @@ interface MemoryFactory extends Operations {
   latest(): FlowDraft;
   /** Another client saves the Flow, appending the next revision. */
   saveElsewhere(name: string, readiness?: FlowReadiness): FlowDraft;
-  /** Factory commits this editor's held save of `name`, whose reply has not been given yet. */
-  commit(name: string): FlowDraft;
 }
 
 const ready: FlowReadiness = { ready: true, issues: [] };
@@ -42,9 +39,6 @@ export const notReady: FlowReadiness = {
 
 export const rejection = (detail: Partial<OperationError> = {}) =>
   new ApiError({ code: "validation", message: "Flow is invalid.", issues: [], ...detail });
-
-/** A save whose request may have reached Factory before the connection was lost. */
-export const lostReply = () => new OfflineError("unknown");
 
 export function memoryFactory(): MemoryFactory {
   let removed = false;
@@ -80,7 +74,6 @@ export function memoryFactory(): MemoryFactory {
   return {
     latest: () => latest,
     saveElsewhere: (name, readiness = ready) => append({ name, readiness }),
-    commit: (name) => append({ name }),
     updateFlow: vi.fn<FlowOperations["updateFlow"]>(
       async (_id, { expectedRevision, name, graph, workspace }) => {
         if (removed) throw rejection({ code: "not_found", message: "Flow was removed." });

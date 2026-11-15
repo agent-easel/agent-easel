@@ -1,9 +1,16 @@
-import { held } from "./support/flow-draft.ts";
 import type { AgentDefinition } from "@t3-factory/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { savedAgent } from "./support/agent-draft.ts";
+import {
+  comparedFlow,
+  editedFlow,
+  held,
+  openedFlow,
+  rejection,
+  savingFlow,
+} from "./support/flow-draft.ts";
 import {
   agentDraft,
   comparedAgent,
@@ -179,17 +186,63 @@ it("a failure mentioning a newer revision without a conflict code does not raise
   });
 });
 
-it("an accepted delete leaves no unsaved changes", async () => {
+it("a rejected save keeps the edits unsaved and shows Factory's message and issues", async () => {
   // Arrange
-  const { draft, factory } = editedAgent();
+  const { draft, factory } = editedFlow("Edited");
+  const issue = { code: "required", path: "name", message: "Name is required." };
+  factory.updateFlow.mockRejectedValueOnce(rejection({ issues: [issue] }));
 
   // Act
-  const deleted = await draft.remove();
+  await draft.save();
 
   // Assert
-  expect(deleted).toBe(true);
-  expect(factory.removeAgent).toHaveBeenCalledWith("agent");
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { revision: 1 },
+    content: { name: "Edited" },
+    dirty: true,
+    saving: false,
+    saveOutcome: "rejected",
+    error: "Flow is invalid.",
+    issues: [issue],
+    conflict: { status: "none" },
+  });
+});
+
+it("a second save is not sent while the first is in flight", async () => {
+  // Arrange
+  const { draft, factory } = editedFlow();
+  held(factory.updateFlow);
+  void draft.save();
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.updateFlow).toHaveBeenCalledTimes(1);
+  expect(draft.getSnapshot().saving).toBe(true);
+});
+
+it("an accepted removal clears unsaved changes before its caller navigates", async () => {
+  // Arrange
+  const { draft, factory } = editedFlow("Mine");
+  const reported: { dirty: boolean; removing: boolean }[] = [];
+  const unsubscribe = draft.subscribe(() => {
+    const { dirty, removing } = draft.getSnapshot();
+    reported.push({ dirty, removing });
+  });
+
+  // Act
+  const removed = await draft.remove();
+
+  // Assert
+  expect(removed).toBe(true);
   expect(draft.getSnapshot()).toMatchObject({ dirty: false, removing: false, removalError: "" });
+  expect(factory.removeFlow).toHaveBeenCalledWith("flow");
+  expect(reported).toStrictEqual([
+    { dirty: true, removing: true },
+    { dirty: false, removing: false },
+  ]);
+  unsubscribe();
 });
 
 it("a rejected delete keeps the draft unsaved and its failure separate from the save error", async () => {
@@ -414,6 +467,24 @@ it("keeping the edits against a revision that is no longer the newest changes no
   });
 });
 
+it("taking a compared revision that is no longer the newest changes nothing", () => {
+  // Arrange
+  const { draft, factory, published } = comparedFlow();
+  factory.saveElsewhere("Theirs again");
+  published();
+
+  // Act
+  draft.takeLatest(2);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { revision: 1 },
+    content: { name: "Mine" },
+    dirty: true,
+    conflict: { status: "compared", latest: { revision: 3 } },
+  });
+});
+
 it("an own save delivered before its reply is acknowledged without a saved-elsewhere notice", async () => {
   // Arrange
   const setup = editedAgent();
@@ -506,6 +577,23 @@ it("a removal elsewhere before a late save success keeps the Agent removed", asy
     saved: { revision: 3 },
     content: { name: "Edited" },
     saving: false,
+  });
+});
+
+it("a removal keeps revision resolution dismissed after a late save conflict", async () => {
+  // Arrange
+  const { draft, removedElsewhere, reply, saving } = savingFlow();
+  await removedElsewhere();
+
+  // Act
+  reply.fail(rejection({ code: "conflict", message: "A stale save." }));
+  await saving;
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    removed: true,
+    conflict: { status: "none" },
+    error: "",
   });
 });
 
@@ -653,6 +741,28 @@ it("an own delete delivered before its reply is not a removal elsewhere", async 
     removed: false,
     dirty: false,
     removing: false,
+  });
+});
+
+it("a failed removal of a definition another client removed meanwhile retains a clean draft", async () => {
+  // Arrange
+  const { draft, factory, removedElsewhere } = openedFlow();
+  const reply = held(factory.removeFlow);
+  const removing = draft.remove();
+  await removedElsewhere();
+
+  // Act
+  reply.fail(new OfflineError("unknown"));
+  const accepted = await removing;
+
+  // Assert
+  expect(accepted).toBe(false);
+  expect(draft.getSnapshot()).toMatchObject({
+    removed: true,
+    dirty: false,
+    removing: false,
+    canSave: false,
+    removalError: "",
   });
 });
 

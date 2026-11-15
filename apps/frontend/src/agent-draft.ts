@@ -223,7 +223,7 @@ export function createAgentDraft(
       if (!canSave) return undefined;
       const request = saveRequest(saved, content, source);
       if (!("error" in request)) return draft.save(request);
-      draft.refuse(request.error);
+      draft.report(request.error);
       return undefined;
     },
     compare: draft.compare,
