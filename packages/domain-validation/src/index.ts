@@ -13,7 +13,12 @@ import type {
   WaitDuration,
   WaitUnit,
 } from "@t3-factory/contracts";
-import { effectiveExits, inheritedExits, type IssueReporter } from "./block-exits.ts";
+import {
+  CONDITION_OTHERWISE,
+  effectiveExits,
+  inheritedExits,
+  type IssueReporter,
+} from "./block-exits.ts";
 
 export const TASK_TITLE_LIMIT = 500;
 
@@ -187,6 +192,56 @@ function waitReadiness(
     add("wait_duration_range", `${path}.duration`, `${label} must wait from 1 minute to 7 days.`);
 }
 
+/**
+ * A Condition is ready when every rule has a distinct, non-blank name and a threshold, and every
+ * output, Otherwise included, is selected for some arrival number: thresholds strictly descend and
+ * are at least 2. Each finding names its rule row.
+ */
+function conditionReadiness(
+  block: Extract<FlowBlockInput, { kind: "condition" }>,
+  path: string,
+  add: IssueReporter,
+) {
+  const label = blockLabel(block);
+  const names = new Set([CONDITION_OTHERWISE.name]);
+  let lowest = Infinity;
+  block.rules.forEach((rule, j) => {
+    const rulePath = `${path}.rules.${j}`;
+    const name = rule.name.trim();
+    const row = `${label}: rule ${j + 1}${name ? ` "${name}"` : ""}`;
+    if (!name)
+      add("condition_rule_name_required", `${rulePath}.name`, `${row} needs an output name.`);
+    else if (names.has(name))
+      add(
+        "condition_rule_name_duplicate",
+        `${rulePath}.name`,
+        `${row} has the same name as another output of the Condition. Rename it.`,
+      );
+    names.add(name);
+    if (rule.fromArrival === null) {
+      add(
+        "condition_threshold_required",
+        `${rulePath}.fromArrival`,
+        `${row} needs the arrival number it applies from.`,
+      );
+      return;
+    }
+    if (rule.fromArrival >= lowest)
+      add(
+        "condition_rule_shadowed",
+        `${rulePath}.fromArrival`,
+        `${row} is never selected: an earlier rule already matches from arrival ${lowest}. Order rules from the highest arrival number down.`,
+      );
+    else if (rule.fromArrival === 1)
+      add(
+        "condition_threshold_first_arrival",
+        `${rulePath}.fromArrival`,
+        `${row} matches every arrival from the first, so Otherwise is never selected. Use arrival 2 or later.`,
+      );
+    lowest = Math.min(lowest, rule.fromArrival);
+  });
+}
+
 /** Names, Agent references and exits of one block. */
 function blockReadiness(
   block: FlowBlockInput,
@@ -197,6 +252,7 @@ function blockReadiness(
   const label = blockLabel(block);
   if (!block.name.trim()) add("block_name_required", `${path}.name`, `Name block ${block.id}.`);
   if (block.kind === "wait") waitReadiness(block, path, add);
+  if (block.kind === "condition") conditionReadiness(block, path, add);
   if (block.kind === "continuation" && !block.prompt.trim())
     add(
       "continuation_prompt_required",
@@ -296,9 +352,59 @@ function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
 }
 
 /**
+ * Every directed cycle through a Condition that passes only Conditions and Continuations blocks
+ * Start, whichever outputs its wires leave by: a Continuation may already be used and pass messages
+ * straight through, so such a loop could circle without any work, answer or wait. One issue per
+ * Condition on such a cycle, naming one shortest cycle through it. Loops through an Agent, a Human
+ * step or a Wait stay legal, as do cycles of Continuations alone.
+ */
+function conditionCycleReadiness(graph: FlowGraphInput, add: IssueReporter) {
+  const passThrough = new Map(
+    graph.blocks.flatMap((block) =>
+      block.kind === "condition" || block.kind === "continuation" ? [[block.id, block]] : [],
+    ),
+  );
+  const next = new Map<string, string[]>();
+  for (const edge of graph.connections)
+    if (passThrough.has(edge.sourceBlockId) && passThrough.has(edge.targetBlockId))
+      next.set(edge.sourceBlockId, [...(next.get(edge.sourceBlockId) ?? []), edge.targetBlockId]);
+  graph.blocks.forEach((block, i) => {
+    if (block.kind !== "condition") return;
+    const cycle = shortestCycle(block.id, next);
+    if (!cycle) return;
+    const names = cycle.map((id) => blockLabel(passThrough.get(id)!));
+    add(
+      "condition_cycle",
+      `graph.blocks.${i}`,
+      `${blockLabel(block)} loops back to itself through only Conditions and Continuations (${[...names, names[0]].join(" → ")}). Route the loop through an Agent, Human step or Wait.`,
+    );
+  });
+}
+
+/** The blocks of one shortest directed cycle from `start` back to it, in order, if any. */
+function shortestCycle(start: string, next: ReadonlyMap<string, readonly string[]>) {
+  const previous = new Map<string, string>();
+  const queue = [start];
+  for (let at = 0; at < queue.length; at++) {
+    const current = queue[at]!;
+    for (const target of next.get(current) ?? []) {
+      if (target === start) {
+        const cycle = [current];
+        while (cycle[0] !== start) cycle.unshift(previous.get(cycle[0]!)!);
+        return cycle;
+      }
+      if (previous.has(target)) continue;
+      previous.set(target, current);
+      queue.push(target);
+    }
+  }
+  return undefined;
+}
+
+/**
  * The Agent blocks whose worker threads a Continuation can continue: the nearest Agent on each
- * incoming path, walking back through Human steps, Waits and Continuations, which have no thread of their
- * own. A Flow input targets only Agents, so every path a Run can take into a Continuation passes
+ * incoming path, walking back through Human steps, Waits, Conditions and Continuations, which have
+ * no thread of their own. A Flow input targets only Agents, so every path a Run can take into a Continuation passes
  * one; at run time the arriving message's own worker decides.
  */
 export function continuationSources(graph: FlowGraphInput, blockId: string): string[] {
@@ -348,6 +454,7 @@ export function flowReadiness(
   });
   graph.blocks.forEach((block, i) => blockReadiness(block, `graph.blocks.${i}`, agents, add));
   connectionReadiness(graph, agents, add);
+  conditionCycleReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
   return { ready: issues.length === 0, issues };
 }
@@ -382,6 +489,7 @@ export function resolveAgentModel(
 }
 
 export {
+  CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
   effectiveExits,
   inheritedExits,

@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type {
-  FlowBlock,
-  FlowGraph,
-  FlowWorkspace,
-  RunDefinitions,
-  WaitUnit,
+import {
+  CONDITION_OTHERWISE_ID,
+  type FlowBlock,
+  type FlowGraph,
+  type FlowWorkspace,
+  type RunDefinitions,
+  type WaitUnit,
 } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
 
@@ -45,6 +46,13 @@ type ExitRow = {
   name: string;
   description: string;
   message_required: number;
+};
+type ConditionRuleRow = {
+  flow_revision_id: string;
+  block_id: string;
+  rule_id: string;
+  name: string;
+  from_arrival: number | null;
 };
 type HiddenExitRow = { flow_revision_id: string; block_id: string; exit_id: string };
 type ConnectionRow = {
@@ -100,6 +108,14 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
           ${block.kind === "continuation" ? block.prompt : null},
           ${block.kind === "agent" ? block.revisitInstruction : null}, ${block.position.x}, ${block.position.y},
           ${duration?.amount ?? null}, ${duration?.unit ?? null})`;
+        if (block.kind === "condition")
+          yield* Effect.forEach(
+            block.rules,
+            (rule, ruleOrdinal) =>
+              sql`INSERT INTO flow_revision_condition_rules (flow_revision_id, block_id, rule_id, ordinal, name, from_arrival)
+              VALUES (${revisionId}, ${block.id}, ${rule.id}, ${ruleOrdinal}, ${rule.name}, ${rule.fromArrival})`,
+            { discard: true },
+          );
         if (block.kind !== "agent") return;
         yield* Effect.forEach(
           block.localExits,
@@ -150,9 +166,21 @@ const toBlock = (
   row: BlockRow,
   exits: readonly ExitRow[],
   hidden: readonly HiddenExitRow[],
+  rules: readonly ConditionRuleRow[],
 ): FlowBlock => {
   const base = { id: row.block_id, name: row.name, position: { x: row.x, y: row.y } };
   if (row.kind === "human") return { ...base, kind: "human" };
+  if (row.kind === "condition")
+    return {
+      ...base,
+      kind: "condition",
+      rules: rules.map((rule) => ({
+        id: rule.rule_id,
+        name: rule.name,
+        fromArrival: rule.from_arrival,
+      })),
+      otherwise: { id: CONDITION_OTHERWISE_ID },
+    };
   if (row.kind === "wait")
     return {
       ...base,
@@ -210,16 +238,18 @@ const withGraphs = Effect.fnUntraced(function* (
 ) {
   if (!revisions.length) return [];
   const ids = sql.in(revisions.map((revision) => revision.id));
-  const [blocks, exits, hidden, connections, targets] = yield* Effect.all([
+  const [blocks, exits, hidden, rules, connections, targets] = yield* Effect.all([
     sql<BlockRow>`SELECT * FROM flow_revision_blocks WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<ExitRow>`SELECT * FROM flow_revision_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<HiddenExitRow>`SELECT * FROM flow_revision_hidden_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+    sql<ConditionRuleRow>`SELECT * FROM flow_revision_condition_rules WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<ConnectionRow>`SELECT * FROM flow_revision_connections WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<TargetRow>`SELECT * FROM flow_revision_input_targets WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
   ]);
   const blocksByRevision = groupBy(blocks, byRevision);
   const exitsByBlock = groupBy(exits, byBlock);
   const hiddenByBlock = groupBy(hidden, byBlock);
+  const rulesByBlock = groupBy(rules, byBlock);
   const connectionsByRevision = groupBy(connections, byRevision);
   const targetsByRevision = groupBy(targets, byRevision);
   return revisions.map((revision): FlowRevision => ({
@@ -232,6 +262,7 @@ const withGraphs = Effect.fnUntraced(function* (
           block,
           exitsByBlock.get(byBlock(block)) ?? [],
           hiddenByBlock.get(byBlock(block)) ?? [],
+          rulesByBlock.get(byBlock(block)) ?? [],
         ),
       ),
       connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({

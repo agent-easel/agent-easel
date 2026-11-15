@@ -66,15 +66,15 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   });
 });
 
-it("a protocol 12 client, which cannot read Agents without a model, is told to update itself while the current client is served", async (c) => {
+it("a protocol 14 client, which cannot read Condition blocks, is told to update itself while the current client is served", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const current = await server.approved("Laptop");
-  assert((await current.send("GET", "/api/agents")).body.ok);
-  const old = server.client("desktop", { protocol: 12, minimum: 9 });
+  assert((await current.send("GET", "/api/flows")).body.ok);
+  const old = server.client("desktop", { protocol: 14, minimum: 13 });
 
   // Act
-  const reply = await old.send("GET", "/api/agents");
+  const reply = await old.send("GET", "/api/flows");
 
   // Assert
   expect(reply.status).toBe(426);
@@ -84,15 +84,15 @@ it("a protocol 12 client, which cannot read Agents without a model, is told to u
 
 it.for([
   [
-    12,
+    14,
     {
       status: 426,
       body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
     },
   ],
-  [13, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [15, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 13",
+  "the current client, which reads and saves Condition blocks, refuses a protocol %i server only when it predates 15",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });

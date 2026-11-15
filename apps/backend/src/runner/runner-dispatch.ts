@@ -94,6 +94,8 @@ export function openRunnerDispatch(
         if (arrival) yield* scheduleWait(arrival);
         return;
       }
+      // Condition routing is not implemented yet: its Handoff stays pending.
+      if (kind === "condition") return;
       return yield* prepareAgentHandoff(current, handoff);
     });
   }

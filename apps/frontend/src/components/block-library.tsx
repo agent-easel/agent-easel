@@ -237,6 +237,7 @@ const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
+  condition: "border bg-muted text-muted-foreground",
 };
 
 /** The ghost previews the block a drop would add as it reads before it is connected. */

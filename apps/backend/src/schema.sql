@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: appearance_snapshot_without_grant
+-- Newest applied migration: condition_blocks
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -431,7 +431,7 @@ CREATE TABLE "flow_revision_blocks" (
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
   block_id TEXT NOT NULL,
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait')),
+  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition')),
   name TEXT NOT NULL,
   -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),
@@ -454,6 +454,23 @@ CREATE TABLE "flow_revision_blocks" (
 CREATE TRIGGER immutable_flow_revision_block_delete BEFORE DELETE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_block_update BEFORE UPDATE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_condition_rules (
+  flow_revision_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL CHECK (rule_id <> 'otherwise'),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  name TEXT NOT NULL,
+  from_arrival INTEGER CHECK (from_arrival IS NULL OR
+    (typeof(from_arrival) = 'integer' AND from_arrival BETWEEN 1 AND 9007199254740991)),
+  PRIMARY KEY (flow_revision_id, block_id, rule_id),
+  UNIQUE (flow_revision_id, block_id, ordinal),
+  FOREIGN KEY (flow_revision_id, block_id) REFERENCES flow_revision_blocks(flow_revision_id, block_id)
+);
+
+CREATE TRIGGER immutable_flow_revision_condition_rule_delete BEFORE DELETE ON flow_revision_condition_rules BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_condition_rule_update BEFORE UPDATE ON flow_revision_condition_rules BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE "flow_revision_connections" (
   flow_revision_id TEXT NOT NULL,

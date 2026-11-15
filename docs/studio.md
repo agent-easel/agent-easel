@@ -221,6 +221,16 @@ a duration. It has one input and one unnamed output (**after the wait**) whose *
 **finish here**. A Wait has no Agent, prompt, execution settings, reports or worker, and the Flow input cannot connect to
 it.
 
+**Condition.** A Condition routes each arrival by its arrival number at that block: an ordered list of rules
+**From arrival *N* onward → *output***, each with its own stably identified, named output, followed by the fixed, mandatory
+**Otherwise** output, which cannot be renamed, removed or reordered. The first rule the arrival number reaches selects its
+output; when none does, Otherwise is selected, as the normal route rather than an error. A Condition with no rules passes every
+arrival on through Otherwise. A Condition has no Agent, prompt, execution settings, reports or worker, and the Flow input
+cannot connect to it. Until Studio's dedicated Condition editing exists, the canvas shows a Condition with its rule count and one
+output port per rule and Otherwise, and its panel lists each output read-only with its threshold and recipients; Conditions are
+authored through the [Flow graph](#graph-shape) or the [MCP authoring tools](t3-integration.md#authoring-tools). The block
+library offers no Condition yet, and a Run does not route through one yet.
+
 ### Automatic layout and canvas view
 
 **Auto-arrange** lays out the draft left to right (Flow input leftmost, correction edges returning left, including disconnected blocks and loops, with orthogonal routes) and fits the
@@ -252,7 +262,7 @@ content, baseline revision and placed Agent revisions it was requested for: an a
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
-the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt and unreachable blocks. Each names the block, the exit and the problem, and selecting one
+the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
 inspects its block. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
@@ -461,24 +471,37 @@ An Agent block adds `agentId`, `hiddenExitIds` (inherited exit IDs it hides), `l
 and empty when omitted or whitespace-only. Readiness never requires it or warns about it, even on a block that cannot be revisited. A Human block has
 no exit fields. A Wait block adds `duration`: `{amount, unit}` with any finite number as `amount` and `unit` `minutes`,
 `hours` or `days`, or `null` while the draft has none; a Continuation adds `prompt` (stored trimmed, up to 120,000 characters, empty only in a draft). Each has one fixed, unnamed exit with ID `output`. An exit is `{id, name, description, messageRequired}`, with IDs scoped to their block; runtime consumers enforce a non-empty message when
-`messageRequired` is true. Connections identify source block, exit ID and target block: a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, and an Agent block's
+`messageRequired` is true. A Condition adds `rules`, an ordered array of `{id, name, fromArrival}`, and
+`otherwise: {id: "otherwise"}`. A rule `name` is stored trimmed and may be blank in a draft; `fromArrival` is a whole number from 1 to
+9,007,199,254,740,991, the largest integer JSON numbers and the stored definition hold exactly, or `null` while the draft has none. Its
+outputs are the rules in order, then **Otherwise**; a rule ID is unique within the block and never `otherwise`. Connections identify source block, exit ID and target block: a Human block's exit is `approve` or `request-changes`, a Wait's or Continuation's is `output`, a Condition's is a rule ID or `otherwise`, and an Agent block's
 exit is resolved against its Agent by readiness, not by the save. No block execution settings or prompt overrides are accepted.
 
 #### Flow input block
 
-Every graph carries exactly one `flowInput`: a canvas `position` and the `targetBlockIds` of the Agent blocks it feeds (each at most once). It has no work execution state; on a Run's [execution canvas](runs.md#execution-canvas) the Flow input card may carry the Run's [title generation](runs.md#run-title-generation) line, which describes the Run's title, not Block work, and Studio's Flow editor shows nothing of it. Targets are distinct Agent blocks; Human and Continuation targets are rejected. A Wait target saves but is a readiness gap (`flow_input_wait`): a Wait never starts a Run. Every path a Run can take into a Continuation therefore passes an Agent. A new Flow has no Flow input targets; removing a block also removes its target reference. Reachability starts at every Flow input target. Initial activations are independent, are not Handoffs and receive the same prompt; a failed or uncertain activation creates its own Problem while other branches can continue.
+Every graph carries exactly one `flowInput`: a canvas `position` and the `targetBlockIds` of the Agent blocks it feeds (each at most once). It has no work execution state; on a Run's [execution canvas](runs.md#execution-canvas) the Flow input card may carry the Run's [title generation](runs.md#run-title-generation) line, which describes the Run's title, not Block work, and Studio's Flow editor shows nothing of it. Targets are distinct Agent blocks; Human, Continuation and Condition targets are rejected. A Wait target saves but is a readiness gap (`flow_input_wait`): a Wait never starts a Run. Every path a Run can take into a Continuation or Condition therefore passes an Agent. A new Flow has no Flow input targets; removing a block also removes its target reference. Reachability starts at every Flow input target. Initial activations are independent, are not Handoffs and receive the same prompt; a failed or uncertain activation creates its own Problem while other branches can continue.
 
 ### Validation
 
 Structural failures return `Result` errors with `code`, `path` and `message`: invalid or duplicate IDs and names,
-positions, Flow input targets, dangling or duplicate edges, a Human or Wait connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit) and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB.
+positions, Flow input targets, dangling or duplicate edges, a Human or Wait connection from another exit, malformed exits, hide entries or Wait durations (an amount that is not a finite number, an unknown unit), and unknown block, exit, graph or Flow input fields, including Agent fields on a Wait. A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB.
+A Condition has no rule or output quota of its own and does not borrow the Agent exit limit: it counts as one block, each actual wire
+from any of its outputs, including fan-out and Otherwise wires, is one connection, unwired outputs cost nothing, and its rule IDs,
+names and thresholds count toward the 2 MB body.
 
 Unfinished names, unset Agents, an unconnected Flow input, blocks without exits, local exit name or ID collisions and wires from hidden or removed exits can be saved.
 Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
 without a duration (`wait_duration_required`) or outside 1 minute to 7 days inclusive after converting its unit, including a zero or negative amount (`wait_duration_range`), a Wait Flow input target, missing saved
-Agents and blocks unreachable from the Flow input, resolving each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
+Agents and blocks unreachable from the Flow input,
+a Condition rule without a name (`condition_rule_name_required`) or with the name of another of its outputs, Otherwise included
+(`condition_rule_name_duplicate`), without a threshold (`condition_threshold_required`), never selected because an earlier rule
+already matches from an equal or lower arrival (`condition_rule_shadowed`), or from arrival 1, which leaves Otherwise unreachable
+(`condition_threshold_first_arrival`), each at its rule row, and every directed cycle through a Condition made only of Conditions
+and Continuations, whichever outputs its wires leave by (`condition_cycle`, at the Condition, naming the cycle): a Continuation may
+already pass messages straight through, so such a loop could circle without work. A ready Condition's thresholds therefore
+strictly descend and are at least 2; one with only Otherwise is ready. resolving each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
 they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
-terminal exit needs no edge; cycles, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
+terminal exit needs no edge; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
 Readiness depends only on the graph and the saved revisions of the Agents it places, because an Agent's exits and former exit names are fixed per revision. Validating unsaved content
 (`POST /api/flows/validate`, Studio's **Check readiness**) therefore also answers `agentRevisions`: the saved revision of each placed Agent by id, `null` for a missing one, against which that

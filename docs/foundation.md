@@ -24,8 +24,9 @@ and restricted OAuth credentials live outside project repositories.
   execution, recovery and Run history read these revisions, so later edits and removals
   cannot rewrite history.
   External skill files are not frozen. Agent revisions hold the Agent's exits and Flow revisions
-  hold each Agent block's hidden and Flow-local exits and its Revisit instruction, so a Run's block
-  exits and Revisit instructions come from the same frozen revisions. Migration `072` converted
+  hold each Agent block's hidden and Flow-local exits and its Revisit instruction and each
+  Condition's ordered rules, so a Run's block exits, Revisit instructions and Condition rules come
+  from the same frozen revisions. Migration `072` converted
   every stored Flow revision, including those Runs captured: Agents started with no exits, Agent
   block exits became Flow-local with the same IDs, and Human exits became Approve or Request
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
@@ -34,6 +35,10 @@ and restricted OAuth credentials live outside project repositories.
   none. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
+  Migration `097` widened the Flow revision block kinds to include Condition, rebuilding the block
+  table under its restored immutability guards with every stored block unchanged and no Condition
+  inferred, and added immutable Condition rule rows; a Condition's Otherwise output is implicit for
+  the kind and not stored.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the

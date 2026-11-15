@@ -1,9 +1,10 @@
-import type {
-  AgentDefinition,
-  BlockExit,
-  FlowBlockInput,
-  Result,
-  ValidationIssue,
+import {
+  CONDITION_OTHERWISE_ID,
+  type AgentDefinition,
+  type BlockExit,
+  type FlowBlockInput,
+  type Result,
+  type ValidationIssue,
 } from "@t3-factory/contracts";
 
 export type IssueReporter = (code: string, path: string, message: string) => void;
@@ -48,9 +49,17 @@ export const CONTINUATION_EXIT: BlockExit = {
   messageRequired: true,
 };
 
-/** Where a block's exit comes from: its Agent, this Flow only, a Human step, a Wait's output or a
- * Continuation. */
-export type ExitSource = "agent" | "local" | "human" | "wait" | "continuation";
+/** A Condition's fixed last output, selected when no rule matches. It is not an error route. */
+export const CONDITION_OTHERWISE: BlockExit = {
+  id: CONDITION_OTHERWISE_ID,
+  name: "Otherwise",
+  description: "",
+  messageRequired: false,
+};
+
+/** Where a block's exit comes from: its Agent, this Flow only, a Human step, a Wait's output, a
+ * Continuation or a Condition's rules and Otherwise. */
+export type ExitSource = "agent" | "local" | "human" | "wait" | "continuation" | "condition";
 export interface EffectiveExit extends BlockExit {
   readonly source: ExitSource;
 }
@@ -66,8 +75,9 @@ export function inheritedExits(
 
 /**
  * The exits a block offers: an Agent block's Agent exits minus those hidden in this Flow, then its
- * Flow-local exits; a Human block's fixed exits; a Wait's or a Continuation's single output. Pass the Agents the reader resolves against: the
- * current saved ones for authoring, the captured revisions for a Run.
+ * Flow-local exits; a Human block's fixed exits; a Wait's or a Continuation's single output; a
+ * Condition's rule outputs in order, then Otherwise. Pass the Agents the reader resolves against:
+ * the current saved ones for authoring, the captured revisions for a Run.
  */
 export function effectiveExits(
   block: FlowBlockInput,
@@ -76,6 +86,17 @@ export function effectiveExits(
   if (block.kind === "human") return HUMAN_EXITS.map((exit) => ({ ...exit, source: "human" }));
   if (block.kind === "wait") return [{ ...WAIT_OUTPUT, source: "wait" }];
   if (block.kind === "continuation") return [{ ...CONTINUATION_EXIT, source: "continuation" }];
+  if (block.kind === "condition")
+    return [
+      ...block.rules.map((rule) => ({
+        id: rule.id,
+        name: rule.name,
+        description: "",
+        messageRequired: false,
+        source: "condition" as const,
+      })),
+      { ...CONDITION_OTHERWISE, source: "condition" },
+    ];
   const hidden = new Set(block.hiddenExitIds);
   return [
     ...inheritedExits(block, agents)

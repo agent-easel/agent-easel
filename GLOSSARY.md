@@ -28,7 +28,7 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait or a Continuation. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
@@ -73,6 +73,10 @@ One accepted delivery to a Wait within a Run, with its retained message, worker 
 **Continuation**:
 A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in a Run sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of the Run, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits and other Continuations pass the worker on.
 _Avoid_: continuity, follow-up block, reusing a worker by copying its conversation.
+
+**Condition**:
+A Flow-local flow block that routes by arrival number: an ordered list of **From arrival N onward** rules, each with its own named output, followed by the fixed, mandatory **Otherwise** output. The first rule whose number the arrival reaches selects its output; Otherwise is selected when none does and is not an error route. It has no Agent, worker, prompt or reports, cannot be a Flow input target, and does not interpret message text. Written with a capital C it always means this block kind; a lowercase condition is any ordinary requirement or circumstance, such as a readiness or Start condition.
+_Avoid_: Branch, router, switch or decision as the block name; condition for a generic requirement where the block could be meant.
 
 **Worker provenance**:
 The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.

@@ -379,6 +379,63 @@ it("an MCP-created Flow with an eight-day Wait saves with Studio's readiness gap
   expect(assertOk(await factory.getFlow(flow.id))).toStrictEqual(flow);
 });
 
+it("an MCP-created Flow whose Condition rules ascend saves with Studio's readiness gap at the rule row and arranged positions", async (c) => {
+  // Arrange
+  const { factory, client } = await authoringMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const graph = {
+    flowInput: { targetBlockIds: ["coder"] },
+    blocks: [
+      {
+        id: "coder",
+        kind: "agent",
+        name: "Coder",
+        agentId: agent.id,
+        hiddenExitIds: [],
+        localExits: [],
+      },
+      {
+        id: "gate",
+        kind: "condition",
+        name: "Escalate",
+        rules: [
+          { id: "ask", name: "Ask a person", fromArrival: 3 },
+          { id: "end", name: "End branch", fromArrival: 5 },
+        ],
+        otherwise: { id: "otherwise" },
+      },
+    ],
+    connections: [
+      { sourceBlockId: "coder", exitId: "done", targetBlockId: "gate" },
+      { sourceBlockId: "gate", exitId: "otherwise", targetBlockId: "coder" },
+    ],
+  };
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_flow",
+    arguments: { name: "Escalating review", graph },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const flow = toolReply(result);
+  expect(flow.readiness.issues).toStrictEqual([
+    {
+      code: "condition_rule_shadowed",
+      path: "graph.blocks.1.rules.1.fromArrival",
+      message:
+        'Escalate: rule 2 "End branch" is never selected: an earlier rule already matches from arrival 3. Order rules from the highest arrival number down.',
+    },
+  ]);
+  expect(flow.graph.blocks[1]).toMatchObject({
+    kind: "condition",
+    otherwise: { id: "otherwise" },
+    position: { x: expect.any(Number), y: expect.any(Number) },
+  });
+  expect(assertOk(await factory.getFlow(flow.id))).toStrictEqual(flow);
+});
+
 function revisitGraph(agentId: string, revisitInstruction: string) {
   return {
     flowInput: { targetBlockIds: ["review"] },

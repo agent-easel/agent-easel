@@ -1,10 +1,11 @@
 import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
-import type {
-  AgentDefinition,
-  FlowBlock,
-  FlowConnection,
-  FlowGraph,
-  RunDefinitions,
+import {
+  CONDITION_OTHERWISE_ID,
+  type AgentDefinition,
+  type FlowBlock,
+  type FlowConnection,
+  type FlowGraph,
+  type RunDefinitions,
 } from "@t3-factory/contracts";
 import {
   continuationSources,
@@ -32,6 +33,7 @@ const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {
   human: "Human step",
   wait: "Wait",
   continuation: "Continuation",
+  condition: "Condition",
 };
 
 /** Without a drop position, new blocks fill a three-column grid right of the Flow input. */
@@ -59,6 +61,8 @@ export function newBlock(
       revisitInstruction: "",
     };
   if (kind === "wait") return { ...base, kind, duration: null };
+  if (kind === "condition")
+    return { ...base, kind, rules: [], otherwise: { id: CONDITION_OTHERWISE_ID } };
   return kind === "continuation" ? { ...base, kind, prompt: "" } : { ...base, kind };
 }
 

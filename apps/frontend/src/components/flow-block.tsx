@@ -11,6 +11,7 @@ const EXIT_SOURCE_LABELS: Record<EffectiveExit["source"], string> = {
   human: "fixed",
   wait: "after the wait",
   continuation: "output",
+  condition: "output",
 };
 
 const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
@@ -18,6 +19,7 @@ const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   human: "text-muted-foreground",
   wait: "text-muted-foreground",
   continuation: "text-brand-cyan",
+  condition: "text-muted-foreground",
 };
 
 /** An exit's name as rows show it; a Wait's or Continuation's single output has none, so it shows

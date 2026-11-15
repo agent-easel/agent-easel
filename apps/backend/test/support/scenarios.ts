@@ -29,6 +29,8 @@ type WaitShape = Extract<FlowBlock, { kind: "wait" }>;
 export type ScenarioWait = { [Key in keyof WaitShape]: WaitShape[Key] };
 type ContinuationShape = Extract<FlowBlock, { kind: "continuation" }>;
 export type ScenarioContinuation = { [Key in keyof ContinuationShape]: ContinuationShape[Key] };
+type ConditionShape = Extract<FlowBlock, { kind: "condition" }>;
+export type ScenarioCondition = { [Key in keyof ConditionShape]: ConditionShape[Key] };
 type Position = FlowBlock["position"];
 export const blockExit = (
   id: string,
@@ -292,6 +294,26 @@ export const continuationStep = (
   prompt: string,
   position: Position = { x: 0, y: 0 },
 ): ScenarioContinuation => ({ id, name, kind: "continuation", prompt, position });
+export const conditionRule = (id: string, name: string, fromArrival: number | null) => ({
+  id,
+  name,
+  fromArrival,
+});
+export const conditionBlock = (
+  id: string,
+  name: string,
+  rules: ConditionShape["rules"],
+  position: Position = { x: 0, y: 0 },
+): ScenarioCondition => ({
+  id,
+  name,
+  kind: "condition",
+  rules,
+  otherwise: { id: OTHERWISE },
+  position,
+});
+/** The fixed last output every Condition has. */
+export const OTHERWISE = "otherwise";
 export const connection = (
   sourceBlockId: string,
   exitId: string,

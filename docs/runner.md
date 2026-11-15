@@ -71,6 +71,9 @@ reporting protocol.
   Conversation with the user stays in that worker thread; Factory does not track it.
 - A [Continuation](#continuations) has no worker of its own: its prompt is a later task in the worker
   thread its first message belongs to, with the Continuation's own Block id.
+- A [Condition](studio.md#canvas-and-block-configuration) is captured with its ordered rules as part of
+  the Flow revision; a later save never changes them for a started Run. It has no worker and gets no
+  Block id. Routing a delivery through a Condition is not implemented yet: a Handoff to one stays pending.
 
 ### Run workspace
 

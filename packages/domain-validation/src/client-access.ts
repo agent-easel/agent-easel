@@ -11,16 +11,13 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 14;
-/** Protocol 14 theme-color presentations and sources carry no appearance grant, which older
- * clients read unguarded. Protocol 13 Agents may have no execution settings (`execution` null),
- * create and save require the `execution` key with complete `modelOptions`, and definitions are
- * exported and imported. */
-export const FACTORY_MINIMUM_PEER_PROTOCOL = 14;
-/** The current UI saves Agents without a model, imports and exports definitions and relies on
- * Studio's live subscription, which protocol 13 servers provide; it refuses older servers rather
- * than offer operations they lack. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 13;
+export const FACTORY_PROTOCOL = 15;
+/** Protocol 15 Flows and Runs may contain Condition blocks with their rules and outputs, which
+ * older clients can neither read nor save. Protocol 14 theme-color presentations and sources carry
+ * no appearance grant. */
+export const FACTORY_MINIMUM_PEER_PROTOCOL = 15;
+/** The current UI reads and saves Condition blocks, which older servers reject or lack. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 15;
 
 export const CLIENT_LABEL_LIMIT = 80;
 
