@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "./support/test.ts";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import type {
   Result,
@@ -7,7 +7,7 @@ import type {
   UpdateRunTitleSettingInput,
 } from "../packages/contracts/src/index.ts";
 import { openComposerWithFlow } from "./support/composer.ts";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
+import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { applyRunState } from "./support/scenarios.ts";
 
@@ -30,12 +30,6 @@ async function runTitleSetting(baseUrl: string | undefined, input?: UpdateRunTit
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1000 });
-});
-
-// Journeys share one Factory: later Runs keep their automatic titles.
-afterEach(async ({ app }) => {
-  const { model } = await runTitleSetting(app.baseUrl);
-  await runTitleSetting(app.baseUrl, { enabled: false, model });
 });
 
 test("the host turns on Generate Run titles with a provider instance and model from T3", async ({
@@ -111,6 +105,7 @@ test("a Run started while Generate Run titles is on shows Generating title… un
     generatedTitle,
   });
   await app.screenshot("run-title-applied");
+  await archiveJourneyRun(app.baseUrl, run.id);
 });
 
 test("pressing a Run's title line opens its title details with the title thread link and leaves Follow active as it was", async ({

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { Browser } from "@e2e-dev/web";
-import { afterEach, beforeEach, test } from "./support/test.ts";
+import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Locator, type Screen } from "e2e";
 import { sha256Hex, solidPng } from "../apps/backend/test/support/scenarios.ts";
 import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
@@ -40,11 +40,6 @@ const carried = (name: keyof typeof files): CarriedFile => ({
   name: basename(files[name].path),
   type: name === "notes" ? "text/plain" : "image/png",
   data: files[name].data,
-});
-
-/** Shared fixture state: restore attachment support even when a journey fails. */
-afterEach(async ({ fixture }) => {
-  await fixture.runImagesAndTitles.attachments({ supported: true });
 });
 
 beforeEach(async ({ browser }) => {
