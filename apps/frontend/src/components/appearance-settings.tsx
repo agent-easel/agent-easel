@@ -5,8 +5,8 @@ import { SettingsPage } from "./settings-page.tsx";
 import { ThemeColorSettings, ThemeColorsNote } from "./theme-color-settings.tsx";
 
 /**
- * Settings → Appearance: this device's Light or Dark choice, then T3 theme colors (paired on the
- * host; explained on other clients).
+ * Settings → Appearance: this device's Light or Dark choice, then T3 theme colors (detailed on
+ * the host; explained on other clients).
  */
 export function AppearanceSettings() {
   const host = useClientScope() === "host";

@@ -3,7 +3,7 @@ import { flowOperations } from "./flow.ts";
 import { definitionImportOperations } from "./portable-document.ts";
 import { projectOperations, projectServerOperations } from "./project.ts";
 import { connectionOperations } from "./connection.ts";
-import { appearanceOperations, type AppearanceSource } from "./appearance.ts";
+import type { AppearanceSource } from "./appearance.ts";
 import { runOperations } from "./run.ts";
 import { chatControlOperations } from "./chat-control.ts";
 import {
@@ -24,7 +24,6 @@ export const httpOperations = {
   ...projectOperations,
   ...projectServerOperations,
   ...connectionOperations,
-  ...appearanceOperations,
   ...runOperations,
   ...chatControlOperations,
   ...clientAccessOperations,
@@ -39,7 +38,6 @@ export interface FactoryOperations extends FacadeOperations<
     typeof definitionImportOperations &
     typeof projectOperations &
     typeof connectionOperations &
-    typeof appearanceOperations &
     typeof runOperations &
     typeof chatControlOperations &
     typeof clientAccessOperations
@@ -48,7 +46,7 @@ export interface FactoryOperations extends FacadeOperations<
   getClientAccess(credential: string): Promise<Result<ClientAccessState>>;
   /** The identity this Factory's data home was created with; it never changes. */
   getServerId(): Promise<Result<string>>;
-  /** The source theme colors currently come from; null without an active grant to follow. */
+  /** The source theme colors currently come from; null while there is no authorized T3 connection environment. */
   getAppearanceSource(): Promise<Result<AppearanceSource | null>>;
   authenticateClient(credential: string): Promise<Result<FactoryClient>>;
 }

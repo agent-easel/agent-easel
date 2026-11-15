@@ -1,5 +1,4 @@
 import type { Appearance } from "./desktop-bridge.ts";
-import { operation } from "./operation.ts";
 
 /**
  * Every color token of Factory's design system, by its CSS custom property name without `--`.
@@ -69,8 +68,6 @@ export type AppearanceModeResult =
 export interface AppearancePresentation {
   readonly revision: string;
   readonly environmentId: string;
-  /** The appearance grant the colors were read with: an opaque id and its expiry. */
-  readonly grant: { readonly id: string; readonly expiresAt: string };
   /** The upstream T3 revision Factory's palette resolver was ported from. */
   readonly resolverPin: string;
   readonly theme: { readonly id: string; readonly name: string };
@@ -78,57 +75,27 @@ export interface AppearancePresentation {
 }
 
 /**
- * The source theme colors currently come from: the connection's T3 environment, the active
- * appearance grant and the resolver. A client reuses cached colors only for exactly this source.
+ * The source theme colors currently come from: the connection's T3 environment and the
+ * resolver. A client reuses cached colors only for exactly this source.
  */
 export interface AppearanceSource {
   readonly environmentId: string;
-  readonly grantId: string;
   readonly resolverPin: string;
 }
 
 /**
- * - `not-paired`: no appearance grant for the saved T3 endpoint.
- * - `connecting`: a grant is stored and Factory is reading T3's configuration.
+ * - `connecting`: Factory is reading T3's default theme over the T3 connection.
  * - `following`: Factory follows the environment default theme.
- * - `unavailable`: T3 is unreachable or its environment cannot be matched to the T3 connection.
- * - `re-pair-required`: the grant expired or T3 revoked it; only manual pairing continues.
+ * - `unavailable`: the T3 connection is not authorized, T3 is unreachable or its environment
+ *   cannot be matched to the T3 connection.
+ * - `unsupported`: the connected T3 does not offer `t3_theme_read`.
  */
-export type T3AppearanceState =
-  | "not-paired"
-  | "connecting"
-  | "following"
-  | "unavailable"
-  | "re-pair-required";
+export type T3AppearanceState = "connecting" | "following" | "unavailable" | "unsupported";
 
 /** Theme-color status for Settings. It never carries a T3 credential. */
 export interface T3Appearance {
   readonly state: T3AppearanceState;
   readonly explanation: string;
-  /** The stored grant, also after it ended. `expiresSoon` warns before expiry. */
-  readonly grant: {
-    readonly pairedAt: string;
-    readonly expiresAt: string;
-    readonly expiresSoon: boolean;
-  } | null;
   /** The last valid presentation of this session; kept through a transient outage only. */
   readonly presentation: AppearancePresentation | null;
 }
-
-export interface PairAppearanceInput {
-  /** The pairing code or `/pair#token=` link T3 created with only `orchestration:read`. */
-  readonly pairing: string;
-}
-
-/** Host-only theme-color enrollment; status reaches clients through live delivery. */
-export const appearanceOperations = {
-  pairAppearance: operation<PairAppearanceInput, T3Appearance>()({
-    method: "POST",
-    path: "/api/connection/appearance",
-    body: "json",
-  }),
-  disconnectAppearance: operation<never, T3Appearance>()({
-    method: "DELETE",
-    path: "/api/connection/appearance",
-  }),
-};

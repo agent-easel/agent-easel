@@ -1,12 +1,17 @@
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync } from "node:fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { stat, realpath } from "node:fs/promises";
-import { isAbsolute, basename } from "node:path";
+import { isAbsolute, basename, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { threadRepository } from "./worker-repository.ts";
-import { credentialPath, readCredentialFile, writeCredentialFile } from "./credential-files.ts";
-import { LiveT3Appearance } from "./live-t3-appearance.ts";
+import {
+  credentialPath,
+  readCredentialFile,
+  removeCredentialFile,
+  writeCredentialFile,
+} from "./credential-files.ts";
+import { themeListing, themeRead } from "./t3-theme-read.ts";
 import {
   Client,
   StreamableHTTPClientTransport,
@@ -406,30 +411,15 @@ export class LiveT3Adapter implements T3Adapter {
   private completing = false;
   private completion: Promise<void> | undefined;
   private transientFailure = false;
-  private readonly appearance: LiveT3Appearance;
   constructor(options: LiveT3Options) {
     this.options = options;
     mkdirSync(options.credentialsDirectory, { recursive: true, mode: 0o700 });
     chmodSync(options.credentialsDirectory, 0o700);
-    this.appearance = new LiveT3Appearance(options.credentialsDirectory);
-  }
-  pairAppearance(target: T3Endpoint, pairingCode: string) {
-    return this.appearance.pair(target, pairingCode);
-  }
-  async readAppearanceGrant(target: T3Endpoint) {
-    return this.appearance.grant(target);
-  }
-  checkAppearanceGrant(target: T3Endpoint) {
-    return this.appearance.check(target);
-  }
-  async endAppearanceGrant(target: T3Endpoint, reason: "expired" | "revoked") {
-    return this.appearance.end(target, reason);
-  }
-  async forgetAppearanceGrant(target: T3Endpoint) {
-    this.appearance.forget(target);
-  }
-  watchAppearance(target: T3Endpoint) {
-    return this.appearance.watch(target);
+    // Theme colors once used a separately paired orchestration:read session; its stored token
+    // has no use now, so Factory's copy is deleted. T3 keeps that session until it expires.
+    for (const name of readdirSync(options.credentialsDirectory))
+      if (/^t3-appearance-[0-9a-f]{64}\.json$/.test(name))
+        removeCredentialFile(join(options.credentialsDirectory, name));
   }
   private path(endpoint: string) {
     return credentialPath(this.options.credentialsDirectory, "t3", endpoint);
@@ -1193,6 +1183,22 @@ export class LiveT3Adapter implements T3Adapter {
           ? body.label.trim()
           : body.environmentId;
       return { environmentId: body.environmentId, label };
+    });
+  }
+  async readTheme(target: T3Endpoint) {
+    return this.withAuthorizedClient(target, async (client) => {
+      const tools = await listAllTools(client, () => new Error("Invalid pagination"));
+      if (!tools.some((tool) => tool.name === "t3_theme_read")) return null;
+      const read = async (args: Record<string, string>) =>
+        this.structuredToolResult(
+          await client.callTool({ name: "t3_theme_read", arguments: args }, { timeout: 10_000 }),
+        );
+      const environmentId = await readEnvironmentIdentity(client);
+      const listing = themeListing(await read({}));
+      const file = listing.published.includes(listing.defaultTheme)
+        ? await read({ themeId: listing.defaultTheme })
+        : null;
+      return themeRead(environmentId, listing, file);
     });
   }
   async orchestratorCapabilities(target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {

@@ -13,7 +13,6 @@ import {
   flowOperations,
   projectOperations,
   projectServerOperations,
-  appearanceOperations,
   connectionOperations,
   runOperations,
   chatControlOperations,
@@ -121,7 +120,6 @@ function apiRoutes(factory: Factory) {
   return {
     ...runRoutes(factory),
     ...connectionRoutes(factory),
-    ...appearanceRoutes(factory),
     ...projectRoutes(factory),
     ...flowRoutes(factory),
     ...agentRoutes(factory),
@@ -253,21 +251,6 @@ function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOpera
       // Approved clients may ask the host to show T3 consent for the saved endpoint;
       // the consent page, state and tokens stay on the host.
       handle: () => answer(() => factory.openConnectionAuthorization()),
-    },
-  };
-}
-
-/** Pairing and disconnecting theme colors manage a host credential, like the T3 endpoint. */
-function appearanceRoutes(factory: Factory): RouteEntries<typeof appearanceOperations> {
-  return {
-    pairAppearance: {
-      hostOnly: true,
-      body: standardBody,
-      handle: ({ input }) => answer(() => factory.pairAppearance(input)),
-    },
-    disconnectAppearance: {
-      hostOnly: true,
-      handle: () => answer(() => factory.disconnectAppearance()),
     },
   };
 }

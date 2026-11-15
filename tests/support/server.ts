@@ -632,28 +632,22 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
     liveSnapshotDelayMs = Number(query.get("ms"));
   },
 
-  /**
-   * Theme colors: no grant, no published themes, T3's default theme Ocean and a session T3
-   * still accepts.
-   */
-  async "/__fixture/appearance/reset"() {
-    requireSuccess(await factory.disconnectAppearance());
-    t3.appearance.sessionValid = true;
-    t3.appearance.publishThemes([]);
-    t3.appearance.setDefaultTheme("ocean");
+  /** Theme colors: a T3 with `t3_theme_read`, no published themes and T3's default theme Ocean. */
+  "/__fixture/appearance/reset"() {
+    t3.appearance.supported = true;
+    t3.appearance.themes = [];
+    t3.appearance.defaultTheme = "ocean";
   },
-  "/__fixture/appearance/publish": () => t3.appearance.publishThemes(publishedThemeFiles),
+  "/__fixture/appearance/publish": () => {
+    t3.appearance.themes = publishedThemeFiles;
+  },
   /** `t3 theme set <id>` on the environment; the id need not be published. */
   "/__fixture/appearance/default"(query) {
-    t3.appearance.setDefaultTheme(query.get("theme") ?? "");
+    t3.appearance.defaultTheme = query.get("theme") ?? "";
   },
-  async "/__fixture/appearance/pair"() {
-    requireSuccess(await factory.pairAppearance({ pairing: t3.appearance.pairingCode }));
-  },
-  "/__fixture/appearance/pairing-code": () => ({ code: t3.appearance.pairingCode }),
-  /** `t3 auth session revoke` from another T3 process: open subscriptions keep streaming. */
-  "/__fixture/appearance/revoke": () => {
-    t3.appearance.sessionValid = false;
+  /** A T3 build that lists no `t3_theme_read`. */
+  "/__fixture/appearance/unsupported": () => {
+    t3.appearance.supported = false;
   },
   /** A device's access request, made through host operations like the approved journey browser. */
   async "/__fixture/request-access"(query) {

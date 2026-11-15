@@ -22,8 +22,8 @@ export function profileStorage(): ProfileStorage | null {
 
 /**
  * The colors a client may keep showing once its server declares `source`: only those that came
- * from exactly that T3 environment, grant and resolver. A disconnect, another pairing or
- * another T3 source therefore ends them at the access check, before live delivery answers.
+ * from exactly that T3 environment and resolver. Another T3 source therefore ends them at the
+ * access check, before live delivery answers.
  */
 function colorsOfSource(
   presentation: AppearancePresentation | null,
@@ -32,7 +32,6 @@ function colorsOfSource(
   return presentation &&
     source &&
     presentation.environmentId === source.environmentId &&
-    presentation.grant.id === source.grantId &&
     presentation.resolverPin === source.resolverPin
     ? presentation
     : null;
@@ -85,23 +84,21 @@ export function followColors(
 
 /**
  * The snapshot to show for `serverId`, or null: one stored for another Factory server, from
- * another source than the server's current `source` (its T3 environment, grant and resolver),
- * past its grant's expiry or not exactly a sanitized presentation is never used. Call this only
+ * another source than the server's current `source` (its T3 environment and resolver) or not
+ * exactly a sanitized presentation is never used. Call this only
  * once the server has confirmed this client's access and declared that source.
  */
 export function cachedColors(
   storage: ProfileStorage | null,
   serverId: string,
   source: AppearanceSource | null,
-  now: number,
 ): AppearancePresentation | null {
   try {
     const stored: unknown = JSON.parse(storage?.getItem(storageKey) ?? "null");
     if (typeof stored !== "object" || stored === null) return null;
     const { version, serverId: server, presentation } = stored as Record<string, unknown>;
     if (version !== 1 || server !== serverId) return null;
-    const snapshot = colorsOfSource(parseAppearancePresentation(presentation), source);
-    return snapshot && now < Date.parse(snapshot.grant.expiresAt) ? snapshot : null;
+    return colorsOfSource(parseAppearancePresentation(presentation), source);
   } catch {
     return null;
   }
@@ -121,8 +118,8 @@ export function rememberColors(
 }
 
 /**
- * Removes the cached snapshot: the server ended inheritance (expiry, revocation, disconnect,
- * another source, no inherited theme) or this client has no approved access.
+ * Removes the cached snapshot: the server ended inheritance (another source, no inherited
+ * theme) or this client has no approved access.
  */
 export function forgetColors(storage: ProfileStorage | null) {
   try {
