@@ -120,7 +120,7 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
 - **Dock badge**: the number of Runs with at least one pending **Needs input** or **Problem**
   matter, not the number of matters. Settled Runs and Archived Runs (which leave navigation) do
   not count. More than 99 Runs show `99+`; none removes the badge. The badge does not depend on
-  notification permission.
+  notification permission. Turning **Dock badge** off clears it.
 - **Readiness**: only the installation's own subscription qualifies the badge and notifications:
   an accepted (approved, compatible) connection whose navigation snapshot is applied and
   current. While it is offline, unauthorized, incompatible, synchronizing after a gap, or the
@@ -128,11 +128,25 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
 - **Notifications**: matters that become pending in one committed change share one notification
   per Run, with `+N more` for the others; a later matter gets its own notification. A rise in a
   worker's native pending-question count notifies once per increase (1, 2, 1, 2 is two
-  increases). The text is generic: "A Run needs your input" or "A Run has a problem", never a Run
-  or Block name, message, report or question text, or path. Notifications play no sound and the
-  Dock icon never bounces. Ordinary Agent chat questions are not attention and never notify.
-- **Permission**: macOS asks the first time a notification would be shown, never at launch. A
-  grant shows what waited; a denial leaves the badge working.
+  increases). By default the text is generic: "A Run needs your input" or "A Run has a problem".
+  **Show Run details in notifications** adds the project, Run title and Block name; message,
+  report or question text and paths never appear. Notifications play no sound and the Dock icon
+  never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Focused window**: while any Factory window of this installation is focused, no notification
+  is shown. Matters that became pending meanwhile count as seen and never notify later, also
+  after switching to another app.
+- **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
+  **Notifications** (on), **Dock badge** (on) and **Show Run details in notifications** (off).
+  They are stored with the desktop settings, apply immediately and are never synchronized
+  through the server, so each Mac is tuned on its own. While **Notifications** is off nothing is
+  shown; turning it on shows what is still pending, at most one notification per Run.
+- **Permission**: macOS asks the first time a notification would be shown, never at launch and
+  never while it would be suppressed. Factory reads the permission without a window at startup,
+  before each delivery, when the app becomes active or the Mac wakes, and about every 60
+  seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
+  A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  status and, after a denial, **Open System Settings**, which opens this app's page in System
+  Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
 - **Restart and reconnect**: each installation keeps a ledger of what it announced in
   `desktop-attention.json` beside its desktop settings, per server. After a restart or reconnect
   the fresh snapshot catches up with at most one notification per Run for matters still pending

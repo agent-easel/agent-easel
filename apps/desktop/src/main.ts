@@ -14,6 +14,7 @@ import {
   MessageChannelMain,
   nativeImage,
   nativeTheme,
+  powerMonitor,
   protocol,
   safeStorage,
   session,
@@ -31,6 +32,7 @@ import {
 } from "@t3-factory/contracts";
 import type {
   Appearance,
+  DesktopAlertSettings,
   DesktopMenuState,
   DesktopResult,
   DesktopRole,
@@ -46,7 +48,7 @@ import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts"
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
-import { SettingsStore } from "./settings-store.ts";
+import { SettingsStore, type DesktopSettings } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
@@ -71,8 +73,10 @@ let store: SettingsStore;
 let approvedClient: ApprovedClient;
 let backend: BackendSupervisor;
 let updates: Updates;
+let alerts: MacAlerts;
 let attention: AttentionCoordinator;
 let attentionSubscription: AttentionSubscription;
+let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
@@ -86,6 +90,18 @@ let serverInstallAccepted = false;
 
 const updateChannel = (): UpdateChannel => store.get().updateChannel ?? buildChannel();
 
+const alertSettings = ({
+  notifications,
+  dockBadge,
+  showRunDetails,
+}: DesktopSettings): DesktopAlertSettings => ({ notifications, dockBadge, showRunDetails });
+
+const alertSettingNames = new Set<unknown>([
+  "notifications",
+  "dockBadge",
+  "showRunDetails",
+] satisfies (keyof DesktopAlertSettings)[]);
+
 function desktopState(): DesktopState {
   const settings = store.get();
   return {
@@ -97,6 +113,8 @@ function desktopState(): DesktopState {
     backend: backend.state,
     launchAtLogin: settings.launchAtLogin,
     menuBarIcon: settings.menuBarIcon,
+    alerts: alertSettings(settings),
+    notificationPermission: attention.permission,
     updateChannel: updateChannel(),
     update: updates.current,
     // macOS keeps a minimized window's document "visible"; live delivery detaches on this.
@@ -147,6 +165,7 @@ function followAttention() {
 
 /** Quit: alerts stop with the process; delivered notifications stay in Notification Center. */
 function stopAttention() {
+  clearInterval(permissionCheck);
   attentionSubscription.stop();
   void attention.close();
 }
@@ -250,6 +269,7 @@ function openWindow() {
   // Closing the window never stops the backend; the Dock and the optional tray reopen it.
   created.on("closed", () => {
     window = null;
+    attention.focus(false);
     applyMenuState(withoutOpenRun(menuState));
   });
   window = created;
@@ -356,6 +376,18 @@ async function setMenuBarIcon(enabled: boolean): Promise<DesktopResult> {
     return failed(`The menu bar setting could not be saved: ${String(error)}`);
   }
   applyMenuBarIcon();
+  broadcast();
+  return { ok: true };
+}
+
+async function setAlertSetting(name: unknown, enabled: boolean): Promise<DesktopResult> {
+  if (!alertSettingNames.has(name)) return failed("Unknown notification setting.");
+  try {
+    await store.update({ [name as keyof DesktopAlertSettings]: enabled });
+  } catch (error) {
+    return failed(`The notification setting could not be saved: ${String(error)}`);
+  }
+  await attention.configure(alertSettings(store.get()));
   broadcast();
   return { ok: true };
 }
@@ -508,6 +540,12 @@ const bridgeHandlers: BridgeHandlers = {
   },
   setLaunchAtLogin: (_frame, enabled: boolean) => setLaunchAtLogin(enabled === true),
   setMenuBarIcon: (_frame, enabled: boolean) => setMenuBarIcon(enabled === true),
+  setAlertSetting: (_frame, name: unknown, enabled: boolean) =>
+    setAlertSetting(name, enabled === true),
+  openNotificationSettings: async () => {
+    await shell.openExternal(alerts.systemSettingsUrl);
+    return { ok: true };
+  },
   checkForUpdates: async () => {
     await updates.check();
     return { ok: true };
@@ -641,11 +679,22 @@ async function start() {
       });
   });
   // Alerts run in the main process for the installation's lifetime, with every window closed.
-  attention = await AttentionCoordinator.open(
-    app.getPath("userData"),
-    new MacAlerts(loadNativeNotifications(join(here, "native", "notifications.node")), app.dock!),
+  alerts = new MacAlerts(
+    loadNativeNotifications(join(here, "native", "notifications.node")),
+    app.dock!,
   );
+  attention = await AttentionCoordinator.open(app.getPath("userData"), alerts, {
+    settings: alertSettings(store.get()),
+    permissionChanged: broadcast,
+  });
   attentionSubscription = new AttentionSubscription(attention);
+  // No window is needed: a grant made in System Settings is noticed here and catches up.
+  const checkPermission = () => void attention.checkPermission();
+  permissionCheck = setInterval(checkPermission, 60_000);
+  app.on("did-become-active", checkPermission);
+  powerMonitor.on("resume", checkPermission);
+  app.on("browser-window-focus", () => attention.focus(true));
+  app.on("browser-window-blur", () => attention.focus(false));
   followAttention();
   registerUi();
   registerBridge();

@@ -3,6 +3,7 @@ import {
   type DesktopMenuCommandId,
   type DesktopState,
   type FactoryDesktop,
+  type NotificationPermission,
 } from "../../packages/contracts/src/desktop-bridge.ts";
 
 export const desktopBridgeOptions = (
@@ -18,7 +19,9 @@ export const desktopBridgeOptions = (
 // Its live relay stands in for the main process: a page WebSocket to the fixture, relayed
 // over a MessageChannel with the same delivery messages the desktop main process posts.
 // The application menu is recorded in window.__desktopMenu; window.__chooseMenuItem(id)
-// stands in for a pointer click on a native menu item.
+// stands in for a pointer click on a native menu item. window.__observePermission(state)
+// stands in for the main process re-reading macOS notification permission, and
+// window.__notificationSettingsOpened records Open System Settings.
 export function desktopBridgeScript({
   role,
   update,
@@ -30,6 +33,8 @@ export function desktopBridgeScript({
     __desktopMenu?: Parameters<FactoryDesktop["setMenuState"]>[0];
     __chooseMenuItem?: (id: DesktopMenuCommandId) => void;
     __clientInstallRequested?: boolean;
+    __observePermission?: (permission: NotificationPermission) => void;
+    __notificationSettingsOpened?: boolean;
   };
   let state: DesktopState = {
     version: "0.1.0",
@@ -37,6 +42,8 @@ export function desktopBridgeScript({
     server: role === "client" ? { url: "https://factory.example", fingerprint: "fixture" } : null,
     launchAtLogin: false,
     menuBarIcon: false,
+    alerts: { notifications: true, dockBadge: true, showRunDetails: false },
+    notificationPermission: "undetermined",
     updateChannel: "stable",
     backend: { state: role === "server" ? "running" : "stopped", message: null },
     minimized: false,
@@ -55,6 +62,10 @@ export function desktopBridgeScript({
   const publish = () => listeners.forEach((listener) => listener(state));
   const menuListeners = new Set<Parameters<FactoryDesktop["onMenuCommand"]>[0]>();
   desktopWindow.__chooseMenuItem = (id) => menuListeners.forEach((listener) => listener(id));
+  desktopWindow.__observePermission = (notificationPermission) => {
+    state = { ...state, notificationPermission };
+    publish();
+  };
   desktopWindow.factoryDesktop = {
     getState: async () => state,
     onState: (listener) => (listeners.add(listener), () => listeners.delete(listener)),
@@ -74,6 +85,15 @@ export function desktopBridgeScript({
     setMenuBarIcon: async (menuBarIcon) => {
       state = { ...state, menuBarIcon };
       publish();
+      return { ok: true };
+    },
+    setAlertSetting: async (name, enabled) => {
+      state = { ...state, alerts: { ...state.alerts, [name]: enabled } };
+      publish();
+      return { ok: true };
+    },
+    openNotificationSettings: async () => {
+      desktopWindow.__notificationSettingsOpened = true;
       return { ok: true };
     },
     checkForUpdates: async () => ({ ok: true }),

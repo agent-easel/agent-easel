@@ -13,6 +13,22 @@ export type DesktopRole = "server" | "client";
 /** Factory's Light/Dark appearance, chosen per desktop installation or browser profile. */
 export type Appearance = "light" | "dark";
 
+/** Per-installation alert switches; never synchronized through the server. */
+export interface DesktopAlertSettings {
+  /** macOS notifications for matters that newly need the owner; on by default. */
+  readonly notifications: boolean;
+  /** The Dock badge counting Runs that need the owner; on by default. */
+  readonly dockBadge: boolean;
+  /** Adds the project, Run title and Block name to notifications; off by default. */
+  readonly showRunDetails: boolean;
+}
+
+/**
+ * This installation's macOS notification permission. `requesting`: Factory's own prompt is
+ * unanswered (macOS reports it as denied meanwhile).
+ */
+export type NotificationPermission = "undetermined" | "requesting" | "granted" | "denied";
+
 export interface DesktopState {
   readonly version: string;
   readonly role: DesktopRole | null;
@@ -26,6 +42,8 @@ export interface DesktopState {
   readonly launchAtLogin: boolean;
   /** The macOS menu-bar icon is shown; off until the user turns it on. */
   readonly menuBarIcon: boolean;
+  readonly alerts: DesktopAlertSettings;
+  readonly notificationPermission: NotificationPermission;
   /** The release track this installation updates from. */
   readonly updateChannel: UpdateChannel;
   readonly update: ApplicationUpdate;
@@ -100,6 +118,10 @@ export interface FactoryDesktop {
   retryBackend(): Promise<DesktopResult>;
   setLaunchAtLogin(enabled: boolean): Promise<DesktopResult>;
   setMenuBarIcon(enabled: boolean): Promise<DesktopResult>;
+  /** Turning Notifications on shows what is still waiting, at most one notification per Run. */
+  setAlertSetting(name: keyof DesktopAlertSettings, enabled: boolean): Promise<DesktopResult>;
+  /** Opens this app's page in System Settings → Notifications; Factory never asks twice. */
+  openNotificationSettings(): Promise<DesktopResult>;
   checkForUpdates(): Promise<DesktopResult>;
   downloadUpdate(): Promise<DesktopResult>;
   /** Installs a downloaded update confirmed in the upgrade review; never on an unrelated Quit. */

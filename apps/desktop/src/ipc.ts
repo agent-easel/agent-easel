@@ -9,6 +9,8 @@ export const channels = {
   retryBackend: "factory:retry-backend",
   setLaunchAtLogin: "factory:set-launch-at-login",
   setMenuBarIcon: "factory:set-menu-bar-icon",
+  setAlertSetting: "factory:set-alert-setting",
+  openNotificationSettings: "factory:open-notification-settings",
   checkForUpdates: "factory:check-for-updates",
   downloadUpdate: "factory:download-update",
   installUpdate: "factory:install-update",

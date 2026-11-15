@@ -5,7 +5,16 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import type { RunAttentionMatter, RunNavigationEntry } from "@t3-factory/contracts";
-import { AttentionLedger, type DeferReason, type ServerLedger } from "./attention-ledger.ts";
+import type {
+  DesktopAlertSettings,
+  NotificationPermission,
+} from "@t3-factory/contracts/desktop-bridge";
+import {
+  AttentionLedger,
+  type AppearanceState,
+  type DeferReason,
+  type ServerLedger,
+} from "./attention-ledger.ts";
 
 /** The coordinator's single output port; the macOS adapter implements it. */
 export interface DesktopAlertPort {
@@ -17,9 +26,9 @@ export interface DesktopAlertPort {
   /** The Dock badge text; an empty label removes the badge. Independent of permission. */
   setBadge(label: string): void;
   /** Read without a window; never prompts. */
-  permission(): Promise<PermissionState>;
+  permission(): Promise<NotificationPermission>;
   /** Called only at the first delivery while undetermined; resolves when the owner answers. */
-  requestPermission(): Promise<PermissionState>;
+  requestPermission(): Promise<NotificationPermission>;
 }
 
 export interface AlertNotification {
@@ -33,9 +42,6 @@ export interface AlertNotification {
 
 /** `accepted` means delivered to Notification Center, not that a banner was seen. */
 export type ShowOutcome = { readonly kind: "accepted" } | { readonly kind: "failed" };
-
-/** `requesting`: this installation's request is unanswered; macOS reports `denied` meanwhile. */
-export type PermissionState = "undetermined" | "requesting" | "granted" | "denied";
 
 /**
  * One committed navigation state from the coordinator's own subscription while it is ready.
@@ -60,7 +66,8 @@ function eligibleMatters(row: RunNavigationEntry): readonly RunAttentionMatter[]
   return row.lifecycle === "active" ? row.attention.matters : [];
 }
 
-function badgeLabel(rows: readonly RunNavigationEntry[]): string {
+function badgeLabel(rows: readonly RunNavigationEntry[] | undefined): string {
+  if (!rows) return "";
   const counted = rows.filter((row) => eligibleMatters(row).length > 0).length;
   if (counted === 0) return "";
   return counted > badgeLimit ? `${badgeLimit}+` : String(counted);
@@ -124,39 +131,49 @@ function observe(
   });
 }
 
-/** Generic by default: never message, report or question text, Run titles or paths. */
-function content(appearances: readonly Appearance[]): Pick<AlertNotification, "title" | "body"> {
+/**
+ * Generic by default. Show Run details adds the project, Run title and Block name; message,
+ * report and question text and paths never appear.
+ */
+function content(
+  { row, appearances }: Announcement,
+  showRunDetails: boolean,
+): Pick<AlertNotification, "title" | "body"> {
   const matters = [...new Set(appearances.map(({ matter }) => matter))];
-  return {
-    title: titles[matters[0]!.presentation],
-    body: matters.length > 1 ? `+${matters.length - 1} more` : "",
-  };
+  const first = matters[0]!;
+  const details = showRunDetails
+    ? [row.project.title, row.title, first.blockName].filter(Boolean).join(" · ")
+    : "";
+  const more = matters.length > 1 ? `+${matters.length - 1} more` : "";
+  return { title: titles[first.presentation], body: [details, more].filter(Boolean).join("\n") };
 }
 
 const groupOf = (server: string) =>
   `factory-${createHash("sha256").update(server).digest("hex").slice(0, 16)}`;
 
-/** Without permission every due appearance waits for catch-up. */
-function defer(
+/** Records due appearances that show no banner now: deferred ones wait for catch-up. */
+function account(
   ledger: ServerLedger,
   announcements: readonly Announcement[],
-  permission: Exclude<PermissionState, "granted">,
+  state: AppearanceState,
 ): AlertNotification[] {
-  const reason: DeferReason =
-    permission === "denied" ? "permission-denied" : "permission-undetermined";
   for (const { appearances } of announcements)
     for (const { matter, revision } of appearances)
-      ledger.matters[matter.id]!.appearances[revision] = { state: "deferred", reason };
+      ledger.matters[matter.id]!.appearances[revision] = state;
   return [];
 }
+
+const deferred = (reason: DeferReason): AppearanceState => ({ state: "deferred", reason });
 
 /** One notification per Run, recorded as attempted before the notifier is called. */
 function intend(
   ledger: ServerLedger,
   server: string,
   announcements: readonly Announcement[],
+  showRunDetails: boolean,
 ): AlertNotification[] {
-  return announcements.map(({ row, appearances }) => {
+  return announcements.map((announcement) => {
+    const { row, appearances } = announcement;
     const id = randomUUID();
     for (const { matter, revision } of appearances)
       ledger.matters[matter.id]!.appearances[revision] = {
@@ -170,7 +187,7 @@ function intend(
       matters: appearances.map(({ matter, revision }) => ({ id: matter.id, revision })),
       postedAt: new Date().toISOString(),
     };
-    return { id, groupId: groupOf(server), ...content(appearances) };
+    return { id, groupId: groupOf(server), ...content(announcement, showRunDetails) };
   });
 }
 
@@ -180,21 +197,69 @@ export class AttentionCoordinator {
   /** The latest ready delivery; null while the subscription is not ready. */
   private latest: AttentionDelivery | null = null;
   private requesting = false;
+  private focused = false;
 
   private constructor(
     private readonly ledger: AttentionLedger,
     private readonly port: DesktopAlertPort,
+    private settings: DesktopAlertSettings,
+    /** The last observed permission, shown in Settings. */
+    private observed: NotificationPermission,
+    private readonly permissionChanged: (permission: NotificationPermission) => void,
   ) {}
 
-  static async open(directory: string, port: DesktopAlertPort): Promise<AttentionCoordinator> {
-    return new AttentionCoordinator(await AttentionLedger.open(directory), port);
+  /** Reads permission once, without a window and without asking. */
+  static async open(
+    directory: string,
+    port: DesktopAlertPort,
+    options: {
+      readonly settings: DesktopAlertSettings;
+      readonly permissionChanged: (permission: NotificationPermission) => void;
+    },
+  ): Promise<AttentionCoordinator> {
+    return new AttentionCoordinator(
+      await AttentionLedger.open(directory),
+      port,
+      options.settings,
+      await port.permission(),
+      options.permissionChanged,
+    );
+  }
+
+  get permission(): NotificationPermission {
+    return this.observed;
+  }
+
+  /**
+   * Re-reads permission without asking (on activation, resume and periodically); a newly
+   * observed grant catches up on what waited.
+   */
+  checkPermission(): Promise<void> {
+    return this.enqueue(async () => {
+      if ((await this.observePermission()) && this.latest) await this.announce(this.latest, true);
+    });
+  }
+
+  /** The owner changed this installation's switches; turning Notifications on catches up. */
+  configure(settings: DesktopAlertSettings): Promise<void> {
+    return this.enqueue(async () => {
+      const enabled = settings.notifications && !this.settings.notifications;
+      this.settings = settings;
+      this.showBadge();
+      if (enabled && this.latest) await this.announce(this.latest, true);
+    });
+  }
+
+  /** Whether any Factory window of this installation is focused. */
+  focus(focused: boolean) {
+    this.focused = focused;
   }
 
   /** A committed state from the coordinator's subscription while it is ready. */
   deliver(delivery: AttentionDelivery): Promise<void> {
     return this.enqueue(async () => {
       this.latest = delivery;
-      this.port.setBadge(badgeLabel(delivery.rows));
+      this.showBadge();
       await this.announce(delivery, delivery.fresh);
     });
   }
@@ -206,7 +271,7 @@ export class AttentionCoordinator {
   notReady(): Promise<void> {
     return this.enqueue(async () => {
       this.latest = null;
-      this.port.setBadge("");
+      this.showBadge();
     });
   }
 
@@ -221,6 +286,22 @@ export class AttentionCoordinator {
     this.closed = true;
   }
 
+  /** The Dock badge switch off keeps the badge clear, as does a subscription that is not ready. */
+  private showBadge() {
+    this.port.setBadge(this.settings.dockBadge ? badgeLabel(this.latest?.rows) : "");
+  }
+
+  /**
+   * Why due appearances show no banner now, or null to show them. A focused window accounts
+   * them for good: the owner sees the Run list, and switching away never replays them.
+   */
+  private withheld(permission: NotificationPermission): AppearanceState | null {
+    if (this.focused) return { state: "foreground-accounted" };
+    if (!this.settings.notifications) return deferred("notifications-off");
+    if (permission === "granted") return null;
+    return deferred(permission === "denied" ? "permission-denied" : "permission-undetermined");
+  }
+
   private enqueue(task: () => Promise<void>): Promise<void> {
     const run = this.queue.then(() => (this.closed ? undefined : task()));
     // A failed ledger write must not stop later deliveries; it is reported and not acted on.
@@ -232,19 +313,22 @@ export class AttentionCoordinator {
 
   private async announce(delivery: AttentionDelivery, catchUp: boolean) {
     const { server } = delivery;
-    const permission = await this.port.permission();
-    const { due, notifications } = await this.ledger.change(server, (ledger) => {
-      const announcements = observe(ledger, delivery.rows, catchUp);
+    const granted = await this.observePermission();
+    const withheld = this.withheld(this.observed);
+    const { due, shown } = await this.ledger.change(server, (ledger) => {
+      const announcements = observe(ledger, delivery.rows, catchUp || granted);
       return {
         due: announcements.length > 0,
-        notifications:
-          permission === "granted"
-            ? intend(ledger, server, announcements)
-            : defer(ledger, announcements, permission),
+        shown: withheld
+          ? account(ledger, announcements, withheld)
+          : intend(ledger, server, announcements, this.settings.showRunDetails),
       };
     });
-    if (due && permission === "undetermined" && !this.requesting) this.request();
-    for (const notification of notifications)
+    // Asked only when a banner would otherwise show now, never at launch.
+    const bannerWaitsForPermission =
+      !this.focused && this.settings.notifications && this.observed === "undetermined";
+    if (due && bannerWaitsForPermission && !this.requesting) this.request();
+    for (const notification of shown)
       void this.port.show(notification).then(
         (outcome) => this.settle(server, notification.id, outcome),
         () => this.settle(server, notification.id, { kind: "failed" }),
@@ -268,15 +352,23 @@ export class AttentionCoordinator {
     );
   }
 
+  /** Whether this read newly observed a grant. */
+  private async observePermission(): Promise<boolean> {
+    const previous = this.observed;
+    this.observed = await this.port.permission();
+    if (this.observed !== previous) this.permissionChanged(this.observed);
+    return this.observed === "granted" && previous !== "granted";
+  }
+
   /** Asked at the first delivery, never at launch; a grant catches up on what waited. */
   private request() {
     this.requesting = true;
-    void this.port.requestPermission().then((answer) => {
+    const answered = this.port.requestPermission();
+    // Settings shows the unanswered prompt; the answer is read back like any re-check.
+    void this.checkPermission();
+    void answered.then(() => {
       this.requesting = false;
-      if (answer !== "granted") return;
-      void this.enqueue(async () => {
-        if (this.latest) await this.announce(this.latest, true);
-      });
+      return this.checkPermission();
     });
   }
 }

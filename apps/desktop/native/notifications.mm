@@ -180,6 +180,14 @@ napi_value Delivered(napi_env env, napi_callback_info) {
   return pending.promise;
 }
 
+// bundleIdentifier(): string, this app's identity in System Settings → Notifications.
+napi_value BundleIdentifier(napi_env env, napi_callback_info) {
+  std::string identifier = Utf8(NSBundle.mainBundle.bundleIdentifier);
+  napi_value value;
+  napi_create_string_utf8(env, identifier.c_str(), identifier.size(), &value);
+  return value;
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   napi_property_descriptor properties[] = {
       {"authorizationStatus", nullptr, AuthorizationStatus, nullptr, nullptr, nullptr,
@@ -189,6 +197,8 @@ napi_value Init(napi_env env, napi_value exports) {
       {"post", nullptr, Post, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"remove", nullptr, Remove, nullptr, nullptr, nullptr, napi_default, nullptr},
       {"delivered", nullptr, Delivered, nullptr, nullptr, nullptr, napi_default, nullptr},
+      {"bundleIdentifier", nullptr, BundleIdentifier, nullptr, nullptr, nullptr, napi_default,
+       nullptr},
   };
   napi_define_properties(env, exports, sizeof(properties) / sizeof(properties[0]), properties);
   return exports;

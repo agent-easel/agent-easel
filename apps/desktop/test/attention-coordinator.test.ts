@@ -2,26 +2,29 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunAttentionMatter, RunNavigationEntry } from "@t3-factory/contracts";
+import type {
+  DesktopAlertSettings,
+  NotificationPermission,
+} from "@t3-factory/contracts/desktop-bridge";
 import { expect, it, type TestContext } from "vite-plus/test";
 import {
   AttentionCoordinator,
   type AlertNotification,
   type DesktopAlertPort,
-  type PermissionState,
   type ShowOutcome,
 } from "../src/attention-coordinator.ts";
 
 const server = "host";
 
 /** Records what the outside world sees; `show` answers as `answer` decides. */
-function recordingPort(permission: PermissionState = "granted") {
+function recordingPort(permission: NotificationPermission = "granted") {
   const port = {
     shown: [] as AlertNotification[],
     badge: "",
     permission,
     requests: 0,
     answer: (): Promise<ShowOutcome> => Promise.resolve({ kind: "accepted" }),
-    grant: (_state: PermissionState) => undefined as void,
+    grant: (_state: NotificationPermission) => undefined as void,
   };
   const implementation: DesktopAlertPort = {
     show: (notification) => {
@@ -46,10 +49,21 @@ function recordingPort(permission: PermissionState = "granted") {
   return Object.assign(port, { implementation });
 }
 
-async function installation(context: TestContext, port = recordingPort()) {
+const defaultSettings: DesktopAlertSettings = {
+  notifications: true,
+  dockBadge: true,
+  showRunDetails: false,
+};
+
+async function installation(
+  context: TestContext,
+  port = recordingPort(),
+  settings: Partial<DesktopAlertSettings> = {},
+) {
   const directory = await mkdtemp(join(tmpdir(), "factory-desktop-attention-"));
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
-  let coordinator = await AttentionCoordinator.open(directory, port.implementation);
+  const options = { settings: { ...defaultSettings, ...settings }, permissionChanged: () => {} };
+  let coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
   context.onTestFinished(() => coordinator.close());
   return {
     port,
@@ -59,7 +73,7 @@ async function installation(context: TestContext, port = recordingPort()) {
     /** Quit and launch again: the same profile directory, a new coordinator. */
     async restart() {
       await coordinator.close();
-      coordinator = await AttentionCoordinator.open(directory, port.implementation);
+      coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
     },
   };
 }
@@ -311,4 +325,114 @@ it("permission is asked at the first banner, not at launch, and the banner follo
 
   // Assert
   expect({ asked, shown: port.shown.length }).toStrictEqual({ asked: 0, shown: 1 });
+});
+
+it("turning Notifications on shows one catch-up banner per Run for what waited while they were off", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c, recordingPort(), { notifications: false });
+  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
+  await coordinator.deliver({
+    server,
+    fresh: false,
+    rows: [run("a", [matter("a1"), problem("a2")]), run("b", [matter("b1")])],
+  });
+  const whileOff = port.shown.length;
+
+  // Act
+  await coordinator.configure({ ...defaultSettings, notifications: true });
+
+  // Assert
+  expect({ whileOff, bodies: port.shown.map(({ body }) => body) }).toStrictEqual({
+    whileOff: 0,
+    bodies: ["+1 more", ""],
+  });
+});
+
+it("turning the Dock badge off clears it while Runs still need the owner", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c);
+  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Act
+  await coordinator.configure({ ...defaultSettings, dockBadge: false });
+
+  // Assert
+  expect(port.badge).toBe("");
+});
+
+it("with Run details shown a notification adds the project, Run title and Block name and nothing else", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c, recordingPort(), { showRunDetails: true });
+  const detailed = run("a", [matter("a1"), problem("a2")], {
+    title: "Release notes",
+    flowName: "Private Flow",
+  });
+
+  // Act
+  await coordinator.deliver({ server, fresh: true, rows: [detailed] });
+
+  // Assert
+  expect(port.shown).toStrictEqual([
+    {
+      id: expect.any(String),
+      groupId: expect.any(String),
+      title: "A Run needs your input",
+      body: "Project · Release notes · Review\n+1 more",
+    },
+  ]);
+});
+
+it("matters that arrived while a Factory window was focused never alert after switching away", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c);
+  coordinator.focus(true);
+  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
+  await coordinator.deliver({ server, fresh: false, rows: [run("a", [matter("a1")])] });
+  const whileFocused = port.shown.length;
+  coordinator.focus(false);
+
+  // Act
+  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ whileFocused, shown: port.shown.length, badge: port.badge }).toStrictEqual({
+    whileFocused: 0,
+    shown: 0,
+    badge: "1",
+  });
+});
+
+it("with notification permission denied the Dock badge still counts and Factory never asks again", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c, recordingPort("denied"));
+
+  // Act
+  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ badge: port.badge, shown: port.shown.length, requests: port.requests }).toStrictEqual({
+    badge: "1",
+    shown: 0,
+    requests: 0,
+  });
+});
+
+it("a permission grant noticed by a re-check shows one catch-up banner per Run", async (c) => {
+  // Arrange
+  const { port, coordinator } = await installation(c, recordingPort("denied"));
+  await coordinator.deliver({
+    server,
+    fresh: true,
+    rows: [run("a", [matter("a1"), matter("a2")]), run("b", [problem("b1")])],
+  });
+  port.permission = "granted";
+
+  // Act
+  await coordinator.checkPermission();
+
+  // Assert
+  expect(port.shown.map(({ title, body }) => ({ title, body }))).toStrictEqual([
+    { title: "A Run needs your input", body: "+1 more" },
+    { title: "A Run has a problem", body: "" },
+  ]);
 });

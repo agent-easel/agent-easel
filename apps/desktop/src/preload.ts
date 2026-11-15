@@ -29,6 +29,9 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
     ipcRenderer.invoke(channels.setLaunchAtLogin, enabled === true),
   setMenuBarIcon: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setMenuBarIcon, enabled === true),
+  setAlertSetting: (name: string, enabled: boolean) =>
+    ipcRenderer.invoke(channels.setAlertSetting, String(name), enabled === true),
+  openNotificationSettings: () => ipcRenderer.invoke(channels.openNotificationSettings),
   checkForUpdates: () => ipcRenderer.invoke(channels.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(channels.downloadUpdate),
   installUpdate: () => ipcRenderer.invoke(channels.installUpdate),

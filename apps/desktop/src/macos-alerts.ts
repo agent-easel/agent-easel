@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import type { Dock } from "electron";
-import type { DesktopAlertPort, PermissionState } from "./attention-coordinator.ts";
+import type { NotificationPermission } from "@t3-factory/contracts/desktop-bridge";
+import type { DesktopAlertPort } from "./attention-coordinator.ts";
 
 /** The staged N-API module (native/notifications.mm); macOS only, never loaded by tests. */
 interface NativeNotifications {
@@ -12,6 +13,7 @@ interface NativeNotifications {
   post(id: string, title: string, body: string, threadId: string): Promise<string | null>;
   remove(ids: readonly string[]): void;
   delivered(): Promise<readonly string[]>;
+  bundleIdentifier(): string;
 }
 
 /** Loads the module staged beside the bundle (unpacked from asar in a package). */
@@ -43,18 +45,24 @@ export class MacAlerts implements DesktopAlertPort {
     return refusal === null ? ({ kind: "accepted" } as const) : ({ kind: "failed" } as const);
   }
 
+  /** This app's page in System Settings → Notifications, where a denial can be changed. */
+  get systemSettingsUrl() {
+    const id = encodeURIComponent(this.native.bundleIdentifier());
+    return `x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=${id}`;
+  }
+
   setBadge(label: string) {
     this.dock.setBadge(label);
   }
 
-  async permission(): Promise<PermissionState> {
+  async permission(): Promise<NotificationPermission> {
     const status = await this.native.authorizationStatus();
     if (status === "notDetermined") return "undetermined";
     if (status === "authorized" || status === "provisional") return "granted";
     return this.requesting ? "requesting" : "denied";
   }
 
-  async requestPermission(): Promise<PermissionState> {
+  async requestPermission(): Promise<NotificationPermission> {
     this.requesting = true;
     try {
       return (await this.native.requestAuthorization()) ? "granted" : "denied";
