@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
+import { BLOCK_KINDS } from "../block-kind.ts";
 import { StudioLink } from "../components/app-link.tsx";
 import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration } from "../components/block-inspector.tsx";
@@ -694,13 +695,6 @@ function DraftProblems({
   );
 }
 
-const PANEL_BADGES: Record<FlowBlock["kind"], string> = {
-  agent: "AGENT BLOCK",
-  human: "HUMAN STEP",
-  wait: "WAIT",
-  continuation: "CONTINUATION BLOCK",
-};
-
 /** The floating configuration panel: anchored to the canvas's right edge, only while selected. */
 function BlockPanel({
   block,
@@ -735,7 +729,7 @@ function BlockPanel({
     >
       <div className="flex items-center gap-2 px-4">
         <Badge variant="default" className="rounded-md px-2 py-1 font-medium">
-          {PANEL_BADGES[block.kind]}
+          {BLOCK_KINDS[block.kind].panelLabel}
         </Badge>
         <span className="flex-1" />
         <kbd className="rounded-sm border border-border-strong bg-accent px-1.25 font-mono text-2xs text-muted-foreground">

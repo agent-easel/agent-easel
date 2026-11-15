@@ -1,17 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GripVertical, PanelLeftClose, PanelLeftOpen, Plus, Search } from "lucide-react";
-import type { AgentDefinition, FlowBlock } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { StudioLink } from "../components/app-link.tsx";
-import type { BlockPosition } from "../flow-graph.ts";
+import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
+import { newBlock, type BlockPosition } from "../flow-graph.ts";
 import type { GrabOffset } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
-import { BLOCK_KINDS } from "./flow-block.tsx";
 import { SectionLabel } from "./page.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 
@@ -141,6 +141,7 @@ export function BlockLibrary({
           name={agent.name}
           detail={agentDetail(agent)}
           kind="agent"
+          agent={agent}
           dropAt={dropAt}
           onAdd={(position) => onAdd("agent", agent, position)}
         />
@@ -170,12 +171,14 @@ function LibraryItem({
   name,
   detail,
   kind,
+  agent,
   dropAt,
   onAdd,
 }: {
   name: string;
   detail: ReactNode;
   kind: FlowBlock["kind"];
+  agent?: AgentDefinition;
   dropAt: DropAt;
   onAdd: (position?: BlockPosition) => void;
 }) {
@@ -183,7 +186,7 @@ function LibraryItem({
   const { Icon } = BLOCK_KINDS[kind];
   return (
     <>
-      {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} />}
+      {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} agent={agent} />}
       <DragButton
         aria-label={`Add ${name}`}
         className="group flex h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
@@ -236,12 +239,11 @@ const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   continuation: "border bg-muted text-brand-cyan",
 };
 
-/** What a new block of each kind shows on its reference line before it is connected. */
-const GHOST_REFERENCES: Record<FlowBlock["kind"], (name: string) => [string, string]> = {
-  agent: (name) => ["Agent", name],
-  human: () => ["Asks", "a person"],
-  wait: () => ["Waits", "no duration"],
-  continuation: () => ["", "no Agent before it"],
+/** The ghost previews the block a drop would add as it reads before it is connected. */
+const UNCONNECTED: FlowGraph = {
+  blocks: [],
+  connections: [],
+  flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
 };
 
 /** A compact, non-interactive preview of the block a library drag would add. */
@@ -249,12 +251,17 @@ function BlockGhost({
   ghost,
   kind,
   name,
+  agent,
 }: {
   ghost: Ghost;
   kind: FlowBlock["kind"];
   name: string;
+  agent: AgentDefinition | undefined;
 }) {
-  const [label, value] = GHOST_REFERENCES[kind](name);
+  const { label, value } = blockReference(newBlock(UNCONNECTED, kind, agent), {
+    graph: UNCONNECTED,
+    agents: agent ? [agent] : [],
+  }).card;
   return createPortal(
     <BlockPreview
       kind={kind}

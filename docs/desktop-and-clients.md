@@ -312,7 +312,7 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 The current protocol is **14**. Servers require clients of at least **14**, and clients require servers of at least **13**.
 Protocol 14 drops the appearance grant from theme-color presentations and sources: colors come from
 `t3_theme_read` over the T3 connection. Protocol 13 clients read the grant unguarded, so servers
-require clients of at least 14; a current client still accepts protocol 13 servers. Protocol 13 lets an Agent have no execution settings (`execution` and `settingsStatus` are `null`),
+require clients of at least 14; a current client still accepts protocol 13 servers. Protocol 13 lets an Agent have no execution settings (`execution` is `null`),
 requires the `execution` key on Agent create and save, and adds Agent and Flow export and import
 ([definition export](studio.md#definition-export)). Older clients cannot read such an Agent, so the server refuses them before
 product screens mount and they must update; their credentials and stored data are kept. A current

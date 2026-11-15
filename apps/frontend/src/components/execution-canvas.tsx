@@ -10,7 +10,8 @@ import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { selectExecutionTargets } from "../execution-focus.ts";
-import { continuedThread, exitRecipients, type CanvasBlock } from "../flow-graph.ts";
+import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
+import { exitRecipients, type CanvasBlock } from "../flow-graph.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
 import {
   CanvasSurface,
@@ -18,8 +19,8 @@ import {
   type CanvasFlowInputContent,
   type CanvasPort,
 } from "./canvas-surface.tsx";
-import { BLOCK_KINDS, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
-import { pendingArrivals, waitDurationText } from "../wait-display.ts";
+import { exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { pendingArrivals } from "../wait-display.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
 import { AttentionChip } from "./run-attention.tsx";
 import { ContinueNow } from "./wait-arrivals.tsx";
@@ -43,27 +44,12 @@ function blockObservation(block: RunBlock, unavailable: boolean) {
   return "live" as const;
 }
 
-function agentLabel(run: RunDetail, block: Exclude<FlowBlock, { kind: "continuation" }>) {
-  if (block.kind === "human") return "asks you";
-  if (block.kind === "wait") return `waits ${waitDurationText(block.duration)}`;
-  if (!block.agentId) return "not chosen";
-  return (
-    run.definitions.agents.find((agent) => agent.id === block.agentId)?.name ?? "Unavailable Agent"
-  );
-}
-
-/** The reference line under a block's name: what it runs, or whose thread a Continuation continues. */
-function referenceLine(run: RunDetail, block: FlowBlock) {
-  if (block.kind !== "continuation")
-    return {
-      text: `${BLOCK_KINDS[block.kind].name} · ${agentLabel(run, block)}`,
-      color: "text-subtle-foreground",
-    };
-  const thread = continuedThread(run.definitions.flow.graph, block.id);
-  return thread
-    ? { text: `continues ${thread}`, color: "text-brand-cyan" }
-    : { text: "no Agent before it", color: "text-subtle-foreground" };
-}
+/** The Execution canvas colour of each reference tone. */
+const REFERENCE_TONES: Record<ReferenceTone, string> = {
+  plain: "text-subtle-foreground",
+  continued: "text-brand-cyan",
+  absent: "text-subtle-foreground",
+};
 
 /** The Continuation's prompt visit: the one message that sent its prompt in this Run. */
 export function continuationPromptVisit(run: RunDetail, blockId: string) {
@@ -222,13 +208,6 @@ function attentionFooterText(human: boolean, needsInput: boolean) {
 
 type BlockObservation = ReturnType<typeof blockObservation>;
 
-const EXECUTION_KIND_LABELS: Record<FlowBlock["kind"], string> = {
-  agent: "AGENT",
-  human: "HUMAN",
-  wait: "WAIT",
-  continuation: "CONTINUATION",
-};
-
 function ExecutionBlockHeader({
   kind,
   state,
@@ -236,7 +215,7 @@ function ExecutionBlockHeader({
   kind: FlowBlock["kind"];
   state: RunBlock["state"];
 }) {
-  const KindIcon = BLOCK_KINDS[kind].Icon;
+  const { Icon: KindIcon, executionLabel } = BLOCK_KINDS[kind];
   return (
     <span className="flex flex-1 items-center gap-1.5 pt-2 pr-2.5 pl-3">
       <KindIcon
@@ -245,7 +224,7 @@ function ExecutionBlockHeader({
         strokeWidth={1.75}
       />
       <span className="text-2xs leading-3 font-semibold tracking-section text-subtle-foreground">
-        {EXECUTION_KIND_LABELS[kind]}
+        {executionLabel}
       </span>
     </span>
   );
@@ -287,7 +266,10 @@ function ExecutionBlockTitle({
 }) {
   const state = recorded?.state ?? "not-started";
   const activity = activityLine(run, block, recorded, observation);
-  const reference = referenceLine(run, block);
+  const reference = blockReference(block, {
+    graph: run.definitions.flow.graph,
+    agents: run.definitions.agents,
+  }).line;
   return (
     <span className="flex flex-1 flex-col gap-0.75 pt-1 pr-2.5 pb-2 pl-3">
       <span className="flex h-5 min-w-0 items-center gap-1.5">
@@ -301,7 +283,12 @@ function ExecutionBlockTitle({
         </span>
         <StatePill state={state} />
       </span>
-      <span className={cn("truncate text-2xs leading-3 tracking-label", reference.color)}>
+      <span
+        className={cn(
+          "truncate text-2xs leading-3 tracking-label",
+          REFERENCE_TONES[reference.tone],
+        )}
+      >
         {reference.text}
       </span>
       <span

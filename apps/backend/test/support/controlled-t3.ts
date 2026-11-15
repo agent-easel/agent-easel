@@ -391,6 +391,8 @@ export class ControlledT3 implements T3Adapter {
   pendingApproval = false;
   reopenedApprovals = 0;
   capabilitiesAvailable = true;
+  /** Environment and orchestrator capability reads Factory sent, including refused ones. */
+  capabilityReads = 0;
   runtimeContractComplete = true;
   readonly controlledProviders: T3ProviderCapability[] = [
     {
@@ -484,11 +486,13 @@ export class ControlledT3 implements T3Adapter {
     return "reopened";
   }
   async readEnvironment(_target: T3Endpoint): Promise<AgentEnvironment> {
+    this.capabilityReads++;
     if (!this.available || !this.authorized)
       throw new Error("External failure containing secret material");
     return { environmentId: this.environmentId, label: "Controlled machine" };
   }
   async orchestratorCapabilities(_target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {
+    this.capabilityReads++;
     if (!this.available || !this.authorized)
       throw new Error("External failure containing secret material");
     if (!this.capabilitiesAvailable) throw new Error("Capabilities are temporarily unavailable");

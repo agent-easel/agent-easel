@@ -13,9 +13,9 @@ import type {
  */
 export const FACTORY_PROTOCOL = 14;
 /** Protocol 14 theme-color presentations and sources carry no appearance grant, which older
- * clients read unguarded. Protocol 13 Agents may have no execution settings (`execution` and
- * `settingsStatus` null), create and save require the `execution` key with complete
- * `modelOptions`, and definitions are exported and imported. */
+ * clients read unguarded. Protocol 13 Agents may have no execution settings (`execution` null),
+ * create and save require the `execution` key with complete `modelOptions`, and definitions are
+ * exported and imported. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 14;
 /** The current UI saves Agents without a model, imports and exports definitions and relies on
  * Studio's live subscription, which protocol 13 servers provide; it refuses older servers rather
