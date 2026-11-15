@@ -201,9 +201,10 @@ function ExecutionExit({
   );
 }
 
-function attentionFooterText(human: boolean, needsInput: boolean) {
+function attentionFooterText(kind: FlowBlock["kind"], needsInput: boolean) {
+  if (kind === "condition") return "Settle or Archive the Run";
   if (!needsInput) return "Investigate in T3";
-  return human ? "Waiting for your answer" : "Respond in T3";
+  return kind === "human" ? "Waiting for your answer" : "Respond in T3";
 }
 
 type BlockObservation = ReturnType<typeof blockObservation>;
@@ -339,7 +340,7 @@ function executionFooters(
         {attention.problem && <AttentionChip presentation="problem" />}
         {attention.needsInput !== attention.problem && (
           <span className="truncate text-muted-foreground">
-            {attentionFooterText(block.kind === "human", attention.needsInput)}
+            {attentionFooterText(block.kind, attention.needsInput)}
           </span>
         )}
       </span>,

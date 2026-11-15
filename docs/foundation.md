@@ -83,6 +83,8 @@ and restricted OAuth credentials live outside project repositories.
   into a verified check of the application Discord reported, keeps a rejection for another application's token
   until Retry and keeps every other value. Migration `093` records the message carrying each new review's
   button, so its button can be shown disabled once unusable; existing proposals have none and are never edited.
+  Migration `099` rebuilds the record of announced attention matters to admit Condition integrity Problems,
+  keeping every row unchanged.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.
 - A Block reuses its worker conversation across visits. Exact execution identity, report

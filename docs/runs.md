@@ -350,7 +350,7 @@ repository metadata, even when the title fits. Opening a row menu dismisses and 
 menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
-  **Problem**: a pending missing report, execution failure or report problem. Both can show. Stale observations or an unavailable
+  **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip.
 - **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
@@ -508,8 +508,16 @@ in the Run, whichever wire or worker it came from, and goes unchanged, with its 
 rules select ([Runner](runner.md#condition-arrivals)). Run detail carries one constant-size summary per Condition, not its
 history: the arrivals numbered so far, the deliveries waiting there for a number, and the latest selection (arrival number,
 selected output and acceptance time), which is the most recent route, not proof its recipients received it. The timeline
-records one **arrival *N* → *output*** row per arrival with the Condition icon. A Condition is never Needs input or a Problem
-and does not wake a Snoozed Run.
+records one **arrival *N* → *output*** row per arrival with the Condition icon. A Condition is never Needs input and its
+routing raises no attention.
+
+When Factory cannot trust a Condition's count or captured rules, or its next arrival number would pass
+9,007,199,254,740,991, it numbers nothing and records one **Condition integrity Problem** on the Condition, with the
+reason, as a Problem like any other: it shows on the Condition's block and in the Run's attention, wakes a Snoozed Run and
+keeps the Run Active, also across restart. The Condition accepts no delivery while it is pending; its waiting deliveries
+stay unnumbered, and other branches continue. No report, **Request report**, Retry or repair clears it. **Settle** or
+**Archive** settles it and cancels the waiting deliveries without numbering them or changing the count
+([Runner](runner.md#condition-integrity-problems)).
 
 ## Continuations
 

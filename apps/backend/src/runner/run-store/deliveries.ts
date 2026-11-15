@@ -88,13 +88,14 @@ export function openRunDeliveries(database: RunnerDatabase) {
     );
 
   /** The Run's Handoffs not yet turned into deliveries and its deliveries not yet acknowledged or
-   * cancelled, in the order they were recorded. */
+   * cancelled, in the order they were recorded. A pending integrity Problem stops its Condition's
+   * acceptance, so Handoffs to that Condition wait unnumbered and are not retried. */
   const dispatchable = (run: Pick<RunRow, "id">) =>
     database.transaction(
       (sql) =>
         sql<
           Handoff | Delivery
-        >`SELECT * FROM operation_intents WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') ORDER BY rowid`,
+        >`SELECT * FROM operation_intents i WHERE run_id=${run.id} AND state IN ('pending','reserved','uncertain') AND kind IN ('handoff','launch','send') AND NOT EXISTS(SELECT 1 FROM run_attention a WHERE a.run_id=i.run_id AND a.block_id=i.block_id AND a.kind='condition-integrity' AND a.settled_at IS NULL) ORDER BY rowid`,
     );
 
   /** Notes a Handoff or delivery unresolved with `message`; a reserved delivery becomes

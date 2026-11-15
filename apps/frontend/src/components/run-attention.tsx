@@ -28,6 +28,7 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
     "missing-report": "Missing reports",
     "report-problem": "Report problems",
     "execution-failed": "Execution problems",
+    "condition-integrity": "Condition integrity problems",
   })[kind];
 
 /** Needs input / Problem on Run-local surfaces: the same Run/StatusChip as Run navigation. */
@@ -49,6 +50,8 @@ function attentionExplanation(kind: RunAttention["kind"]) {
       return "A report or its work evidence needs attention. Inspect the recorded reason and the worker in T3.";
     case "execution-failed":
       return "T3 execution did not complete successfully. Continue in T3 to investigate.";
+    case "condition-integrity":
+      return "This Condition cannot number its next arrival, so it accepts none until the Run is Settled or Archived.";
   }
 }
 
@@ -224,7 +227,7 @@ function PendingMatter({
           Thread-level observation; questions and permission approvals may be grouped.
         </p>
       )}
-      {item.kind === "report-problem" && item.message && (
+      {(item.kind === "report-problem" || item.kind === "condition-integrity") && item.message && (
         <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
           {item.message}
         </p>
@@ -276,7 +279,9 @@ function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
           ? item.message
             ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
             : "Inspect the recorded work evidence in T3."
-          : "Inspect the failed execution in T3; report recovery does not retry work."}
+          : item.kind === "condition-integrity"
+            ? "Waiting deliveries stay unnumbered. There is no Retry or repair: Settle or Archive the Run to abandon them; neither resets the count."
+            : "Inspect the failed execution in T3; report recovery does not retry work."}
       {detail ? ` ${detail}` : ""}
     </p>
   );
@@ -291,9 +296,7 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
         <AttentionChip presentation={attentionPresentation(item.kind)} />
         <h3 className="truncate text-2xs font-medium text-muted-foreground">{item.blockName}</h3>
       </div>
-      {(item.kind === "report-problem" || item.kind === "conversation-waiting") && item.message && (
-        <p className="whitespace-pre-wrap">{item.message}</p>
-      )}
+      {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
       {exit && <p>Selected exit: {exit}</p>}
       <p>Settled: {item.settlementReason}</p>
       {reply && (

@@ -531,7 +531,8 @@ export interface RunAttention {
     | "conversation-waiting"
     | "missing-report"
     | "execution-failed"
-    | "report-problem";
+    | "report-problem"
+    | "condition-integrity";
   readonly nativeRequestId: string | null;
   readonly occurrenceId: string | null;
   readonly link: string | null;
@@ -541,12 +542,13 @@ export interface RunAttention {
   readonly settlementReason: string | null;
   /**
    * The Agent's question for `conversation-waiting`, a retired kind kept only as settled history;
-   * null for every other kind.
+   * the recorded reason for `report-problem` and `condition-integrity`; null for every other kind.
    */
   readonly message: string | null;
 }
 
-/** Needs input is a pending question or decision. Problem is an execution or report issue. */
+/** Needs input is a pending question or decision. Problem is an execution, report or Condition
+ * integrity issue. */
 export type RunAttentionPresentation = "needs-input" | "problem";
 
 /**
@@ -578,6 +580,7 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "missing-report":
     case "execution-failed":
     case "report-problem":
+    case "condition-integrity":
       return "problem";
   }
 }

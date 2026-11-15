@@ -1,11 +1,16 @@
 import { assert, expect, it } from "@effect/vitest";
+import { CONDITION_ARRIVAL_MAX } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
-import { conditionStorageInterrupted } from "./support/condition-storage.ts";
+import {
+  conditionCountAtMaximum,
+  conditionStorageInterrupted,
+} from "./support/condition-storage.ts";
 import { prepared, preparedService } from "./support/prepared-runner.ts";
 import { launchedBlockId } from "./support/run-worker.ts";
 import {
   allTurnsEnd,
   arrivalsNumbered,
+  besideConditionFlow,
   conditionFlow,
   conditionSelections,
   fanOutConditionFlow,
@@ -28,7 +33,29 @@ import {
   turnBegins,
   twoWorkersStarted,
   workerAtWork,
+  type ScenarioWorld,
+  type WorkerHandle,
 } from "./support/scenarios.ts";
+
+/** The worker's first result was numbered arrival 1 at the Gate, whose count was then moved to the
+ * largest safe integer; a later turn's "Revise" result reached the Gate, which refused to number
+ * it and latched its integrity Problem. */
+async function integrityProblemLatched(
+  world: ScenarioWorld,
+  databasePath: string,
+  worker: WorkerHandle,
+) {
+  await resultReported(world, worker, { message: "First pass." });
+  await arrivalsNumbered(world, worker.runId, 1);
+  conditionCountAtMaximum(databasePath);
+  const later = turnBegins(world, worker, "later-execution");
+  const revised = await report(world, later, finishedReport("Needs another pass.", "Revise"));
+  assert(revised === "ACCEPTED");
+  allTurnsEnd(world, later);
+  return observeFor("observe the integrity Problem", world, worker.runId, (run) =>
+    run.attention.some((matter) => matter.kind === "condition-integrity"),
+  );
+}
 
 it("arrivals from two workers share one count, and each selection forwards its own worker's message and origin", async (c) => {
   // Arrange
@@ -350,4 +377,165 @@ it("an empty Human approval passes through the Condition unchanged with the revi
     ["spec", worker.threadId],
     ["follow-up", worker.threadId],
   ]);
+});
+
+it("an arrival past the largest safe number latches one Condition Problem and stays unnumbered while another branch continues", async (c) => {
+  // Arrange
+  const f = await prepared(c, besideConditionFlow);
+  const [worker, second] = await twoWorkersStarted(f.world, f.input);
+  await integrityProblemLatched(f.world, f.h.databasePath, worker);
+  await resultReported(f.world, second, { message: "Second branch." });
+
+  // Act
+  const run = await observeFor(
+    "observe the other branch's review",
+    f.world,
+    worker.runId,
+    (detail) => detail.humanOccurrences.length === 1,
+  );
+
+  // Assert
+  expect(run.attention.map((matter) => [matter.blockId, matter.kind])).toStrictEqual([
+    ["review", "human"],
+    ["gate", "condition-integrity"],
+  ]);
+  expect(run.attention.find((matter) => matter.blockId === "gate")).toMatchObject({
+    executionId: "",
+    settledAt: null,
+    message: "The Condition's next arrival number is not representable.",
+  });
+  expect(run.conditions).toStrictEqual([
+    {
+      blockId: "gate",
+      arrivals: CONDITION_ARRIVAL_MAX,
+      pending: 1,
+      latest: {
+        arrivalNumber: CONDITION_ARRIVAL_MAX,
+        outputId: "otherwise",
+        acceptedAt: expect.any(String),
+      },
+    },
+  ]);
+  expect(conditionSelections(run)).toStrictEqual([
+    { arrivalNumber: CONDITION_ARRIVAL_MAX, outputId: "otherwise" },
+  ]);
+  expect(
+    run.intents.filter((intent) => intent.blockId === "gate").map((intent) => intent.state),
+  ).toStrictEqual(["acknowledged", "pending"]);
+  expect(run.humanOccurrences).toMatchObject([{ blockId: "review", context: "Second branch." }]);
+  expect(run.lifecycle).toBe("active");
+});
+
+it("a repeated report of an arrival numbered at the largest safe number keeps its decision", async (c) => {
+  // Arrange
+  const f = await prepared(c, terminalConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker, { message: "Once." });
+  await arrivalsNumbered(f.world, worker.runId, 1);
+  await settled(f.world, worker);
+  conditionCountAtMaximum(f.h.databasePath);
+
+  // Act
+  const repeated = await report(f.world, worker, finishedReport("Once."));
+
+  // Assert
+  expect(repeated).toBe("ACCEPTED");
+  assert((await f.f.reconcileRuns()).ok);
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(run.value.attention).toStrictEqual([]);
+  expect(run.value.conditions).toMatchObject([
+    {
+      arrivals: CONDITION_ARRIVAL_MAX,
+      pending: 0,
+      latest: { arrivalNumber: CONDITION_ARRIVAL_MAX, outputId: "otherwise" },
+    },
+  ]);
+  expect(run.value.intents.filter((intent) => intent.blockId === "gate")).toHaveLength(1);
+});
+
+it.effect(
+  "a Condition integrity Problem holds automatic settlement and stays latched across restart",
+  (c) =>
+    Effect.gen(function* () {
+      // Arrange
+      const f = yield* preparedService(c, terminalConditionFlow);
+      const worker = yield* Effect.promise(() => workerAtWork(f.world, f.input));
+      yield* Effect.promise(() => integrityProblemLatched(f.world, f.h.databasePath, worker));
+      yield* f.close;
+
+      // Act
+      const recovered = yield* f.reopen;
+      const reconciled = yield* recovered.reconcileRuns();
+
+      // Assert
+      assert(reconciled.ok);
+      const run = yield* recovered.getRun(worker.runId);
+      assert(run.ok);
+      expect(run.value.lifecycle).toBe("active");
+      expect(run.value.attention).toMatchObject([
+        { blockId: "gate", kind: "condition-integrity", settledAt: null },
+      ]);
+      expect(run.value.conditions).toMatchObject([{ arrivals: CONDITION_ARRIVAL_MAX, pending: 1 }]);
+      expect(
+        run.value.intents
+          .filter((intent) => intent.blockId === "gate")
+          .map((intent) => intent.state),
+      ).toStrictEqual(["acknowledged", "pending"]);
+    }),
+);
+
+it("Request report on a Condition is refused and leaves its integrity Problem pending", async (c) => {
+  // Arrange
+  const f = await prepared(c, terminalConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await integrityProblemLatched(f.world, f.h.databasePath, worker);
+
+  // Act
+  const requested = await f.f.requestReport(worker.runId, { blockId: "gate" });
+
+  // Assert
+  assert(!requested.ok);
+  expect(requested.error.code).toBe("conflict");
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  expect(run.value.attention).toMatchObject([{ kind: "condition-integrity", settledAt: null }]);
+  expect(run.value.recoveries).toStrictEqual([]);
+});
+
+it("manual Settle settles a Condition integrity Problem and cancels its waiting delivery without numbering it", async (c) => {
+  // Arrange
+  const f = await prepared(c, terminalConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await integrityProblemLatched(f.world, f.h.databasePath, worker);
+
+  // Act
+  const settledRun = await f.f.settleRun(worker.runId, {});
+
+  // Assert
+  assert(settledRun.ok);
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(run.value.attention).toMatchObject([
+    {
+      kind: "condition-integrity",
+      settledAt: expect.any(String),
+      settlementReason: "manual-settlement",
+    },
+  ]);
+  expect(run.value.conditions).toMatchObject([
+    {
+      arrivals: CONDITION_ARRIVAL_MAX,
+      pending: 0,
+      latest: { arrivalNumber: CONDITION_ARRIVAL_MAX, outputId: "otherwise" },
+    },
+  ]);
+  expect(conditionSelections(run.value)).toStrictEqual([
+    { arrivalNumber: CONDITION_ARRIVAL_MAX, outputId: "otherwise" },
+  ]);
+  expect(
+    run.value.intents.filter((intent) => intent.blockId === "gate").map((intent) => intent.state),
+  ).toStrictEqual(["acknowledged", "cancelled"]);
 });

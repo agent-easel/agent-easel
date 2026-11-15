@@ -971,6 +971,24 @@ export const parallelConditionFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
+/** Entry worker's "Done" and Flow-local "Revise" go to the Gate, whose Otherwise ends the branch;
+ * Second entry, also started from the Flow input, hands "Done" to a Human Review. */
+export const besideConditionFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Beside condition", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
+      agentBlock("second", "Second entry", agentId),
+      gate(),
+      reviewStep,
+    ],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("worker", "revise", "gate"),
+      connection("second", "done", "review"),
+    ],
+  }));
+
 /** Entry worker's "Done" goes to the Gate, which escalates to a Human Review from arrival 2 and
  * otherwise returns it to Entry worker. */
 export const loopConditionFlow: ReadyFlowShape = (world) =>

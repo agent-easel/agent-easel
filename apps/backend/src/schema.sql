@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: condition_arrivals
+-- Newest applied migration: condition_integrity_matters
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -277,11 +277,11 @@ CREATE TABLE chat_proposals (
 CREATE INDEX chat_proposals_identity ON chat_proposals(identity, state)
 ;
 
-CREATE TABLE chat_report_matters (
+CREATE TABLE "chat_report_matters" (
   matter_id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id),
   notice_id TEXT REFERENCES chat_report_notices(delivery_id),
-  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem')),
+  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'condition-integrity')),
   block TEXT NOT NULL,
   appeared_at TEXT NOT NULL,
   resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1))

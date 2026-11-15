@@ -11,6 +11,7 @@ import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
 import type { Checked, RunRow } from "../runner-types.ts";
 import { unverified, verified } from "../runner-utils.ts";
+import { latchConditionIntegrityProblem } from "./attention.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { guardsHold } from "./guards.ts";
@@ -48,7 +49,8 @@ export function createConditionCounters(
  * The Condition's next arrival number, with its captured rules: the integrity check before any
  * number is committed. It refuses when the captured rules are not a started Run's, the counter is
  * missing or disagrees with the numbers already committed, or the next number is not
- * representable. A refusal numbers and selects nothing; the delivery stays pending in order.
+ * representable. A refusal numbers and selects nothing; the delivery stays pending in order and
+ * the Condition's integrity Problem latches.
  */
 function nextArrival(
   block: ConditionBlock | undefined,
@@ -70,7 +72,8 @@ const selectedRule = (block: ConditionBlock, number: number) =>
   block.rules.find((rule) => rule.fromArrival !== null && number >= rule.fromArrival);
 
 /** Numbers the Condition's pending deliveries in the order they were recorded, oldest first, while
- * the integrity check allows. Answers how many were numbered. */
+ * the integrity check allows; its refusal latches the Condition's integrity Problem. Answers how
+ * many were numbered and whether this pass latched the Problem. */
 function numberPendingArrivals(
   sql: SqlClient.SqlClient,
   runRow: RunRow,
@@ -84,13 +87,23 @@ function numberPendingArrivals(
     for (let numbered = 0; ; numbered++) {
       const [head] =
         yield* sql<PendingArrival>`SELECT id,incoming_intent_id,binding_id,origin_activation_id FROM condition_arrivals WHERE run_id=${runRow.id} AND block_id=${blockId} AND state='pending' ORDER BY rowid LIMIT 1`;
-      if (!head) return numbered;
+      if (!head) return { numbered, latched: false };
       const [counter] = yield* sql<{
         arrivals: number;
         committed: number;
       }>`SELECT c.arrivals,COALESCE((SELECT MAX(a.arrival_number) FROM condition_arrivals a WHERE a.run_id=c.run_id AND a.block_id=c.block_id),0) AS committed FROM condition_counters c WHERE c.run_id=${runRow.id} AND c.block_id=${blockId}`;
       const next = nextArrival(captured, counter);
-      if (!next.ok) return numbered;
+      if (!next.ok)
+        return {
+          numbered,
+          latched: yield* latchConditionIntegrityProblem(
+            sql,
+            runRow.id,
+            blockId,
+            next.problem,
+            time,
+          ),
+        };
       const { block, number } = next.value;
       const [incoming] =
         yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${head.incoming_intent_id} AND state='pending'`;
@@ -185,7 +198,9 @@ export function openRunConditions(database: RunnerDatabase) {
    * first, so none overtakes an earlier one: each gets the next arrival number, its first matching
    * rule or Otherwise is selected, released Handoffs to every recipient of that output carry its
    * message and provenance, its incoming Handoff is acknowledged, the count moves and
-   * "condition-selected" is appended. An unwired output still counts and ends the arrival. Sets the
+   * "condition-selected" is appended. An unwired output still counts and ends the arrival. An
+   * integrity refusal stops numbering and, in the same transaction, latches the Condition's
+   * integrity Problem, which holds every later delivery to it unnumbered. Sets the
    * Condition waiting while a delivery is pending, else finished, and advances the generation.
    * Any failure rolls back everything, so no number is consumed. Answers whether it changed the
    * Run. */
@@ -210,8 +225,13 @@ export function openRunConditions(database: RunnerDatabase) {
             yield* sql`INSERT INTO condition_arrivals(id,run_id,block_id,incoming_intent_id,flow_revision_id,binding_id,origin_activation_id,arrived_at)
               SELECT ${yield* newId},i.run_id,i.block_id,i.id,r.flow_revision_id,i.binding_id,i.origin_activation_id,${time} FROM operation_intents i JOIN runs r ON r.id=i.run_id
               WHERE i.id=${handoff.id} AND i.kind='handoff' AND i.state='pending' ON CONFLICT(incoming_intent_id) DO NOTHING RETURNING id`;
-          const numbered = yield* numberPendingArrivals(sql, runRow, handoff.block_id, time);
-          if (!recorded.length && !numbered) return false;
+          const { numbered, latched } = yield* numberPendingArrivals(
+            sql,
+            runRow,
+            handoff.block_id,
+            time,
+          );
+          if (!recorded.length && !numbered && !latched) return false;
           yield* writeBlockState(
             sql,
             { runId: runRow.id, blockId: handoff.block_id },

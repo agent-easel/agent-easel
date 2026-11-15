@@ -136,6 +136,7 @@ const attentionWords: Record<RunAttention["kind"], string> = {
   "missing-report": "problem · no report",
   "report-problem": "problem · report needs a fix",
   "execution-failed": "problem · T3 execution failed",
+  "condition-integrity": "problem · Condition cannot number its next arrival",
 };
 
 /** The message a Continuation event is about, named by the delivery that arrived. */

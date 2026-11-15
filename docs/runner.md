@@ -501,14 +501,14 @@ Condition's newest pending delivery; a redelivery of the same Handoff finds it a
 with identical text and worker is a new arrival. The Condition then numbers its pending deliveries oldest first, so a
 delivery durably pending there is never overtaken by a later one, whatever order their sources completed in. Numbering
 checks that the count matches the arrivals already numbered, that the next number stays within 9,007,199,254,740,991 and
-that the captured rules are complete; a check that fails numbers and selects nothing and leaves the delivery pending in
-order. Each numbered arrival selects the first rule whose threshold the number reaches, else Otherwise; records only its
+that the captured rules are complete; a check that fails is an [integrity refusal](#condition-integrity-problems). Each
+numbered arrival selects the first rule whose threshold the number reaches, else Otherwise; records only its
 number, the matched captured rule (none for Otherwise), acceptance time and the Handoff's [worker provenance](#worker-provenance),
 never a copy of the rules; creates one Handoff to every recipient of the selected output, released from creation and carrying
 the unchanged text, including empty text, and provenance; acknowledges the incoming Handoff; moves the count; and appends
 one `condition-selected` event. An unwired selection counts and ends that arrival without cancelling other work or the Run.
-A Condition creates no worker, prompt, report or attention; it shows waiting while a delivery is pending there and finished
-once every delivery has been numbered.
+A Condition creates no worker, prompt or report, and no attention except its integrity Problem; it shows waiting while a
+delivery is pending there and finished once every delivery has been numbered.
 
 Any failure before commit, such as unavailable storage, rolls everything back: no number is consumed, nothing is selected
 and no Problem is recorded. The Handoff stays pending and the next dispatch pass, or reconciliation after restart, retries it;
@@ -517,6 +517,24 @@ failures retry only its outstanding outgoing Handoffs under the ordinary deliver
 A downstream Agent visit a Condition started has reason `Condition` and reads the routed text as its
 [input](t3-integration.md#block-and-run-reads); a Continuation after a Condition continues the thread of the worker whose
 message was routed and, after a Human step, labels that step's reply as usual.
+
+#### Condition integrity Problems
+
+An integrity refusal (a missing count, a count that disagrees with the arrivals already numbered, a next number past
+9,007,199,254,740,991 or incomplete captured rules) commits no number or route, and in the same transaction latches one
+pending `condition-integrity` Problem for that Condition in the Run, recording the refusal's reason. A refusal whose
+transaction fails records nothing and is retried like any failure before commit. The Problem has no execution, worker or
+T3 thread. While it is pending the Condition's acceptance stops: dispatch no longer offers Handoffs to it, so the refused
+delivery and every later one wait unnumbered and are not retried. Factory never selects Otherwise for them, skips them,
+resets the count, fabricates a report or repairs the captured rules. Other Blocks continue, and arrivals already numbered
+keep their decisions and outstanding recipients; a redelivery of a numbered delivery still finds its decision, also at the
+largest number.
+
+This is a deliberate workerless-Problem recovery limit, not worker-report recovery: no report or Request report can settle
+it, and there is no Retry, in-place repair, error exit or automatic failed state. As pending attention it holds automatic
+settlement and stays latched across restart. Only [manual settlement](#manual-settlement) or [Archive](#archive) settles it,
+cancelling the waiting deliveries without numbering them; neither reports success nor changes the count. Flow edits affect
+only later Runs.
 
 ## Run title generations
 
