@@ -7,6 +7,9 @@ import {
   waitBlock,
   WAIT_OUTPUT,
   continuationStep,
+  conditionBlock,
+  conditionRule,
+  OTHERWISE,
 } from "../../apps/backend/test/support/scenarios.ts";
 import type { Factory } from "../../apps/backend/src/index.ts";
 import type { FlowGraph, FlowWorkspace } from "../../packages/contracts/src/index.ts";
@@ -140,7 +143,80 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     worktree,
     continuation,
     ...(await createWaitFlows(factory, agents)),
+    ...(await createConditionFlows(factory, agents)),
   };
+}
+
+/** Review rounds that return changes to the worker until arrival 3 escalates to you, parallel
+ * approvals where only the first reaches your decision, and a saved Condition draft whose rules
+ * block Start. */
+async function createConditionFlows(factory: Factory, agents: DemoAgents) {
+  const graph = (rules: Parameters<typeof conditionBlock>[2]) => ({
+    flowInput: flowInput(["worker"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 }),
+      agentBlock(
+        "reviewer",
+        "Review implementation",
+        agents.reviewer,
+        { x: 700, y: 180 },
+        [],
+        [
+          blockExit(
+            "changes",
+            "Changes requested",
+            "The change needs another pass. List each requested change.",
+          ),
+        ],
+      ),
+      conditionBlock("rounds", "Review rounds", rules, { x: 1080, y: 180 }),
+      humanStep("escalation", "Your decision", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "reviewer"),
+      connection("reviewer", "changes", "rounds"),
+      connection("rounds", "escalate", "escalation"),
+      connection("rounds", OTHERWISE, "worker"),
+      connection("escalation", "request-changes", "worker"),
+    ],
+  });
+  const conditionRounds = await saveFlow(
+    factory,
+    "Demo · Review rounds, then escalate",
+    graph([conditionRule("escalate", "Human escalation", 3)]),
+  );
+  const firstApproval = await saveFlow(factory, "Demo · First approval decides", {
+    flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("reviewer", "Code review", agents.reviewer, { x: 320, y: 40 }),
+      accessibilityReview(agents.accessibility, 320),
+      conditionBlock("first", "First approval", [conditionRule("later", "Later approvals", 2)], {
+        x: 700,
+        y: 180,
+      }),
+      humanStep("decision", "Your decision", { x: 1080, y: 180 }),
+    ],
+    connections: [
+      connection("reviewer", "approved", "first"),
+      connection("accessibility", "approved", "first"),
+      connection("first", OTHERWISE, "decision"),
+    ],
+  });
+  const draft = requireSuccess(
+    await factory.createFlow({ name: "Demo · Condition needs thresholds (draft)" }),
+  );
+  requireSuccess(
+    await factory.updateFlow(draft.id, {
+      name: draft.name,
+      expectedRevision: draft.revision,
+      workspace: { mode: "checkout" },
+      graph: graph([
+        conditionRule("escalate", "Human escalation", null),
+        conditionRule("every", "Every arrival", 1),
+      ]),
+    }),
+  );
+  return { conditionRounds, firstApproval };
 }
 
 /** A Wait between implementation and review, Waits holding parallel reviews for a decision, an
