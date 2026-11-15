@@ -47,6 +47,12 @@ function savedExecution(selection: AgentExecutionSettings): AgentExecutionSettin
     : null;
 }
 
+/** The create API's shape for the draft: an unchosen or partial Worker becomes no model. Saving and a
+ * removed Agent's **Copy as JSON** both use it, so recovered JSON creates the same Agent. */
+export function createShapedContent(content: AgentContent) {
+  return { ...content, execution: savedExecution(content.execution) };
+}
+
 function withOptionValue(
   options: readonly AgentModelOptionValue[],
   id: string,
@@ -86,7 +92,7 @@ function saveRequest(
   draft: AgentContent,
   operations: AgentDraftOperations,
 ): { error: string } | { submitted: AgentContent; save: () => Promise<AgentDefinition> } {
-  const content = { ...draft, execution: savedExecution(draft.execution) };
+  const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
   const asContent = (input: typeof content): AgentContent => ({
     ...input,

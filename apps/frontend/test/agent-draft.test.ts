@@ -1,6 +1,8 @@
 import { held } from "./support/flow-draft.ts";
 import type { AgentDefinition } from "@t3-factory/contracts";
 import { expect, it, vi } from "vite-plus/test";
+import { validateCreateAgent } from "@t3-factory/domain-validation";
+import { createShapedContent } from "../src/agent-draft.ts";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
@@ -111,6 +113,19 @@ it("saved worker settings that T3 no longer offers are kept without substitution
     dirty: false,
     choices: { providers: [], selectedProvider: undefined, selectedModel: undefined },
   });
+});
+
+it("a model-less Agent removed elsewhere recovers as a valid create request without a model", () => {
+  // Arrange
+  const setup = agentDraft(savedAgent({ execution: null }));
+  removedElsewhere(setup);
+
+  // Act
+  const recovered = createShapedContent(setup.draft.getSnapshot().content);
+
+  // Assert
+  expect(recovered.execution).toBeNull();
+  expect(validateCreateAgent(recovered).ok).toBe(true);
 });
 
 it("choosing a provider selects its first model, preserves shared options and defaults the rest", () => {

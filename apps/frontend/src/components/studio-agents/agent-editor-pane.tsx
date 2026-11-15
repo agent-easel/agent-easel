@@ -21,7 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
+import {
+  createShapedContent,
+  type AgentDraftModel,
+  type AgentDraftSnapshot,
+} from "../../agent-draft.ts";
 import { editedLabel } from "../studio-list.tsx";
 import { flowUsageLabel } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
@@ -59,7 +63,10 @@ export function AgentEditorPane(props: AgentEditorProps) {
       >
         <AgentEditorHeader {...props} name={name} saving={saving} />
         {state.removed ? (
-          <StudioRemovedDraft kind="Agent" json={JSON.stringify(state.content, null, 2)} />
+          <StudioRemovedDraft
+            kind="Agent"
+            json={JSON.stringify(createShapedContent(state.content), null, 2)}
+          />
         ) : (
           <AgentRevisionPanel draft={draft} state={state} />
         )}
