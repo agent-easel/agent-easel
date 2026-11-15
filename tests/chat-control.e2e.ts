@@ -98,7 +98,6 @@ afterEach(async ({ app }) => {
   }
   const off = await hostCall(app.baseUrl, "PUT", "/api/chat-control/enabled", { enabled: false });
   assert(off.ok, JSON.stringify(off));
-  await discord(app.baseUrl).commands({ available: true });
   await provider.close();
 });
 
