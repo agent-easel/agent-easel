@@ -4,7 +4,6 @@ import { RunConversationAction, RunConversationNotice } from "../components/run-
 import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
-import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail } from "@t3-factory/contracts";
 import {
@@ -72,18 +71,16 @@ type RunObservation = ReturnType<typeof useRunObservation>;
 
 /**
  * Marks Woke seen once per opened Run, as soon as its live view is current: the command
- * is refused while delivery synchronizes. Canvas selection and viewport stay out of this.
+ * is refused while delivery synchronizes. A Run opened under Settings is marked once Settings
+ * closes; Studio, Settings, canvas selection and viewport changes over it do not mark it again.
  */
 function useRunOpened(id: string, current: boolean) {
-  const location = useLocation();
-  const [seenError, setSeenError] = useState<{ location: typeof location; message: string }>();
-  const unmarked = useRef(false);
+  const settingsOpen = !!useSettings();
+  const [seenError, setSeenError] = useState<{ id: string; message: string }>();
+  const marked = useRef<string | undefined>(undefined);
   useEffect(() => {
-    unmarked.current = !location.search.settings;
-  }, [id, location]);
-  useEffect(() => {
-    if (!current || !unmarked.current) return;
-    unmarked.current = false;
+    if (!current || settingsOpen || marked.current === id) return;
+    marked.current = id;
     let active = true;
     void api
       .markRunWokeSeen(id)
@@ -93,15 +90,15 @@ function useRunOpened(id: string, current: boolean) {
       .catch(() => {
         if (active)
           setSeenError({
-            location,
+            id,
             message: "Could not mark Woke as seen. Reopen this Run to try again.",
           });
       });
     return () => {
       active = false;
     };
-  }, [id, location, current]);
-  return seenError?.location === location ? seenError.message : "";
+  }, [id, current, settingsOpen]);
+  return seenError?.id === id ? seenError.message : "";
 }
 
 function useEscapeToDeselect(active: boolean, deselect: () => void) {
