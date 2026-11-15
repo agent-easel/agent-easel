@@ -100,10 +100,11 @@ function manifestIssues(images: readonly RunImage[]): ValidationIssue[] {
 }
 
 /**
- * The Start prompt as segments and an image manifest. The earlier text-only request, which sends
- * `input` instead, is still accepted and becomes one text segment without images.
+ * The Start prompt's segments and image manifest when their structure is readable, before any of
+ * the Start check's issues. The earlier text-only request, which sends `input` instead, becomes
+ * one text segment without images.
  */
-export function validateStartPrompt(request: object): Result<StartPrompt> {
+export function parseStartPrompt(request: object): StartPrompt | undefined {
   const input = request as { input?: unknown; segments?: unknown; images?: unknown };
   const legacy = input.segments === undefined && input.images === undefined;
   const rawSegments = legacy ? [{ type: "text", text: input.input }] : input.segments;
@@ -114,7 +115,15 @@ export function validateStartPrompt(request: object): Result<StartPrompt> {
     (!legacy && input.input !== undefined) ||
     segments.some((segment) => !segment) ||
     images.some((image) => !image);
-  if (malformed)
+  return malformed
+    ? undefined
+    : { segments: segments as PromptSegment[], images: images as RunImage[] };
+}
+
+/** The Start prompt as segments and an image manifest, with every issue Start reports. */
+export function validateStartPrompt(request: object): Result<StartPrompt> {
+  const prompt = parseStartPrompt(request);
+  if (!prompt)
     return {
       ok: false,
       error: {
@@ -125,7 +134,6 @@ export function validateStartPrompt(request: object): Result<StartPrompt> {
         ],
       },
     };
-  const prompt = { segments: segments as PromptSegment[], images: images as RunImage[] };
   const text = promptText(prompt.segments);
   const known = new Set(prompt.images.map((image) => image.imageId));
   const issues = [

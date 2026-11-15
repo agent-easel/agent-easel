@@ -9,23 +9,29 @@ import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { parse } from "smol-toml";
 import type { ReportingInstallation, Result, T3Connection } from "@t3-factory/contracts";
-import { FACTORY_BLOCK_SKILL, factorySkillPath } from "./factory-block-skill.ts";
+import { FACTORY_BLOCK_SKILL } from "./factory-block-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "./factory-start-run-skill.ts";
 import { SETUP_FACTORY_SKILL } from "./setup-factory-skill.ts";
 import { discoverReporting, record } from "./reporting-discovery.ts";
 import { isReportingDriver } from "./reporting-drivers.ts";
+import { HARNESS_PROFILES, type HarnessProfile } from "./harness-profiles.ts";
+import { boundary } from "./effect-operations.ts";
 import {
   RepairableInstallationError,
   withReportingInstallationActions,
 } from "./reporting-installation-actions.ts";
 import { failure } from "./result.ts";
 
-const isToml = (target: ReportingInstallation) =>
-  target.provider === "codex" || target.provider === "grok";
+/** Discovery gives a configuration path only to a reporting driver's target. */
+function harnessProfile(target: ReportingInstallation): HarnessProfile {
+  if (!isReportingDriver(target.provider))
+    throw Error(`No harness profile for provider ${target.provider}.`);
+  return HARNESS_PROFILES[target.provider];
+}
 
-/** The entry each harness writes for a Streamable HTTP server; Claude names the transport. */
-const mcpEntry = (target: ReportingInstallation, url: string): Record<string, string> =>
-  target.provider === "claudeAgent" ? { type: "http", url } : { url };
+/** A Factory skill's copy in the harness skills folder; the configuration sits in the home. */
+const harnessSkillPath = (profile: HarnessProfile, configPath: string, skill: string) =>
+  join(profile.skillsFolder(dirname(configPath)), skill, "SKILL.md");
 
 const sameKeys = (saved: Record<string, unknown>, entry: Record<string, string>) =>
   Object.keys(saved).length === Object.keys(entry).length &&
@@ -160,13 +166,13 @@ async function replace(path: string, before: string, after: string, mode = 0o600
 }
 /** Registration text for one provider's configuration; TOML keeps unrelated content verbatim. */
 function registered(
-  target: ReportingInstallation,
+  profile: HarnessProfile,
   before: string,
   config: Record<string, unknown>,
   url: string,
   replacingUrl?: string,
 ) {
-  if (isToml(target)) {
+  if (profile.config.format === "toml") {
     // Replace only the exact block Factory appended, keeping comments and formatting.
     if (replacingUrl !== undefined && !before.includes(tomlEntry(replacingUrl)))
       throw Error(
@@ -182,7 +188,7 @@ function registered(
   const servers = record(config.mcpServers ?? {});
   return (
     JSON.stringify(
-      { ...config, mcpServers: { ...servers, "factory-runtime": mcpEntry(target, url) } },
+      { ...config, mcpServers: { ...servers, "factory-runtime": profile.entry(url) } },
       null,
       2,
     ) + "\n"
@@ -193,14 +199,13 @@ function registered(
  * The harness configuration after registering Factory MCP at `url`. Factory's own entry
  * for another address is replaced only on `repair`; any other entry is left for review.
  */
-function configChange(target: ReportingInstallation, before: string, url: string, repair = false) {
-  const config = isToml(target) ? parse(before) : record(JSON.parse(before || "{}"));
-  const existing = record(config[isToml(target) ? "mcp_servers" : "mcpServers"] ?? {})[
-    "factory-runtime"
-  ];
-  if (existing === undefined) return registered(target, before, config, url);
+function configChange(profile: HarnessProfile, before: string, url: string, repair = false) {
+  const toml = profile.config.format === "toml";
+  const config = toml ? parse(before) : record(JSON.parse(before || "{}"));
+  const existing = record(config[toml ? "mcp_servers" : "mcpServers"] ?? {})["factory-runtime"];
+  if (existing === undefined) return registered(profile, before, config, url);
   const saved = record(existing);
-  const entry = mcpEntry(target, url);
+  const entry = profile.entry(url);
   if (!sameKeys(saved, entry) || typeof saved.url !== "string")
     throw Error(
       "Conflicting factory-runtime MCP entry. Remove it from this file and install again; Factory does not overwrite another definition.",
@@ -210,7 +215,7 @@ function configChange(target: ReportingInstallation, before: string, url: string
     throw new RepairableInstallationError(
       "Factory MCP is registered for another backend address. Repair the installation.",
     );
-  return registered(target, before, config, url, saved.url);
+  return registered(profile, before, config, url, saved.url);
 }
 
 const openReportingInstallation = Effect.fn(function* (
@@ -221,9 +226,9 @@ const openReportingInstallation = Effect.fn(function* (
 ) {
   const canonicalSkill = join(directory, "reporting", "skills", "factory-block", "SKILL.md");
   /** Each optional skill's harness copy beside `configPath` and its canonical copy. */
-  const optionalSkillCopies = (configPath: string): OptionalSkillCopy[] =>
+  const optionalSkillCopies = (profile: HarnessProfile, configPath: string): OptionalSkillCopy[] =>
     OPTIONAL_SKILLS.flatMap((skill) => [
-      { ...skill, path: factorySkillPath(configPath, skill.name) },
+      { ...skill, path: harnessSkillPath(profile, configPath, skill.name) },
       { ...skill, path: join(directory, "reporting", "skills", skill.name, "SKILL.md") },
     ]);
   // The last failed optional-skill replacement per copy, until a later write or inspection finds it
@@ -246,7 +251,8 @@ const openReportingInstallation = Effect.fn(function* (
     target: ReportingInstallation,
   ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation, never> {
     if (!target.path) return target;
-    const copies = optionalSkillCopies(target.path);
+    const profile = harnessProfile(target);
+    const copies = optionalSkillCopies(profile, target.path);
     const optional = yield* boundary(() => inspectOptionalSkills(copies));
     if (optional.state === "current")
       for (const { path } of copies) optionalWriteFailures.delete(path);
@@ -262,10 +268,12 @@ const openReportingInstallation = Effect.fn(function* (
     > {
       yield* boundary(() => access(dirname(target.path!), constants.R_OK | constants.W_OK));
       const before = yield* boundary(() => readConfig(target.path!));
-      const after = configChange(target, before, mcpUrl());
+      const after = configChange(profile, before, mcpUrl());
       if (after !== before) return withReportingInstallationActions(target);
       if (
-        !(yield* boundary(() => skillMatches(factorySkillPath(target.path!, "factory-block")))) ||
+        !(yield* boundary(() =>
+          skillMatches(harnessSkillPath(profile, target.path!, "factory-block")),
+        )) ||
         !(yield* boundary(() => skillMatches(canonicalSkill)))
       )
         throw new RepairableInstallationError(
@@ -338,10 +346,14 @@ const openReportingInstallation = Effect.fn(function* (
                   throw Error(
                     "Target unavailable. Recheck the local T3 environment and configuration home.",
                   );
+                const profile = harnessProfile(target);
                 const before = yield* boundary(() => readConfig(target.path!));
-                const after = configChange(target, before, mcpUrl(), true);
+                const after = configChange(profile, before, mcpUrl(), true);
                 yield* boundary(() =>
-                  writeSkill(factorySkillPath(target.path!, "factory-block"), FACTORY_BLOCK_SKILL),
+                  writeSkill(
+                    harnessSkillPath(profile, target.path!, "factory-block"),
+                    FACTORY_BLOCK_SKILL,
+                  ),
                 );
                 yield* boundary(() => writeSkill(canonicalSkill, FACTORY_BLOCK_SKILL));
                 if (after !== before) {
@@ -353,7 +365,7 @@ const openReportingInstallation = Effect.fn(function* (
                 // The optional skills never block required reporting. Each copy is written on
                 // its own; writeSkill refuses linked and special files without reading them, and a
                 // failed copy stays as it is, explained by inspection until a later write succeeds.
-                for (const { name, text, path } of optionalSkillCopies(target.path)) {
+                for (const { name, text, path } of optionalSkillCopies(profile, target.path)) {
                   const failure = yield* boundary(() => writeSkill(path, text)).pipe(
                     Effect.as(undefined),
                     Effect.catch((error) =>
@@ -394,6 +406,3 @@ export class ReportingInstaller extends Context.Service<
 >()("ReportingInstaller") {}
 export const ReportingInstallerLayer = (...args: Parameters<typeof openReportingInstallation>) =>
   Layer.effect(ReportingInstaller, openReportingInstallation(...args));
-
-const boundary = <A>(operation: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: operation, catch: (error) => error });

@@ -1,4 +1,5 @@
 import { expect, it } from "vite-plus/test";
+import { RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { draftTitle } from "../src/run-draft.ts";
 import { composer, plain, pngFile, references, reopen } from "./support/run-draft.ts";
@@ -47,6 +48,45 @@ it("a pending Start saved before images and title provenance is checked again as
     createdAt: "2026-11-06T08:00:00.000Z",
   });
 });
+
+it.for([
+  { imageId: "image-1", sizeBytes: 0 },
+  { imageId: "image-1", sizeBytes: RUN_IMAGE_MAX_BYTES + 1 },
+  { imageId: "i".repeat(257), sizeBytes: 1024 },
+])(
+  "a saved draft whose image Start would refuse ($sizeBytes bytes, $imageId.length-character id) is not restored",
+  (image, context) => {
+    // Arrange
+    const setup = composer(context);
+    setup.storage.setItem(
+      "factory-run-drafts:server-a",
+      JSON.stringify({
+        current: "draft-1",
+        drafts: [
+          {
+            id: "draft-1",
+            segments: [{ type: "text", text: "Fix the header" }],
+            images: [
+              { ...image, sha256: "a".repeat(64), name: "header.png", mimeType: "image/png" },
+            ],
+            projectId: "project",
+            flowId: "flow",
+            titleProvenance: "automatic",
+            createdAt: "2026-11-06T08:00:00.000Z",
+            listed: true,
+          },
+        ],
+      }),
+    );
+
+    // Act
+    const { draft } = reopen(setup);
+
+    // Assert
+    expect(draft.getDrafts()).toStrictEqual([]);
+    expect(draft.getSnapshot()).toMatchObject({ draftId: undefined, text: "", images: [] });
+  },
+);
 
 it("picked images attach individually: rejected files are named and valid ones kept", async (context) => {
   // Arrange

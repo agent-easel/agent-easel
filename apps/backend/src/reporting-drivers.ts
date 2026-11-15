@@ -1,30 +1,8 @@
 import type { AgentProviderReporting } from "@t3-factory/contracts";
-
-/** Harnesses whose Block reports Factory can accept. */
-const REPORTING_DRIVERS = ["codex", "claudeAgent", "cursor", "grok"] as const;
-export type ReportingDriver = (typeof REPORTING_DRIVERS)[number];
+import { HARNESS_PROFILES, type ReportingDriver } from "./harness-profiles.ts";
 
 export const isReportingDriver = (driverKind: unknown): driverKind is ReportingDriver =>
-  REPORTING_DRIVERS.some((driver) => driver === driverKind);
-
-export function reportingHome(driver: Exclude<ReportingDriver, "cursor">): {
-  readonly envName: string;
-  /** `null` means the config file sits in the OS home, not a subdirectory. */
-  readonly defaultDirectory: string | null;
-  readonly file: string;
-  readonly toml: boolean;
-} {
-  if (driver === "grok")
-    return { envName: "GROK_HOME", defaultDirectory: ".grok", file: "config.toml", toml: true };
-  if (driver === "codex")
-    return { envName: "CODEX_HOME", defaultDirectory: ".codex", file: "config.toml", toml: true };
-  return {
-    envName: "CLAUDE_CONFIG_DIR",
-    defaultDirectory: null,
-    file: ".claude.json",
-    toml: false,
-  };
-}
+  typeof driverKind === "string" && Object.hasOwn(HARNESS_PROFILES, driverKind);
 
 export function providerReporting(driverKind: unknown): AgentProviderReporting {
   return isReportingDriver(driverKind)

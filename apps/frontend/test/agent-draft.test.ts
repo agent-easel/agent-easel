@@ -1,5 +1,4 @@
 import { held } from "./support/flow-draft.ts";
-import type { AgentDefinition } from "@t3-factory/contracts";
 import { expect, it, vi } from "vite-plus/test";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
@@ -339,7 +338,7 @@ it("a new Agent saves without a model when no provider supports Factory reportin
   // Assert
   expect(factory.createAgent).toHaveBeenCalledWith(expect.objectContaining({ execution: null }));
   expect(draft.getSnapshot()).toMatchObject({
-    saved: { execution: null, settingsStatus: null },
+    saved: { execution: null },
     needsModel: true,
     dirty: false,
     error: "",
@@ -529,27 +528,17 @@ it("a newer revision saved elsewhere replaces the revision a dirty editor names"
   });
 });
 
-it("a delivery of the saved revision with new settings status keeps the draft and names no revision", () => {
+it("a fresh delivery of the saved revision keeps the draft and names no revision", () => {
   // Arrange
   const setup = editedAgent();
-  const agent = savedAgent();
-  const unavailable: AgentDefinition = {
-    ...agent,
-    execution: agent.execution!,
-    settingsStatus: {
-      environment: { state: "available" },
-      provider: { state: "unavailable" },
-      model: { state: "available" },
-      options: [],
-    },
-  };
+  const redelivered = savedAgent();
 
   // Act
-  deliver(setup, [unavailable]);
+  deliver(setup, [redelivered]);
 
   // Assert
   expect(setup.draft.getSnapshot()).toMatchObject({
-    saved: unavailable,
+    saved: redelivered,
     content: { name: "Edited" },
     dirty: true,
     newer: null,

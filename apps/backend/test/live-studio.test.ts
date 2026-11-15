@@ -10,7 +10,7 @@ import { controlledExecution } from "./support/scenarios.ts";
 import { makeLiveChanges } from "../src/live-changes.ts";
 import { makeLiveStreams } from "../src/live-streams.ts";
 
-it("a Studio snapshot holds current Agents with their settings status and Flows with their readiness", async (c) => {
+it("a Studio snapshot holds current Agents and Flows with their readiness", async (c) => {
   // Arrange
   const { factory, flowId, save, review } = await reviewedFlow(c);
   assertOk(await save(review));
@@ -25,8 +25,8 @@ it("a Studio snapshot holds current Agents with their settings status and Flows 
     studio: {
       // Agents saved in the same millisecond are ordered by their generated ids.
       agents: expect.arrayContaining([
-        expect.objectContaining({ name: "Reviewer", settingsStatus: expect.anything() }),
-        expect.objectContaining({ name: "Coder", settingsStatus: expect.anything() }),
+        expect.objectContaining({ name: "Reviewer" }),
+        expect.objectContaining({ name: "Coder" }),
       ]),
       flows: [{ id: flowId, revision: 2, readiness: { ready: true, issues: [] } }],
     },

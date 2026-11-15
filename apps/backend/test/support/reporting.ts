@@ -8,6 +8,18 @@ import { startServer } from "../../src/server.ts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 
+/**
+ * The configuration file each driver keeps in the `homePath` these fixtures give it. Cursor ignores
+ * `homePath` and always reads the OS user's `.cursor/mcp.json`, so it is set up through
+ * `driverHomes` with an isolated user home instead.
+ */
+const HARNESS_CONFIG_FILES = {
+  codex: "config.toml",
+  claudeAgent: ".claude.json",
+  grok: "config.toml",
+} as const;
+type HarnessHomeDriver = keyof typeof HARNESS_CONFIG_FILES;
+
 /** An approved controlled T3 whose state lists one provider with a disposable harness home. */
 async function reportingHomes(context: TestContext, driver: string) {
   const harness = await factoryHarness(context);
@@ -32,12 +44,15 @@ export async function installFirstReportingTarget(
   return targetId;
 }
 
-export async function reportingFixture(context: TestContext, driver = "claudeAgent") {
+export async function reportingFixture(
+  context: TestContext,
+  driver: HarnessHomeDriver = "claudeAgent",
+) {
   const { harness, state, home, t3 } = await reportingHomes(context, driver);
   const options = { t3, reportingStateDirectory: state };
   const factory = await harness.open(options);
   assert((await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
-  const config = join(home, driver === "codex" ? "config.toml" : ".claude.json");
+  const config = join(home, HARNESS_CONFIG_FILES[driver]);
   return { harness, factory, options, home, state, config, t3 };
 }
 
@@ -73,5 +88,5 @@ export async function installedReportingServer(context: TestContext) {
   context.onTestFinished(() => server.close());
   assert((await server.factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
   await installFirstReportingTarget(server.factory);
-  return { server, config: join(home, ".claude.json") };
+  return { server, config: join(home, HARNESS_CONFIG_FILES.claudeAgent) };
 }

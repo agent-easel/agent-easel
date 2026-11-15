@@ -64,7 +64,7 @@ editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
 Availability is separate from verified execution support. A provider without Factory reporting support (Codex, Claude, Cursor and Grok have it) stays in the provider menu
 as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
-([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings and `settingsStatus` their availability.
+([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings. Agent reads return the saved settings without contacting T3; Studio judges their availability against the capabilities it loads.
 
 The Worker is optional. **Clear** empties the selection, and a save whose environment, provider or model is not chosen stores
 no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
@@ -74,7 +74,7 @@ execution state; its Worker section asks for an environment, provider and model,
 with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
 states of a saved selection. Every Flow that places such an Agent is not ready (`agent_model_required`, one issue per block,
 "{block}: {agent} needs a model."), so a Run never starts with it; choosing a model in the Agent editor makes those Flows
-ready without saving them again. In the API both `execution` and `settingsStatus` are
+ready without saving them again. In the API `execution` is
 `null`; create and save require the `execution` key, as complete settings (`environmentId`, `providerInstanceId`, `modelId`
 and a `modelOptions` list) or an explicit `null`, so an omitted key or a partial object, including one without
 `modelOptions`, is a validation error. A `null` execution skips the reporting-support check.

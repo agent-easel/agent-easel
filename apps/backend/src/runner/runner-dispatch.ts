@@ -1,6 +1,10 @@
 import { dispatchBlockLaunch } from "./runner-block-workers.ts";
-import { prepareCoordinatorHandoff } from "./runner-coordinator-handoffs.ts";
-import { prepareContinuationHandoff } from "./runner-continuations.ts";
+import {
+  previousVisitReleased,
+  releaseAtPreparation,
+  releaseAtReservation,
+  type Release,
+} from "./handoff-release.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
@@ -8,22 +12,22 @@ import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
-import type { BlockRow, Checked, RunnerOptions, RunRow, StoredTarget } from "./runner-types.ts";
+import { intactPayload } from "../fingerprint.ts";
 import {
-  catalogProject,
-  intactPayload,
-  passedThrough,
   runTarget,
-  unverified,
-  verified,
-} from "./runner-utils.ts";
-import {
-  activatePendingHumanHandoff,
-  activatePendingWaitHandoff,
-  reservePendingExplicitHandoff,
-} from "./runner-release.ts";
-import { inRunWorkspace } from "./run-workspace.ts";
+  type BlockRow,
+  type Checked,
+  type RunnerOptions,
+  type RunRow,
+  type StoredTarget,
+} from "./runner-types.ts";
+import { catalogProject, unverified, verified } from "./runner-utils.ts";
+import { inRunWorkspace, launchStrategy } from "./run-workspace.ts";
 import type { RunImages } from "../run-images.ts";
+/** A Human occurrence or Wait arrival from a durable Human answer, Wait forwarding or pass-through
+ * needs no generation guard; one from a released Final result requires the release's generation. */
+const arrivalGeneration = (release: Exclude<Release, { state: "held" }>) =>
+  release.state === "durable" ? undefined : release.run.generation;
 /** Uncertain work may be replayed only within the retry scope recorded at reservation. */
 const replayUnproven = (delivery: Delivery, retryScope: string | null) =>
   delivery.state !== "pending" && (!delivery.retry_scope || delivery.retry_scope !== retryScope);
@@ -62,29 +66,61 @@ export function openRunnerDispatch(
   images: RunImages,
   scheduleWait: (wait: ScheduledWait) => Effect.Effect<void, unknown>,
 ) {
-  /** Agent handoffs become worker commands or revisit sends, Continuation handoffs a prompt send
-   * or a pass-through; Human handoffs become occurrences; Wait handoffs become arrivals whose
-   * wake-up is scheduled. */
+  /** A released Handoff to an Agent becomes a worker launch or a revisit send, a Continuation
+   * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, and a Wait Handoff an
+   * arrival whose wake-up is scheduled. A held Handoff stays a Handoff; reservation asks again. */
   function prepareHandoff(
     runRow: RunRow,
     handoff: Handoff,
   ): Effect.Effect<Delivery | undefined, unknown> {
     return Effect.gen(function* () {
-      const kind = runRow.definitions.flow.graph.blocks.find(
+      const release = yield* releaseAtPreparation(store, t3, runRow, handoff);
+      if (release.state === "held") return;
+      const current = release.run;
+      const kind = current.definitions.flow.graph.blocks.find(
         (block) => block.id === handoff.block_id,
       )?.kind;
-      if (kind === "continuation")
-        return yield* prepareContinuationHandoff(store, t3, runRow, handoff);
+      if (kind === "continuation") return yield* prepareContinuationHandoff(current, handoff);
       if (kind === "human") {
-        yield* activatePendingHumanHandoff(store, t3, runRow, handoff);
+        yield* store.handoffToHumanOccurrence(current, handoff, arrivalGeneration(release));
         return;
       }
       if (kind === "wait") {
-        const arrival = yield* activatePendingWaitHandoff(store, t3, runRow, handoff);
+        const arrival = yield* store.handoffToWaitArrival(
+          current,
+          handoff,
+          arrivalGeneration(release),
+        );
         if (arrival) yield* scheduleWait(arrival);
         return;
       }
-      return yield* prepareCoordinatorHandoff(store, t3, runRow, handoff);
+      return yield* prepareAgentHandoff(current, handoff);
+    });
+  }
+  /** A released Agent Handoff reserves a new activation only after the recipient settles: an
+   * unresolved launch for it holds the Handoff, a worktree Run's later workers wait until its
+   * worktree is bound, and a revisit waits for the previous visit's result release. */
+  function prepareAgentHandoff(current: RunRow, handoff: Handoff) {
+    return Effect.gen(function* () {
+      const arrival = yield* store.arrivalAt(current.id, handoff.block_id);
+      if (arrival.launchUnresolved) return undefined;
+      const strategy = launchStrategy(current.workspace, handoff.block_id);
+      if (!strategy) return undefined;
+      const previous = arrival.previousVisit;
+      if (previous && !(yield* previousVisitReleased(store, t3, current, previous)))
+        return undefined;
+      return yield* store.handoffToActivation(current, handoff, previous, strategy);
+    });
+  }
+  /** The first released Handoff to a Continuation sends its prompt (answered as the delivery), one
+   * arriving while the prompt is pending waits, and later ones pass through unchanged. */
+  function prepareContinuationHandoff(current: RunRow, handoff: Handoff) {
+    return Effect.gen(function* () {
+      const prompt = yield* store.continuationPrompt(current.id, handoff.block_id);
+      if (!prompt) return yield* store.sendContinuationPrompt(current, handoff);
+      if (prompt.state === "forwarded") yield* store.passThroughArrival(current, handoff);
+      else if (prompt.state === "sent") yield* store.queueContinuationArrival(current, handoff);
+      return undefined;
     });
   }
   /** Commits a reserved send's T3 reference with its execution record, generation and event. */
@@ -158,14 +194,10 @@ export function openRunnerDispatch(
   }
   function reserveSend(runRow: RunRow, intent: Delivery, retryScope: string | null) {
     return Effect.gen(function* () {
-      const gated =
-        Boolean(
-          intent.report_id ||
-          intent.occurrence_id ||
-          intent.wait_arrival_id ||
-          passedThrough(intent),
-        ) && intent.state === "pending";
-      if (gated) return yield* reservePendingExplicitHandoff(store, t3, runRow, intent, retryScope);
+      const release = yield* releaseAtReservation(store, t3, runRow, intent);
+      if (release.state === "held") return false;
+      if (release.state !== "ungated")
+        return yield* store.reserveDelivery(runRow, intent, retryScope, release.run.generation);
       const generation = yield* recoveryDispatchGeneration(store, t3, runRow, intent);
       if (generation === null) return false;
       return yield* store.reserveDelivery(runRow, intent, retryScope, generation);

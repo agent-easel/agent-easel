@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
 import { clockTime } from "./execution-state.tsx";
 import { InspectorDisclosure } from "./inspector-section.tsx";
@@ -169,8 +170,8 @@ function resultFacts(run: RunDetail, report: RunReport) {
     visit: [visit > 0 && `Visit ${visit}`, version > 1 && `version ${version}`]
       .filter(Boolean)
       .join(" · "),
-    // A Continuation's single output has no name to show.
-    exit: exit?.source === "continuation" ? null : (exit?.name ?? report.exitId ?? "unspecified"),
+    // A single unnamed output has no name to show.
+    exit: exit && isSingleOutput(exit) ? null : (exit?.name ?? report.exitId ?? "unspecified"),
     replacedBy: results.at(-1) !== report ? results.length : null,
     completion:
       results.at(-1) !== report

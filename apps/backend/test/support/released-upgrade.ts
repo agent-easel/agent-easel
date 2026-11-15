@@ -107,8 +107,8 @@ export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) 
   workspace: { mode: "checkout" as const },
 });
 
-/** A released Agent as current Factory reads it: it has no exits of its own. */
-export const currentAgent = <A extends Omit<ReleasedAgent, "settingsStatus">>(agent: A) => ({
+/** A released Agent as current Factory reads it: no exits of its own and no settings status. */
+export const currentAgent = ({ settingsStatus: _settingsStatus, ...agent }: ReleasedAgent) => ({
   ...agent,
   exits: [],
 });
@@ -122,7 +122,7 @@ function capturedDefinitions({ flow, agents }: ReleasedSnapshot) {
   const { readiness: _readiness, ...savedFlow } = flow;
   return {
     flow: currentFlow(savedFlow),
-    agents: agents.map(({ settingsStatus: _settingsStatus, ...saved }) => currentAgent(saved)),
+    agents: agents.map(currentAgent),
   };
 }
 

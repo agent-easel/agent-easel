@@ -136,8 +136,8 @@ commands and other reads remain HTTP operations. A window holds one connection-s
 one theme-color subscription (it never disables mutations or shows synchronizing), one view
 subscription carrying navigation and its open Runs, and, while the composer is shown, one
 launch-choices subscription carrying the Project catalog and Flows with their readiness.
-Servers also serve a Studio subscription carrying every current Agent with its
-settings status and every current Flow with its readiness; Agent usage is derived from those
+Servers also serve a Studio subscription carrying every current saved Agent and every
+current Flow with its readiness; Agent usage is derived from those
 Flows. A window holds it for its lifetime, because Agent reporting state and the command palette
 read it outside Studio; those reads never gate mutations or show synchronizing, like theme colors.
 While Studio is open its hold gates the window's mutations like every other gating scope, so Studio
@@ -157,8 +157,8 @@ project reconcile, whose own publications would otherwise leave that read not cu
 Committed Flow and Agent creates, saves, duplicates, removals and imports mark Studio through the
 same definition-change hook; refused writes change nothing. Each read of Studio covers both lists in
 one read transaction, so every Flow's readiness was resolved against exactly the Agents delivered
-with it. Settings status reflects the T3 capabilities loaded for that read; capability and
-connection changes alone do not mark Studio.
+with it. Studio reads come from SQL alone and never contact T3, so capability and connection
+changes neither mark Studio nor change what it delivers.
 Subscription registration precedes the snapshot read. A relevant hint during that read
 triggers a fresh read, up to three reads. A delivery is current only when no relevant
 change arrived while it was read and no later read failed; a scope counts as synchronized,

@@ -7,12 +7,9 @@ import { createHash } from "node:crypto";
 import type { ReportingInstallation, T3Connection } from "@t3-factory/contracts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 import { withReportingInstallationActions } from "./reporting-installation-actions.ts";
-import {
-  isReportingDriver,
-  providerReporting,
-  reportingHome,
-  type ReportingDriver,
-} from "./reporting-drivers.ts";
+import { isReportingDriver, providerReporting } from "./reporting-drivers.ts";
+import { HARNESS_PROFILES, type ResolvedHome } from "./harness-profiles.ts";
+import { boundary } from "./effect-operations.ts";
 
 export function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -57,12 +54,8 @@ function assertDirectHomeSupported(instance: Record<string, unknown>) {
     );
 }
 
-function resolveReportingHome(
-  instance: Record<string, unknown>,
-  driver: Exclude<ReportingDriver, "cursor">,
-) {
+function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedHome) {
   assertDirectHomeSupported(instance);
-  const home = reportingHome(driver);
   const config = record(instance.config ?? {});
   const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
   const configuredHome = typeof config.homePath === "string" ? config.homePath.trim() : "";
@@ -152,6 +145,7 @@ const targetFor = Effect.fn(function* (
       launchSkill: null,
       runtimeEvidence: "UNVERIFIED",
     });
+  const profile = HARNESS_PROFILES[driver];
   const base = {
     id,
     provider: String(driver),
@@ -164,10 +158,8 @@ const targetFor = Effect.fn(function* (
     ReportingInstallation,
     never
   > {
-    if (driver === "cursor") {
-      // The Cursor SDK always reads os.homedir()/.cursor/mcp.json. A provider homePath would
-      // point Factory at a file the harness never loads.
-      const directory = join(homedir(), ".cursor");
+    if (profile.home.kind === "fixed") {
+      const directory = join(homedir(), profile.home.directory);
       const resolved = yield* boundary(() => realpath(directory)).pipe(
         Effect.catch((error) =>
           (error as NodeJS.ErrnoException).code === "ENOENT"
@@ -175,20 +167,20 @@ const targetFor = Effect.fn(function* (
             : Effect.fail(error),
         ),
       );
+      const path = join(resolved, profile.config.file);
       return withReportingInstallationActions({
         ...base,
-        id: createHash("sha256").update(join(resolved, "mcp.json")).digest("hex"),
-        path: join(resolved, "mcp.json"),
+        id: createHash("sha256").update(path).digest("hex"),
+        path,
         status: "not-installed",
-        message:
-          "Cursor loads this user MCP file for every project. Install once; both Cursor provider instances share it.",
+        message: profile.home.message,
       });
     }
-    const resolved = resolveReportingHome(instance, driver);
+    const resolved = resolveReportingHome(instance, profile.home);
     const directory = yield* boundary(() => realpath(resolved.directory));
     if (!(yield* boundary(() => stat(directory))).isDirectory())
       throw Error("Harness home is not a directory.");
-    const path = join(directory, reportingHome(driver).file);
+    const path = join(directory, profile.config.file);
     return withReportingInstallationActions({
       ...base,
       id: createHash("sha256").update(path).digest("hex"),
@@ -294,6 +286,3 @@ export const discoverReporting = Effect.fn(function* (
     }),
   );
 });
-
-const boundary = <A>(operation: () => PromiseLike<A>) =>
-  Effect.tryPromise({ try: operation, catch: (error) => error });

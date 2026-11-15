@@ -4,7 +4,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
 import type { RunRow, StoredTarget } from "../runner-types.ts";
-import { fingerprint, intactPayload } from "../runner-utils.ts";
+import { fingerprint, intactPayload } from "../../fingerprint.ts";
 import { continuationPromptMessage, workerRevisitPayload } from "../worker-payloads.ts";
 import { writeBlockState } from "./blocks.ts";
 import type { RunnerDatabase } from "./database.ts";
