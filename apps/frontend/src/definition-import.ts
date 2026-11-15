@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import type { StudioSelection } from "./settings-navigation.ts";
+import type { StudioDefinitions } from "./studio-definitions.ts";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
@@ -62,11 +63,23 @@ export function importModelChoices(capabilities: AgentCapabilities): ImportModel
     );
 }
 
-/** What Studio opens after an import: the imported Flow, or the Agent of an Agent file. */
-export const importedSelection = (result: ImportResult): StudioSelection =>
-  result.flowId === null
-    ? { tab: "agents", agentId: result.agents[0]!.id }
-    : { tab: "flows", flowId: result.flowId };
+/**
+ * Opens what an import created, the imported Flow or the Agent of an Agent file, once Studio's
+ * live lists hold it, so its editor never starts out as not found.
+ */
+export async function openImported(
+  result: ImportResult,
+  definitions: Pick<StudioDefinitions, "listed">,
+  open: (selection: StudioSelection) => unknown,
+) {
+  if (result.flowId === null) {
+    const agentId = result.agents[0]!.id;
+    await definitions.listed("agents", agentId);
+    return open({ tab: "agents", agentId });
+  }
+  await definitions.listed("flows", result.flowId);
+  return open({ tab: "flows", flowId: result.flowId });
+}
 
 const idle: DefinitionImportSnapshot = {
   file: null,

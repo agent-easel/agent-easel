@@ -483,6 +483,8 @@ type FlowCanvasProps = {
   onDeleteWire: (wire: FlowWire) => void;
   onEdit: (block: FlowBlock) => void;
   onChange: (graph: FlowGraph) => void;
+  /** Whether an Auto-arrange run is in progress. */
+  onArranging: (arranging: boolean) => void;
 };
 
 /** The move and connect gestures, and the placement of library drops, in canvas positions. */
@@ -555,6 +557,7 @@ export function FlowCanvas({
   onDeleteWire,
   onEdit,
   onChange,
+  onArranging,
 }: FlowCanvasProps) {
   const gestures = useAuthoringGestures({ ref, graph, placementRef, onEdit, onChange });
   const content = authoringContent({ graph, agents, selected, onSelect, gestures });
@@ -579,7 +582,7 @@ export function FlowCanvas({
       }}
       resize="refit"
       covered={{ top: READINESS_HEIGHT, right: reservedRight }}
-      arrangement={{ busy, saved: savedGraph, commit: onChange }}
+      arrangement={{ busy, saved: savedGraph, commit: onChange, onArranging }}
       gesture={gestures.gesture}
       points={gestures.points}
       onTap={() => onSelect(null)}

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Check, ChevronDown, CircleAlert, CircleDot } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
@@ -46,11 +46,16 @@ export function IssueLink({
   );
 }
 
-/** The readiness label: a backend check result, or a prompt to check the changed draft. */
-function readinessSummary(readiness: FlowReadiness | null) {
+/**
+ * The readiness label: a backend check result, or a prompt to check the changed draft or, after
+ * an Agent it places changed, to check it again.
+ */
+function readinessSummary(readiness: FlowReadiness | null, agentsChanged: boolean) {
   if (!readiness)
     return {
-      label: "Draft changed · Check readiness",
+      label: agentsChanged
+        ? "Agents changed — check readiness again"
+        : "Draft changed · Check readiness",
       Icon: CircleDot,
       tone: "text-muted-foreground",
     };
@@ -62,20 +67,23 @@ function readinessSummary(readiness: FlowReadiness | null) {
 /** Readiness summary floating at the canvas's top left; its issue list expands on demand. */
 export function ReadinessPanel({
   readiness,
+  agentsChanged,
   graph,
   onSelect,
 }: {
   readiness: FlowReadiness | null;
+  agentsChanged: boolean;
   graph: FlowGraph;
   onSelect: (blockId: string | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const issues = readiness?.issues.length ?? 0;
+  const [expanded, setExpanded] = useState({ readiness, open: issues > 0 });
+  const { open } = expanded;
   // A check that finds problems lists them; a ready or stale result stays compact.
-  useEffect(() => {
-    if (issues > 0) setOpen(true);
-  }, [readiness, issues]);
-  const summary = readinessSummary(readiness);
+  if (expanded.readiness !== readiness) {
+    setExpanded({ readiness, open: issues > 0 || open });
+  }
+  const summary = readinessSummary(readiness, agentsChanged);
   return (
     <div className="absolute top-4 left-4 z-[5] grid max-w-80 gap-2">
       <Button
@@ -84,7 +92,7 @@ export function ReadinessPanel({
         className="w-fit bg-card shadow-floating"
         aria-expanded={open}
         aria-controls="flow-readiness"
-        onClick={() => setOpen(!open)}
+        onClick={() => setExpanded({ readiness, open: !open })}
       >
         <summary.Icon aria-hidden className={summary.tone} />
         <span>{summary.label}</span>

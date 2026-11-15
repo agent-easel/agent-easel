@@ -26,9 +26,11 @@ import { createServer, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   FactoryClient,
   Result,
@@ -52,6 +54,33 @@ import { PersistentT3 } from "../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment, seedScenarios, settlementUnresolved } from "../../scripts/dev/seed.ts";
 import { requireSuccess, demoStart } from "../../scripts/dev/seed-support.ts";
 import { proxyFixture, proxyFixtureUpgrade } from "./proxy.ts";
+
+// The backend runs from source, but the UI is served from apps/frontend/dist. Journeys against a
+// missing or older build test the previous UI, so the fixture refuses to start on one.
+function newestSourceChange(paths: string[]): number {
+  return Math.max(
+    ...paths.flatMap((path) =>
+      statSync(path).isDirectory()
+        ? readdirSync(path, { recursive: true, withFileTypes: true })
+            .filter((entry) => entry.isFile())
+            .map((entry) => statSync(join(entry.parentPath, entry.name)).mtimeMs)
+        : [statSync(path).mtimeMs],
+    ),
+  );
+}
+const builtUi = fileURLToPath(new URL("../../apps/frontend/dist/index.html", import.meta.url));
+const uiSources = [
+  "apps/frontend/src",
+  "apps/frontend/public",
+  "apps/frontend/index.html",
+  "apps/frontend/vite.config.ts",
+  ...readdirSync(new URL("../../packages", import.meta.url)).map((name) => `packages/${name}/src`),
+].map((path) => fileURLToPath(new URL(`../../${path}`, import.meta.url)));
+if (!existsSync(builtUi) || statSync(builtUi).mtimeMs < newestSourceChange(uiSources)) {
+  throw new Error(
+    "apps/frontend/dist is missing or older than the UI sources; run `pnpm build` before e2e.",
+  );
+}
 
 const home = await mkdtemp(join(tmpdir(), "factory-e2e-"));
 // Harness homes and T3 state default to os.homedir() or the developer's T3 state override; keep
@@ -350,13 +379,14 @@ async function decideAll(from: FactoryClient["status"], decision: "approve" | "r
     await host(`/api/host/clients/${client.id}/${decision}`, "POST");
 }
 
+/** Approved on the server remote browsers currently reach. */
 async function approvedBrowserCookie() {
-  const requested = await current.server.factory.requestClientAccess({
+  const requested = await target.server.factory.requestClientAccess({
     label: "Approved journey browser",
     kind: "browser",
   });
   if (!requested.ok) throw new Error("Could not request journey browser access");
-  const approved = await current.server.factory.approveClient(requested.value.client.id);
+  const approved = await target.server.factory.approveClient(requested.value.client.id);
   if (!approved.ok) throw new Error("Could not approve the journey browser");
   return `factory_client=${requested.value.credential}; Path=/; HttpOnly; Secure; SameSite=Strict`;
 }

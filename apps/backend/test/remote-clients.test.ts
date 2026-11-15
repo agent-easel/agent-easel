@@ -66,12 +66,12 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   });
 });
 
-it("a protocol 11 client, which cannot read Agents without a model, is told to update itself while the current client is served", async (c) => {
+it("a protocol 12 client, which cannot read Agents without a model, is told to update itself while the current client is served", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const current = await server.approved("Laptop");
   assert((await current.send("GET", "/api/agents")).body.ok);
-  const old = server.client("desktop", { protocol: 11, minimum: 9 });
+  const old = server.client("desktop", { protocol: 12, minimum: 9 });
 
   // Act
   const reply = await old.send("GET", "/api/agents");
@@ -84,15 +84,15 @@ it("a protocol 11 client, which cannot read Agents without a model, is told to u
 
 it.for([
   [
-    11,
+    12,
     {
       status: 426,
       body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
     },
   ],
-  [12, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [13, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 12",
+  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 13",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });

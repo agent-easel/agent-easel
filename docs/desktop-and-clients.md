@@ -313,14 +313,19 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **12**. Servers require clients of at least **12**, and clients require servers of at least **12**.
-Protocol 12 lets an Agent have no execution settings (`execution` and `settingsStatus` are `null`),
+The current protocol is **13**. Servers require clients of at least **13**, and clients require servers of at least **13**.
+Protocol 13 lets an Agent have no execution settings (`execution` and `settingsStatus` are `null`),
 requires the `execution` key on Agent create and save, and adds Agent and Flow export and import
 ([definition export](studio.md#definition-export)). Older clients cannot read such an Agent, so the server refuses them before
 product screens mount and they must update; their credentials and stored data are kept. A current
-client likewise refuses a protocol 9 to 11 server, which can neither save an Agent without a model nor
+client likewise refuses a protocol 9 to 12 server, which can neither save an Agent without a model nor
 export or import definitions, and shows the update gate naming the server before product screens mount.
-Protocol 11 added the Flow's current revision to Run detail. Protocol 10 added the
+Every compatible server therefore serves the Studio live subscription (`WatchStudio`) and names the
+Agent revisions a Flow validation answer was resolved against ([Studio](studio.md#validation)), so
+clients always subscribe. A client repeats the handshake whenever its live socket reconnects, so a
+server replaced by an incompatible one shows the update gate without a reload.
+Protocol 12 added the Studio live subscription and those Agent revisions. Protocol 11 added the
+Flow's current revision to Run detail. Protocol 10 added the
 theme-color live subscription (`WatchAppearance`) and the server identity and current theme-color
 source in the client-scope answer for the host panel and approved clients. Protocol 9 changed manual
 Settle: its request may authorize stopping workers (`stopWorkers`) and it answers a settlement

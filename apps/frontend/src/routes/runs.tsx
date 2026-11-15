@@ -76,10 +76,9 @@ type RunObservation = ReturnType<typeof useRunObservation>;
  */
 function useRunOpened(id: string, current: boolean) {
   const location = useLocation();
-  const [seenError, setSeenError] = useState("");
+  const [seenError, setSeenError] = useState<{ location: typeof location; message: string }>();
   const unmarked = useRef(false);
   useEffect(() => {
-    setSeenError("");
     unmarked.current = !location.search.settings;
   }, [id, location]);
   useEffect(() => {
@@ -89,16 +88,20 @@ function useRunOpened(id: string, current: boolean) {
     void api
       .markRunWokeSeen(id)
       .then(() => {
-        if (active) setSeenError("");
+        if (active) setSeenError(undefined);
       })
       .catch(() => {
-        if (active) setSeenError("Could not mark Woke as seen. Reopen this Run to try again.");
+        if (active)
+          setSeenError({
+            location,
+            message: "Could not mark Woke as seen. Reopen this Run to try again.",
+          });
       });
     return () => {
       active = false;
     };
   }, [id, location, current]);
-  return seenError;
+  return seenError?.location === location ? seenError.message : "";
 }
 
 function useEscapeToDeselect(active: boolean, deselect: () => void) {

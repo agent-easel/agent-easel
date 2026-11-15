@@ -1,12 +1,17 @@
 import { useSyncExternalStore } from "react";
-import type { AgentDefinition, FlowDraft } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  FlowDraft,
+  OperationError,
+  StudioDefinitions as SavedDefinitions,
+} from "@t3-factory/contracts";
 import { api } from "./api.ts";
+import type { LiveOwner, LiveScopeView } from "./live/owner.ts";
+import { studioScope } from "./live/studio.ts";
 
 /** The Factory operations one Studio session uses; the HTTP client in the app, fakes in tests. */
 export type StudioDefinitionsOperations = Pick<
   typeof api,
-  | "listFlows"
-  | "listAgents"
   | "createFlow"
   | "updateFlow"
   | "removeFlow"
@@ -18,7 +23,7 @@ export type StudioDefinitionsOperations = Pick<
 
 /** One saved list, with the live scope's three facts and their meaning. */
 export interface StudioRead<V> {
-  /** The last successful read; null until one answers. */
+  /** The last delivered list; null until one arrives. */
   readonly value: V | null;
   readonly synchronized: boolean;
   readonly error: Error | null;
@@ -29,102 +34,116 @@ export interface StudioDefinitionsSnapshot {
   readonly agents: StudioRead<readonly AgentDefinition[]>;
 }
 
+type StudioList = "flows" | "agents";
+
+/** The window's live owner, as Studio holds its scope. */
+type StudioLive = Pick<LiveOwner, "acquire" | "view" | "subscribe">;
+
 const unread: StudioRead<never> = { value: null, synchronized: false, error: null };
 
-function savedList<V>(read: () => Promise<V>, publish: () => void) {
-  let view: StudioRead<V> = unread;
-  /** Advances with every read, so only the latest read's answer applies. */
-  let request = 0;
-  return {
-    view: () => view,
-    /** Pending answers no longer apply. */
-    retire() {
-      ++request;
-    },
-    refresh() {
-      const asked = ++request;
-      view = { ...view, synchronized: false, error: null };
-      read().then(
-        (value) => {
-          if (asked !== request) return;
-          view = { value, synchronized: true, error: null };
-          publish();
-        },
-        (cause: unknown) => {
-          if (asked !== request) return;
-          const error = cause instanceof Error ? cause : new Error("Could not read.");
-          view = { ...view, synchronized: false, error };
-          publish();
-        },
-      );
-    },
-  };
-}
+const sameRead = <V>(a: StudioRead<V>, b: StudioRead<V>) =>
+  a.value === b.value && a.synchronized === b.synchronized && a.error === b.error;
 
 /**
- * The saved Flows and saved Agents of one Studio session. Opening reads both; Studio re-reads
- * them on each navigation and retry, and every accepted write through this module re-reads them
- * without waiting. Ending the session retires pending reads, and a write completing later still
- * answers its caller but refreshes nothing.
+ * The saved Flows and saved Agents of one Studio session. The server delivers both lists through
+ * the window's Studio scope, which is held only while Studio is open and therefore gates
+ * mutations like every other held scope. HTTP answers never mark the live scope synchronized.
  */
-export function createStudioDefinitions(operations: StudioDefinitionsOperations = api) {
-  const flows = savedList(operations.listFlows, publish);
-  const agents = savedList(operations.listAgents, publish);
-  let snapshot: StudioDefinitionsSnapshot = current();
-  let ended = false;
+export function createStudioDefinitions(
+  live: StudioLive,
+  operations: StudioDefinitionsOperations = api,
+) {
+  let snapshot: StudioDefinitionsSnapshot = { flows: unread, agents: unread };
+  // A Create reply may bridge only its first delivery, never a later removal or navigation.
+  const observed = { flows: new Set<string>(), agents: new Set<string>() };
   const listeners = new Set<() => void>();
 
-  function current(): StudioDefinitionsSnapshot {
-    return { flows: flows.view(), agents: agents.view() };
-  }
-  function publish() {
-    snapshot = current();
+  /** Publishes changed facts; an unchanged list keeps its identity. */
+  function update(change: Partial<StudioDefinitionsSnapshot>) {
+    const flows =
+      change.flows && !sameRead(change.flows, snapshot.flows) ? change.flows : snapshot.flows;
+    const agents =
+      change.agents && !sameRead(change.agents, snapshot.agents) ? change.agents : snapshot.agents;
+    if (flows.synchronized && agents.synchronized) {
+      flows.value?.forEach((flow) => observed.flows.add(flow.id));
+      agents.value?.forEach((agent) => observed.agents.add(agent.id));
+    }
+    if (flows === snapshot.flows && agents === snapshot.agents) return;
+    snapshot = { flows, agents };
     listeners.forEach((notify) => notify());
   }
-  function refresh() {
-    if (ended) return;
-    flows.refresh();
-    agents.refresh();
-    publish();
-  }
-  function write<A extends unknown[], R>(operation: (...args: A) => Promise<R>) {
-    return async (...args: A) => {
-      const result = await operation(...args);
-      refresh();
-      return result;
+
+  /** Follows the Studio scope until the returned function releases it. */
+  function follow() {
+    const release = live.acquire(studioScope);
+    let seen: LiveScopeView<SavedDefinitions> | undefined;
+    let refusal: { readonly cause: OperationError; readonly error: Error } | undefined;
+    function apply() {
+      const view = live.view<SavedDefinitions>(studioScope.key);
+      if (view === seen) return;
+      seen = view;
+      if (view.error && refusal?.cause !== view.error)
+        refusal = { cause: view.error, error: new Error(view.error.message) };
+      const error = view.error ? refusal!.error : null;
+      update({
+        flows: {
+          value: view.value?.flows ?? snapshot.flows.value,
+          synchronized: view.synchronized,
+          error,
+        },
+        agents: {
+          value: view.value?.agents ?? snapshot.agents.value,
+          synchronized: view.synchronized,
+          error,
+        },
+      });
+    }
+    const unsubscribe = live.subscribe(apply);
+    apply();
+    return () => {
+      unsubscribe();
+      release();
     };
   }
 
-  refresh();
+  function subscribe(notify: () => void) {
+    listeners.add(notify);
+    return () => {
+      listeners.delete(notify);
+    };
+  }
 
   return {
     getSnapshot: () => snapshot,
-    subscribe(notify: () => void) {
-      listeners.add(notify);
-      return () => {
-        listeners.delete(notify);
-      };
+    /** Whether Studio has already shown the definition in its joint current lists. */
+    hasObserved: (list: StudioList, id: string) => observed[list].has(id),
+    /** Settles once Studio's joint current lists have shown the definition. */
+    listed(list: StudioList, id: string) {
+      return new Promise<void>((resolve) => {
+        if (observed[list].has(id)) return resolve();
+        const stop = subscribe(() => {
+          if (!observed[list].has(id)) return;
+          stop();
+          resolve();
+        });
+      });
     },
-    /** Re-reads both lists; Studio calls it on each navigation and on an explicit retry. */
-    refresh,
-    createFlow: write(operations.createFlow),
-    updateFlow: write(operations.updateFlow),
-    removeFlow: write(operations.removeFlow),
-    createAgent: write(operations.createAgent),
-    updateAgent: write(operations.updateAgent),
-    duplicateAgent: write(operations.duplicateAgent),
-    removeAgent: write(operations.removeAgent),
-    dispose() {
-      ended = true;
-      flows.retire();
-      agents.retire();
-    },
+    subscribe,
+    /** Keeps the lists current while Studio is open; the returned function stops when it closes. */
+    open: follow,
+    createFlow: operations.createFlow,
+    updateFlow: operations.updateFlow,
+    removeFlow: operations.removeFlow,
+    createAgent: operations.createAgent,
+    updateAgent: operations.updateAgent,
+    duplicateAgent: operations.duplicateAgent,
+    removeAgent: operations.removeAgent,
   };
 }
 
 export type StudioDefinitions = ReturnType<typeof createStudioDefinitions>;
 
-export function useStudioRead<K extends keyof StudioDefinitionsSnapshot>(
+export function useStudioRead<K extends StudioList>(
   definitions: StudioDefinitions,
   list: K,
 ): StudioDefinitionsSnapshot[K] {

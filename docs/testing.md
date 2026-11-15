@@ -117,7 +117,7 @@ sleeps. Advancing `TestClock` applies only to Effect time; native timers require
 separate treatment. Do not turn a test of automatic background behavior into a
 manual-reconciliation test just to avoid waiting.
 
-The backend config serializes test files because they exercise real SQLite, process ownership and network resources.
+Backend test files run in parallel, each in its own process: they exercise real SQLite, process ownership and network resources, so every file creates its own temporary home and listens only on ephemeral loopback ports.
 Timeouts are suite-level failure bounds, not synchronization. Fix failures at
 their cause; do not add retries or larger per-test timeouts.
 
@@ -138,8 +138,11 @@ their cause; do not add retries or larger per-test timeouts.
 
 ### PR journey check
 
-The **Controlled UI journeys** PR check runs the complete existing suite with one
-worker after a frozen install, build and Chromium installation. Browser installation
+The **Controlled UI journeys** PR check runs the complete existing suite in three
+parallel shards after a frozen install, build and Chromium installation. Each shard
+is its own runner invocation with one worker and its own freshly seeded fixture, so
+a journey must not depend on state another journey created; the check passes only
+when every shard passes. Browser installation
 and journey execution are separate Actions steps so their durations are distinguishable.
 It runs on PR open, reopen and source synchronization, including drafts and forks,
 without model or production credentials. Becoming ready for review preserves the
@@ -155,7 +158,7 @@ Failed file enumeration fails selection. The final check succeeds only for an
 explicit skip or a successful full run, never a failed selection or unexpected skip.
 
 Failures upload available reports and traces from `.e2e/ci/` and fixture logs from
-`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>`, including hidden files, for
+`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>-shard-<n>`, including hidden files, for
 seven days. Setup failures may occur before those files exist. Download them from
 the Actions run. CI does not replace Before/After UI evidence or prove live provider,
 native desktop or remote-device compatibility. Requiring the check is an owner
@@ -220,10 +223,11 @@ unverified. Keep private addresses and execution evidence outside Git.
 
 For client approval, revocation, TLS, offline recovery or protocol changes, exercise the approved-client HTTPS listener; Vite's host-local proxy does not prove those boundaries. For live delivery, distinguish snapshot/update and reconnect evidence from ordinary HTTP
 reads. Run detail, sidebar navigation, shared T3 connection status and composer launch
-choices no longer poll; Studio, approvals, updater and client-gate checks retain their
-existing reads or polling. A stationary Run trace should separate those consumers and compact observation
+choices no longer poll, and Studio's lists and editors are not re-read; approvals, updater and client-gate checks retain their existing reads or polling. A
+stationary Run trace should separate those consumers and compact observation
 metadata from repeated Run data. Controlled public-stream tests establish delivery and
 Runner independence; they do not establish actual Electron or cross-device transport.
+Studio acceptance keeps the editor open while independent public HTTP operations create, save and remove definitions, checks the visible draft and dependency state, and confirms writes through public reads and reload. Its race matrix belongs in the frontend state-model tests.
 For desktop behavior, use a current desktop build. Report the tested UI/build and transport so browser acceptance is not mistaken for desktop or cross-device evidence.
 
 ## UI verification
@@ -232,12 +236,12 @@ The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI agains
 [verification skill](../.agents/skills/verify-t3-factory/SKILL.md) and its [feature map](../.agents/skills/verify-t3-factory/features/README.md) define paths, charters and evidence standards.
 Live integration is covered by [live verification](installation.md).
 
-From the root, after `pnpm install --frozen-lockfile` (build again after changing app code):
+From the root, after `pnpm install --frozen-lockfile` (build again after changing app code before a direct `e2e` run; the fixture refuses a missing or stale frontend build):
 
 ```sh
 pnpm build
 pnpm exec e2e run tests/smoke.e2e.ts --trace on --output .e2e/doctor
-pnpm test:e2e          # all controlled UI regression journeys
+pnpm test:e2e          # build, then all controlled UI regression journeys
 pnpm e2e:screenshots   # build and capture named PNGs
 pnpm exec e2e run tests/flow-authoring.e2e.ts --trace on --video on --output .e2e/proof/my-change
 ```

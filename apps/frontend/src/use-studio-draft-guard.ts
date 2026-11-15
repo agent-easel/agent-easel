@@ -1,10 +1,9 @@
+import type { DraftGuardState } from "./draft-guard.ts";
 import type { RefObject } from "react";
 import { validateAppSearch, type StudioSelection } from "./settings-navigation.ts";
 import { useNavigationBlock } from "./use-navigation-block.ts";
 
-export type StudioDraft =
-  | { kind: "flow"; id: string; dirty: boolean }
-  | { kind: "agent"; id: string; dirty: boolean };
+export type StudioDraft = DraftGuardState & { kind: "flow" | "agent"; id: string };
 
 export type StudioDraftGuardInput = {
   flow?: StudioDraft | undefined;
@@ -45,12 +44,14 @@ function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft)
 function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
   const flow = input.flowRef ? input.flowRef.current : input.flow;
   const agent = input.agentRef ? input.agentRef.current : input.agent;
-  return [flow, agent].filter((draft): draft is StudioDraft => !!draft?.dirty);
+  return [flow, agent].filter(
+    (draft): draft is StudioDraft => !!draft && (draft.dirty || draft.removed),
+  );
 }
 
 export function useStudioDraftGuard(input: StudioDraftGuardInput) {
-  const dirty = !!(input.flow?.dirty || input.agent?.dirty);
-  return useNavigationBlock(dirty, (location) => {
+  const guarded = liveDrafts(input).length > 0;
+  return useNavigationBlock(guarded, (location) => {
     const studio = studioSelectionFromLocation(location);
     const drafts = liveDrafts(input).filter((draft) => !staysWithDraft(studio, draft));
     return drafts.length ? drafts : undefined;

@@ -28,7 +28,6 @@ export function AgentsListPane({
   onCreate,
   onImported,
   error,
-  onRetry,
   loading,
   creatingNew,
 }: {
@@ -42,7 +41,6 @@ export function AgentsListPane({
   onCreate: () => void;
   onImported: (result: ImportResult) => void;
   error: string;
-  onRetry: () => void;
   loading: boolean;
 }) {
   const filtered =
@@ -102,7 +100,6 @@ export function AgentsListPane({
           capabilities={capabilities}
           selectedId={selectedId}
           error={error}
-          onRetry={onRetry}
           loading={loading}
           count={count}
         />
@@ -123,7 +120,6 @@ function AgentListRows({
   capabilities,
   selectedId,
   error,
-  onRetry,
   loading,
   count,
 }: {
@@ -132,18 +128,12 @@ function AgentListRows({
   capabilities: AgentCapabilities | null;
   selectedId: string | undefined;
   error: string;
-  onRetry: () => void;
   loading: boolean;
   count: number;
 }) {
   return error ? (
     <Alert variant="destructive" className="mb-2">
-      <AlertDescription className="flex flex-wrap items-center gap-2">
-        {error}
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-          Try again
-        </Button>
-      </AlertDescription>
+      <AlertDescription>{error}</AlertDescription>
     </Alert>
   ) : loading ? (
     <p role="status" className="px-1 py-4 text-sm text-muted-foreground">

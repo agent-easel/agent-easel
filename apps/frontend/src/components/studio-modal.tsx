@@ -1,3 +1,4 @@
+import type { ReportDraft, DraftGuardState } from "../draft-guard.ts";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bot, Workflow } from "lucide-react";
 import { Link } from "@tanstack/react-router";
@@ -20,27 +21,13 @@ import {
   useStudioRead,
   type StudioDefinitions,
 } from "../studio-definitions.ts";
+import type { FlowDraft } from "@t3-factory/contracts";
+import { liveOwner } from "../live/live-connection.ts";
 
-/**
- * This Studio session's saved definitions, read again after each Studio navigation. The session
- * ends a moment after Studio closes, so StrictMode's immediate remount keeps the same session.
- */
-function useStudioSession(selection: StudioSelection) {
-  const [definitions] = useState(() => createStudioDefinitions());
-  const ending = useRef<number>(undefined);
-  useEffect(() => {
-    window.clearTimeout(ending.current);
-    return () => {
-      ending.current = window.setTimeout(definitions.dispose, 0);
-    };
-  }, [definitions]);
-  const shown = useRef(selection);
-  // Before paint, so a new page never shows the previous page's read as its own.
-  useLayoutEffect(() => {
-    if (shown.current === selection) return;
-    shown.current = selection;
-    definitions.refresh();
-  }, [definitions, selection]);
+/** This Studio session's saved definitions, delivered live while Studio is open. */
+function useStudioSession() {
+  const [definitions] = useState(() => createStudioDefinitions(liveOwner()));
+  useLayoutEffect(() => definitions.open(), [definitions]);
   return definitions;
 }
 
@@ -56,24 +43,40 @@ function useEscapeHandler() {
   return { escapeHandler, registerEscape };
 }
 
+/**
+ * Whether New Flow's dialog is open, and the Flow it created last: its editor opens from the
+ * create answer, which can arrive before Studio receives the Flow.
+ */
+function useFlowCreation() {
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState<FlowDraft>();
+  const finishCreating = useCallback((flow: FlowDraft) => {
+    setCreating(false);
+    setCreated(flow);
+  }, []);
+  return { creating, created, setCreating, finishCreating };
+}
+
 export function StudioModal({ selection }: { selection: StudioSelection }) {
   const navigate = useStudioNavigation();
-  const definitions = useStudioSession(selection);
+  const definitions = useStudioSession();
   const dialog = useRef<HTMLDivElement>(null);
-  const [creating, setCreating] = useState(false);
+  const { creating, created, setCreating, finishCreating } = useFlowCreation();
   const [flowDraft, setFlowDraft] = useState<StudioDraft>();
   const [agentDraft, setAgentDraft] = useState<StudioDraft>();
   const flowDraftRef = useRef<StudioDraft | undefined>(undefined);
   const agentDraftRef = useRef<StudioDraft | undefined>(undefined);
-  const reportFlowDraft = useCallback((id: string, dirty: boolean) => {
-    if (!dirty && flowDraftRef.current?.id !== id) return;
-    const next = dirty ? ({ kind: "flow", id, dirty: true } as const) : undefined;
+  const reportFlowDraft = useCallback((id: string, state: DraftGuardState) => {
+    if (!state.dirty && !state.removed && flowDraftRef.current?.id !== id) return;
+    const next =
+      state.dirty || state.removed ? ({ kind: "flow", id, ...state } as const) : undefined;
     flowDraftRef.current = next;
     setFlowDraft(next);
   }, []);
-  const reportAgentDraft = useCallback((id: string, dirty: boolean) => {
-    if (!dirty && agentDraftRef.current?.id !== id) return;
-    const next = dirty ? ({ kind: "agent", id, dirty: true } as const) : undefined;
+  const reportAgentDraft = useCallback((id: string, state: DraftGuardState) => {
+    if (!state.dirty && !state.removed && agentDraftRef.current?.id !== id) return;
+    const next =
+      state.dirty || state.removed ? ({ kind: "agent", id, ...state } as const) : undefined;
     agentDraftRef.current = next;
     setAgentDraft(next);
   }, []);
@@ -83,6 +86,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
     flowRef: flowDraftRef,
     agentRef: agentDraftRef,
   });
+  const keepEditing = useRetainedFlowReopen(blocker);
   const { escapeHandler, registerEscape } = useEscapeHandler();
   const close = () => void navigate(undefined);
   return (
@@ -129,16 +133,16 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
             registerEscape={registerEscape}
             reportFlowDraft={reportFlowDraft}
             reportAgentDraft={reportAgentDraft}
-            onCreate={() => setCreating(true)}
+            creation={{ start: () => setCreating(true), created }}
           />
         </div>
-        {blocker.status === "blocked" && <DraftDiscardDialog blocker={blocker} />}
+        <DraftDiscardDialog blocker={blocker} onKeepEditing={keepEditing} />
         {creating && (
           <CreateFlow
             createFlow={definitions.createFlow}
             onClose={() => setCreating(false)}
             onCreated={(flow) => {
-              setCreating(false);
+              finishCreating(flow);
               void navigate({ tab: "flows", flowId: flow.id });
             }}
           />
@@ -148,13 +152,68 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
   );
 }
 
+/** Reopen a retained Flow only after the blocked navigation has finished cancelling. */
+function useRetainedFlowReopen(blocker: ReturnType<typeof useStudioDraftGuard>) {
+  const navigate = useStudioNavigation();
+  const reopenFlow = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!reopenFlow.current || blocker.status !== "idle") return;
+    const flowId = reopenFlow.current;
+    reopenFlow.current = undefined;
+    void navigate({ tab: "flows", flowId });
+  }, [blocker.status, navigate]);
+  return () => {
+    if (blocker.status !== "blocked") return;
+    const flow = blocker.drafts.find((draft) => draft.kind === "flow" && draft.removed);
+    if (flow && blocker.drafts.length === 1) reopenFlow.current = flow.id;
+    blocker.reset();
+  };
+}
+
+function discardMessage(drafts: readonly StudioDraft[]) {
+  const agent = drafts.some((draft) => draft.kind === "agent");
+  const both = drafts.length > 1;
+  const removed = drafts.some((draft) => draft.removed);
+  if (removed)
+    return {
+      removed,
+      title: both
+        ? "Discard the Flow and Agent drafts?"
+        : `This ${agent ? "Agent" : "Flow"} was removed elsewhere. Discard the retained draft?`,
+      description: drafts
+        .map((draft) => {
+          const kind = draft.kind === "agent" ? "Agent" : "Flow";
+          return draft.removed
+            ? `This ${kind} was removed elsewhere. Its retained draft will be discarded.`
+            : `Your ${kind} has unsaved changes that will be discarded.`;
+        })
+        .join(" "),
+    };
+  if (both)
+    return {
+      removed,
+      title: "Discard unsaved Flow and Agent changes?",
+      description:
+        "Your Flow and Agent have unsaved changes. Keep editing to save them, or discard both to continue.",
+    };
+  return {
+    removed,
+    title: agent ? "Discard unsaved Agent changes?" : "Discard unsaved Flow changes?",
+    description: agent
+      ? "This Agent has unsaved changes. Keep editing to save them, or discard them to continue."
+      : "Your Flow has unsaved changes. Keep editing to save them, or discard them to continue.",
+  };
+}
+
 function DraftDiscardDialog({
   blocker,
+  onKeepEditing,
 }: {
-  blocker: Extract<ReturnType<typeof useStudioDraftGuard>, { status: "blocked" }>;
+  blocker: ReturnType<typeof useStudioDraftGuard>;
+  onKeepEditing: () => void;
 }) {
-  const blockingAgent = blocker.drafts.some((draft) => draft.kind === "agent");
-  const blockingBoth = blocker.drafts.length > 1;
+  if (blocker.status !== "blocked") return null;
+  const message = discardMessage(blocker.drafts);
   return (
     <Dialog
       open
@@ -175,26 +234,14 @@ function DraftDiscardDialog({
           blocker.reset();
         }}
       >
-        <DialogTitle>
-          {blockingBoth
-            ? "Discard unsaved Flow and Agent changes?"
-            : blockingAgent
-              ? "Discard unsaved Agent changes?"
-              : "Discard unsaved Flow changes?"}
-        </DialogTitle>
-        <DialogDescription>
-          {blockingBoth
-            ? "Your Flow and Agent have unsaved changes. Keep editing to save them, or discard both to continue."
-            : blockingAgent
-              ? "This Agent has unsaved changes. Keep editing to save them, or discard them to continue."
-              : "Your Flow has unsaved changes. Keep editing to save them, or discard them to continue."}
-        </DialogDescription>
+        <DialogTitle>{message.title}</DialogTitle>
+        <DialogDescription>{message.description}</DialogDescription>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={blocker.reset}>
+          <Button variant="outline" onClick={onKeepEditing}>
             Keep editing
           </Button>
           <Button variant="destructive" onClick={blocker.proceed}>
-            Discard changes
+            {message.removed ? "Discard" : "Discard changes"}
           </Button>
         </div>
       </DialogContent>
@@ -262,16 +309,17 @@ function StudioContent({
   selection,
   definitions,
   registerEscape,
-  onCreate,
   reportFlowDraft,
   reportAgentDraft,
+  creation,
 }: {
   selection: StudioSelection;
   definitions: StudioDefinitions;
   registerEscape: (handler: () => void) => () => void;
-  onCreate: () => void;
-  reportFlowDraft: (id: string, dirty: boolean) => void;
-  reportAgentDraft: (id: string, dirty: boolean) => void;
+  /** New Flow, and the Flow it created last, which can open before Studio receives it. */
+  creation: { readonly start: () => void; readonly created: FlowDraft | undefined };
+  reportFlowDraft: ReportDraft;
+  reportAgentDraft: ReportDraft;
 }) {
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -303,16 +351,13 @@ function StudioContent({
         />
       ) : !flowId ? (
         <div className="min-h-0 flex-1 overflow-auto">
-          <FlowList definitions={definitions} onCreate={onCreate} />
+          <FlowList definitions={definitions} onCreate={creation.start} />
         </div>
       ) : null}
       {openedFlowId && (
         <div
           key={openedFlowId}
-          className={cn(
-            selection.tab === "agents" ? "hidden" : "min-h-0 flex-1 overflow-auto",
-            flowHidden && "hidden",
-          )}
+          className={flowHidden ? "hidden" : "min-h-0 flex-1 overflow-auto"}
           inert={flowHidden}
         >
           <FlowDetail
@@ -321,6 +366,7 @@ function StudioContent({
             active={!flowHidden}
             registerEscape={registerEscape}
             reportDraft={reportFlowDraft}
+            created={creation.created}
           />
         </div>
       )}

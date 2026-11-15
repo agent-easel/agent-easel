@@ -11,13 +11,15 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 12;
-/** Protocol 12 Agents may have no execution settings (`execution` and `settingsStatus` null), and
- * create and save require the `execution` key; older clients cannot read or save them. */
-export const FACTORY_MINIMUM_PEER_PROTOCOL = 12;
-/** The current UI saves Agents without a model and imports and exports definitions, which
- * protocol 12 servers added; it refuses older servers rather than offer operations they lack. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 12;
+export const FACTORY_PROTOCOL = 13;
+/** Protocol 13 Agents may have no execution settings (`execution` and `settingsStatus` null),
+ * create and save require the `execution` key with complete `modelOptions`, and definitions are
+ * exported and imported; older clients cannot read or save these Agents. */
+export const FACTORY_MINIMUM_PEER_PROTOCOL = 13;
+/** The current UI saves Agents without a model, imports and exports definitions and relies on
+ * Studio's live subscription, which protocol 13 servers provide; it refuses older servers rather
+ * than offer operations they lack. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 13;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

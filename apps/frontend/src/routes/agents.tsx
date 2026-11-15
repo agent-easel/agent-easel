@@ -1,54 +1,49 @@
+import { Button } from "../components/ui/button";
 import { useEffect, useState } from "react";
-import { useDraftGuard } from "../draft-guard.ts";
+import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
 import { useStudioNavigation } from "../settings-navigation.ts";
-import {
-  createAgentDraft,
-  useAgentDraftSnapshot,
-  type AgentDraftOperations,
-} from "../agent-draft.ts";
+import { createAgentDraft, useAgentDraftSnapshot, type AgentDraftSource } from "../agent-draft.ts";
 import { api } from "../api.ts";
 import {
   useStudioRead,
   type StudioDefinitions,
   type StudioDefinitionsSnapshot,
 } from "../studio-definitions.ts";
-import { useVisitValue } from "../components/studio-list.tsx";
 import { useActiveView } from "../use-active-view.ts";
 import { AgentsListPane } from "../components/studio-agents/agents-list-pane.tsx";
 import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.tsx";
 import { flowUsageCount } from "@/lib/agent-display";
 import { useReportingState } from "../reporting-state.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
-import { importedSelection } from "../definition-import.ts";
+import { openImported } from "../definition-import.ts";
 import { definitionExportNotice } from "../components/definition-export-control.tsx";
+import { useServerId } from "../client-scope.ts";
 
 type ShownLists = {
-  readonly [K in keyof StudioDefinitionsSnapshot]: NonNullable<
-    StudioDefinitionsSnapshot[K]["value"]
-  >;
+  readonly [K in "agents" | "flows"]: NonNullable<StudioDefinitionsSnapshot[K]["value"]>;
 };
 
 /**
  * Studio's saved Agents and Flows as the Agents page shows them: entering the page waits until
- * both were read for this visit, then later refreshes keep the shown rows. Both lists are shown
- * together, only once both reads of a refresh have answered, so Agents never appear beside
- * another refresh's Flow usage.
+ * both were delivered, then later deliveries replace the shown rows. Both lists are shown
+ * together, only once both are synchronized, so Agents never appear beside another delivery's
+ * Flow usage.
  */
 function useShownLists(definitions: StudioDefinitions) {
   const agentsRead = useStudioRead(definitions, "agents");
   const flowsRead = useStudioRead(definitions, "flows");
-  const visitAgents = useVisitValue(agentsRead);
-  const visitFlows = useVisitValue(flowsRead);
+  const agents = agentsRead.value;
+  const flows = flowsRead.value;
   const [shown, setShown] = useState<ShownLists | null>(null);
   const answered = agentsRead.synchronized && flowsRead.synchronized;
   if (
     answered &&
-    visitAgents !== null &&
-    visitFlows !== null &&
-    (shown?.agents !== visitAgents || shown.flows !== visitFlows)
+    agents !== null &&
+    flows !== null &&
+    (shown?.agents !== agents || shown.flows !== flows)
   )
-    setShown({ agents: visitAgents, flows: visitFlows });
+    setShown({ agents, flows });
   const error = agentsRead.error || flowsRead.error ? "Factory could not load Agents." : "";
   return { shown, error };
 }
@@ -82,10 +77,6 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
     error,
     definitions,
     refreshReporting,
-    retry() {
-      definitions.refresh();
-      void refreshReporting();
-    },
   };
 }
 
@@ -96,11 +87,14 @@ export function StudioAgentsPage({
 }: {
   agentId: string | undefined;
   definitions: StudioDefinitions;
-  reportAgentDraft: (id: string, dirty: boolean) => void;
+  reportAgentDraft: ReportDraft;
 }) {
   const openStudio = useStudioNavigation();
   const library = useAgentsLibrary(definitions);
+  const serverId = useServerId();
   const [query, setQuery] = useState("");
+  // This window's own Create or Duplicate, answered before Studio may have delivered it.
+  const [acknowledged, setAcknowledged] = useState<AgentDefinition | null>(null);
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
       <AgentsListPane
@@ -112,17 +106,19 @@ export function StudioAgentsPage({
         query={query}
         onQueryChange={setQuery}
         onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
-        onImported={(result) => void openStudio(importedSelection(result))}
+        onImported={(result) => void openImported(result, definitions, openStudio)}
         error={library.error}
-        onRetry={library.retry}
         loading={library.agents === null || library.flows === null}
       />
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         {agentId ? (
           <SelectedAgentEditor
-            key={agentId}
+            // An editor never outlives its server, so a pending reply from another one is discarded.
+            key={`${serverId ?? ""}:${agentId}`}
             agentId={agentId}
             library={library}
+            acknowledged={acknowledged?.id === agentId ? acknowledged : null}
+            onAcknowledged={setAcknowledged}
             reportDraft={reportAgentDraft}
           />
         ) : (
@@ -137,42 +133,47 @@ export function StudioAgentsPage({
   );
 }
 
+/**
+ * The saved Agent an editor opens over: the first one Studio lists for this visit, or this
+ * window's acknowledged Create or Duplicate before Studio delivers it. Once opened, the draft
+ * follows Studio itself, so a later removal keeps the opened editor. `undefined` while loading.
+ */
+function useOpenedAgent(
+  agentId: string,
+  library: ReturnType<typeof useAgentsLibrary>,
+  acknowledged: AgentDefinition | null,
+) {
+  const creating = agentId === "new";
+  const pending = library.definitions.hasObserved("agents", agentId) ? null : acknowledged;
+  const listed = library.agents?.find((entry) => entry.id === agentId) ?? pending;
+  const [opened, setOpened] = useState<AgentDefinition | null>(null);
+  if (!creating && !opened && listed) setOpened(listed);
+  if (creating) return { agent: null, unavailable: false };
+  const agent = opened ?? listed ?? undefined;
+  return { agent, unavailable: !agent && Boolean(library.error || library.agents) };
+}
+
 function SelectedAgentEditor({
   agentId,
   library,
+  acknowledged,
+  onAcknowledged,
   reportDraft,
 }: {
   agentId: string;
   library: ReturnType<typeof useAgentsLibrary>;
-  reportDraft: (id: string, dirty: boolean) => void;
+  acknowledged: AgentDefinition | null;
+  onAcknowledged: (agent: AgentDefinition) => void;
+  reportDraft: ReportDraft;
 }) {
   const openStudio = useStudioNavigation();
   const active = useActiveView();
-  const creating = agentId === "new";
-  const [agent, setAgent] = useState<AgentDefinition | null>(null);
-  const [error, setError] = useState("");
-  const [duplicateError, setDuplicateError] = useState("");
-  const [duplicating, setDuplicating] = useState(false);
-  useEffect(() => {
-    if (creating) return;
-    let active = true;
-    void api.getAgent(agentId).then(
-      (value) => {
-        if (active) setAgent(value);
-      },
-      () => {
-        if (active) setError("Factory could not load this Agent editor.");
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [agentId, creating]);
+  const { agent, unavailable } = useOpenedAgent(agentId, library, acknowledged);
   const saved = (value: AgentDefinition) => {
     void library.refreshReporting();
     if (!active.current) return;
-    setDuplicateError("");
-    setAgent(value);
+    if (value.id === agentId) return;
+    onAcknowledged(value);
     void openStudio({ tab: "agents", agentId: value.id });
   };
   const deleted = () => {
@@ -180,29 +181,18 @@ function SelectedAgentEditor({
     if (!active.current) return;
     void openStudio({ tab: "agents" });
   };
-  async function duplicate() {
-    if (duplicating) return;
-    setDuplicating(true);
-    try {
-      const copy = await library.definitions.duplicateAgent(agentId, {});
-      void library.refreshReporting();
-      if (active.current) void openStudio({ tab: "agents", agentId: copy.id });
-    } catch (cause) {
-      if (!active.current) return;
-      setDuplicateError(
-        cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
-      );
-    } finally {
-      if (active.current) setDuplicating(false);
-    }
-  }
-  if (error)
+  if (unavailable)
     return (
-      <p role="alert" className="p-8 text-sm text-destructive">
-        {error}
-      </p>
+      <div className="grid justify-items-start gap-3 p-8">
+        <p role="alert" className="text-sm text-destructive">
+          {library.error ? "Factory could not load this Agent editor." : "Agent not found"}
+        </p>
+        <Button variant="outline" onClick={() => void openStudio({ tab: "agents" })}>
+          Back to list
+        </Button>
+      </div>
     );
-  if ((!creating && !agent) || library.capabilities === undefined) {
+  if (agent === undefined || library.capabilities === undefined) {
     return (
       <p role="status" className="p-8 text-sm text-muted-foreground">
         Loading Agent…
@@ -213,28 +203,30 @@ function SelectedAgentEditor({
     <OpenedAgentEditor
       agent={agent}
       capabilities={library.capabilities}
-      operations={library.definitions}
+      source={library.definitions}
       agentId={agentId}
       flowUsage={flowUsageCount(library.flows ?? [], agentId)}
-      duplicating={duplicating}
-      duplicateError={duplicateError}
       reportDraft={reportDraft}
       onSaved={saved}
-      onDuplicate={creating ? undefined : () => void duplicate()}
+      onDuplicated={saved}
       onDeleted={deleted}
     />
   );
 }
 
-/** One loaded editor owns its draft; disposal detaches and clears only its own Studio guard. */
+/**
+ * One loaded editor owns its draft, which follows Studio's saved Agents while mounted; disposal
+ * detaches it and clears only its own Studio guard.
+ */
 function useOpenedAgentDraft(
   agent: AgentDefinition | null,
   capabilities: AgentCapabilities | null,
-  operations: AgentDraftOperations,
+  source: AgentDraftSource,
   id: string,
-  reportDraft: (id: string, dirty: boolean) => void,
+  reportDraft: ReportDraft,
 ) {
-  const [draft] = useState(() => createAgentDraft(agent, capabilities, operations));
+  const [draft] = useState(() => createAgentDraft(agent, capabilities, source));
+  useEffect(() => draft.connect(), [draft]);
   useDraftGuard(draft, id, reportDraft);
   return { draft, state: useAgentDraftSnapshot(draft) };
 }
@@ -242,38 +234,51 @@ function useOpenedAgentDraft(
 function OpenedAgentEditor({
   agent,
   capabilities,
-  operations,
+  source,
   agentId,
   reportDraft,
   onSaved,
-  duplicateError,
+  onDuplicated,
   ...props
 }: {
   agent: AgentDefinition | null;
   capabilities: AgentCapabilities | null;
-  operations: AgentDraftOperations;
+  source: AgentDraftSource;
   agentId: string;
-  reportDraft: (id: string, dirty: boolean) => void;
+  reportDraft: ReportDraft;
   onSaved: (agent: AgentDefinition) => void;
-  duplicateError: string;
+  onDuplicated: (agent: AgentDefinition) => void;
   flowUsage: number;
-  duplicating: boolean;
-  onDuplicate: (() => void) | undefined;
   onDeleted: () => void;
 }) {
-  const { draft, state } = useOpenedAgentDraft(
-    agent,
-    capabilities,
-    operations,
-    agentId,
-    reportDraft,
-  );
+  const { draft, state } = useOpenedAgentDraft(agent, capabilities, source, agentId, reportDraft);
   const exporter = useDefinitionExport(() => api.exportAgent(agentId));
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState("");
+  async function duplicate() {
+    if (duplicating) return;
+    setDuplicating(true);
+    setDuplicateError("");
+    await draft
+      .duplicate()
+      .then((copy) => {
+        if (copy) onDuplicated(copy);
+      })
+      .catch((cause: unknown) => {
+        setDuplicateError(
+          cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+        );
+      })
+      .finally(() => setDuplicating(false));
+  }
   async function save() {
     const saved = await draft.save();
-    if (saved) onSaved(saved);
+    if (saved) {
+      setDuplicateError("");
+      onSaved(saved);
+    }
   }
-  const notice = state.conflict || duplicateError || definitionExportNotice(exporter.state);
+  const notice = duplicateError || definitionExportNotice(exporter.state);
   return (
     <>
       {notice && (
@@ -288,6 +293,8 @@ function OpenedAgentEditor({
         capabilities={capabilities}
         exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
+        duplicating={duplicating}
+        onDuplicate={agent ? () => void duplicate() : undefined}
       />
     </>
   );

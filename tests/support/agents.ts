@@ -64,6 +64,15 @@ export async function updateAgentExits(
   agent: AgentDefinition,
   exits: AgentDefinition["exits"],
 ) {
+  return saveAgentElsewhere(baseUrl, agent, { exits });
+}
+
+/** Another client saves the Agent through the public API, appending its next revision. */
+export async function saveAgentElsewhere(
+  baseUrl: string | undefined,
+  agent: AgentDefinition,
+  change: Partial<Pick<AgentDefinition, "name" | "prompt" | "execution" | "exits">>,
+) {
   const result = (await (
     await fetch(new URL(`/api/agents/${agent.id}`, baseUrl), {
       method: "PUT",
@@ -72,11 +81,21 @@ export async function updateAgentExits(
         name: agent.name,
         prompt: agent.prompt,
         execution: agent.execution,
+        exits: agent.exits,
         expectedRevision: agent.revision,
-        exits,
+        ...change,
       }),
     })
   ).json()) as Result<AgentDefinition>;
   assert(result.ok);
   return result.value;
+}
+
+/** Remove a journey-owned Agent through the public API, as another client. */
+export async function removeAgentElsewhere(baseUrl: string | undefined, id: string) {
+  const response = await fetch(new URL(`/api/agents/${id}`, baseUrl), {
+    method: "DELETE",
+    headers: { "X-Factory-Request": "1" },
+  });
+  assert(response.ok);
 }

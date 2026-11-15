@@ -1,18 +1,39 @@
 import { vi, type Mock } from "vite-plus/test";
-import type { FlowDraft, FlowGraph, FlowReadiness, OperationError } from "@t3-factory/contracts";
-import { ApiError } from "../../src/api.ts";
-import { createFlowDraft, type FlowDraftOperations } from "../../src/flow-draft.ts";
+import type {
+  AgentDefinition,
+  FlowDraft,
+  FlowGraph,
+  FlowReadiness,
+  FlowValidation,
+  OperationError,
+  StudioLiveMessage,
+} from "@t3-factory/contracts";
+import { api, ApiError } from "../../src/api.ts";
+import { createFlowDraft } from "../../src/flow-draft.ts";
+import { createStudioDefinitions } from "../../src/studio-definitions.ts";
+import { OfflineError } from "../../src/transport.ts";
+import { savedAgent } from "./agent-draft.ts";
+import { envelope, liveHarness } from "./live.ts";
 
-type Operations = { [K in keyof FlowDraftOperations]: Mock<FlowDraftOperations[K]> };
+type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow">;
+type Operations = { [K in keyof FlowOperations]: Mock<FlowOperations[K]> };
 
 /** The Flow Factory holds, and its Flow operations over it in memory. */
 interface MemoryFactory extends Operations {
   latest(): FlowDraft;
   /** Another client saves the Flow, appending the next revision. */
   saveElsewhere(name: string, readiness?: FlowReadiness): FlowDraft;
+  /** Factory commits this editor's held save of `name`, whose reply has not been given yet. */
+  commit(name: string): FlowDraft;
 }
 
 const ready: FlowReadiness = { ready: true, issues: [] };
+
+/** Readiness Factory validated against the saved Agent at revision 3. */
+export const validated = (readiness: FlowReadiness = ready, revision = 3): FlowValidation => ({
+  ...readiness,
+  agentRevisions: { agent: revision },
+});
 
 export const notReady: FlowReadiness = {
   ready: false,
@@ -22,6 +43,9 @@ export const notReady: FlowReadiness = {
 export const rejection = (detail: Partial<OperationError> = {}) =>
   new ApiError({ code: "validation", message: "Flow is invalid.", issues: [], ...detail });
 
+/** A save whose request may have reached Factory before the connection was lost. */
+export const lostReply = () => new OfflineError("unknown");
+
 export function memoryFactory(): MemoryFactory {
   let removed = false;
   let latest: FlowDraft = {
@@ -29,9 +53,20 @@ export function memoryFactory(): MemoryFactory {
     name: "Review",
     revision: 1,
     graph: {
-      blocks: [],
+      blocks: [
+        {
+          id: "review",
+          name: "Review",
+          kind: "agent",
+          agentId: "agent",
+          position: { x: 200, y: 0 },
+          hiddenExitIds: [],
+          localExits: [],
+          revisitInstruction: "",
+        },
+      ],
       connections: [],
-      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["review"] },
     },
     workspace: { mode: "checkout" },
     createdAt: "2026-11-10T08:00:00.000Z",
@@ -45,8 +80,8 @@ export function memoryFactory(): MemoryFactory {
   return {
     latest: () => latest,
     saveElsewhere: (name, readiness = ready) => append({ name, readiness }),
-    getFlow: vi.fn<FlowDraftOperations["getFlow"]>(async () => latest),
-    updateFlow: vi.fn<FlowDraftOperations["updateFlow"]>(
+    commit: (name) => append({ name }),
+    updateFlow: vi.fn<FlowOperations["updateFlow"]>(
       async (_id, { expectedRevision, name, graph, workspace }) => {
         if (removed) throw rejection({ code: "not_found", message: "Flow was removed." });
         if (expectedRevision !== latest.revision)
@@ -55,15 +90,12 @@ export function memoryFactory(): MemoryFactory {
         return append({ name, graph: graph as FlowGraph, ...(workspace && { workspace }) });
       },
     ),
-    removeFlow: vi.fn<FlowDraftOperations["removeFlow"]>(async () => {
+    removeFlow: vi.fn<FlowOperations["removeFlow"]>(async () => {
       removed = true;
     }),
-    validateFlow: vi.fn<FlowDraftOperations["validateFlow"]>(async () => ready),
+    validateFlow: vi.fn<FlowOperations["validateFlow"]>(async () => validated()),
   };
 }
-
-/** Lets every answer the fakes already gave reach the draft. */
-export const settled = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** The next call of `operation` waits until the test answers it. */
 export function held<T>(operation: Mock<(...args: never[]) => Promise<T>>) {
@@ -78,44 +110,126 @@ export function held<T>(operation: Mock<(...args: never[]) => Promise<T>>) {
   return { answer: (value: T) => answer(value), fail: (error: Error) => fail(error) };
 }
 
-/** A Flow draft over a Flow Factory holds in memory; creating it starts loading the Flow. */
-export function flowDraft(factory = memoryFactory()) {
-  return { factory, draft: createFlowDraft("flow", factory) };
+type StudioChange = Omit<Extract<StudioLiveMessage, { _tag: "changed" }>, "_tag">;
+
+/**
+ * A live Studio, with the window's live owner over scripted sockets, whose first snapshot holds
+ * `flows` and one saved Agent; `changed` delivers more. The Flow editor sends only the Flow writes.
+ */
+function liveFlowStudio(factory: MemoryFactory, flows: readonly FlowDraft[]) {
+  const live = liveHarness();
+  const definitions = createStudioDefinitions(live.owner, {
+    ...api,
+    updateFlow: factory.updateFlow,
+    removeFlow: factory.removeFlow,
+  });
+  definitions.open();
+  const socket = live.sessions[0]!;
+  socket.connected();
+  const subscription = socket.subscriptions[0]!;
+  subscription.message(
+    envelope<StudioLiveMessage>([{ _tag: "snapshot", studio: { agents: [savedAgent()], flows } }]),
+  );
+  return {
+    definitions,
+    socket,
+    changed: (change: StudioChange) =>
+      subscription.message(envelope<StudioLiveMessage>([{ _tag: "changed", ...change }])),
+  };
 }
 
-/** The Flow editor shows a loaded, clean Flow whose readiness refresh has answered. */
-export async function openedFlow() {
-  const setup = flowDraft();
-  setup.draft.reportVisibility(true);
-  await settled();
-  return setup;
+/**
+ * The Flow editor's draft of the Flow Factory holds, in a Studio that receives that Flow and one
+ * saved Agent live. The returned deliveries are Studio's live updates of what Factory now holds.
+ */
+function flowDraft(factory = memoryFactory()) {
+  const { definitions, socket, changed } = liveFlowStudio(factory, [factory.latest()]);
+  const draft = createFlowDraft("flow", definitions, factory);
+  draft.open();
+  return {
+    factory,
+    draft,
+    /** Studio receives Factory's latest revision of the Flow. */
+    published: (flow = factory.latest()) => changed({ flows: { upserts: [flow], removals: [] } }),
+    /** Another client removes the Flow and Studio receives the removal. */
+    removedElsewhere: async () => {
+      await factory.removeFlow("flow");
+      changed({ flows: { upserts: [], removals: ["flow"] } });
+    },
+    /**
+     * Studio receives a save of a saved Agent, by default the one the Flow places, with the
+     * Flows whose readiness that save changed.
+     */
+    agentChanged: (
+      agent: AgentDefinition = savedAgent({ revision: 4 }),
+      flows: readonly FlowDraft[] = [],
+    ) =>
+      changed({
+        agents: { upserts: [agent], removals: [] },
+        flows: { upserts: flows, removals: [] },
+      }),
+    /** The live connection drops, so Studio's saved definitions are no longer current. */
+    disconnected: () => socket.disconnected(),
+  };
 }
+
+/** Studio has delivered an empty Flow list; a Create answer may precede its first delivery. */
+export function unlistedFlow() {
+  const factory = memoryFactory();
+  const { definitions, changed } = liveFlowStudio(factory, []);
+  return { definitions, factory, changed };
+}
+
+/** The Flow editor shows a loaded, clean Flow. */
+export const openedFlow = () => flowDraft();
 
 /** The opened Flow is hidden while the user visits another Studio page. */
-export async function hiddenFlow() {
-  const setup = await openedFlow();
-  setup.draft.reportVisibility(false);
+export function hiddenFlow() {
+  const setup = openedFlow();
+  setup.draft.hide();
   return setup;
 }
 
 /** The opened Flow has an unsaved rename. */
-export async function editedFlow(name = "Edited") {
-  const setup = await openedFlow();
+export function editedFlow(name = "Edited") {
+  const setup = openedFlow();
   setup.draft.edit({ name });
   return setup;
 }
 
-/** A save of an unsaved rename was refused because another client saved first. */
-export async function conflictedFlow() {
-  const setup = await editedFlow("Mine");
+/** The opened Flow is being dragged, wired, arranged or typed into; `end` finishes it. */
+export function interactingFlow() {
+  const setup = openedFlow();
+  return { ...setup, end: setup.draft.interact() };
+}
+
+/** Another client saved the Flow, and Studio received that revision, before this edit's save. */
+function conflictedFlow() {
+  const setup = editedFlow("Mine");
+  setup.factory.saveElsewhere("Theirs");
+  setup.published();
+  return setup;
+}
+
+/** A save of an unsaved rename was refused because another client saved first unseen. */
+export async function refusedFlow() {
+  const setup = editedFlow("Mine");
   setup.factory.saveElsewhere("Theirs");
   await setup.draft.save();
   return setup;
 }
 
-/** The conflicted save's latest saved Flow is loaded beside the local draft. */
-export async function comparedFlow() {
-  const setup = await conflictedFlow();
-  await setup.draft.compareLatest();
+/** The newer revision saved elsewhere is shown beside the local draft. */
+export function comparedFlow() {
+  const setup = conflictedFlow();
+  setup.draft.compareLatest();
   return setup;
+}
+
+/** The opened Flow's rename is being saved; `reply` answers the save. */
+export function savingFlow() {
+  const setup = editedFlow("Mine");
+  const reply = held(setup.factory.updateFlow);
+  const saving = setup.draft.save();
+  return { ...setup, reply, saving };
 }

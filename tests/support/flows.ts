@@ -57,14 +57,13 @@ export async function saveFlowCopy(
 /** Saves Flow `id` again under `name` with its graph unchanged, creating its next revision. */
 export async function renameFlow(baseUrl: string | undefined, id: string, name: string) {
   const flow = (await flowRequest(baseUrl, `/api/flows/${id}`)) as FlowDraft;
-  await flowRequest(baseUrl, `/api/flows/${id}`, {
-    method: "PUT",
-    headers: mutation,
-    body: JSON.stringify({ name, expectedRevision: flow.revision, graph: flow.graph }),
-  });
+  await saveFlowElsewhere(baseUrl, flow, { name });
 }
 
-/** Saves a new checkout Flow whose input starts one block of the named saved Agent. */
+/**
+ * Saves a new checkout Flow whose input starts one block of the named saved Agent; with
+ * `wiredExit`, that Agent exit hands over to a Human step named Review.
+ */
 export async function saveSingleAgentFlow(
   baseUrl: string | undefined,
   name: string,
@@ -76,7 +75,9 @@ export async function saveSingleAgentFlow(
     readonly y: number;
     readonly revisitInstruction?: string;
   },
+  wiredExit?: string,
 ) {
+  const review = { id: "review", kind: "human", name: "Review" };
   const agents = (await flowRequest(baseUrl, "/api/agents")) as AgentDefinition[];
   const agent = agents.find((item) => item.name === agentName);
   assert(agent);
@@ -99,8 +100,11 @@ export async function saveSingleAgentFlow(
             revisitInstruction: block.revisitInstruction,
             position: { x: block.x, y: block.y },
           },
+          ...(wiredExit ? [{ ...review, position: { x: block.x + 360, y: block.y } }] : []),
         ],
-        connections: [],
+        connections: wiredExit
+          ? [{ sourceBlockId: block.id, exitId: wiredExit, targetBlockId: review.id }]
+          : [],
       },
     }),
   })) as FlowDraft;
@@ -125,4 +129,33 @@ export async function createStudioFlow(
   await screen.getByRole("button", "New Flow").tap();
   await screen.getByLabel("Flow name").fill(name);
   await screen.getByRole("button", "Create Flow").tap();
+}
+
+/** Removes a Flow through another client's public write boundary. */
+export async function removeFlowElsewhere(baseUrl: string | undefined, id: string) {
+  await flowRequest(baseUrl, `/api/flows/${id}`, { method: "DELETE", headers: mutation });
+}
+
+/** Reads the saved Flow through Factory's public API. */
+export async function readFlow(baseUrl: string | undefined, id: string) {
+  return (await flowRequest(baseUrl, `/api/flows/${id}`)) as FlowDraft;
+}
+
+/** Another client saves a complete Flow revision through the public HTTP boundary. */
+export async function saveFlowElsewhere(
+  baseUrl: string | undefined,
+  flow: FlowDraft,
+  change: Partial<Pick<FlowDraft, "name" | "graph" | "workspace">>,
+) {
+  return (await flowRequest(baseUrl, `/api/flows/${flow.id}`, {
+    method: "PUT",
+    headers: mutation,
+    body: JSON.stringify({
+      name: flow.name,
+      graph: flow.graph,
+      workspace: flow.workspace,
+      expectedRevision: flow.revision,
+      ...change,
+    }),
+  })) as FlowDraft;
 }
