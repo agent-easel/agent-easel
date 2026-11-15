@@ -10,6 +10,7 @@ import { flowAgentRevisions } from "@t3-factory/domain-validation";
 import { api, ApiError } from "./api.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import { OfflineError } from "./transport.ts";
+import { canonical } from "./revisioned-draft.ts";
 
 /** The part of a Flow its editor changes: what a save writes and a revision conflict compares. */
 export type FlowContent = Pick<FlowDraft, "name" | "workspace" | "graph">;
@@ -76,18 +77,6 @@ const contentOf = (flow: FlowDraft): FlowContent => ({
   workspace: flow.workspace,
   graph: flow.graph,
 });
-
-/** JSON with sorted object keys, so equal content compares equal whatever its key order. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
-      .join(",")}}`;
-  return JSON.stringify(value);
-}
 
 const sameContent = (a: FlowContent, b: FlowContent) => canonical(a) === canonical(b);
 
