@@ -235,12 +235,12 @@ The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI agains
 [verification skill](../.agents/skills/verify-t3-factory/SKILL.md) and its [feature map](../.agents/skills/verify-t3-factory/features/README.md) define paths, charters and evidence standards.
 Live integration is covered by [live verification](installation.md).
 
-From the root, after `pnpm install --frozen-lockfile` (build again after changing app code):
+From the root, after `pnpm install --frozen-lockfile` (build again after changing app code before a direct `e2e` run; the fixture refuses a missing or stale frontend build):
 
 ```sh
 pnpm build
 pnpm exec e2e run tests/smoke.e2e.ts --trace on --output .e2e/doctor
-pnpm test:e2e          # all controlled UI regression journeys
+pnpm test:e2e          # build, then all controlled UI regression journeys
 pnpm e2e:screenshots   # build and capture named PNGs
 pnpm exec e2e run tests/flow-authoring.e2e.ts --trace on --video on --output .e2e/proof/my-change
 ```
