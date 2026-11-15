@@ -113,13 +113,14 @@ across releases when their protocol ranges overlap; see the
 Every desktop installation, in either role, follows its server's Run navigation with its own
 live subscription in the main process, independent of any window: the server role over the
 supervised loopback backend, the client role over the pinned HTTPS connection with its
-credential. A server, role or backend change replaces the subscription; any loss reconnects
-automatically. Browser profiles show no OS notifications, the menu-bar icon keeps showing only
+credential. A server, role, credential or backend change replaces the subscription; any loss
+reconnects automatically. Browser profiles show no OS notifications, the menu-bar icon keeps showing only
 role and status, and [Chat control](chat-control.md) notices are unaffected.
 
 - **Dock badge**: the number of Runs with at least one pending **Needs input** or **Problem**
-  matter, not the number of matters. Settled Runs and Archived Runs (which leave navigation) do
-  not count. More than 99 Runs show `99+`; none removes the badge. The badge does not depend on
+  matter, not the number of matters. Snoozed, Settled and Archived Runs (which leave navigation)
+  do not count, nor do a Run's Human steps and native requests while a confirmed Settle is
+  stopping or unresolved. More than 99 Runs show `99+`; none removes the badge. The badge does not depend on
   notification permission. Turning **Dock badge** off clears it.
 - **Readiness**: only the installation's own subscription qualifies the badge and notifications:
   an accepted (approved, compatible) connection whose navigation snapshot is applied and
@@ -132,6 +133,17 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   **Show Run details in notifications** adds the project, Run title and Block name; message,
   report or question text and paths never appear. Notifications play no sound and the Dock icon
   never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Snooze and Settle hold**: a [Snoozed](runs.md#snooze-and-woke) Run is silent. Matters
+  pending or appearing while it is Snoozed never notify, also after **Restore**, which returns it
+  to the badge without a notification; new attention that wakes it (Woke) notifies as usual.
+  While a confirmed [Settle](runs.md#settled-runs) is stopping or unresolved, answers are
+  refused, so the Run's Human steps and native requests do not notify; its Problems, including
+  **Settle could not stop workers**, still do.
+- **Withdrawal**: a delivered notification is withdrawn, best effort, once none of the matters
+  it announced still counts: they resolved, or the Run was Snoozed, Settled, Archived or held by
+  a confirmed Settle. macOS alerts again for a notification posted again, so one whose matters
+  resolve only in part is withdrawn and not replaced; the rest stay on the badge and never
+  notify again. Withdrawing never makes a matter notify again.
 - **Focused window**: while any Factory window of this installation is focused, no notification
   is shown. Matters that became pending meanwhile count as seen and never notify later, also
   after switching to another app.
@@ -153,6 +165,13 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   that were never announced; matters that appeared and resolved meanwhile are never reported. A
   notification is recorded as attempted before it is posted, so a crash can lose a banner but
   never repeats one; one macOS refused is retried only at the next catch-up.
+- **Selection boundaries**: switching server or role, or the server refusing this client's
+  credential after a revocation, clears the badge, withdraws the previous selection's
+  notifications and ignores whatever the previous selection's subscription still delivers. The
+  ledger is kept per server, so switching back without forgetting repeats nothing. **Forget
+  server** deletes that server's ledger: connecting to it again announces what is still pending,
+  at most one notification per Run. A revoked client keeps reconnecting; once its new access
+  request is approved, alerts resume within about ten seconds.
 
 Notifications are posted through `UNUserNotificationCenter` by a small native module, not
 Electron's `Notification` API: Electron withdraws its notifications when the app quits and asks

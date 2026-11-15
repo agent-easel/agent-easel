@@ -48,15 +48,18 @@ export class ApprovedClient {
   private constructor(
     private readonly store: SettingsStore,
     private readonly protection: CredentialProtection,
+    private readonly credentialChanged: () => void,
   ) {
     this.role = store.get().role;
   }
 
+  /** `credentialChanged` runs when the current selection is issued a new credential. */
   static async open(
     store: SettingsStore,
     protection: CredentialProtection,
+    credentialChanged: () => void,
   ): Promise<ApprovedClient> {
-    const client = new ApprovedClient(store, protection);
+    const client = new ApprovedClient(store, protection, credentialChanged);
     await client.restore(store.get().server, client.generation);
     return client;
   }
@@ -163,6 +166,7 @@ export class ApprovedClient {
   private async rememberCredential(selection: Selection, issued: string) {
     this.requireCurrent(selection);
     selection.credential = issued;
+    this.credentialChanged();
     // Without Keychain encryption the credential lives only for this session.
     const available = await this.protection.isAsyncEncryptionAvailable();
     this.requireCurrent(selection);

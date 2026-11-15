@@ -406,6 +406,11 @@ wakes it (**Woke**). Ordinary progress, stale observations and re-reads of the s
 **Restore** returns it to the main list. Snooze state survives reload and restart. Settling or archiving a Run clears both;
 Settled Runs cannot be snoozed. T3 reports only a count, so a replacement question with an unchanged count cannot be detected.
 
+On every desktop installation a Snoozed Run is silent: it leaves the Dock badge, its delivered notifications are withdrawn, and
+matters that are pending or appear while it is Snoozed never notify, also after Snooze ends. **Restore** returns it to the badge
+without a notification; Woke notifies for the new matter as usual. See
+[Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
+
 ## Reports and attention
 
 For new Runs a worker calls `factory_update_block` with its Block id (stated in every Factory message to that worker):
@@ -465,6 +470,10 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   handoffs **Cancelled**, and a same-exit update after hand-off says it was not handed off again. Activations show the current
   result, and the latest Agent visit shows the Block's current execution state. **Work periods** list each exact execution with
   its own state, the finished or working report (or a historical waiting report) accepted during it, and its T3 link; elapsed times are approximate observations.
+
+Pending Needs input and Problems also drive each desktop installation's macOS notifications and Dock badge, which clear when
+the matter resolves, never because a Run was viewed; see
+[Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
 
 ## Human steps
 

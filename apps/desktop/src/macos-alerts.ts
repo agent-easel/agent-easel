@@ -45,6 +45,10 @@ export class MacAlerts implements DesktopAlertPort {
     return refusal === null ? ({ kind: "accepted" } as const) : ({ kind: "failed" } as const);
   }
 
+  withdraw(ids: readonly string[]) {
+    this.native.remove(ids);
+  }
+
   /** This app's page in System Settings → Notifications, where a denial can be changed. */
   get systemSettingsUrl() {
     const id = encodeURIComponent(this.native.bundleIdentifier());

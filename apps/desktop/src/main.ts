@@ -48,7 +48,7 @@ import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts"
 import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
-import { SettingsStore, type DesktopSettings } from "./settings-store.ts";
+import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
@@ -144,20 +144,29 @@ const attentionHostBase = () =>
     ? `http://127.0.0.1:${backend.port}`
     : null;
 
-/** The server whose attention this installation follows, independent of any window. */
+/** A remembered server's identity in the attention ledger. */
+const clientServer = ({ url, trust }: RememberedServer) => `client ${url} ${trust.fingerprint}`;
+
+/**
+ * The server whose attention this installation follows, independent of any window and of
+ * whether it is reachable: a stopped local backend leaves the selection, and its
+ * notifications, in place.
+ */
 function attentionSelection(): AttentionSelection | null {
   const settings = store.get();
   if (settings.role === "server") {
     const base = attentionHostBase();
-    return base ? { server: "server", target: { kind: "host", base } } : null;
+    return { server: "server", target: base ? { kind: "host", base } : null };
   }
+  if (settings.role !== "client" || !settings.server) return null;
   const connection = approvedClient.capture();
-  if (!connection || !settings.server) return null;
-  const { url, trust } = settings.server;
-  return { server: `client ${url} ${trust.fingerprint}`, target: { kind: "remote", connection } };
+  return {
+    server: clientServer(settings.server),
+    target: connection ? { kind: "remote", connection } : null,
+  };
 }
 
-/** Replaces the subscription after a server, role or backend change. */
+/** Replaces the subscription after a server, role, credential or backend change. */
 function followAttention() {
   attentionHost = store.get().role === "server" ? attentionHostBase() : null;
   attentionSubscription.follow(attentionSelection());
@@ -529,8 +538,10 @@ const bridgeHandlers: BridgeHandlers = {
   },
   connectServer: (_frame, url: string, fingerprint: string) => connectServer(url, fingerprint),
   forgetServer: async () => {
+    const forgotten = store.get().server;
     await approvedClient.forget();
     followAttention();
+    if (forgotten) await attention.forget(clientServer(forgotten));
     broadcast();
     return { ok: true };
   },
@@ -634,7 +645,8 @@ if (!app.requestSingleInstanceLock()) {
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
   applyNativeAppearance(store.get().appearance);
-  approvedClient = await ApprovedClient.open(store, safeStorage);
+  // A newly issued credential replaces the attention subscription at once.
+  approvedClient = await ApprovedClient.open(store, safeStorage, followAttention);
   backend = new BackendSupervisor(
     join(here, "backend-host.js"),
     {

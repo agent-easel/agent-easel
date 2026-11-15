@@ -20,6 +20,7 @@ const server = "host";
 function recordingPort(permission: NotificationPermission = "granted") {
   const port = {
     shown: [] as AlertNotification[],
+    withdrawn: [] as string[],
     badge: "",
     permission,
     requests: 0,
@@ -30,6 +31,9 @@ function recordingPort(permission: NotificationPermission = "granted") {
     show: (notification) => {
       port.shown.push(notification);
       return port.answer();
+    },
+    withdraw: (ids) => {
+      port.withdrawn.push(...ids);
     },
     setBadge: (label) => {
       port.badge = label;
@@ -64,16 +68,22 @@ async function installation(
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const options = { settings: { ...defaultSettings, ...settings }, permissionChanged: () => {} };
   let coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
+  let feed = coordinator.select(server);
   context.onTestFinished(() => coordinator.close());
   return {
     port,
     get coordinator() {
       return coordinator;
     },
+    /** The selected server's navigation input. */
+    get feed() {
+      return feed;
+    },
     /** Quit and launch again: the same profile directory, a new coordinator. */
     async restart() {
       await coordinator.close();
       coordinator = await AttentionCoordinator.open(directory, port.implementation, options);
+      feed = coordinator.select(server);
     },
   };
 }
@@ -140,11 +150,10 @@ function run(
 
 it("the Dock badge counts Runs with pending matters, not matters, and leaves out Settled Runs", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
+  const { port, feed } = await installation(c);
 
   // Act
-  await coordinator.deliver({
-    server,
+  await feed.deliver({
     fresh: true,
     rows: [
       run("a", [matter("a1"), matter("a2"), problem("a3")]),
@@ -160,11 +169,11 @@ it("the Dock badge counts Runs with pending matters, not matters, and leaves out
 
 it("more than 99 waiting Runs show 99+ on the Dock badge", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
+  const { port, feed } = await installation(c);
   const rows = Array.from({ length: 100 }, (_, index) => run(`r${index}`, [problem(`p${index}`)]));
 
   // Act
-  await coordinator.deliver({ server, fresh: true, rows });
+  await feed.deliver({ fresh: true, rows });
 
   // Assert
   expect(port.badge).toBe("99+");
@@ -172,11 +181,11 @@ it("more than 99 waiting Runs show 99+ on the Dock badge", async (c) => {
 
 it("the Dock badge disappears once the last pending matter resolves", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
-  await coordinator.deliver({ server, fresh: false, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [])] });
 
   // Assert
   expect(port.badge).toBe("");
@@ -184,17 +193,15 @@ it("the Dock badge disappears once the last pending matter resolves", async (c) 
 
 it("matters arriving together on one Run share one banner, and a later matter gets its own", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
-  await coordinator.deliver({
-    server,
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({
     fresh: false,
     rows: [run("a", [matter("a1"), matter("a2"), problem("a3")])],
   });
 
   // Act
-  await coordinator.deliver({
-    server,
+  await feed.deliver({
     fresh: false,
     rows: [run("a", [matter("a1"), matter("a2"), problem("a3"), problem("a4")])],
   });
@@ -208,14 +215,14 @@ it("matters arriving together on one Run share one banner, and a later matter ge
 
 it("a native question count of 1, 2, 1, 2 alerts once for each increase", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
+  const { port, feed } = await installation(c);
   const counted = (count: number) => [run("a", [nativeRequest("n1", count)])];
-  await coordinator.deliver({ server, fresh: true, rows: counted(1) });
-  await coordinator.deliver({ server, fresh: false, rows: counted(2) });
-  await coordinator.deliver({ server, fresh: false, rows: counted(1) });
+  await feed.deliver({ fresh: true, rows: counted(1) });
+  await feed.deliver({ fresh: false, rows: counted(2) });
+  await feed.deliver({ fresh: false, rows: counted(1) });
 
   // Act
-  await coordinator.deliver({ server, fresh: false, rows: counted(2) });
+  await feed.deliver({ fresh: false, rows: counted(2) });
 
   // Assert
   expect(port.shown).toHaveLength(3);
@@ -223,14 +230,14 @@ it("a native question count of 1, 2, 1, 2 alerts once for each increase", async 
 
 it("a notification says only whether a Run needs input or has a problem", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
+  const { port, feed } = await installation(c);
   const secret = run("a", [problem("a1")], {
     title: "Rotate the key in /Users/owner/secrets.txt",
     flowName: "Private Flow",
   });
 
   // Act
-  await coordinator.deliver({ server, fresh: true, rows: [secret] });
+  await feed.deliver({ fresh: true, rows: [secret] });
 
   // Assert
   expect(port.shown).toStrictEqual([
@@ -240,11 +247,11 @@ it("a notification says only whether a Run needs input or has a problem", async 
 
 it("losing readiness clears the badge and retained matters never notify", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
-  await coordinator.notReady();
+  await feed.notReady();
 
   // Assert
   expect(port.badge).toBe("");
@@ -254,12 +261,11 @@ it("losing readiness clears the badge and retained matters never notify", async 
 it("after a restart each Run with still-pending matters that were never accounted shows one banner", async (c) => {
   // Arrange
   const profile = await installation(c);
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
   await profile.restart();
 
   // Act
-  await profile.coordinator.deliver({
-    server,
+  await profile.feed.deliver({
     fresh: true,
     rows: [run("a", [matter("a1"), matter("a2")]), run("b", [matter("b1"), problem("b2")])],
   });
@@ -271,12 +277,12 @@ it("after a restart each Run with still-pending matters that were never accounte
 it("a matter that waited for permission and resolved while Factory was away never notifies", async (c) => {
   // Arrange
   const profile = await installation(c, recordingPort("denied"));
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
   await profile.restart();
   profile.port.permission = "granted";
 
   // Act
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [])] });
 
   // Assert
   expect(profile.port.shown).toStrictEqual([]);
@@ -286,11 +292,11 @@ it("a notifier that never answered before a restart is not repeated", async (c) 
   // Arrange
   const profile = await installation(c);
   profile.port.answer = () => new Promise(() => undefined);
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
   await profile.restart();
 
   // Act
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
   expect(profile.port.shown).toHaveLength(1);
@@ -300,13 +306,13 @@ it("a rejected notification is retried at the next catch-up, not on later change
   // Arrange
   const profile = await installation(c);
   profile.port.answer = () => Promise.resolve({ kind: "failed" });
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
-  await profile.coordinator.deliver({ server, fresh: false, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
   await profile.restart();
   profile.port.answer = () => Promise.resolve({ kind: "accepted" });
 
   // Act
-  await profile.coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
   expect(profile.port.shown).toHaveLength(2);
@@ -314,10 +320,10 @@ it("a rejected notification is retried at the next catch-up, not on later change
 
 it("permission is asked at the first banner, not at launch, and the banner follows the grant", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c, recordingPort("undetermined"));
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
+  const { port, coordinator, feed } = await installation(c, recordingPort("undetermined"));
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
   const asked = port.requests;
-  await coordinator.deliver({ server, fresh: false, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
 
   // Act
   port.grant("granted");
@@ -329,10 +335,11 @@ it("permission is asked at the first banner, not at launch, and the banner follo
 
 it("turning Notifications on shows one catch-up banner per Run for what waited while they were off", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c, recordingPort(), { notifications: false });
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
-  await coordinator.deliver({
-    server,
+  const { port, coordinator, feed } = await installation(c, recordingPort(), {
+    notifications: false,
+  });
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({
     fresh: false,
     rows: [run("a", [matter("a1"), problem("a2")]), run("b", [matter("b1")])],
   });
@@ -350,8 +357,8 @@ it("turning Notifications on shows one catch-up banner per Run for what waited w
 
 it("turning the Dock badge off clears it while Runs still need the owner", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Act
   await coordinator.configure({ ...defaultSettings, dockBadge: false });
@@ -362,14 +369,14 @@ it("turning the Dock badge off clears it while Runs still need the owner", async
 
 it("with Run details shown a notification adds the project, Run title and Block name and nothing else", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c, recordingPort(), { showRunDetails: true });
+  const { port, feed } = await installation(c, recordingPort(), { showRunDetails: true });
   const detailed = run("a", [matter("a1"), problem("a2")], {
     title: "Release notes",
     flowName: "Private Flow",
   });
 
   // Act
-  await coordinator.deliver({ server, fresh: true, rows: [detailed] });
+  await feed.deliver({ fresh: true, rows: [detailed] });
 
   // Assert
   expect(port.shown).toStrictEqual([
@@ -384,15 +391,15 @@ it("with Run details shown a notification adds the project, Run title and Block 
 
 it("matters that arrived while a Factory window was focused never alert after switching away", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c);
+  const { port, coordinator, feed } = await installation(c);
   coordinator.focus(true);
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [])] });
-  await coordinator.deliver({ server, fresh: false, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
   const whileFocused = port.shown.length;
   coordinator.focus(false);
 
   // Act
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
   expect({ whileFocused, shown: port.shown.length, badge: port.badge }).toStrictEqual({
@@ -404,10 +411,10 @@ it("matters that arrived while a Factory window was focused never alert after sw
 
 it("with notification permission denied the Dock badge still counts and Factory never asks again", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c, recordingPort("denied"));
+  const { port, feed } = await installation(c, recordingPort("denied"));
 
   // Act
-  await coordinator.deliver({ server, fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
 
   // Assert
   expect({ badge: port.badge, shown: port.shown.length, requests: port.requests }).toStrictEqual({
@@ -419,9 +426,8 @@ it("with notification permission denied the Dock badge still counts and Factory 
 
 it("a permission grant noticed by a re-check shows one catch-up banner per Run", async (c) => {
   // Arrange
-  const { port, coordinator } = await installation(c, recordingPort("denied"));
-  await coordinator.deliver({
-    server,
+  const { port, coordinator, feed } = await installation(c, recordingPort("denied"));
+  await feed.deliver({
     fresh: true,
     rows: [run("a", [matter("a1"), matter("a2")]), run("b", [problem("b1")])],
   });
@@ -435,4 +441,201 @@ it("a permission grant noticed by a re-check shows one catch-up banner per Run",
     { title: "A Run needs your input", body: "+1 more" },
     { title: "A Run has a problem", body: "" },
   ]);
+});
+
+it("matters first seen while a Run is Snoozed never alert and keep it off the Dock badge", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  const snoozed = { presentation: { snoozed: true, woke: false } };
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), problem("a2")], snoozed)] });
+
+  // Assert
+  expect({ shown: port.shown.length, badge: port.badge }).toStrictEqual({ shown: 0, badge: "" });
+});
+
+it("Restore puts a Snoozed Run back on the Dock badge without a banner", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  const matters = [matter("a1"), problem("a2")];
+  await feed.deliver({
+    fresh: true,
+    rows: [run("a", matters, { presentation: { snoozed: true, woke: false } })],
+  });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [run("a", matters)] });
+
+  // Assert
+  expect({ shown: port.shown.length, badge: port.badge }).toStrictEqual({ shown: 0, badge: "1" });
+});
+
+it("new attention wakes a Snoozed Run and alerts only for the new matter", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({
+    fresh: true,
+    rows: [run("a", [matter("a1")], { presentation: { snoozed: true, woke: false } })],
+  });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [
+      run("a", [matter("a1"), problem("a2")], { presentation: { snoozed: false, woke: true } }),
+    ],
+  });
+
+  // Assert
+  expect(port.shown.map(({ title, body }) => ({ title, body }))).toStrictEqual([
+    { title: "A Run has a problem", body: "" },
+  ]);
+});
+
+it("Snoozing a Run withdraws its delivered banner", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [run("a", [matter("a1")], { presentation: { snoozed: true, woke: false } })],
+  });
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual(port.shown.map(({ id }) => id));
+});
+
+it("a banner is withdrawn without a new alert once every matter it announced resolves", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), problem("a2")])] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [run("a", [])] });
+
+  // Assert
+  expect({ shown: port.shown.length, withdrawn: port.withdrawn }).toStrictEqual({
+    shown: 1,
+    withdrawn: [port.shown[0]!.id],
+  });
+});
+
+it("a banner whose matters partly resolve is withdrawn, not reposted, and its Run still counts", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), problem("a2")])] });
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [run("a", [problem("a2")])] });
+
+  // Assert
+  expect({ shown: port.shown.length, withdrawn: port.withdrawn, badge: port.badge }).toStrictEqual({
+    shown: 1,
+    withdrawn: [port.shown[0]!.id],
+    badge: "1",
+  });
+});
+
+it("a Settle hold withdraws and uncounts Human and native matters while its Problem still alerts", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  const waiting = [matter("a1"), nativeRequest("n1", 1)];
+  await feed.deliver({ fresh: true, rows: [run("a", waiting)] });
+  const unresolved = matter("s1", {
+    kind: "settlement-unresolved",
+    presentation: "problem",
+    blockId: null,
+    occurrenceId: null,
+    blockName: null,
+  });
+
+  // Act
+  await feed.deliver({
+    fresh: false,
+    rows: [
+      run("a", [...waiting, unresolved], { settlement: "unresolved" }),
+      run("b", [matter("b1")], { settlement: "stopping" }),
+    ],
+  });
+
+  // Assert
+  expect({
+    titles: port.shown.map(({ title }) => title),
+    withdrawn: port.withdrawn,
+    badge: port.badge,
+  }).toStrictEqual({
+    titles: ["A Run needs your input", "A Run has a problem"],
+    withdrawn: [port.shown[0]!.id],
+    badge: "1",
+  });
+});
+
+it("switching server clears the badge, withdraws its banners and ignores its late deliveries", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  coordinator.select("other");
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1"), matter("a2")])] });
+
+  // Assert
+  expect({ shown: port.shown.length, withdrawn: port.withdrawn, badge: port.badge }).toStrictEqual({
+    shown: 1,
+    withdrawn: [port.shown[0]!.id],
+    badge: "",
+  });
+});
+
+it("revocation clears the badge, withdraws the server's banners and ignores its later deliveries", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.revoked();
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), matter("a2")])] });
+
+  // Assert
+  expect({ shown: port.shown.length, withdrawn: port.withdrawn, badge: port.badge }).toStrictEqual({
+    shown: 1,
+    withdrawn: [port.shown[0]!.id],
+    badge: "",
+  });
+});
+
+it("switching back to a server without forgetting it does not replay its alerts", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  coordinator.select("other");
+  const back = coordinator.select(server);
+
+  // Act
+  await back.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ shown: port.shown.length, badge: port.badge }).toStrictEqual({ shown: 1, badge: "1" });
+});
+
+it("a banner Notification Center accepts after its server selection ended is withdrawn again", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  let accept = () => undefined as void;
+  port.answer = () =>
+    new Promise((resolve) => {
+      accept = () => resolve({ kind: "accepted" });
+    });
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await coordinator.select("other").notReady();
+
+  // Act
+  accept();
+  await coordinator.close();
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([port.shown[0]!.id, port.shown[0]!.id]);
 });

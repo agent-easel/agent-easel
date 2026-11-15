@@ -39,6 +39,8 @@ export interface NotificationRecord {
   readonly blockId: string | null;
   readonly matters: readonly { readonly id: string; readonly revision: number }[];
   readonly postedAt: string;
+  /** Asked to leave Notification Center; withdrawal never changes the matters' accounting. */
+  withdrawn: boolean;
 }
 
 export interface ServerLedger {
@@ -114,11 +116,23 @@ export class AttentionLedger {
     return new AttentionLedger(path, parsed);
   }
 
+  /** Forgetting a server deletes its history: reconnecting later starts fresh. */
+  async forget(server: string): Promise<void> {
+    await this.write(() => {
+      delete this.data.servers[server];
+    });
+  }
+
   /** Applies `change` to the server's ledger and persists it, or leaves everything unchanged. */
   async change<A>(server: string, change: (ledger: ServerLedger) => A): Promise<A> {
+    return this.write(() =>
+      change((this.data.servers[server] ??= { matters: {}, notifications: {} })),
+    );
+  }
+
+  private async write<A>(change: () => A): Promise<A> {
     const before = structuredClone(this.data);
-    const ledger = (this.data.servers[server] ??= { matters: {}, notifications: {} });
-    const result = change(ledger);
+    const result = change();
     try {
       await writeFile(`${this.path}.next`, JSON.stringify(this.data) + "\n", { mode: 0o600 });
       await rename(`${this.path}.next`, this.path);

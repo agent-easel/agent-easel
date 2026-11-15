@@ -13,6 +13,7 @@ import {
   AttentionLedger,
   type AppearanceState,
   type DeferReason,
+  type NotificationRecord,
   type ServerLedger,
 } from "./attention-ledger.ts";
 
@@ -23,6 +24,8 @@ export interface DesktopAlertPort {
    * coordinator never reuses an id and withdraws instead of updating.
    */
   show(notification: AlertNotification): Promise<ShowOutcome>;
+  /** Removes delivered notifications best effort, also ones posted by an earlier process. */
+  withdraw(ids: readonly string[]): void;
   /** The Dock badge text; an empty label removes the badge. Independent of permission. */
   setBadge(label: string): void;
   /** Read without a window; never prompts. */
@@ -48,11 +51,28 @@ export type ShowOutcome = { readonly kind: "accepted" } | { readonly kind: "fail
  * `fresh` marks the first state after a new snapshot, which runs catch-up.
  */
 export interface AttentionDelivery {
-  /** The selected server's identity; the ledger is kept per server. */
-  readonly server: string;
   readonly fresh: boolean;
   readonly rows: readonly RunNavigationEntry[];
 }
+
+/**
+ * The navigation input of one server selection. Once another selection or a revocation ended
+ * it, everything it still reports is ignored, so it can never act for another server.
+ */
+export interface AttentionFeed {
+  /** A committed state while the subscription is ready. */
+  deliver(delivery: AttentionDelivery): Promise<void>;
+  /**
+   * The subscription lost readiness (offline, incompatible, a delivery gap or a stopped
+   * backend): the badge clears and retained data never notifies.
+   */
+  notReady(): Promise<void>;
+  /** The server refused this client's credential: the selection ends as at a switch. */
+  revoked(): Promise<void>;
+}
+
+/** The selected server's latest ready state. */
+type Ready = { readonly server: string; readonly rows: readonly RunNavigationEntry[] };
 
 const badgeLimit = 99;
 
@@ -61,9 +81,14 @@ const titles: Record<RunAttentionMatter["presentation"], string> = {
   problem: "A Run has a problem",
 };
 
-/** Matters that count for the badge and may notify. */
+/**
+ * Matters that count for the badge and may notify: none on a Snoozed, Settled or Archived
+ * Run, and no Human or native request while a confirmed Settle refuses answers.
+ */
 function eligibleMatters(row: RunNavigationEntry): readonly RunAttentionMatter[] {
-  return row.lifecycle === "active" ? row.attention.matters : [];
+  if (row.lifecycle !== "active" || row.presentation.snoozed) return [];
+  if (row.settlement === null) return row.attention.matters;
+  return row.attention.matters.filter((matter) => matter.presentation === "problem");
 }
 
 function badgeLabel(rows: readonly RunNavigationEntry[] | undefined): string {
@@ -106,10 +131,22 @@ function observeMatter(ledger: ServerLedger, runId: string, matter: RunAttention
 
 const retriedAtCatchUp = new Set(["deferred", "definitely-failed"]);
 
+/** The matter's revisions never accounted, plus deferred and failed ones when `retry`. */
+function due(ledger: ServerLedger, runId: string, matter: RunAttentionMatter, retry: boolean) {
+  const record = observeMatter(ledger, runId, matter);
+  return Array.from({ length: record.revision + 1 }, (_, revision) => revision)
+    .filter((revision) => {
+      const state = record.appearances[revision]?.state;
+      return state === undefined || (retry && retriedAtCatchUp.has(state));
+    })
+    .map((revision) => ({ matter, revision }));
+}
+
 /**
  * Records what this delivery observed: new appearances, native count increases and resolved
- * matters. Returns, per Run, the appearances to announce: new ones, plus deferred and failed
- * ones when `catchUp`.
+ * matters. What exists or appears while its Run is Snoozed is accounted for good, so Restore
+ * shows no banner. Returns, per Run, the appearances to announce: new ones, plus deferred and
+ * failed ones when `catchUp`.
  */
 function observe(
   ledger: ServerLedger,
@@ -118,16 +155,44 @@ function observe(
 ): Announcement[] {
   resolveMissing(ledger, rows);
   return rows.flatMap((row) => {
-    const appearances = eligibleMatters(row).flatMap((matter) => {
-      const record = observeMatter(ledger, row.id, matter);
-      return Array.from({ length: record.revision + 1 }, (_, revision) => revision)
-        .filter((revision) => {
-          const state = record.appearances[revision]?.state;
-          return state === undefined || (catchUp && retriedAtCatchUp.has(state));
-        })
-        .map((revision) => ({ matter, revision }));
-    });
+    if (row.lifecycle === "active" && row.presentation.snoozed) {
+      for (const matter of row.attention.matters)
+        account(ledger, [{ row, appearances: due(ledger, row.id, matter, true) }], {
+          state: "snooze-accounted",
+        });
+      return [];
+    }
+    const appearances = eligibleMatters(row).flatMap((matter) =>
+      due(ledger, row.id, matter, catchUp),
+    );
     return appearances.length > 0 ? [{ row, appearances }] : [];
+  });
+}
+
+/**
+ * Notifications to withdraw: those with a resolved matter, since a posted notification cannot
+ * change quietly and is never posted again, and those none of whose matters is eligible.
+ * Withdrawal leaves every appearance's accounting as it was.
+ */
+function withdrawable(ledger: ServerLedger, rows: readonly RunNavigationEntry[]): string[] {
+  const pending = new Set(rows.flatMap((row) => row.attention.matters.map(({ id }) => id)));
+  const eligible = new Set(rows.flatMap((row) => eligibleMatters(row).map(({ id }) => id)));
+  return withdrawWhere(
+    ledger,
+    ({ matters }) =>
+      matters.some(({ id }) => !pending.has(id)) || !matters.some(({ id }) => eligible.has(id)),
+  );
+}
+
+/** Marks the matching notifications withdrawn and returns their ids. */
+function withdrawWhere(
+  ledger: ServerLedger,
+  matches: (notification: NotificationRecord) => boolean,
+): string[] {
+  return Object.entries(ledger.notifications).flatMap(([id, notification]) => {
+    if (notification.withdrawn || !matches(notification)) return [];
+    notification.withdrawn = true;
+    return [id];
   });
 }
 
@@ -186,6 +251,7 @@ function intend(
       blockId: blocks.size === 1 ? [...blocks][0]! : null,
       matters: appearances.map(({ matter, revision }) => ({ id: matter.id, revision })),
       postedAt: new Date().toISOString(),
+      withdrawn: false,
     };
     return { id, groupId: groupOf(server), ...content(announcement, showRunDetails) };
   });
@@ -194,8 +260,10 @@ function intend(
 export class AttentionCoordinator {
   private queue: Promise<void> = Promise.resolve();
   private closed = false;
-  /** The latest ready delivery; null while the subscription is not ready. */
-  private latest: AttentionDelivery | null = null;
+  /** The server whose feed is current; null with none selected or after revocation. */
+  private selection: { readonly server: string } | null = null;
+  /** The selection's latest ready state; null while its subscription is not ready. */
+  private latest: Ready | null = null;
   private requesting = false;
   private focused = false;
 
@@ -231,6 +299,54 @@ export class AttentionCoordinator {
   }
 
   /**
+   * Follows `server` (null: none) and ends the previous feed, so its late deliveries are
+   * ignored. The badge clears until the new feed is ready. Switching to another server withdraws
+   * the previous one's notifications and keeps its ledger, so switching back replays nothing.
+   */
+  select(server: string | null): AttentionFeed {
+    const previous = this.selection;
+    const selection = server === null ? null : { server };
+    this.selection = selection;
+    void this.enqueue(async () => {
+      this.latest = null;
+      this.showBadge();
+      if (previous && previous.server !== server) await this.withdrawAll(previous.server);
+    });
+    const current = () => selection !== null && this.selection === selection;
+    return {
+      deliver: (delivery) =>
+        this.enqueue(async () => {
+          if (!current()) return;
+          this.latest = { server: selection!.server, rows: delivery.rows };
+          this.showBadge();
+          await this.announce(this.latest, delivery.fresh);
+        }),
+      notReady: () =>
+        this.enqueue(async () => {
+          if (!current()) return;
+          this.latest = null;
+          this.showBadge();
+        }),
+      revoked: () =>
+        this.enqueue(async () => {
+          if (!current()) return;
+          this.selection = null;
+          this.latest = null;
+          this.showBadge();
+          await this.withdrawAll(selection!.server);
+        }),
+    };
+  }
+
+  /** Forgetting a server withdraws its notifications and deletes its ledger. */
+  forget(server: string): Promise<void> {
+    return this.enqueue(async () => {
+      await this.withdrawAll(server);
+      await this.ledger.forget(server);
+    });
+  }
+
+  /**
    * Re-reads permission without asking (on activation, resume and periodically); a newly
    * observed grant catches up on what waited.
    */
@@ -255,26 +371,6 @@ export class AttentionCoordinator {
     this.focused = focused;
   }
 
-  /** A committed state from the coordinator's subscription while it is ready. */
-  deliver(delivery: AttentionDelivery): Promise<void> {
-    return this.enqueue(async () => {
-      this.latest = delivery;
-      this.showBadge();
-      await this.announce(delivery, delivery.fresh);
-    });
-  }
-
-  /**
-   * The subscription lost readiness (offline, incompatible, unauthorized, a delivery gap or a
-   * stopped backend): the badge clears and retained data never notifies.
-   */
-  notReady(): Promise<void> {
-    return this.enqueue(async () => {
-      this.latest = null;
-      this.showBadge();
-    });
-  }
-
   /** Waits for recorded decisions; a notifier that never answers is not awaited. */
   async close(): Promise<void> {
     // Settled answers enqueue their records while earlier tasks finish.
@@ -289,6 +385,12 @@ export class AttentionCoordinator {
   /** The Dock badge switch off keeps the badge clear, as does a subscription that is not ready. */
   private showBadge() {
     this.port.setBadge(this.settings.dockBadge ? badgeLabel(this.latest?.rows) : "");
+  }
+
+  /** Best effort: Notification Center may already have dropped some of them. */
+  private async withdrawAll(server: string) {
+    const ids = await this.ledger.change(server, (ledger) => withdrawWhere(ledger, () => true));
+    if (ids.length > 0) this.port.withdraw(ids);
   }
 
   /**
@@ -311,19 +413,20 @@ export class AttentionCoordinator {
     return this.queue;
   }
 
-  private async announce(delivery: AttentionDelivery, catchUp: boolean) {
-    const { server } = delivery;
+  private async announce({ server, rows }: Ready, catchUp: boolean) {
     const granted = await this.observePermission();
     const withheld = this.withheld(this.observed);
-    const { due, shown } = await this.ledger.change(server, (ledger) => {
-      const announcements = observe(ledger, delivery.rows, catchUp || granted);
+    const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {
+      const announcements = observe(ledger, rows, catchUp || granted);
       return {
         due: announcements.length > 0,
+        withdrawn: withdrawable(ledger, rows),
         shown: withheld
           ? account(ledger, announcements, withheld)
           : intend(ledger, server, announcements, this.settings.showRunDetails),
       };
     });
+    if (withdrawn.length > 0) this.port.withdraw(withdrawn);
     // Asked only when a banner would otherwise show now, never at launch.
     const bannerWaitsForPermission =
       !this.focused && this.settings.notifications && this.observed === "undetermined";
@@ -335,11 +438,16 @@ export class AttentionCoordinator {
       );
   }
 
-  /** Records the notifier's answer; an unanswered one stays attempted-unknown for good. */
+  /**
+   * Records the notifier's answer; an unanswered one stays attempted-unknown for good. One
+   * accepted after it was withdrawn (its matters resolved or its selection ended meanwhile) is
+   * withdrawn again.
+   */
   private settle(server: string, id: string, outcome: ShowOutcome) {
-    void this.enqueue(() =>
-      this.ledger.change(server, (ledger) => {
-        for (const { id: matterId, revision } of ledger.notifications[id]?.matters ?? []) {
+    void this.enqueue(async () => {
+      const late = await this.ledger.change(server, (ledger) => {
+        const notification = ledger.notifications[id];
+        for (const { id: matterId, revision } of notification?.matters ?? []) {
           const record = ledger.matters[matterId];
           const appearance = record?.appearances[revision];
           if (appearance?.state !== "attempted-unknown" || appearance.notification !== id) continue;
@@ -348,8 +456,10 @@ export class AttentionCoordinator {
               ? { state: "delivered", notification: id }
               : { state: "definitely-failed", notification: id };
         }
-      }),
-    );
+        return outcome.kind === "accepted" && notification?.withdrawn === true;
+      });
+      if (late) this.port.withdraw([id]);
+    });
   }
 
   /** Whether this read newly observed a grant. */

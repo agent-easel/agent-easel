@@ -107,3 +107,62 @@ it("a desktop client of an incompatible server never badges or announces", async
     shown: [],
   });
 });
+
+it("forgetting a server deletes its alert history, so reconnecting announces its pending matter again", async (c) => {
+  // Arrange
+  const prepared = await remotePrepared(c);
+  const selection = await clientSelection(c, prepared.server, prepared.laptop.credential);
+  const alerts = await desktopAttention(c, selection);
+  await nativeQuestionAsked(prepared);
+  await alerts.until(() => alerts.shown.length === 1);
+  await alerts.forget(selection.server);
+
+  // Act
+  alerts.follow(await clientSelection(c, prepared.server, prepared.laptop.credential));
+
+  // Assert
+  await alerts.until(() => alerts.shown.length === 2);
+  expect(alerts.shown.map(({ title }) => title)).toStrictEqual([
+    "A Run needs your input",
+    "A Run needs your input",
+  ]);
+});
+
+it("revoking a desktop client clears its Dock badge and withdraws its notifications", async (c) => {
+  // Arrange
+  const prepared = await remotePrepared(c);
+  const selection = await clientSelection(c, prepared.server, prepared.laptop.credential);
+  const alerts = await desktopAttention(c, selection);
+  await nativeQuestionAsked(prepared);
+  await alerts.until(() => alerts.shown.length === 1 && alerts.badges.at(-1) === "1");
+
+  // Act
+  const revoked = await prepared.server.host(
+    "POST",
+    `/api/host/clients/${prepared.laptop.id}/revoke`,
+  );
+
+  // Assert
+  expect(revoked.body.ok).toBe(true);
+  await alerts.until(() => alerts.withdrawn.length > 0 && alerts.badges.at(-1) === "");
+  expect(alerts.withdrawn).toStrictEqual([alerts.shown[0]!.id]);
+});
+
+it("a revoked desktop client that the owner approves again resumes its Dock badge", async (c) => {
+  // Arrange
+  const prepared = await remotePrepared(c);
+  const selection = await clientSelection(c, prepared.server, prepared.laptop.credential);
+  const alerts = await desktopAttention(c, selection);
+  await nativeQuestionAsked(prepared);
+  await alerts.until(() => alerts.badges.at(-1) === "1");
+  await prepared.server.host("POST", `/api/host/clients/${prepared.laptop.id}/revoke`);
+  await alerts.until(() => alerts.withdrawn.length > 0);
+  const again = await prepared.server.approved("Laptop");
+
+  // Act
+  await selection.target.connection.rememberCredential(again.credential);
+
+  // Assert
+  await alerts.until(() => alerts.badges.at(-1) === "1");
+  expect(alerts.shown).toHaveLength(1);
+});
