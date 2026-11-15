@@ -2,6 +2,7 @@ import { useSettleRun } from "./settle-run.tsx";
 import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { publishSidebarNavigation, type SidebarRunAction } from "../sidebar-navigation.ts";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
@@ -104,7 +105,7 @@ function NewRunButton({ current }: { current: boolean }) {
             <Plus aria-hidden strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>New Run · {hint("newRun")}</TooltipContent>
+        <TooltipContent>{withShortcutHint("New Run", hint("newRun"))}</TooltipContent>
       </Tooltip>
     </MutationGate>
   );
@@ -510,7 +511,7 @@ function RunSearchField({
       <Input
         ref={ref}
         aria-label="Search Run titles"
-        title={`Search Runs · ${hint("searchRuns")}`}
+        title={withShortcutHint("Search Runs", hint("searchRuns"))}
         placeholder="Search Run titles"
         className={cn("bg-muted pl-8", value && "pr-8")}
         value={value}
@@ -737,11 +738,7 @@ function RenameItem({ onSelect, disabled }: { onSelect: () => void; disabled?: b
   const { hint } = useShortcutPreferences();
   const binding = hint("rename");
   return (
-    <RowMenuItem
-      onSelect={onSelect}
-      disabled={disabled}
-      aria-keyshortcuts={binding === "Unbound" ? undefined : binding}
-    >
+    <RowMenuItem onSelect={onSelect} disabled={disabled} aria-keyshortcuts={binding}>
       <Pencil aria-hidden strokeWidth={1.5} />
       Rename
       <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
@@ -971,7 +968,7 @@ function RunActionItems({
         <RowMenuItem
           disabled={!mutationsAllowed}
           onSelect={() => onAction(run.presentation.snoozed ? "restore" : "snooze")}
-          aria-keyshortcuts={snoozeHint === "Unbound" ? undefined : snoozeHint}
+          aria-keyshortcuts={snoozeHint}
         >
           {run.presentation.snoozed ? (
             <Undo2 aria-hidden strokeWidth={1.5} />
@@ -988,7 +985,7 @@ function RunActionItems({
         <RowMenuItem
           disabled={!mutationsAllowed}
           onSelect={() => onAction("settle")}
-          aria-keyshortcuts={settleHint === "Unbound" ? undefined : settleHint}
+          aria-keyshortcuts={settleHint}
         >
           <CircleCheck aria-hidden strokeWidth={1.5} />
           Settle
@@ -1000,7 +997,7 @@ function RunActionItems({
       <RowMenuItem
         disabled={!mutationsAllowed}
         onSelect={() => onArchive(run)}
-        aria-keyshortcuts={archiveHint === "Unbound" ? undefined : archiveHint}
+        aria-keyshortcuts={archiveHint}
       >
         <Archive aria-hidden strokeWidth={1.5} />
         Archive…

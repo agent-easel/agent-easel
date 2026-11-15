@@ -344,6 +344,17 @@ export function validateShortcutBinding(
     : undefined;
 }
 
+/** The hint a menu or tooltip shows for a command: its binding, or none while unbound. */
+export function shortcutHint(binding: ShortcutBinding | null | undefined) {
+  return binding ? formatShortcut(binding) : undefined;
+}
+
+/** A tooltip text followed by the command's hint, when it has one. */
+export function withShortcutHint(text: string, hint: string | undefined) {
+  return hint ? `${text} · ${hint}` : text;
+}
+
+/** A binding as lists of bindings show it, including Unbound. */
 export function formatShortcut(binding: ShortcutBinding | null | undefined) {
   if (!binding) return "Unbound";
   const key =

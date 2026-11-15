@@ -31,6 +31,7 @@ import { OpenRunKeyboardHost } from "../open-run-keyboard.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
@@ -302,8 +303,7 @@ function RunTopBar({
           </Button>
         </TooltipTrigger>
         <TooltipContent>
-          {inspectorOpen ? "Hide inspector" : "Show inspector"}
-          {inspectorHint !== "Unbound" ? ` · ${inspectorHint}` : ""}
+          {withShortcutHint(inspectorOpen ? "Hide inspector" : "Show inspector", inspectorHint)}
         </TooltipContent>
       </Tooltip>
       {run.lifecycle !== "archived" && <RunActionsMenu run={run} />}
@@ -332,12 +332,12 @@ function RunActionsMenu({ run }: { run: RunDetail }) {
           <DropdownMenuItem
             disabled={!mutationsAllowed}
             onSelect={() => setArchiving(true)}
-            aria-keyshortcuts={archiveHint === "Unbound" ? undefined : archiveHint}
+            aria-keyshortcuts={archiveHint}
           >
             <Archive aria-hidden strokeWidth={1.5} />
             Archive…
             <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-              {archiveHint === "Unbound" ? "" : archiveHint}
+              {archiveHint}
             </span>
           </DropdownMenuItem>
         </DropdownMenuContent>

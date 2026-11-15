@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { reportingSummary, useReportingState } from "../reporting-state.tsx";
 
 /** Connection failures take precedence; reporting warnings lead straight to their repair surface. */
@@ -96,7 +97,7 @@ function FooterIcon({
   children,
 }: {
   label: string;
-  shortcut?: string;
+  shortcut: string | undefined;
   active: boolean;
   children: ReactNode;
 }) {
@@ -117,10 +118,7 @@ function FooterIcon({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="top">
-        {label}
-        {shortcut && ` · ${shortcut}`}
-      </TooltipContent>
+      <TooltipContent side="top">{withShortcutHint(label, shortcut)}</TooltipContent>
     </Tooltip>
   );
 }

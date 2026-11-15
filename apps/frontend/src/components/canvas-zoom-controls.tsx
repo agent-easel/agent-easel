@@ -1,4 +1,5 @@
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import type { ReactNode } from "react";
 import { Crosshair, LocateFixed, Minus, Plus, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,10 @@ function FollowActiveButton({
         </Button>
       </TooltipTrigger>
       <TooltipContent>
-        {`${indicated ? "Active Blocks changed · follow them" : "Follow active Blocks"} · ${shortcutHint("followActive")}`}
+        {withShortcutHint(
+          indicated ? "Active Blocks changed · follow them" : "Follow active Blocks",
+          shortcutHint("followActive"),
+        )}
       </TooltipContent>
     </Tooltip>
   );
@@ -110,7 +114,7 @@ export function CanvasZoomControls({
     <>
       <ControlButton
         label="Zoom out"
-        hint={`Zoom out · ${shortcutHint("zoomOut")}`}
+        hint={withShortcutHint("Zoom out", shortcutHint("zoomOut"))}
         onClick={() => onZoom(1 / 1.1)}
       >
         <Minus aria-hidden className="size-3.75" strokeWidth={1.5} />
@@ -124,7 +128,7 @@ export function CanvasZoomControls({
       </span>
       <ControlButton
         label="Zoom in"
-        hint={`Zoom in · ${shortcutHint("zoomIn")}`}
+        hint={withShortcutHint("Zoom in", shortcutHint("zoomIn"))}
         onClick={() => onZoom(1.1)}
       >
         <Plus aria-hidden className="size-3.75" strokeWidth={1.5} />
@@ -132,7 +136,7 @@ export function CanvasZoomControls({
       {separator}
     </>
   );
-  const fitHint = `Fit Flow · ${shortcutHint("fit")}`;
+  const fitHint = withShortcutHint("Fit Flow", shortcutHint("fit"));
   const followButton = follow && <FollowActiveButton {...follow} iconOnly={iconOnly} />;
   if (iconOnly)
     return (

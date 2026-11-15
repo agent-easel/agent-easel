@@ -79,7 +79,7 @@ function PaletteResults({
   listId: string;
   onActivate: (item: PaletteItem) => void;
   onHover: (index: number) => void;
-  shortcutHint: (id: ShortcutId) => string;
+  shortcutHint: (id: ShortcutId) => string | undefined;
 }) {
   return items.map((item, index) => {
     const Icon = item.icon;
@@ -112,7 +112,7 @@ function PaletteResults({
           )}
         </span>
         <span className="text-2xs tracking-label text-subtle-foreground capitalize">
-          {hint && hint !== "Unbound" ? hint : item.kind}
+          {hint ?? item.kind}
         </span>
       </button>
     );
@@ -128,6 +128,7 @@ function PaletteContent({
   onNewRun: () => void;
 }) {
   const { hint } = useShortcutPreferences();
+  const paletteHint = hint("palette");
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
   const listRef = useRef<HTMLDivElement>(null);
@@ -186,9 +187,11 @@ function PaletteContent({
           }}
           onKeyDown={onKeyDown}
         />
-        <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
-          {hint("palette")}
-        </kbd>
+        {paletteHint && (
+          <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
+            {paletteHint}
+          </kbd>
+        )}
       </div>
       {catalog.loading && (
         <p role="status" className="px-3 py-2 text-xs text-muted-foreground">

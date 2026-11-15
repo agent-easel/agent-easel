@@ -93,6 +93,8 @@ shortcuts could not be restored. Defaults are in use.**
 - **Hints:** current bindings appear on the command-palette search field, footer Settings
   and Studio controls, selected palette actions (New Run, Settings, Studio), Rename in row
   menus, and Snooze/Restore, Settle and Archive menu items, including Archive in the open Run's ··· menu.
+  A command without a binding shows no hint there; Settings, the cheat sheet and the canvas
+  shortcuts popover list it as **Unbound**.
 - **Desktop menu:** the desktop app's native menu lists registry commands with the current
   bindings as accelerators; see [Application menu](desktop-and-clients.md#application-menu).
 

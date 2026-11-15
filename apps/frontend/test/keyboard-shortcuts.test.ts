@@ -3,9 +3,11 @@ import {
   getDefaultShortcutBindings,
   parseShortcutStorage,
   shortcutDefinitions,
+  shortcutHint,
   type ShortcutBinding,
   type ShortcutPlatform,
   validateShortcutBinding,
+  withShortcutHint,
 } from "../src/keyboard-shortcuts.ts";
 
 function modKey(key: string, extra: Partial<ShortcutBinding> = {}): ShortcutBinding {
@@ -171,4 +173,26 @@ it("null stored bindings produce a visible recovery issue", () => {
 
   // Assert
   expect(restored?.storageIssue).toMatch(/could not be restored/i);
+});
+
+it("an unbound command shows its tooltip text without a hint", () => {
+  // Arrange
+  const binding = null;
+
+  // Act
+  const text = withShortcutHint("Archive Run…", shortcutHint(binding));
+
+  // Assert
+  expect(text).toBe("Archive Run…");
+});
+
+it("a bound command shows its tooltip text with the formatted binding", () => {
+  // Arrange
+  const binding: ShortcutBinding = { key: "F2", mod: false, alt: false, shift: false };
+
+  // Act
+  const text = withShortcutHint("Rename", shortcutHint(binding));
+
+  // Assert
+  expect(text).toBe("Rename · F2");
 });
