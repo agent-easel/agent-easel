@@ -152,3 +152,15 @@ it("a Run action is refused while another Run's action is running", async () => 
   expect(ports.settle).not.toHaveBeenCalled();
   expect(actions.getSnapshot()).toMatchObject({ busyRunId: other.id, error: "" });
 });
+
+it("a keyboard Settle acts on the Run its screen declared, with no sidebar mounted", async () => {
+  // Arrange
+  const { actions, ports } = runActionsWith();
+  actions.setOpenRun({ entry: active, detail: runDetail() });
+
+  // Act
+  await actions.run(actions.getSnapshot().openRun, "settle");
+
+  // Assert
+  expect(ports.settle).toHaveBeenCalledWith(active.id, false, expect.any(Function));
+});

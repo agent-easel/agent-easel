@@ -18,7 +18,7 @@ import {
   matchShortcutCommand,
   setAppCommandHandlers,
 } from "./app-keyboard-commands.ts";
-import { getOpenRunCommandSurface } from "./open-run-keyboard.tsx";
+import { runActions } from "./components/run-actions.tsx";
 import { getSidebarNavigation } from "./sidebar-navigation.ts";
 import { toggleRunInspector } from "./run-inspector-preference.ts";
 import { useDesktopMenu } from "./desktop-menu.ts";
@@ -104,20 +104,16 @@ export function KeyboardCommandsProvider({ children }: { children: ReactNode }) 
         stepRun(1);
       },
       snoozeRestore: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.snoozeRestore();
+        void runActions.run(runActions.getSnapshot().openRun, "snoozeRestore");
       },
       settle: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.settle();
+        void runActions.run(runActions.getSnapshot().openRun, "settle");
       },
       archive: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.archive();
+        runActions.openDialog("archive", runActions.getSnapshot().openRun);
       },
       rename: () => {
-        const openRun = getOpenRunCommandSurface();
-        openRun.rename();
+        runActions.openDialog("rename", runActions.getSnapshot().openRun);
       },
       toggleInspector: toggleRunInspector,
     };

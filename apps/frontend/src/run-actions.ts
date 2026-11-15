@@ -86,7 +86,11 @@ type RunActionsState = {
   readonly busyRunId: string | undefined;
   readonly error: string;
   readonly dialog: RunActionDialog | undefined;
+  /** The Run open in detail, which the keyboard and the desktop menu act on. */
+  readonly openRun: RunActionSubject;
 };
+
+const noRun: RunActionSubject = {};
 
 export type RunActionPorts = {
   readonly snooze: (runId: string) => Promise<unknown>;
@@ -107,7 +111,12 @@ export type RunActionPorts = {
 
 /** Runs Snooze, Restore and Settle and holds the Archive and Rename dialog, whichever surface asks. */
 export function createRunActions(ports: RunActionPorts) {
-  let state: RunActionsState = { busyRunId: undefined, error: "", dialog: undefined };
+  let state: RunActionsState = {
+    busyRunId: undefined,
+    error: "",
+    dialog: undefined,
+    openRun: noRun,
+  };
   const listeners = new Set<() => void>();
   function update(next: Partial<RunActionsState>) {
     state = { ...state, ...next };
@@ -182,5 +191,7 @@ export function createRunActions(ports: RunActionPorts) {
       update({ dialog: { kind, runId: target.id, title: target.title, returnFocusId } });
     },
     closeDialog: () => update({ dialog: undefined }),
+    /** Declares the Run open in detail, or none once its screen closes. */
+    setOpenRun: (subject: RunActionSubject | undefined) => update({ openRun: subject ?? noRun }),
   };
 }

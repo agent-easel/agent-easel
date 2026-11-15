@@ -122,10 +122,13 @@ while observations are unavailable; elsewhere it does nothing. It is not an appl
 item on desktop.
 
 **Open Run actions** (Snooze or restore, Settle, Archive…, Rename) apply to the Run
-currently open in detail, not to a highlighted sidebar row alone. Snooze and Settle follow
-the same availability and focus rules as the row and detail controls in
-[Runs](runs.md#run-list). An unavailable action does nothing. **Archive…** always opens
-the existing confirmation dialog. Global Open Run shortcuts that include Mod still run
+currently open in detail, not to a highlighted sidebar row alone. They have the same
+availability as the sidebar row menu, the open Run's ··· menu and the desktop **Run** menu:
+none for an Archived Run or while mutations are not allowed; unavailable observations do not
+change it. While a Run action is running, Snooze or restore and Settle are unavailable for
+every Run and the busy Run offers no action. Snooze and Settle follow the focus rules in
+[Runs](runs.md#run-list) and work whether or not the sidebar is shown. An unavailable action
+does nothing. When Archive is available, **Archive…** always opens the confirmation dialog. Global Open Run shortcuts that include Mod still run
 while focus is in a text field on the Run page; bare **Rename** does not
 run inside editable fields.
 

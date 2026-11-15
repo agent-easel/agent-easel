@@ -35,14 +35,18 @@ export const runActions = createRunActions({
   requestFocus: (request) => mountedHost().requestFocus(request),
 });
 
-export function useRunActionsState() {
-  return useSyncExternalStore(runActions.subscribe, runActions.getSnapshot);
+type RunActionsState = ReturnType<typeof runActions.getSnapshot>;
+
+/** One part of the Run actions state; the open Run changes with every live update, so a
+ * component re-renders only when its own part changes. */
+export function useRunActionsState<Part>(select: (state: RunActionsState) => Part) {
+  return useSyncExternalStore(runActions.subscribe, () => select(runActions.getSnapshot()));
 }
 
 /** Which actions `subject` offers now, and whether its own action is running. */
 export function useRunActions(subject: RunActionSubject) {
   const mutationsAllowed = useMutationsAllowed();
-  const { busyRunId } = useRunActionsState();
+  const busyRunId = useRunActionsState((state) => state.busyRunId);
   const id = subject.entry?.id ?? subject.detail?.id;
   return {
     available: runActionAvailability(subject, { mutationsAllowed, busyRunId }),
@@ -71,7 +75,7 @@ export function RunActionsHost() {
       host = undefined;
     };
   });
-  const { dialog } = useRunActionsState();
+  const dialog = useRunActionsState((state) => state.dialog);
   return (
     <>
       {settlementDialog}

@@ -13,8 +13,8 @@ import {
 } from "./ui/dialog";
 
 /**
- * Archive is final, so both entry points (row menu and Run page) confirm it here. An archived Run
- * leaves navigation, so archiving the open Run returns to the composer.
+ * Archive is final, so every entry point confirms it here. An archived Run leaves navigation, so
+ * archiving the open Run returns to the composer.
  */
 export function ArchiveRunDialog({
   run,

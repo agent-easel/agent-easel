@@ -2,9 +2,9 @@ import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { withShortcutHint } from "../keyboard-shortcuts.ts";
-import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { runActions, useRunActions, useRunActionsState } from "./run-actions.tsx";
-import { publishSidebarNavigation, type SidebarRunAction } from "../sidebar-navigation.ts";
+import { publishSidebarNavigation } from "../sidebar-navigation.ts";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
 import type { RunActionAvailability } from "../run-actions.ts";
 import {
@@ -121,33 +121,21 @@ export function RunSidebar({ path }: { path: string }) {
   const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
   const query = search.trim().toLocaleLowerCase();
   const { open, snoozed, settled, matches, total } = navigationGroups(runs, drafts, query);
-  const { busyRunId, error: actionError } = useRunActionsState();
-  const busy = busyRunId !== undefined;
-  const actOnRun = useCallback(
-    (runId: string, action: SidebarRunAction) => {
-      const entry = runs.find((run) => run.id === runId);
-      void runActions.run({ entry }, action === "settle" ? "settle" : "snoozeRestore");
-    },
-    [runs],
-  );
+  const actionError = useRunActionsState((state) => state.error);
   const queryKey = query;
   useLayoutEffect(() => {
     publishSidebarNavigation({
       visibleRows: sidebarRows(open, snoozed, settled, queryKey, snoozedExpanded, expanded),
       searching: !!queryKey,
-      busy,
       focusSearch: () => searchRef.current?.focus(),
-      actOnRun,
     });
     return () =>
       publishSidebarNavigation({
         visibleRows: [],
         searching: false,
-        busy: false,
         focusSearch: () => undefined,
-        actOnRun: () => undefined,
       });
-  }, [actOnRun, busy, open, snoozed, settled, expanded, queryKey, snoozedExpanded]);
+  }, [open, snoozed, settled, expanded, queryKey, snoozedExpanded]);
   return (
     <section aria-label="Run navigation" className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2">

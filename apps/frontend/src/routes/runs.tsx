@@ -1,11 +1,10 @@
-import { useMutationsAllowed } from "@/client-gate";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
 import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FactoryProject, RunDetail } from "@t3-factory/contracts";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 import {
   Archive,
   Ellipsis,
@@ -17,7 +16,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { RunAttentionDetails } from "../components/run-attention.tsx";
-import { ArchiveRunDialog } from "../components/archive-run-dialog.tsx";
 import { RunNumber } from "../components/run-number.tsx";
 import { NotLiveMarker, RunHeaderStatus } from "../components/run-header-status.tsx";
 import { runFreshness, runStatus, type RunFreshness } from "../run-status.ts";
@@ -27,7 +25,7 @@ import { ExecutionCanvas } from "../components/execution-canvas.tsx";
 import { clockTime, dayAndTime } from "../components/execution-state.tsx";
 import { Notice, NoticeSettingsLink } from "../components/notice.tsx";
 import { useConnectionState } from "../connection-state.tsx";
-import { OpenRunKeyboardHost } from "../open-run-keyboard.tsx";
+import { runActions, useRunActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
@@ -115,6 +113,14 @@ function useEscapeToDeselect(active: boolean, deselect: () => void) {
   }, [active, deselect]);
 }
 
+/** Declares this screen's Run to Run actions, so the keyboard and desktop menu act on it. Live
+ * updates replace the subject in place; clearing only on unmount keeps an unchanged native menu
+ * from being rebuilt in between. */
+function useOpenRunActions(entry: RunNavigationEntry | undefined, detail: RunDetail | undefined) {
+  useLayoutEffect(() => runActions.setOpenRun({ entry, detail }), [entry, detail]);
+  useLayoutEffect(() => () => runActions.setOpenRun(undefined), []);
+}
+
 /** What the inspector shows besides the overview: a selected Block, or the Run title, which is not a Block. */
 type Inspected = { readonly blockId: string } | "run-title" | null;
 
@@ -127,13 +133,9 @@ export function RunScreen({ id }: { id: string }) {
   const seenError = useRunOpened(id, !observed.unavailable);
   useEscapeToDeselect(inspected !== null, deselect);
   const { run, error } = observed;
+  useOpenRunActions(navigationRun, run ?? undefined);
   return (
     <CanvasLayout>
-      <OpenRunKeyboardHost
-        unavailable={observed.unavailable}
-        run={run ?? undefined}
-        navigationRun={navigationRun}
-      />
       {run ? (
         <RunDetailView
           observed={observed}
@@ -316,34 +318,30 @@ function RunTopBar({
  * Archive is the menu's only action, so an Archived Run shows no menu.
  */
 function RunActionsMenu({ run }: { run: RunDetail }) {
-  const [archiving, setArchiving] = useState(false);
-  const mutationsAllowed = useMutationsAllowed();
+  const { available } = useRunActions({ detail: run });
   const { hint } = useShortcutPreferences();
   const archiveHint = hint("archive");
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
-            <Ellipsis aria-hidden className="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            disabled={!mutationsAllowed}
-            onSelect={() => setArchiving(true)}
-            aria-keyshortcuts={archiveHint}
-          >
-            <Archive aria-hidden strokeWidth={1.5} />
-            Archive…
-            <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-              {archiveHint}
-            </span>
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <ArchiveRunDialog run={run} open={archiving} onOpenChange={setArchiving} />
-    </>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
+          <Ellipsis aria-hidden className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          disabled={!available.archive}
+          onSelect={() => runActions.openDialog("archive", { detail: run })}
+          aria-keyshortcuts={archiveHint}
+        >
+          <Archive aria-hidden strokeWidth={1.5} />
+          Archive…
+          <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
+            {archiveHint}
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
