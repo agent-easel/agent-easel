@@ -11,16 +11,16 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 14;
+export const FACTORY_PROTOCOL = 15;
 /** Protocol 14 theme-color presentations and sources carry no appearance grant, which older
- * clients read unguarded. Protocol 13 Agents may have no execution settings (`execution` null),
- * create and save require the `execution` key with complete `modelOptions`, and definitions are
- * exported and imported. */
+ * clients read unguarded. Protocol 15 only adds attention fields and the `settlement-unresolved`
+ * kind, which protocol 14 clients ignore: they parse responses without validation, and their
+ * presentation leaves an unknown kind out rather than failing. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 14;
-/** The current UI saves Agents without a model, imports and exports definitions and relies on
- * Studio's live subscription, which protocol 13 servers provide; it refuses older servers rather
- * than offer operations they lack. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 13;
+/** The current client reads each navigation attention matter's native pending request count and
+ * Block name, which protocol 15 servers provide; it refuses older servers rather than miss
+ * alerts. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 15;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

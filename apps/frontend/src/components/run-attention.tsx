@@ -28,6 +28,7 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
     "missing-report": "Missing reports",
     "report-problem": "Report problems",
     "execution-failed": "Execution problems",
+    "settlement-unresolved": "Settle could not stop workers",
   })[kind];
 
 /** Needs input / Problem on Run-local surfaces: the same Run/StatusChip as Run navigation. */
@@ -49,6 +50,8 @@ function attentionExplanation(kind: RunAttention["kind"]) {
       return "A report or its work evidence needs attention. Inspect the recorded reason and the worker in T3.";
     case "execution-failed":
       return "T3 execution did not complete successfully. Continue in T3 to investigate.";
+    case "settlement-unresolved":
+      return "Settle could not stop this Run's workers. Settle again, remove queued work in T3, or Archive the Run.";
   }
 }
 
@@ -276,7 +279,9 @@ function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
           ? item.message
             ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
             : "Inspect the recorded work evidence in T3."
-          : "Inspect the failed execution in T3; report recovery does not retry work."}
+          : item.kind === "settlement-unresolved"
+            ? "This resolves when settlement succeeds or the Run is Archived."
+            : "Inspect the failed execution in T3; report recovery does not retry work."}
       {detail ? ` ${detail}` : ""}
     </p>
   );

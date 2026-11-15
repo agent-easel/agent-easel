@@ -525,7 +525,8 @@ export interface RunAttention {
     | "conversation-waiting"
     | "missing-report"
     | "execution-failed"
-    | "report-problem";
+    | "report-problem"
+    | "settlement-unresolved";
   readonly nativeRequestId: string | null;
   readonly occurrenceId: string | null;
   readonly link: string | null;
@@ -555,6 +556,11 @@ export interface RunAttentionMatter {
   readonly blockId: string;
   readonly occurrenceId: string | null;
   readonly nativeRequestId: string | null;
+  /** The worker's current native pending request count for a `native-request` matter, null until
+   * observed and for every other kind. */
+  readonly pendingRequestCount: number | null;
+  /** Null for a matter that is not about one Block. */
+  readonly blockName: string | null;
 }
 
 export interface RunAttentionSummary {
@@ -572,6 +578,7 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "missing-report":
     case "execution-failed":
     case "report-problem":
+    case "settlement-unresolved":
       return "problem";
   }
 }

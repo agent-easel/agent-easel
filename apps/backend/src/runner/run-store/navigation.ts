@@ -85,7 +85,12 @@ export function openRunNavigation(database: RunnerDatabase) {
             kind: RunAttention["kind"];
             occurrence_id: string | null;
             native_request_id: string | null;
-          }>`SELECT id,run_id,block_id,kind,occurrence_id,native_request_id FROM run_attention WHERE settled_at IS NULL ORDER BY appeared_at,id`;
+            pending_request_count: number | null;
+            block_name: string;
+          }>`SELECT a.id,a.run_id,a.block_id,a.kind,a.occurrence_id,a.native_request_id,
+          CASE WHEN a.kind='native-request' THEN b.pending_request_count END AS pending_request_count,b.name AS block_name
+          FROM run_attention a JOIN run_blocks b ON b.run_id=a.run_id AND b.block_id=a.block_id
+          WHERE a.settled_at IS NULL ORDER BY a.appeared_at,a.id`;
           const mattersByRun = new Map<
             string,
             RunNavigationEntry["attention"]["matters"][number][]
@@ -99,6 +104,8 @@ export function openRunNavigation(database: RunnerDatabase) {
               blockId: matter.block_id,
               occurrenceId: matter.occurrence_id,
               nativeRequestId: matter.native_request_id,
+              pendingRequestCount: matter.pending_request_count,
+              blockName: matter.block_name,
             });
             mattersByRun.set(matter.run_id, matters);
           }
