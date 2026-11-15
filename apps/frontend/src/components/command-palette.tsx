@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import {
   buildPaletteItems,
   paletteActionShortcut,
+  paletteCatalog,
   paletteMatchesQuery,
   type PaletteItem,
 } from "../command-palette-items.ts";
@@ -16,23 +17,6 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dial
 import { Input } from "./ui/input";
 import { RunNumber } from "./run-number.tsx";
 import { cn } from "@/lib/utils";
-
-/** Runs come from the navigation scope and Flows and Agents from the Studio scope. */
-function usePaletteScopes() {
-  const navigation = useLiveNavigation();
-  const studio = useLiveStudio();
-  const scopes = [
-    { view: navigation, names: ["Runs"] },
-    { view: studio, names: ["Flows", "Agents"] },
-  ];
-  return {
-    loading: scopes.some(({ view }) => view.value === null && !view.error),
-    refused: scopes.filter(({ view }) => view.error).flatMap(({ names }) => names),
-    runs: navigation.value ?? [],
-    flows: studio.value?.flows ?? [],
-    agents: studio.value?.agents ?? [],
-  };
-}
 
 function PaletteResults({
   items,
@@ -87,6 +71,30 @@ function PaletteResults({
   });
 }
 
+/** Which sections are loading, updating or refused; navigation actions stay usable throughout. */
+function CatalogStatus({ catalog }: { catalog: ReturnType<typeof paletteCatalog> }) {
+  return (
+    <>
+      {catalog.loading.length > 0 && (
+        <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+          Loading items… Navigation actions are available.
+        </p>
+      )}
+      {catalog.synchronizing.length > 0 && (
+        <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
+          Updating {catalog.synchronizing.join(", ")}… Showing the last listed items; navigation
+          actions are available.
+        </p>
+      )}
+      {catalog.refused.length > 0 && (
+        <p role="alert" className="px-3 py-2 text-xs">
+          Could not load {catalog.refused.join(", ")}. Navigation actions are still available.
+        </p>
+      )}
+    </>
+  );
+}
+
 /** Mounted for each opening, so the query and selection cannot leak into a new session. */
 function PaletteContent({
   onActivate,
@@ -103,7 +111,7 @@ function PaletteContent({
   const listId = useId();
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const catalog = usePaletteScopes();
+  const catalog = paletteCatalog(useLiveNavigation(), useLiveStudio());
   const items = useMemo(
     () =>
       buildPaletteItems({
@@ -168,16 +176,7 @@ function PaletteContent({
           {hint("palette")}
         </kbd>
       </div>
-      {catalog.loading && (
-        <p role="status" className="px-3 py-2 text-xs text-muted-foreground">
-          Loading items… Navigation actions are available.
-        </p>
-      )}
-      {catalog.refused.length > 0 && (
-        <p role="alert" className="px-3 py-2 text-xs">
-          Could not load {catalog.refused.join(", ")}. Navigation actions are still available.
-        </p>
-      )}
+      <CatalogStatus catalog={catalog} />
       {!items.length && (
         <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
           No matches.

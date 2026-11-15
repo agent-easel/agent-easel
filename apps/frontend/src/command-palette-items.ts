@@ -1,7 +1,13 @@
 import type { LucideIcon } from "lucide-react";
 import { Bot, Play, Settings, Workflow } from "lucide-react";
-import type { AgentDefinition, FlowDraft, RunNavigationEntry } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  FlowDraft,
+  RunNavigationEntry,
+  StudioDefinitions,
+} from "@t3-factory/contracts";
 import type { useNavigate } from "@tanstack/react-router";
+import type { LiveScopeView } from "./live/owner.ts";
 import type { useOpenStudio, useSettingsNavigation } from "./settings-navigation.ts";
 import type { ShortcutId } from "./keyboard-shortcuts.ts";
 
@@ -30,6 +36,31 @@ export type PaletteNavigation = {
   openStudio: ReturnType<typeof useOpenStudio>;
   openSettings: ReturnType<typeof useSettingsNavigation>;
 };
+
+/**
+ * The palette's items from the navigation and Studio scopes, with each scope's state named by the
+ * sections it supplies: unread, cached while not current, or refused. Cached items stay listed.
+ */
+export function paletteCatalog(
+  navigation: LiveScopeView<readonly RunNavigationEntry[]>,
+  studio: LiveScopeView<StudioDefinitions>,
+) {
+  const scopes = [
+    { view: navigation, names: ["Runs"] },
+    { view: studio, names: ["Flows", "Agents"] },
+  ];
+  const named = (state: (view: LiveScopeView<unknown>) => boolean) =>
+    scopes.filter(({ view }) => state(view)).flatMap(({ names }) => names);
+  const pending = (view: LiveScopeView<unknown>) => !view.synchronized && !view.error;
+  return {
+    loading: named((view) => view.value === null && pending(view)),
+    synchronizing: named((view) => view.value !== null && pending(view)),
+    refused: named((view) => view.error !== null),
+    runs: navigation.value ?? [],
+    flows: studio.value?.flows ?? [],
+    agents: studio.value?.agents ?? [],
+  };
+}
 
 function normalize(value: string) {
   return value.trim().toLowerCase();
