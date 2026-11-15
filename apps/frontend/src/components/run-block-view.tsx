@@ -420,10 +420,12 @@ export function RunBlockView({
     graph: run.definitions.flow.graph,
     agents: run.definitions.agents,
   }).header;
-  // A Continuation has no thread of its own: its prompt ran on the thread of its prompt visit.
-  const promptBinding = run.threadBindings.find(
-    (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
-  );
+  // A block without a worker thread of its own shows the thread its Continuation prompt ran on.
+  const promptBinding = BLOCK_KINDS[block.kind].workerThread
+    ? undefined
+    : run.threadBindings.find(
+        (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
+      );
   const link = recorded.link ?? promptBinding?.link ?? null;
   const threadId = recorded.threadId ?? promptBinding?.threadId;
   return (

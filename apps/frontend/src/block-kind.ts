@@ -17,6 +17,9 @@ interface BlockKind {
   /** The kind badge on the Flow editor's block panel. */
   readonly panelLabel: string;
   readonly name: string;
+  /** It runs in a worker thread of its own. Only an Agent block does; Human steps, Waits and
+   * Continuations work with the worker of the message that reaches them. */
+  readonly workerThread: boolean;
   /** Its frame is dashed on the Flow authoring canvas and the block library's drag preview. */
   readonly dashedFrame: boolean;
   /** Its only output has no name: exit rows, connect ports and results show none. */
@@ -39,6 +42,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     executionLabel: "AGENT",
     panelLabel: "AGENT BLOCK",
     name: "Agent",
+    workerThread: true,
     dashedFrame: false,
     singleOutput: false,
     observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
@@ -49,6 +53,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     executionLabel: "HUMAN",
     panelLabel: "HUMAN STEP",
     name: "Human step",
+    workerThread: false,
     dashedFrame: true,
     singleOutput: false,
     observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
@@ -59,6 +64,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     executionLabel: "WAIT",
     panelLabel: "WAIT",
     name: "Wait",
+    workerThread: false,
     dashedFrame: false,
     singleOutput: true,
     observed: { references: false, freshness: true, noThread: "A Wait has no T3 thread" },
@@ -69,6 +75,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     executionLabel: "CONTINUATION",
     panelLabel: "CONTINUATION BLOCK",
     name: "Continuation",
+    workerThread: false,
     dashedFrame: false,
     singleOutput: true,
     observed: { references: true, freshness: false, noThread: "No T3 thread yet" },
@@ -102,13 +109,20 @@ function agentName(agentId: string | null, agents: readonly NamedAgent[]) {
  * maps a tone to its own colour. */
 export type ReferenceTone = "plain" | "continued" | "absent";
 
+/** A muted label, then the value. */
+interface ReferenceCard {
+  readonly label: string;
+  readonly value: string;
+  readonly tone: ReferenceTone;
+}
+
 /**
  * What a block runs, in each screen's wording. Screens word it differently by design, so each
  * form is spelled out per kind here rather than derived from another.
  */
 export interface BlockReference {
-  /** The Flow authoring canvas and its drag preview: a muted label, then the value. */
-  readonly card: { readonly label: string; readonly value: string; readonly tone: ReferenceTone };
+  /** The Flow authoring canvas and its drag preview. */
+  readonly card: ReferenceCard;
   /** The Execution canvas line under the block's name. */
   readonly line: { readonly text: string; readonly tone: ReferenceTone };
   /** Run detail's header line under the block's name. */
@@ -144,19 +158,29 @@ export function blockReference(
         header: `${kind} · ${duration}`,
       };
     }
-    case "continuation": {
-      const thread = continuedThread(graph, block.id);
-      return thread
-        ? {
-            card: { label: "continues", value: thread, tone: "continued" },
-            line: { text: `continues ${thread}`, tone: "continued" },
-            header: `${kind} · continues ${thread}`,
-          }
-        : {
-            card: { label: "", value: "no Agent before it", tone: "absent" },
-            line: { text: "no Agent before it", tone: "absent" },
-            header: `${kind} · no Agent before it`,
-          };
-    }
+    case "continuation":
+      return continuationReference(block, graph);
   }
+}
+
+/** A Continuation's reference, with the sentence-case form its block inspector shows as well. */
+export function continuationReference(
+  block: Extract<FlowBlock, { kind: "continuation" }>,
+  graph: FlowGraph,
+): BlockReference & { readonly inspector: ReferenceCard } {
+  const kind = BLOCK_KINDS.continuation.name;
+  const thread = continuedThread(graph, block.id);
+  return thread
+    ? {
+        card: { label: "continues", value: thread, tone: "continued" },
+        line: { text: `continues ${thread}`, tone: "continued" },
+        header: `${kind} · continues ${thread}`,
+        inspector: { label: "Continues", value: thread, tone: "continued" },
+      }
+    : {
+        card: { label: "", value: "no Agent before it", tone: "absent" },
+        line: { text: "no Agent before it", tone: "absent" },
+        header: `${kind} · no Agent before it`,
+        inspector: { label: "", value: "No Agent before it", tone: "absent" },
+      };
 }

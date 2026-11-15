@@ -148,6 +148,7 @@ it("a Continuation names the thread of the Agent before it as continued", () => 
     card: { label: "continues", value: "Review's thread", tone: "continued" },
     line: { text: "continues Review's thread", tone: "continued" },
     header: "Continuation · continues Review's thread",
+    inspector: { label: "Continues", value: "Review's thread", tone: "continued" },
   });
 });
 
@@ -163,6 +164,7 @@ it("a Continuation without an Agent before it says so as absent", () => {
     card: { label: "", value: "no Agent before it", tone: "absent" },
     line: { text: "no Agent before it", tone: "absent" },
     header: "Continuation · no Agent before it",
+    inspector: { label: "", value: "No Agent before it", tone: "absent" },
   });
 });
 
