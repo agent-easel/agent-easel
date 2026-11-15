@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
-import { afterEach, test } from "./support/test.ts";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { listAgentDefinitions, repairCodexReporting } from "./support/agents.ts";
-
-// Later journeys share the fixture's T3 connection.
-afterEach(async ({ fixture }) => {
-  await fixture.reporting.replaceOptionalSkill({ linked: false });
-});
 
 test("reporting problems are visible before Start and clear after repairing the provider", async ({
   fixture,
@@ -151,7 +146,7 @@ test("installed reporting shows the file and manual remedy for a linked optional
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  const { path } = await fixture.reporting.replaceOptionalSkill({ linked: true });
+  const { path } = await fixture.reporting.linkOptionalSkill();
 
   // Act
   await app.open("/settings/agent-reporting");

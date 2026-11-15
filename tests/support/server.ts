@@ -30,7 +30,7 @@ const modules = {
   live,
   discord: discordFixture(discord),
   appearance: appearanceFixture(host),
-  reporting: await reportingFixture(host),
+  reporting: reportingFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),
   scenarios,
 } satisfies Record<string, FixtureModule>;
