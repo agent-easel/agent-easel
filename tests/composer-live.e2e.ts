@@ -1,4 +1,4 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { browserRequests, resetBrowserRequests } from "./support/live.ts";
 import { elapse } from "./support/remote-access.ts";

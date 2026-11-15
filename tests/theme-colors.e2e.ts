@@ -1,7 +1,6 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { delayLiveSnapshots } from "./support/live.ts";
-import { remoteFixture } from "./support/remote-access.ts";
 import {
   cachedSnapshot,
   canvasColor,
@@ -194,15 +193,14 @@ test("an approved client reopening before live delivery answers shows its cached
   // Assert
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
   await app.screenshot("theme-colors-cached-reopen-dark");
-  await delayLiveSnapshots(app, 0);
   await colors.reset();
 });
 
 test("an offline client switches Light and Dark immediately within the T3 theme it holds", async (journey) => {
   // Arrange
-  const { app, screen, browser } = journey;
+  const { app, screen, browser, fixture } = journey;
   const { colors } = await clientWithCachedOcean(journey);
-  await remoteFixture(app, "offline");
+  await fixture.remoteAccess.offline();
   await expect.poll(() => browser.evaluate(offlineBannerShown)).toBe(true);
 
   // Act
@@ -212,15 +210,14 @@ test("an offline client switches Light and Dark immediately within the T3 theme 
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanLight);
   await app.screenshot("theme-colors-offline-light");
   await screen.getByRole("radio", "Dark").tap();
-  await remoteFixture(app, "online");
   await colors.reset();
 });
 
 test("a client whose Factory access was revoked keeps no cached theme", async (journey) => {
   // Arrange
-  const { app, screen, browser } = journey;
+  const { app, screen, browser, fixture } = journey;
   const { colors, appearance } = await clientWithCachedOcean(journey);
-  await remoteFixture(app, "revoke");
+  await fixture.remoteAccess.revoke();
 
   // Act
   await app.open(appearance);
@@ -247,6 +244,5 @@ test("a theme-color grant T3 revoked leaves a reopening client nothing to restor
   // Assert
   expect(await browser.evaluate(cachedSnapshot)).toBe(null);
   expect(await browser.evaluate(canvasColor)).toBe(factoryDark);
-  await delayLiveSnapshots(app, 0);
   await colors.reset();
 });

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { afterEach, beforeEach, test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { afterEach, beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Locator, type Screen } from "e2e";
 import { sha256Hex, solidPng } from "../apps/backend/test/support/scenarios.ts";
 import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
@@ -19,6 +20,7 @@ import {
   startLosingResponse,
   type CarriedFile,
 } from "./support/composer.ts";
+import { fixtureHandles } from "./support/fixture/handle.ts";
 
 /**
  * Picked files live in ignored storage; red and blue share their original filename. Factory keeps
@@ -41,8 +43,8 @@ const carried = (name: keyof typeof files): CarriedFile => ({
 });
 
 /** Shared fixture state: restore attachment support even when a journey fails. */
-afterEach(async ({ app }) => {
-  await fixture(app, "attachments?supported=true");
+afterEach(async ({ fixture }) => {
+  await fixture.runImagesAndTitles.attachments({ supported: true });
 });
 
 beforeEach(async ({ browser }) => {
@@ -52,15 +54,6 @@ beforeEach(async ({ browser }) => {
     await writeFile(file.path, file.data);
   }
 });
-
-async function fixture(app: App, path: string) {
-  const response = await fetch(new URL(`/__fixture/images/${path}`, app.baseUrl), {
-    method: "POST",
-  });
-  const text = await response.text();
-  assert.ok(response.ok, text);
-  return text ? (JSON.parse(text) as unknown) : undefined;
-}
 
 async function composeWithImages(
   app: App,
@@ -91,7 +84,7 @@ async function checkPreview(app: App, screen: Screen, opener: Locator, frame: st
 }
 
 async function launchedAttachments(app: App, number: number) {
-  const launches = (await fixture(app, `launches?number=${number}`)) as { attachments: unknown }[];
+  const launches = await fixtureHandles(app).runImagesAndTitles.launches({ number });
   return launches.map((launch) => launch.attachments);
 }
 
@@ -293,6 +286,7 @@ test("an image Factory reports missing at Start is uploaded again and the Run st
 });
 
 test("a T3 without attachment support rejects the image Start and keeps the draft editable", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -300,7 +294,7 @@ test("a T3 without attachment support rejects the image Start and keeps the draf
   // Arrange
   await composeWithImages(app, screen, browser, "UI images unsupported", ["red"]);
   await expect(thumbnails(screen)).toHaveCount(1);
-  await fixture(app, "attachments?supported=false");
+  await fixture.runImagesAndTitles.attachments({ supported: false });
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();

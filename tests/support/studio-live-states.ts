@@ -12,14 +12,15 @@ import {
 import { saveSingleAgentFlow, readFlow, saveFlowElsewhere, removeFlowElsewhere } from "./flows.ts";
 import { browserRequests, resetBrowserRequests, delayLiveSnapshots } from "./live.ts";
 import { expectRetainedDefinition, expectBrokenAgentWire } from "./studio.ts";
-import { openApproved, remoteFixture } from "./remote-access.ts";
+import { fixtureHandles } from "./fixture/handle.ts";
+import { openApproved, openRemoteBrowser } from "./remote-access.ts";
 const block = { id: "worker", name: "Worker", x: 320, y: 120 };
 const listReads = expect.arrayContaining([expect.stringMatching(/^GET \/api\/(flows|agents)$/)]);
 /** Prerequisite stages replay one continuous editor-open history; tested operations stay in the test Acts. */
 export async function beforeCreatedAgent(fixtures: StudioFixtures, prefix: string) {
   const { app, screen, browser } = fixtures;
   await browser.setViewport({ width: 1920, height: 1000 });
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
   await openApproved(app, "/studio/flows");
   const studio = screen.getByRole("navigation", "Studio navigation");
   const agentsBefore = await listAgentDefinitions(app.baseUrl);
@@ -259,7 +260,7 @@ export async function beforeReconnectedFlow(fixtures: StudioFixtures, prefix: st
   const state = await (async () => {
     const previous = await beforeOfflineFlow(fixtures, prefix);
     const { app } = previous;
-    await remoteFixture(app, "offline");
+    await fixtureHandles(app).remoteAccess.offline();
     return expectOfflineFlow({ ...previous });
   })();
   const { app, screen } = state;
@@ -286,7 +287,7 @@ export async function beforeDirtyFlow(fixtures: StudioFixtures, prefix: string) 
   const state = await (async () => {
     const previous = await beforeReconnectedFlow(fixtures, prefix);
     const { app } = previous;
-    await remoteFixture(app, "online");
+    await fixtureHandles(app).remoteAccess.online();
     return expectReconnectedFlow({ ...previous });
   })();
   const { app, screen } = state;

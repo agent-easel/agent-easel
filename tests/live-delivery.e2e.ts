@@ -1,4 +1,5 @@
-import { afterEach, test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import {
   browserRequests,
@@ -10,7 +11,7 @@ import {
 } from "./support/live.ts";
 import { manualRunView } from "./support/canvas.ts";
 import { findRun } from "./support/run-history.ts";
-import { elapse, openApproved, remoteFixture } from "./support/remote-access.ts";
+import { elapse, openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const writes = expect.arrayContaining([expect.stringMatching(/^(POST|PUT|PATCH|DELETE) /)]);
 
@@ -33,11 +34,6 @@ async function expectLiveAndWritable(screen: Screen, browser: Browser) {
   await expect(await runActionsArchive(screen)).toBeEnabled();
   await browser.keyboard.press("Escape");
 }
-
-afterEach(async ({ app }) => {
-  await remoteFixture(app, "online");
-  await delayLiveSnapshots(app, 0);
-});
 
 test("an Agent's MCP report updates the open Run and the sidebar without polling", async ({
   app,
@@ -71,18 +67,18 @@ test("an Agent's MCP report updates the open Run and the sidebar without polling
 });
 
 test("a lost live connection keeps the last Run read-only, then resynchronizes without replaying commands", async ({
+  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1000 });
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
   const run = await liveRun(app, "recovery");
   await openApproved(app, `/runs/${run}`);
   await expectLiveAndWritable(screen, browser);
-  await remoteFixture(app, "offline");
+  await fixture.remoteAccess.offline();
   await expect(screen.getByRole("status", "Offline")).toBeVisible({ timeout: 10_000 });
   const notLive = screen.getByRole("status", "Observation freshness");
   await expect(notLive).toContainText("Not live · last observed");
@@ -99,7 +95,7 @@ test("a lost live connection keeps the last Run read-only, then resynchronizes w
   await resetBrowserRequests(app);
 
   // Act
-  await remoteFixture(app, "online");
+  await fixture.remoteAccess.online();
 
   // Assert
   await expect(screen.getByRole("status", "Synchronizing")).toBeVisible({ timeout: 15_000 });

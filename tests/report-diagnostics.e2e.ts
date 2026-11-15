@@ -1,4 +1,4 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
@@ -9,7 +9,7 @@ test("a rejected report explains the missing accepted result and recovery assess
   browser,
 }) => {
   // Arrange
-  await prepareScenarios(app.baseUrl);
+  await prepareScenarios(app);
   const run = await findRun(app.baseUrl, "UI worker · Problem · Report exit needs correction");
   await browser.setViewport({ width: 1440, height: 1100 });
   await app.open(`/runs/${run.id}`);

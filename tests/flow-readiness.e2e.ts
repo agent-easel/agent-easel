@@ -1,7 +1,6 @@
 import { applyRunState } from "./support/scenarios.ts";
 import { copyAgentDefinition, repairCodexReporting } from "./support/agents.ts";
-import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "@e2e-dev/web";
+import { afterEach, beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { openComposerWithFlow } from "./support/composer.ts";
 import { saveFlowCopy } from "./support/flows.ts";
@@ -11,14 +10,12 @@ beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1100 });
 });
 
-afterEach(async ({ app }) => {
-  const restored = await fetch(new URL("/__fixture/readiness/restore", app.baseUrl), {
-    method: "POST",
-  });
-  assert(restored.ok);
+afterEach(async ({ fixture }) => {
+  await fixture.reporting.restoreReadiness();
 });
 
 test("Start names every blocked Agent including later branches and succeeds after repair", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -26,10 +23,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   // Arrange
   await openComposerWithFlow(app, screen, "Demo · Parallel review");
   await screen.getByLabel("Initial prompt", { exact: false }).fill("UI whole Flow readiness");
-  const broken = await fetch(new URL("/__fixture/reporting/break", app.baseUrl), {
-    method: "POST",
-  });
-  assert(broken.ok);
+  await fixture.reporting.breakRequiredSkill();
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();
@@ -61,9 +55,8 @@ test("Start names every blocked Agent including later branches and succeeds afte
     .poll(async () => (await readHistoryRun(app.baseUrl, created.id)).activations.length)
     .toBe(1);
   await app.screenshot("whole-flow-start-accepted");
-  await applyRunState(app.baseUrl, created.id, "result reported", "Ready for parallel review.");
-  const finished = await applyRunState(app.baseUrl, created.id, "result released to two workers");
-  assert(finished.ok);
+  await applyRunState(app, created.id, "result reported", "Ready for parallel review.");
+  await applyRunState(app, created.id, "result released to two workers");
   await browser.reload();
   await expect(screen.getByRole("region", "Block activations")).toContainText(
     "Ready for parallel review.",
@@ -112,6 +105,7 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
 });
 
 test("Agent-scoped runtime contract blockers point to the connection without blaming Agents", async ({
+  fixture,
   app,
   screen,
 }) => {
@@ -120,10 +114,7 @@ test("Agent-scoped runtime contract blockers point to the connection without bla
   await screen
     .getByLabel("Initial prompt", { exact: false })
     .fill("UI incomplete runtime contract");
-  const incomplete = await fetch(new URL("/__fixture/readiness/incomplete-runtime", app.baseUrl), {
-    method: "POST",
-  });
-  assert(incomplete.ok);
+  await fixture.reporting.incompleteRuntime();
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();

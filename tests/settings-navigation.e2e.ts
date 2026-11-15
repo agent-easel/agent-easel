@@ -1,7 +1,7 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
-import { openApproved, remoteFixture } from "./support/remote-access.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const sections = (screen: Screen) => screen.getByRole("navigation", "Settings sections");
 
@@ -48,8 +48,7 @@ test("a remote client lists neither Devices & access nor Desktop app and locks R
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
 
   // Act
   await openApproved(app, "/settings/connection");

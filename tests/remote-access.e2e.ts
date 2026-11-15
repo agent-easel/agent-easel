@@ -1,20 +1,19 @@
-import { beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
 import {
   approvedBrowser,
   expectServerInstallRequested,
+  openApproved,
   openHostDevices,
   openIncompatibleApplicationSettings,
-  openApproved,
+  openRemoteBrowser,
   openUpgradeReview,
-  remoteFixture,
   serverUpdateActions,
 } from "./support/remote-access.ts";
 
 beforeEach(async ({ app }) => {
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
 });
 
 const settingsSections = (screen: Screen) => screen.getByRole("navigation", "Settings sections");
@@ -81,6 +80,7 @@ test("the host denies a pending device, which clears the Devices & access attent
 });
 
 test("a new browser profile waits for host approval, then operates the server's shared Flows", async ({
+  fixture,
   app,
   screen,
 }) => {
@@ -96,7 +96,7 @@ test("a new browser profile waits for host approval, then operates the server's 
   await app.screenshot("remote-pending-approval");
 
   // Act: the owner approves on the host panel.
-  await remoteFixture(app, "approve");
+  await fixture.remoteAccess.approve();
 
   // Assert
   await expect(screen.getByRole("link", /Shared remote plan/)).toBeVisible();
@@ -104,6 +104,7 @@ test("a new browser profile waits for host approval, then operates the server's 
 });
 
 test("revoking an approved browser profile replaces the product with the revoked screen", async ({
+  fixture,
   app,
   screen,
 }) => {
@@ -112,7 +113,7 @@ test("revoking an approved browser profile replaces the product with the revoked
   await expect(screen.getByRole("button", "New Run (+)")).toBeVisible();
 
   // Act
-  await remoteFixture(app, "revoke");
+  await fixture.remoteAccess.revoke();
 
   // Assert
   await expect(screen.getByRole("heading", "Access was revoked")).toBeVisible();
@@ -121,13 +122,14 @@ test("revoking an approved browser profile replaces the product with the revoked
 });
 
 test("an approved browser installs Factory MCP on the server and retains it after reload", async ({
+  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  await remoteFixture(app, "reporting/remove-registration");
+  await fixture.reporting.removeRegistration();
   await openApproved(app, "/settings/agent-reporting");
   const codex = screen.getByRole("group", "Codex", { exact: true });
   await expect(codex.getByRole("status")).toHaveText("Not installed");
@@ -146,11 +148,12 @@ test("an approved browser installs Factory MCP on the server and retains it afte
 });
 
 test("an approved browser repairs the server's Factory MCP installation", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "reporting/break");
+  await fixture.reporting.breakRequiredSkill();
   await openApproved(app, "/settings/agent-reporting");
   const codex = screen.getByRole("group", "Codex", { exact: true });
   await expect(codex.getByRole("status")).toHaveText("Needs attention");
@@ -164,6 +167,7 @@ test("an approved browser repairs the server's Factory MCP installation", async 
 });
 
 test("a lost server connection marks the last observed view offline and disables actions", async ({
+  fixture,
   app,
   screen,
 }) => {
@@ -172,7 +176,7 @@ test("a lost server connection marks the last observed view offline and disables
   await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
 
   // Act
-  await remoteFixture(app, "offline");
+  await fixture.remoteAccess.offline();
 
   // Assert
   await expect(screen.getByRole("status", "Offline")).toContainText("nothing is queued");
@@ -181,20 +185,20 @@ test("a lost server connection marks the last observed view offline and disables
   await expect(screen.getByRole("link", /^Settings,/)).toBeEnabled();
   await expect(screen.getByRole("link", "Studio", { exact: true })).toBeEnabled();
   await app.screenshot("remote-offline");
-  await remoteFixture(app, "online");
+  await fixture.remoteAccess.online();
   await expect(screen.getByRole("status", "Offline")).toHaveCount(0);
   await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
 });
 
 test("a failed access request can be retried after automatic reconnection", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "compatible");
   await app.open("/");
   await expect(screen.getByRole("button", "Request access")).toBeEnabled();
-  await remoteFixture(app, "drop-access-request");
+  await fixture.remoteAccess.dropAccessRequest();
   await screen.getByRole("button", "Request access").tap();
   await expect(screen.getByRole("alert")).toContainText("server may have accepted the request");
   await expect(screen.getByRole("button", "Request access")).toBeEnabled();
@@ -321,11 +325,12 @@ test("an available update previews its changes as short lines in the footer tool
 });
 
 test("the current composer requires an updated server before requesting access", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "older-server");
+  await fixture.remoteAccess.olderServer();
 
   // Act
   await app.open("/runs/new");
@@ -340,11 +345,12 @@ test("the current composer requires an updated server before requesting access",
 });
 
 test("an incompatible client recovers when the selected server becomes compatible", async ({
+  fixture,
   app,
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "incompatible");
+  await fixture.remoteAccess.incompatible();
   await app.open("/");
   await expect(
     screen.getByRole("heading", "This client and server can’t work together"),
@@ -354,7 +360,7 @@ test("an incompatible client recovers when the selected server becomes compatibl
   await app.screenshot("remote-incompatible");
 
   // Act
-  await remoteFixture(app, "compatible");
+  await fixture.remoteAccess.compatible();
 
   // Assert
   await expect(screen.getByRole("heading", "Request access to this Factory")).toBeVisible();

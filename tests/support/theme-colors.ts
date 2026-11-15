@@ -1,5 +1,7 @@
 import { expect, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
+import { fixtureHandles } from "./fixture/handle.ts";
+import { approvedBrowserPath, remoteBrowserPath } from "./fixture/seam.ts";
 
 type FixtureApp = { baseUrl: string | undefined; open(path: string): Promise<unknown> };
 
@@ -11,31 +13,28 @@ export const cachedSnapshot = `window.localStorage.getItem("factory.inherited-co
 
 /** Theme-color state of the fixture host's controlled T3, and a second browser address. */
 export function themeColors(app: FixtureApp) {
-  const post = (action: string) =>
-    fetch(new URL(`/__fixture/appearance/${action}`, app.baseUrl), { method: "POST" });
+  const appearance = fixtureHandles(app).appearance;
   const otherAddress = (path: string) => {
     const url = new URL(path, app.baseUrl);
     url.hostname = "localhost";
     return url.href;
   };
   return {
-    reset: () => post("reset"),
-    pair: () => post("pair"),
-    revoke: () => post("revoke"),
+    reset: () => appearance.reset(),
+    pair: () => appearance.pair(),
+    revoke: () => appearance.revoke(),
     /**
      * A paired host whose T3 owner published "Nightfall" (dark seeds, no Light variant), "Dusk"
      * (dark seeds with a Light variant) and "Future" (a newer theme file version).
      */
     async pairWithPublishedThemes() {
-      await post("reset");
-      await post("pair");
-      await post("publish");
+      await appearance.reset();
+      await appearance.pair();
+      await appearance.publish();
     },
     /** `t3 theme set <id>` on the controlled T3 environment. */
-    setDefaultTheme: (id: string) => post(`default?theme=${id}`),
-    async pairingCode() {
-      return ((await (await post("pairing-code")).json()) as { code: string }).code;
-    },
+    setDefaultTheme: (theme: string) => appearance.setDefaultTheme({ theme }),
+    pairingCode: async () => (await appearance.pairingCode()).code,
     /**
      * The same fixture under `localhost` instead of `127.0.0.1`: another origin, so another
      * browser profile's storage, mode and client access.
@@ -43,8 +42,8 @@ export function themeColors(app: FixtureApp) {
     otherAddress,
     /** Appearance settings of an approved browser profile at the other address, following Ocean. */
     async openApprovedClient(screen: Screen) {
-      await app.open(otherAddress("/__fixture/remote-browser"));
-      await app.open(otherAddress("/__fixture/approved-browser?next=/settings/appearance"));
+      await app.open(otherAddress(remoteBrowserPath));
+      await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
       await expect(screen.getByText("Colors follow T3’s default theme “Ocean”.")).toBeVisible();
     },
     /**
@@ -52,12 +51,12 @@ export function themeColors(app: FixtureApp) {
      * address shows its Appearance settings, so the host panel keeps its own mode.
      */
     async followNightfallInApprovedBrowser() {
-      await post("reset");
-      await post("pair");
-      await post("publish");
-      await post("default?theme=nightfall");
-      await app.open(otherAddress("/__fixture/remote-browser"));
-      await app.open(otherAddress("/__fixture/approved-browser?next=/settings/appearance"));
+      await appearance.reset();
+      await appearance.pair();
+      await appearance.publish();
+      await appearance.setDefaultTheme({ theme: "nightfall" });
+      await app.open(otherAddress(remoteBrowserPath));
+      await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
     },
   };
 }

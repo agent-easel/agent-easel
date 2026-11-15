@@ -1,5 +1,5 @@
 import { renameCanvasAgent } from "./support/studio-live-states.ts";
-import { afterEach, test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import {
   copyAgentDefinition,
   saveAgentElsewhere,
@@ -7,8 +7,6 @@ import {
   updateAgentExits,
 } from "./support/agents.ts";
 import { saveSingleAgentFlow, saveFlowElsewhere, removeFlowElsewhere } from "./support/flows.ts";
-import { delayLiveSnapshots } from "./support/live.ts";
-import { remoteFixture } from "./support/remote-access.ts";
 import {
   expectCreatedAgent,
   beforeCreatedAgent,
@@ -78,12 +76,6 @@ import {
   beforeCheckedBrokenDependency,
 } from "./support/studio-live-states.ts";
 const block = { id: "worker", name: "Worker", x: 320, y: 120 };
-afterEach(async ({ app }) => {
-  await remoteFixture(app, "online");
-  await delayLiveSnapshots(app, 0);
-  await remoteFixture(app, "compatible");
-});
-
 test("an independent Agent create updates the open Studio count", async ({
   app,
   screen,
@@ -217,18 +209,19 @@ test("releasing the held canvas gesture adopts the deferred Flow revision withou
   await expectReleasedGesture({ ...state });
 });
 
-test("an offline Studio refuses Flow saves", async ({ app, screen, browser }) => {
+test("an offline Studio refuses Flow saves", async ({ fixture, app, screen, browser }) => {
   // Arrange
   const state = await beforeOfflineFlow({ app, screen, browser }, "offlineFlow");
 
   // Act
-  await remoteFixture(app, "offline");
+  await fixture.remoteAccess.offline();
 
   // Assert
   await expectOfflineFlow({ ...state });
 });
 
 test("a reconnect snapshot preserves the Flow draft and viewport", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -237,7 +230,7 @@ test("a reconnect snapshot preserves the Flow draft and viewport", async ({
   const state = await beforeReconnectedFlow({ app, screen, browser }, "reconnectedFlow");
 
   // Act
-  await remoteFixture(app, "online");
+  await fixture.remoteAccess.online();
 
   // Assert
   await expectReconnectedFlow({ ...state });
