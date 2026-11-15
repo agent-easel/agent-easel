@@ -48,11 +48,11 @@ import {
 import {
   createFlowDraft,
   useFlowDraftSnapshot,
-  type FlowConflict,
   type FlowContent,
   type FlowDraftModel,
   type FlowDraftSnapshot,
 } from "../flow-draft.ts";
+import type { RevisionConflict } from "../revisioned-draft.ts";
 import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
 
 /**
@@ -766,9 +766,12 @@ function BlockPanel({
   );
 }
 
+type FlowRevisionConflict = Exclude<RevisionConflict<FlowDraft>, { status: "none" }>;
+
 /** The newest revision Factory holds beyond the draft's baseline, when Studio has it. */
-function newerRevision(conflict: Exclude<FlowConflict, { status: "none" }>) {
-  return conflict.status === "compared" ? conflict.latest.revision : conflict.revision;
+function newerRevision(conflict: FlowRevisionConflict) {
+  if (conflict.status === "compared") return conflict.latest.revision;
+  return conflict.status === "detected" ? conflict.revision : null;
 }
 
 /**
@@ -783,7 +786,7 @@ function ConflictPanel({
   onKeepLocal,
 }: {
   local: FlowContent;
-  conflict: Exclude<FlowConflict, { status: "none" }>;
+  conflict: FlowRevisionConflict;
   onCompare: () => void;
   onTakeLatest: (revision: number) => void;
   onKeepLocal: (revision: number) => void;

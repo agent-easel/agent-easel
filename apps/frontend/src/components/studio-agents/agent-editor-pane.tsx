@@ -254,7 +254,7 @@ function duplicateBlockedReason(state: AgentDraftSnapshot): string | undefined {
 
 function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   if (state.removed) return "This Agent was removed elsewhere.";
-  if (state.newer || state.stale) return "Compare the latest revision before saving.";
+  if (state.conflict.status !== "none") return "Compare the latest revision before saving.";
   if (!state.saved && state.saveOutcome === "unknown")
     return "Check the Agent list before creating this Agent again.";
   return undefined;
@@ -282,10 +282,10 @@ function DeleteAgentButton({
   onDeleted: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { deleting, deleteError: error } = state;
+  const { removing: deleting, removalError: error } = state;
   if (open && state.removed && !deleting) setOpen(false);
   async function confirmDelete() {
-    if (await draft.delete()) {
+    if (await draft.remove()) {
       setOpen(false);
       onDeleted();
     }
@@ -300,7 +300,7 @@ function DeleteAgentButton({
           title={state.removed ? "This Agent was removed elsewhere." : undefined}
           onClick={() => {
             if (draft.getSnapshot().removed) return;
-            draft.clearDeleteError();
+            draft.clearRemovalError();
             setOpen(true);
           }}
         >

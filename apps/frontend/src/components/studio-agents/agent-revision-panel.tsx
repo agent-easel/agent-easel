@@ -65,13 +65,13 @@ export function AgentRevisionPanel({
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
 }) {
-  const { newer, stale, comparing, updatedTo } = state;
+  const { conflict, updatedTo } = state;
   useEffect(() => {
     if (updatedTo === null) return;
     const timer = setTimeout(() => draft.dismissUpdate(), updatedNoticeMs);
     return () => clearTimeout(timer);
   }, [draft, updatedTo]);
-  if (!newer && !stale)
+  if (conflict.status === "none")
     return updatedTo === null ? null : (
       <p
         role="status"
@@ -81,6 +81,12 @@ export function AgentRevisionPanel({
         Updated to revision {updatedTo}
       </p>
     );
+  const revision =
+    conflict.status === "compared"
+      ? conflict.latest.revision
+      : conflict.status === "detected"
+        ? conflict.revision
+        : null;
   return (
     <section
       aria-label="Reconcile Agent"
@@ -89,24 +95,26 @@ export function AgentRevisionPanel({
       <div className="flex flex-wrap items-center gap-3">
         <p role="status" className="text-sm text-foreground">
           <span className="font-medium">
-            {newer
-              ? `Revision ${newer.revision} was saved elsewhere.`
+            {revision !== null
+              ? `Revision ${revision} was saved elsewhere.`
               : "Factory holds a newer revision of this Agent."}
           </span>{" "}
           Your edits are kept.
         </p>
-        {!comparing && (
+        {conflict.status === "detected" && (
           <Button type="button" variant="outline" size="sm" onClick={draft.compare}>
             Compare latest revision
           </Button>
         )}
-        {comparing && !newer && (
+        {conflict.status === "comparing" && (
           <p role="status" className="text-sm text-muted-foreground">
             Loading the latest revision…
           </p>
         )}
       </div>
-      {comparing && newer && <Comparison draft={draft} state={state} newer={newer} />}
+      {conflict.status === "compared" && (
+        <Comparison draft={draft} state={state} latest={conflict.latest} />
+      )}
     </section>
   );
 }
@@ -114,18 +122,18 @@ export function AgentRevisionPanel({
 function Comparison({
   draft,
   state,
-  newer,
+  latest,
 }: {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
-  newer: AgentDefinition;
+  latest: AgentDefinition;
 }) {
-  const { revision } = newer;
+  const { revision } = latest;
   return (
     <>
       <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
         <Presentation title="Your local draft" content={state.content} />
-        <Presentation title={`Saved revision ${revision}`} content={newer} />
+        <Presentation title={`Saved revision ${revision}`} content={latest} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button

@@ -13,10 +13,14 @@ import {
   validateCreateAgent,
   validateUpdateAgent,
 } from "@t3-factory/domain-validation";
-import { api, ApiError } from "./api.ts";
-import { OfflineError } from "./transport.ts";
+import type { api } from "./api.ts";
 import { randomId } from "./lib/ids.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
+import {
+  createRevisionedDraft,
+  type RevisionedDraftState,
+  type SaveRequest,
+} from "./revisioned-draft.ts";
 
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
@@ -85,69 +89,43 @@ function contentOf(agent: AgentDefinition): AgentContent {
   };
 }
 
-const sameContent = (a: AgentContent, b: AgentContent) => JSON.stringify(a) === JSON.stringify(b);
-
 function saveRequest(
   agent: AgentDefinition | null,
   draft: AgentContent,
   operations: AgentDraftOperations,
-): { error: string } | { submitted: AgentContent; save: () => Promise<AgentDefinition> } {
+): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
   const asContent = (input: typeof content): AgentContent => ({
     ...input,
     execution: input.execution ?? NO_WORKER,
   });
+  const fallback = "Could not save this Agent. Your edits are still here.";
   if (agent) {
     const validation = validateUpdateAgent({ ...content, expectedRevision: agent.revision });
     if (!validation.ok) return { error: validation.error.message };
     const { expectedRevision: _, ...submitted } = validation.value;
     return {
       submitted: asContent(submitted),
-      save: () => operations.updateAgent(agent.id, validation.value),
+      send: () => operations.updateAgent(agent.id, validation.value),
+      unknownMessage:
+        "Save outcome unknown. Factory may have saved this Agent; your edits are kept and nothing is retried.",
+      fallback,
     };
   }
   const validation = validateCreateAgent(content);
   if (!validation.ok) return { error: validation.error.message };
   const input = validation.value;
-  return { submitted: asContent(input), save: () => operations.createAgent(input) };
-}
-
-/**
- * `not-sent`: the window refused to send it while offline or synchronizing. `unknown`: the
- * connection failed after sending, so Factory may or may not have accepted it.
- */
-export type AgentSaveOutcome = "pending" | "succeeded" | "rejected" | "not-sent" | "unknown";
-
-/** One save this draft sent: what it submitted, against which revision, and how it ended. */
-interface AgentSave {
-  readonly outcome: AgentSaveOutcome;
-  readonly content: AgentContent;
-  /** The revision the save expected; null for a Create. */
-  readonly baseline: number | null;
-}
-
-function saveFailure(cause: unknown, creating: boolean) {
-  if (cause instanceof OfflineError && cause.delivery === "unknown")
-    return {
-      outcome: "unknown" as const,
-      message: creating
-        ? "Save outcome unknown. Factory may have created this Agent; check the Agent list before creating it again."
-        : "Save outcome unknown. Factory may have saved this Agent; your edits are kept and nothing is retried.",
-    };
   return {
-    outcome: cause instanceof OfflineError ? ("not-sent" as const) : ("rejected" as const),
-    message:
-      cause instanceof Error
-        ? cause.message
-        : "Could not save this Agent. Your edits are still here.",
+    submitted: asContent(input),
+    send: () => operations.createAgent(input),
+    unknownMessage:
+      "Save outcome unknown. Factory may have created this Agent; check the Agent list before creating it again.",
+    fallback,
   };
 }
 
-export interface AgentDraftSnapshot {
-  /** The saved revision the draft is based on and the next save expects; null for a new Agent. */
-  readonly saved: AgentDefinition | null;
-  readonly content: AgentContent;
+export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition, AgentContent> {
   readonly choices: {
     readonly environments: readonly AgentEnvironment[];
     readonly providers: readonly AgentProviderCapability[];
@@ -156,340 +134,161 @@ export interface AgentDraftSnapshot {
   };
   /** Saving now would store no model: the Worker selection is empty or incomplete. */
   readonly needsModel: boolean;
-  readonly dirty: boolean;
-  /** A save is pending; edits and further writes wait for its reply. */
-  readonly saving: boolean;
-  /** How the last save ended; null before the first save. */
-  readonly saveOutcome: AgentSaveOutcome | null;
-  readonly error: string;
-  /** The newest revision saved elsewhere while the draft had unsaved changes, until resolved. */
-  readonly newer: AgentDefinition | null;
-  /** Factory refused a save as stale; resolved through the same comparison as `newer`. */
-  readonly stale: boolean;
-  /** The comparison of the local draft with `newer` is open. */
-  readonly comparing: boolean;
-  /** The revision **Load latest revision** is waiting to be confirmed for. */
+  /** The compared revision **Load latest revision** is waiting to be confirmed for. */
   readonly confirmingLoad: number | null;
-  /** A clean draft just switched to this revision saved elsewhere. */
-  readonly updatedTo: number | null;
-  /** Studio no longer holds the Agent this draft had seen saved. */
-  readonly removed: boolean;
-  readonly canSave: boolean;
-  readonly deleting: boolean;
-  readonly deleteError: string;
 }
 
 /**
- * One opened Agent: editable content, worker choices, the saved revision it is based on and
- * its write outcomes. A connected draft follows Studio's saved Agents: a clean draft adopts a
- * newer revision, a dirty one keeps its edits and offers the newer revision for comparison, and
- * this draft's own saves are recognised as its own whichever arrives first, the reply or the
- * delivery. Only synchronized reads are conclusive. The new-Agent form follows nothing until
- * its own Create. A draft belongs to one Studio session and server, so replies reaching a
- * discarded draft change nothing shown.
+ * One opened Agent on the shared revision protocol: editable content and worker choices, the
+ * Create gate after an unknown Create outcome, Duplicate and the confirmation before **Load
+ * latest revision**. The new-Agent form follows nothing until its own Create. A draft belongs to
+ * one Studio session and server, so replies reaching a discarded draft change nothing shown.
  */
 export function createAgentDraft(
   agent: AgentDefinition | null,
   capabilities: AgentCapabilities | null,
   source: AgentDraftSource,
 ) {
-  let saved = agent;
-  let content: AgentContent = agent
-    ? contentOf(agent)
-    : {
-        name: "",
-        prompt: "",
-        execution: initialExecution(capabilities),
-        exits: [{ id: randomId(), name: "done", description: "", messageRequired: false }],
-      };
-  let baseline = content;
-  let lastSave: AgentSave | null = null;
-  let error = "";
-  let newer: AgentDefinition | null = null;
-  let stale = false;
-  let comparing = false;
+  /** Shown only while this revision is the compared one, so a newer revision closes it. */
   let confirmingLoad: number | null = null;
-  let updatedTo: number | null = null;
-  /** A synchronized read held this Agent, so its later absence is a removal, not "not found". */
-  let seen = false;
-  let removed = false;
-  let deleting = false;
-  let deleted = false;
-  let deleteError = "";
-  let snapshot = current();
-  const listeners = new Set<() => void>();
-
-  function current(): AgentDraftSnapshot {
-    const { environmentId, providerInstanceId, modelId } = content.execution;
-    const environments = capabilities?.environments ?? [];
-    const providers = environments.some((entry) => entry.environmentId === environmentId)
-      ? (capabilities?.providers ?? [])
-      : [];
-    const selectedProvider = providers.find(
-      (entry) => entry.providerInstanceId === providerInstanceId,
-    );
-    const selectedModel = selectedProvider?.models.find((entry) => entry.id === modelId);
-    const saving = lastSave?.outcome === "pending";
-    const unknownCreate = !saved && lastSave?.outcome === "unknown";
-    return {
-      saved,
-      content,
-      saving,
-      saveOutcome: lastSave?.outcome ?? null,
-      error,
-      newer,
-      stale,
-      comparing,
-      confirmingLoad,
-      updatedTo,
-      removed,
-      canSave: !removed && !saving && !deleting && !newer && !stale && !unknownCreate,
-      deleting,
-      deleteError,
-      choices: { environments, providers, selectedProvider, selectedModel },
-      needsModel: savedExecution(content.execution) === null,
-      dirty: !sameContent(content, baseline),
-    };
-  }
-  function publish() {
-    snapshot = current();
-    listeners.forEach((notify) => notify());
-  }
-  function edit(change: Partial<AgentContent>) {
-    if ((snapshot.saving && !removed) || deleting) return;
-    content = { ...content, ...change };
-    publish();
-  }
-  function closeResolution() {
-    newer = null;
-    stale = false;
-    comparing = false;
-    confirmingLoad = null;
-  }
-  /** The saved revision replaces the draft, which is clean and shows no conflict or error. */
-  function adopt(next: AgentDefinition) {
-    saved = next;
-    content = contentOf(next);
-    baseline = content;
-    closeResolution();
-    error = "";
-  }
-  /** A removal is shown at once, even while a save is pending, and beats its late success. */
-  function noteAbsence(): boolean {
-    if (!seen) return false;
-    removed = true;
-    closeResolution();
-    updatedTo = null;
-    return true;
-  }
-  /** A save whose outcome was unknown reached Factory after all if `latest` holds its content. */
-  function recognisesUnknownSave(latest: AgentDefinition): boolean {
-    if (lastSave?.outcome !== "unknown" || !sameContent(contentOf(latest), lastSave.content))
-      return false;
-    saved = latest;
-    baseline = contentOf(latest);
-    lastSave = { ...lastSave, outcome: "succeeded" };
-    error = "";
-    return true;
-  }
-  /** A newer saved revision: a clean draft adopts it, a dirty one names it until resolved. */
-  function followNewer(latest: AgentDefinition): boolean {
-    if (recognisesUnknownSave(latest)) return true;
-    if (sameContent(content, baseline)) {
-      adopt(latest);
-      updatedTo = latest.revision;
-      return true;
-    }
-    if (newer === latest) return false;
-    if (newer?.revision !== latest.revision) confirmingLoad = null;
-    newer = latest;
-    return true;
-  }
-  /** Applies Studio's saved Agents to the draft; returns whether anything shown changed. */
-  function reconcile(): boolean {
-    if (!saved || removed || deleting || deleted) return false;
-    const read = source.getSnapshot().agents;
-    if (!read.synchronized || !read.value) return false;
-    const id = saved.id;
-    const latest = read.value.find((entry) => entry.id === id);
-    if (!latest) return noteAbsence();
-    seen = true;
-    // A pending save defers notices; an older revision is a delivery behind its accepted reply.
-    if (lastSave?.outcome === "pending" || latest.revision < saved.revision) return false;
-    if (latest.revision > saved.revision) return followNewer(latest);
-    if (latest === saved) return false;
-    saved = latest;
-    return true;
-  }
-  return {
-    getSnapshot: () => snapshot,
-    subscribe(notify: () => void) {
-      listeners.add(notify);
-      return () => {
-        listeners.delete(notify);
+  const draft = createRevisionedDraft({
+    saved: agent,
+    content: agent
+      ? contentOf(agent)
+      : {
+          name: "",
+          prompt: "",
+          execution: initialExecution(capabilities),
+          exits: [{ id: randomId(), name: "done", description: "", messageRequired: false }],
+        },
+    contentOf,
+    list: () => source.getSnapshot().agents,
+    view(state): AgentDraftSnapshot {
+      const { environmentId, providerInstanceId, modelId } = state.content.execution;
+      const environments = capabilities?.environments ?? [];
+      const providers = environments.some((entry) => entry.environmentId === environmentId)
+        ? (capabilities?.providers ?? [])
+        : [];
+      const selectedProvider = providers.find(
+        (entry) => entry.providerInstanceId === providerInstanceId,
+      );
+      const selectedModel = selectedProvider?.models.find((entry) => entry.id === modelId);
+      const { conflict } = state;
+      const unknownCreate = !state.saved && state.saveOutcome === "unknown";
+      return {
+        ...state,
+        canSave: state.canSave && !unknownCreate,
+        choices: { environments, providers, selectedProvider, selectedModel },
+        needsModel: savedExecution(state.content.execution) === null,
+        confirmingLoad:
+          conflict.status === "compared" && conflict.latest.revision === confirmingLoad
+            ? confirmingLoad
+            : null,
       };
     },
+  });
+  function edit(change: Partial<AgentContent>) {
+    const { saving, removed, removing } = draft.getSnapshot();
+    if ((saving && !removed) || removing) return;
+    draft.edit(change);
+  }
+  const execution = () => draft.getSnapshot().content.execution;
+  return {
+    getSnapshot: draft.getSnapshot,
+    subscribe: draft.subscribe,
     /** Follows Studio's saved Agents until the returned function is called. */
     connect() {
-      const unsubscribe = source.subscribe(() => {
-        if (reconcile()) publish();
-      });
-      if (reconcile()) publish();
+      const unsubscribe = source.subscribe(draft.reconcile);
+      draft.reconcile();
       return unsubscribe;
     },
     edit,
     async duplicate() {
-      if (removed || !saved || snapshot.dirty || snapshot.saving || deleting) return;
+      const { saved, removed, dirty, saving, removing } = draft.getSnapshot();
+      if (removed || !saved || dirty || saving || removing) return;
       return source.duplicateAgent(saved.id, {});
     },
     setEnvironmentId(id: string) {
-      edit({ execution: { ...content.execution, environmentId: id } });
+      edit({ execution: { ...execution(), environmentId: id } });
     },
     clearWorker() {
       edit({ execution: NO_WORKER });
     },
-    /** The transient "Updated to revision N" line has been shown long enough. */
-    dismissUpdate() {
-      if (updatedTo === null) return;
-      updatedTo = null;
-      publish();
-    },
-    clearDeleteError() {
-      deleteError = "";
-      publish();
-    },
-    async delete() {
-      if (removed || !saved || snapshot.saving || deleting) return false;
-      deleting = true;
-      deleteError = "";
-      publish();
-      try {
-        await source.removeAgent(saved.id);
-        deleted = true;
-        baseline = content;
-        return true;
-      } catch (cause) {
-        deleteError =
-          cause instanceof Error ? cause.message : "Factory could not delete this Agent.";
-        return false;
-      } finally {
-        deleting = false;
-        reconcile();
-        publish();
-      }
-    },
-    /**
-     * Sends the draft against its saved revision, or creates it. Notices wait for the reply;
-     * a stale save opens the same comparison as a revision saved elsewhere.
-     */
+    dismissUpdate: draft.dismissUpdate,
+    clearRemovalError: draft.clearRemovalError,
+    remove: () => draft.remove(source.removeAgent, "Factory could not delete this Agent."),
+    /** Validates and sends the draft against its saved revision, or creates it. */
     async save() {
-      if (!snapshot.canSave) return;
+      const { saved, content, canSave } = draft.getSnapshot();
+      if (!canSave) return undefined;
       const request = saveRequest(saved, content, source);
-      if ("error" in request) {
-        error = request.error;
-        publish();
-        return;
-      }
-      const creating = !saved;
-      const sent: AgentSave = {
-        outcome: "pending",
-        content: request.submitted,
-        baseline: saved?.revision ?? null,
-      };
-      lastSave = sent;
-      error = "";
-      updatedTo = null;
-      publish();
-      try {
-        const result = await request.save();
-        lastSave = { ...sent, outcome: "succeeded" };
-        if (removed) return undefined;
-        adopt(result);
-        return result;
-      } catch (cause) {
-        const failure = saveFailure(cause, creating);
-        lastSave = { ...sent, outcome: failure.outcome };
-        error = failure.message;
-        if (cause instanceof ApiError && cause.detail.code === "conflict") stale = true;
-        return undefined;
-      } finally {
-        reconcile();
-        publish();
-      }
+      if (!("error" in request)) return draft.save(request);
+      draft.report(request.error);
+      return undefined;
     },
-    /** Opens the comparison with the newest saved revision, which Studio's live lists deliver. */
-    compare() {
-      if (!newer && !stale) return;
-      comparing = true;
-      publish();
-    },
+    compare: draft.compare,
     /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */
     requestLoadLatest(revision: number) {
-      if (newer?.revision !== revision) return;
+      const { conflict } = draft.getSnapshot();
+      if (conflict.status !== "compared" || conflict.latest.revision !== revision) return;
       confirmingLoad = revision;
-      publish();
+      draft.publish();
     },
     cancelLoadLatest() {
       confirmingLoad = null;
-      publish();
+      draft.publish();
     },
-    /** Replaces the draft with `revision` if it is still the newest and was confirmed. */
+    /** Replaces the draft with `revision` if it is still the compared one and was confirmed. */
     loadLatest(revision: number) {
-      if (!newer || newer.revision !== revision || confirmingLoad !== revision) return;
-      adopt(newer);
-      publish();
+      if (draft.getSnapshot().confirmingLoad !== revision) return;
+      confirmingLoad = null;
+      draft.takeLatest(revision);
     },
-    /** Keeps the edits, unsaved, against `revision` if it is still the newest. */
-    keepEdits(revision: number) {
-      if (!newer || newer.revision !== revision) return;
-      saved = newer;
-      baseline = contentOf(newer);
-      closeResolution();
-      error = "";
-      publish();
-    },
+    keepEdits: draft.keep,
     /** The user checked the Agent list after an unknown Create, so Create may be sent again. */
     allowCreateAgain() {
-      if (saved || lastSave?.outcome !== "unknown") return;
-      lastSave = null;
-      error = "";
-      publish();
+      if (draft.getSnapshot().saved) return;
+      draft.acknowledgeUnknownSave();
     },
     setOption(id: string, value: AgentModelOptionValue["value"]) {
+      const current = execution();
       edit({
-        execution: {
-          ...content.execution,
-          modelOptions: withOptionValue(content.execution.modelOptions, id, value),
-        },
+        execution: { ...current, modelOptions: withOptionValue(current.modelOptions, id, value) },
       });
     },
     removeOption(id: string) {
+      const current = execution();
       edit({
         execution: {
-          ...content.execution,
-          modelOptions: content.execution.modelOptions.filter((option) => option.id !== id),
+          ...current,
+          modelOptions: current.modelOptions.filter((option) => option.id !== id),
         },
       });
     },
     chooseModel(id: string) {
-      const model = snapshot.choices.selectedProvider?.models.find((entry) => entry.id === id);
+      const current = execution();
+      const model = draft
+        .getSnapshot()
+        .choices.selectedProvider?.models.find((entry) => entry.id === id);
       edit({
         execution: {
-          ...content.execution,
+          ...current,
           modelId: id,
-          modelOptions: buildOptions(model?.options, content.execution.modelOptions),
+          modelOptions: buildOptions(model?.options, current.modelOptions),
         },
       });
     },
     chooseProvider(id: string) {
-      const model = snapshot.choices.providers.find((entry) => entry.providerInstanceId === id)
-        ?.models[0];
+      const current = execution();
+      const model = draft
+        .getSnapshot()
+        .choices.providers.find((entry) => entry.providerInstanceId === id)?.models[0];
       edit({
         execution: {
-          ...content.execution,
+          ...current,
           providerInstanceId: id,
           modelId: model?.id ?? "",
-          modelOptions: buildOptions(model?.options, content.execution.modelOptions),
+          modelOptions: buildOptions(model?.options, current.modelOptions),
         },
       });
     },
