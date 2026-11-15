@@ -401,6 +401,7 @@ export {
 export {
   imageSignatureMime,
   isSha256Hex,
+  parseStartPrompt,
   promptText,
   RUN_IMAGE_DELETION_LIMIT,
   RUN_IMAGE_LIMIT,
