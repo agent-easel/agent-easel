@@ -17,7 +17,12 @@ publication conditions its operation requires. Start, startup ownership and rena
 keep their existing exceptions to the per-Run mutation lane. Reads participate in
 the caller's read transaction, so a live view reads navigation and its open Runs
 from one consistent snapshot. The store exposes transitions and reads, without a
-SQL handle, mutation lane or shared write steps.
+SQL handle, mutation lane or shared write steps. [Run title generation](#run-title-generations)
+records are the one exception: Run title generation serves its setting and
+`factory_set_run_title` before the Runner opens the store, so the store's title
+generation transitions run in the caller's transaction and take no lane, gate,
+generation, settlement, attention or Block guard. Start, Rename, Archive and manual
+settlement use the same transitions inside their own transactions.
 
 Orchestration calls T3, verifies payloads, searches uncertain launches and schedules
 observations, dispatch and retries. Its separate reconciliation lane serializes
@@ -715,6 +720,14 @@ new Runs use per-Block settlement. The migration preserves existing data and doe
 reorganize existing threads. Failure changes no results or Run state; without native settle support this is
 a no-op. With no native compare-and-set or replay key, direct activity can still race the
 request; that existing limitation now applies while the Run is still in progress.
+
+Per-Block settlement, Settled-Run settlement, Archive's worker interruption and
+[title thread cleanup](#run-title-generations) follow one owned-thread rule: send the settle
+or Stop only when T3 supports it, recheck the Run's live authorization context for each
+thread, record the claim in the store before sending, and treat the request as best effort.
+A request whose claim was already recorded, also before a restart, is never sent again.
+Archive's claim is its own transition, so only the call that archived the Run interrupts.
+[Manual settlement](#manual-settlement) Stops keep their own per-attempt records and outcomes.
 
 ## Navigation and presentation
 

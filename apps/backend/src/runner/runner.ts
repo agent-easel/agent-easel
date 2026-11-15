@@ -15,6 +15,7 @@ import { openRunnerDispatch } from "./runner-dispatch.ts";
 import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
 import { openRunActions } from "./run-actions.ts";
+import { openOwnedThreads } from "./owned-thread.ts";
 import { makeRunLanes } from "./runner-lanes.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { bindRunWorkspace } from "./run-workspace-binding.ts";
@@ -83,11 +84,13 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     followTitleGeneration,
     images,
   );
-  const settlement = openRunnerSettle(store, t3, lifecycle, liveContextId);
+  const ownedThreads = openOwnedThreads(t3, liveContextId);
+  const settlement = openRunnerSettle(store, t3, lifecycle, liveContextId, ownedThreads);
   const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
   const actions = openRunActions({
     store,
     t3,
+    ownedThreads,
     lifecycle,
     liveContextId,
     cancelWaitTimer: waitTimers.cancel,

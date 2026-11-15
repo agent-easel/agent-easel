@@ -12,7 +12,7 @@ import {
   workerPromptText,
   type RunImages,
 } from "../../run-images.ts";
-import { recordTitleGeneration, type TitleGenerationPlan } from "../../run-titles.ts";
+import { recordTitleGeneration, type TitleGenerationPlan } from "./title-generations.ts";
 import { worktreeBranch, type RunWorkspace } from "../run-workspace.ts";
 import { createEntryLaunches } from "./activations.ts";
 import type { RunnerDatabase } from "./database.ts";

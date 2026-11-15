@@ -2,7 +2,7 @@ import type { Result, RunSettlement, RunSettlementWorker } from "@t3-factory/con
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { failure } from "../../result.ts";
-import { cancelTitleGeneration } from "../../run-titles.ts";
+import { cancelTitleGeneration } from "./title-generations.ts";
 import { threadHref } from "../../thread-link.ts";
 import { now } from "../../time.ts";
 import type { RunRow } from "../runner-types.ts";

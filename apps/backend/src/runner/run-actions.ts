@@ -11,6 +11,7 @@ import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
 import type { RuntimeReply, RuntimeReport } from "../runtime-types.ts";
 import type { RunStore, WaitForwarding } from "./run-store/run-store.ts";
+import type { OwnedThreads } from "./owned-thread.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryReady } from "./runner-recovery.ts";
 import type { RunnerSettlement } from "./runner-settle.ts";
@@ -49,6 +50,7 @@ function validSettleInput(input: unknown): input is SettleRunInput {
 export function openRunActions({
   store,
   t3,
+  ownedThreads,
   lifecycle,
   liveContextId,
   cancelWaitTimer,
@@ -57,6 +59,7 @@ export function openRunActions({
 }: {
   store: RunStore;
   t3: T3Adapter;
+  ownedThreads: OwnedThreads;
   lifecycle: RunnerLifecycle;
   liveContextId: () => Effect.Effect<string | null, unknown>;
   cancelWaitTimer: (arrivalId: string) => Effect.Effect<void>;
@@ -174,18 +177,19 @@ export function openRunActions({
         if (!run || (yield* liveContextId()) !== run.context_id) return;
         const threads = yield* store.boundWorkers(id);
         if (!threads.length) return;
-        const support = yield* Effect.tryPromise(() => t3.inspectStopSupport(runTarget(run)));
-        if (!support.supported) return;
+        const stop = yield* ownedThreads.stopper({
+          target: runTarget(run),
+          contextId: run.context_id,
+        });
+        if (!stop) return;
         for (const { thread_id: threadId } of threads)
-          yield* recoverOperation(
-            Effect.tryPromise(() =>
-              t3.stopThread(runTarget(run), {
-                threadId,
-                clientRequestId: fingerprint(`${id}:archive:${threadId}`),
-              }),
-            ),
-            () => Effect.void,
-          );
+          yield* stop({
+            threadId,
+            // Only the call whose Archive transition changed the Run interrupts, so that
+            // transition is the claim.
+            claim: Effect.succeed(true),
+            clientRequestId: fingerprint(`${id}:archive:${threadId}`),
+          });
       }),
       () => Effect.void,
     );
