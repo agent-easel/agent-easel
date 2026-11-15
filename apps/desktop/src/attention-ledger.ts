@@ -123,6 +123,11 @@ export class AttentionLedger {
     });
   }
 
+  /** What a notification of `server` represents, if this installation posted it for that server. */
+  notification(server: string, id: string): NotificationRecord | undefined {
+    return this.data.servers[server]?.notifications[id];
+  }
+
   /** Applies `change` to the server's ledger and persists it, or leaves everything unchanged. */
   async change<A>(server: string, change: (ledger: ServerLedger) => A): Promise<A> {
     return this.write(() =>

@@ -4,12 +4,16 @@ import assert from "node:assert/strict";
 import { expect, type App, type Screen } from "e2e";
 import { findArchivedRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { liveRun } from "./support/live.ts";
+import { shortcutMod } from "./support/keyboard-shortcuts.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import {
   openSidebarAction,
   expectFlatSearch,
   matchingSidebarTitles,
   prepareSidebarPreview,
+  badgeRunTitles,
+  openDesktopWindow,
+  routeWindow,
 } from "./support/sidebar.ts";
 
 const snoozedTitle = "Demo · Snoozed · Navigation research";
@@ -485,4 +489,114 @@ test("an Archived Run opened by link shows Archived as its one header status", a
   // Assert
   await expect(status).toHaveText(/^Archived/);
   await app.screenshot("run-header-archived");
+});
+
+// The native question stays pending through the suite (see the Needs input header journey).
+const nativeQuestionTitle = "Demo · Woke · A question about keyboard shortcuts";
+
+test("a notification route opens its Run with the Block of its one pending matter selected", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openDesktopWindow({ app, screen, browser });
+  const run = await findRun(app.baseUrl, nativeQuestionTitle);
+  const [matter] = run.attention.matters;
+  assert(matter?.kind === "native-request" && matter.blockName);
+
+  // Act
+  await routeWindow(browser, { kind: "run", runId: run.id, blockId: matter.blockId });
+
+  // Assert
+  await expect(browser).toHaveURL(`/runs/${run.id}`);
+  await expect(
+    browser.locator('[aria-label="Execution canvas"] button[aria-pressed="true"]'),
+  ).toContainText(matter.blockName);
+  await expect(screen.getByRole("link", "Open in T3").nth(0)).toBeVisible();
+  await app.screenshot("desktop-route-run-block");
+});
+
+test("a notification route to a Run that no longer exists shows it is unavailable", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openDesktopWindow({ app, screen, browser });
+
+  // Act
+  await routeWindow(browser, { kind: "run", runId: "run-removed-since", blockId: null });
+
+  // Assert
+  await expect(screen.getByText("This Run does not exist.")).toBeVisible();
+  await app.screenshot("desktop-route-run-missing");
+});
+
+test("Needs you lists exactly the Runs the Dock badge counts and clears a conflicting search", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openDesktopWindow({ app, screen, browser });
+  await screen.getByRole("textbox", "Search Run titles").fill("Demo · Settled");
+  const titles = await badgeRunTitles(app.baseUrl);
+  expect(titles).toContain("Demo · Problem · Search checks failed");
+  expect(titles).not.toContain(snoozedTitle);
+
+  // Act
+  await routeWindow(browser, { kind: "needs-you" });
+
+  // Assert
+  await expect(screen.getByRole("textbox", "Search Run titles")).toHaveValue("");
+  await expect(screen.getByRole("button", `Needs you (${titles.length})`)).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const rows = screen.getByRole("navigation", "Open Runs").getByRole("link");
+  await expect(rows).toHaveCount(titles.length);
+  await expect(rows).toContainText(titles);
+  await expectFlatSearch(screen);
+  await app.screenshot("desktop-route-needs-you");
+});
+
+test("a route away from the New Run view keeps the draft in the Run list", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openDesktopWindow({ app, screen, browser });
+  await screen.getByLabel("Initial prompt", { exact: false }).fill("Demo · Draft kept by a route");
+  const run = await findRun(app.baseUrl, nativeQuestionTitle);
+
+  // Act
+  await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });
+
+  // Assert
+  await expect(browser).toHaveURL(`/runs/${run.id}`);
+  await expect(screen.getByRole("link", /^Demo · Draft kept by a route\s*Draft$/)).toBeVisible();
+});
+
+test("a route while Studio has unsaved edits asks first, and Keep editing keeps them", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openDesktopWindow({ app, screen, browser });
+  await browser.keyboard.press(`${shortcutMod}+Shift+s`);
+  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByLabel("Flow name").fill("Launch ready Flow routed");
+  const run = await findRun(app.baseUrl, nativeQuestionTitle);
+  await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });
+  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await app.screenshot("desktop-route-studio-guard");
+
+  // Act
+  await screen.getByRole("button", "Keep editing", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow routed");
 });

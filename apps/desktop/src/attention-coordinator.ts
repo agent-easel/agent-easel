@@ -4,9 +4,14 @@
  * attention ledger. The macOS adapter behind `DesktopAlertPort` only carries the decisions out.
  */
 import { createHash, randomUUID } from "node:crypto";
-import type { RunAttentionMatter, RunNavigationEntry } from "@t3-factory/contracts";
+import {
+  mattersNeedingOwner,
+  type RunAttentionMatter,
+  type RunNavigationEntry,
+} from "@t3-factory/contracts";
 import type {
   DesktopAlertSettings,
+  DesktopRoute,
   NotificationPermission,
 } from "@t3-factory/contracts/desktop-bridge";
 import {
@@ -81,19 +86,12 @@ const titles: Record<RunAttentionMatter["presentation"], string> = {
   problem: "A Run has a problem",
 };
 
-/**
- * Matters that count for the badge and may notify: none on a Snoozed, Settled or Archived
- * Run, and no Human or native request while a confirmed Settle refuses answers.
- */
-function eligibleMatters(row: RunNavigationEntry): readonly RunAttentionMatter[] {
-  if (row.lifecycle !== "active" || row.presentation.snoozed) return [];
-  if (row.settlement === null) return row.attention.matters;
-  return row.attention.matters.filter((matter) => matter.presentation === "problem");
-}
+const waitingRuns = (rows: readonly RunNavigationEntry[]) =>
+  rows.filter((row) => mattersNeedingOwner(row).length > 0);
 
 function badgeLabel(rows: readonly RunNavigationEntry[] | undefined): string {
   if (!rows) return "";
-  const counted = rows.filter((row) => eligibleMatters(row).length > 0).length;
+  const counted = waitingRuns(rows).length;
   if (counted === 0) return "";
   return counted > badgeLimit ? `${badgeLimit}+` : String(counted);
 }
@@ -162,7 +160,7 @@ function observe(
         });
       return [];
     }
-    const appearances = eligibleMatters(row).flatMap((matter) =>
+    const appearances = mattersNeedingOwner(row).flatMap((matter) =>
       due(ledger, row.id, matter, catchUp),
     );
     return appearances.length > 0 ? [{ row, appearances }] : [];
@@ -176,7 +174,7 @@ function observe(
  */
 function withdrawable(ledger: ServerLedger, rows: readonly RunNavigationEntry[]): string[] {
   const pending = new Set(rows.flatMap((row) => row.attention.matters.map(({ id }) => id)));
-  const eligible = new Set(rows.flatMap((row) => eligibleMatters(row).map(({ id }) => id)));
+  const eligible = new Set(rows.flatMap((row) => mattersNeedingOwner(row).map(({ id }) => id)));
   return withdrawWhere(
     ledger,
     ({ matters }) =>
@@ -212,6 +210,43 @@ function content(
   const more = matters.length > 1 ? `+${matters.length - 1} more` : "";
   return { title: titles[first.presentation], body: [details, more].filter(Boolean).join("\n") };
 }
+
+/**
+ * A notification opens its Run as it is now: at the Block while exactly one matter it announced
+ * is still pending, otherwise the overview. A Run no longer in navigation (Archived or removed)
+ * still opens by id, where the window shows its read-only history or that it is unavailable.
+ */
+function notificationRoute(
+  notification: NotificationRecord,
+  rows: readonly RunNavigationEntry[],
+): DesktopRoute {
+  const announced = new Set(notification.matters.map(({ id }) => id));
+  const pending = (
+    rows.find((row) => row.id === notification.runId)?.attention.matters ?? []
+  ).filter(({ id }) => announced.has(id));
+  return {
+    kind: "run",
+    runId: notification.runId,
+    blockId: pending.length === 1 ? pending[0]!.blockId : null,
+  };
+}
+
+/** One waiting Run opens (at its Block when it has one matter); several open Needs you. */
+function dockRoute(rows: readonly RunNavigationEntry[]): DesktopRoute | null {
+  const waiting = waitingRuns(rows);
+  if (waiting.length > 1) return { kind: "needs-you" };
+  const [row] = waiting;
+  if (!row) return null;
+  const matters = mattersNeedingOwner(row);
+  return { kind: "run", runId: row.id, blockId: matters.length === 1 ? matters[0]!.blockId : null };
+}
+
+/** A click that waits for its selection's next ready state, as after a relaunch. */
+type HeldClick = {
+  readonly server: string;
+  readonly notification: NotificationRecord;
+  readonly answer: (route: DesktopRoute | null) => void;
+};
 
 const groupOf = (server: string) =>
   `factory-${createHash("sha256").update(server).digest("hex").slice(0, 16)}`;
@@ -266,6 +301,7 @@ export class AttentionCoordinator {
   private latest: Ready | null = null;
   private requesting = false;
   private focused = false;
+  private held: HeldClick | null = null;
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -307,6 +343,8 @@ export class AttentionCoordinator {
     const previous = this.selection;
     const selection = server === null ? null : { server };
     this.selection = selection;
+    // A click held for another server never routes into this one.
+    if (this.held && this.held.server !== server) this.drop();
     void this.enqueue(async () => {
       this.latest = null;
       this.showBadge();
@@ -319,6 +357,10 @@ export class AttentionCoordinator {
           if (!current()) return;
           this.latest = { server: selection!.server, rows: delivery.rows };
           this.showBadge();
+          if (this.held?.server === selection!.server) {
+            this.held.answer(notificationRoute(this.held.notification, delivery.rows));
+            this.held = null;
+          }
           await this.announce(this.latest, delivery.fresh);
         }),
       notReady: () =>
@@ -332,10 +374,43 @@ export class AttentionCoordinator {
           if (!current()) return;
           this.selection = null;
           this.latest = null;
+          this.drop();
           this.showBadge();
           await this.withdrawAll(selection!.server);
         }),
     };
+  }
+
+  /**
+   * A notification click: the route to open, decided from the Run's current state, or null when
+   * the notification is not the current selection's. Before the subscription is ready (after a
+   * relaunch) the answer waits for its next ready state; a later click or a switch to another
+   * server answers it with null. The window opens regardless; nothing is ever acted on.
+   */
+  activate(id: string): Promise<DesktopRoute | null> {
+    return new Promise((answer) => {
+      void this.enqueue(async () => {
+        this.drop();
+        const server = this.selection?.server;
+        const notification =
+          server === undefined ? undefined : this.ledger.notification(server, id);
+        if (!server || !notification) return answer(null);
+        if (this.latest) return answer(notificationRoute(notification, this.latest.rows));
+        this.held = { server, notification, answer };
+      });
+    });
+  }
+
+  /**
+   * A Dock click. With a window open it only comes forward (null); without one, the single
+   * waiting Run, Needs you for several, or null to reopen the last view.
+   */
+  dock(windowOpen: boolean): Promise<DesktopRoute | null> {
+    return new Promise((answer) => {
+      void this.enqueue(async () =>
+        answer(windowOpen || !this.latest ? null : dockRoute(this.latest.rows)),
+      );
+    });
   }
 
   /** Forgetting a server withdraws its notifications and deletes its ledger. */
@@ -385,6 +460,11 @@ export class AttentionCoordinator {
   /** The Dock badge switch off keeps the badge clear, as does a subscription that is not ready. */
   private showBadge() {
     this.port.setBadge(this.settings.dockBadge ? badgeLabel(this.latest?.rows) : "");
+  }
+
+  private drop() {
+    this.held?.answer(null);
+    this.held = null;
   }
 
   /** Best effort: Notification Center may already have dropped some of them. */

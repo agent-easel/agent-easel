@@ -5,6 +5,7 @@ import {
   livePortMessage,
   type DesktopMenuCommandId,
   type DesktopResult,
+  type DesktopRoute,
   type DesktopState,
   type FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
@@ -47,6 +48,16 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
     ipcRenderer.on(channels.menuCommand, handler);
     return () => {
       ipcRenderer.removeListener(channels.menuCommand, handler);
+    };
+  },
+  onRoute(listener) {
+    const handler = (_event: IpcRendererEvent, route: DesktopRoute) => listener(route);
+    ipcRenderer.on(channels.route, handler);
+    void ipcRenderer
+      .invoke(channels.takeRoute)
+      .then((route: DesktopRoute | null) => route && listener(route));
+    return () => {
+      ipcRenderer.removeListener(channels.route, handler);
     };
   },
   /**

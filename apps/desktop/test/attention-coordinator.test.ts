@@ -639,3 +639,151 @@ it("a banner Notification Center accepts after its server selection ended is wit
   // Assert
   expect(port.withdrawn).toStrictEqual([port.shown[0]!.id, port.shown[0]!.id]);
 });
+
+it("clicking a notification whose one matter is still pending opens its Run with that Block selected", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [nativeRequest("n1", 1)])] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: "review" });
+});
+
+it("clicking a notification whose two matters are still pending opens the Run overview", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), problem("a2")])] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("clicking a notification whose matters resolved meanwhile opens the Run overview", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: false, rows: [run("a", [])] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("clicking a notification for a Run that left navigation opens that Run without a Block", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await feed.deliver({ fresh: false, rows: [] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: null });
+});
+
+it("a notification clicked at a relaunch routes once the fresh snapshot shows the Run's current state", async (c) => {
+  // Arrange
+  const profile = await installation(c);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1"), problem("a2")])] });
+  await profile.restart();
+  const route = profile.coordinator.activate(profile.port.shown[0]!.id);
+
+  // Act
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [problem("a2")])] });
+
+  // Assert
+  expect(await route).toStrictEqual({ kind: "run", runId: "a", blockId: "review" });
+});
+
+it("clicking a notification of a previous server selection opens nothing", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await coordinator.select("other").deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Act
+  const route = await coordinator.activate(port.shown[0]!.id);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("a click waiting for readiness opens nothing once another server is selected", async (c) => {
+  // Arrange
+  const profile = await installation(c);
+  await profile.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await profile.restart();
+  const route = profile.coordinator.activate(profile.port.shown[0]!.id);
+
+  // Act
+  await profile.coordinator
+    .select("other")
+    .deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect(await route).toBeNull();
+});
+
+it("a Dock click with a window open only brings it forward", async (c) => {
+  // Arrange
+  const { coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")]), run("b", [problem("b1")])] });
+
+  // Act
+  const route = await coordinator.dock(true);
+
+  // Assert
+  expect(route).toBeNull();
+});
+
+it("a Dock click with no window and one waiting Run with one matter opens it at that Block", async (c) => {
+  // Arrange
+  const { coordinator, feed } = await installation(c);
+  const snoozed = { presentation: { snoozed: true, woke: false } };
+  await feed.deliver({
+    fresh: true,
+    rows: [run("a", [matter("a1")]), run("b", [problem("b1")], snoozed)],
+  });
+
+  // Act
+  const route = await coordinator.dock(false);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "run", runId: "a", blockId: "review" });
+});
+
+it("a Dock click with no window and several waiting Runs opens the Needs you Run list", async (c) => {
+  // Arrange
+  const { coordinator, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")]), run("b", [problem("b1")])] });
+
+  // Act
+  const route = await coordinator.dock(false);
+
+  // Assert
+  expect(route).toStrictEqual({ kind: "needs-you" });
+});
+
+it("a Dock click with no window and nothing waiting reopens the last view", async (c) => {
+  // Arrange
+  const { coordinator, feed } = await installation(c);
+  await feed.deliver({
+    fresh: true,
+    rows: [run("a", []), run("b", [matter("b1")], { lifecycle: "settled" })],
+  });
+
+  // Act
+  const route = await coordinator.dock(false);
+
+  // Assert
+  expect(route).toBeNull();
+});

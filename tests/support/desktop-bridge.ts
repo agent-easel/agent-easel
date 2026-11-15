@@ -1,6 +1,7 @@
 import {
   livePortMessage,
   type DesktopMenuCommandId,
+  type DesktopRoute,
   type DesktopState,
   type FactoryDesktop,
   type NotificationPermission,
@@ -21,7 +22,8 @@ export const desktopBridgeOptions = (
 // The application menu is recorded in window.__desktopMenu; window.__chooseMenuItem(id)
 // stands in for a pointer click on a native menu item. window.__observePermission(state)
 // stands in for the main process re-reading macOS notification permission, and
-// window.__notificationSettingsOpened records Open System Settings.
+// window.__notificationSettingsOpened records Open System Settings. window.__route(route) stands
+// in for a notification or Dock click the main process routed to the window.
 export function desktopBridgeScript({
   role,
   update,
@@ -35,6 +37,7 @@ export function desktopBridgeScript({
     __clientInstallRequested?: boolean;
     __observePermission?: (permission: NotificationPermission) => void;
     __notificationSettingsOpened?: boolean;
+    __route?: (route: DesktopRoute) => void;
   };
   let state: DesktopState = {
     version: "0.1.0",
@@ -62,6 +65,8 @@ export function desktopBridgeScript({
   const publish = () => listeners.forEach((listener) => listener(state));
   const menuListeners = new Set<Parameters<FactoryDesktop["onMenuCommand"]>[0]>();
   desktopWindow.__chooseMenuItem = (id) => menuListeners.forEach((listener) => listener(id));
+  const routeListeners = new Set<Parameters<FactoryDesktop["onRoute"]>[0]>();
+  desktopWindow.__route = (route) => routeListeners.forEach((listener) => listener(route));
   desktopWindow.__observePermission = (notificationPermission) => {
     state = { ...state, notificationPermission };
     publish();
@@ -122,6 +127,7 @@ export function desktopBridgeScript({
       menuListeners.add(listener),
       () => menuListeners.delete(listener)
     ),
+    onRoute: (listener) => (routeListeners.add(listener), () => routeListeners.delete(listener)),
     openLive: async (query, nonce) => {
       const scheme = location.protocol === "https:" ? "wss" : "ws";
       const socket = new WebSocket(scheme + "://" + location.host + "/api/live" + query);

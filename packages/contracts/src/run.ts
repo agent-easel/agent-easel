@@ -589,6 +589,17 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
 }
 
 /**
+ * The Run's matters that need the owner now: they put it on each desktop installation's Dock
+ * badge and in the Run list's Needs you filter, and they may notify. None on a Snoozed, Settled or
+ * Archived Run, and no Human or native request while a confirmed Settle refuses answers.
+ */
+export function mattersNeedingOwner(row: RunNavigationEntry): readonly RunAttentionMatter[] {
+  if (row.lifecycle !== "active" || row.presentation.snoozed) return [];
+  if (row.settlement === null) return row.attention.matters;
+  return row.attention.matters.filter((matter) => matter.presentation === "problem");
+}
+
+/**
  * One message that reached a Continuation. The first sends the prompt into the message's worker
  * thread (`prompt`); every later one is forwarded unchanged (`pass-through`), keeping its own
  * worker. Messages arriving while the prompt is pending stay `queued` until its response is out.

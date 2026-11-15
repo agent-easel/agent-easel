@@ -29,6 +29,15 @@ export interface DesktopAlertSettings {
  */
 export type NotificationPermission = "undetermined" | "requesting" | "granted" | "denied";
 
+/**
+ * Where a notification or Dock click takes the window. A route only navigates; it never performs
+ * an action. `run` selects the Block when it has one; `needs-you` filters the Run list to the
+ * Runs the Dock badge counts.
+ */
+export type DesktopRoute =
+  | { readonly kind: "run"; readonly runId: string; readonly blockId: string | null }
+  | { readonly kind: "needs-you" };
+
 export interface DesktopState {
   readonly version: string;
   readonly role: DesktopRole | null;
@@ -146,4 +155,9 @@ export interface FactoryDesktop {
   setMenuState(state: DesktopMenuState | null): Promise<DesktopResult>;
   /** A menu item chosen with the pointer; menu accelerators never arrive here. */
   onMenuCommand(listener: (id: DesktopMenuCommandId) => void): () => void;
+  /**
+   * Routes from notification and Dock clicks. One chosen before the page listened (a window
+   * opened or relaunched for it) arrives once the listener is added.
+   */
+  onRoute(listener: (route: DesktopRoute) => void): () => void;
 }

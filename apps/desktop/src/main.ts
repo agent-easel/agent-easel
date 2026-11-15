@@ -21,6 +21,7 @@ import {
   shell,
   Tray,
   type IpcMainInvokeEvent,
+  type WebContents,
   type WebFrameMain,
 } from "electron";
 import {
@@ -36,6 +37,7 @@ import type {
   DesktopMenuState,
   DesktopResult,
   DesktopRole,
+  DesktopRoute,
   DesktopState,
   FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
@@ -80,6 +82,13 @@ let permissionCheck: NodeJS.Timeout | undefined;
 /** The local backend the attention subscription follows in the server role. */
 let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
+/** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
+let routeReceiver: WebContents | null = null;
+let pendingRoute: DesktopRoute | null = null;
+/** The page a closed window showed; reopening the window returns to it. */
+let lastView = `${appOrigin}/`;
+/** The notification whose click launched this process, read before any window exists. */
+let launchActivation: string | null = null;
 let tray: Tray | null = null;
 let menuState: DesktopMenuState | null = null;
 /** Set only after the local user confirmed and the backend stopped in order. */
@@ -168,6 +177,8 @@ function attentionSelection(): AttentionSelection | null {
 
 /** Replaces the subscription after a server, role, credential or backend change. */
 function followAttention() {
+  // A route chosen for the previous selection never opens in the next one.
+  pendingRoute = null;
   attentionHost = store.get().role === "server" ? attentionHostBase() : null;
   attentionSubscription.follow(attentionSelection());
 }
@@ -235,6 +246,22 @@ async function stopBackendFor(action: keyof typeof interruption): Promise<boolea
   return true;
 }
 
+/**
+ * Applies a click's route in the window, which the caller already opened. The page applies it
+ * through its own navigation, behind its connection gate, so its draft guards still ask.
+ */
+function openRoute(route: DesktopRoute | null) {
+  if (!route) return;
+  if (routeReceiver) routeReceiver.send(channels.route, route);
+  else pendingRoute = route;
+}
+
+/** A notification click focuses or opens the window, then routes to the Run's current state. */
+function activateNotification(id: string) {
+  openWindow();
+  void attention.activate(id).then(openRoute);
+}
+
 function openWindow() {
   if (window) {
     if (window.isMinimized()) window.restore();
@@ -273,16 +300,25 @@ function openWindow() {
     if (!url.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
   created.once("ready-to-show", () => created.show());
+  // A reload replaces the page and its route listener; in-page navigation keeps both.
+  created.webContents.on("did-navigate", () => {
+    routeReceiver = null;
+  });
+  created.on("close", () => {
+    const url = created.webContents.getURL();
+    if (url.startsWith(`${appOrigin}/`)) lastView = url;
+  });
   created.on("minimize", broadcast);
   created.on("restore", broadcast);
   // Closing the window never stops the backend; the Dock and the optional tray reopen it.
   created.on("closed", () => {
     window = null;
+    routeReceiver = null;
     attention.focus(false);
     applyMenuState(withoutOpenRun(menuState));
   });
   window = created;
-  void created.loadURL(`${appOrigin}/`);
+  void created.loadURL(lastView);
 }
 
 function trayImage() {
@@ -505,7 +541,7 @@ function trustedFrame(event: IpcMainInvokeEvent) {
 }
 
 /** Bridge methods the page calls over `ipcRenderer.invoke`; the rest are main → page pushes. */
-type BridgeRequest = Exclude<keyof FactoryDesktop, "onState" | "onMenuCommand">;
+type BridgeRequest = Exclude<keyof FactoryDesktop, "onState" | "onMenuCommand" | "onRoute">;
 type BridgeAnswer<Name extends BridgeRequest> = Awaited<ReturnType<FactoryDesktop[Name]>>;
 
 /**
@@ -587,6 +623,13 @@ const bridgeHandlers: BridgeHandlers = {
 };
 
 function registerBridge() {
+  ipcMain.handle(channels.takeRoute, (event: IpcMainInvokeEvent) => {
+    trustedFrame(event);
+    routeReceiver = event.sender;
+    const route = pendingRoute;
+    pendingRoute = null;
+    return route;
+  });
   for (const name of Object.keys(bridgeHandlers) as BridgeRequest[]) {
     const run = bridgeHandlers[name] as (frame: WebFrameMain, ...args: unknown[]) => unknown;
     ipcMain.handle(channels[name], (event: IpcMainInvokeEvent, ...args: unknown[]) =>
@@ -613,7 +656,16 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", openWindow);
-  app.on("activate", openWindow);
+  // A Dock click: an open window only comes forward; otherwise the window opens where attention waits.
+  app.on("activate", () => {
+    const windowOpen = window !== null;
+    openWindow();
+    void attention.dock(windowOpen).then(openRoute);
+  });
+  app.once("ready", (_event, launchInfo) => {
+    if ("identifier" in launchInfo && typeof launchInfo.identifier === "string")
+      launchActivation = launchInfo.identifier;
+  });
   // Background operation: the last window closing leaves the server and app running.
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", (event) => {
@@ -694,6 +746,7 @@ async function start() {
   alerts = new MacAlerts(
     loadNativeNotifications(join(here, "native", "notifications.node")),
     app.dock!,
+    activateNotification,
   );
   attention = await AttentionCoordinator.open(app.getPath("userData"), alerts, {
     settings: alertSettings(store.get()),
@@ -708,6 +761,9 @@ async function start() {
   app.on("browser-window-focus", () => attention.focus(true));
   app.on("browser-window-blur", () => attention.focus(false));
   followAttention();
+  void alerts.listenForClicks();
+  // A relaunch from a notification routes once the subscription is ready, behind the connection gate.
+  if (launchActivation) void attention.activate(launchActivation).then(openRoute);
   registerUi();
   registerBridge();
   applyMenuState(null);

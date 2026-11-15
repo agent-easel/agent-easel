@@ -354,6 +354,12 @@ menu items never opens a row preview.
   project are not Problems and opening a Run clears no chip.
 - **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
+- **Needs you (N)** filters the list to exactly the Runs the desktop
+  [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input
+  or Problem, leaving out Human steps and native requests during a confirmed Settle that is stopping or unresolved. A Dock click
+  with no window open and several such Runs opens the list with it; it clears the title search, and typing a search or choosing
+  the filter again shows the whole list. Rows keep their own chips, groups are hidden, drafts are left out, and with no such Run it shows
+  **Nothing needs you**. It is a view of the Run list, not an Inbox.
 - When Runs exist but none are open, the open list shows **Nothing open** / **You're all caught up.**
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.
   A Settle still stopping workers focuses the row; when the Run settles later, focus moves to the destination only if it is

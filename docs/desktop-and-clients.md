@@ -28,7 +28,8 @@ same conflict in the other direction.
 ## Lifecycle
 
 - Closing the last window leaves the server (and its Runs) running. The Dock icon and
-  launching the app again reopen the panel.
+  launching the app again reopen the panel at the view it last showed, unless a Dock click
+  [routes](#notifications-and-dock-badge) to waiting Runs.
 - Closing the last window also leaves [notifications and the Dock badge](#notifications-and-dock-badge)
   running, in both roles; they stop with Quit.
 - **Settings → Desktop app → Show Factory in the menu bar** (desktop only) is off by
@@ -165,6 +166,18 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   that were never announced; matters that appeared and resolved meanwhile are never reported. A
   notification is recorded as attempted before it is posted, so a crash can lose a banner but
   never repeats one; one macOS refused is retried only at the next catch-up.
+- **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
+  now: with the Block selected while exactly one matter the notification announced is still
+  pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
+  Archived Run opens its read-only history and a Run that no longer exists shows that it is
+  unavailable. A notification clicked after Quit relaunches Factory and opens its Run once the
+  connection is ready, behind the connection gate. A Dock click with no window open opens the
+  single waiting Run (its Block selected when it has one matter), the Run list's
+  [Needs you (N)](runs.md#run-list) filter when several wait, or the last view when none does; with
+  a window open it only brings the window forward. Routing only navigates, never acts on a Run:
+  Settings and Studio still ask before discarding unsaved edits, and leaving the New Run view
+  keeps its draft. Clicks on another server's or a revoked selection's notifications open only
+  the window.
 - **Selection boundaries**: switching server or role, or the server refusing this client's
   credential after a revocation, clears the badge, withdraws the previous selection's
   notifications and ignores whatever the previous selection's subscription still delivers. The
@@ -175,7 +188,9 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
 
 Notifications are posted through `UNUserNotificationCenter` by a small native module, not
 Electron's `Notification` API: Electron withdraws its notifications when the app quits and asks
-for permission on its first call. macOS accepts notifications only from an app registered from a
+for permission on its first call. Clicks arrive through Electron, which restores delivered
+notifications only once permission is decided; a notification that relaunched Factory is read
+from the launch before any window opens. macOS accepts notifications only from an app registered from a
 non-temporary location, so a package run from a temporary folder badges but cannot notify.
 
 ## Native window appearance
