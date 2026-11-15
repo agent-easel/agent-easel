@@ -3,6 +3,19 @@ import { Check, ChevronDown, CircleAlert, CircleDot } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { RuleFocus } from "./condition-rules.tsx";
+
+/** Selects a block, or with null clears the selection; `rule` also focuses one Condition rule. */
+export type IssueSelect = (blockId: string | null, rule?: RuleFocus) => void;
+
+/** The Condition rule control an issue path such as `graph.blocks.2.rules.5.fromArrival` names. */
+function issueRule(path: string, graph: FlowGraph): RuleFocus | undefined {
+  const match = /^graph\.blocks\.(\d+)\.rules\.(\d+)(?:\.(name|fromArrival))?/.exec(path);
+  if (!match) return undefined;
+  const block = graph.blocks[Number(match[1])];
+  const rule = block?.kind === "condition" ? block.rules[Number(match[2])] : undefined;
+  return rule && { ruleId: rule.id, field: match[3] === "fromArrival" ? "fromArrival" : "name" };
+}
 
 /** The block an issue path refers to: null clears the selection, undefined leaves it. */
 function issueSelection(path: string, graph: FlowGraph): string | null | undefined {
@@ -17,9 +30,9 @@ function issueSelection(path: string, graph: FlowGraph): string | null | undefin
 }
 
 /**
- * Validation issue paths such as `graph.blocks.2.name` select the block they refer to and a
- * connection path its source block; a Flow input target path selects that target, and other
- * Flow input issues clear the selection.
+ * Validation issue paths such as `graph.blocks.2.name` select the block they refer to, and a
+ * Condition rule path also focuses that rule's row; a connection path selects its source block, a
+ * Flow input target path selects that target, and other Flow input issues clear the selection.
  */
 export function IssueLink({
   issue,
@@ -29,7 +42,7 @@ export function IssueLink({
 }: {
   issue: ValidationIssue;
   graph: FlowGraph;
-  onSelect: (blockId: string | null) => void;
+  onSelect: IssueSelect;
   children: ReactNode;
 }) {
   return (
@@ -38,7 +51,7 @@ export function IssueLink({
       className="block rounded-sm text-left text-xs text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
       onClick={() => {
         const selection = issueSelection(issue.path, graph);
-        if (selection !== undefined) onSelect(selection);
+        if (selection !== undefined) onSelect(selection, issueRule(issue.path, graph));
       }}
     >
       {children}
@@ -74,7 +87,7 @@ export function ReadinessPanel({
   readiness: FlowReadiness | null;
   agentsChanged: boolean;
   graph: FlowGraph;
-  onSelect: (blockId: string | null) => void;
+  onSelect: IssueSelect;
 }) {
   const issues = readiness?.issues.length ?? 0;
   const [expanded, setExpanded] = useState({ readiness, open: issues > 0 });

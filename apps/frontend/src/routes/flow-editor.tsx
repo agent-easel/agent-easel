@@ -28,7 +28,8 @@ import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration } from "../components/block-inspector.tsx";
 import { BlockLibrary } from "../components/block-library.tsx";
 import { FlowCanvas, type DropAt } from "../components/flow-canvas.tsx";
-import { IssueLink, ReadinessPanel } from "../components/flow-readiness.tsx";
+import { IssueLink, ReadinessPanel, type IssueSelect } from "../components/flow-readiness.tsx";
+import type { ConditionEditing, RuleFocus } from "../components/condition-rules.tsx";
 import { FlowWorkspaceControl } from "../components/flow-workspace-control.tsx";
 import {
   DefinitionExportControl,
@@ -259,6 +260,32 @@ function useCanvasSelection(
 
 const noAgents: readonly AgentDefinition[] = [];
 
+/**
+ * Condition arrival-number text that is not a valid threshold, by block and rule. It stays shown
+ * where it was typed, never enters the draft, and makes `invalid` true while its rule exists, so
+ * the draft cannot be saved as something other than what is shown.
+ */
+function useThresholdEntries(graph: FlowGraph) {
+  const [entries, setEntries] = useState<ReadonlyMap<string, ReadonlyMap<string, string>>>(
+    () => new Map(),
+  );
+  const invalid = [...entries].some(([blockId, rules]) => {
+    const block = graph.blocks.find((item) => item.id === blockId);
+    return block?.kind === "condition" && block.rules.some((rule) => rules.has(rule.id));
+  });
+  function onEntry(blockId: string, ruleId: string, text: string | null) {
+    setEntries((current) => {
+      const rules = new Map(current.get(blockId));
+      if (text === null) rules.delete(ruleId);
+      else rules.set(ruleId, text);
+      return new Map(current).set(blockId, rules);
+    });
+  }
+  return { entries, invalid, onEntry };
+}
+
+const noEntries: ReadonlyMap<string, string> = new Map();
+
 /** Studio's saved Agents for the block library; the last read stays offered during refreshes. */
 function useLibraryAgents(definitions: StudioDefinitions) {
   const { value, error } = useStudioRead(definitions, "agents");
@@ -310,13 +337,28 @@ export function FlowDetail({
     active,
     registerEscape,
   );
+  const thresholds = useThresholdEntries(graph);
+  const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
+  const selectBlock = (blockId: string | null) => {
+    setRuleFocus(null);
+    select(blockId);
+  };
+  const selectIssue: IssueSelect = (blockId, rule) => {
+    select(blockId);
+    setRuleFocus(blockId && rule ? { blockId, rule } : null);
+  };
   const block = graph.blocks.find((b) => b.id === selected);
+  const conditionEditing = (blockId: string): ConditionEditing => ({
+    focus: ruleFocus?.blockId === blockId ? ruleFocus.rule : null,
+    entries: thresholds.entries.get(blockId) ?? noEntries,
+    onEntry: (ruleId, text) => thresholds.onEntry(blockId, ruleId, text),
+  });
   const closing = usePanelBlock(block);
   const reservedRight = block ? PANEL_WIDTH + 24 : 0;
   function add(kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) {
     const next = newBlock(graph, kind, agent, position);
     change({ ...graph, blocks: [...graph.blocks, next] });
-    select(next.id);
+    selectBlock(next.id);
   }
   const dropAt: DropAt = (x, y, grab) => placement.current?.(x, y, grab) ?? null;
   if (!saved) return <FlowLoadState error={error} />;
@@ -330,9 +372,10 @@ export function FlowDetail({
         flowId={id}
         exporter={exporter}
         fields={interactions.fields}
+        invalidEntry={thresholds.invalid}
       />
       <ExportNotice notice={definitionExportNotice(exporter.state)} />
-      <DraftProblems draft={draft} state={state} onSelect={select} />
+      <DraftProblems draft={draft} state={state} onSelect={selectIssue} />
       <div inert={state.busy} className="flex min-h-0 flex-1" {...interactions.gestures}>
         <BlockLibrary
           open={libraryOpen}
@@ -354,7 +397,7 @@ export function FlowDetail({
             savedGraph={saved.id === id ? saved.graph : undefined}
             busy={state.busy}
             placementRef={placement}
-            onSelect={select}
+            onSelect={selectBlock}
             onSelectWire={selectWire}
             onDeleteWire={deleteWire}
             onEdit={editBlock}
@@ -365,16 +408,17 @@ export function FlowDetail({
             readiness={readiness}
             agentsChanged={state.agentsChanged}
             graph={graph}
-            onSelect={select}
+            onSelect={selectIssue}
           />
           <EditorSelectionPanel
             block={block}
             closing={closing}
             graph={graph}
             agents={agents}
+            condition={conditionEditing}
             onEdit={editBlock}
             onChange={change}
-            select={select}
+            select={selectBlock}
           />
         </div>
       </div>
@@ -404,6 +448,7 @@ function EditorSelectionPanel({
   closing,
   graph,
   agents,
+  condition,
   onEdit,
   onChange,
   select,
@@ -412,6 +457,7 @@ function EditorSelectionPanel({
   closing: FlowBlock | null;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  condition: (blockId: string) => ConditionEditing;
   onEdit: (block: FlowBlock) => void;
   onChange: (graph: FlowGraph) => void;
   select: (id: string | null) => void;
@@ -424,6 +470,7 @@ function EditorSelectionPanel({
       closing={!block}
       graph={graph}
       agents={agents}
+      condition={condition(displayed.id)}
       onClose={() => select(null)}
       onEdit={onEdit}
       onRemove={(removed) => {
@@ -442,6 +489,7 @@ function EditorToolbar({
   flowId,
   exporter,
   fields,
+  invalidEntry,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
@@ -450,8 +498,13 @@ function EditorToolbar({
   exporter: ReturnType<typeof useDefinitionExport>;
   /** Reports typing in the toolbar's fields, which a newer revision waits for. */
   fields: ReturnType<typeof useInteractionReports>["fields"];
+  /** A shown Condition arrival number is invalid, so neither the check nor a save would match it. */
+  invalidEntry: boolean;
 }) {
   const { openFlowComposer } = useComposerNavigation();
+  const invalidTitle = invalidEntry
+    ? "Correct or clear the arrival number marked invalid first."
+    : undefined;
   return (
     <div className="flex h-12 shrink-0 items-center gap-2.5 border-b px-4" {...fields}>
       <StudioLink
@@ -481,16 +534,16 @@ function EditorToolbar({
       <Separator orientation="vertical" className="h-5!" />
       <Button
         variant="outline"
-        disabled={state.busy || state.removed}
-        title={state.removed ? "This Flow was removed elsewhere." : undefined}
+        disabled={state.busy || state.removed || invalidEntry}
+        title={state.removed ? "This Flow was removed elsewhere." : invalidTitle}
         onClick={() => void draft.check()}
       >
         <ListChecks aria-hidden /> Check readiness
       </Button>
       <MutationGate>
         <Button
-          title={state.removed ? "This Flow was removed elsewhere." : undefined}
-          disabled={!state.canSave}
+          title={state.removed ? "This Flow was removed elsewhere." : invalidTitle}
+          disabled={!state.canSave || invalidEntry}
           onClick={() => void draft.save()}
         >
           <Save aria-hidden /> Save Flow
@@ -664,7 +717,7 @@ function DraftProblems({
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
-  onSelect: (blockId: string | null) => void;
+  onSelect: IssueSelect;
 }) {
   const { conflict } = state;
   if (state.removed)
@@ -704,6 +757,7 @@ function BlockPanel({
   closing,
   graph,
   agents,
+  condition,
   onClose,
   onEdit,
   onRemove,
@@ -712,6 +766,7 @@ function BlockPanel({
   closing: boolean;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  condition: ConditionEditing;
   onClose: () => void;
   onEdit: (block: FlowBlock) => void;
   onRemove: (block: FlowBlock) => void;
@@ -761,6 +816,7 @@ function BlockPanel({
           block={block}
           graph={graph}
           agents={agents}
+          condition={condition}
           onEdit={onEdit}
           onRemove={() => onRemove(block)}
         />

@@ -66,15 +66,19 @@ export function newBlock(
   return kind === "continuation" ? { ...base, kind, prompt: "" } : { ...base, kind };
 }
 
+/** The exits a block owns in this Flow and an edit can remove: Agent local exits and Condition
+ * rule outputs. */
+function removableExitIds(block: FlowBlock | undefined): readonly string[] {
+  if (block?.kind === "agent") return block.localExits.map((exit) => exit.id);
+  if (block?.kind === "condition") return block.rules.map((rule) => rule.id);
+  return [];
+}
+
+/** Replaces a block; wires from a local exit or Condition rule the edit removed go with it. */
 export function replaceBlock(graph: FlowGraph, next: FlowBlock): FlowGraph {
   const previous = graph.blocks.find((block) => block.id === next.id);
-  const removed = new Set(
-    previous?.kind === "agent" && next.kind === "agent"
-      ? previous.localExits
-          .filter((exit) => !next.localExits.some((item) => item.id === exit.id))
-          .map((exit) => exit.id)
-      : [],
-  );
+  const kept = new Set(removableExitIds(next));
+  const removed = new Set(removableExitIds(previous).filter((id) => !kept.has(id)));
   return {
     ...graph,
     blocks: graph.blocks.map((block) => (block.id === next.id ? next : block)),
