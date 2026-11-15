@@ -14,6 +14,7 @@ import {
   flowFile,
   flowUnderCreateLimitBy,
   reviewedCommit,
+  withReversedKeys,
 } from "./support/definition-import.ts";
 import {
   assertOk,
@@ -468,6 +469,26 @@ it("retrying a commit with the same request id and content returns the original 
   // Assert
   expect(retried).toStrictEqual({ ok: true, value: first });
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
+});
+
+it("retrying a Flow commit whose file lists the same content with fields reordered returns the original result", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const selections = { "agent-1": controlledExecution() };
+  const first = assertOk(
+    await factory.commitImport({ requestId: "import-flow", document: flowFile(), selections }),
+  );
+
+  // Act
+  const retried = await factory.commitImport({
+    requestId: "import-flow",
+    document: withReversedKeys(flowFile()),
+    selections,
+  });
+
+  // Assert
+  expect(retried).toStrictEqual({ ok: true, value: first });
+  expect(assertOk(await factory.listFlows())).toHaveLength(1);
 });
 
 it("a commit reusing a request id with different selections conflicts and creates nothing", async (context) => {

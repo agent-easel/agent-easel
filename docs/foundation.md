@@ -35,7 +35,7 @@ and restricted OAuth credentials live outside project repositories.
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
-  a SHA-256 fingerprint of the canonical document plus the reviewed selections, the created Agent ids by document key and, for a Flow file,
+  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.

@@ -46,6 +46,17 @@ export function flowUnderCreateLimitBy(bytes: number) {
   return longChecklist("x".repeat(room));
 }
 
+/** The same JSON content with every object's fields in reverse order, as another serializer may write it. */
+export function withReversedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withReversedKeys);
+  if (value === null || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .reverse()
+      .map(([key, entry]) => [key, withReversedKeys(entry)]),
+  );
+}
+
 /** A version-1 Agent file as Definition export writes it. */
 export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {}) => ({
   format: "t3-factory/definitions",

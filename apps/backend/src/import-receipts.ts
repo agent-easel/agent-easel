@@ -9,12 +9,21 @@ interface ImportReceipt {
   readonly result: ImportResult;
 }
 
+/** JSON with object keys sorted at every level. Array order is content and is kept. */
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, entry: unknown) =>
+    entry !== null && typeof entry === "object" && !Array.isArray(entry)
+      ? Object.fromEntries(Object.entries(entry).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : entry,
+  );
+}
+
 /**
- * The content a request id commits to: the decoded document and the selections, both rebuilt by
- * the validator in a fixed field and Agent order, so equal content always hashes equally.
+ * The content a request id commits to: the decoded document and the selections in canonical
+ * JSON, so a retry of equal content hashes equally however its file orders object fields.
  */
 export const importFingerprint = ({ document, selections }: CommitImportInput) =>
-  createHash("sha256").update(JSON.stringify({ document, selections })).digest("hex");
+  createHash("sha256").update(canonicalJson({ document, selections })).digest("hex");
 
 export const readImportReceipt = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
