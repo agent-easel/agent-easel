@@ -1,4 +1,4 @@
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow } from "./support/flows.ts";
 import { findRun } from "./support/run-history.ts";

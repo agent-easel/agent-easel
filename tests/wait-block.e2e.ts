@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { applyRunState, prepareScenarios, scenarioFixture } from "./support/scenarios.ts";
+import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 
 test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
   app,
@@ -63,20 +63,20 @@ test("a Wait added from the library saves with a missing duration as a readiness
 });
 
 test("a waiting arrival is held with its message and forwarded by the backend once its minute elapses", async ({
+  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app.baseUrl);
-  const started = await scenarioFixture(app.baseUrl, "ensure", {
+  await prepareScenarios(app);
+  const { id: runId } = await fixture.scenarios.ensure({
     key: "wait",
-    flow: "UI wait · Pause a minute",
+    flow: "pause",
   });
-  const { id: runId } = (await started.json()) as { id: string };
-  await applyRunState(app.baseUrl, runId, "result reported", "Ready after a short pause.");
-  await applyRunState(app.baseUrl, runId, "result released to a Wait");
+  await applyRunState(app, runId, "result reported", "Ready after a short pause.");
+  await applyRunState(app, runId, "result released to a Wait");
   await app.open(`/runs/${runId}`);
   await screen.getByRole("button", /^Wait Pause a minute, waiting/).tap();
   await expect(screen.getByRole("listitem", "Arrival 1, waiting")).toContainText(
@@ -112,7 +112,7 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app.baseUrl);
+  await prepareScenarios(app);
   const held = await findRun(
     app.baseUrl,
     "UI worker · Waiting · Two reviews held for the morning sync",

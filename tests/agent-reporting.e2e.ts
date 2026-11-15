@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
-import { afterEach, test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { listAgentDefinitions, repairCodexReporting } from "./support/agents.ts";
-import { remoteFixture } from "./support/remote-access.ts";
-
-// Later journeys share the fixture's T3 connection.
-afterEach(async ({ app }) => {
-  await remoteFixture(app, "t3-available");
-  await remoteFixture(app, "reporting/optional-skill");
-});
 
 test("reporting problems are visible before Start and clear after repairing the provider", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -22,10 +16,7 @@ test("reporting problems are visible before Start and clear after repairing the 
   const worker = agents.find((agent) => agent.name === "Runtime worker");
   assert(worker);
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
-  const broken = await fetch(new URL("/__fixture/reporting/break", app.baseUrl), {
-    method: "POST",
-  });
-  assert(broken.ok);
+  await fixture.reporting.breakRequiredSkill();
 
   // Act
   await browser.reload();
@@ -148,15 +139,14 @@ test("the Agent reporting attention dot clears once every harness is installed",
 });
 
 test("installed reporting shows the file and manual remedy for a linked optional skill", async ({
+  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  const linked = await remoteFixture(app, "reporting/optional-skill?linked=1");
-  assert(linked.ok);
-  const { path } = (await linked.json()) as { path: string };
+  const { path } = await fixture.reporting.linkOptionalSkill();
 
   // Act
   await app.open("/settings/agent-reporting");
@@ -175,6 +165,7 @@ test("installed reporting shows the file and manual remedy for a linked optional
 });
 
 test("a disconnected T3 connection takes precedence over reporting warnings", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -183,7 +174,7 @@ test("a disconnected T3 connection takes precedence over reporting warnings", as
   await browser.route("**/api/reporting", (route) =>
     route.fulfill({ json: { ok: true, value: [] } }),
   );
-  await remoteFixture(app, "t3-unavailable");
+  await fixture.remoteAccess.t3Unavailable();
 
   // Act
   await app.open("/runs/new");

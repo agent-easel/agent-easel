@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { beforeEach, test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import type {
   EligibleRunImage,

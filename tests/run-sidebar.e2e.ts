@@ -1,5 +1,5 @@
 import { confirmSettlement } from "./support/run-history.ts";
-import { test } from "@e2e-dev/web";
+import { test } from "./support/test.ts";
 import assert from "node:assert/strict";
 import { expect, type App, type Screen } from "e2e";
 import { findArchivedRun, findRun, readHistoryRun } from "./support/run-history.ts";
@@ -188,7 +188,7 @@ test("snooze during search keeps focus on the matching row", async ({ app, scree
 
 test("settle during search keeps focus on the matching row", async ({ app, screen, browser }) => {
   // Arrange
-  await prepareScenarios(app.baseUrl);
+  await prepareScenarios(app);
   const { actions } = await openSidebarAction(
     { app, screen, browser },
     settleTitle,

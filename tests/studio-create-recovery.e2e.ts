@@ -1,4 +1,4 @@
-import { beforeEach, test } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow, removeFlowElsewhere } from "./support/flows.ts";
 import { removeAgentElsewhere } from "./support/agents.ts";

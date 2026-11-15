@@ -1,4 +1,9 @@
-import { seedScenarioList, type DemoFlows, type SeedScenario } from "./seed-scenarios.ts";
+import {
+  seedScenarioList,
+  type DemoAgents,
+  type DemoFlows,
+  type SeedScenario,
+} from "./seed-scenarios.ts";
 import {
   blockExit,
   observeFor,
@@ -77,7 +82,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
 }
 
 async function createDemoAgents(factory: Factory, t3: PersistentT3) {
-  const agents = { worker: "", reviewer: "", accessibility: "" };
+  const agents: DemoAgents = { worker: "", reviewer: "", accessibility: "" };
   for (const [key, name, prompt, exits] of [
     [
       "worker",
@@ -151,12 +156,11 @@ async function createDemoClients(factory: Factory) {
   requireSuccess(await factory.revokeClient(laptop.client.id));
 }
 
-/** Fresh demo homes only; the owning server records completion and preserves subsequent edits. */
-export async function seedDevelopment(
-  factory: Factory,
-  t3: PersistentT3,
-  home: string,
-): Promise<void> {
+/**
+ * Fresh demo homes only; the owning server records completion and preserves subsequent edits.
+ * Answers the demo world it created by stable keys: Runs by seed scenario key.
+ */
+export async function seedDevelopment(factory: Factory, t3: PersistentT3, home: string) {
   await createDemoReporting(home, t3.environmentId);
   t3.approve();
   // Runtime readiness requires a loopback hostname. Port zero cannot target a live T3 server.
@@ -173,10 +177,12 @@ export async function seedDevelopment(
   const agents = await createDemoAgents(factory, t3);
   const flows = await createDemoFlows(factory, agents);
   await createDemoClients(factory);
-  await seedScenarios({ factory, t3, projectId: project.id }, flows);
+  const runs = await seedScenarios({ factory, t3, projectId: project.id }, flows);
+  return { project, agents, flows, runs };
 }
 
-async function seedScenario(
+/** Starts `scenario` in `flowId` and brings its Run to the scenario's state; answers the Run. */
+export async function seedScenario(
   context: SeedContext,
   flowId: string,
   scenario: SeedScenario,
@@ -366,13 +372,12 @@ async function finishScenario(
   }
 }
 
-export async function seedScenarios(
-  context: SeedContext,
-  flows: DemoFlows,
-  namespace: ScenarioNamespace = demoNamespace,
-) {
+async function seedScenarios(context: SeedContext, flows: DemoFlows) {
   const runs = new Map<string, string>();
   for (const scenario of seedScenarioList)
-    runs.set(scenario.key, await seedScenario(context, flows[scenario.flow], scenario, namespace));
+    runs.set(
+      scenario.key,
+      await seedScenario(context, flows[scenario.flow], scenario, demoNamespace),
+    );
   return runs;
 }

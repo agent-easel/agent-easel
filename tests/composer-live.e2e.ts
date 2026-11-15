@@ -1,7 +1,10 @@
-import { test } from "@e2e-dev/web";
+import assert from "node:assert/strict";
+import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { browserRequests, resetBrowserRequests } from "./support/live.ts";
 import { elapse } from "./support/remote-access.ts";
+import { removeFlowElsewhere } from "./support/flows.ts";
+import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
 
 /** Updater checks have their own schedule and are reported separately. */
 const launchChoiceRequests = async (app: { baseUrl: string | undefined }) =>
@@ -47,4 +50,7 @@ test("a Flow created in another window appears in an open Run composer", async (
   await expect(
     screen.getByRole("menuitemradio", "Live composer Flow · Not ready", { exact: true }),
   ).toBeVisible();
+  const flow = (await created.json()) as Result<FlowDraft>;
+  assert(flow.ok);
+  await removeFlowElsewhere(app.baseUrl, flow.value.id);
 });

@@ -1,8 +1,10 @@
 import { confirmSettlement } from "./support/run-history.ts";
 import assert from "node:assert/strict";
-import { beforeEach, test, type Browser } from "@e2e-dev/web";
+import type { Browser } from "@e2e-dev/web";
+import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import {
+  archiveJourneyRun,
   findRun,
   readHistoryRun,
   runsTitled,
@@ -19,7 +21,7 @@ import {
 } from "./support/keyboard-shortcuts.ts";
 
 beforeEach(async ({ app }) => {
-  await prepareScenarios(app.baseUrl);
+  await prepareScenarios(app);
 });
 
 beforeEach(async ({ browser }) => {
@@ -163,6 +165,7 @@ test("an unfinished prompt reopens as a Draft after reload and Starts exactly on
   await expect(draftRow).toHaveCount(0);
   await expect(journeyRows).toHaveText([/^UI newer draft\s*Draft$/, /UI saved draft/]);
   await app.screenshot("draft-started-once");
+  await archiveJourneyRun(app.baseUrl, started[0]!.id);
 });
 
 test("a reopened Draft continues typing at the end of its prompt", async ({
@@ -238,12 +241,14 @@ test("a Start whose response was lost is recovered after reload without a duplic
   await expect(
     screen.getByRole("heading", "UI recovered lost Start", { exact: true }),
   ).toBeVisible();
-  expect(await runsTitled(app.baseUrl, "UI recovered lost Start")).toHaveLength(1);
+  const recovered = await runsTitled(app.baseUrl, "UI recovered lost Start");
+  expect(recovered).toHaveLength(1);
   await browser.reload();
   await expect(
     screen.getByRole("heading", "UI recovered lost Start", { exact: true }),
   ).toBeVisible();
   await app.screenshot("lost-start-recovered");
+  await archiveJourneyRun(app.baseUrl, recovered[0]!.id);
 });
 
 test("a worker discussing in T3 stays working without Needs input after reload", async ({
@@ -346,14 +351,14 @@ test("a native worker reply completes the same activation without another workin
   await app.open(`/runs/${found.id}`);
 
   // Act — simulate the ordinary reply in the exact native worker conversation.
-  await applyRunState(app.baseUrl, found.id, "reply turn observed");
+  await applyRunState(app, found.id, "reply turn observed");
   await applyRunState(
-    app.baseUrl,
+    app,
     found.id,
     "result reported",
     "Used the requested concise wording and Clear filters label.",
   );
-  await applyRunState(app.baseUrl, found.id, "settled");
+  await applyRunState(app, found.id, "settled");
 
   // Assert
   await expect
@@ -380,19 +385,14 @@ test("a worker's replaced report releases only its newest result to review work"
   await app.open(`/runs/${found.id}`);
 
   // Act — the external worker reports a draft, then replaces it, through Factory's public runtime boundary.
+  await applyRunState(app, found.id, "result held", "A first draft of the project picker change.");
   await applyRunState(
-    app.baseUrl,
-    found.id,
-    "result held",
-    "A first draft of the project picker change.",
-  );
-  await applyRunState(
-    app.baseUrl,
+    app,
     found.id,
     "result reported",
     "The project picker change is ready for review.",
   );
-  await applyRunState(app.baseUrl, found.id, "result released to a second worker");
+  await applyRunState(app, found.id, "result released to a second worker");
 
   // Assert
   await expect
@@ -526,19 +526,22 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   // Arrange
   const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
   await settleStoppingWorkers(app.baseUrl, found.id);
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
+    .toBe("settled");
   await app.open(`/runs/${found.id}`);
   const before = await readHistoryRun(app.baseUrl, found.id);
 
   // Act
   const report = await applyRunState(
-    app.baseUrl,
+    app,
     found.id,
     "late working report",
     "Two subagents are still checking the empty state.",
   );
 
   // Assert
-  expect(await report.json()).toMatchObject({ outcome: "RUN_SETTLED" });
+  expect(report).toMatchObject({ outcome: "RUN_SETTLED" });
   const after = await readHistoryRun(app.baseUrl, found.id);
   expect(after.lifecycle).toBe("settled");
   expect(after.reports).toEqual(before.reports);
@@ -570,7 +573,7 @@ test("Retry of an unresolved settlement keeps focus on the settlement section wh
     screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(found.title)),
   ).toHaveCount(0);
   await app.screenshot("settlement-unresolved");
-  await applyRunState(app.baseUrl, found.id, "Stop taken while the turn continues");
+  await applyRunState(app, found.id, "Stop taken while the turn continues");
 
   // Act
   await progress.getByRole("button", "Retry", { exact: true }).tap();
@@ -588,7 +591,7 @@ test("a Retry the user left does not pull focus to the settlement section once i
 }) => {
   // Arrange
   const id = await liveRun(app, "settle-left-retry");
-  await applyRunState(app.baseUrl, id, "settlement unresolved");
+  await applyRunState(app, id, "settlement unresolved");
   await app.open(`/runs/${id}`);
   const progress = screen.getByRole("region", "Run settlement");
   const retry = progress.getByRole("button", "Retry", { exact: true });
@@ -597,7 +600,7 @@ test("a Retry the user left does not pull focus to the settlement section once i
   // Focus falls to the page, as when the user clicks content outside any focusable container.
   await browser.evaluate("document.activeElement.blur()");
   expect(await browser.evaluate("document.activeElement === document.body")).toBe(true);
-  await applyRunState(app.baseUrl, id, "Stop taken while the turn continues");
+  await applyRunState(app, id, "Stop taken while the turn continues");
 
   // Act
   await settleStoppingWorkers(app.baseUrl, id);
@@ -613,14 +616,14 @@ test("a held Stop that ends settles the Run and removes its settlement progress"
 }) => {
   // Arrange
   const id = await liveRun(app, "settle-held-stop");
-  await applyRunState(app.baseUrl, id, "Stop taken while the turn continues");
+  await applyRunState(app, id, "Stop taken while the turn continues");
   await settleStoppingWorkers(app.baseUrl, id);
   await app.open(`/runs/${id}`);
   const progress = screen.getByRole("region", "Run settlement");
   await expect(progress).toContainText("Stopping workers…");
 
   // Act
-  await applyRunState(app.baseUrl, id, "stopped turns ended");
+  await applyRunState(app, id, "stopped turns ended");
 
   // Assert
   await expect.poll(async () => (await readHistoryRun(app.baseUrl, id)).lifecycle).toBe("settled");
@@ -631,7 +634,7 @@ test("a held Stop that ends settles the Run and removes its settlement progress"
 
 /** T3 ends the turns Settle asked to stop, and the Run settles. */
 async function finishStopping(baseUrl: string | undefined, id: string) {
-  await applyRunState(baseUrl, id, "stopped turns ended");
+  await applyRunState({ baseUrl }, id, "stopped turns ended");
   await expect.poll(async () => (await readHistoryRun(baseUrl, id)).lifecycle).toBe("settled");
 }
 
@@ -641,7 +644,7 @@ async function confirmSettleStillStopping(
   title: string,
 ) {
   const found = await findRun(app.baseUrl, title);
-  await applyRunState(app.baseUrl, found.id, "Stop taken while the turn continues");
+  await applyRunState(app, found.id, "Stop taken while the turn continues");
   await app.open(`/runs/${found.id}`);
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
   await row.secondaryTap();

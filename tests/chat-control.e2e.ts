@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, beforeEach, test } from "@e2e-dev/web";
+import { afterEach, beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import type {
   ChatModelSettings,
   DiscordSettings,
   Result,
 } from "../packages/contracts/src/index.ts";
-import { openApproved, remoteFixture } from "./support/remote-access.ts";
+import type { MessageFault } from "../apps/backend/test/support/controlled-discord.ts";
+import { fixtureHandles } from "./support/fixture/handle.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
+
+/** Participants, moderators and Discord itself, as the fixture's controlled Discord plays them. */
+const discord = (baseUrl: string | undefined) => fixtureHandles({ baseUrl }).discord;
 
 /**
  * A chat-completions provider on loopback that records the headers of each request and answers
@@ -93,9 +98,6 @@ afterEach(async ({ app }) => {
   }
   const off = await hostCall(app.baseUrl, "PUT", "/api/chat-control/enabled", { enabled: false });
   assert(off.ok, JSON.stringify(off));
-  await fetch(new URL("/__fixture/discord/commands?available=true", app.baseUrl), {
-    method: "POST",
-  });
   await provider.close();
 });
 
@@ -172,13 +174,7 @@ test("leaving the Language model page with unsaved edits asks before discarding 
 });
 
 /** The bot the fixture's controlled Discord knows and the Gateway sessions it saw. */
-async function controlledDiscord(baseUrl: string | undefined) {
-  const response = await fetch(new URL("/__fixture/discord", baseUrl), { method: "POST" });
-  return (await response.json()) as {
-    bot: { token: string; applicationId: string };
-    sessions: { token: string | null; ready: boolean; closed: boolean }[];
-  };
-}
+const controlledDiscord = (baseUrl: string | undefined) => discord(baseUrl).state();
 
 async function discordSettings(baseUrl: string | undefined) {
   const response = await fetch(new URL("/api/chat-control/discord", baseUrl));
@@ -303,6 +299,8 @@ test("the host saves Access on its own while connection edits stay unsaved", asy
 }) => {
   // Arrange
   const project = await firstProject(app.baseUrl);
+  const before = await discordSettings(app.baseUrl);
+  assert(before.ok);
   await app.open("/settings/chat-control/discord");
   await screen
     .getByRole("region", "Discord connection")
@@ -320,7 +318,9 @@ test("the host saves Access on its own while connection edits stay unsaved", asy
   await access.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(access.getByText(/^Saved .* · revision 1\.$/)).toBeVisible();
+  await expect(
+    access.getByText(new RegExp(`^Saved .* · revision ${before.value.access.revision + 1}\\.$`)),
+  ).toBeVisible();
   await expect(
     screen.getByRole("region", "Discord connection").getByText("Unsaved changes."),
   ).toBeVisible();
@@ -366,9 +366,7 @@ test("the host retries failed command setup while the Gateway is connected", asy
 }) => {
   // Arrange
   await completeChatControl(app.baseUrl);
-  await fetch(new URL("/__fixture/discord/commands?available=false", app.baseUrl), {
-    method: "POST",
-  });
+  await discord(app.baseUrl).commands({ available: false });
   const on = await hostCall(app.baseUrl, "PUT", "/api/chat-control/enabled", { enabled: true });
   assert(on.ok);
   await settingsWhen<DiscordSettings>(
@@ -384,9 +382,7 @@ test("the host retries failed command setup while the Gateway is connected", asy
   const connection = screen.getByRole("region", "Discord connection check");
   await connection.scrollIntoView();
   await app.screenshot("chat-discord-command-failed");
-  await fetch(new URL("/__fixture/discord/commands?available=true", app.baseUrl), {
-    method: "POST",
-  });
+  await discord(app.baseUrl).commands({ available: true });
 
   // Act
   await connection.getByRole("button", "Retry connection").tap();
@@ -402,8 +398,7 @@ test("an approved client's Settings has no Chat control section or search entry"
   screen,
 }) => {
   // Arrange
-  await remoteFixture(app, "compatible");
-  await app.open("/__fixture/remote-browser");
+  await openRemoteBrowser(app);
   await openApproved(app, "/settings/run-titles");
   const sections = screen.getByRole("navigation", "Settings sections");
   await expect(
@@ -496,7 +491,7 @@ test("an actual conversation failure shows on the Language model page and marks 
   // Arrange
   provider.state.failure = 500;
   await operatingChatControl(app.baseUrl);
-  await fetch(new URL("/__fixture/discord/invoke", app.baseUrl), { method: "POST" });
+  await discord(app.baseUrl).invoke();
   await settingsWhen<ChatModelSettings>(
     app.baseUrl,
     "/api/chat-control/model",
@@ -529,10 +524,7 @@ async function messagesWhen(
   until: (messages: FixtureMessage[]) => boolean,
 ) {
   for (let attempt = 0; attempt < OBSERVATION_ATTEMPTS; attempt++) {
-    const response = await fetch(new URL("/__fixture/discord/messages", baseUrl), {
-      method: "POST",
-    });
-    const messages = (await response.json()) as FixtureMessage[];
+    const messages = await discord(baseUrl).messages();
     if (until(messages)) return messages;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -547,7 +539,7 @@ const receipts = (messages: FixtureMessage[]) =>
  * A participant's Start of `prompt`, confirmed with its button after Discord was told to meet the
  * next message creates with `faults`. Returns the thread and the number of receipts before it.
  */
-async function confirmedStart(baseUrl: string | undefined, prompt: string, faults: string[]) {
+async function confirmedStart(baseUrl: string | undefined, prompt: string, faults: MessageFault[]) {
   const project = await firstProject(baseUrl);
   const flows = (await (await fetch(new URL("/api/flows", baseUrl))).json()) as Result<
     { id: string; name: string; readiness: { ready: boolean } }[]
@@ -559,11 +551,7 @@ async function confirmedStart(baseUrl: string | undefined, prompt: string, fault
     name: "start_run",
     input: { projectId: project.id, flowId: flow.id, prompt, promptSource: "requester-message" },
   };
-  const invoked = await fetch(
-    new URL(`/__fixture/discord/invoke?content=${encodeURIComponent(`start: ${prompt}`)}`, baseUrl),
-    { method: "POST" },
-  );
-  const { id: thread } = (await invoked.json()) as { id: string };
+  const { id: thread } = await discord(baseUrl).invoke({ content: `start: ${prompt}` });
   const messages = await messagesWhen(baseUrl, (created) =>
     created.some((message) => message.channelId === thread && message.customId !== null),
   );
@@ -571,11 +559,8 @@ async function confirmedStart(baseUrl: string | undefined, prompt: string, fault
     (message) => message.channelId === thread && message.customId !== null,
   )!;
   const before = receipts(messages).length;
-  for (const fault of faults)
-    await fetch(new URL(`/__fixture/discord/fault?fault=${fault}`, baseUrl), { method: "POST" });
-  await fetch(new URL(`/__fixture/discord/click?thread=${thread}&customId=${customId}`, baseUrl), {
-    method: "POST",
-  });
+  await discord(baseUrl).fault({ faults });
+  await discord(baseUrl).click({ thread, customId: customId! });
   return { thread, before };
 }
 
@@ -612,7 +597,7 @@ async function unknownReceipt(baseUrl: string | undefined) {
   await settingsWhen<DiscordSettings>(baseUrl, "/api/chat-control/discord", (settings) =>
     settings.delivery.problems.some((problem) => problem.state === "unknown"),
   );
-  await fetch(new URL("/__fixture/discord/nonce-window", baseUrl), { method: "POST" });
+  await discord(baseUrl).nonceWindow();
   return { before, runId: await receiptRunId(baseUrl, thread) };
 }
 
@@ -699,9 +684,7 @@ test("the host retries the status card Discord refused in a locked thread once a
   await messagesWhen(app.baseUrl, (created) =>
     created.some((message) => message.channelId === thread && CARD.test(message.content)),
   );
-  await fetch(new URL(`/__fixture/discord/thread?thread=${thread}&state=locked`, app.baseUrl), {
-    method: "POST",
-  });
+  await discord(app.baseUrl).thread({ thread, state: "locked" });
   // Archiving the Run changes its card and owes an Archived notice; Discord refuses both in the
   // locked thread.
   const archived = await hostCall(app.baseUrl, "POST", `/api/runs/${runId}/archive`, undefined);
@@ -719,9 +702,7 @@ test("the host retries the status card Discord refused in a locked thread once a
     .getByRole("listitem", "Lifecycle notice, Failed");
   await expect(notice.getByText(LOCKED_CORRECTION)).toBeVisible();
   await app.screenshot("chat-discord-status-card-failed");
-  await fetch(new URL(`/__fixture/discord/thread?thread=${thread}&state=unlocked`, app.baseUrl), {
-    method: "POST",
-  });
+  await discord(app.baseUrl).thread({ thread, state: "unlocked" });
 
   // Act
   await card.getByRole("button", "Retry").tap();

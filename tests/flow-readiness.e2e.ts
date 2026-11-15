@@ -1,24 +1,21 @@
 import { applyRunState } from "./support/scenarios.ts";
-import { copyAgentDefinition, repairCodexReporting } from "./support/agents.ts";
-import assert from "node:assert/strict";
-import { afterEach, beforeEach, test } from "@e2e-dev/web";
+import {
+  copyAgentDefinition,
+  removeAgentElsewhere,
+  repairCodexReporting,
+} from "./support/agents.ts";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { openComposerWithFlow } from "./support/composer.ts";
-import { saveFlowCopy } from "./support/flows.ts";
-import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
+import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
+import { archiveJourneyRun, findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1100 });
 });
 
-afterEach(async ({ app }) => {
-  const restored = await fetch(new URL("/__fixture/readiness/restore", app.baseUrl), {
-    method: "POST",
-  });
-  assert(restored.ok);
-});
-
 test("Start names every blocked Agent including later branches and succeeds after repair", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -26,10 +23,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   // Arrange
   await openComposerWithFlow(app, screen, "Demo · Parallel review");
   await screen.getByLabel("Initial prompt", { exact: false }).fill("UI whole Flow readiness");
-  const broken = await fetch(new URL("/__fixture/reporting/break", app.baseUrl), {
-    method: "POST",
-  });
-  assert(broken.ok);
+  await fixture.reporting.breakRequiredSkill();
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();
@@ -61,9 +55,8 @@ test("Start names every blocked Agent including later branches and succeeds afte
     .poll(async () => (await readHistoryRun(app.baseUrl, created.id)).activations.length)
     .toBe(1);
   await app.screenshot("whole-flow-start-accepted");
-  await applyRunState(app.baseUrl, created.id, "result reported", "Ready for parallel review.");
-  const finished = await applyRunState(app.baseUrl, created.id, "result released to two workers");
-  assert(finished.ok);
+  await applyRunState(app, created.id, "result reported", "Ready for parallel review.");
+  await applyRunState(app, created.id, "result released to two workers");
   await browser.reload();
   await expect(screen.getByRole("region", "Block activations")).toContainText(
     "Ready for parallel review.",
@@ -72,6 +65,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   expect(run.reports[0]?.completionEligibleAt).not.toBe(null);
   expect(run.activations).toHaveLength(3);
   await app.screenshot("whole-flow-result-accepted");
+  await archiveJourneyRun(app.baseUrl, created.id);
 });
 
 test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays blocked", async ({
@@ -85,7 +79,7 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
     "Model-less accessibility reviewer",
     { modelLess: true },
   );
-  await saveFlowCopy(
+  const flow = await saveFlowCopy(
     app.baseUrl,
     "Demo · Parallel review",
     "Model-less later review",
@@ -109,9 +103,12 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
     "Needs a model",
   );
   await app.screenshot("model-less-agent-canvas-tag");
+  await removeFlowElsewhere(app.baseUrl, flow);
+  await removeAgentElsewhere(app.baseUrl, agent.id);
 });
 
 test("Agent-scoped runtime contract blockers point to the connection without blaming Agents", async ({
+  fixture,
   app,
   screen,
 }) => {
@@ -120,10 +117,7 @@ test("Agent-scoped runtime contract blockers point to the connection without bla
   await screen
     .getByLabel("Initial prompt", { exact: false })
     .fill("UI incomplete runtime contract");
-  const incomplete = await fetch(new URL("/__fixture/readiness/incomplete-runtime", app.baseUrl), {
-    method: "POST",
-  });
-  assert(incomplete.ok);
+  await fixture.reporting.incompleteRuntime();
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();
@@ -145,7 +139,7 @@ test("a worktree Flow whose custom base ref is missing blocks Start with a Studi
   screen,
 }) => {
   // Arrange
-  await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Missing base worktree", {
+  const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Missing base worktree", {
     mode: "worktree",
     base: { kind: "ref", ref: "release/missing" },
   });
@@ -163,4 +157,5 @@ test("a worktree Flow whose custom base ref is missing blocks Start with a Studi
   await app.screenshot("workspace-base-blocker");
   await expect(screen.getByRole("link", "Open Studio → Agents", { exact: true })).toHaveCount(0);
   expect(await runsTitled(app.baseUrl, "UI missing worktree base")).toHaveLength(0);
+  await removeFlowElsewhere(app.baseUrl, flow);
 });
