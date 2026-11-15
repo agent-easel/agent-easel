@@ -10,7 +10,6 @@ import * as SqlClient from "effect/sql/SqlClient";
 import {
   PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_VERSION,
-  type AgentCapabilities,
   type AgentDefinition,
   type FactoryOperations,
   type FlowBlock,
@@ -35,12 +34,7 @@ import {
   validateUpdateAgent,
   validateUpdateFlow,
 } from "@t3-factory/domain-validation";
-import {
-  agentSettingsStatus,
-  emptyCapabilities,
-  readyCapabilities,
-  unsupportedReportingFailure,
-} from "./agents.ts";
+import { emptyCapabilities, readyCapabilities, unsupportedReportingFailure } from "./agents.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { LiveChanges } from "./live-changes.ts";
@@ -75,14 +69,6 @@ import {
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
-const toAgent = (agent: AgentRevision, capabilities: AgentCapabilities | null): AgentDefinition =>
-  agent.execution === null
-    ? { ...agent, execution: null, settingsStatus: null }
-    : {
-        ...agent,
-        execution: agent.execution,
-        settingsStatus: agentSettingsStatus(agent.execution, capabilities),
-      };
 const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
   readiness: flowReadiness(flow.graph, agents),
@@ -153,6 +139,8 @@ export const makeDefinitions = (
       );
     const provideSql = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
       operation.pipe(Effect.provideService(SqlClient.SqlClient, sql));
+    const transaction = <A>(operation: Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>) =>
+      provideSql(sql.withTransaction(operation));
     /** Flow readiness resolves blocks against the current saved Agents, their exits and models. */
     const readinessAgents = Effect.gen(function* () {
       const agents = yield* readCurrentAgents(sql);
@@ -259,34 +247,16 @@ export const makeDefinitions = (
         ),
       );
     });
-    /** Agent reads and writes report settings availability against capabilities loaded before SQL runs. */
-    function agentOperation<A>(
-      operation: (
-        sql: SqlClient.SqlClient,
-        capabilities: AgentCapabilities,
-      ) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
-    ): Effect.Effect<Result<A>, unknown> {
-      return Effect.gen(function* () {
-        const capabilities = yield* loadCapabilities();
-        return yield* provideSql(sql.withTransaction(operation(sql, capabilities)));
-      });
-    }
-    function savedAgentOperation(
+    /** Runs `operation` on the current revision of Agent `id`, refusing a missing Agent. */
+    const withSavedAgent = <A>(
       id: string,
-      operation: (
-        sql: SqlClient.SqlClient,
-        agent: AgentRevision,
-        capabilities: AgentCapabilities,
-      ) => Effect.Effect<Result<AgentDefinition>, unknown, SqlClient.SqlClient>,
-    ): Effect.Effect<Result<AgentDefinition>, unknown> {
-      return agentOperation((sql, capabilities) =>
-        Effect.gen(function* () {
-          const [agent] = yield* readCurrentAgents(sql, id);
-          if (!agent) return failure("not_found", "This Agent does not exist.");
-          return yield* operation(sql, agent, capabilities);
-        }),
-      );
-    }
+      operation: (agent: AgentRevision) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
+    ) =>
+      Effect.gen(function* () {
+        const [agent] = yield* readCurrentAgents(sql, id);
+        if (!agent) return failure("not_found", "This Agent does not exist.");
+        return yield* operation(agent);
+      });
     /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
      * block and exit ids, positions and the workspace arrive as exported. */
     const importFlow = Effect.fnUntraced(function* (
@@ -428,155 +398,166 @@ export const makeDefinitions = (
       getAgentCapabilities: () =>
         loadCapabilities().pipe(Effect.map((value) => ({ ok: true as const, value }))),
       listAgents: () =>
-        agentOperation((sql, capabilities) =>
-          Effect.gen(function* () {
-            const agents = yield* readCurrentAgents(sql);
-            return {
-              ok: true as const,
-              value: agents.map((agent) => toAgent(agent, capabilities)),
-            };
-          }),
+        transaction(
+          readCurrentAgents(sql).pipe(
+            Effect.map((agents) => ({ ok: true as const, value: agents })),
+          ),
         ),
       getAgent: (id) =>
-        savedAgentOperation(id, (_sql, agent, capabilities) =>
-          Effect.sync(() => ({ ok: true as const, value: toAgent(agent, capabilities) })),
+        transaction(
+          withSavedAgent(id, (agent) => Effect.succeed({ ok: true as const, value: agent })),
         ),
       createAgent(input) {
         const validated = validateCreateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return agentOperation<AgentDefinition>((sql, capabilities) =>
-          Effect.gen(function* () {
-            const unsupported = unsupportedReportingFailure(
-              validated.value.execution,
-              capabilities,
-            );
-            if (unsupported) return unsupported;
-            const now = yield* currentTime;
-            const agent: AgentRevision = {
-              id: yield* newId,
-              name: validated.value.name,
-              prompt: validated.value.prompt,
-              execution: validated.value.execution,
-              exits: validated.value.exits,
-              revision: 1,
-              createdAt: now,
-              updatedAt: now,
-            };
-            yield* sql`INSERT INTO agents (id, created_at) VALUES (${agent.id}, ${now})`;
-            yield* appendAgentRevision(sql, agent);
-            return { ok: true as const, value: toAgent(agent, capabilities) };
-          }),
-        );
+        return Effect.gen(function* () {
+          const capabilities = yield* loadCapabilities();
+          return yield* transaction<AgentDefinition>(
+            Effect.gen(function* () {
+              const unsupported = unsupportedReportingFailure(
+                validated.value.execution,
+                capabilities,
+              );
+              if (unsupported) return unsupported;
+              const now = yield* currentTime;
+              const agent: AgentRevision = {
+                id: yield* newId,
+                name: validated.value.name,
+                prompt: validated.value.prompt,
+                execution: validated.value.execution,
+                exits: validated.value.exits,
+                revision: 1,
+                createdAt: now,
+                updatedAt: now,
+              };
+              yield* sql`INSERT INTO agents (id, created_at) VALUES (${agent.id}, ${now})`;
+              yield* appendAgentRevision(sql, agent);
+              return { ok: true as const, value: agent };
+            }),
+          );
+        });
       },
       updateAgent(id, input) {
         const validated = validateUpdateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return savedAgentOperation(id, (sql, saved, capabilities) =>
-          Effect.gen(function* () {
-            if (saved.revision !== validated.value.expectedRevision) return staleRevision("Agent");
-            const unsupported = unsupportedReportingFailure(
-              validated.value.execution,
-              capabilities,
-            );
-            if (unsupported) return unsupported;
-            const agent: AgentRevision = {
-              ...saved,
-              name: validated.value.name,
-              prompt: validated.value.prompt,
-              execution: validated.value.execution,
-              exits: validated.value.exits,
-              revision: saved.revision + 1,
-              updatedAt: yield* currentTime,
-            };
-            yield* appendAgentRevision(sql, agent);
-            return { ok: true as const, value: toAgent(agent, capabilities) };
-          }),
-        );
+        return Effect.gen(function* () {
+          const capabilities = yield* loadCapabilities();
+          return yield* transaction(
+            withSavedAgent<AgentDefinition>(id, (saved) =>
+              Effect.gen(function* () {
+                if (saved.revision !== validated.value.expectedRevision)
+                  return staleRevision("Agent");
+                const unsupported = unsupportedReportingFailure(
+                  validated.value.execution,
+                  capabilities,
+                );
+                if (unsupported) return unsupported;
+                const agent: AgentRevision = {
+                  ...saved,
+                  name: validated.value.name,
+                  prompt: validated.value.prompt,
+                  execution: validated.value.execution,
+                  exits: validated.value.exits,
+                  revision: saved.revision + 1,
+                  updatedAt: yield* currentTime,
+                };
+                yield* appendAgentRevision(sql, agent);
+                return { ok: true as const, value: agent };
+              }),
+            ),
+          );
+        });
       },
       duplicateAgent(id, input) {
         const validated = validateDuplicateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return savedAgentOperation(id, (sql, saved, capabilities) =>
-          Effect.gen(function* () {
-            const now = yield* currentTime;
-            const copy: AgentRevision = {
-              ...saved,
-              id: yield* newId,
-              name: validated.value.name ?? `${saved.name.trim()} copy`,
-              revision: 1,
-              createdAt: now,
-              updatedAt: now,
-            };
-            yield* sql`INSERT INTO agents (id, created_at) VALUES (${copy.id}, ${now})`;
-            yield* appendAgentRevision(sql, copy);
-            return { ok: true as const, value: toAgent(copy, capabilities) };
-          }),
-        );
-      },
-      removeAgent(id) {
-        return provideSql<void>(
-          sql.withTransaction(
+        return transaction(
+          withSavedAgent(id, (saved) =>
             Effect.gen(function* () {
-              const [agent] = yield* sql<{
-                id: string;
-              }>`SELECT id FROM agents WHERE id=${id} AND removed_at IS NULL`;
-              if (!agent) return { ok: true as const, value: undefined };
-              const flows = yield* currentFlowsReferencingAgent(sql, id);
-              if (flows.length > 0)
-                return failure(
-                  "conflict",
-                  "This Agent is used in saved Flows. Remove those references before deleting it.",
-                  flows.map((flow) => ({
-                    code: "agent_in_use",
-                    path: "agentId",
-                    message: `Flow "${flow.name}" (${flow.id}) places this Agent.`,
-                  })),
-                );
-              yield* sql`UPDATE agents SET removed_at=${yield* currentTime} WHERE id=${id}`;
-              return { ok: true as const, value: undefined };
+              const now = yield* currentTime;
+              const copy: AgentRevision = {
+                ...saved,
+                id: yield* newId,
+                name: validated.value.name ?? `${saved.name.trim()} copy`,
+                revision: 1,
+                createdAt: now,
+                updatedAt: now,
+              };
+              yield* sql`INSERT INTO agents (id, created_at) VALUES (${copy.id}, ${now})`;
+              yield* appendAgentRevision(sql, copy);
+              return { ok: true as const, value: copy };
             }),
           ),
         );
       },
+      removeAgent(id) {
+        return transaction<void>(
+          Effect.gen(function* () {
+            const [agent] = yield* sql<{
+              id: string;
+            }>`SELECT id FROM agents WHERE id=${id} AND removed_at IS NULL`;
+            if (!agent) return { ok: true as const, value: undefined };
+            const flows = yield* currentFlowsReferencingAgent(sql, id);
+            if (flows.length > 0)
+              return failure(
+                "conflict",
+                "This Agent is used in saved Flows. Remove those references before deleting it.",
+                flows.map((flow) => ({
+                  code: "agent_in_use",
+                  path: "agentId",
+                  message: `Flow "${flow.name}" (${flow.id}) places this Agent.`,
+                })),
+              );
+            yield* sql`UPDATE agents SET removed_at=${yield* currentTime} WHERE id=${id}`;
+            return { ok: true as const, value: undefined };
+          }),
+        );
+      },
       exportAgent: (id) =>
-        agentOperation((sql, capabilities) =>
-          Effect.gen(function* () {
-            const [agent] = yield* readCurrentAgents(sql, id);
-            if (!agent) return failure("not_found", "This Agent does not exist.");
-            return definitionExport(
-              {
-                format: PORTABLE_DOCUMENT_FORMAT,
-                formatVersion: PORTABLE_DOCUMENT_VERSION,
-                kind: "agent",
-                factoryVersion,
-                exportedAt: yield* currentTime,
-                agents: [portableAgent(agent, "agent-1", capabilities)],
-              },
-              [agent],
-            );
-          }),
-        ),
+        Effect.gen(function* () {
+          const capabilities = yield* loadCapabilities();
+          return yield* transaction(
+            withSavedAgent(id, (agent) =>
+              Effect.gen(function* () {
+                return definitionExport(
+                  {
+                    format: PORTABLE_DOCUMENT_FORMAT,
+                    formatVersion: PORTABLE_DOCUMENT_VERSION,
+                    kind: "agent",
+                    factoryVersion,
+                    exportedAt: yield* currentTime,
+                    agents: [portableAgent(agent, "agent-1", capabilities)],
+                  },
+                  [agent],
+                );
+              }),
+            ),
+          );
+        }),
       exportFlow: (id) =>
-        agentOperation((sql, capabilities) =>
-          Effect.gen(function* () {
-            const [flow] = yield* readCurrentFlows(sql, id);
-            if (!flow) return flowNotFound();
-            const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
-            return definitionExport(
-              {
-                format: PORTABLE_DOCUMENT_FORMAT,
-                formatVersion: PORTABLE_DOCUMENT_VERSION,
-                kind: "flow",
-                factoryVersion,
-                exportedAt: yield* currentTime,
-                flow: portable.flow,
-                agents: portable.agents,
-              },
-              portable.revisions,
-              flow,
-            );
-          }),
-        ),
+        Effect.gen(function* () {
+          const capabilities = yield* loadCapabilities();
+          return yield* transaction(
+            Effect.gen(function* () {
+              const [flow] = yield* readCurrentFlows(sql, id);
+              if (!flow) return flowNotFound();
+              const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
+              return definitionExport(
+                {
+                  format: PORTABLE_DOCUMENT_FORMAT,
+                  formatVersion: PORTABLE_DOCUMENT_VERSION,
+                  kind: "flow",
+                  factoryVersion,
+                  exportedAt: yield* currentTime,
+                  flow: portable.flow,
+                  agents: portable.agents,
+                },
+                portable.revisions,
+                flow,
+              );
+            }),
+          );
+        }),
       reviewImport(file) {
         const document = parsePortableFile(file.data);
         if (!document.ok) return Effect.succeed(document);
@@ -643,12 +624,9 @@ export const makeDefinitions = (
         );
       },
     };
-    /**
-     * Both lists from one read transaction, so every Flow's readiness matches the Agents read
-     * with it. Capabilities load first, outside the transaction, as for the Agent list.
-     */
+    /** Both lists from one read transaction, so every Flow's readiness matches the Agents read with it. */
     const readStudio = (): Effect.Effect<Result<StudioDefinitions>, unknown> =>
-      agentOperation((sql, capabilities) =>
+      transaction(
         Effect.gen(function* () {
           const agents = yield* readCurrentAgents(sql);
           const flows = yield* readCurrentFlows(sql);
@@ -656,7 +634,7 @@ export const makeDefinitions = (
           return {
             ok: true as const,
             value: {
-              agents: agents.map((agent) => toAgent(agent, capabilities)),
+              agents,
               flows: flows.map((flow) => toDraft(flow, readiness)),
             },
           };

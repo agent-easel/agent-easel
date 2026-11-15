@@ -1,10 +1,10 @@
 import type { CallToolResult, Tool } from "@modelcontextprotocol/server";
 import type {
+  AgentDefinition,
   AgentExecutionSettingsStatus,
   FactoryOperations,
   OperationError,
   Result,
-  SavedAgent,
 } from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
@@ -311,24 +311,24 @@ const removal = (key: "agentId" | "flowId", remove: (id: string) => Promise<Resu
   });
 
 /** An Agent in an authoring reply: its saved fields and the settings status the tool judged. */
-type ReportedAgent = SavedAgent & {
+type ReportedAgent = AgentDefinition & {
   readonly settingsStatus: AgentExecutionSettingsStatus | null;
 };
 
 /**
- * Judges settings status from a catalog loaded after the Agent operation succeeds, replacing any
- * status the operation carries. T3 being down yields an unavailable catalog.
+ * Judges settings status from a catalog loaded after the Agent operation succeeds; Agent operations
+ * read SQL only. T3 being down yields an unavailable catalog.
  */
 async function withSettingsStatus<A, B>(
   factory: AuthoringOperations,
   result: Result<A>,
-  reply: (value: A, report: (agent: SavedAgent) => ReportedAgent) => B,
+  reply: (value: A, report: (agent: AgentDefinition) => ReportedAgent) => B,
 ): Promise<Result<B>> {
   if (!result.ok) return result;
   const capabilities = await factory.getAgentCapabilities();
   if (!capabilities.ok) return capabilities;
   const catalog = capabilities.value;
-  const report = (agent: SavedAgent): ReportedAgent => ({
+  const report = (agent: AgentDefinition): ReportedAgent => ({
     ...agent,
     settingsStatus: agent.execution ? agentSettingsStatus(agent.execution, catalog) : null,
   });

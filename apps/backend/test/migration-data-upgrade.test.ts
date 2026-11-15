@@ -143,11 +143,7 @@ it("after upgrading v0.2.0 the released Agent saves without a model while its ca
 
   // Assert
   assert(saved.ok);
-  expect(saved.value).toMatchObject({
-    revision: fixture.agent.revision + 1,
-    execution: null,
-    settingsStatus: null,
-  });
+  expect(saved.value).toMatchObject({ revision: fixture.agent.revision + 1, execution: null });
   expect(await factory.getRun(fixture.stopped.id)).toStrictEqual({
     ok: true,
     value: currentRun(fixture.stopped, "archived", fixture.flow.revision),

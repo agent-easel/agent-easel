@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { agentSettingsStatus } from "../src/agents.ts";
 import { authorizedLiveOAuth } from "./support/boundaries-setup.ts";
 
 const liveCatalog = {
@@ -49,46 +50,38 @@ it("orchestrator capability reads preserve live model option values and choices"
   ]);
 });
 
-it("agent settings mark fastMode unavailable when the live catalog allows only false", async (c) => {
+it("settings status marks fastMode unavailable when the live catalog allows only false", async (c) => {
   // Arrange
   const { factory } = await authorizedLiveOAuth(c, { capabilities: () => liveCatalog });
+  const execution = {
+    environmentId: "fixture-environment",
+    providerInstanceId: "codex",
+    modelId: "gpt-6.1-sol",
+    modelOptions: [{ id: "fastMode", value: true }],
+  };
 
   // Act
-  const saved = await factory.createAgent({
-    name: "fastMode-true",
-    prompt: "Work",
-    execution: {
-      environmentId: "fixture-environment",
-      providerInstanceId: "codex",
-      modelId: "gpt-6.1-sol",
-      modelOptions: [{ id: "fastMode", value: true }],
-    },
-    exits: [],
-  });
+  const capabilities = await factory.getAgentCapabilities();
 
   // Assert
-  assert(saved.ok);
-  expect(saved.value.settingsStatus?.options[0]?.state).toBe("unavailable");
+  assert(capabilities.ok);
+  expect(agentSettingsStatus(execution, capabilities.value).options[0]?.state).toBe("unavailable");
 });
 
-it("agent settings mark mixed values outside the live catalog as unavailable", async (c) => {
+it("settings status marks mixed values outside the live catalog as unavailable", async (c) => {
   // Arrange
   const { factory } = await authorizedLiveOAuth(c, { capabilities: () => liveCatalog });
+  const execution = {
+    environmentId: "fixture-environment",
+    providerInstanceId: "codex",
+    modelId: "gpt-6.1-sol",
+    modelOptions: [{ id: "mixed", value: true }],
+  };
 
   // Act
-  const saved = await factory.createAgent({
-    name: "mixed-true",
-    prompt: "Work",
-    execution: {
-      environmentId: "fixture-environment",
-      providerInstanceId: "codex",
-      modelId: "gpt-6.1-sol",
-      modelOptions: [{ id: "mixed", value: true }],
-    },
-    exits: [],
-  });
+  const capabilities = await factory.getAgentCapabilities();
 
   // Assert
-  assert(saved.ok);
-  expect(saved.value.settingsStatus?.options[0]?.state).toBe("unavailable");
+  assert(capabilities.ok);
+  expect(agentSettingsStatus(execution, capabilities.value).options[0]?.state).toBe("unavailable");
 });

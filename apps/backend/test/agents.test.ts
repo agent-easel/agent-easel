@@ -4,6 +4,7 @@ import {
   readAgentAfterRestart,
   sampleAgentInput,
 } from "./support/domain-setup.ts";
+import { subscribe } from "./support/live.ts";
 
 const reviewExits = [
   { id: "pass", name: "pass", description: "The change is ready.", messageRequired: false },
@@ -28,7 +29,7 @@ it("saved Agent definitions survive restart with execution settings and exits in
   expect(recovered.value.exits).toStrictEqual(reviewExits);
 });
 
-it("an Agent saved without a model reads back after restart with no execution settings or settings status", async (context) => {
+it("an Agent saved without a model reads back after restart with no execution settings", async (context) => {
   // Arrange
   const { harness, factory } = await openFactoryWithApprovedT3(context);
   const created = await factory.createAgent(sampleAgentInput());
@@ -46,7 +47,7 @@ it("an Agent saved without a model reads back after restart with no execution se
 
   // Assert
   expect(recovered).toStrictEqual({ ok: true, value: cleared.value });
-  expect(cleared.value).toMatchObject({ revision: 2, execution: null, settingsStatus: null });
+  expect(cleared.value).toMatchObject({ revision: 2, execution: null });
 });
 
 it("renaming an Agent exit appends a revision that keeps the exit's identity", async (context) => {
@@ -132,21 +133,30 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
   });
 });
 
-it("listAgents preserves saved execution when capabilities are unavailable", async (context) => {
+it("Agent lists, Agent reads and the Studio snapshot answer from saved definitions without calling T3", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   const saved = await factory.createAgent(sampleAgentInput());
   assert(saved.ok);
   t3.capabilitiesAvailable = false;
+  const capabilityReads = t3.capabilityReads;
 
   // Act
-  const listed = await factory.listAgents();
+  const studio = subscribe(context, factory.live.watchStudio());
+  const [listed, read, [snapshot]] = await Promise.all([
+    factory.listAgents(),
+    factory.getAgent(saved.value.id),
+    studio.until((messages) => messages.length > 0),
+  ]);
 
   // Assert
-  assert(listed.ok);
-  const original = listed.value.find((agent) => agent.id === saved.value.id);
-  expect(original?.execution?.modelId).toBe("gpt-6.1-sol");
-  expect(original?.settingsStatus?.model.state).toBe("unknown");
+  expect(listed).toStrictEqual({ ok: true, value: [saved.value] });
+  expect(read).toStrictEqual({ ok: true, value: saved.value });
+  expect(snapshot).toStrictEqual({
+    _tag: "snapshot",
+    studio: { agents: [saved.value], flows: [] },
+  });
+  expect(t3.capabilityReads).toBe(capabilityReads);
 });
 
 it("Agent input missing required fields is rejected without creating a definition", async (context) => {

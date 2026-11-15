@@ -231,7 +231,6 @@ it("factory_save_agent with execution null saves the next revision without a mod
   expect(assertOk(await factory.getAgent(saved.id))).toMatchObject({
     revision: saved.revision + 1,
     execution: null,
-    settingsStatus: null,
   });
 });
 
