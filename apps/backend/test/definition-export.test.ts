@@ -22,7 +22,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 1,
+        formatVersion: 2,
         kind: "agent",
         factoryVersion: "source",
         exportedAt: expect.any(String),
@@ -116,7 +116,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     value: {
       document: {
         format: "t3-factory/definitions",
-        formatVersion: 1,
+        formatVersion: 2,
         kind: "flow",
         factoryVersion: "source",
         exportedAt: expect.any(String),
