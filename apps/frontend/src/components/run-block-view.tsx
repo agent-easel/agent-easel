@@ -373,9 +373,8 @@ function TechnicalDetails({
   threadId: string | null | undefined;
   observationUnavailable: boolean;
 }) {
-  const references = block.kind !== "wait";
-  const observation = block.kind !== "continuation";
-  const hint = [references && "thread · execution", observation && "observation"]
+  const { references, freshness } = BLOCK_KINDS[block.kind].observed;
+  const hint = [references && "thread · execution", freshness && "observation"]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -387,7 +386,7 @@ function TechnicalDetails({
             <p>Exact execution: {recorded.executionId ?? "unresolved"}</p>
           </>
         )}
-        {observation && (
+        {freshness && (
           <p>
             Observation: {observationUnavailable ? "stale" : recorded.freshness}
             {recorded.observedAt ? ` · ${dayAndTime(recorded.observedAt)}` : ""}
@@ -502,7 +501,7 @@ export function RunBlockView({
           </Button>
         ) : (
           <p className="text-xs text-subtle-foreground">
-            {block.kind === "wait" ? "A Wait has no T3 thread" : "No T3 thread yet"}
+            {BLOCK_KINDS[block.kind].observed.noThread}
           </p>
         )}
       </footer>

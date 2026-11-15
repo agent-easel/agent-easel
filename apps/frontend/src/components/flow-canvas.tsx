@@ -32,7 +32,7 @@ import {
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { blockIdentity, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
-import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
+import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 
 /** Places a block dragged by `grab` at viewport point x/y, or null when x/y is outside the canvas. */
 export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | null;
@@ -350,7 +350,6 @@ function authoringBlock({
   drag: DragHandlers;
   connectFrom: (exit: CanvasBlock["exits"][number]) => DragHandlers;
 }): CanvasBlockContent {
-  const human = block.kind === "human";
   const name = block.name || "Unnamed block";
   const { tags, describedBy } = agentBlockTags(block, agents);
   const reference = blockReference(block, { graph, agents }).card;
@@ -370,7 +369,7 @@ function authoringBlock({
   return {
     className: cn(
       "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
-      human && "border-dashed border-border-strong",
+      BLOCK_KINDS[block.kind].dashedFrame && "border-dashed border-border-strong",
       selected && "border-primary ring-4 ring-primary/20 hover:border-primary",
       dragging && "z-10 cursor-grabbing shadow-lift",
       connectTarget && "ring-2 ring-primary/30",
@@ -398,7 +397,7 @@ function authoringBlock({
       exit.unavailable
         ? unavailablePort
         : connectionHandle(
-            exit.source === "wait" || exit.source === "continuation"
+            isSingleOutput(exit)
               ? `Connect output of ${name}`
               : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`,
             connectingExitId === exit.id,
@@ -432,7 +431,7 @@ export function BlockPreview({
       aria-hidden
       className={cn(
         "rounded-lg bg-card",
-        kind === "human" && "border-dashed border-border-strong",
+        BLOCK_KINDS[kind].dashedFrame && "border-dashed border-border-strong",
         className,
       )}
       style={{ ...style, width: rows.width, borderWidth: rows.border }}

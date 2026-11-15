@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import type { AgentDefinition, FlowBlock, FlowConnection, FlowGraph } from "@t3-factory/contracts";
-import { blockReference } from "../src/block-kind.ts";
+import { effectiveExits } from "@t3-factory/domain-validation";
+import { blockReference, isSingleOutput } from "../src/block-kind.ts";
 import { savedAgent } from "./support/agent-draft.ts";
 
 const position = { x: 0, y: 0 };
@@ -163,4 +164,36 @@ it("a Continuation without an Agent before it says so as absent", () => {
     line: { text: "no Agent before it", tone: "absent" },
     header: "Continuation · no Agent before it",
   });
+});
+
+it("only a Wait's and a Continuation's output are a single unnamed output", () => {
+  // Arrange
+  const agent = savedAgent();
+  const review: FlowBlock = {
+    id: "review",
+    name: "Review",
+    position,
+    kind: "agent",
+    agentId: agent.id,
+    hiddenExitIds: [],
+    localExits: [{ id: "blocked", name: "blocked", description: "", messageRequired: false }],
+    revisitInstruction: "",
+  };
+  const approval: FlowBlock = { id: "approval", name: "Approval", position, kind: "human" };
+  const exits = [review, approval, waitBlock(null), continuation].flatMap((block) =>
+    effectiveExits(block, [agent]),
+  );
+
+  // Act
+  const unnamed = exits.map((exit) => [exit.source, isSingleOutput(exit)]);
+
+  // Assert
+  expect(unnamed).toStrictEqual([
+    ["agent", false],
+    ["local", false],
+    ["human", false],
+    ["human", false],
+    ["wait", true],
+    ["continuation", true],
+  ]);
 });

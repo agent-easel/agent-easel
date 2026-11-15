@@ -3,7 +3,7 @@ import { TextCursorInput } from "lucide-react";
 import type { FlowBlock } from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { cn } from "@/lib/utils";
-import { BLOCK_KINDS } from "../block-kind.ts";
+import { BLOCK_KINDS, isSingleOutput } from "../block-kind.ts";
 
 const EXIT_SOURCE_LABELS: Record<EffectiveExit["source"], string> = {
   agent: "Agent",
@@ -26,9 +26,7 @@ export function exitDisplayName(
   exit: Pick<EffectiveExit, "name" | "source">,
   singleOutputLabel = "",
 ) {
-  return exit.source === "wait" || exit.source === "continuation"
-    ? singleOutputLabel
-    : exit.name || "Unnamed exit";
+  return isSingleOutput(exit) ? singleOutputLabel : exit.name || "Unnamed exit";
 }
 
 /** Where an exit comes from, and whether finishing on it needs a message. */

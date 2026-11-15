@@ -208,13 +208,6 @@ function attentionFooterText(human: boolean, needsInput: boolean) {
 
 type BlockObservation = ReturnType<typeof blockObservation>;
 
-const EXECUTION_KIND_LABELS: Record<FlowBlock["kind"], string> = {
-  agent: "AGENT",
-  human: "HUMAN",
-  wait: "WAIT",
-  continuation: "CONTINUATION",
-};
-
 function ExecutionBlockHeader({
   kind,
   state,
@@ -222,7 +215,7 @@ function ExecutionBlockHeader({
   kind: FlowBlock["kind"];
   state: RunBlock["state"];
 }) {
-  const KindIcon = BLOCK_KINDS[kind].Icon;
+  const { Icon: KindIcon, executionLabel } = BLOCK_KINDS[kind];
   return (
     <span className="flex flex-1 items-center gap-1.5 pt-2 pr-2.5 pl-3">
       <KindIcon
@@ -231,7 +224,7 @@ function ExecutionBlockHeader({
         strokeWidth={1.75}
       />
       <span className="text-2xs leading-3 font-semibold tracking-section text-subtle-foreground">
-        {EXECUTION_KIND_LABELS[kind]}
+        {executionLabel}
       </span>
     </span>
   );

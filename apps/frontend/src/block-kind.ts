@@ -1,18 +1,93 @@
 import { Bot, CornerDownLeft, Hourglass, User } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import type { EffectiveExit, ExitSource } from "@t3-factory/domain-validation";
 import { continuedThread } from "./flow-graph.ts";
 import { waitDurationText } from "./wait-display.ts";
 
-/** Each block kind's icon and the kind label its header shows. */
-export const BLOCK_KINDS: Record<
-  FlowBlock["kind"],
-  { readonly Icon: typeof Bot; readonly label: string; readonly name: string }
-> = {
-  agent: { Icon: Bot, label: "AGENT", name: "Agent" },
-  human: { Icon: User, label: "HUMAN STEP", name: "Human step" },
-  wait: { Icon: Hourglass, label: "WAIT", name: "Wait" },
-  continuation: { Icon: CornerDownLeft, label: "CONTINUATION", name: "Continuation" },
+/**
+ * What screens show and observe of one block kind. Each answer is spelled out per kind, not
+ * derived from another, so a screen's current reading of a kind stays exactly as it is.
+ */
+interface BlockKind {
+  readonly Icon: typeof Bot;
+  /** The kind label on the Flow authoring canvas header. */
+  readonly label: string;
+  /** The kind label on the Execution canvas header. */
+  readonly executionLabel: string;
+  /** The kind badge on the Flow editor's block panel. */
+  readonly panelLabel: string;
+  readonly name: string;
+  /** Its frame is dashed on the Flow authoring canvas and the block library's drag preview. */
+  readonly dashedFrame: boolean;
+  /** Its only output has no name: exit rows, connect ports and results show none. */
+  readonly singleOutput: boolean;
+  /** How Run detail observes it. */
+  readonly observed: {
+    /** Technical details list its T3 thread and exact execution. */
+    readonly references: boolean;
+    /** Technical details list its observation freshness. */
+    readonly freshness: boolean;
+    /** The footer while there is no thread to open. */
+    readonly noThread: string;
+  };
+}
+
+export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
+  agent: {
+    Icon: Bot,
+    label: "AGENT",
+    executionLabel: "AGENT",
+    panelLabel: "AGENT BLOCK",
+    name: "Agent",
+    dashedFrame: false,
+    singleOutput: false,
+    observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
+  },
+  human: {
+    Icon: User,
+    label: "HUMAN STEP",
+    executionLabel: "HUMAN",
+    panelLabel: "HUMAN STEP",
+    name: "Human step",
+    dashedFrame: true,
+    singleOutput: false,
+    observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
+  },
+  wait: {
+    Icon: Hourglass,
+    label: "WAIT",
+    executionLabel: "WAIT",
+    panelLabel: "WAIT",
+    name: "Wait",
+    dashedFrame: false,
+    singleOutput: true,
+    observed: { references: false, freshness: true, noThread: "A Wait has no T3 thread" },
+  },
+  continuation: {
+    Icon: CornerDownLeft,
+    label: "CONTINUATION",
+    executionLabel: "CONTINUATION",
+    panelLabel: "CONTINUATION BLOCK",
+    name: "Continuation",
+    dashedFrame: false,
+    singleOutput: true,
+    observed: { references: true, freshness: false, noThread: "No T3 thread yet" },
+  },
 };
+
+/** The kind of block each exit source belongs to: Agent and Flow-local exits leave Agent blocks. */
+const EXIT_SOURCE_KINDS: Record<ExitSource, FlowBlock["kind"]> = {
+  agent: "agent",
+  local: "agent",
+  human: "human",
+  wait: "wait",
+  continuation: "continuation",
+};
+
+/** Whether `exit` is its block's single unnamed output. */
+export function isSingleOutput(exit: Pick<EffectiveExit, "source">) {
+  return BLOCK_KINDS[EXIT_SOURCE_KINDS[exit.source]].singleOutput;
+}
 
 type NamedAgent = Pick<AgentDefinition, "id" | "name">;
 
