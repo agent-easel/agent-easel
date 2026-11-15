@@ -409,6 +409,7 @@ The distinct rejections are:
 - unsupported format version N, which asks to update Factory when N is newer;
 - an invalid definition, field-addressed (for example `agents.0.prompt` or `flow.graph.blocks.2.position`) and naming the Agent or block;
 - over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
+- not received completely (`document_unreadable`): the upload broke off before its body arrived. Only a body over the limit is reported as too large.
 
 Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Try again**.
 

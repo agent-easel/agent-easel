@@ -1,5 +1,7 @@
 import type { TestContext } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
+import * as Effect from "effect/Effect";
+import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type { PortableAgent, RawBody } from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { ControlledT3 } from "./controlled-t3.ts";
@@ -45,6 +47,13 @@ export function flowUnderCreateLimitBy(bytes: number) {
     DEFINITION_REQUEST_LIMIT_BYTES - bytes - Buffer.byteLength(JSON.stringify(longChecklist("")));
   return longChecklist("x".repeat(room));
 }
+
+/** An import upload under the size limit whose connection broke off before the body arrived. */
+export const interruptedUpload = () =>
+  ({
+    headers: { "content-type": "application/json", "content-length": "300000" },
+    arrayBuffer: Effect.fail(new Error("upload interrupted")),
+  }) as unknown as HttpServerRequest;
 
 /** The same JSON content with every object's fields in reverse order, as another serializer may write it. */
 export function withReversedKeys(value: unknown): unknown {

@@ -3,7 +3,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Result } from "@t3-factory/contracts";
+import * as Effect from "effect/Effect";
+import { HttpServerResponse } from "effect/http";
 import { loadConfiguration } from "../src/config.ts";
+import { importBody, readRawBody } from "../src/http-support.ts";
 import { startServer } from "../src/server.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import {
@@ -13,6 +16,7 @@ import {
   fileBody,
   flowFile,
   flowUnderCreateLimitBy,
+  interruptedUpload,
   reviewedCommit,
   withReversedKeys,
 } from "./support/definition-import.ts";
@@ -136,6 +140,23 @@ it("a Flow whose create request fits 2 MB but whose later save would not is refu
   expect(review.error.issues).toStrictEqual([
     expect.objectContaining({ code: "definition_too_large", path: "flow" }),
   ]);
+});
+
+it("an import upload that breaks off under the size limit is answered as unreadable, not too large", async () => {
+  // Arrange
+  const request = interruptedUpload();
+
+  // Act
+  const read = await Effect.runPromise(readRawBody(request, importBody));
+
+  // Assert
+  assert(read.kind === "invalid");
+  const response = HttpServerResponse.toWeb(read.response);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    ok: false,
+    error: { issues: [expect.objectContaining({ code: "document_unreadable", path: "document" })] },
+  });
 });
 
 it("an import request over 16 MiB is refused with HTTP 413", async (c) => {
