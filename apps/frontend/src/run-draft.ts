@@ -8,12 +8,11 @@ import type {
 } from "@t3-factory/contracts";
 import {
   isCanonicalTimestamp,
-  isSha256Hex,
   isStartTitleProvenance,
+  parseStartPrompt,
   promptText,
   promptTitle,
   RUN_IMAGE_LIMIT,
-  RUN_IMAGE_MIME_TYPES,
   TASK_TITLE_LIMIT,
 } from "@t3-factory/domain-validation";
 import { randomId } from "./lib/ids.ts";
@@ -145,8 +144,6 @@ interface SavedDrafts {
 const filled = (value: unknown): value is string =>
   typeof value === "string" && value.trim() !== "";
 
-const textSegments = (text: string): PromptSegment[] => (text ? [{ type: "text", text }] : []);
-
 /** Adjacent text segments joined and empty ones dropped: one spelling for each prompt. */
 export function joinedSegments(segments: readonly PromptSegment[]): PromptSegment[] {
   const joined: PromptSegment[] = [];
@@ -160,41 +157,6 @@ export function joinedSegments(segments: readonly PromptSegment[]): PromptSegmen
   return joined;
 }
 
-function readSegments(value: unknown): PromptSegment[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const segments = value.map((segment: unknown) => {
-    const { type, text, imageId } = (segment ?? {}) as Record<string, unknown>;
-    if (type === "text" && typeof text === "string") return { type, text } as const;
-    if (type === "image" && filled(imageId)) return { type, imageId } as const;
-    return undefined;
-  });
-  return segments.every((segment) => segment !== undefined) ? segments : undefined;
-}
-
-function readImages(value: unknown): RunImage[] | undefined {
-  if (!Array.isArray(value) || value.length > RUN_IMAGE_LIMIT) return undefined;
-  const images = value.map((image: unknown) => {
-    const { imageId, sha256, name, mimeType, sizeBytes } = (image ?? {}) as Record<string, unknown>;
-    if (!filled(imageId) || !isSha256Hex(sha256) || !filled(name)) return undefined;
-    if (!RUN_IMAGE_MIME_TYPES.includes(mimeType as RunImage["mimeType"])) return undefined;
-    if (typeof sizeBytes !== "number" || !Number.isInteger(sizeBytes)) return undefined;
-    return { imageId, sha256, name, mimeType: mimeType as RunImage["mimeType"], sizeBytes };
-  });
-  return images.every((image) => image !== undefined) ? images : undefined;
-}
-
-/**
- * The saved prompt. Drafts and submissions saved before images carry `input` text instead; it
- * becomes one text segment without images, under the same request identity.
- */
-function readPrompt(value: Record<string, unknown>) {
-  if (value.segments === undefined && typeof value.input === "string")
-    return { segments: textSegments(value.input), images: [] };
-  const segments = readSegments(value.segments);
-  const images = readImages(value.images);
-  return segments && images ? { segments, images } : undefined;
-}
-
 /** Drafts and submissions saved before provenance carry none; they are legacy. */
 function readTitleProvenance(value: unknown) {
   if (value === undefined) return "legacy";
@@ -205,10 +167,9 @@ function readSubmission(value: unknown): StartRunInput | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const fields = value as Record<string, unknown>;
   const { requestId, projectId, flowId, title, createdAt } = fields;
-  const prompt = readPrompt(fields);
+  const prompt = parseStartPrompt(fields);
   const titleProvenance = readTitleProvenance(fields.titleProvenance);
   if (!filled(requestId) || !filled(projectId) || !filled(flowId) || !prompt) return undefined;
-  if (!filled(promptText(prompt.segments))) return undefined;
   if (!filled(title) || !titleProvenance || !isCanonicalTimestamp(createdAt)) return undefined;
   return Object.freeze({
     requestId,
@@ -229,7 +190,7 @@ function readDraft(value: unknown): SavedRunDraft | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const fields = value as Record<string, unknown>;
   const { id, projectId, flowId, manualTitle, createdAt, listed, submission } = fields;
-  const prompt = readPrompt(fields);
+  const prompt = parseStartPrompt(fields);
   const titleProvenance = readTitleProvenance(fields.titleProvenance);
   if (!filled(id) || !prompt || !retained(prompt) || typeof projectId !== "string")
     return undefined;
