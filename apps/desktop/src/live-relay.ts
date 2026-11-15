@@ -1,5 +1,6 @@
 import { LIVE_PATH } from "@t3-factory/contracts";
 import { WebSocket } from "ws";
+import type { ApiTarget } from "./protocol.ts";
 
 /**
  * Main → renderer messages on a live port. A refused upgrade closes with 4000 + the HTTP
@@ -31,9 +32,20 @@ export function livePath(query: string): string {
   return `${LIVE_PATH}?${forwarded}`;
 }
 
-/** Host role: the supervised local backend, admitted as its own loopback origin. */
-export const hostLiveSocket = (base: string, path: string) =>
-  new WebSocket(base.replace(/^http/, "ws") + path, { origin: base, handshakeTimeout: 10_000 });
+/**
+ * Opens a live socket to the current selection: the server role's supervised local backend,
+ * admitted as its own loopback origin, or the client role's pinned server with the
+ * main-process credential. Null while no server is reachable.
+ */
+export function openLiveSocket(target: ApiTarget, query: string): WebSocket | null {
+  if (!target) return null;
+  const path = livePath(query);
+  if (target.kind === "remote") return target.connection.openSocket(path);
+  return new WebSocket(target.base.replace(/^http/, "ws") + path, {
+    origin: target.base,
+    handshakeTimeout: 10_000,
+  });
+}
 
 export function refuseLive(port: LivePort, reason: string) {
   port.postMessage({ type: "close", code: 1006, reason });
