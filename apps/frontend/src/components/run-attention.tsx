@@ -245,6 +245,28 @@ function PendingMatter({
       {answerable && (
         <p className="text-sm font-medium text-foreground">{attentionExplanation(item.kind)}</p>
       )}
+      <MatterKindDetail run={run} item={item} binding={binding} />
+      {binding && <BindingDetail binding={binding} executionId={item.executionId} />}
+      {item.blockId !== null && (
+        <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
+      )}
+      {item.kind === "human" && <PendingHuman run={run} item={item} />}
+      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
+    </article>
+  );
+}
+
+function MatterKindDetail({
+  run,
+  item,
+  binding,
+}: {
+  run: RunDetail;
+  item: RunAttention;
+  binding: RunDetail["threadBindings"][number] | undefined;
+}) {
+  return (
+    <>
       {item.kind === "native-request" && (
         <p className="text-sm text-muted-foreground">
           Thread-level observation; questions and permission approvals may be grouped.
@@ -260,7 +282,7 @@ function PendingMatter({
           Worker failed. Report recovery cannot repeat or replace worker work.
         </p>
       )}
-      {presentation === "problem" && <ProblemDetail run={run} item={item} />}
+      {attentionPresentation(item.kind) === "problem" && <ProblemDetail run={run} item={item} />}
       {item.kind === "settlement-unresolved" && <BlockedWorkers run={run} />}
       {item.kind === "missing-report" && item.blockId !== null && (
         <RequestReport
@@ -270,26 +292,30 @@ function PendingMatter({
           recovery={run.recoveries.find((r) => r.attentionId === item.id)}
         />
       )}
-      {binding && (
-        <dl className="flex flex-col gap-0.5 text-2xs leading-4 text-muted-foreground">
-          <div className="flex gap-2">
-            <dt className="w-14 shrink-0">{bindingRole[binding.role]}</dt>
-            <dd className="min-w-0 font-mono break-all">{binding.threadId}</dd>
-          </div>
-          {item.executionId && (
-            <div className="flex gap-2">
-              <dt className="w-14 shrink-0">Execution</dt>
-              <dd className="min-w-0 font-mono break-all">{item.executionId}</dd>
-            </div>
-          )}
-        </dl>
+    </>
+  );
+}
+
+function BindingDetail({
+  binding,
+  executionId,
+}: {
+  binding: RunDetail["threadBindings"][number];
+  executionId: string;
+}) {
+  return (
+    <dl className="flex flex-col gap-0.5 text-2xs leading-4 text-muted-foreground">
+      <div className="flex gap-2">
+        <dt className="w-14 shrink-0">{bindingRole[binding.role]}</dt>
+        <dd className="min-w-0 font-mono break-all">{binding.threadId}</dd>
+      </div>
+      {executionId && (
+        <div className="flex gap-2">
+          <dt className="w-14 shrink-0">Execution</dt>
+          <dd className="min-w-0 font-mono break-all">{executionId}</dd>
+        </div>
       )}
-      {item.blockId !== null && (
-        <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
-      )}
-      {item.kind === "human" && <PendingHuman run={run} item={item} />}
-      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
-    </article>
+    </dl>
   );
 }
 

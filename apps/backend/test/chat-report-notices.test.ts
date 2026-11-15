@@ -17,7 +17,7 @@ import {
   resultReleasedToHumanReview,
   resultReported,
   settled,
-  settlementUnresolved,
+  settleUnresolved,
   woke,
   workingReported,
 } from "./support/scenarios.ts";
@@ -185,7 +185,7 @@ it("a confirmed Settle that could not stop workers posts a Problem notice in the
   const { worker } = await chatStartedRun(world);
 
   // Act
-  await settlementUnresolved(world.world, worker);
+  await settleUnresolved(world.world, worker);
 
   // Assert
   const notice = await noticeCreated(world.discord);
@@ -201,7 +201,7 @@ it("settling the Run after Settle could not stop its workers edits the Problem n
   // Arrange
   const world = await startingWorld(c);
   const { runId, worker } = await chatStartedRun(world);
-  await settlementUnresolved(world.world, worker);
+  await settleUnresolved(world.world, worker);
   const notice = await noticeCreated(world.discord);
   world.world.t3.stopSupported = true;
   stopsEndThreads(world.world.t3);

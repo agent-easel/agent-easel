@@ -1163,7 +1163,7 @@ export function snoozed(world: ScenarioWorld, worker: WorkerHandle) {
 
 /** T3 cannot stop worker threads and the user confirmed Settle with Stop on the worker's Run;
  * Factory observed the settlement unresolved and raised its Problem. */
-export function settlementUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
+export function settleUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
   return reach("settlement unresolved", async () => {
     world.t3.stopSupported = false;
     stepResult(

@@ -25,7 +25,7 @@ import {
   resultReported,
   sentTurnBegins,
   settled,
-  settlementUnresolved,
+  settleUnresolved,
   snoozed,
   turnBegins,
   twoWorkersStarted,
@@ -764,7 +764,7 @@ it("a retried Settle that ends unresolved again keeps its one Problem without a 
   const setup = await prepared(c, handoffFlow);
   const f = {
     ...setup,
-    ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+    ...(await settleUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
   };
   const before = await f.f.getRun(f.runId);
   assert(before.ok);
@@ -788,7 +788,7 @@ it("archiving a Run whose Settle could not stop workers resolves its Problem", a
   const setup = await prepared(c, handoffFlow);
   const f = {
     ...setup,
-    ...(await settlementUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+    ...(await settleUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
   };
 
   // Act
