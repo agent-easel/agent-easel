@@ -1,10 +1,11 @@
 # Controlled UI journey map
 
 Run `pnpm test:e2e` for all journeys through one fixture server and Factory.
-Each invocation owns disposable data; keep one worker per invocation. Tests share
-seeded state, so select entities by name or create uniquely named records.
-The worker suite creates its own named Runs against the current authorization
-context; remote authorization retires the context of earlier demo Runs.
+Each invocation owns disposable data; keep one worker per invocation. The fixture's
+[modules](../../../../docs/testing.md#fixture-modules) reset their controlled state
+before every journey. Stored data persists, so select entities by name or create
+uniquely named records. Scenario Runs belong to the authorization context and
+journey attempt that started them; remote authorization retires earlier contexts.
 Remote journeys select the secure approved-client listener with their browser-profile
 cookie; ordinary journeys use the host listener. Protocol compatibility assertions
 use older/newer peers owned and cleaned up by the same fixture process.
