@@ -268,6 +268,32 @@ test("Mod+Backspace opens the existing Archive confirmation for the open Run", a
   expect((await readHistoryRun(app.baseUrl, found.id)).lifecycle).toBe("active");
 });
 
+test("Mod+Backspace in Studio over an open Run keeps the selected Flow wire", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, "Demo · Parallel review from one prompt");
+  await app.open(`/runs/${found.id}`);
+  await expectFactoryConnected(screen);
+  await browser.keyboard.press(`${shortcutMod}+Shift+s`);
+  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  const wires = screen.getByRole("group", "Directed connections");
+  await expect(wires).toHaveAttribute("data-flow-input-count", "1");
+  await wires.getByRole("button", "Connection from Flow input to Entry worker").press("Enter");
+  await expect(screen.getByRole("button", "Delete connection")).toBeVisible();
+
+  // Act
+  await browser.keyboard.press(`${shortcutMod}+Backspace`);
+
+  // Assert
+  // Observe beyond the key event so an asynchronous deletion cannot pass on the initial state.
+  await elapse(500);
+  await expect(wires).toHaveAttribute("data-flow-input-count", "1");
+  await expect(screen.getByRole("button", "Delete connection")).toBeVisible();
+});
+
 async function openParallelReviewRun(app: App, screen: Screen, browser: Browser) {
   await browser.setViewport({ width: 1440, height: 1100 });
   const found = await findRun(app.baseUrl, "Demo · Parallel review from one prompt");

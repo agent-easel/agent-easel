@@ -210,6 +210,8 @@ export interface RouteTrust {
   readonly surface?: "host" | "remote";
   /** The protocol handshake itself: answered before a client declares its protocol. */
   readonly handshake?: true;
+  /** A protocol declaration is required on the host listener too, as the remote one requires. */
+  readonly protocolRequired?: true;
   /** Browser image GET/HEAD requests cannot set protocol headers; credentials still apply. */
   readonly protocolOptional?: true;
   /** Reachable on the approved-client listener without an approved credential. */
