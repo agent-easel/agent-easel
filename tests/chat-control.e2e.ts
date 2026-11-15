@@ -90,14 +90,11 @@ beforeEach(async ({ browser }) => {
 });
 
 afterEach(async ({ app }) => {
-  // Journeys share one fixture; a later journey must start with Chat control Off and without
-  // this journey's Runs.
+  // Journeys share one fixture; a later journey must start without this journey's Runs.
   for (const runId of startedRuns.splice(0)) {
     const archived = await hostCall(app.baseUrl, "POST", `/api/runs/${runId}/archive`, undefined);
     assert(archived.ok, JSON.stringify(archived));
   }
-  const off = await hostCall(app.baseUrl, "PUT", "/api/chat-control/enabled", { enabled: false });
-  assert(off.ok, JSON.stringify(off));
   await provider.close();
 });
 
@@ -299,6 +296,8 @@ test("the host saves Access on its own while connection edits stay unsaved", asy
 }) => {
   // Arrange
   const project = await firstProject(app.baseUrl);
+  const before = await discordSettings(app.baseUrl);
+  assert(before.ok);
   await app.open("/settings/chat-control/discord");
   await screen
     .getByRole("region", "Discord connection")
@@ -316,7 +315,9 @@ test("the host saves Access on its own while connection edits stay unsaved", asy
   await access.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(access.getByText(/^Saved .* · revision 1\.$/)).toBeVisible();
+  await expect(
+    access.getByText(new RegExp(`^Saved .* · revision ${before.value.access.revision + 1}\\.$`)),
+  ).toBeVisible();
   await expect(
     screen.getByRole("region", "Discord connection").getByText("Unsaved changes."),
   ).toBeVisible();

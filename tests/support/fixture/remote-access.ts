@@ -73,6 +73,15 @@ async function remoteFactory(protocol: { protocol: number; minimumPeerProtocol: 
 
 /** The host opens T3 authorization for remote browsers at most this often (connection.ts). */
 const authorizationOpenCooldownMs = 5_000;
+/**
+ * A server admits this many access requests per peer in a minute (server.ts). Every remote
+ * browser reaches it through the fixture, so they all count as one peer.
+ */
+const accessRequestsPerMinute = 5;
+const minuteMs = 60_000;
+const sleep = async (ms: number) => {
+  if (ms > 0) await new Promise((resolve) => setTimeout(resolve, ms));
+};
 
 const remoteCookie = "fixture_remote=1";
 const isRemote = (incoming: IncomingMessage) => !!incoming.headers.cookie?.includes(remoteCookie);
@@ -114,6 +123,8 @@ export async function remoteAccessFixture(
   };
   // Every authorization a remote browser opens on the host first asks T3 to resume a pending one.
   let authorizationOpenedAt = -Infinity;
+  /** When the fixture relayed each access request, per target server. */
+  const accessRequests = new Map<typeof current, number[]>();
   const resumeAuthorization = t3.resumeAuthorization.bind(t3);
   t3.resumeAuthorization = (target) => {
     authorizationOpenedAt = Date.now();
@@ -206,8 +217,16 @@ export async function remoteAccessFixture(
       t3.authorizationStarts = 0;
       t3.reopenedApprovals = 0;
       // The host ignores another open within its cooldown, so the next journey waits it out.
-      const cooldownLeft = authorizationOpenedAt + authorizationOpenCooldownMs - Date.now();
-      if (cooldownLeft > 0) await new Promise((resolve) => setTimeout(resolve, cooldownLeft));
+      await sleep(authorizationOpenedAt + authorizationOpenCooldownMs - Date.now());
+      // A journey makes at most one access request, so each server keeps one free in its minute.
+      for (const [server, times] of accessRequests) {
+        const recent = times.filter((time) => Date.now() - time < minuteMs);
+        accessRequests.set(server, recent);
+        if (recent.length >= accessRequestsPerMinute)
+          await sleep(
+            recent[recent.length - accessRequestsPerMinute]! + minuteMs - Date.now() + 100,
+          );
+      }
       if (!t3.available || !t3.authorized || t3.pendingApproval) {
         t3.available = true;
         t3.approve();
@@ -256,6 +275,8 @@ export async function remoteAccessFixture(
         incoming.socket.destroy();
         return true;
       }
+      if (incoming.method === "POST" && incoming.url === "/api/client-access/requests")
+        accessRequests.set(target, [...(accessRequests.get(target) ?? []), Date.now()]);
       proxyFixture(incoming, outgoing, target.server.remoteAddress()!.port, { ca: target.anchor });
       return true;
     },

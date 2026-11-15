@@ -5,6 +5,8 @@ import {
   type CreatedMessage,
   type MessageFault,
 } from "../../../apps/backend/test/support/controlled-discord.ts";
+import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
+import type { Host } from "./host.ts";
 
 /** The confirmation button a message Discord created carries, if any. */
 const buttonOf = (message: CreatedMessage) =>
@@ -26,18 +28,59 @@ export async function startJourneyDiscord() {
 }
 
 /** Participants, moderators and Discord's own behavior around the bot. */
-export function discordFixture({
-  discord,
-  bot,
-  guild,
-}: Awaited<ReturnType<typeof startJourneyDiscord>>) {
+export function discordFixture(
+  { discord, bot, guild }: Awaited<ReturnType<typeof startJourneyDiscord>>,
+  { factory }: Host,
+) {
+  /** Chat control Off with nothing saved: no Language model, Discord connection or Access. */
+  async function restoreChatControl() {
+    const model = requireSuccess(await factory.getChatModelSettings());
+    if (model.chatControlEnabled)
+      requireSuccess(await factory.setChatControlEnabled({ enabled: false }));
+    const saved = model.configuration;
+    if (
+      saved.providerKind !== null ||
+      saved.baseUrl !== null ||
+      saved.model !== null ||
+      saved.keyConfigured
+    )
+      requireSuccess(
+        await factory.updateChatModelSettings({
+          revision: saved.revision,
+          providerKind: null,
+          baseUrl: null,
+          model: null,
+          key: saved.keyConfigured ? { kind: "remove" } : { kind: "keep" },
+        }),
+      );
+    const { configuration: connection, access } = requireSuccess(
+      await factory.getDiscordSettings(),
+    );
+    if (connection.publicKey !== null || connection.tokenConfigured)
+      requireSuccess(
+        await factory.updateDiscordConnection({
+          revision: connection.revision,
+          publicKey: null,
+          token: connection.tokenConfigured ? { kind: "remove" } : { kind: "keep" },
+        }),
+      );
+    if (access.users.length > 0 || access.channels.length > 0)
+      requireSuccess(
+        await factory.updateDiscordAccess({ revision: access.revision, users: [], channels: [] }),
+      );
+  }
+
   let invocations = 0;
+  /** Gateway sessions opened before the current journey began. */
+  let earlierSessions = 0;
   return {
     actions: {
-      /** The bot the controlled Discord knows, and the tokens of the Gateway sessions it saw. */
+      /** The bot the controlled Discord knows, and the Gateway sessions it saw in this journey. */
       state: () => ({
         bot,
-        sessions: discord.sessions.map(({ token, ready, closed }) => ({ token, ready, closed })),
+        sessions: discord.sessions
+          .slice(earlierSessions)
+          .map(({ token, ready, closed }) => ({ token, ready, closed })),
       }),
       /** External application permissions determine whether command registration succeeds. */
       commands({ available }: { available: boolean }) {
@@ -100,9 +143,11 @@ export function discordFixture({
         );
       },
     },
-    reset() {
+    async reset() {
       discord.setCommandsAvailable(true);
       discord.clearFaults();
+      await restoreChatControl();
+      earlierSessions = discord.sessions.length;
     },
   };
 }

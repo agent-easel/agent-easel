@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { beforeEach, test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
@@ -24,7 +25,8 @@ test("the host approves a pending device listed first, which clears the Devices 
   browser,
 }) => {
   // Arrange
-  await openHostDevices(app, browser, "Review tablet");
+  const tablet = `Review tablet ${randomUUID().slice(0, 8)}`;
+  await openHostDevices(app, browser, tablet);
   await expect(
     screen.getByRole("switch", "Allow approved devices on my LAN or tailnet"),
   ).toBeChecked();
@@ -34,19 +36,17 @@ test("the host approves a pending device listed first, which clears the Devices 
     }),
   ).toBeVisible();
   const devices = screen.getByRole("region", "Devices");
-  await expect(devices.getByRole("group").first()).toContainText("Review tablet");
+  await expect(devices.getByRole("group").first()).toContainText(tablet);
   await app.screenshot("host-devices-pending");
 
   // Act
   await devices
-    .getByRole("group", "Review tablet, Pending", { exact: true })
+    .getByRole("group", `${tablet}, Pending`, { exact: true })
     .getByRole("button", "Approve")
     .tap();
 
   // Assert
-  await expect(
-    devices.getByRole("group", "Review tablet, Approved", { exact: true }),
-  ).toBeVisible();
+  await expect(devices.getByRole("group", `${tablet}, Approved`, { exact: true })).toBeVisible();
   await expect(
     settingsSections(screen).getByRole("link", "Devices & access", { exact: true }),
   ).toBeVisible();
@@ -58,7 +58,8 @@ test("the host denies a pending device, which clears the Devices & access attent
   browser,
 }) => {
   // Arrange
-  await openHostDevices(app, browser, "Unknown kiosk");
+  const kiosk = `Unknown kiosk ${randomUUID().slice(0, 8)}`;
+  await openHostDevices(app, browser, kiosk);
   await expect(
     settingsSections(screen).getByRole("link", "Devices & access, 1 device waiting for approval", {
       exact: true,
@@ -68,12 +69,12 @@ test("the host denies a pending device, which clears the Devices & access attent
 
   // Act
   await devices
-    .getByRole("group", "Unknown kiosk, Pending", { exact: true })
+    .getByRole("group", `${kiosk}, Pending`, { exact: true })
     .getByRole("button", "Deny")
     .tap();
 
   // Assert
-  await expect(devices.getByRole("group", "Unknown kiosk, Denied", { exact: true })).toBeVisible();
+  await expect(devices.getByRole("group", `${kiosk}, Denied`, { exact: true })).toBeVisible();
   await expect(
     settingsSections(screen).getByRole("link", "Devices & access", { exact: true }),
   ).toBeVisible();

@@ -28,7 +28,7 @@ const scenarios = await scenariosFixture(host);
 const modules = {
   remoteAccess,
   live,
-  discord: discordFixture(discord),
+  discord: discordFixture(discord, host),
   appearance: appearanceFixture(host),
   reporting: reportingFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),
