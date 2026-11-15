@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fieldLabelClass } from "@/components/page";
-import { api } from "../api.ts";
+import { api, ApiError } from "../api.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
 import { reportDiscordSettings } from "../chat-control-attention.ts";
 import { AccessForm, useAccessSection } from "./chat-discord-access.tsx";
@@ -155,9 +155,12 @@ function useDiscordPage() {
       await section.save(input);
       supersede();
     },
-    refreshError: failure
-      ? chatControlError(failure.cause, "Factory could not refresh the connection state.")
-      : "",
+    // A lost read changed nothing on the host, unlike the lost answer chatControlError describes.
+    refreshError: !failure
+      ? ""
+      : failure.cause instanceof ApiError
+        ? chatControlError(failure.cause, "")
+        : "Factory could not refresh the connection state. It retries automatically.",
     dirty: settings !== null && draft !== null && isDirty(draft, settings),
     checking,
     checkError,
