@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
-import { Bot, CornerDownLeft, Hourglass, TextCursorInput, User } from "lucide-react";
+import { TextCursorInput } from "lucide-react";
 import type { FlowBlock } from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { cn } from "@/lib/utils";
+import { BLOCK_KINDS } from "../block-kind.ts";
 
 const EXIT_SOURCE_LABELS: Record<EffectiveExit["source"], string> = {
   agent: "Agent",
@@ -10,17 +11,6 @@ const EXIT_SOURCE_LABELS: Record<EffectiveExit["source"], string> = {
   human: "fixed",
   wait: "after the wait",
   continuation: "output",
-};
-
-/** Each block kind's icon and the kind label its header shows. */
-export const BLOCK_KINDS: Record<
-  FlowBlock["kind"],
-  { readonly Icon: typeof Bot; readonly label: string; readonly name: string }
-> = {
-  agent: { Icon: Bot, label: "AGENT", name: "Agent" },
-  human: { Icon: User, label: "HUMAN STEP", name: "Human step" },
-  wait: { Icon: Hourglass, label: "WAIT", name: "Wait" },
-  continuation: { Icon: CornerDownLeft, label: "CONTINUATION", name: "Continuation" },
 };
 
 const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {

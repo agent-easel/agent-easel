@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import {
   addWire,
   canConnect,
-  continuedThread,
   exitRecipients,
   type BlockPosition,
   type CanvasBlock,
@@ -32,8 +31,8 @@ import {
   type Placement,
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
-import { BLOCK_KINDS, blockIdentity, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
-import { waitDurationText } from "../wait-display.ts";
+import { blockIdentity, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
 
 /** Places a block dragged by `grab` at viewport point x/y, or null when x/y is outside the canvas. */
 export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | null;
@@ -275,25 +274,12 @@ function authoringFlowInput({
   };
 }
 
-function blockReference(
-  graph: FlowGraph,
-  block: FlowBlock,
-  agents: readonly AgentDefinition[],
-): { label: string; value: string; valueClassName?: string } {
-  if (block.kind === "human") return { label: "Asks", value: "a person" };
-  if (block.kind === "wait") return { label: "Waits", value: waitDurationText(block.duration) };
-  if (block.kind === "continuation") {
-    const thread = continuedThread(graph, block.id);
-    return thread
-      ? { label: "continues", value: thread, valueClassName: "text-brand-cyan" }
-      : { label: "", value: "no Agent before it", valueClassName: "text-muted-foreground" };
-  }
-  if (!block.agentId) return { label: "Agent", value: "not chosen" };
-  return {
-    label: "Agent",
-    value: agents.find((a) => a.id === block.agentId)?.name ?? "Unavailable Agent",
-  };
-}
+/** The authoring canvas colour of each reference tone. */
+const REFERENCE_TONES: Record<ReferenceTone, string> = {
+  plain: "text-emphasis-foreground",
+  continued: "text-brand-cyan",
+  absent: "text-muted-foreground",
+};
 
 /**
  * One exit row: where the exit comes from, its name and, for screen readers, its recipients.
@@ -367,10 +353,13 @@ function authoringBlock({
   const human = block.kind === "human";
   const name = block.name || "Unnamed block";
   const { tags, describedBy } = agentBlockTags(block, agents);
+  const reference = blockReference(block, { graph, agents }).card;
   const identity = blockIdentity({
     kind: block.kind,
     name,
-    ...blockReference(graph, block, agents),
+    label: reference.label,
+    value: reference.value,
+    valueClassName: REFERENCE_TONES[reference.tone],
     trailing: (
       <>
         {tags}

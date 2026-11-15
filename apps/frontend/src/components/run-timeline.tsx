@@ -12,7 +12,7 @@ import {
   History,
 } from "lucide-react";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
-import { BLOCK_KINDS } from "./flow-block.tsx";
+import { BLOCK_KINDS } from "../block-kind.ts";
 import { TitleMark, titleOutcome, titleStateLabel } from "./run-title-generation.tsx";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
