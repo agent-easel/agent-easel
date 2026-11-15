@@ -10,7 +10,7 @@ import type { EffectOperations } from "../effect-operations.ts";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
-import { openRunStore } from "./run-store/run-store.ts";
+import { openRunStore, queryPageLimit } from "./run-store/run-store.ts";
 import { openRunnerDispatch } from "./runner-dispatch.ts";
 import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
@@ -243,6 +243,9 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     restoreRun: store.restoreRun,
     markRunWokeSeen: store.markRunWokeSeen,
     getRun,
+    /** The HTTP Condition evidence read, whose empty query parameters are absent. */
+    listConditionArrivals: (runId: string, blockId: string, limit: string, cursor: string) =>
+      store.listConditionArrivals(runId, blockId, queryPageLimit(limit), cursor || undefined),
     listAttention,
     getRunCreationPolicy: () =>
       Effect.succeed({ ok: true as const, value: { ready: true as const } }),

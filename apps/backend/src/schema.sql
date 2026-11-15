@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: condition_integrity_matters
+-- Newest applied migration: condition_recipient_index
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -645,6 +645,9 @@ CREATE TABLE operation_intents (
 );
 
 CREATE UNIQUE INDEX one_reservation_per_run ON operation_intents(run_id) WHERE state='reserved'
+;
+
+CREATE INDEX operation_intents_condition_arrival ON operation_intents(condition_arrival_id) WHERE condition_arrival_id IS NOT NULL
 ;
 
 CREATE TABLE project_selection (

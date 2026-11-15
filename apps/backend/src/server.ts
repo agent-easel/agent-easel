@@ -176,6 +176,17 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
     continueWaitArrival: {
       handle: ({ parameters }) => answer(() => factory.continueWaitArrival(parameters.id)),
     },
+    listConditionArrivals: {
+      handle: ({ parameters }) =>
+        answer(() =>
+          factory.listConditionArrivals(
+            parameters.runId,
+            parameters.blockId,
+            parameters.limit,
+            parameters.cursor,
+          ),
+        ),
+    },
     listAttention: {
       handle: () => answer(() => factory.listAttention()),
     },

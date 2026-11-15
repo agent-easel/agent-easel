@@ -336,7 +336,8 @@ listener answers `/mcp` with `host_only`, and a request whose `Origin` is not th
 origin is refused, so a cross-origin browser page cannot drive it. Requests may be up to 2 MB to accommodate whole Agent and Flow definitions.
 Alongside the [authoring tools](#authoring-tools), its Block runtime tools are
 `factory_get_block({ blockId })`, read-only `factory_get_run({ blockId })`,
-read-only `factory_get_run_image({ blockId, imageId })` and
+read-only `factory_get_run_image({ blockId, imageId })`,
+read-only `factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` and
 `factory_update_block({ blockId, to, exit?, message? })`, where `to` is `working` or `finished`.
 A `waiting` report from an outdated instruction is refused with `WAITING_RETIRED` and current guidance.
 [Title threads](#title-threads) call `factory_set_run_title({ titleGenerationId, title })` instead.
@@ -487,8 +488,16 @@ The result message is plain text: it can describe decisions, include artifact UR
 declaration is required, and Factory does not automatically fetch linked artifacts. An Agent's prompt can specify an expected
 format when the next step needs one; the reporting contract's message requirements still apply.
 
-`factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result. It grants no
-routing authority.
+`factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result, plus each
+Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history.
+It grants no routing authority.
+
+`factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` reads one page of
+[Condition evidence](runs.md#conditions) for a Condition of the calling Block's Run: the same page, window, cursor and limits as
+the HTTP read, as `{ code: "CONDITION_ARRIVALS", arrivals, highWater, nextCursor }`. `conditionBlockId` is a Flow block id from
+`factory_get_run`'s `conditions`; `limit` is a JSON integer. A Block id resolves only its own Run, so another Run's Conditions
+are unreachable. An unknown Condition, invalid `limit` or a cursor that does not continue this Condition's window is refused
+with `UNKNOWN_CONDITION`, `INVALID_LIMIT` or `INVALID_CURSOR` and static guidance.
 
 ### Run image reads
 

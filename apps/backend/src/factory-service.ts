@@ -225,6 +225,8 @@ export const makeFactoryService = (
       installReporting: (input) => reporting.installReporting(input),
       answerHumanOccurrence: (id, input) => runner.answerHumanOccurrence(id, input),
       continueWaitArrival: (id) => runner.continueWaitArrival(id),
+      listConditionArrivals: (runId, blockId, limit, cursor) =>
+        runner.listConditionArrivals(runId, blockId, limit, cursor),
       listAttention: () => runner.listAttention(),
       requestReport: (id, input) => runner.requestReport(id, input),
       archiveRun: (id) => runner.archiveRun(id),
