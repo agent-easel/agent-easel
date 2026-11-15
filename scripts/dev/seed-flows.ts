@@ -11,8 +11,10 @@ import {
 import type { Factory } from "../../apps/backend/src/index.ts";
 import type { FlowGraph, FlowWorkspace } from "../../packages/contracts/src/index.ts";
 import { requireSuccess } from "./seed-support.ts";
+import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 
-async function saveFlow(
+/** Creates the named Flow with `graph` and requires it to be ready to start. */
+export async function saveFlow(
   factory: Factory,
   name: string,
   graph: FlowGraph,
@@ -34,10 +36,7 @@ async function saveFlow(
 const accessibilityReview = (agentId: string, x: number) =>
   agentBlock("accessibility", "Accessibility review", agentId, { x, y: 320 });
 
-export async function createDemoFlows(
-  factory: Factory,
-  agents: { worker: string; reviewer: string; accessibility: string },
-) {
+export async function createDemoFlows(factory: Factory, agents: DemoAgents): Promise<DemoFlows> {
   requireSuccess(await factory.createFlow({ name: "Demo · Release checklist (draft)" }));
   const worker = agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 });
   const simple = await saveFlow(factory, "Demo · Focused change", {
@@ -146,10 +145,7 @@ export async function createDemoFlows(
 
 /** A Wait between implementation and review, Waits holding parallel reviews for a decision, an
  * approval held for the release window, and a saved Wait draft with no duration yet. */
-async function createWaitFlows(
-  factory: Factory,
-  agents: { worker: string; reviewer: string; accessibility: string },
-) {
+async function createWaitFlows(factory: Factory, agents: DemoAgents) {
   const review = agentBlock("reviewer", "Review implementation", agents.reviewer, {
     x: 1080,
     y: 180,

@@ -73,7 +73,7 @@ test("a waiting arrival is held with its message and forwarded by the backend on
   await prepareScenarios(app);
   const { id: runId } = await fixture.scenarios.ensure({
     key: "wait",
-    flow: "UI wait · Pause a minute",
+    flow: "pause",
   });
   await applyRunState(app, runId, "result reported", "Ready after a short pause.");
   await applyRunState(app, runId, "result released to a Wait");

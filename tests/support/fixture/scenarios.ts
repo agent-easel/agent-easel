@@ -26,7 +26,9 @@ import {
 } from "../../../apps/backend/test/support/scenarios.ts";
 import type { RunDetail } from "../../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../../packages/domain-validation/src/index.ts";
-import { seedScenarios, settlementUnresolved } from "../../../scripts/dev/seed.ts";
+import { seedScenario, settlementUnresolved } from "../../../scripts/dev/seed.ts";
+import { saveFlow } from "../../../scripts/dev/seed-flows.ts";
+import { seedScenarioList, type DemoFlows } from "../../../scripts/dev/seed-scenarios.ts";
 import { requireSuccess, demoStart, type SeedContext } from "../../../scripts/dev/seed-support.ts";
 import type { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import type { Host } from "./host.ts";
@@ -86,28 +88,20 @@ function runTransitions(context: Context) {
 /** A Run state a journey applies to an existing Run. */
 export type FixtureState = keyof ReturnType<typeof runTransitions>;
 
-/** Flows, Agents, repositories and provider models only UI journeys use. */
-async function createFixtureDefinitions({ factory, t3, home, server }: Host) {
+/**
+ * The fixture scenario set: Flows, Agents, repositories and provider models only UI journeys use,
+ * built like the development seed's. Answers its ready Flows by key.
+ */
+async function createFixtureScenarioSet({ factory, t3, home, world }: Host) {
   // A one-minute Wait lets the Wait journey observe a real forwarding without a long Run.
-  const engineer = requireSuccess(await factory.listAgents()).find(
-    (agent) => agent.name === "Demo · Product engineer",
-  )!;
-  const pauseFlow = requireSuccess(await factory.createFlow({ name: "UI wait · Pause a minute" }));
-  requireSuccess(
-    await factory.updateFlow(pauseFlow.id, {
-      name: pauseFlow.name,
-      expectedRevision: pauseFlow.revision,
-      workspace: { mode: "checkout" },
-      graph: {
-        flowInput: flowInput("worker"),
-        blocks: [
-          agentBlock("worker", "Implement change", engineer.id, { x: 320, y: 180 }, [], []),
-          waitBlock("pause", "Pause a minute", { amount: 1, unit: "minutes" }, { x: 700, y: 180 }),
-        ],
-        connections: [connection("worker", "review", "pause")],
-      },
-    }),
-  );
+  const pause = await saveFlow(factory, "UI wait · Pause a minute", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      waitBlock("pause", "Pause a minute", { amount: 1, unit: "minutes" }, { x: 700, y: 180 }),
+    ],
+    connections: [connection("worker", "review", "pause")],
+  });
 
   // Exercise published defaults and mixed value domains through the Agent editor.
   t3.controlledProviders[0] = {
@@ -150,21 +144,19 @@ async function createFixtureDefinitions({ factory, t3, home, server }: Host) {
       },
     ],
   };
-  const response = await fetch(`http://127.0.0.1:${server.address.port}/api/agents`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "X-Factory-Request": "1" },
-    body: JSON.stringify({
+  const unselectedModelOptions = controlledExecution(t3.environmentId, { modelOptions: [] });
+  requireSuccess(
+    await factory.createAgent({
       name: "Sample worker",
       prompt: "Improve the empty search state",
-      execution: controlledExecution(t3.environmentId, { modelOptions: [] }),
+      execution: unselectedModelOptions,
       exits: [
         blockExit("finish", "finish", "", false),
         blockExit("ok", "ok", "The work passes review.", false),
         blockExit("fail", "fail", "Corrections are needed.", true),
       ],
     }),
-  });
-  if (!response.ok) throw new Error("Could not seed saved Agent definition");
+  );
   // Runtime UI uses only this disposable repository and controlled engine.
   const neutral = join(home, "neutral-repository");
   await mkdir(join(neutral, ".codex"), { recursive: true });
@@ -175,15 +167,16 @@ async function createFixtureDefinitions({ factory, t3, home, server }: Host) {
     join(neutral, ".codex/config.toml"),
     '# preserved runtime fixture\nmodel = "existing"\n',
   );
-  const runtimeProject = await factory.addRepository({ path: neutral });
+  const runtimeProject = requireSuccess(await factory.addRepository({ path: neutral }));
   const doneExit = blockExit("done", "Done", "Complete", false);
-  const agent = await factory.createAgent({
-    name: "Runtime worker",
-    prompt: "Neutral integration fixture",
-    execution: controlledExecution(t3.environmentId, { modelOptions: [] }),
-    exits: [doneExit],
-  });
-  if (!runtimeProject.ok || !agent.ok) throw Error("Could not seed runtime fixture");
+  requireSuccess(
+    await factory.createAgent({
+      name: "Runtime worker",
+      prompt: "Neutral integration fixture",
+      execution: unselectedModelOptions,
+      exits: [doneExit],
+    }),
+  );
   // Exercise repository favicons through the actual public binary endpoint.
   await writeFile(
     join(neutral, "project-icon.png"),
@@ -193,148 +186,220 @@ async function createFixtureDefinitions({ factory, t3, home, server }: Host) {
     ),
   );
   t3.projects = t3.projects.map((entry) =>
-    entry.projectId === runtimeProject.value.projectId
+    entry.projectId === runtimeProject.projectId
       ? { ...entry, faviconPath: "project-icon.png" }
       : entry,
   );
-  if (!(await factory.recheckProjects()).ok) throw Error("Could not seed project favicon");
+  requireSuccess(await factory.recheckProjects());
   // Separate launch fixture so runtime-setup tests retain their unvalidated selection.
   const launchRoot = join(home, "neutral-launch");
   await mkdir(launchRoot);
   await promisify(execFile)("git", ["init", launchRoot], {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home },
   });
-  const launchProject = await factory.addRepository({ path: launchRoot });
-  if (!launchProject.ok) throw Error("Launch project unavailable");
-  const launchAgent = await factory.createAgent({
-    name: "Launch worker",
-    prompt: "Neutral launch work",
-    execution: controlledExecution(t3.environmentId, { modelOptions: [] }),
-    exits: [doneExit],
+  requireSuccess(await factory.addRepository({ path: launchRoot }));
+  const launchAgent = requireSuccess(
+    await factory.createAgent({
+      name: "Launch worker",
+      prompt: "Neutral launch work",
+      execution: unselectedModelOptions,
+      exits: [doneExit],
+    }),
+  );
+  requireSuccess(await factory.createFlow({ name: "Launch blocked draft" }));
+  const launch = await saveFlow(factory, "Launch ready Flow", {
+    flowInput: flowInput("worker"),
+    blocks: [agentBlock("worker", "Entry worker", launchAgent.id, { x: 0, y: 0 }, [], [])],
+    connections: [],
   });
-  if (!launchAgent.ok) throw Error("Launch Agent unavailable");
-  await factory.createFlow({ name: "Launch blocked draft" });
-  const launchFlow = await factory.createFlow({ name: "Launch ready Flow" });
-  if (!launchFlow.ok) throw Error("Launch Flow unavailable");
-  await factory.updateFlow(launchFlow.value.id, {
-    name: launchFlow.value.name,
-    expectedRevision: 1,
-    workspace: { mode: "checkout" },
-    graph: {
-      flowInput: flowInput("worker"),
-      blocks: [agentBlock("worker", "Entry worker", launchAgent.value.id, { x: 0, y: 0 }, [], [])],
-      connections: [],
-    },
-  });
-  if (!(await factory.createFlow({ name: "Shared remote plan" })).ok)
-    throw new Error("Could not seed the shared Flow");
+  requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
+  return { pause, launch };
 }
 
-/** Seeded scenario Runs, keyed journey Runs and the Run states journeys apply to them. */
-export async function scenariosFixture(host: Host) {
-  const { factory, context } = host;
-  await createFixtureDefinitions(host);
-  const flows = requireSuccess(await factory.listFlows());
-  const transitions = runTransitions(context);
+type FixtureFlows = Awaited<ReturnType<typeof createFixtureScenarioSet>>;
 
-  /** Journey keys are scoped to this fixture; the Flow is fixed when the key is first used. */
-  const journeyRuns = new Map<string, { id: string; flow: string }>();
-  async function ensureRun(
+/** A Flow journey Runs start in: a seeded or fixture scenario Flow by key, or one the journey saved. */
+export type ScenarioFlow = keyof DemoFlows | keyof FixtureFlows | { id: string };
+
+/** A scenario Run and how it looked when the fixture last handed it to a journey. */
+interface ScenarioRun {
+  id: string;
+  seen: string;
+}
+
+/**
+ * Seeded scenario Runs, keyed journey Runs and the Run states journeys apply to them. Both belong
+ * to the authorization context and journey attempt that started them: authorization journeys
+ * retire contexts, and journeys change Runs. A later attempt gets fresh Runs and the earlier ones
+ * are archived, so journeys that find a Run by title find the fresh one.
+ */
+export async function scenariosFixture(host: Host) {
+  const { factory, context, world } = host;
+  const flows: Record<keyof DemoFlows | keyof FixtureFlows, string> = {
+    ...world.flows,
+    ...(await createFixtureScenarioSet(host)),
+  };
+  const transitions = runTransitions(context);
+  /** Advances before every journey attempt; Start keys include it. */
+  let attempt = 0;
+
+  async function currentContext() {
+    const { authorizationContext } = requireSuccess(await factory.getConnection());
+    assert(authorizationContext, "Run scenarios need an authorized T3 connection");
+    return authorizationContext.id;
+  }
+
+  async function retire(id: string) {
+    if (requireSuccess(await factory.getRun(id)).lifecycle !== "archived")
+      requireSuccess(await factory.archiveRun(id));
+  }
+
+  /**
+   * Reads what journeys change on scenario Runs, through the UI or Run states: navigation and
+   * presentation, lifecycle, recorded work and requests. Archived Runs have no navigation entry.
+   */
+  async function observeRuns() {
+    const navigation = new Map(
+      requireSuccess(await factory.listRunNavigation()).map((entry) => [entry.id, entry]),
+    );
+    return async (id: string) => {
+      const run = requireSuccess(await factory.getRun(id));
+      return JSON.stringify([
+        navigation.get(id) ?? null,
+        run.lifecycle,
+        run.events.length,
+        run.intents.length,
+        run.recoveries.length,
+      ]);
+    };
+  }
+
+  async function startWorker(
+    flowId: string,
     key: string,
-    flowName: string,
-    title = `Demo · Live ${key} · Tidy the project picker`,
-    prompt = "Tidy the spacing of the Atlas project picker.",
+    title: string,
+    prompt: string,
+    keyNamespace: string,
   ) {
-    const known = journeyRuns.get(key);
-    if (known) {
-      assert.equal(known.flow, flowName, `Journey ${key} already uses another Flow`);
-      return known.id;
-    }
-    const flow = requireSuccess(await factory.listFlows()).find((item) => item.name === flowName);
-    assert(flow, `Unknown journey Flow ${flowName}`);
-    const worker = await workerAtWork(
+    return workerAtWork(
       context,
-      await demoStart(context, flow.id, key, title, prompt, undefined, {
+      await demoStart(context, flowId, key, title, prompt, undefined, {
         titlePrefix: "",
-        keyNamespace: "ui-live:",
+        keyNamespace,
       }),
     );
-    journeyRuns.set(key, { id: worker.runId, flow: flowName });
+  }
+
+  /** Every journey key's latest Run, with the context and attempt it belongs to. */
+  const journeyRuns = new Map<
+    string,
+    { id: string; flowId: string; context: string; attempt: number }
+  >();
+  async function ensureRun(
+    key: string,
+    flow: ScenarioFlow,
+    title = `Demo · Live ${key} · Tidy the project picker`,
+  ) {
+    const flowId = typeof flow === "string" ? flows[flow] : flow.id;
+    const runContext = await currentContext();
+    const known = journeyRuns.get(key);
+    if (known?.attempt === attempt && known.context === runContext) {
+      assert.equal(known.flowId, flowId, `Journey ${key} already uses another Flow`);
+      return known.id;
+    }
+    if (known) await retire(known.id);
+    const worker = await startWorker(
+      flowId,
+      key,
+      title,
+      "Tidy the spacing of the Atlas project picker.",
+      `ui-live:${runContext}:${attempt}:`,
+    );
+    journeyRuns.set(key, { id: worker.runId, flowId, context: runContext, attempt });
     return worker.runId;
   }
 
-  const review = flows.find((f) => f.name === "Demo · Build, review and decide")!;
-  let workerRuns: Promise<Map<string, string>> | undefined;
-  async function prepareWorkerRuns() {
-    // Authorization journeys retire earlier contexts; this suite owns a fresh scenario copy.
-    const flow = (name: string) => flows.find((item) => item.name === name)!.id;
-    const runs = await seedScenarios(
-      context,
-      {
-        simple: flow("Demo · Focused change"),
-        review: review.id,
-        parallel: flow("Demo · Parallel review"),
-        parallelStart: flow("Demo · Parallel review from one prompt"),
-        worktree: flow("Demo · Build and review in a worktree"),
-        wait: flow("Demo · Build, cool down and review"),
-        parallelWait: flow("Demo · Parallel review held for the sync"),
-        continuation: flow("Demo · Grill, spec and tickets"),
-        humanWait: flow("Demo · Approve, then hold for release"),
-      },
-      { titlePrefix: "UI worker · ", keyNamespace: "ui-worker:development-v1:" },
-    );
-    runs.set(
-      "report-release",
-      await ensureRun(
-        "report-release",
-        review.name,
-        "UI worker · UI worker report release",
-        "Implement the project picker change.",
+  /** The scenario copy as last handed to a journey, and the refresh of the current attempt. */
+  let copy: { context: string; runs: Map<string, ScenarioRun> } | undefined;
+  let refreshing:
+    | { attempt: number; context: string; runs: Promise<Map<string, ScenarioRun>> }
+    | undefined;
+  /** Replaces the copy's Runs that changed since a journey last received them, or all of them
+   * when the authorization context changed. */
+  async function refreshCopy(runContext: string) {
+    const observe = await observeRuns();
+    const earlier = copy?.context === runContext ? copy.runs : new Map<string, ScenarioRun>();
+    const stale = async (key: string) => {
+      const run = earlier.get(key);
+      return !run || (await observe(run.id)) !== run.seen;
+    };
+    const keyNamespace = `ui-worker:${runContext}:${attempt}:`;
+    const namespace = { titlePrefix: "UI worker · ", keyNamespace };
+    const starts = [
+      ...seedScenarioList.map(
+        (scenario) =>
+          [
+            scenario.key,
+            () => seedScenario(context, world.flows[scenario.flow], scenario, namespace),
+          ] as const,
       ),
-    );
-    return runs;
+      [
+        "report-release",
+        async () =>
+          (
+            await startWorker(
+              world.flows.review,
+              "report-release",
+              "UI worker · UI worker report release",
+              "Implement the project picker change.",
+              keyNamespace,
+            )
+          ).runId,
+      ] as const,
+    ];
+    const runs = new Map<string, string>();
+    for (const [key, start] of starts) {
+      if (!(await stale(key))) continue;
+      const replaced = copy?.runs.get(key);
+      if (replaced) await retire(replaced.id);
+      runs.set(key, await start());
+    }
+    const observeSeeded = await observeRuns();
+    const next = new Map(earlier);
+    for (const [key, id] of runs) next.set(key, { id, seen: await observeSeeded(id) });
+    copy = { context: runContext, runs: next };
+    return next;
   }
 
   return {
     actions: {
+      /** This attempt's scenario Runs by scenario key, in the current authorization context. */
       async prepare() {
-        return Object.fromEntries(await (workerRuns ??= prepareWorkerRuns()));
+        const runContext = await currentContext();
+        if (refreshing?.attempt !== attempt || refreshing.context !== runContext)
+          refreshing = { attempt, context: runContext, runs: refreshCopy(runContext) };
+        return Object.fromEntries([...(await refreshing.runs)].map(([key, run]) => [key, run.id]));
       },
-      /** Starts `key` once, in the named Flow and current authorization context. */
-      async ensure({ key, flow }: { key: string; flow: string }) {
+      /** Starts `key` once per journey attempt, in `flow` and the current authorization context. */
+      async ensure({ key, flow }: { key: string; flow: ScenarioFlow }) {
         return { id: await ensureRun(key, flow) };
       },
-      /** Applies exactly the named Run state to the Run `id` or journey `key`. */
+      /** Applies exactly the named Run state to the Run `id` or this attempt's journey `key`. */
       async transition(
         input: { state: FixtureState; message?: string } & ({ id: string } | { key: string }),
       ) {
         assert(Object.hasOwn(transitions, input.state), `Unknown Run state ${input.state}`);
-        const id = "id" in input ? input.id : journeyRuns.get(input.key)?.id;
-        assert(id, "An existing Run id or journey key is required");
+        const journey = "key" in input ? journeyRuns.get(input.key) : undefined;
+        const id = "id" in input ? input.id : journey?.attempt === attempt ? journey.id : undefined;
+        assert(id, "An existing Run id or this journey's key is required");
         const run = requireSuccess(await factory.getRun(id));
         const outcome = await transitions[input.state](run, input.message);
         return { outcome };
       },
     },
-    reset() {},
-    /** Starts one Run of the named seeded Flow and waits until its worker is at work. */
-    async startRun(flowName: string, key: string, title: string) {
-      const flow = flows.find((item) => item.name === flowName)!;
-      return workerAtWork(
-        context,
-        await demoStart(
-          context,
-          flow.id,
-          key,
-          title,
-          "Tidy the spacing of the Atlas project picker.",
-          undefined,
-          {
-            titlePrefix: "",
-            keyNamespace: "ui-live:",
-          },
-        ),
-      );
+    reset() {
+      attempt += 1;
     },
+    ensureRun,
   };
 }

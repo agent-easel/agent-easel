@@ -221,7 +221,7 @@ test("saving a Run's Flow after Start shows the revision badge on the open Run",
   await browser.setViewport({ width: 1600, height: 1000 });
   const name = "Canvas revision · Focused change";
   const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", name, { mode: "checkout" });
-  const run = await liveRun(app, "revision-badge", name);
+  const run = await liveRun(app, "revision-badge", { id: flow });
   await app.open(`/runs/${run}`);
   const badge = screen.getByRole("status", "Flow revision");
   await expect(screen.getByRole("button", "Canvas shortcuts", { exact: true })).toBeVisible();

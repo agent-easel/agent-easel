@@ -8,7 +8,6 @@ import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
-import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 
 type ServerOptions = NonNullable<Parameters<typeof startServer>[1]>;
 
@@ -77,9 +76,8 @@ export async function startHost(
   );
   const factory = server.factory;
   factory.setRuntimeBackendUrl(`http://127.0.0.1:${server.address.port}`);
-  await seedDevelopment(factory, t3, home);
+  const world = await seedDevelopment(factory, t3, home);
   t3.approve();
-  const project = requireSuccess(await factory.listProjects()).projects[0]!;
   let advancing: Promise<void> | undefined;
   const timer = setInterval(() => {
     advancing ??= t3.advance().finally(() => {
@@ -93,7 +91,9 @@ export async function startHost(
     t3,
     server,
     factory,
-    context: { factory, t3, projectId: project.id },
+    /** The development seed's project, Agents and Flows, by key. */
+    world,
+    context: { factory, t3, projectId: world.project.id },
     async close() {
       clearInterval(timer);
       await advancing;
