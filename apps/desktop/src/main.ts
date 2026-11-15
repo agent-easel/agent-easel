@@ -41,7 +41,7 @@ import { ApprovedClient } from "./approved-client.ts";
 import { BackendSupervisor } from "./backend.ts";
 import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
-import { hostLiveSocket, livePath, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
+import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
 import { SettingsStore } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
@@ -410,11 +410,8 @@ function closeLive(reason: string) {
 
 /** Captures the current target: a later selection or backend change closes this channel. */
 function openLive(query: string, port: LivePort) {
-  const target = apiTarget();
-  if (!target) return refuseLive(port, "The Factory server is unreachable.");
-  const path = livePath(query);
-  const socket =
-    target.kind === "host" ? hostLiveSocket(target.base, path) : target.connection.openSocket(path);
+  const socket = openLiveSocket(apiTarget(), query);
+  if (!socket) return refuseLive(port, "The Factory server is unreachable.");
   const channel = relayLive(socket, port, () => liveChannels.delete(channel));
   liveChannels.add(channel);
 }

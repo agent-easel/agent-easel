@@ -2,13 +2,13 @@ import { useEffect, useSyncExternalStore } from "react";
 import { Layer } from "effect";
 import { Socket } from "effect/socket";
 import { LIVE_PATH } from "@t3-factory/contracts";
+import { rpcSessions } from "@t3-factory/contracts/live-session";
 import { FACTORY_MINIMUM_SERVER_PROTOCOL, FACTORY_PROTOCOL } from "@t3-factory/domain-validation";
 import { recheckAccess } from "../client-gate.tsx";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { transport } from "../transport.ts";
 import { desktopLiveSocket } from "./desktop-socket.ts";
 import { LiveOwner, type LiveScope, type LiveScopeView } from "./owner.ts";
-import { rpcSessions } from "./rpc-session.ts";
 import { appearanceScope, connectionScope } from "./scopes.ts";
 
 /** Browsers cannot set WebSocket headers, so the protocol range travels in the query. */
