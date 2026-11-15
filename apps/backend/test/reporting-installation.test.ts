@@ -1,7 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import {
   driverHomes,
@@ -10,17 +11,112 @@ import {
   installedReportingServer,
 } from "./support/reporting.ts";
 import { prepared } from "./support/prepared-runner.ts";
+import { FACTORY_BLOCK_SKILL } from "../src/factory-block-skill.ts";
 import { FACTORY_START_RUN_SKILL } from "../src/factory-start-run-skill.ts";
 import { SETUP_FACTORY_SKILL } from "../src/setup-factory-skill.ts";
 import { isolatedUserHome } from "./support/reporting-home.ts";
 
-it("installing Claude reporting preserves unrelated user settings", async (context) => {
+const MCP_URL = "http://127.0.0.1:4310/mcp";
+
+it.for([
+  {
+    driver: "codex",
+    config: ".codex/config.toml",
+    before: '# keep this comment\nmodel = "sample"\n',
+    after: `# keep this comment\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "${MCP_URL}"\n`,
+    skills: ".codex/skills",
+  },
+  {
+    driver: "claudeAgent",
+    config: ".claude.json",
+    before: JSON.stringify({ theme: "dark", mcpServers: { other: { command: "keep" } } }),
+    after: `${JSON.stringify(
+      {
+        theme: "dark",
+        mcpServers: {
+          other: { command: "keep" },
+          "factory-runtime": { type: "http", url: MCP_URL },
+        },
+      },
+      null,
+      2,
+    )}\n`,
+    skills: ".claude/skills",
+  },
+  {
+    driver: "cursor",
+    config: ".cursor/mcp.json",
+    before: JSON.stringify({ theme: "dark", mcpServers: { other: { command: "keep" } } }),
+    after: `${JSON.stringify(
+      {
+        theme: "dark",
+        mcpServers: { other: { command: "keep" }, "factory-runtime": { url: MCP_URL } },
+      },
+      null,
+      2,
+    )}\n`,
+    skills: ".cursor/skills",
+  },
+  {
+    driver: "grok",
+    config: ".grok/config.toml",
+    before: '# keep\nmodel = "sample"\n',
+    after: `# keep\nmodel = "sample"\n\n[mcp_servers.factory-runtime]\nurl = "${MCP_URL}"\n`,
+    skills: ".grok/skills",
+  },
+] as const)(
+  "installing $driver reporting adds Factory MCP to its user config beside unrelated settings and installs the Factory skills in its skill folder",
+  async ({ driver, config, before, after, skills }, context) => {
+    // Arrange
+    const { factory, home, harness } = await driverHomes(context, {
+      [driver]: { driver, config: {} },
+    });
+    await mkdir(dirname(join(home, config)), { recursive: true });
+    await writeFile(join(home, config), before);
+    const targets = await factory.getReportingInstallations();
+    assert(targets.ok);
+    const canonicalSkills = join(harness.processHome, "reporting", "skills");
+
+    // Act
+    const result = await factory.installReporting({ targetId: targets.value[0]!.id });
+
+    // Assert
+    assert(result.ok);
+    expect(result.value).toMatchObject({
+      provider: driver,
+      status: "installed",
+      launchSkill: "current",
+      runtimeEvidence: "UNVERIFIED",
+    });
+    expect(result.value.path).toBe(join(await realpath(home), config));
+    expect(await readFile(join(home, config), "utf8")).toBe(after);
+    expect(await readFile(join(home, skills, "factory-block", "SKILL.md"), "utf8")).toBe(
+      FACTORY_BLOCK_SKILL,
+    );
+    expect(await readFile(join(home, skills, "factory-start-run", "SKILL.md"), "utf8")).toBe(
+      FACTORY_START_RUN_SKILL,
+    );
+    expect(await readFile(join(home, skills, "setup-factory", "SKILL.md"), "utf8")).toBe(
+      SETUP_FACTORY_SKILL,
+    );
+    expect(await readFile(join(canonicalSkills, "factory-block", "SKILL.md"), "utf8")).toBe(
+      FACTORY_BLOCK_SKILL,
+    );
+    expect(await readFile(join(canonicalSkills, "factory-start-run", "SKILL.md"), "utf8")).toBe(
+      FACTORY_START_RUN_SKILL,
+    );
+    expect(await readFile(join(canonicalSkills, "setup-factory", "SKILL.md"), "utf8")).toBe(
+      SETUP_FACTORY_SKILL,
+    );
+  },
+);
+
+it("a Claude home named .claude keeps its config and skills directly inside it", async (context) => {
   // Arrange
-  const { factory, config, home, harness } = await reportingFixture(context);
-  await writeFile(
-    config,
-    JSON.stringify({ theme: "dark", mcpServers: { other: { command: "other" } } }),
-  );
+  const { factory, home } = await driverHomes(context, {
+    claude: { driver: "claudeAgent", config: { homePath: "~/.claude" } },
+  });
+  await mkdir(join(home, ".claude"));
   const targets = await factory.getReportingInstallations();
   assert(targets.ok);
 
@@ -30,34 +126,22 @@ it("installing Claude reporting preserves unrelated user settings", async (conte
   // Assert
   assert(result.ok);
   expect(result.value.status).toBe("installed");
-  expect(result.value.runtimeEvidence).toBe("UNVERIFIED");
-  const saved = JSON.parse(await readFile(config, "utf8"));
-  expect(result.value.launchSkill).toBe("current");
+  expect(result.value.path).toBe(join(await realpath(home), ".claude", ".claude.json"));
+  expect(await readFile(join(home, ".claude", "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
+    FACTORY_BLOCK_SKILL,
+  );
   expect(
     await readFile(join(home, ".claude", "skills", "factory-start-run", "SKILL.md"), "utf8"),
-  ).toBe(FACTORY_START_RUN_SKILL);
-  expect(
-    await readFile(
-      join(harness.processHome, "reporting", "skills", "factory-start-run", "SKILL.md"),
-      "utf8",
-    ),
   ).toBe(FACTORY_START_RUN_SKILL);
   expect(await readFile(join(home, ".claude", "skills", "setup-factory", "SKILL.md"), "utf8")).toBe(
     SETUP_FACTORY_SKILL,
   );
-  expect(
-    await readFile(
-      join(harness.processHome, "reporting", "skills", "setup-factory", "SKILL.md"),
-      "utf8",
-    ),
-  ).toBe(SETUP_FACTORY_SKILL);
-  expect(saved.theme).toBe("dark");
-  expect(saved.mcpServers.other).toStrictEqual({ command: "other" });
+  expect(existsSync(join(home, ".claude", ".claude", "skills"))).toBe(false);
 });
 
-it("Codex installation preserves existing settings and survives backend restart without duplicates", async (context) => {
+it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
   // Arrange
-  const { factory, config, home, harness, options } = await reportingFixture(context, "codex");
+  const { factory, config, harness, options } = await reportingFixture(context, "codex");
   await writeFile(
     config,
     '# keep this comment\nmodel = "sample"\n[mcp_servers.other]\ncommand = "other"\n',
@@ -76,16 +160,11 @@ it("Codex installation preserves existing settings and survives backend restart 
   assert(result.ok);
   expect(result.value.status).toBe("installed");
   expect(await readFile(config, "utf8")).toBe(before);
-  expect(await readFile(join(home, "skills", "factory-start-run", "SKILL.md"), "utf8")).toBe(
-    FACTORY_START_RUN_SKILL,
-  );
-  expect(before).toMatch(/# keep this comment/);
-  expect(before).toMatch(/command = "other"/);
 });
 
 it("a provider without Factory reporting is listed as unsupported with nothing to install", async (context) => {
   // Arrange
-  const { factory } = await reportingFixture(context, "pi");
+  const { factory } = await driverHomes(context, { "test-provider": { driver: "pi", config: {} } });
 
   // Act
   const targets = await factory.getReportingInstallations();
@@ -239,39 +318,6 @@ it("a provider instance a T3 project enables stays listed while the machine has 
   // Assert
   assert(result.ok);
   expect(result.value).toMatchObject([{ provider: "claudeAgent", instances: ["claude"] }]);
-});
-
-it("installing Cursor reporting writes the user MCP file", async (context) => {
-  // Arrange
-  const { factory, home } = await driverHomes(context, {
-    cursor: { driver: "cursor", config: {} },
-  });
-  await mkdir(join(home, ".cursor"));
-  await writeFile(
-    join(home, ".cursor", "mcp.json"),
-    JSON.stringify({ theme: "dark", mcpServers: { other: { command: "keep" } } }),
-  );
-  const targets = await factory.getReportingInstallations();
-  assert(targets.ok);
-  const cursor = targets.value.find((target) => target.provider === "cursor")!;
-
-  // Act
-  const installed = await factory.installReporting({ targetId: cursor.id });
-
-  // Assert
-  assert(installed.ok);
-  expect(installed.value.status).toBe("installed");
-  expect(
-    await readFile(join(home, ".cursor", "skills", "factory-start-run", "SKILL.md"), "utf8"),
-  ).toBe(FACTORY_START_RUN_SKILL);
-  expect(JSON.parse(await readFile(cursor.path!, "utf8"))).toMatchObject({
-    theme: "dark",
-    mcpServers: { other: { command: "keep" } },
-  });
-  expect(cursor.path).toBe(join(await realpath(home), ".cursor", "mcp.json"));
-  expect(
-    JSON.parse(await readFile(cursor.path!, "utf8")).mcpServers["factory-runtime"],
-  ).toStrictEqual({ url: "http://127.0.0.1:4310/mcp" });
 });
 
 it("Grok reporting uses the standard home and stays not installed until install", async (context) => {
@@ -438,30 +484,9 @@ it("repairing a Codex entry for another backend address replaces only Factory's 
   );
 });
 
-it("Repair installs the Factory Block skill under the Claude home", async (context) => {
+it("the installed Factory Block skill names its trigger, the Factory tools and both reports", async (context) => {
   // Arrange
-  const { home, harness } = await installedReportingFixture(context);
-  const harnessSkill = join(home, ".claude", "skills", "factory-block", "SKILL.md");
-  const canonical = join(harness.processHome, "reporting", "skills", "factory-block", "SKILL.md");
-
-  // Act
-  const installed = await readFile(harnessSkill, "utf8");
-
-  // Assert
-  expect(installed).toBe(await readFile(canonical, "utf8"));
-  expect(installed).toContain("name: factory-block");
-  expect(installed).toContain("factory_get_block");
-  expect(installed).toContain("factory_get_run");
-  expect(installed).toContain("factory_get_run_image");
-  expect(installed).toContain('to: "working"');
-  expect(installed).toContain('to: "finished"');
-  expect(installed).toContain("`blockId`");
-  expect(installed).toContain("$factory-block");
-});
-
-it("Repair installs the Factory Block skill beside a Codex config", async (context) => {
-  // Arrange
-  const { factory, home } = await reportingFixture(context, "codex");
+  const { factory, home } = await reportingFixture(context);
   const targets = await factory.getReportingInstallations();
   assert(targets.ok);
 
@@ -470,8 +495,17 @@ it("Repair installs the Factory Block skill beside a Codex config", async (conte
 
   // Assert
   assert(result.ok);
-  const installed = await readFile(join(home, "skills", "factory-block", "SKILL.md"), "utf8");
+  const installed = await readFile(
+    join(home, ".claude", "skills", "factory-block", "SKILL.md"),
+    "utf8",
+  );
   expect(installed).toContain("name: factory-block");
+  expect(installed).toContain("factory_get_block");
+  expect(installed).toContain("factory_get_run");
+  expect(installed).toContain("factory_get_run_image");
+  expect(installed).toContain('to: "working"');
+  expect(installed).toContain('to: "finished"');
+  expect(installed).toContain("`blockId`");
   expect(installed).toContain("$factory-block");
 });
 
@@ -532,27 +566,6 @@ it("a Factory Block skill installed by an earlier release needs attention until 
   assert(result.ok);
   expect(result.value.status).toBe("installed");
   expect(await readFile(skill, "utf8")).toContain('to: "working"');
-});
-
-it("Grok installation distributes the launch skill while preserving unrelated config", async (context) => {
-  // Arrange
-  const { factory, home } = await driverHomes(context, { grok: { driver: "grok", config: {} } });
-  await mkdir(join(home, ".grok"));
-  const config = join(home, ".grok", "config.toml");
-  await writeFile(config, '# keep\nmodel = "sample"\n');
-  const targets = await factory.getReportingInstallations();
-  assert(targets.ok);
-
-  // Act
-  const installed = await factory.installReporting({ targetId: targets.value[0]!.id });
-
-  // Assert
-  assert(installed.ok);
-  expect(installed.value.launchSkill).toBe("current");
-  expect(
-    await readFile(join(home, ".grok", "skills", "factory-start-run", "SKILL.md"), "utf8"),
-  ).toBe(FACTORY_START_RUN_SKILL);
-  expect(await readFile(config, "utf8")).toContain('# keep\nmodel = "sample"\n');
 });
 
 it("a missing optional skill leaves reporting installed and offers Reinstall", async (context) => {
