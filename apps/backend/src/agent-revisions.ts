@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { AgentExecutionSettings, BlockExit, SavedAgent } from "@t3-factory/contracts";
+import type { AgentDefinition, AgentExecutionSettings, BlockExit } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
 
 /** A saved Agent revision as Studio and Start read it; settings availability is derived separately. */
-export type AgentRevision = SavedAgent;
+export type AgentRevision = AgentDefinition;
 
 type RevisionRow = {
   id: string;

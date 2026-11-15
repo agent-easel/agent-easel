@@ -315,7 +315,7 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 ## Protocol compatibility
 
 The current protocol is **13**. Servers require clients of at least **13**, and clients require servers of at least **13**.
-Protocol 13 lets an Agent have no execution settings (`execution` and `settingsStatus` are `null`),
+Protocol 13 lets an Agent have no execution settings (`execution` is `null`),
 requires the `execution` key on Agent create and save, and adds Agent and Flow export and import
 ([definition export](studio.md#definition-export)). Older clients cannot read such an Agent, so the server refuses them before
 product screens mount and they must update; their credentials and stored data are kept. A current

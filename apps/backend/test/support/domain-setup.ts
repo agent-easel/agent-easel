@@ -35,6 +35,15 @@ export async function openFactoryWithApprovedT3(context: TestContext) {
   return { harness, factory, t3 };
 }
 
+/** A saved Agent with T3 connected but its capability reads failing, and the reads sent so far. */
+export async function savedAgentWhileCapabilitiesFail(context: TestContext) {
+  const { factory, t3 } = await openFactoryWithApprovedT3(context);
+  const saved = await factory.createAgent(sampleAgentInput());
+  assert(saved.ok);
+  t3.capabilitiesAvailable = false;
+  return { factory, t3, agent: saved.value, capabilityReads: t3.capabilityReads };
+}
+
 export async function readAgentAfterRestart(
   harness: Awaited<ReturnType<typeof factoryHarness>>,
   agentId: string,
