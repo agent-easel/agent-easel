@@ -397,7 +397,7 @@ test("the host retries failed command setup while the Gateway is connected", asy
   await app.screenshot("chat-discord-command-retried");
 });
 
-test("an approved client's Settings has no Chat control group or search entry", async ({
+test("an approved client's Settings has no Chat control section or search entry", async ({
   app,
   screen,
 }) => {
@@ -406,14 +406,17 @@ test("an approved client's Settings has no Chat control group or search entry", 
   await app.open("/__fixture/remote-browser");
   await openApproved(app, "/settings/run-titles");
   const sections = screen.getByRole("navigation", "Settings sections");
-  await expect(sections.getByRole("link", "Run titles", { exact: true })).toBeVisible();
+  await expect(
+    sections.getByRole("link", "Run titles, Managed on the Factory host", { exact: true }),
+  ).toBeVisible();
+  await expect(sections.getByRole("link", /^Language model/)).toHaveCount(0);
+  await expect(sections.getByRole("link", /^Discord/)).toHaveCount(0);
 
   // Act
   await screen.getByLabel("Search settings").fill("chat control");
 
   // Assert
   await expect(screen.getByText("No settings match “chat control”.")).toBeVisible();
-  await expect(sections.getByRole("group", "CHAT CONTROL")).toHaveCount(0);
   await app.screenshot("chat-control-approved-client");
 });
 

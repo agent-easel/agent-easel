@@ -27,7 +27,7 @@ import type { Duplex } from "node:stream";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,6 +46,7 @@ import {
 import { startServer } from "../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../apps/backend/src/config.ts";
 import { ControlledT3 } from "../../apps/backend/test/support/controlled-t3.ts";
+import { FACTORY_START_RUN_SKILL } from "../../apps/backend/src/factory-start-run-skill.ts";
 import {
   buttonEvent,
   messageEvent,
@@ -522,6 +523,20 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
   async "/__fixture/reporting/break"() {
     await rm(join(home, "reporting-codex", "skills", "factory-block", "SKILL.md"));
   },
+  async "/__fixture/reporting/optional-skill"(query) {
+    const path = join(
+      await realpath(home),
+      "reporting-codex",
+      "skills",
+      "factory-start-run",
+      "SKILL.md",
+    );
+    await rm(path);
+    if (query.get("linked") === "1")
+      await symlink(join(home, "reporting-codex", "config.toml"), path);
+    else await writeFile(path, FACTORY_START_RUN_SKILL);
+    return { path };
+  },
   async "/__fixture/scenarios/prepare"() {
     return Object.fromEntries(await (workerRuns ??= prepareWorkerRuns()));
   },
@@ -662,6 +677,12 @@ const fixtureRoutes: Record<string, (query: URLSearchParams) => unknown> = {
   /** `t3 auth session revoke` from another T3 process: open subscriptions keep streaming. */
   "/__fixture/appearance/revoke": () => {
     t3.appearance.sessionValid = false;
+  },
+  /** A device's access request, made through host operations like the approved journey browser. */
+  async "/__fixture/request-access"(query) {
+    const label = query.get("label");
+    assert(label, "A device label is required");
+    requireSuccess(await factory.requestClientAccess({ label, kind: "browser" }));
   },
   "/__fixture/approve": () => decideAll("pending", "approve"),
   "/__fixture/revoke": () => decideAll("approved", "revoke"),
