@@ -10,17 +10,15 @@ export const EXECUTION_DIMENSIONS: CanvasDimensions = {
     divider: 1,
     exitPaddingTop: 3,
     exitPaddingBottom: 5,
-    anchorBorder: 1.5,
     inputY: 18.5,
     exitRow: 22,
     footer: 32,
   },
   flowInput: {
     ...AUTHORING_DIMENSIONS.flowInput,
-    anchorBorder: 1,
     promptLine: 26,
     promptImages: 108,
     statusLine: 26,
   },
-  port: { size: 10, outset: 6, handle: 10, highlight: 10 },
+  port: { size: 10, handle: 10, highlight: 10 },
 };

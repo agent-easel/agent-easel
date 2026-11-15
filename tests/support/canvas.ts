@@ -60,3 +60,37 @@ export async function expectFollowingReview(screen: Screen) {
   );
   await expect(screen.getByRole("button", "Follow active", { exact: true })).toBeVisible();
 }
+
+/**
+ * The largest distance, in viewport px, between an end of a Flow canvas wire and the centre of
+ * the port it starts or ends at.
+ */
+export async function largestWirePortOffset(browser: Browser) {
+  return Number(
+    await browser.evaluate(`(() => {
+      const canvas = document.querySelector('[aria-label="Flow canvas"]');
+      const centre = (el) => {
+        const box = el.getBoundingClientRect();
+        return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      };
+      const ports = [...canvas.querySelectorAll("article span.rounded-full")];
+      const incoming = ports.filter((el) => el.hasAttribute("data-incoming-port")).map(centre);
+      const outgoing = ports.filter((el) => !el.hasAttribute("data-incoming-port")).map(centre);
+      const at = (path, length) => {
+        const point = path.getPointAtLength(length);
+        return point.matrixTransform(path.getScreenCTM());
+      };
+      const nearest = (point, centres) =>
+        Math.min(...centres.map((c) => Math.hypot(c.x - point.x, c.y - point.y)));
+      return Math.max(
+        ...[...canvas.querySelectorAll('g[role="button"]')].flatMap((wire) => {
+          const path = wire.querySelectorAll("path")[1];
+          return [
+            nearest(at(path, 0), outgoing),
+            nearest(at(path, path.getTotalLength()), incoming),
+          ];
+        }),
+      );
+    })()`),
+  );
+}
