@@ -187,7 +187,7 @@ export function blockReference(
 const conditionRoutes = (rules: number) =>
   rules === 0
     ? "every arrival to Otherwise"
-    : `by arrival · ${rules} ${rules === 1 ? "rule" : "rules"}, then Otherwise`;
+    : `by arrival · ${rules.toLocaleString("en-US")} ${rules === 1 ? "rule" : "rules"}, then Otherwise`;
 
 /** A Continuation's reference, with the sentence-case form its block inspector shows as well. */
 export function continuationReference(

@@ -274,6 +274,11 @@ fixed Human exits their old exits were mapped to.
 - A [Wait](#waits) is not started before its first arrival, waiting while any arrival is pending, with **until** and the
   nearest deadline (and the count of waiting arrivals when there are several), and finished once every arrival has
   continued. It has no worker, thread or attention.
+- A [Condition](#conditions) reads **Not visited** before anything reaches it, then its arrival total and
+  **latest →** the output its most recent arrival selected (with the count still waiting for a number, if any); the
+  latest selection is not all downstream work. Each output row shows when it is selected (**from arrival *N* onward**
+  or **when no rule matches**). Routing, Otherwise and an unwired selection raise no attention; only a Condition
+  integrity Problem shows on the block.
 - **Needs input** and **Problem** use the same labels as the Run sidebar, are independent of execution state and are not
   cleared by selecting a block. Stale observations say **Not live** and **Last known**; an unknown observation on a started
   block differs from stale; a block that never ran says **Not visited**.
@@ -531,6 +536,15 @@ only that window, so arrivals numbered later never shift a page; reading without
 A cursor is opaque and bound to its Run and Condition: one for another Run or Condition, an altered one or one beyond the
 committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
 selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
+
+Selecting a Condition shows this evidence in the inspector: the latest selection, then its arrivals in ascending number,
+each with acceptance time, source block and producing worker, the matched rule or **No rule matched** (Otherwise), the
+selected output, and each recipient with its delivery's disposition when that page was read; an arrival whose output is
+not connected says it ends there. A selection is only the route, so the list never shows a recipient as having received
+it until its delivery is acknowledged. The first page opens once the Condition has an arrival; **Load more** continues
+that window and **Refresh** opens a new one. When live Run updates count arrivals after the window, the list says so and
+waits for **Refresh** rather than adding them. A failed read, including a cursor the server refuses, shows its error
+with **Try again** and, for a later page, a refresh from arrival 1.
 
 ## Continuations
 

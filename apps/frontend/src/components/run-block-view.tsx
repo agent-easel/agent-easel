@@ -19,6 +19,7 @@ import { pendingRecovery, RequestReport, RunAttentionDetails } from "./run-atten
 import { CoordinatorActivations } from "./run-coordination.tsx";
 import { ResultCard } from "./run-result.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
+import { ConditionArrivals } from "./condition-arrivals.tsx";
 
 type Visits = ReturnType<typeof blockVisits>;
 
@@ -79,6 +80,9 @@ function BlockNow({
         </InspectorSection>
       )}
       {block.kind === "wait" && <WaitArrivals run={run} blockId={block.id} />}
+      {block.kind === "condition" && (
+        <ConditionArrivals key={`${run.id}:${block.id}`} run={run} blockId={block.id} />
+      )}
       {block.kind !== "wait" && visits.length > 1 && (
         <InspectorSection title={`Visits · ${visits.length}`}>
           <ul className="flex flex-col gap-1.5">

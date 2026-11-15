@@ -19,6 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { capturedExits } from "../flow-graph.ts";
+import { conditionActivityText } from "../condition-arrivals.ts";
 import { blockVisits } from "./execution-canvas.tsx";
 import { clockTime, executionStateLabel, StatePill } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
@@ -53,8 +54,10 @@ const stateIcon: Record<RunBlock["state"], { Icon: LucideIcon; className: string
   stopped: { Icon: CircleStop, className: "text-status-stopped" },
 };
 
-/** An active block's current visit; a settled one's exit and when it was accepted. */
+/** An active block's current visit; a settled one's exit and when it was accepted; a Condition's
+ * routing summary. */
 function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock) {
+  if (block.kind === "condition") return conditionActivityText(run, block.id);
   if (activeStates.includes(recorded.state))
     return currentVisitText(run, block, blockVisits(run, block));
   const report = run.reports.findLast(

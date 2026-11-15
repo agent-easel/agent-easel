@@ -7,6 +7,8 @@ import {
   saveFlowElsewhere,
   saveSingleAgentFlow,
 } from "./support/flows.ts";
+import { findRun, readHistoryRun } from "./support/run-history.ts";
+import { prepareScenarios } from "./support/scenarios.ts";
 
 /** Saves a Flow whose Coder `finish` exit reaches Condition Escalate with `rules`, wired as listed. */
 async function saveConditionFlow(
@@ -222,4 +224,84 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
   );
   await expect(screen.getByRole("article", "Block Escalate")).toContainText(`Route ${last} late`);
   await app.screenshot("condition-size-limit-after-reload");
+});
+
+test("a Condition's Run block reads Not visited before its first arrival and each rule output by its threshold", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await prepareScenarios(app);
+  const unvisited = await findRun(
+    app.baseUrl,
+    "UI worker · Condition · First review before the rounds gate",
+  );
+
+  // Act
+  await app.open(`/runs/${unvisited.id}`);
+
+  // Assert
+  const block = screen.getByRole("article", "Block Review rounds");
+  await expect(block).toContainText("Not visited");
+  await expect(block).toContainText("from arrival 3 onward");
+  await expect(block).toContainText("when no rule matches");
+  await screen.getByRole("button", /^Condition Review rounds, /).tap();
+  await expect(screen.getByRole("region", "Condition arrivals")).toContainText(
+    "Not visited · no arrival numbered yet.",
+  );
+  await app.screenshot("condition-run-unvisited");
+});
+
+test("selecting a routed Condition lists each arrival's route, recipient dispositions and the arrival that ended there, with one Timeline row per arrival", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await prepareScenarios(app);
+  const found = await findRun(
+    app.baseUrl,
+    "UI worker · Condition · Second approval ended at the gate",
+  );
+  await app.open(`/runs/${found.id}`);
+  const block = screen.getByRole("article", "Block First approval");
+  await expect(block).toContainText("2 arrivals · latest → Later approvals");
+
+  // Act
+  await screen.getByRole("button", /^Condition First approval, /).tap();
+
+  // Assert
+  const details = screen.getByRole("region", "Condition arrivals");
+  await expect(details).toContainText("Latest selection: arrival 2 → Later approvals");
+  await expect(details).toContainText("not all downstream work");
+  await expect(details.getByRole("listitem", "Arrival 1, Otherwise")).toContainText(
+    "No rule matched · selected Otherwise",
+  );
+  const recipients = details.getByRole("list", "Arrival 1 recipients");
+  await expect(recipients).toContainText("Your decision");
+  await expect(recipients).toContainText("acknowledged");
+  await expect(
+    details.getByRole("listitem", "Arrival 2, Later approvals, ends here"),
+  ).toContainText("Matched rule Later approvals · selected Later approvals");
+  await expect(screen.getByRole("region", "Run attention")).toHaveCount(0);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await app.screenshot("condition-run-arrivals");
+  await screen.getByRole("button", "Show timeline", { exact: true }).tap();
+  const timeline = screen.getByRole("region", "Timeline");
+  await expect(timeline).toContainText("arrival 1 → Otherwise");
+  await expect(timeline).toContainText("arrival 2 → Later approvals");
+  await timeline.getByText("arrival 2 → Later approvals").scrollIntoView();
+  await app.screenshot("condition-run-timeline");
+  const run = await readHistoryRun(app.baseUrl, found.id);
+  expect(run.conditions).toMatchObject([
+    {
+      blockId: "first",
+      arrivals: 2,
+      pending: 0,
+      latest: { arrivalNumber: 2, outputId: "later" },
+    },
+  ]);
 });

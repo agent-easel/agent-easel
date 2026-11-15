@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { BLOCK_KINDS } from "../block-kind.ts";
+import { conditionOutputName, countText } from "../condition-arrivals.ts";
 import { TitleMark, titleOutcome, titleStateLabel } from "./run-title-generation.tsx";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -125,7 +126,7 @@ function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
   if (!event.blockId || !selection) return { actorId: event.blockId, text: "selected an output" };
   return {
     actorId: event.blockId,
-    text: `arrival ${selection.arrivalNumber} → ${exitLabel(run, event.blockId, selection.outputId)}`,
+    text: `arrival ${countText(selection.arrivalNumber)} → ${conditionOutputName(run, event.blockId, selection.outputId)}`,
   };
 }
 
