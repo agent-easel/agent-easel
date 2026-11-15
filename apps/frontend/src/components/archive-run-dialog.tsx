@@ -28,7 +28,7 @@ export function ArchiveRunDialog({
   onOpenChange: (open: boolean) => void;
   onArchived?: () => void;
   /** Receives focus when the dialog closes, if it is still on the page. */
-  returnFocusId?: string;
+  returnFocusId?: string | undefined;
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();

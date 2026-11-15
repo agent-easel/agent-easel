@@ -1,11 +1,12 @@
-import { useSettleRun } from "./settle-run.tsx";
 import { RenameDialog } from "./rename-dialog.tsx";
-import { MutationGate, useMutationsAllowed } from "@/client-gate";
+import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { useCallback, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { runActions, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation, type SidebarRunAction } from "../sidebar-navigation.ts";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
+import type { RunActionAvailability } from "../run-actions.ts";
 import {
   Archive,
   ChevronDown,
@@ -26,7 +27,6 @@ import {
   Undo2,
   X,
 } from "lucide-react";
-import { api } from "../api.ts";
 import {
   byCreation,
   draftTitle,
@@ -37,7 +37,6 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
-import { ArchiveRunDialog } from "./archive-run-dialog.tsx";
 import { RunStatusChip } from "./run-status-chip.tsx";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -119,28 +118,31 @@ export function RunSidebar({ path }: { path: string }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
-  const { onRename, onArchive, dialogs } = useSidebarDialogs();
+  const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
   const query = search.trim().toLocaleLowerCase();
   const { open, snoozed, settled, matches, total } = navigationGroups(runs, drafts, query);
-  const { act, busy, actionError, settlementDialog } = useRunActions(!!query, runs);
+  const { busyRunId, error: actionError } = useRunActionsState();
+  const busy = busyRunId !== undefined;
   const actOnRun = useCallback(
     (runId: string, action: SidebarRunAction) => {
       const entry = runs.find((run) => run.id === runId);
-      if (entry) void act(entry, action);
+      void runActions.run({ entry }, action === "settle" ? "settle" : "snoozeRestore");
     },
-    [act, runs],
+    [runs],
   );
   const queryKey = query;
   useLayoutEffect(() => {
     publishSidebarNavigation({
       visibleRows: sidebarRows(open, snoozed, settled, queryKey, snoozedExpanded, expanded),
-      busy: !!busy,
+      searching: !!queryKey,
+      busy,
       focusSearch: () => searchRef.current?.focus(),
       actOnRun,
     });
     return () =>
       publishSidebarNavigation({
         visibleRows: [],
+        searching: false,
         busy: false,
         focusSearch: () => undefined,
         actOnRun: () => undefined,
@@ -166,8 +168,6 @@ export function RunSidebar({ path }: { path: string }) {
           snoozed={snoozed}
           snoozedExpanded={snoozedExpanded}
           onExpandSnoozed={() => setSnoozedExpanded(!snoozedExpanded)}
-          onAction={act}
-          busy={busy}
           expanded={expanded}
           query={query}
           search={search.trim()}
@@ -175,38 +175,14 @@ export function RunSidebar({ path }: { path: string }) {
           total={total}
           matches={matches}
           onExpand={() => setExpanded(!expanded)}
-          onRename={onRename}
-          onArchive={onArchive}
+          onRenameDraft={setRenamingDraft}
         />
       </SidebarRowsProvider>
-      {dialogs}
-      {settlementDialog}
+      {renamingDraft && (
+        <DraftRenameDialog draft={renamingDraft} onClose={() => setRenamingDraft(undefined)} />
+      )}
     </section>
   );
-}
-
-function useSidebarDialogs() {
-  const [renaming, setRenaming] = useState<RunNavigationEntry | SavedRunDraft>();
-  const [archiving, setArchiving] = useState<RunNavigationEntry>();
-  return {
-    onRename: setRenaming,
-    onArchive: setArchiving,
-    dialogs: (
-      <>
-        {archiving && (
-          <ArchiveRunDialog
-            run={archiving}
-            open
-            returnFocusId={`run-row-${archiving.id}`}
-            onOpenChange={(open) => !open && setArchiving(undefined)}
-          />
-        )}
-        {renaming && (
-          <SidebarRenameDialog entry={renaming} onClose={() => setRenaming(undefined)} />
-        )}
-      </>
-    ),
-  };
 }
 
 function sidebarRows(
@@ -227,35 +203,16 @@ function sidebarRows(
   }));
 }
 
-function SidebarRenameDialog({
-  entry,
-  onClose,
-}: {
-  entry: RunNavigationEntry | SavedRunDraft;
-  onClose: () => void;
-}) {
-  if ("presentation" in entry)
-    return (
-      <RenameDialog
-        id={entry.id}
-        title={entry.title}
-        kind="Run"
-        description="Change the title of this execution."
-        onClose={onClose}
-        save={async (title) => {
-          await api.renameRun(entry.id, { title });
-        }}
-      />
-    );
+function DraftRenameDialog({ draft, onClose }: { draft: SavedRunDraft; onClose: () => void }) {
   return (
     <RenameDialog
-      id={entry.id}
-      title={draftTitle(entry)}
+      id={draft.id}
+      title={draftTitle(draft)}
       kind="draft"
       description="Name this draft. Prompt edits keep the title you choose."
       onClose={onClose}
       save={async (title) => {
-        if (!runDraft.rename(entry.id, title))
+        if (!runDraft.rename(draft.id, title))
           throw new Error(
             "This draft was discarded or is waiting for its Start outcome, so it keeps its title.",
           );
@@ -264,199 +221,7 @@ function SidebarRenameDialog({
   );
 }
 
-type RunAction = "snooze" | "restore" | "settle";
-const runActions = {
-  snooze: api.snoozeRun,
-  restore: api.restoreRun,
-};
-/** The group a Run moves to, whose toggle takes focus after the row leaves the open list. */
-const actionGroup = { snooze: "snoozed", settle: "settled" } as const;
-
-/** Snooze, Restore and Settle from the row menu. */
-function useRunActions(searching: boolean, runs: readonly RunNavigationEntry[]) {
-  // A new request object also refocuses the same target after consecutive row actions. The
-  // command's response can arrive before live navigation moves the row, so the request waits
-  // until navigation shows the Run where the action puts it, then focuses that target.
-  // A Settle still stopping workers focuses its row now and moves the Run later; by then the
-  // user may have moved on, so that request focuses the destination only while focus is still
-  // on the row, on that Run's fallback, or lost to the page because the holder left. Focus the
-  // user moves anywhere else, or a press outside them, such as on page content, revokes it.
-  const requestFocus = useRunActionFocus(runs);
-  // The navigation a Settle answer arrives at, which tells a lagging entry from a later one.
-  const latestRuns = useRef(runs);
-  useLayoutEffect(() => {
-    latestRuns.current = runs;
-  }, [runs]);
-  const { settle, dialog: settlementDialog } = useSettleRun();
-  const [actionError, setActionError] = useState("");
-  const [busy, setBusy] = useState<string>();
-  const act = async (run: RunNavigationEntry, action: RunAction) => {
-    if (busy) {
-      setActionError("Another Run action is still in progress. Try again when it finishes.");
-      return;
-    }
-    setBusy(run.id);
-    setActionError("");
-    // A cancelled confirmation can finish after another row request has started.
-    let requestPending = true;
-    const finishRequest = () => {
-      if (!requestPending) return;
-      requestPending = false;
-      setBusy(undefined);
-    };
-    const row = `run-row-${run.id}`;
-    const operation =
-      action === "settle"
-        ? settle(run.id, run.settlement === "unresolved", finishRequest)
-        : runActions[action](run.id).then(() => undefined);
-    return await operation
-      .then((outcome) => {
-        let focusAction: RunAction | undefined = action;
-        let owner: Pick<FocusRequest, "owner" | "seen"> = {};
-        if (action === "settle") {
-          if (!outcome) return;
-          if (outcome.outcome === "stopping")
-            owner = {
-              owner: row,
-              seen: latestRuns.current.find((candidate) => candidate.id === run.id),
-            };
-          else if (outcome.outcome !== "settled") focusAction = undefined;
-        }
-        const id =
-          searching || focusAction === "restore" || !focusAction
-            ? row
-            : `${actionGroup[focusAction]}-toggle`;
-        requestFocus({ id, runId: run.id, action: focusAction, ...owner });
-      })
-      .catch((error: unknown) => {
-        setActionError(error instanceof Error ? error.message : "Could not update the Run.");
-      })
-      .finally(finishRequest);
-  };
-  return { act, busy, actionError, settlementDialog };
-}
-
-/** Focus progress belongs to the DOM interaction and does not render any UI. */
-function useRunActionFocus(runs: readonly RunNavigationEntry[]) {
-  const [request, setRequest] = useState<FocusRequest>();
-  const pending = useRef<FocusRequest | undefined>(undefined);
-  useLayoutEffect(() => {
-    let focus = pending.current;
-    if (!focus) return;
-    const runId = focus.runId;
-    const run = runs.find((candidate) => candidate.id === runId);
-    if (focus.owner && !focus.ownerFocused) {
-      document.getElementById(focus.owner)?.focus();
-      focus = { ...focus, ownerFocused: true };
-      pending.current = focus;
-    }
-    const step = focusStep(focus, run);
-    if (step === "drop") {
-      pending.current = undefined;
-      return;
-    }
-    if (step === "stopping") {
-      pending.current = { ...focus, stopping: true };
-    }
-    if (step === "focus") {
-      const target = document.getElementById(focus.id);
-      if (target) {
-        if (!focus.owner || ownsFocus(focus.owner, runId)) target.focus();
-        pending.current = undefined;
-        return;
-      }
-    }
-    const owner = focus.owner;
-    if (!owner) return;
-    // Track ownership only while this request still waits for its destination. The layout
-    // effect's cleanup releases these listeners before navigation advances or replaces it.
-    const tracking = new AbortController();
-    const revoke = () => {
-      if (pending.current?.owner === owner) {
-        pending.current = undefined;
-        tracking.abort();
-      }
-    };
-    const focusIn = (event: FocusEvent) => {
-      if (!closingConfirmation() && !holdsFocus(event.target, owner, runId)) revoke();
-    };
-    // Losing the row can drop focus to the page; only a press there revokes the request.
-    const holders = `#${CSS.escape(owner)}, [data-focus-fallback="${CSS.escape(runId)}"]`;
-    const press = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest(holders)) revoke();
-    };
-    document.addEventListener("focusin", focusIn, { signal: tracking.signal });
-    document.addEventListener("pointerdown", press, { capture: true, signal: tracking.signal });
-    return () => tracking.abort();
-  }, [request, runs]);
-  return useCallback((next: FocusRequest) => {
-    pending.current = next;
-    setRequest(next);
-  }, []);
-}
-
-/** A focus request after a Run action. A Settle still stopping has an `owner`, the row it
- * focuses at once; `seen` is the Run's navigation entry when the answer arrived and `stopping`
- * whether navigation has shown it stopping since. */
-type FocusRequest = {
-  readonly id: string;
-  readonly runId: string;
-  readonly action: RunAction | undefined;
-  readonly owner?: string;
-  readonly ownerFocused?: boolean;
-  readonly seen?: RunNavigationEntry | undefined;
-  readonly stopping?: boolean;
-};
-
-/** What a focus request does with the Run as navigation shows it: wait until the Run moved, then
- * focus. A stopping Settle's request is dropped once the Run leaves navigation, such as by
- * Archive, or navigation newer than the answer shows it neither stopping nor settled, such as
- * unresolved again; only the entry the answer arrived at may still lag behind it. */
-function focusStep(request: FocusRequest, run: RunNavigationEntry | undefined) {
-  if (request.owner && request.action) {
-    if (!run) return "drop";
-    if (run.settlement === "stopping") return request.stopping ? "wait" : "stopping";
-    const later = request.stopping || !sameSettlementState(run, request.seen);
-    if (later && !moved(run, request.action)) return "drop";
-  }
-  return run && request.action && !moved(run, request.action) ? "wait" : "focus";
-}
-
-/** A replaced navigation snapshot gives the Run a new entry object even when nothing about it
- * changed, so only a different lifecycle or settlement counts as newer navigation. */
-function sameSettlementState(run: RunNavigationEntry, seen: RunNavigationEntry | undefined) {
-  return run.lifecycle === seen?.lifecycle && run.settlement === seen?.settlement;
-}
-
-/** Focus is still on the `owner` element, on the fallback of the same Run that took over when an
- * action's own control left the page, or lost to the page because its holder left. */
-function ownsFocus(owner: string, runId: string) {
-  const active = document.activeElement;
-  return !active || active === document.body || holdsFocus(active, owner, runId);
-}
-
-/** The answered Settle confirmation is still closing. Until it unmounts and returns focus to the
- * row, its focus trap and its disabled or removed controls move focus, which is not the user
- * leaving. */
-function closingConfirmation() {
-  return !!document.querySelector('[role="alertdialog"][data-state="closed"]');
-}
-
-/** `element` is the `owner` element or the fallback of the same Run. */
-function holdsFocus(element: EventTarget | null, owner: string, runId: string) {
-  return (
-    element instanceof HTMLElement &&
-    (element.id === owner || element.dataset.focusFallback === runId)
-  );
-}
-
-/** Navigation already shows the Run where `action` puts it. */
-function moved(run: RunNavigationEntry, action: RunAction) {
-  if (action === "settle") return run.lifecycle === "settled";
-  return run.presentation.snoozed === (action === "snooze");
-}
-
-/** Snooze and Settle apply to Active Runs. */
+/** Active Runs are open or Snoozed and offer Snooze or Restore and Settle; the rest are Settled. */
 function isActive(run: RunNavigationEntry) {
   return run.lifecycle === "active";
 }
@@ -642,10 +407,7 @@ function RunGroups({
   matches,
   onExpand,
   onExpandSnoozed,
-  onRename,
-  onArchive,
-  onAction,
-  busy,
+  onRenameDraft,
 }: {
   path: string;
   open: readonly (RunNavigationEntry | SavedRunDraft)[];
@@ -661,24 +423,10 @@ function RunGroups({
   matches: number;
   onExpand: () => void;
   onExpandSnoozed: () => void;
-  onRename: (entry: RunNavigationEntry | SavedRunDraft) => void;
-  onArchive: (run: RunNavigationEntry) => void;
-  onAction: (run: RunNavigationEntry, action: RunAction) => Promise<void>;
-  busy: string | undefined;
+  onRenameDraft: (draft: SavedRunDraft) => void;
 }) {
   const row = (run: RunNavigationEntry, muted = false) => (
-    <RunRow
-      key={run.id}
-      run={run}
-      selected={path === `/runs/${run.id}`}
-      searchMuted={muted}
-      onRename={() => onRename(run)}
-      onArchive={onArchive}
-      onAction={(action) => {
-        void onAction(run, action);
-      }}
-      busy={busy === run.id}
-    />
+    <RunRow key={run.id} run={run} selected={path === `/runs/${run.id}`} searchMuted={muted} />
   );
   const entryRow = (entry: RunNavigationEntry | SavedRunDraft) =>
     "presentation" in entry ? (
@@ -688,7 +436,7 @@ function RunGroups({
         key={entry.id}
         draft={entry}
         selected={path === "/runs/new" && entry.id === composingDraftId}
-        onRename={() => onRename(entry)}
+        onRename={() => onRenameDraft(entry)}
       />
     );
   const empty = navigationEmptyState(loaded, total, matches, open.length, search);
@@ -801,20 +549,12 @@ function RunRow({
   run,
   selected,
   searchMuted,
-  onRename,
-  onArchive,
-  onAction,
-  busy,
 }: {
   run: RunNavigationEntry;
   selected: boolean;
   searchMuted?: boolean;
-  onRename: () => void;
-  onArchive: (run: RunNavigationEntry) => void;
-  onAction: (action: RunAction) => void;
-  busy: boolean;
 }) {
-  const mutationsAllowed = useMutationsAllowed();
+  const { available, busy } = useRunActions({ entry: run });
   const state = execution(run);
   const { branches, pullRequests } = repositorySummary(run.repositories);
   const compact = run.lifecycle === "settled";
@@ -838,8 +578,11 @@ function RunRow({
       preview={<RunPreview run={run} />}
       actions={
         <>
-          <RenameItem onSelect={onRename} disabled={!mutationsAllowed} />
-          <RunActionItems run={run} onAction={onAction} onArchive={onArchive} />
+          <RenameItem
+            onSelect={() => runActions.openDialog("rename", { entry: run })}
+            disabled={!available.rename}
+          />
+          <RunActionItems run={run} available={available} />
         </>
       }
     >
@@ -950,24 +693,21 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
 
 function RunActionItems({
   run,
-  onAction,
-  onArchive,
+  available,
 }: {
   run: RunNavigationEntry;
-  onAction: (action: RunAction) => void;
-  onArchive: (run: RunNavigationEntry) => void;
+  available: RunActionAvailability;
 }) {
   const { hint } = useShortcutPreferences();
   const snoozeHint = hint("snoozeRestore");
   const settleHint = hint("settle");
   const archiveHint = hint("archive");
-  const mutationsAllowed = useMutationsAllowed();
   return (
     <>
       {isActive(run) && (
         <RowMenuItem
-          disabled={!mutationsAllowed}
-          onSelect={() => onAction(run.presentation.snoozed ? "restore" : "snooze")}
+          disabled={!available.snoozeRestore}
+          onSelect={() => void runActions.run({ entry: run }, "snoozeRestore")}
           aria-keyshortcuts={snoozeHint}
         >
           {run.presentation.snoozed ? (
@@ -983,8 +723,8 @@ function RunActionItems({
       )}
       {isActive(run) && (
         <RowMenuItem
-          disabled={!mutationsAllowed}
-          onSelect={() => onAction("settle")}
+          disabled={!available.settle}
+          onSelect={() => void runActions.run({ entry: run }, "settle")}
           aria-keyshortcuts={settleHint}
         >
           <CircleCheck aria-hidden strokeWidth={1.5} />
@@ -995,8 +735,8 @@ function RunActionItems({
         </RowMenuItem>
       )}
       <RowMenuItem
-        disabled={!mutationsAllowed}
-        onSelect={() => onArchive(run)}
+        disabled={!available.archive}
+        onSelect={() => runActions.openDialog("archive", { entry: run }, `run-row-${run.id}`)}
         aria-keyshortcuts={archiveHint}
       >
         <Archive aria-hidden strokeWidth={1.5} />
