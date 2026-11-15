@@ -316,8 +316,8 @@ type ReportedAgent = SavedAgent & {
 };
 
 /**
- * Judges settings status from a catalog loaded after the Agent operation succeeds, so the reply
- * never depends on a status the operation may carry. T3 being down yields an unavailable catalog.
+ * Judges settings status from a catalog loaded after the Agent operation succeeds, replacing any
+ * status the operation carries. T3 being down yields an unavailable catalog.
  */
 async function withSettingsStatus<A, B>(
   factory: AuthoringOperations,
@@ -328,25 +328,9 @@ async function withSettingsStatus<A, B>(
   const capabilities = await factory.getAgentCapabilities();
   if (!capabilities.ok) return capabilities;
   const catalog = capabilities.value;
-  const report = ({
-    id,
-    name,
-    prompt,
-    revision,
-    execution,
-    exits,
-    createdAt,
-    updatedAt,
-  }: SavedAgent): ReportedAgent => ({
-    id,
-    name,
-    prompt,
-    revision,
-    execution,
-    exits,
-    createdAt,
-    updatedAt,
-    settingsStatus: execution ? agentSettingsStatus(execution, catalog) : null,
+  const report = (agent: SavedAgent): ReportedAgent => ({
+    ...agent,
+    settingsStatus: agent.execution ? agentSettingsStatus(agent.execution, catalog) : null,
   });
   return { ok: true, value: reply(result.value, report) };
 }
