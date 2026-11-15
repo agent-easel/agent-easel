@@ -1,6 +1,6 @@
 import { applyRunState } from "./support/scenarios.ts";
 import { copyAgentDefinition, repairCodexReporting } from "./support/agents.ts";
-import { afterEach, beforeEach, test } from "./support/test.ts";
+import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { openComposerWithFlow } from "./support/composer.ts";
 import { saveFlowCopy } from "./support/flows.ts";
@@ -8,10 +8,6 @@ import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1100 });
-});
-
-afterEach(async ({ fixture }) => {
-  await fixture.reporting.restoreReadiness();
 });
 
 test("Start names every blocked Agent including later branches and succeeds after repair", async ({
