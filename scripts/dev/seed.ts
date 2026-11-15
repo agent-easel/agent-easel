@@ -158,7 +158,7 @@ async function createDemoClients(factory: Factory) {
 
 /**
  * Fresh demo homes only; the owning server records completion and preserves subsequent edits.
- * Answers the demo world it created, by stable keys.
+ * Answers the demo world it created by stable keys: Runs by seed scenario key.
  */
 export async function seedDevelopment(factory: Factory, t3: PersistentT3, home: string) {
   await createDemoReporting(home, t3.environmentId);
@@ -177,8 +177,8 @@ export async function seedDevelopment(factory: Factory, t3: PersistentT3, home: 
   const agents = await createDemoAgents(factory, t3);
   const flows = await createDemoFlows(factory, agents);
   await createDemoClients(factory);
-  await seedScenarios({ factory, t3, projectId: project.id }, flows);
-  return { project, agents, flows };
+  const runs = await seedScenarios({ factory, t3, projectId: project.id }, flows);
+  return { project, agents, flows, runs };
 }
 
 /** Starts `scenario` in `flowId` and brings its Run to the scenario's state; answers the Run. */
@@ -373,6 +373,11 @@ async function finishScenario(
 }
 
 async function seedScenarios(context: SeedContext, flows: DemoFlows) {
+  const runs = new Map<string, string>();
   for (const scenario of seedScenarioList)
-    await seedScenario(context, flows[scenario.flow], scenario, demoNamespace);
+    runs.set(
+      scenario.key,
+      await seedScenario(context, flows[scenario.flow], scenario, demoNamespace),
+    );
+  return runs;
 }

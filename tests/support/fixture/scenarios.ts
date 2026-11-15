@@ -319,66 +319,90 @@ export async function scenariosFixture(host: Host) {
     return worker.runId;
   }
 
-  /** The scenario copy as last handed to a journey, and the refresh of the current attempt. */
-  let copy: { context: string; runs: Map<string, ScenarioRun> } | undefined;
-  let refreshing:
+  async function observed(runs: ReadonlyMap<string, string>) {
+    const observe = await observeRuns();
+    const result = new Map<string, ScenarioRun>();
+    for (const [key, id] of runs) result.set(key, { id, seen: await observe(id) });
+    return result;
+  }
+
+  /**
+   * One copy of the seed scenario Runs, titled with `titlePrefix`, plus `extra` Runs. A refresh
+   * replaces the Runs journeys changed since the previous refresh, or all of them when the
+   * authorization context changed, and archives the replaced Runs.
+   */
+  function scenarioCopy(
+    titlePrefix: string,
+    keyPrefix: string,
+    extra: readonly (readonly [string, (keyNamespace: string) => Promise<string>])[],
+    seeded?: { context: string; runs: Map<string, ScenarioRun> },
+  ) {
+    let copy = seeded;
+    return async (runContext: string) => {
+      const observe = await observeRuns();
+      const earlier = copy?.context === runContext ? copy.runs : new Map<string, ScenarioRun>();
+      const stale = async (key: string) => {
+        const run = earlier.get(key);
+        return !run || (await observe(run.id)) !== run.seen;
+      };
+      const keyNamespace = `${keyPrefix}:${runContext}:${attempt}:`;
+      const namespace = { titlePrefix, keyNamespace };
+      const starts = [
+        ...seedScenarioList.map(
+          (scenario) =>
+            [
+              scenario.key,
+              () => seedScenario(context, world.flows[scenario.flow], scenario, namespace),
+            ] as const,
+        ),
+        ...extra.map(([key, start]) => [key, () => start(keyNamespace)] as const),
+      ];
+      const runs = new Map<string, string>();
+      for (const [key, start] of starts) {
+        if (!(await stale(key))) continue;
+        const replaced = copy?.runs.get(key);
+        if (replaced) await retire(replaced.id);
+        runs.set(key, await start());
+      }
+      const next = new Map([...earlier, ...(await observed(runs))]);
+      copy = { context: runContext, runs: next };
+      return next;
+    };
+  }
+
+  /** The development seed's own Runs, which journeys find by their Demo titles. */
+  const refreshSeeded = scenarioCopy("Demo · ", "ui-demo", [], {
+    context: await currentContext(),
+    runs: await observed(world.runs),
+  });
+  /** The fixture's scenario copy, prepared on a journey's first request. */
+  const refreshPrepared = scenarioCopy("UI worker · ", "ui-worker", [
+    [
+      "report-release",
+      async (keyNamespace) =>
+        (
+          await startWorker(
+            world.flows.review,
+            "report-release",
+            "UI worker · UI worker report release",
+            "Implement the project picker change.",
+            keyNamespace,
+          )
+        ).runId,
+    ],
+  ]);
+  let prepared:
     | { attempt: number; context: string; runs: Promise<Map<string, ScenarioRun>> }
     | undefined;
-  /** Replaces the copy's Runs that changed since a journey last received them, or all of them
-   * when the authorization context changed. */
-  async function refreshCopy(runContext: string) {
-    const observe = await observeRuns();
-    const earlier = copy?.context === runContext ? copy.runs : new Map<string, ScenarioRun>();
-    const stale = async (key: string) => {
-      const run = earlier.get(key);
-      return !run || (await observe(run.id)) !== run.seen;
-    };
-    const keyNamespace = `ui-worker:${runContext}:${attempt}:`;
-    const namespace = { titlePrefix: "UI worker · ", keyNamespace };
-    const starts = [
-      ...seedScenarioList.map(
-        (scenario) =>
-          [
-            scenario.key,
-            () => seedScenario(context, world.flows[scenario.flow], scenario, namespace),
-          ] as const,
-      ),
-      [
-        "report-release",
-        async () =>
-          (
-            await startWorker(
-              world.flows.review,
-              "report-release",
-              "UI worker · UI worker report release",
-              "Implement the project picker change.",
-              keyNamespace,
-            )
-          ).runId,
-      ] as const,
-    ];
-    const runs = new Map<string, string>();
-    for (const [key, start] of starts) {
-      if (!(await stale(key))) continue;
-      const replaced = copy?.runs.get(key);
-      if (replaced) await retire(replaced.id);
-      runs.set(key, await start());
-    }
-    const observeSeeded = await observeRuns();
-    const next = new Map(earlier);
-    for (const [key, id] of runs) next.set(key, { id, seen: await observeSeeded(id) });
-    copy = { context: runContext, runs: next };
-    return next;
-  }
 
   return {
     actions: {
       /** This attempt's scenario Runs by scenario key, in the current authorization context. */
       async prepare() {
         const runContext = await currentContext();
-        if (refreshing?.attempt !== attempt || refreshing.context !== runContext)
-          refreshing = { attempt, context: runContext, runs: refreshCopy(runContext) };
-        return Object.fromEntries([...(await refreshing.runs)].map(([key, run]) => [key, run.id]));
+        if (prepared?.attempt !== attempt || prepared.context !== runContext)
+          prepared = { attempt, context: runContext, runs: refreshPrepared(runContext) };
+        return Object.fromEntries([...(await prepared.runs)].map(([key, run]) => [key, run.id]));
       },
       /** Starts `key` once per journey attempt, in `flow` and the current authorization context. */
       async ensure({ key, flow }: { key: string; flow: ScenarioFlow }) {
@@ -397,8 +421,9 @@ export async function scenariosFixture(host: Host) {
         return { outcome };
       },
     },
-    reset() {
+    async reset() {
       attempt += 1;
+      await refreshSeeded(await currentContext());
     },
     ensureRun,
   };

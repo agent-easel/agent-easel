@@ -526,6 +526,9 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   // Arrange
   const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
   await settleStoppingWorkers(app.baseUrl, found.id);
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
+    .toBe("settled");
   await app.open(`/runs/${found.id}`);
   const before = await readHistoryRun(app.baseUrl, found.id);
 
