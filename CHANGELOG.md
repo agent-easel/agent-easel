@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.6.0](https://github.com/alimek/t3-factory/compare/v0.5.0...v0.6.0) (2026-11-15)
+
+
+### Features
+
+* accept a stated reason in place of UI evidence screenshots ([#370](https://github.com/alimek/t3-factory/issues/370)) ([c4da5e3](https://github.com/alimek/t3-factory/commit/c4da5e33fd29f160557a67108435e687742c0c49))
+* add an optional Revisit instruction to Agent blocks ([#353](https://github.com/alimek/t3-factory/issues/353)) ([afde9a4](https://github.com/alimek/t3-factory/commit/afde9a4d07519353a06defec865981368a605ef8))
+* **backend:** remove Agents and Flows through Factory MCP ([#295](https://github.com/alimek/t3-factory/issues/295)) ([14afe00](https://github.com/alimek/t3-factory/commit/14afe00f89d3b1019e976f074f66ecb92cf932eb))
+* control Factory Runs through an outbound-only Discord bot ([#324](https://github.com/alimek/t3-factory/issues/324)) ([c5327f0](https://github.com/alimek/t3-factory/commit/c5327f01d348ed520b7365643de526959442aef4))
+* **frontend:** enable React Compiler with strict Hook diagnostics ([#367](https://github.com/alimek/t3-factory/issues/367)) ([2353e47](https://github.com/alimek/t3-factory/commit/2353e477edb836b9f19b333371112ed97b3c8feb))
+* **frontend:** regroup Settings by scope with one page template ([#333](https://github.com/alimek/t3-factory/issues/333)) ([7511116](https://github.com/alimek/t3-factory/commit/751111691434d15598cdefa344312f125ac112e4))
+* **frontend:** simplify the Run detail screen ([#303](https://github.com/alimek/t3-factory/issues/303)) ([521d507](https://github.com/alimek/t3-factory/commit/521d5079732223ad387a4f70c160383313b49b82))
+* generate Run titles with a cheap T3 model ([#311](https://github.com/alimek/t3-factory/issues/311)) ([79d23bb](https://github.com/alimek/t3-factory/commit/79d23bbd146816656884ea9ad900f2369d3733e1))
+* import and export Agents and Flows with optional model hints ([#371](https://github.com/alimek/t3-factory/issues/371)) ([27fd98a](https://github.com/alimek/t3-factory/commit/27fd98aaec0f229891b467521db80b979f146e36))
+* **landing:** refresh the landing page to the Nov 2026 Figma design ([#425](https://github.com/alimek/t3-factory/issues/425)) ([ed512c1](https://github.com/alimek/t3-factory/commit/ed512c133136c6838ffebb8d51e21113cad7e00b))
+* refresh open Studio views live when definitions change elsewhere ([#354](https://github.com/alimek/t3-factory/issues/354)) ([9b0ebee](https://github.com/alimek/t3-factory/commit/9b0ebee470cc1aec7b0b7b0fc23e3ea0c51fa53e))
+
+
+### Bug Fixes
+
+* **backend:** let T3 refresh the default worktree base ([#368](https://github.com/alimek/t3-factory/issues/368)) ([1510888](https://github.com/alimek/t3-factory/commit/151088881bd03b9051d0096d57d62332c6b1c59b))
+* **backend:** settle a worker thread after its Continuation's response ([#352](https://github.com/alimek/t3-factory/issues/352)) ([0dddf5c](https://github.com/alimek/t3-factory/commit/0dddf5c7a79dd279177c863aa33a9e842cd8e252))
+* follow T3 theme colors over the T3 connection without separate pairing ([#424](https://github.com/alimek/t3-factory/issues/424)) ([88cd49d](https://github.com/alimek/t3-factory/commit/88cd49d637e2a0cfbe5fc8696252bd493a2e5a46))
+* **frontend:** pin sidebar Snoozed and Settled groups below open Runs ([#357](https://github.com/alimek/t3-factory/issues/357)) ([cc463d3](https://github.com/alimek/t3-factory/commit/cc463d3d1c26ffeadc74812d2f9dc9b88b52d9a1))
+* reuse validation and preserve admitted image Starts ([#356](https://github.com/alimek/t3-factory/issues/356)) ([2c8275c](https://github.com/alimek/t3-factory/commit/2c8275c8b3a728d9b2e79198f38532d0c46d6e54))
+* stop UI journey flakes from live resync, Settle focus and image test races ([#369](https://github.com/alimek/t3-factory/issues/369)) ([04828e3](https://github.com/alimek/t3-factory/commit/04828e39eb4a76bc8276c9735d11b26c6abc6abb))
+
+
+### Performance Improvements
+
+* read Agents without calling T3 and drop settingsStatus from HTTP ([#420](https://github.com/alimek/t3-factory/issues/420)) ([c29a9e7](https://github.com/alimek/t3-factory/commit/c29a9e7097f141f04f3afe1fdf0e3f582cc65311))
+
 ## [0.5.0](https://github.com/alimek/t3-factory/compare/v0.4.0...v0.5.0) (2026-11-13)
 
 
