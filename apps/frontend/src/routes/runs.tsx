@@ -76,26 +76,25 @@ type RunObservation = ReturnType<typeof useRunObservation>;
 function useRunOpened(id: string, current: boolean) {
   const settingsOpen = !!useSettings();
   const [seenError, setSeenError] = useState<{ id: string; message: string }>();
-  const marked = useRef<string | undefined>(undefined);
+  // The opening being marked. Its answer applies while the same opening lasts, so Settings or
+  // Studio opening over the Run before the answer arrives does not drop it.
+  const marked = useRef<{ readonly id: string } | undefined>(undefined);
   useEffect(() => {
-    if (!current || settingsOpen || marked.current === id) return;
-    marked.current = id;
-    let active = true;
+    if (!current || settingsOpen || marked.current?.id === id) return;
+    const opening = { id };
+    marked.current = opening;
     void api
       .markRunWokeSeen(id)
       .then(() => {
-        if (active) setSeenError(undefined);
+        if (marked.current === opening) setSeenError(undefined);
       })
       .catch(() => {
-        if (active)
+        if (marked.current === opening)
           setSeenError({
             id,
             message: "Could not mark Woke as seen. Reopen this Run to try again.",
           });
       });
-    return () => {
-      active = false;
-    };
   }, [id, current, settingsOpen]);
   return seenError?.id === id ? seenError.message : "";
 }

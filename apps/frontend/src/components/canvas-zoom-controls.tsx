@@ -1,5 +1,5 @@
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { withShortcutHint } from "../keyboard-shortcuts.ts";
+import { canvasShortcutHelp, withShortcutHint } from "../keyboard-shortcuts.ts";
 import type { ReactNode } from "react";
 import { Crosshair, LocateFixed, Minus, Plus, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -178,7 +178,7 @@ export function CanvasZoomControls({
         {separator}
         {arrange}
       </div>
-      <p className="text-2xs tracking-label text-subtle-foreground max-lg:hidden">{`Focus the canvas: ${shortcutHint("zoomIn")} / ${shortcutHint("zoomOut")} zoom, ${shortcutHint("fit")} fits; arrows pan. ${presentation.hint}`}</p>
+      <p className="text-2xs tracking-label text-subtle-foreground max-lg:hidden">{`Focus the canvas: ${canvasShortcutHelp({ zoomIn: shortcutHint("zoomIn"), zoomOut: shortcutHint("zoomOut"), fit: shortcutHint("fit") })}. ${presentation.hint}`}</p>
     </div>
   );
 }

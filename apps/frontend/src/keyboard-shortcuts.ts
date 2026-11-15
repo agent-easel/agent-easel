@@ -354,6 +354,19 @@ export function withShortcutHint(text: string, hint: string | undefined) {
   return hint ? `${text} · ${hint}` : text;
 }
 
+/** The canvas helper line's key list, naming only bound canvas commands; arrow pan is fixed. */
+export function canvasShortcutHelp(hints: {
+  zoomIn: string | undefined;
+  zoomOut: string | undefined;
+  fit: string | undefined;
+}) {
+  const zoom = [hints.zoomIn, hints.zoomOut].filter(Boolean).join(" / ");
+  const keys = [zoom && `${zoom} zoom`, hints.fit && `${hints.fit} fits`]
+    .filter(Boolean)
+    .join(", ");
+  return keys ? `${keys}; arrows pan` : "arrows pan";
+}
+
 /** A binding as lists of bindings show it, including Unbound. */
 export function formatShortcut(binding: ShortcutBinding | null | undefined) {
   if (!binding) return "Unbound";

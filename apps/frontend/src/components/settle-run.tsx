@@ -49,6 +49,7 @@ export function useSettleRun() {
   const [confirmation, setConfirmation] =
     useState<Extract<RunSettlementOutcome, { outcome: "confirmation-required" }>>();
   const answer = useRef<(outcome: RunSettlementOutcome | undefined) => void>(() => undefined);
+  const requesting = useRef<(running: boolean) => void>(() => undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const returnFocus = useRef<HTMLElement | null>(null);
@@ -57,8 +58,15 @@ export function useSettleRun() {
     setError("");
     answer.current(outcome);
     answer.current = () => undefined;
+    requesting.current = () => undefined;
   }
-  async function settle(id: string, retry: boolean, onConfirmation?: () => void) {
+  /** `onRequesting` hears that the confirmation waits for the user, and when each confirmed
+   * request starts and ends, so the caller's busy state covers that request too. */
+  async function settle(
+    id: string,
+    retry: boolean,
+    onRequesting: (running: boolean) => void = () => undefined,
+  ) {
     if (busy) return;
     close();
     let outcome = await api.settleRun(id, retry ? { stopWorkers: true } : {});
@@ -74,7 +82,8 @@ export function useSettleRun() {
         ? opener
         : document.getElementById(`run-row-${id}`);
     setConfirmation(outcome);
-    onConfirmation?.();
+    requesting.current = onRequesting;
+    onRequesting(false);
     return new Promise<RunSettlementOutcome | undefined>((resolve) => {
       answer.current = resolve;
     });
@@ -83,6 +92,7 @@ export function useSettleRun() {
     if (!confirmation || busy) return;
     setBusy(true);
     setError("");
+    requesting.current(true);
     return await api
       .settleRun(confirmation.run.id, { stopWorkers: true })
       .then((outcome) => {
@@ -93,6 +103,8 @@ export function useSettleRun() {
       })
       .finally(() => {
         setBusy(false);
+        // A refused request leaves the confirmation open for another answer.
+        requesting.current(false);
       });
   }
   return {

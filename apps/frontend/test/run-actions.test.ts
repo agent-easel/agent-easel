@@ -164,3 +164,37 @@ it("a keyboard Settle acts on the Run its screen declared, with no sidebar mount
   // Assert
   expect(ports.settle).toHaveBeenCalledWith(active.id, false, expect.any(Function));
 });
+
+it("a confirmed Settle request keeps its Run busy until the request answers", () => {
+  // Arrange
+  const { actions } = runActionsWith({
+    settle: vi.fn<RunActionPorts["settle"]>((_runId, _retry, requesting) => {
+      requesting(false);
+      requesting(true);
+      return new Promise(() => undefined);
+    }),
+  });
+
+  // Act
+  void actions.run({ entry: active }, "settle");
+
+  // Assert
+  expect(actions.getSnapshot().busyRunId).toBe(active.id);
+  expect(actions.availability({ entry: other }).settle).toBe(false);
+});
+
+it("a Settle confirmation waiting for the user leaves no Run busy", () => {
+  // Arrange
+  const { actions } = runActionsWith({
+    settle: vi.fn<RunActionPorts["settle"]>((_runId, _retry, requesting) => {
+      requesting(false);
+      return new Promise(() => undefined);
+    }),
+  });
+
+  // Act
+  void actions.run({ entry: active }, "settle");
+
+  // Assert
+  expect(actions.getSnapshot().busyRunId).toBeUndefined();
+});

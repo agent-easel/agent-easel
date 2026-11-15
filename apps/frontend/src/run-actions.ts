@@ -95,11 +95,12 @@ const noRun: RunActionSubject = {};
 export type RunActionPorts = {
   readonly snooze: (runId: string) => Promise<unknown>;
   readonly restore: (runId: string) => Promise<unknown>;
-  /** Settles after any confirmation; `onConfirmation` runs when the confirmation opens. */
+  /** Settles after any confirmation. `requesting(false)` reports that the confirmation waits for
+   * the user; `requesting(true)` and `requesting(false)` bracket each confirmed request. */
   readonly settle: (
     runId: string,
     retry: boolean,
-    onConfirmation: () => void,
+    requesting: (running: boolean) => void,
   ) => Promise<RunSettlementOutcome | undefined>;
   readonly mutationsAllowed: () => boolean;
   /** Sidebar title search is active, so a moved Run stays in its row. */
@@ -118,6 +119,9 @@ export function createRunActions(ports: RunActionPorts) {
     openRun: noRun,
   };
   const listeners = new Set<() => void>();
+  /** The `run` call whose request makes `busyRunId` busy; a confirmation answered after another
+   * request started cannot clear that request's busy state. */
+  let busyRequest: object | undefined;
   function update(next: Partial<RunActionsState>) {
     state = { ...state, ...next };
     for (const notify of listeners) notify();
@@ -141,18 +145,22 @@ export function createRunActions(ports: RunActionPorts) {
     const move: RunMove =
       action === "settle" ? "settle" : entry.presentation.snoozed ? "restore" : "snooze";
     const searching = ports.searching();
-    update({ busyRunId: entry.id, error: "" });
-    // A cancelled confirmation can finish after another request has started.
-    let requestPending = true;
-    const finishRequest = () => {
-      if (!requestPending) return;
-      requestPending = false;
-      update({ busyRunId: undefined });
+    const request = {};
+    const requesting = (running: boolean) => {
+      if (running) {
+        busyRequest = request;
+        update({ busyRunId: entry.id });
+      } else if (busyRequest === request) {
+        busyRequest = undefined;
+        update({ busyRunId: undefined });
+      }
     };
+    update({ error: "" });
+    requesting(true);
     const row = `run-row-${entry.id}`;
     const operation =
       move === "settle"
-        ? ports.settle(entry.id, entry.settlement === "unresolved", finishRequest)
+        ? ports.settle(entry.id, entry.settlement === "unresolved", requesting)
         : ports[move](entry.id).then(() => undefined);
     return await operation
       .then((outcome) => {
@@ -173,7 +181,7 @@ export function createRunActions(ports: RunActionPorts) {
       .catch((error: unknown) => {
         update({ error: error instanceof Error ? error.message : "Could not update the Run." });
       })
-      .finally(finishRequest);
+      .finally(() => requesting(false));
   }
 
   return {

@@ -1,5 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import {
+  canvasShortcutHelp,
   getDefaultShortcutBindings,
   parseShortcutStorage,
   shortcutDefinitions,
@@ -195,4 +196,15 @@ it("a bound command shows its tooltip text with the formatted binding", () => {
 
   // Assert
   expect(text).toBe("Rename · F2");
+});
+
+it("the canvas helper line leaves out an unbound canvas command", () => {
+  // Arrange
+  const hints = { zoomIn: "+ / =", zoomOut: undefined, fit: undefined };
+
+  // Act
+  const help = canvasShortcutHelp(hints);
+
+  // Assert
+  expect(help).toBe("+ / = zoom; arrows pan");
 });
