@@ -233,19 +233,21 @@ function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boo
           Agent definition · {agent ? `rev ${agent.revision}` : "new"}
         </span>
         {owner && <OwnerBadge owner={owner} prefix="Owned by " />}
-        <span className="flex-1" />
-        {agent && <SavedAgentActions {...props} agent={agent} />}
-        <MutationGate>
-          <Button
-            type="submit"
-            disabled={
-              saving || !state.canSave || (ownership.kind === "new" && Boolean(ownership.blocked))
-            }
-            title={saveBlockedReason(state)}
-          >
-            {saving ? "Saving…" : saveLabel}
-          </Button>
-        </MutationGate>
+        {/* The actions wrap together, so Save never leaves the others behind. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {agent && <SavedAgentActions {...props} agent={agent} />}
+          <MutationGate>
+            <Button
+              type="submit"
+              disabled={
+                saving || !state.canSave || (ownership.kind === "new" && Boolean(ownership.blocked))
+              }
+              title={saveBlockedReason(state)}
+            >
+              {saving ? "Saving…" : saveLabel}
+            </Button>
+          </MutationGate>
+        </div>
       </div>
       <p className="mt-1.5 text-2xs text-subtle-foreground">{statusLine}</p>
     </header>
@@ -296,7 +298,7 @@ function SavedAgentActions({
         </MutationGate>
       )}
       {exporter && (
-        <DefinitionExportControl {...exporter} dirty={dirty} disabled={removed || saving} />
+        <DefinitionExportControl {...exporter} dirty={dirty} disabled={removed || saving} compact />
       )}
       <DeleteAgentButton
         agent={agent}

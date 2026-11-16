@@ -65,6 +65,7 @@ function OwnerDialog({
       }}
     >
       <DialogContent
+        showCloseButton={false}
         className={cn("gap-4 sm:max-w-120", className)}
         // A parent Studio modal must not also take this Escape.
         onKeyDownCapture={(event) => {
@@ -155,7 +156,9 @@ export function ChangeOwnerDialog({
     <OwnerDialog busy={state.changing} onClose={onClose}>
       <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
         <DialogHeader>
-          <DialogTitle>Change owner of “{subject.name}”</DialogTitle>
+          <DialogTitle className="text-base leading-normal">
+            Change owner of “{subject.name}”
+          </DialogTitle>
           <DialogDescription>
             Moves this {kind} without creating a revision. Runs keep what they captured, and no
             other Flow or Agent is edited.
