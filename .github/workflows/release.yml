@@ -48,10 +48,13 @@ jobs:
     # Listing draft releases requires push access; this job runs no repository code.
     permissions:
       contents: write
+      checks: read
+      pull-requests: read
     outputs:
       tag: ${{ steps.source.outputs.tag }}
       sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.source.outputs.version }}
+      checked: ${{ steps.checked.outputs.checked }}
     steps:
       - id: source
         env:
@@ -89,6 +92,40 @@ jobs:
             echo "sha=$sha"
             echo "version=${tag#v}"
           } >> "$GITHUB_OUTPUT"
+      - id: checked
+        name: Reuse checks of the Release PR
+        # The ruleset does not require PRs to be up to date, so the merged tree can differ from the
+        # tested PR head; only an identical tree with passing required checks lets the build skip them.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          checked=false
+          tree=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA" --jq .commit.tree.sha)
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" \
+            --jq '[.[] | select(.merged_at != null and .base.ref == "main")][0].head.sha // ""')
+          if [[ -z "$head" ]]; then
+            reason="no merged pull request produced $SHA"
+          elif [[ "$(gh api "repos/$GITHUB_REPOSITORY/commits/$head" --jq .commit.tree.sha)" != "$tree" ]]; then
+            reason="the Release PR head $head was not up to date with main when merged"
+          else
+            reason=""
+            for check in "Quality gate" "Controlled UI journeys"; do
+              conclusions=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?filter=latest&per_page=100" \
+                --jq "[.check_runs[] | select(.name == \"$check\" and .app.slug == \"github-actions\") | .conclusion] | unique | join(\",\")")
+              if [[ "$conclusions" != success ]]; then
+                reason="'$check' on $head is '${conclusions:-missing}'"
+                break
+              fi
+            done
+            if [[ -z "$reason" ]]; then checked=true; fi
+          fi
+          echo "checked=$checked" >> "$GITHUB_OUTPUT"
+          if [[ "$checked" = true ]]; then
+            echo "Release tree passed Quality gate and Controlled UI journeys on $head; the build skips them." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The build runs the quality gate and browser journeys: $reason." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   build-macos:
     name: Build
@@ -104,6 +141,7 @@ jobs:
       sha: ${{ needs.source.outputs.sha }}
       channel: release
       release-version: ${{ needs.source.outputs.version }}
+      run-checks: ${{ needs.source.outputs.checked != 'true' }}
     secrets:
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}

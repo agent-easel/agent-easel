@@ -59,6 +59,7 @@ jobs:
       sha: ${{ needs.source.outputs.sha }}
       channel: beta
       beta-number: ${{ github.run_number }}
+      run-checks: true
     secrets:
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
