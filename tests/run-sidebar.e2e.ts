@@ -592,6 +592,13 @@ test("a route while Studio has unsaved edits asks first, and Keep editing keeps 
   const run = await findRun(app.baseUrl, nativeQuestionTitle);
   await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });
   await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await expect
+    .poll(() =>
+      browser.evaluate(
+        `getComputedStyle([...document.querySelectorAll('[role="dialog"]')].at(-1)).opacity`,
+      ),
+    )
+    .toBe("1");
   await app.screenshot("desktop-route-studio-guard");
 
   // Act
