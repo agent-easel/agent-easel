@@ -180,6 +180,35 @@ export async function discoveredClones(context: TestContext) {
 }
 
 /**
+ * A Flow of the first of `discoveredClones` whose Build and Fix blocks place Coder, a global
+ * Agent, whose Release block places Releaser, an Agent of that Project, and whose Audit block names
+ * an Agent that does not exist.
+ */
+export async function projectFlowToDuplicate(context: TestContext) {
+  const clones = await discoveredClones(context);
+  const { factory, first } = clones;
+  const coder = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const releaser = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = assertOk(
+    await factory.createFlow({
+      name: "Release",
+      projectId: first.id,
+      graph: {
+        flowInput: flowInput("build"),
+        blocks: [
+          agentBlock("build", "Build", coder.id),
+          agentBlock("release", "Release", releaser.id, { x: 300, y: 0 }),
+          agentBlock("fix", "Fix", coder.id, { x: 600, y: 0 }),
+          agentBlock("audit", "Audit", "missing-agent", { x: 900, y: 0 }),
+        ],
+        connections: [connection("build", "done", "release"), connection("release", "done", "fix")],
+      },
+    }),
+  );
+  return { ...clones, coder, releaser, flow };
+}
+
+/**
  * Sets a Flow's or Agent's owning Project in the open backend's storage without a revision, as
  * Change owner will. No public operation changes an owner yet, so this stands in for it.
  */

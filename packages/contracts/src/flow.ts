@@ -165,6 +165,76 @@ export interface FlowDraft {
   readonly readiness: FlowReadiness;
 }
 
+/** What Flow Duplicate does with one Agent the source Flow places. */
+export type FlowDuplicateChoice =
+  /** The copy places the same Agent. */
+  | "keep"
+  /** The copy places a new Agent created in the target from this Agent's latest saved revision. */
+  | "copy";
+
+/** One distinct Agent the source Flow places, as a Flow Duplicate plan lists it. */
+export interface FlowDuplicatePlanAgent {
+  readonly agentId: string;
+  readonly name: string;
+  /** The Agent's owning Project, or null for a global Agent. */
+  readonly projectId: string | null;
+  readonly revision: number;
+  /** The default: keep for an Agent the target may place, copy for one it may not. */
+  readonly choice: FlowDuplicateChoice;
+  /**
+   * Only a global Agent may switch between keep and copy. A Project Agent the target may not place
+   * is always copied, and an Agent of the target Project itself is always kept.
+   */
+  readonly changeable: boolean;
+}
+
+/**
+ * What Flow Duplicate would create, computed without writing anything: one entry per distinct
+ * existing Agent the source's latest revision places, in the order its blocks first place them.
+ * A block whose Agent is unset, missing or removed is copied unchanged and not listed.
+ */
+export interface FlowDuplicatePlan {
+  readonly flowId: string;
+  /** The source revision the plan copies; Duplicate names it as `expectedRevision`. */
+  readonly revision: number;
+  /** The resolved target: a Factory Project id or null for Global. */
+  readonly projectId: string | null;
+  /** The new Flow's default name. */
+  readonly name: string;
+  readonly agents: readonly FlowDuplicatePlanAgent[];
+}
+
+export interface PreviewFlowDuplicateInput {
+  /** The target: a Factory Project id or null for Global; omitted, the source's owning Project. */
+  readonly projectId?: string | null;
+}
+
+/** One planned Agent as the plan listed it, with the chosen treatment. */
+export type FlowDuplicateAgentChoice = Pick<
+  FlowDuplicatePlanAgent,
+  "agentId" | "revision" | "projectId" | "choice"
+>;
+
+export interface DuplicateFlowInput {
+  /** The new Flow's name; omitted, the plan's default name. */
+  readonly name?: string;
+  /**
+   * The target: a Factory Project id available for new Runs, or null for Global. Omitted, the
+   * source's owning Project, which must then be available.
+   */
+  readonly projectId?: string | null;
+  /** The source revision the plan was prepared from. */
+  readonly expectedRevision: number;
+  /** Every planned Agent with its choice; a plan whose Flow or Agents changed since is refused. */
+  readonly agents: readonly FlowDuplicateAgentChoice[];
+}
+
+/** The new Flow and the Agents created for it, by the source Agent each copies. */
+export interface FlowDuplicate {
+  readonly flow: FlowDraft;
+  readonly copies: readonly { readonly sourceAgentId: string; readonly agentId: string }[];
+}
+
 /** The Flow operations the Factory facade implements. */
 export const flowOperations = {
   listFlows: operation<never, readonly FlowDraft[]>()({ method: "GET", path: "/api/flows" }),
@@ -184,6 +254,18 @@ export const flowOperations = {
   updateFlow: operation<UpdateFlowInput, FlowDraft>()({
     method: "PUT",
     path: "/api/flows/:id",
+    body: "json",
+  }),
+  /** The Flow Duplicate plan for a target, writing nothing. */
+  previewFlowDuplicate: operation<PreviewFlowDuplicateInput, FlowDuplicatePlan>()({
+    method: "POST",
+    path: "/api/flows/:id/duplicate/preview",
+    body: "json",
+  }),
+  /** Commits a previewed plan in one transaction; the source Flow and its Agents never change. */
+  duplicateFlow: operation<DuplicateFlowInput, FlowDuplicate>()({
+    method: "POST",
+    path: "/api/flows/:id/duplicate",
     body: "json",
   }),
   /** The latest saved revision with each Agent it references as a portable document. */

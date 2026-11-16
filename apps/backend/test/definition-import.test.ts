@@ -23,6 +23,7 @@ import {
 } from "./support/definition-import.ts";
 import {
   assertOk,
+  discoveredClones,
   openFactoryWithApprovedT3,
   reviewerExits,
   sampleAgentInput,
@@ -336,7 +337,7 @@ it("a match keeps the hint options its model accepts and lists the dropped rest"
   });
 });
 
-it("a commit creates a new Agent at revision 1 with its exact name and exactly the reviewed selection", async (context) => {
+it("a commit without a target creates a new global Agent at revision 1 with its exact name and exactly the reviewed selection", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const execution = controlledExecution(undefined, {
@@ -351,12 +352,52 @@ it("a commit creates a new Agent at revision 1 with its exact name and exactly t
   const [created] = committed.value.agents;
   expect(created?.key).toBe("agent-1");
   expect(assertOk(await factory.getAgent(created!.id))).toMatchObject({
+    projectId: null,
     name: "Code reviewer",
     prompt: exportedAgent().prompt,
     revision: 1,
     execution,
     exits: exportedAgent().exits,
   });
+});
+
+it("a Flow file committed into a Project creates the Flow and a new Agent owned by it, even beside a same-named Agent", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const existing = assertOk(await factory.createAgent(sampleAgentInput("Code reviewer", first.id)));
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow",
+    document: flowFile(),
+    selections: { "agent-1": controlledExecution() },
+    projectId: first.id,
+  });
+
+  // Assert
+  assert(committed.ok);
+  const [imported] = committed.value.agents;
+  expect(imported!.id).not.toBe(existing.id);
+  expect(assertOk(await factory.getAgent(imported!.id)).projectId).toBe(first.id);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow).toMatchObject({ projectId: first.id, readiness: { ready: true } });
+});
+
+it("a commit into an unavailable Project is refused and creates nothing", async (context) => {
+  // Arrange
+  const { factory, t3, second } = await discoveredClones(context);
+  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const committed = await factory.commitImport({ ...reviewedCommit(), projectId: second.id });
+
+  // Assert
+  assert(!committed.ok);
+  expect(committed.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
 });
 
 it("with T3 disconnected a commit still saves the reviewed selection", async (context) => {
@@ -576,6 +617,38 @@ it("retrying a Flow commit whose file lists the same content with fields reorder
   expect(assertOk(await factory.listFlows())).toHaveLength(1);
 });
 
+it("retrying an import into a Project that became unavailable replays the original result", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const commit = { ...reviewedCommit(), projectId: first.id };
+  const accepted = assertOk(await factory.commitImport(commit));
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const retried = await factory.commitImport(commit);
+
+  // Assert
+  expect(retried).toStrictEqual({ ok: true, value: accepted });
+  expect(assertOk(await factory.listAgents())).toHaveLength(1);
+});
+
+it("a commit reusing a request id with another target conflicts and creates nothing", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  assertOk(await factory.commitImport(reviewedCommit()));
+
+  // Act
+  const moved = await factory.commitImport({ ...reviewedCommit(), projectId: first.id });
+
+  // Assert
+  assert(!moved.ok);
+  expect(moved.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "import_request_conflict", path: "requestId" },
+  ]);
+  expect(assertOk(await factory.listAgents())).toHaveLength(1);
+});
+
 it("a commit reusing a request id with different selections conflicts and creates nothing", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
@@ -623,5 +696,24 @@ it("after upgrading, a retried commit of a version-1 file replays the receipt th
     ok: true,
     value: { agents: [{ key: "agent-1", id: agentId }], flowId: null },
   });
+  expect(assertOk(await factory.listAgents())).toHaveLength(1);
+});
+
+it("after upgrading, a retried commit of an earlier release's import into a Project conflicts, as that import was global", async (context) => {
+  // Arrange
+  const { factory } = await factoryWithVersion1Receipt(context);
+  const document = agentFile(exportedAgent(), { formatVersion: 1 });
+
+  // Act
+  const retried = await factory.commitImport({
+    ...reviewedCommit("import-1", undefined, document),
+    projectId: "project-of-a-later-choice",
+  });
+
+  // Assert
+  assert(!retried.ok);
+  expect(retried.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "import_request_conflict", path: "requestId" },
+  ]);
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });

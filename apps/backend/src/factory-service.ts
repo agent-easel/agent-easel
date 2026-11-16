@@ -208,6 +208,8 @@ export const makeFactoryService = (
       validateFlow: definitions.validateFlow,
       updateFlow: definitions.updateFlow,
       removeFlow: definitions.removeFlow,
+      previewFlowDuplicate: definitions.previewFlowDuplicate,
+      duplicateFlow: definitions.duplicateFlow,
       listFlows: definitions.listFlows,
       getFlow: definitions.getFlow,
       getAgentCapabilities: definitions.getAgentCapabilities,
