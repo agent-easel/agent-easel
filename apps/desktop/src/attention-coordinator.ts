@@ -314,6 +314,11 @@ export class AttentionCoordinator {
    * queued work runs, so an announcement can tell that its state ended while it awaited.
    */
   private epoch = 0;
+  /**
+   * A catch-up the selection's lost readiness voided (a fresh snapshot or a grant). The
+   * selection's next valid delivery runs it, since a recovery after a gap is not a snapshot.
+   */
+  private owedCatchUp = false;
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -356,6 +361,7 @@ export class AttentionCoordinator {
     const selection = server === null ? null : { server };
     this.selection = selection;
     this.epoch++;
+    this.owedCatchUp = false;
     // A click held for another server never routes into this one.
     if (this.held && this.held.server !== server) this.drop();
     void this.enqueue(async () => {
@@ -369,7 +375,11 @@ export class AttentionCoordinator {
         // A delivery belongs to the readiness it arrived in; a loss before it runs voids it.
         const epoch = this.epoch;
         return this.enqueue(async () => {
-          if (!current() || this.epoch !== epoch) return;
+          if (!current()) return;
+          if (this.epoch !== epoch) {
+            this.owedCatchUp ||= delivery.fresh;
+            return;
+          }
           this.latest = { server: selection!.server, rows: delivery.rows, epoch };
           this.showBadge();
           if (this.held?.server === selection!.server) {
@@ -518,7 +528,8 @@ export class AttentionCoordinator {
     return this.queue;
   }
 
-  private async announce({ server, rows, epoch }: Ready, catchUp: boolean) {
+  private async announce({ server, rows, epoch }: Ready, requested: boolean) {
+    const catchUp = requested || this.owedCatchUp;
     const granted = await this.observePermission();
     const withheld = this.withheld(this.observed);
     const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {
@@ -532,22 +543,33 @@ export class AttentionCoordinator {
       };
     });
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
-    const ended = this.epoch !== epoch;
-    // The selection, readiness or focus changed while this awaited the permission read or the
-    // intent write. Nothing was posted: the appearances are announced by that server's next ready
-    // delivery if still pending, or count as seen in the focused window.
-    if (shown.length > 0 && (ended || this.focused))
-      return this.unpost(server, shown, ended ? null : { state: "foreground-accounted" });
-    if (ended) return;
+    if (this.epoch !== epoch) return this.abandon(server, shown, catchUp || granted);
+    if (catchUp || granted) this.owedCatchUp = false;
+    // A window was focused meanwhile: the owner sees the Run list, so these count as seen.
+    if (shown.length > 0 && this.focused)
+      return this.unpost(server, shown, { state: "foreground-accounted" });
     // Asked only when a banner would otherwise show now, never at launch.
     const bannerWaitsForPermission =
       !this.focused && this.settings.notifications && this.observed === "undetermined";
     if (due && bannerWaitsForPermission && !this.requesting) this.request();
-    for (const notification of shown)
-      void this.port.show(notification).then(
-        (outcome) => this.settle(server, notification.id, outcome),
-        () => this.settle(server, notification.id, { kind: "failed" }),
-      );
+    for (const notification of shown) this.post(server, notification);
+  }
+
+  /**
+   * The selection or readiness changed while an announcement awaited the permission read or the
+   * intent write. Nothing was posted: that server's next valid delivery announces what is still
+   * pending, and runs the catch-up the announcement started.
+   */
+  private async abandon(server: string, shown: readonly AlertNotification[], catchUp: boolean) {
+    if (shown.length > 0) await this.unpost(server, shown, null);
+    if (this.selection?.server === server) this.owedCatchUp ||= catchUp;
+  }
+
+  private post(server: string, notification: AlertNotification) {
+    void this.port.show(notification).then(
+      (outcome) => this.settle(server, notification.id, outcome),
+      () => this.settle(server, notification.id, { kind: "failed" }),
+    );
   }
 
   /**

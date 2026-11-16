@@ -730,6 +730,36 @@ it("a delivery still queued when readiness is lost shows nothing until navigatio
   });
 });
 
+it("a startup snapshot voided by a delivery gap still catches up at the next current delivery", async (c) => {
+  // Arrange
+  const desktop = await installation(c, recordingPort("denied"));
+  const { port } = desktop;
+  await desktop.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  port.permission = "granted";
+  await desktop.restart();
+  let grant = () => undefined as void;
+  const reading = new Promise<void>((started) => {
+    port.implementation.permission = () =>
+      new Promise((resolve) => {
+        grant = () => resolve("granted");
+        started();
+      });
+  });
+  const holding = desktop.coordinator.checkPermission();
+  await reading;
+  const snapshot = desktop.feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  const lost = desktop.feed.notReady();
+  port.implementation.permission = () => Promise.resolve("granted");
+  grant();
+  await Promise.all([holding, snapshot, lost]);
+
+  // Act
+  await desktop.feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect(port.shown).toHaveLength(1);
+});
+
 it("a banner Notification Center accepts after its server was forgotten is withdrawn again", async (c) => {
   // Arrange
   const { port, coordinator, feed } = await installation(c);
