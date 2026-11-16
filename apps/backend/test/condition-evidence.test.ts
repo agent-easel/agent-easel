@@ -190,6 +190,36 @@ it("an altered cursor is rejected", async (c) => {
   ]);
 });
 
+it("a cursor re-encoded with its high-water raised past a later arrival is rejected", async (c) => {
+  // Arrange
+  const f = await prepared(c, selfLoopConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  const turn = await conditionLoopedThrough(f.world, worker, 3);
+  const first = await f.f.listConditionArrivals(worker.runId, "gate", "1", "");
+  assert(first.ok && first.value.nextCursor);
+  await conditionLoopedThrough(f.world, turn, 4);
+  const [payload = "", ...signature] = first.value.nextCursor.split(".");
+  const [runId, blockId, , after] = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  const raised = Buffer.from(JSON.stringify([runId, blockId, 4, after]), "utf8").toString(
+    "base64url",
+  );
+
+  // Act
+  const page = await f.f.listConditionArrivals(
+    worker.runId,
+    "gate",
+    "1",
+    [raised, ...signature].join("."),
+  );
+
+  // Assert
+  expect(first.value.highWater).toBe(3);
+  assert(!page.ok);
+  expect(page.error.issues.map((issue) => [issue.code, issue.path])).toStrictEqual([
+    ["condition_page_cursor", "cursor"],
+  ]);
+});
+
 it("each evidence read shows a recipient's current disposition, not the one at selection", async (c) => {
   // Arrange
   const f = await prepared(c, conditionFlow);

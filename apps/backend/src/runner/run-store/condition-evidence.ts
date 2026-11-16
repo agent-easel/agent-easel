@@ -7,6 +7,7 @@ import {
   type ConditionRecipientDisposition,
   type Result,
 } from "@t3-factory/contracts";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { RunnerDatabase } from "./database.ts";
@@ -30,23 +31,31 @@ type RecipientRow = { condition_arrival_id: string; block_id: string; state: Del
 /** The window a cursor continues: its Run and Condition, high-water and last arrival number. */
 type Cursor = readonly [runId: string, blockId: string, highWater: number, after: number];
 
-const encodeCursor = (cursor: Cursor) =>
-  Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+/**
+ * Signs cursors so a client cannot move a window it was issued, such as raising its high-water
+ * after a later arrival. The key lives only in this process: a cursor issued before a restart is
+ * refused, and the reader opens a new window from arrival 1.
+ */
+const cursorKey = randomBytes(32);
 
-/** The cursor `text` encodes, exactly as Factory issued it; undefined for anything else. */
+const cursorSignature = (payload: string) =>
+  createHmac("sha256", cursorKey).update(payload).digest();
+
+const encodeCursor = (cursor: Cursor) => {
+  const payload = Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+  return `${payload}.${cursorSignature(payload).toString("base64url")}`;
+};
+
+/** The cursor `text` encodes, exactly as this process issued it; undefined for anything else. */
 function decodeCursor(text: string): Cursor | undefined {
-  let value: unknown;
-  try {
-    value = JSON.parse(Buffer.from(text, "base64url").toString("utf8"));
-  } catch {
-    return undefined;
-  }
-  if (!Array.isArray(value) || value.length !== 4) return undefined;
-  const [runId, blockId, highWater, after] = value as unknown[];
-  if (typeof runId !== "string" || typeof blockId !== "string") return undefined;
-  if (!Number.isSafeInteger(highWater) || !Number.isSafeInteger(after)) return undefined;
-  const cursor: Cursor = [runId, blockId, highWater as number, after as number];
-  return encodeCursor(cursor) === text ? cursor : undefined;
+  const [payload, signature, ...rest] = text.split(".");
+  if (payload === undefined || signature === undefined || rest.length) return undefined;
+  const expected = cursorSignature(payload);
+  const actual = Buffer.from(signature, "base64url");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
+  if (actual.toString("base64url") !== signature) return undefined;
+  // Signed by this process, so the payload is a cursor it encoded.
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Cursor;
 }
 
 const DISPOSITIONS: Readonly<Record<DeliveryState, ConditionRecipientDisposition>> = {

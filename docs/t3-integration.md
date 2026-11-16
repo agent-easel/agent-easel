@@ -497,7 +497,8 @@ It grants no routing authority.
 the HTTP read, as `{ code: "CONDITION_ARRIVALS", arrivals, highWater, nextCursor }`. `conditionBlockId` is a Flow block id from
 `factory_get_run`'s `conditions`; `limit` is a JSON integer. A Block id resolves only its own Run, so another Run's Conditions
 are unreachable. An unknown Condition, invalid `limit` or a cursor that does not continue this Condition's window is refused
-with `UNKNOWN_CONDITION`, `INVALID_LIMIT` or `INVALID_CURSOR` and static guidance.
+with `UNKNOWN_CONDITION`, `INVALID_LIMIT` or `INVALID_CURSOR` and static guidance; as over HTTP, a modified cursor or one issued
+before the server restarted does not continue a window.
 
 ### Run image reads
 

@@ -536,8 +536,9 @@ Decisions never change; dispositions are read again on every page, so they are c
 time. A page holds 50 arrivals by default and `limit` accepts whole numbers from 1 to 100; any other value is a validation error.
 A first page fixes its window at the highest arrival number committed at that read (`highWater`), and its `nextCursor` continues
 only that window, so arrivals numbered later never shift a page; reading without a cursor opens a new window that includes them.
-A cursor is opaque and bound to its Run and Condition: one for another Run or Condition, an altered one or one beyond the
-committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
+A cursor is opaque, signed by the running server and bound to its Run and Condition: one for another Run or Condition, one
+whose content was changed in any way (including a validly re-encoded window), one issued before the server restarted or one
+beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
 selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
 
 Selecting a Condition shows this evidence in the inspector: the latest selection, then its arrivals in ascending number,
