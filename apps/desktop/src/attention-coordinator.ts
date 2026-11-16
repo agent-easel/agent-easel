@@ -76,8 +76,15 @@ export interface AttentionFeed {
   revoked(): Promise<void>;
 }
 
-/** The selected server's latest ready state. */
-type Ready = { readonly server: string; readonly rows: readonly RunNavigationEntry[] };
+/**
+ * The selected server's latest ready state, with the epoch it was delivered under: it counts only
+ * while no selection, readiness loss or revocation happened since.
+ */
+type Ready = {
+  readonly server: string;
+  readonly rows: readonly RunNavigationEntry[];
+  readonly epoch: number;
+};
 
 const badgeLimit = 99;
 
@@ -297,7 +304,7 @@ export class AttentionCoordinator {
   private closed = false;
   /** The server whose feed is current; null with none selected or after revocation. */
   private selection: { readonly server: string } | null = null;
-  /** The selection's latest ready state; null while its subscription is not ready. */
+  /** The selection's latest delivered state; read through `ready`. */
   private latest: Ready | null = null;
   private requesting = false;
   private focused = false;
@@ -358,17 +365,20 @@ export class AttentionCoordinator {
     });
     const current = () => selection !== null && this.selection === selection;
     return {
-      deliver: (delivery) =>
-        this.enqueue(async () => {
-          if (!current()) return;
-          this.latest = { server: selection!.server, rows: delivery.rows };
+      deliver: (delivery) => {
+        // A delivery belongs to the readiness it arrived in; a loss before it runs voids it.
+        const epoch = this.epoch;
+        return this.enqueue(async () => {
+          if (!current() || this.epoch !== epoch) return;
+          this.latest = { server: selection!.server, rows: delivery.rows, epoch };
           this.showBadge();
           if (this.held?.server === selection!.server) {
             this.held.answer(notificationRoute(this.held.notification, delivery.rows));
             this.held = null;
           }
           await this.announce(this.latest, delivery.fresh);
-        }),
+        });
+      },
       notReady: () => {
         if (current()) this.epoch++;
         return this.enqueue(async () => {
@@ -405,7 +415,7 @@ export class AttentionCoordinator {
         const notification =
           server === undefined ? undefined : this.ledger.notification(server, id);
         if (!server || !notification) return answer(null);
-        if (this.latest) return answer(notificationRoute(notification, this.latest.rows));
+        if (this.ready) return answer(notificationRoute(notification, this.ready.rows));
         this.held = { server, notification, answer };
       });
     });
@@ -418,7 +428,7 @@ export class AttentionCoordinator {
   dock(windowOpen: boolean): Promise<DesktopRoute | null> {
     return new Promise((answer) => {
       void this.enqueue(async () =>
-        answer(windowOpen || !this.latest ? null : dockRoute(this.latest.rows)),
+        answer(windowOpen || !this.ready ? null : dockRoute(this.ready.rows)),
       );
     });
   }
@@ -437,7 +447,7 @@ export class AttentionCoordinator {
    */
   checkPermission(): Promise<void> {
     return this.enqueue(async () => {
-      if ((await this.observePermission()) && this.latest) await this.announce(this.latest, true);
+      if ((await this.observePermission()) && this.ready) await this.announce(this.ready, true);
     });
   }
 
@@ -447,7 +457,7 @@ export class AttentionCoordinator {
       const enabled = settings.notifications && !this.settings.notifications;
       this.settings = settings;
       this.showBadge();
-      if (enabled && this.latest) await this.announce(this.latest, true);
+      if (enabled && this.ready) await this.announce(this.ready, true);
     });
   }
 
@@ -467,9 +477,14 @@ export class AttentionCoordinator {
     this.closed = true;
   }
 
+  /** The latest delivered state while its readiness still holds; null otherwise. */
+  private get ready(): Ready | null {
+    return this.latest?.epoch === this.epoch ? this.latest : null;
+  }
+
   /** The Dock badge switch off keeps the badge clear, as does a subscription that is not ready. */
   private showBadge() {
-    this.port.setBadge(this.settings.dockBadge ? badgeLabel(this.latest?.rows) : "");
+    this.port.setBadge(this.settings.dockBadge ? badgeLabel(this.ready?.rows) : "");
   }
 
   private drop() {
@@ -503,8 +518,7 @@ export class AttentionCoordinator {
     return this.queue;
   }
 
-  private async announce({ server, rows }: Ready, catchUp: boolean) {
-    const epoch = this.epoch;
+  private async announce({ server, rows, epoch }: Ready, catchUp: boolean) {
     const granted = await this.observePermission();
     const withheld = this.withheld(this.observed);
     const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {

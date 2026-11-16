@@ -699,6 +699,37 @@ it("a banner interrupted by a delivery gap shows once navigation is current agai
   });
 });
 
+it("a delivery still queued when readiness is lost shows nothing until navigation is current again", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  let grant = () => undefined as void;
+  const reading = new Promise<void>((started) => {
+    port.implementation.permission = () =>
+      new Promise((resolve) => {
+        grant = () => resolve("granted");
+        started();
+      });
+  });
+  const first = feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  await reading;
+  const queued = feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  const lost = feed.notReady();
+  port.implementation.permission = () => Promise.resolve("granted");
+  grant();
+  await Promise.all([first, queued, lost]);
+  const shownWhileNotReady = port.shown.length;
+
+  // Act
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ shownWhileNotReady, shown: port.shown.length }).toStrictEqual({
+    shownWhileNotReady: 0,
+    shown: 1,
+  });
+});
+
 it("a banner Notification Center accepts after its server was forgotten is withdrawn again", async (c) => {
   // Arrange
   const { port, coordinator, feed } = await installation(c);
