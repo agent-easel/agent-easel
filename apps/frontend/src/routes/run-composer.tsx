@@ -6,7 +6,7 @@ import { api } from "../api.ts";
 import { useConnectionState } from "../connection-state.tsx";
 import { useLiveLaunchChoices } from "../live/launch-choices.ts";
 import type { LiveScopeView } from "../live/owner.ts";
-import { runDraft, useRunDraft } from "../run-draft.ts";
+import { composerFlows, runDraft, useRunDraft } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronsUpDown,
@@ -29,6 +29,7 @@ import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "../compo
 import { Button } from "../components/ui/button.tsx";
 import {
   DropdownMenu,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -93,21 +94,15 @@ function flowLaunchIssues(flow: FlowDraft) {
 }
 
 /**
- * Clears a selected Project or Flow that the latest current delivery no longer lists. It runs
- * only when a delivery arrives, not when the selection changes: a just-created choice can be
- * selected before the delivery that lists it, and a non-current delivery is never a deletion.
+ * Hands each launch-choice delivery to the draft, which clears what a current one no longer lists
+ * or allows. It runs only when a delivery arrives, not when the selection changes: a just-created
+ * choice can be selected before the delivery that lists it. Leaving the composer makes the
+ * choices non-current until it shows them again.
  */
-function useForgetUnavailable({ value, synchronized }: LiveScopeView<LaunchChoices>) {
+function useReceiveChoices({ value, synchronized }: LiveScopeView<LaunchChoices>) {
   useEffect(() => {
-    if (!value || !synchronized) return;
-    runDraft.forgetUnavailable(
-      "flowId",
-      value.flows.map((flow) => flow.id),
-    );
-    runDraft.forgetUnavailable(
-      "projectId",
-      value.catalog.projects.map((project) => project.id),
-    );
+    runDraft.receiveChoices({ value, synchronized });
+    return () => runDraft.receiveChoices({ value: null, synchronized: false });
   }, [value, synchronized]);
 }
 
@@ -127,18 +122,20 @@ function useComposer() {
     if (!draft.projectId && projects.catalog.selectedProjectId)
       runDraft.edit({ projectId: projects.catalog.selectedProjectId });
   }, [projects.catalog, draft.projectId]);
-  useForgetUnavailable(choices);
+  useReceiveChoices(choices);
   const prompt = useRef<PromptEditorHandle>(null);
   const [promptMissing, setPromptMissing] = useState(false);
   const project = projects.catalog?.projects.find((p) => p.id === draft.projectId);
   const flow = flows?.find((f) => f.id === draft.flowId);
   const locked = draft.pending;
   const projectReady = project?.availability === "available";
+  const flowFits = flow?.projectId === null || flow?.projectId === draft.projectId;
   const ready =
     choices.synchronized &&
     presentation === "ready" &&
     projectReady &&
     !!flow &&
+    flowFits &&
     flowCanLaunch(flow) &&
     !projects.busy;
   const start = async () => {
@@ -235,10 +232,12 @@ export function RunComposer() {
 
 function flowFieldState({ draft, flows, flow }: Composer) {
   const empty = flows?.length === 0;
+  const choices = composerFlows(flows ?? [], draft.projectId, draft.flowId);
   const notReady = !!flow && !flowCanLaunch(flow);
   const missing = !!flows && !!draft.flowId && !flow;
   return {
     empty,
+    choices,
     notReady,
     invalid: notReady || missing,
     placeholder: empty ? "No Flows yet" : "Choose a Flow",
@@ -278,6 +277,51 @@ function FlowFieldValue({
 const flowRadioItemClass =
   "my-0.5 rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring";
 
+function FlowChoice({ flow, busy }: { flow: FlowDraft; busy: boolean }) {
+  const label = `${flow.name}${flowCanLaunch(flow) ? "" : " · Not ready"}`;
+  return (
+    <DropdownMenuRadioItem
+      value={flow.id}
+      data-flow-id={flow.id}
+      indicatorPosition="right"
+      disabled={busy}
+      aria-label={label}
+      className={flowRadioItemClass}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </DropdownMenuRadioItem>
+  );
+}
+
+/** One heading and its Flows, or nothing when none match. */
+function FlowGroup({
+  title,
+  flows,
+  busy,
+}: {
+  title: string;
+  flows: readonly FlowDraft[];
+  busy: boolean;
+}) {
+  if (flows.length === 0) return null;
+  return (
+    <>
+      <DropdownMenuLabel>{title}</DropdownMenuLabel>
+      {flows.map((flow) => (
+        <FlowChoice key={flow.id} flow={flow} busy={busy} />
+      ))}
+    </>
+  );
+}
+
+/** Why the menu lists no Flow, if it lists none. */
+function flowChoicesStatus(flows: readonly FlowDraft[] | null, offered: boolean, matched: boolean) {
+  if (!flows) return "Loading Flows…";
+  if (flows.length === 0) return "No Flows yet";
+  if (!offered) return "No ready Flows for this project.";
+  return matched ? undefined : "No matching Flows.";
+}
+
 function FlowChoices({
   model,
   busy,
@@ -291,13 +335,20 @@ function FlowChoices({
   listRef: RefObject<HTMLDivElement | null>;
   onSelect: (flowId: string) => void;
 }) {
-  const { draft, flows, flow } = model;
-  const state = flowFieldState(model);
+  const { draft, flows, flow, project } = model;
+  const { choices } = flowFieldState(model);
   const query = search.trim().toLocaleLowerCase();
   const matches = (name: string) => name.toLocaleLowerCase().includes(query);
-  const visibleFlows = flows?.filter((f) => matches(f.name)) ?? [];
+  const globalFlows = choices.global.filter((f) => matches(f.name));
+  const projectFlows = choices.project.filter((f) => matches(f.name));
+  const offered = choices.global.length + choices.project.length > 0;
   const showUnavailable =
     !!flows?.length && !!draft.flowId && !flow && matches("Selected Flow unavailable");
+  const status = flowChoicesStatus(
+    flows,
+    offered,
+    showUnavailable || globalFlows.length + projectFlows.length > 0,
+  );
   const positioned = useRef(false);
   useLayoutEffect(() => {
     if (positioned.current || !flows) return;
@@ -325,41 +376,22 @@ function FlowChoices({
             <span className="truncate text-muted-foreground">Selected Flow unavailable</span>
           </DropdownMenuRadioItem>
         )}
-        {!!flows?.length && (
+        {(offered || showUnavailable || !!flow) && (
           <DropdownMenuRadioItem value="" indicatorPosition="right" disabled={busy}>
             Choose a Flow
           </DropdownMenuRadioItem>
         )}
-        {visibleFlows.map((f) => (
-          <DropdownMenuRadioItem
-            key={f.id}
-            value={f.id}
-            data-flow-id={f.id}
-            indicatorPosition="right"
-            disabled={busy}
-            aria-label={`${f.name}${flowCanLaunch(f) ? "" : " · Not ready"}`}
-            className={flowRadioItemClass}
-          >
-            <span className="min-w-0 flex-1 truncate">
-              {f.name}
-              {flowCanLaunch(f) ? "" : " · Not ready"}
-            </span>
-          </DropdownMenuRadioItem>
-        ))}
+        <FlowGroup title="Global" flows={globalFlows} busy={busy} />
+        <FlowGroup title={project?.title ?? ""} flows={projectFlows} busy={busy} />
       </DropdownMenuRadioGroup>
-      {!flows && (
-        <p role="status" className="px-3 py-6 text-sm text-muted-foreground">
-          Loading Flows…
+      {status && (
+        <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
+          {status}
         </p>
       )}
-      {flows?.length === 0 && (
-        <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
-          {state.placeholder}
-        </p>
-      )}
-      {!!flows?.length && query && visibleFlows.length === 0 && !showUnavailable && (
-        <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
-          No matching Flows.
+      {!!flows?.length && (
+        <p className="px-3 pt-1 pb-2 text-2xs text-muted-foreground">
+          Only ready Flows are listed. Flows of other Projects run only there.
         </p>
       )}
     </div>
@@ -367,15 +399,17 @@ function FlowChoices({
 }
 
 function FlowField({ model }: { model: Composer }) {
-  const { draft, edit, locked, flows } = model;
+  const { draft, edit, locked } = model;
   const state = flowFieldState(model);
   const busy = locked;
+  // No Flow is chosen without a Project; a Flow held from Start Run stays visible.
+  const disabled = state.choices.disabled;
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerLabel = state.value ?? state.placeholder;
-  const showSearch = !!flows?.length;
+  const showSearch = state.choices.global.length + state.choices.project.length > 0;
   return (
     <>
       <Label htmlFor="launch-flow" className="sr-only">
@@ -384,7 +418,7 @@ function FlowField({ model }: { model: Composer }) {
       <DropdownMenu
         open={menuOpen}
         onOpenChange={(open) => {
-          setMenuOpen(open && !busy);
+          setMenuOpen(open && !busy && !disabled);
           if (open) setSearch("");
         }}
       >
@@ -393,7 +427,8 @@ function FlowField({ model }: { model: Composer }) {
             type="button"
             id="launch-flow"
             variant="outline"
-            aria-disabled={busy}
+            disabled={disabled}
+            aria-disabled={busy || disabled}
             aria-busy={busy}
             aria-label={`Select Flow: ${triggerLabel}`}
             aria-invalid={state.notReady || undefined}
@@ -573,8 +608,8 @@ function ProjectNotice({ model }: { model: Composer }) {
         icon={TriangleAlert}
         title={`“${project.title}” is no longer available`}
       >
-        Selected project is unavailable: {project.availability}. Your Flow and prompt are kept —
-        choose another available project or restore it in T3 and recheck.
+        Selected project is unavailable: {project.availability}. Your prompt is kept — choose
+        another available project or restore it in T3 and recheck.
       </Notice>
     );
   }
@@ -597,7 +632,7 @@ function ProjectNotice({ model }: { model: Composer }) {
     >
       {none
         ? "Choose an available project once T3 reports one. Factory uses the projects T3 knows about: add a repository in T3 or in the Project picker, then refresh — your prompt is kept."
-        : "Choose an available project to start. Your Flow and prompt are kept."}
+        : "Choose an available project, then a Flow for it. Your prompt is kept."}
     </Notice>
   );
 }

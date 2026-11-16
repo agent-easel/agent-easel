@@ -7,7 +7,7 @@ import {
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { openComposerWithFlow } from "./support/composer.ts";
-import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
+import { placeAgentElsewhere, removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
 import { archiveJourneyRun, findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
 
 beforeEach(async ({ browser }) => {
@@ -68,7 +68,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   await archiveJourneyRun(app.baseUrl, created.id);
 });
 
-test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays blocked", async ({
+test("a chosen Flow whose later-branch Agent comes to Need a model is Not ready and Start stays blocked", async ({
   app,
   screen,
 }) => {
@@ -83,13 +83,15 @@ test("a Flow whose later-branch Agent Needs a model is Not ready and Start stays
     app.baseUrl,
     "Demo · Parallel review",
     "Model-less later review",
-    { mode: "checkout" },
-    { accessibility: agent.id },
+    {
+      mode: "checkout",
+    },
   );
+  await openComposerWithFlow(app, screen, "Model-less later review");
+  await screen.getByLabel("Initial prompt", { exact: false }).fill("UI model-less later Agent");
 
   // Act
-  await openComposerWithFlow(app, screen, "Model-less later review · Not ready");
-  await screen.getByLabel("Initial prompt", { exact: false }).fill("UI model-less later Agent");
+  await placeAgentElsewhere(app.baseUrl, flow, "accessibility", agent.id);
 
   // Assert
   await expect(

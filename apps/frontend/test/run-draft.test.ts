@@ -1,7 +1,15 @@
 import { assert, expect, it, vi } from "vite-plus/test";
 import { ApiError } from "../src/api.ts";
-import { byCreation, draftTitle } from "../src/run-draft.ts";
-import { composer, pendingStart, plain, reopen, unknownStart } from "./support/run-draft.ts";
+import { byCreation, composerFlows, draftTitle } from "../src/run-draft.ts";
+import {
+  composer,
+  delivery,
+  launchFlow,
+  pendingStart,
+  plain,
+  reopen,
+  unknownStart,
+} from "./support/run-draft.ts";
 
 it("an unknown Start keeps submitted fields read-only", async (context) => {
   // Arrange
@@ -52,7 +60,7 @@ it("Start Run from a Flow opens that Flow in a fresh composition", (context) => 
   const { draft } = composer(context);
 
   // Act
-  draft.openFlow("other-flow");
+  draft.openFlow({ id: "other-flow", projectId: null });
 
   // Assert
   expect(draft.getSnapshot()).toMatchObject({ text: "", flowId: "other-flow", pending: false });
@@ -417,7 +425,7 @@ it("a Flow confirmed deleted clears only that selection", (context) => {
   const { draft } = composer(context);
 
   // Act
-  draft.forgetUnavailable("flowId", ["another-flow"]);
+  draft.receiveChoices(delivery([launchFlow("another-flow", null)]));
 
   // Assert
   expect(draft.getSnapshot()).toMatchObject({
@@ -649,5 +657,232 @@ it("a missing Start reference settles the request without clearing the prompt", 
     pending: false,
     busy: false,
     error: "Flow removed",
+  });
+});
+
+it("switching Project silently clears a Flow owned by another Project and keeps the prompt", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.receiveChoices(delivery([launchFlow("flow", "project")]));
+
+  // Act
+  draft.edit({ projectId: "other-project" });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "Do the work",
+    projectId: "other-project",
+    flowId: "",
+  });
+});
+
+it("switching Project keeps a global Flow", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.receiveChoices(delivery([launchFlow("flow", null)]));
+
+  // Act
+  draft.edit({ projectId: "other-project" });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ projectId: "other-project", flowId: "flow" });
+});
+
+it("a Project switch while launch choices synchronize or are offline keeps the Flow", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.receiveChoices(delivery([launchFlow("flow", "project")]));
+  draft.receiveChoices(delivery([launchFlow("flow", "project")], { synchronized: false }));
+
+  // Act
+  draft.edit({ projectId: "other-project" });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ projectId: "other-project", flowId: "flow" });
+});
+
+it("a Flow kept through a synchronizing Project switch clears once the Flow list is current", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.receiveChoices(delivery([launchFlow("flow", "project")], { synchronized: false }));
+  draft.edit({ projectId: "other-project" });
+
+  // Act
+  draft.receiveChoices(delivery([launchFlow("flow", "project")]));
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "Do the work",
+    projectId: "other-project",
+    flowId: "",
+  });
+});
+
+it("clearing the Project clears the Flow and keeps the prompt", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.receiveChoices(delivery([launchFlow("flow", null)]));
+
+  // Act
+  draft.edit({ projectId: "" });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ text: "Do the work", projectId: "", flowId: "" });
+});
+
+it("a Flow cleared with its Project is not restored by choosing a Project or New Run", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+  draft.edit({ projectId: "" });
+  draft.edit({ projectId: "project" });
+
+  // Act
+  draft.openFresh();
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ projectId: "project", flowId: "" });
+});
+
+it("a restored draft whose Flow now belongs to another Project loses only the Flow once current data confirms it", (context) => {
+  // Arrange
+  const saved = composer(context);
+  const { draft } = reopen(saved);
+
+  // Act
+  draft.receiveChoices(delivery([launchFlow("flow", "other-project")]));
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "Do the work",
+    projectId: "project",
+    flowId: "",
+  });
+  expect(reopen(saved).draft.getSnapshot()).toMatchObject({ projectId: "project", flowId: "" });
+});
+
+it("a restored draft keeps its Flow while launch choices are not current", (context) => {
+  // Arrange
+  const saved = composer(context);
+  const { draft } = reopen(saved);
+
+  // Act
+  draft.receiveChoices(delivery([launchFlow("flow", "other-project")], { synchronized: false }));
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ projectId: "project", flowId: "flow" });
+});
+
+it("an unknown Start keeps its submitted Flow when current choices place it in another Project", async (context) => {
+  // Arrange
+  const { draft } = await unknownStart(context);
+  const before = draft.getSnapshot();
+
+  // Act
+  draft.receiveChoices(delivery([launchFlow("flow", "other-project")]));
+
+  // Assert
+  expect(draft.getSnapshot()).toStrictEqual(before);
+});
+
+it("Check same request resends an unknown Start whose Flow now belongs to another Project", async (context) => {
+  // Arrange
+  const { draft, startRun } = await unknownStart(context);
+  const submitted = structuredClone(startRun.mock.calls[0]?.[0]);
+  draft.receiveChoices(delivery([launchFlow("flow", "other-project")]));
+  startRun.mockResolvedValueOnce({ id: "accepted-run" });
+
+  // Act
+  const runId = await draft.start();
+
+  // Assert
+  expect(startRun.mock.calls[1]?.[0]).toStrictEqual(submitted);
+  expect(runId).toBe("accepted-run");
+});
+
+it("Start Run on a Project Flow selects its owning Project", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+
+  // Act
+  draft.openFlow({ id: "owned-flow", projectId: "other-project" });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "",
+    projectId: "other-project",
+    flowId: "owned-flow",
+  });
+});
+
+it("Start Run on a global Flow uses the remembered Project", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+
+  // Act
+  draft.openFlow({ id: "global-flow", projectId: null });
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ projectId: "project", flowId: "global-flow" });
+});
+
+it("Start Run on a global Flow without a remembered Project holds it in the disabled picker", (context) => {
+  // Arrange
+  const { draft } = reopen(composer(context), "server-b");
+  const flows = [launchFlow("global-flow", null)];
+
+  // Act
+  draft.openFlow({ id: "global-flow", projectId: null });
+
+  // Assert
+  const { projectId, flowId } = draft.getSnapshot();
+  expect({ projectId, flowId }).toStrictEqual({ projectId: "", flowId: "global-flow" });
+  expect(composerFlows(flows, projectId, flowId)).toStrictEqual({
+    disabled: true,
+    global: [],
+    project: [],
+  });
+});
+
+it("a global Flow held without a Project becomes choosable once a Project is picked", (context) => {
+  // Arrange
+  const { draft } = reopen(composer(context), "server-b");
+  const flows = [launchFlow("global-flow", null)];
+  draft.openFlow({ id: "global-flow", projectId: null });
+  draft.receiveChoices(delivery(flows));
+
+  // Act
+  draft.edit({ projectId: "project" });
+
+  // Assert
+  const { projectId, flowId } = draft.getSnapshot();
+  expect(flowId).toBe("global-flow");
+  expect(composerFlows(flows, projectId, flowId)).toStrictEqual({
+    disabled: false,
+    global: flows,
+    project: [],
+  });
+});
+
+it("the Flow picker lists ready global Flows and ready Flows of the selected Project", () => {
+  // Arrange
+  const global = launchFlow("global", null);
+  const owned = launchFlow("owned", "project");
+  const selectedNotReady = launchFlow("selected", "project", false);
+  const flows = [
+    global,
+    launchFlow("global-not-ready", null, false),
+    owned,
+    launchFlow("elsewhere", "other-project"),
+    selectedNotReady,
+  ];
+
+  // Act
+  const listed = composerFlows(flows, "project", "selected");
+
+  // Assert
+  expect(listed).toStrictEqual({
+    disabled: false,
+    global: [global],
+    project: [owned, selectedNotReady],
   });
 });
