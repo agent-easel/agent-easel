@@ -152,16 +152,22 @@ export function IdentityRows({
   );
 }
 
-/** A port centred `center` below its container's inner top edge, on the left or right edge. */
+/**
+ * A port centred on its wire anchor: `center` below its container's inner top edge, on the
+ * block's outer left or right edge. Anchors are measured from the block's outer edge, while the
+ * port is placed inside the block's drawn `border`.
+ */
 function SurfacePort({
   side,
   center,
+  border,
   port,
   look,
   graphY,
 }: {
   side: "left" | "right";
   center: number;
+  border: number;
   port: Dimensions["port"];
   look: CanvasPort;
   /** An input's anchor below the block's top, for the journeys that read it. */
@@ -170,7 +176,7 @@ function SurfacePort({
   const frame = (size: number): CSSProperties => ({
     position: "absolute",
     top: center - size / 2,
-    [side]: -(port.outset + (size - port.size) / 2),
+    [side]: -(border + size / 2),
     width: size,
     height: size,
   });
@@ -241,7 +247,8 @@ function SurfaceFlowInput({
       )}
       <SurfacePort
         side="right"
-        center={geometry.flowInputPoint.y - graph.flowInput.position.y - input.anchorBorder}
+        center={geometry.flowInputPoint.y - graph.flowInput.position.y - input.border}
+        border={input.border}
         port={dimensions.port}
         look={content.port}
       />
@@ -277,10 +284,12 @@ function SurfaceBlock({
             style={{ height: rows.exitRow }}
           >
             {content.exit(exit)}
-            {/* Each exit anchor is the middle of its row, so the port is placed in the row. */}
+            {/* Each exit anchor is the middle of its row in the unselected frame; a selected
+                border moves the row but not the anchor. */}
             <SurfacePort
               side="right"
-              center={rows.exitRow / 2}
+              center={rows.exitRow / 2 - (border - rows.border)}
+              border={border}
               port={dimensions.port}
               look={content.exitPort(exit)}
             />
@@ -327,7 +336,8 @@ function SurfaceBlock({
           <SurfacePort
             key={index}
             side="left"
-            center={graphY - rows.anchorBorder}
+            center={graphY - border}
+            border={border}
             port={dimensions.port}
             look={content.incomingPort(index === pendingInput)}
             graphY={graphY}

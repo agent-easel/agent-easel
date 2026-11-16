@@ -1,7 +1,7 @@
 import { readCoordinationActions } from "./run-coordination-actions.ts";
 import { readRootWork } from "./run-root-history.ts";
 import { readRunImages } from "../../run-images.ts";
-import { readTitleGenerations } from "../../run-titles.ts";
+import { readTitleGenerations } from "./title-generations.ts";
 import { coordinationRead } from "./runner-coordination.ts";
 import { readRunCoordinator } from "./run-coordinator.ts";
 import { threadHref } from "../../thread-link.ts";

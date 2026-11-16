@@ -19,6 +19,7 @@ import type {
 } from "@t3-factory/contracts";
 import { agentSettingsStatus } from "./agents.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
+import { isLocalEndpoint } from "./endpoint-local.ts";
 
 class SetupFailure extends Error {
   readonly issue: ValidationIssue;
@@ -66,10 +67,7 @@ function validatedHarness(
   agent: CapturedAgent,
   capabilities: AgentCapabilities,
 ) {
-  if (
-    !["localhost", "127.0.0.1", "[::1]"].includes(new URL(context.endpoint).hostname) ||
-    context.environmentId !== agent.execution.environmentId
-  )
+  if (!isLocalEndpoint(context.endpoint) || context.environmentId !== agent.execution.environmentId)
     blocked(
       "environment_unsupported",
       "agent.execution.environmentId",

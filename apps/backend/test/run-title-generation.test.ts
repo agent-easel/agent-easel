@@ -714,3 +714,25 @@ it("after a title is applied, Factory requests one keyed Stop of the title threa
   ]);
   expect(fixture.t3.settlements).toStrictEqual([]);
 });
+
+it("a title thread Stop requested before a restart is not requested again after it", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  await enableRunTitles(fixture.f);
+  const thread = await titleThreadLaunched(fixture.world, fixture.input);
+  const applied = await fixture.f.runtime.title({
+    arguments: { titleGenerationId: thread.titleGenerationId, title: "Search ranking" },
+  });
+  expect(applied.code).toBe("TITLE_APPLIED");
+  await fixture.f.reconcileRuns();
+  await fixture.f.close();
+
+  // Act
+  const restored = await fixture.h.open({ t3: fixture.t3, connectionRetryMs: 60_000 });
+  c.onTestFinished(() => restored.close());
+
+  // Assert
+  expect(titleThreadStops(fixture.t3)).toStrictEqual([
+    { threadId: titleThreadReference(fixture.t3).threadId, clientRequestId: expect.any(String) },
+  ]);
+});

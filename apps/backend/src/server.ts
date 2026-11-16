@@ -403,33 +403,31 @@ function importRoutes(factory: Factory): RouteEntries<typeof definitionImportOpe
 
 /**
  * Before any operation: a declared protocol must be compatible, and a remote client
- * must declare one, hold an approved credential, and not call host setup.
+ * must declare one, hold an approved credential, and not call host setup. Admits with
+ * the approved client's id, or null where no credential applies.
  */
 function admission(
   route: RouteTrust,
-  request: HttpServerRequestType,
+  declared: Readonly<Record<string, string | undefined>>,
+  credential: string | undefined,
   binding: HttpBinding,
-): Effect.Effect<HttpServerResponse.HttpServerResponse | undefined> {
+): Effect.Effect<Result<string | null>> {
   return Effect.gen(function* () {
-    const compatibility = declaredProtocolCompatibility(request.headers, binding.protocol);
+    const compatibility = declaredProtocolCompatibility(declared, binding.protocol);
     const exempt = route.handshake === true;
     if (!exempt && compatibility !== undefined && compatibility.kind !== "compatible")
-      return resultResponse(failure("incompatible", compatibility.message));
-    if (binding.surface === "host") return undefined;
-    if (!exempt && !route.protocolOptional && compatibility === undefined)
-      return resultResponse(
-        failure("incompatible", "This client does not declare a Factory protocol. Update it."),
-      );
-    if (route.public) return undefined;
+      return failure("incompatible", compatibility.message);
+    const required = binding.surface === "remote" || route.protocolRequired === true;
+    if (required && !exempt && !route.protocolOptional && compatibility === undefined)
+      return failure("incompatible", "This client does not declare a Factory protocol. Update it.");
+    if (binding.surface === "host" || route.public) return { ok: true, value: null };
     const client = yield* Effect.promise(() =>
-      binding.factory.authenticateClient(requestCredential(request.headers) ?? ""),
+      binding.factory.authenticateClient(credential ?? ""),
     );
-    if (!client.ok) return resultResponse(client);
-    return route.hostOnly
-      ? resultResponse(
-          failure("host_only", "This operation is available only on the Factory host."),
-        )
-      : undefined;
+    if (!client.ok) return client;
+    if (route.hostOnly)
+      return failure("host_only", "This operation is available only on the Factory host.");
+    return { ok: true, value: client.value.id };
   });
 }
 
@@ -444,8 +442,13 @@ function dispatchApi(
     const matched = binding.routes(binding.surface, request.method, target.pathname);
     if (!matched) return undefined;
     const { route, parameters } = matched;
-    const rejected = yield* admission(route, request, binding);
-    if (rejected) return rejected;
+    const admitted = yield* admission(
+      route,
+      request.headers,
+      requestCredential(request.headers),
+      binding,
+    );
+    if (!admitted.ok) return resultResponse(admitted);
     let input: unknown;
     if (route.body) {
       const body =
@@ -517,6 +520,13 @@ interface HttpBinding {
 }
 
 /**
+ * Live delivery requires a declared protocol on the host listener too: every live client is a
+ * Factory UI, and the declaration is the stream's only compatibility check. Host-local HTTP
+ * callers such as scripts may omit it.
+ */
+const liveTrust: RouteTrust = { protocolRequired: true };
+
+/**
  * Admits a live WebSocket before upgrading it, with the product routes' rules. Browsers cannot
  * set headers on a WebSocket, so the protocol is declared in the query, and the Origin is
  * mandatory: an upgrade is a GET that the mutation guard does not cover.
@@ -538,34 +548,14 @@ function serveLive(
     return Effect.succeed(
       resultResponse(failure("validation", "Open live delivery as a WebSocket.")),
     );
-  const protocol = url.searchParams.get("protocol");
-  const minimum = url.searchParams.get("minimum");
-  const compatibility = declaredProtocolCompatibility(
-    {
-      "x-factory-protocol": protocol ?? undefined,
-      "x-factory-protocol-minimum": minimum ?? undefined,
-    },
-    binding.protocol,
+  const declared = {
+    "x-factory-protocol": url.searchParams.get("protocol") ?? undefined,
+    "x-factory-protocol-minimum": url.searchParams.get("minimum") ?? undefined,
+  };
+  return binding.live.serve(
+    request,
+    admission(liveTrust, declared, requestCredential(request.headers), binding),
   );
-  if (compatibility === undefined || compatibility.kind !== "compatible")
-    return Effect.succeed(
-      resultResponse(
-        failure(
-          "incompatible",
-          compatibility?.message ?? "This client does not declare a Factory protocol. Update it.",
-        ),
-      ),
-    );
-  const authenticate: Effect.Effect<Result<string | null>> =
-    binding.surface === "host"
-      ? Effect.succeed({ ok: true, value: null })
-      : Effect.map(
-          Effect.promise(() =>
-            binding.factory.authenticateClient(requestCredential(request.headers) ?? ""),
-          ),
-          (client) => (client.ok ? { ok: true, value: client.value.id } : client),
-        );
-  return binding.live.serve(request, authenticate);
 }
 
 /**

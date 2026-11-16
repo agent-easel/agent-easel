@@ -4,6 +4,7 @@ import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contra
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
+import { largestWirePortOffset } from "./support/canvas.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
@@ -631,4 +632,25 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   const agent = await readAgentDefinition(app.baseUrl, importedWorker.agentId!);
   assert.equal(agent.name, exported.agents[0]!.name);
   await app.screenshot("flow-imported");
+});
+
+test("authoring wires start and end at their port centres while a block is selected", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await app.open("/studio/flows");
+  await screen.getByRole("heading", "Demo · Build and review in a worktree", { exact: true }).tap();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  const block = screen.getByRole("article", "Block Implement change", { exact: true });
+
+  // Act
+  await block.getByText("Implement change", { exact: true }).first().tap();
+
+  // Assert
+  await expect(screen.getByLabel("Block name")).toHaveValue("Implement change");
+  await expect.poll(() => largestWirePortOffset(browser)).toBeLessThan(0.5);
+  await app.screenshot("authoring-wires-meet-port-centres");
 });

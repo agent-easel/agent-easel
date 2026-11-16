@@ -186,7 +186,7 @@ function inEditorLayer(scope: HTMLElement | null, target: EventTarget | null) {
   return at === own || target === document.body;
 }
 
-/** Delete or Backspace in the editor's layer, outside form controls, runs `onDelete` while `enabled`. */
+/** Unmodified Delete or Backspace in the editor's layer, outside form controls, runs `onDelete` while `enabled`. */
 function useDeleteKey(
   scope: RefObject<HTMLElement | null>,
   enabled: boolean,
@@ -200,6 +200,9 @@ function useDeleteKey(
     if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Delete" && event.key !== "Backspace") return;
+      // A modified press belongs to an app shortcut (Mod+Backspace is Archive), which may be
+      // blocked over Studio without preventing the key's default.
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       if (event.defaultPrevented || isEditing(event.target)) return;
       if (!inEditorLayer(scope.current, event.target)) return;
       event.preventDefault();

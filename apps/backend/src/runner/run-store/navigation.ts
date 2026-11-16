@@ -13,7 +13,7 @@ import { failure } from "../../result.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
 import { storedProjectIcon } from "../../projects.ts";
 import { projectFaviconUrl } from "../../project-favicon.ts";
-import { dropTitleGeneration, readTitleGenerations } from "../../run-titles.ts";
+import { dropTitleGeneration, readTitleGenerations } from "./title-generations.ts";
 export function openRunNavigation(database: RunnerDatabase) {
   return {
     listRunNavigation(): Effect.Effect<Result<readonly RunNavigationEntry[]>, unknown> {
