@@ -923,18 +923,38 @@ it("a dirty editor's own Change owner needs no acknowledgement, also before Stud
   });
 });
 
-it("a delivery still showing the former owner after the editor's own Change owner asks nothing", () => {
+it("an owner moved back elsewhere after the editor's own Change owner asks for acknowledgement", () => {
   // Arrange
   const setup = editedAgent();
   setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind").projectId);
 
   // Act
-  deliver(setup, [savedAgent({ updatedAt: "2026-11-10T09:00:00.000Z" })]);
+  ownerChangedElsewhere(setup, null);
 
   // Assert
   expect(setup.draft.getSnapshot()).toMatchObject({
-    owner: "northwind",
-    ownerChange: { status: "none" },
-    canSave: true,
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "changed", from: "northwind", to: null },
+    canSave: false,
+  });
+});
+
+it("a stale-owner refusal after the editor's own Change owner asks to acknowledge the owner Studio shows", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind").projectId);
+  setup.factory.moveElsewhere(null);
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    ownerChange: { status: "changed", from: "northwind", to: null },
+    canSave: false,
   });
 });

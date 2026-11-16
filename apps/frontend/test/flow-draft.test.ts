@@ -341,6 +341,38 @@ it("a readiness check answered after a saved Agent changed owner without a new r
   expect(draft.getSnapshot().readiness).toBeNull();
 });
 
+it("an owner changed elsewhere clears an unsaved draft's readiness check", async () => {
+  // Arrange
+  const { draft, factory, published } = editedFlow();
+  await draft.check();
+
+  // Act
+  published(factory.moveElsewhere("northwind"));
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    readiness: null,
+    canStartRun: false,
+  });
+});
+
+it("a readiness check answered after the editor's own Change owner is dropped", async () => {
+  // Arrange
+  const { draft, factory } = editedFlow();
+  const answer = held(factory.validateFlow);
+  const checking = draft.check();
+  draft.ownerChangedHere(factory.moveElsewhere("northwind").projectId);
+
+  // Act
+  answer.answer(validated());
+  await checking;
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ owner: "northwind", readiness: null });
+});
+
 it("a readiness check answered after the editor was hidden is dropped", async () => {
   // Arrange
   const { draft, factory } = editedFlow();

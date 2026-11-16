@@ -99,6 +99,8 @@ export function createFlowDraft(
       agentsChanged = false;
       forgetCheck();
     },
+    // Readiness judges the draft under the Flow's owner, which the validation answer does not name.
+    onOwnerChange: forgetCheck,
     view(state): FlowDraftSnapshot {
       const loaded = status === "loaded";
       const busy = state.saving || checking;
@@ -133,8 +135,9 @@ export function createFlowDraft(
   /**
    * A shown readiness result stops applying as soon as the Flow's saved revision changes, the
    * Flow is removed, Studio loses synchronization or an Agent the draft places changes, also
-   * while adoption waits for an interaction. A clean draft then shows the saved Flow's
-   * readiness, delivered with those Agents; an unsaved draft waits for another check.
+   * while adoption waits for an interaction (an owner change clears it through `onOwnerChange`).
+   * A clean draft then shows the saved Flow's readiness, delivered with those Agents; an unsaved
+   * draft waits for another check.
    */
   function observe() {
     const next = observed();

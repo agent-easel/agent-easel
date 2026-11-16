@@ -128,8 +128,10 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   readonly hold?: () => boolean;
   /** Runs whenever a saved revision replaces the draft. */
   readonly onAdopt?: () => void;
+  /** Runs whenever the owning Project the draft shows changes, including by its own Change owner. */
+  readonly onOwnerChange?: () => void;
 }) {
-  const { contentOf, list, view, hold, onAdopt } = config;
+  const { contentOf, list, view, hold, onAdopt, onOwnerChange } = config;
   let saved = config.saved;
   let content = config.content;
   let baseline = content;
@@ -144,8 +146,6 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   let owner = config.saved?.projectId ?? null;
   let acknowledgedOwner = owner;
   let ownerChange: OwnerChange = noOwnerChange;
-  /** The owner this editor's own Change owner left behind, until Studio stops showing it. */
-  let movedFrom: { readonly projectId: string | null } | null = null;
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -200,9 +200,14 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     conflict = noConflict;
     newest = null;
   }
+  function showOwner(projectId: string | null) {
+    if (projectId === owner) return;
+    owner = projectId;
+    onOwnerChange?.();
+  }
   /** The draft accepts `projectId` as its owning Project, so its saves expect it. */
   function acceptOwner(projectId: string | null) {
-    owner = projectId;
+    showOwner(projectId);
     acknowledgedOwner = projectId;
     ownerChange = noOwnerChange;
   }
@@ -271,11 +276,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    * still shows the owner the draft expected.
    */
   function followOwner(latest: D): boolean {
-    // A delivery from before this editor's own Change owner is not a change elsewhere.
-    if (movedFrom && latest.projectId === movedFrom.projectId) return false;
-    movedFrom = null;
     const shown = owner;
-    owner = latest.projectId;
+    showOwner(latest.projectId);
     if (owner === acknowledgedOwner) {
       if (ownerChange.status !== "changed") return owner !== shown;
       ownerChange = noOwnerChange;
@@ -311,7 +313,10 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     // A pending save defers notices; an older revision is a delivery behind its accepted reply.
     if (lastSave?.outcome === "pending" || latest.revision < current.revision) return false;
     if (latest.revision === current.revision) {
-      if (latest === current) return false;
+      // Studio's unchanged definition can still name the owner a stale-owner refusal waits for:
+      // live updates coalesce, so a move away and back after this editor's own Change owner may
+      // never be delivered.
+      if (latest === current) return ownerChange.status === "waiting" && followOwner(latest);
       saved = latest;
       followOwner(latest);
       return true;
@@ -399,10 +404,13 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       showError("");
       publish();
     },
-    /** This editor's own Change owner moved the definition to `projectId`; nothing to acknowledge. */
+    /**
+     * This editor's own Change owner moved the definition to `projectId`; nothing to acknowledge.
+     * Studio's later deliveries are followed as usual: they cannot be told apart from a move
+     * elsewhere, and a delivery read before the move is followed by the move itself.
+     */
     ownerChangedHere(projectId: string | null) {
       if (!saved || projectId === owner) return;
-      movedFrom = { projectId: owner };
       acceptOwner(projectId);
       publish();
     },
