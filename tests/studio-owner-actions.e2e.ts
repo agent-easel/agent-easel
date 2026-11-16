@@ -3,6 +3,7 @@ import { expect } from "e2e";
 import { test } from "./support/test.ts";
 import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
+import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
   exportFlowFile,
@@ -18,16 +19,25 @@ const unique = () => crypto.randomUUID().slice(0, 8);
 const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
 
+/** A new global Agent open in Studio, and the id of the fixture's available Northwind Project. */
+async function openGlobalAgent(
+  { app, browser }: Pick<StudioFixtures, "app" | "browser">,
+  label: string,
+) {
+  await browser.setViewport(viewport);
+  const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
+  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", `${label} ${unique()}`);
+  await app.open(`/studio/agents/${agent.id}`);
+  return { northwind, agent };
+}
+
 test("Change owner moves an Agent into a Project without a new revision, also after reload", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await browser.setViewport(viewport);
-  const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
-  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", `Owner move ${unique()}`);
-  await app.open(`/studio/agents/${agent.id}`);
+  const { northwind, agent } = await openGlobalAgent({ app, browser }, "Owner move");
   await screen.getByRole("button", "Change owner…", { exact: true }).tap();
   const dialog = screen.getByRole("dialog", `Change owner of “${agent.name}”`);
   await dialog.getByRole("button", "New owner").tap();
@@ -206,10 +216,7 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   browser,
 }) => {
   // Arrange
-  await browser.setViewport(viewport);
-  const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
-  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", `Dirty owner ${unique()}`);
-  await app.open(`/studio/agents/${agent.id}`);
+  const { northwind, agent } = await openGlobalAgent({ app, browser }, "Dirty owner");
   await screen.getByLabel("Prompt", { exact: true }).fill("Edited while the owner moves.");
   await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
   const notice = screen.getByRole("status", "Owner changed elsewhere");
