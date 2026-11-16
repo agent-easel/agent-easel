@@ -64,7 +64,7 @@ export function AgentsListPane({
           </span>
         )}
         <span className="flex-1" />
-        <DefinitionImportControl size="sm" onImported={onImported} />
+        <DefinitionImportControl size="sm" projects={owners.projects} onImported={onImported} />
         <MutationGate>
           <Button size="sm" aria-label="New Agent" onClick={onCreate}>
             + Add agent

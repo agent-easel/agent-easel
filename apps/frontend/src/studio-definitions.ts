@@ -349,7 +349,7 @@ export function defaultOwner(
 }
 
 /** One owner a new definition may be given; an unavailable Project is offered disabled. */
-export interface OwnerTarget {
+interface OwnerTarget {
   readonly owner: StudioOwner;
   /** Why the target cannot own a new definition, or null when it can. */
   readonly disabled: string | null;
@@ -407,7 +407,7 @@ export interface OwnerChangeBlocker {
   readonly definition: FlowDraft | AgentDefinition | null;
 }
 
-export interface ChangeOwnerSnapshot {
+interface ChangeOwnerSnapshot {
   /** The new owner: a Project, or null for Global. */
   readonly target: string | null;
   readonly changing: boolean;
@@ -478,8 +478,6 @@ export function createChangeOwner(
     },
   };
 }
-
-export type ChangeOwnerModel = ReturnType<typeof createChangeOwner>;
 
 export interface FlowDuplicateSnapshot {
   /** The copy's owner: a Project, or null for Global. */
@@ -587,5 +585,3 @@ export function createFlowDuplicate(
     },
   };
 }
-
-export type FlowDuplicateModel = ReturnType<typeof createFlowDuplicate>;

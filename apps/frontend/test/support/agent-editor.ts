@@ -7,7 +7,7 @@ import { held } from "./flow-draft.ts";
 import { liveStudio, studioChanged, studioFactory, studioSnapshot } from "./studio-definitions.ts";
 
 /** Factory's refusal of a save that expected an owner the Agent no longer has. */
-export const staleOwner = new ApiError({
+const staleOwner = new ApiError({
   code: "conflict",
   message: "This Agent's owning Project changed elsewhere, so nothing was written.",
   issues: [{ code: "stale_owner", path: "expectedProjectId", message: "Compare the owner." }],

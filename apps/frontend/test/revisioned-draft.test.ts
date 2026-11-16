@@ -905,3 +905,36 @@ it("after a stale-owner refusal, Studio's delivery of the new owner asks for ack
     canSave: false,
   });
 });
+
+it("a dirty editor's own Change owner needs no acknowledgement, also before Studio delivers it", () => {
+  // Arrange
+  const setup = editedAgent();
+  const moved = setup.factory.moveElsewhere("northwind");
+
+  // Act
+  setup.draft.ownerChangedHere(moved.projectId);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a delivery still showing the former owner after the editor's own Change owner asks nothing", () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind").projectId);
+
+  // Act
+  deliver(setup, [savedAgent({ updatedAt: "2026-11-10T09:00:00.000Z" })]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});

@@ -271,6 +271,7 @@ export function createFlowDraft(
     /** Replaces the local draft with compared `revision` while it is still the one compared. */
     takeLatest: draft.takeLatest,
     acknowledgeOwner: draft.acknowledgeOwner,
+    ownerChangedHere: draft.ownerChangedHere,
     /**
      * Keeps the local content, unsaved, against compared `revision` for another explicit save,
      * only while that revision is still the one compared; its readiness check no longer applies.

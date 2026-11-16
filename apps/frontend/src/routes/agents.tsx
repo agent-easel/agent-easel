@@ -3,7 +3,13 @@ import { useEffect, useState } from "react";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import type { AgentCapabilities, AgentDefinition, FactoryProject } from "@t3-factory/contracts";
 import { useStudioNavigation } from "../settings-navigation.ts";
-import { createAgentDraft, useAgentDraftSnapshot, type AgentDraftSource } from "../agent-draft.ts";
+import {
+  createAgentDraft,
+  useAgentDraftSnapshot,
+  type AgentDraftModel,
+  type AgentDraftSnapshot,
+  type AgentDraftSource,
+} from "../agent-draft.ts";
 import { api } from "../api.ts";
 import {
   defaultOwner,
@@ -15,6 +21,7 @@ import {
   type StudioDefinitionsSnapshot,
 } from "../studio-definitions.ts";
 import { ownerHint } from "../components/studio-owner.tsx";
+import { ChangeOwnerDialog, DuplicateAgentDialog } from "../components/studio-owner-dialogs.tsx";
 import { useActiveView } from "../use-active-view.ts";
 import { AgentsListPane } from "../components/studio-agents/agents-list-pane.tsx";
 import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.tsx";
@@ -254,11 +261,13 @@ function SelectedAgentEditor({
  */
 function useAgentOwnership(
   saved: AgentDefinition | null,
+  /** The saved Agent's owning Project as Studio shows it now. */
+  owner: string | null,
   projects: readonly FactoryProject[],
   newOwner: ReturnType<typeof useNewAgentOwner>,
 ) {
   const [picked, setPicked] = useState<{ readonly owner: string | null }>();
-  if (saved) return { kind: "saved", owner: studioOwner(saved.projectId, projects) } as const;
+  if (saved) return { kind: "saved", owner: studioOwner(owner, projects), projects } as const;
   const chosen = picked ? picked.owner : newOwner.initial;
   return {
     kind: "new",
@@ -288,6 +297,95 @@ function useOpenedAgentDraft(
   return { draft, state: useAgentDraftSnapshot(draft) };
 }
 
+type AgentOwnerDialog =
+  | { readonly kind: "change-owner" }
+  | { readonly kind: "duplicate"; readonly target?: string | null };
+
+/**
+ * The open owner dialog of an Agent editor and its Duplicate; Duplicate may come with the target
+ * a refused Change owner named.
+ */
+function useAgentOwnerDialogs(
+  draft: AgentDraftModel,
+  onDuplicated: (copy: AgentDefinition) => void,
+) {
+  const [dialog, setDialog] = useState<AgentOwnerDialog | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [error, setError] = useState("");
+  return {
+    dialog,
+    duplicating,
+    error,
+    open: setDialog,
+    close() {
+      setDialog(null);
+      setError("");
+    },
+    async duplicate(target: string | null) {
+      if (duplicating) return;
+      setDuplicating(true);
+      setError("");
+      await draft
+        .duplicate(target)
+        .then((copy) => {
+          if (!copy) return;
+          setDialog(null);
+          onDuplicated(copy);
+        })
+        .catch((cause: unknown) => {
+          setError(
+            cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+          );
+        })
+        .finally(() => setDuplicating(false));
+    },
+  };
+}
+
+function AgentOwnerDialogs({
+  dialogs,
+  draft,
+  state,
+  source,
+  projects,
+}: {
+  dialogs: ReturnType<typeof useAgentOwnerDialogs>;
+  draft: AgentDraftModel;
+  state: AgentDraftSnapshot;
+  source: StudioDefinitions;
+  projects: readonly FactoryProject[];
+}) {
+  const { dialog } = dialogs;
+  const { saved } = state;
+  if (!saved || !dialog) return null;
+  const subject = { id: saved.id, name: saved.name, projectId: state.owner };
+  if (dialog.kind === "change-owner")
+    return (
+      <ChangeOwnerDialog
+        kind="Agent"
+        subject={subject}
+        definitions={source}
+        onClose={dialogs.close}
+        onChanged={draft.ownerChangedHere}
+        onDuplicateInstead={(target) => dialogs.open({ kind: "duplicate", target })}
+        duplicateBlocked={
+          state.dirty ? "Save your changes before duplicating this Agent." : undefined
+        }
+      />
+    );
+  return (
+    <DuplicateAgentDialog
+      source={subject}
+      projects={projects}
+      initialTarget={dialog.target}
+      duplicating={dialogs.duplicating}
+      error={dialogs.error}
+      onClose={dialogs.close}
+      onDuplicate={(target) => void dialogs.duplicate(target)}
+    />
+  );
+}
+
 function OpenedAgentEditor({
   agent,
   capabilities,
@@ -302,7 +400,7 @@ function OpenedAgentEditor({
 }: {
   agent: AgentDefinition | null;
   capabilities: AgentCapabilities | null;
-  source: AgentDraftSource;
+  source: StudioDefinitions;
   agentId: string;
   reportDraft: ReportDraft;
   projects: readonly FactoryProject[];
@@ -314,34 +412,14 @@ function OpenedAgentEditor({
 }) {
   const { draft, state } = useOpenedAgentDraft(agent, capabilities, source, agentId, reportDraft);
   const exporter = useDefinitionExport(() => api.exportAgent(agentId));
-  const [duplicating, setDuplicating] = useState(false);
-  const ownership = useAgentOwnership(state.saved, projects, newOwner);
-  const [duplicateError, setDuplicateError] = useState("");
-  async function duplicate() {
-    if (duplicating) return;
-    setDuplicating(true);
-    setDuplicateError("");
-    await draft
-      .duplicate()
-      .then((copy) => {
-        if (copy) onDuplicated(copy);
-      })
-      .catch((cause: unknown) => {
-        setDuplicateError(
-          cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
-        );
-      })
-      .finally(() => setDuplicating(false));
-  }
+  const ownership = useAgentOwnership(state.saved, state.owner, projects, newOwner);
+  const dialogs = useAgentOwnerDialogs(draft, onDuplicated);
   async function save() {
     if (ownership.kind === "new" && ownership.blocked) return;
     const result = await draft.save(ownership.kind === "new" ? ownership.chosen : null);
-    if (result) {
-      setDuplicateError("");
-      onSaved(result);
-    }
+    if (result) onSaved(result);
   }
-  const notice = duplicateError || definitionExportNotice(exporter.state);
+  const notice = definitionExportNotice(exporter.state);
   return (
     <>
       {notice && (
@@ -357,8 +435,16 @@ function OpenedAgentEditor({
         ownership={ownership}
         exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
-        duplicating={duplicating}
-        onDuplicate={agent ? () => void duplicate() : undefined}
+        duplicating={dialogs.duplicating}
+        onDuplicate={agent ? () => dialogs.open({ kind: "duplicate" }) : undefined}
+        onChangeOwner={agent ? () => dialogs.open({ kind: "change-owner" }) : undefined}
+      />
+      <AgentOwnerDialogs
+        dialogs={dialogs}
+        draft={draft}
+        state={state}
+        source={source}
+        projects={projects}
       />
     </>
   );

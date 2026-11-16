@@ -32,12 +32,16 @@ import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportControl } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
-import { OwnerBadge, OwnerPicker } from "../studio-owner.tsx";
+import { OwnerBadge, OwnerChangeNotice, OwnerPicker } from "../studio-owner.tsx";
 import type { StudioOwner } from "../../studio-definitions.ts";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
 type AgentOwnership =
-  | { readonly kind: "saved"; readonly owner: StudioOwner }
+  | {
+      readonly kind: "saved";
+      readonly owner: StudioOwner;
+      readonly projects: readonly FactoryProject[];
+    }
   | {
       readonly kind: "new";
       readonly chosen: string | null;
@@ -57,7 +61,10 @@ type AgentEditorProps = {
   flowUsage: number;
   duplicating: boolean;
   onSave: () => Promise<void>;
+  /** Opens Duplicate…; absent before the first save. */
   onDuplicate?: (() => void) | undefined;
+  /** Opens Change owner…; absent before the first save. */
+  onChangeOwner?: (() => void) | undefined;
   /** Absent until the Agent's first save. */
   exporter?: { model: DefinitionExportModel; state: DefinitionExportSnapshot } | undefined;
   onDeleted: () => void;
@@ -85,7 +92,18 @@ export function AgentEditorPane(props: AgentEditorProps) {
             json={JSON.stringify(createShapedContent(state.content), null, 2)}
           />
         ) : (
-          <AgentRevisionPanel draft={draft} state={state} />
+          <>
+            {props.ownership.kind === "saved" && (
+              <OwnerChangeNotice
+                kind="Agent"
+                change={state.ownerChange}
+                projects={props.ownership.projects}
+                onAcknowledge={draft.acknowledgeOwner}
+                className="rounded-none border-x-0 border-t-0 px-4 sm:px-6 md:px-8"
+              />
+            )}
+            <AgentRevisionPanel draft={draft} state={state} />
+          </>
         )}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
           <div className="@container/agent-form grid min-w-0 gap-3.5">
@@ -242,6 +260,7 @@ function SavedAgentActions({
   flowUsage,
   saving,
   onDuplicate,
+  onChangeOwner,
   exporter,
   onDeleted,
   duplicating,
@@ -249,6 +268,19 @@ function SavedAgentActions({
   const { dirty, removed } = state;
   return (
     <>
+      {onChangeOwner && (
+        <MutationGate>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={removed || saving}
+            title={removed ? "This Agent was removed elsewhere." : undefined}
+            onClick={onChangeOwner}
+          >
+            Change owner…
+          </Button>
+        </MutationGate>
+      )}
       {onDuplicate && (
         <MutationGate>
           <Button
@@ -287,6 +319,8 @@ function duplicateBlockedReason(state: AgentDraftSnapshot): string | undefined {
 function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   if (state.removed) return "This Agent was removed elsewhere.";
   if (state.conflict.status !== "none") return "Compare the latest revision before saving.";
+  if (state.ownerChange.status !== "none")
+    return "Acknowledge the owner changed elsewhere before saving.";
   if (!state.saved && state.saveOutcome === "unknown")
     return "Check the Agent list before creating this Agent again.";
   return undefined;

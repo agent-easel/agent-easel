@@ -380,7 +380,10 @@ it("a refused Change owner names each blocking Flow as Studio lists it", async (
     error: "Flows outside the new owner place this Agent.",
     blockers: [
       { definition: implement },
-      { definition: null, message: 'Flow "Gone" (removed-flow) places this Agent outside the new owner.' },
+      {
+        definition: null,
+        message: 'Flow "Gone" (removed-flow) places this Agent outside the new owner.',
+      },
     ],
   });
 });
@@ -493,6 +496,7 @@ it("a Duplicate refused as a stale plan previews the plan again and says why", a
   expect(duplicate.getSnapshot()).toMatchObject({
     committing: false,
     plan: { revision: 3 },
-    error: "The Flow or an Agent it places changed after this Duplicate was previewed. Review the updated plan, then Duplicate again.",
+    error:
+      "The Flow or an Agent it places changed after this Duplicate was previewed. Review the updated plan, then Duplicate again.",
   });
 });

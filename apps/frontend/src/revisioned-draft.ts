@@ -144,6 +144,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   let owner = config.saved?.projectId ?? null;
   let acknowledgedOwner = owner;
   let ownerChange: OwnerChange = noOwnerChange;
+  /** The owner this editor's own Change owner left behind, until Studio stops showing it. */
+  let movedFrom: { readonly projectId: string | null } | null = null;
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -269,6 +271,9 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    * still shows the owner the draft expected.
    */
   function followOwner(latest: D): boolean {
+    // A delivery from before this editor's own Change owner is not a change elsewhere.
+    if (movedFrom && latest.projectId === movedFrom.projectId) return false;
+    movedFrom = null;
     const shown = owner;
     owner = latest.projectId;
     if (owner === acknowledgedOwner) {
@@ -298,18 +303,22 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     const id = saved.id;
     const latest = read.value.find((entry) => entry.id === id);
     if (!latest) return noteAbsence() || changed;
+    return applyLatest(saved, latest) || changed;
+  }
+  /** Follows `latest`, the definition as a synchronized list shows it; returns whether it showed. */
+  function applyLatest(current: D, latest: D): boolean {
     seen = true;
     // A pending save defers notices; an older revision is a delivery behind its accepted reply.
-    if (lastSave?.outcome === "pending" || latest.revision < saved.revision) return changed;
-    if (latest.revision === saved.revision) {
-      if (latest === saved) return changed;
+    if (lastSave?.outcome === "pending" || latest.revision < current.revision) return false;
+    if (latest.revision === current.revision) {
+      if (latest === current) return false;
       saved = latest;
       followOwner(latest);
       return true;
     }
-    if (recognisesLostSave(latest) || follow(latest)) changed = true;
+    const followed = recognisesLostSave(latest) || follow(latest);
     // A clean draft adopting `latest` has already accepted its owner.
-    return followOwner(latest) || changed;
+    return followOwner(latest) || followed;
   }
   /** Applies `change` only while `revision` is still the one compared, then shows it. */
   function onCompared(revision: number, change: (latest: D) => void) {
@@ -388,6 +397,13 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       if (ownerChange.status !== "changed" || ownerChange.to !== projectId) return;
       acceptOwner(projectId);
       showError("");
+      publish();
+    },
+    /** This editor's own Change owner moved the definition to `projectId`; nothing to acknowledge. */
+    ownerChangedHere(projectId: string | null) {
+      if (!saved || projectId === owner) return;
+      movedFrom = { projectId: owner };
+      acceptOwner(projectId);
       publish();
     },
     /** The user checked an unknown save's outcome themselves, so the draft may send again. */

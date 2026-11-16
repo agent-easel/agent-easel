@@ -60,6 +60,7 @@ export function FlowList({
         onCreate={onCreate}
         createLabel="New Flow"
         onImported={(result) => void openImported(result, definitions, openStudio)}
+        projects={projects}
         filter={<OwnerFilter filter={filter} projects={projects} onChange={setFilter} />}
       />
       {items && items.length > 0 && groups?.length === 0 ? (

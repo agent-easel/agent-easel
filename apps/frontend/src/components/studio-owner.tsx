@@ -1,7 +1,8 @@
 import { useId } from "react";
 import type { FactoryProject } from "@t3-factory/contracts";
-import { ChevronDown, ChevronsUpDown, FolderGit2, Workflow } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { fieldLabelClass, selectFieldClass } from "./page.tsx";
+import type { OwnerChange } from "../revisioned-draft.ts";
 import {
   ownerPicker,
   studioOwner,
@@ -361,28 +363,40 @@ function OwningProjectMenu({
           className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)]"
         >
           <DropdownMenuRadioGroup value={chosen.projectId ?? ""} onValueChange={onChange}>
-            {targets.map(({ owner, disabled: reason }) => (
-              <DropdownMenuRadioItem
-                key={owner.projectId}
-                value={owner.projectId!}
-                disabled={reason !== null}
-                indicatorPosition="right"
-                aria-label={[owner.title, owner.detail, reason].filter(Boolean).join(" · ")}
-                className="items-start py-1.5"
-              >
-                <FolderGit2
-                  aria-hidden
-                  className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                  strokeWidth={1.5}
-                />
-                <OwnerOptionText owner={owner} reason={` — can’t own new ${plural}`} />
-              </DropdownMenuRadioItem>
-            ))}
+            <ProjectTargetItems targets={targets} reason={` — can’t own new ${plural}`} />
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
   );
+}
+
+/** Each Project as an owner menu choice; an unavailable one is disabled with its reason. */
+function ProjectTargetItems({
+  targets,
+  reason,
+}: {
+  targets: ReturnType<typeof ownerPicker>["targets"];
+  /** Appended to an unavailable Project's reason. */
+  reason: string;
+}) {
+  return targets.map(({ owner, disabled }) => (
+    <DropdownMenuRadioItem
+      key={owner.projectId}
+      value={owner.projectId!}
+      disabled={disabled !== null}
+      indicatorPosition="right"
+      aria-label={[owner.title, owner.detail, disabled].filter(Boolean).join(" · ")}
+      className="items-start py-1.5"
+    >
+      <FolderGit2
+        aria-hidden
+        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+        strokeWidth={1.5}
+      />
+      <OwnerOptionText owner={owner} reason={reason} />
+    </DropdownMenuRadioItem>
+  ));
 }
 
 /** The radio dot of an owner kind card; checked shows the primary ring and fill. */
@@ -419,4 +433,171 @@ export function ownerHint(
   if (filter.kind === "all") return `Starts Global while the Owner filter shows All. ${rule}`;
   const title = filter.kind === "global" ? "Global" : studioOwner(filter.projectId, projects).title;
   return `Prefilled from the Owner filter (${title}). ${rule}`;
+}
+
+/**
+ * Figma Run/SelectField for the owner a copy or move goes to: Global or one Project, unavailable
+ * Projects disabled with their reason. An unavailable chosen owner stays shown with its reason, and
+ * a choice other than `from` names where it changed from.
+ */
+export function OwnerTargetMenu({
+  label,
+  chosen,
+  from,
+  projects,
+  disabled,
+  onChange,
+  unavailableReason,
+}: {
+  label: string;
+  chosen: string | null;
+  /** The starting owner, such as the source's or the current one. */
+  from: string | null;
+  projects: readonly FactoryProject[];
+  disabled: boolean;
+  onChange: (owner: string | null) => void;
+  /** Appended to an unavailable Project's reason in the menu, such as " — can’t own copies". */
+  unavailableReason: string;
+}) {
+  const id = useId();
+  const picker = ownerPicker(chosen, projects);
+  const Icon = chosen === null ? Workflow : FolderGit2;
+  const changedFrom = chosen === from ? null : `changed from ${studioOwner(from, projects).title}`;
+  const context = [picker.chosen.detail ?? "Usable in every project", changedFrom]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div className="grid gap-1.5">
+      <span id={id} className={fieldLabelClass}>
+        {label}
+      </span>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={disabled}>
+          <Button
+            type="button"
+            variant="outline"
+            aria-labelledby={id}
+            aria-describedby={`${id}-value`}
+            aria-invalid={picker.blocked ? true : undefined}
+            className={cn(selectFieldClass, "disabled:opacity-50")}
+          >
+            <Icon
+              aria-hidden
+              className={cn(
+                "size-4 shrink-0",
+                picker.blocked ? "text-attention" : "text-muted-foreground",
+              )}
+              strokeWidth={1.5}
+            />
+            <span id={`${id}-value`} className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="shrink-0 font-medium">{picker.chosen.title}</span>
+              <OwnerPath
+                path={context}
+                className="flex-1 text-2xs tracking-label text-subtle-foreground"
+              />
+            </span>
+            <ChevronsUpDown
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground"
+              strokeWidth={1.5}
+            />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)]"
+        >
+          <DropdownMenuRadioGroup
+            value={chosen ?? "global"}
+            onValueChange={(value) => onChange(value === "global" ? null : value)}
+          >
+            <DropdownMenuRadioItem
+              value="global"
+              indicatorPosition="right"
+              aria-label="Global · usable in every project"
+              className="items-start py-1.5"
+            >
+              <Workflow
+                aria-hidden
+                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                strokeWidth={1.5}
+              />
+              <span className="grid min-w-0 flex-1 gap-0.5">
+                <span className="truncate font-medium">Global</span>
+                <span className="text-2xs tracking-label text-subtle-foreground">
+                  Usable in every project
+                </span>
+              </span>
+            </DropdownMenuRadioItem>
+            {picker.targets.length > 1 && <DropdownMenuSeparator />}
+            <ProjectTargetItems targets={picker.targets.slice(1)} reason={unavailableReason} />
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {picker.blocked && (
+        <p role="alert" className="text-2xs tracking-label text-attention">
+          {picker.chosen.title}: {picker.blocked}. Choose Global or an available Project.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An editor's notice that another client changed its definition's owning Project while it had
+ * unsaved changes: the edits stay, and saving waits until the new owner is acknowledged.
+ */
+export function OwnerChangeNotice({
+  kind,
+  change,
+  projects,
+  onAcknowledge,
+  className,
+}: {
+  kind: "Flow" | "Agent";
+  change: OwnerChange;
+  projects: readonly FactoryProject[];
+  onAcknowledge: (owner: string | null) => void;
+  className?: string;
+}) {
+  if (change.status === "none") return null;
+  const to = change.status === "changed" ? studioOwner(change.to, projects) : null;
+  return (
+    <Alert
+      role="status"
+      aria-label="Owner changed elsewhere"
+      variant="attention"
+      className={className}
+    >
+      <RefreshCw aria-hidden />
+      <AlertTitle>
+        {to
+          ? `This ${kind} is now ${to.projectId === null ? "Global" : `owned by ${ownerName(to)}`}`
+          : `This ${kind}’s owning Project changed elsewhere`}
+      </AlertTitle>
+      <AlertDescription>
+        {change.status === "changed" ? (
+          <>
+            <p>
+              Another client moved it from {studioOwner(change.from, projects).title}. Your unsaved
+              changes are kept; acknowledge the new owner before saving them.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-1.5"
+              onClick={() => onAcknowledge(change.to)}
+            >
+              Acknowledge new owner
+            </Button>
+          </>
+        ) : (
+          <p>
+            Nothing was saved and your changes are kept. Waiting for Studio to show the new owner…
+          </p>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
 }

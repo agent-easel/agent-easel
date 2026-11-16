@@ -4,12 +4,19 @@ import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { useComposerNavigation } from "../run-draft.ts";
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from "react";
-import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  FactoryProject,
+  FlowBlock,
+  FlowDraft,
+  FlowGraph,
+} from "@t3-factory/contracts";
 import {
   ArrowLeft,
   Check,
   CircleDot,
   ListChecks,
+  MoreHorizontal,
   RefreshCw,
   Save,
   Trash2,
@@ -22,6 +29,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -72,7 +85,8 @@ import {
   type StudioDefinitions,
   type StudioOwner,
 } from "../studio-definitions.ts";
-import { OwnerBadge } from "../components/studio-owner.tsx";
+import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
+import { ChangeOwnerDialog, DuplicateFlowDialog } from "../components/studio-owner-dialogs.tsx";
 
 /**
  * This editor's Flow draft, following the Flow through Studio's saved definitions and told when
@@ -314,21 +328,50 @@ const ownerNote = (owner: StudioOwner) =>
  * Studio's saved Agents for the canvas, and for the block library only those the Flow's owner
  * may place; the last read stays offered during refreshes.
  */
-function useLibraryAgents(definitions: StudioDefinitions, saved: FlowDraft | null) {
+function useLibraryAgents(definitions: StudioDefinitions, projectId: string | null) {
   const { value, error } = useStudioRead(definitions, "agents");
   const { projects } = useStudioOwners(definitions);
   const agents = value ?? noAgents;
-  const projectId = saved?.projectId ?? null;
   const owner = studioOwner(projectId, projects);
   return {
     agents,
     agentError: error ? "Could not load saved Agents. Reopen this Flow to try again." : "",
     owner,
+    projects,
     library: { owner, projects, agents: placeableAgents(agents, { projectId }) },
   };
 }
 
+/**
+ * Selecting a block or a readiness issue; an issue about a Condition rule also focuses that rule
+ * in the block's configuration.
+ */
+function useRuleFocus(
+  select: (blockId: string | null) => void,
+  thresholds: ReturnType<typeof useThresholdEntries>,
+) {
+  const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
+  const selectIssue: IssueSelect = (blockId, rule) => {
+    select(blockId);
+    setRuleFocus(blockId && rule ? { blockId, rule } : null);
+  };
+  return {
+    selectIssue,
+    selectBlock(blockId: string | null) {
+      setRuleFocus(null);
+      select(blockId);
+    },
+    conditionEditing: (blockId: string): ConditionEditing => ({
+      focus: ruleFocus?.blockId === blockId ? ruleFocus.rule : null,
+      entries: thresholds.entries.get(blockId) ?? noEntries,
+      onEntry: (ruleId, text) => thresholds.onEntry(blockId, ruleId, text),
+    }),
+  };
+}
+
 const PANEL_WIDTH = 344;
+/** The canvas width the open block panel covers, kept clear when fitting the view. */
+const panelReserve = (block: FlowBlock | undefined) => (block ? PANEL_WIDTH + 24 : 0);
 /** Matches `--duration-panel-out`; the reduced-motion fade is shorter and ends first. */
 const PANEL_CLOSE_MS = 140;
 
@@ -359,7 +402,11 @@ export function FlowDetail({
   );
   const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { saved, error, readiness } = state;
-  const { agents, agentError, owner, library } = useLibraryAgents(definitions, saved);
+  const { agents, agentError, owner, projects, library } = useLibraryAgents(
+    definitions,
+    state.owner,
+  );
+  const ownerDialogs = useOwnerDialogs(definitions);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { graph, name } = state.content;
   const change = (next: FlowGraph) => draft.edit({ graph: next });
@@ -371,23 +418,10 @@ export function FlowDetail({
     registerEscape,
   );
   const thresholds = useThresholdEntries(graph);
-  const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
-  const selectBlock = (blockId: string | null) => {
-    setRuleFocus(null);
-    select(blockId);
-  };
-  const selectIssue: IssueSelect = (blockId, rule) => {
-    select(blockId);
-    setRuleFocus(blockId && rule ? { blockId, rule } : null);
-  };
+  const { selectBlock, selectIssue, conditionEditing } = useRuleFocus(select, thresholds);
   const block = graph.blocks.find((b) => b.id === selected);
-  const conditionEditing = (blockId: string): ConditionEditing => ({
-    focus: ruleFocus?.blockId === blockId ? ruleFocus.rule : null,
-    entries: thresholds.entries.get(blockId) ?? noEntries,
-    onEntry: (ruleId, text) => thresholds.onEntry(blockId, ruleId, text),
-  });
   const closing = usePanelBlock(block);
-  const reservedRight = block ? PANEL_WIDTH + 24 : 0;
+  const reservedRight = panelReserve(block);
   function add(kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) {
     const next = newBlock(graph, kind, agent, position);
     change({ ...graph, blocks: [...graph.blocks, next] });
@@ -407,9 +441,10 @@ export function FlowDetail({
         exporter={exporter}
         fields={interactions.fields}
         invalidEntry={thresholds.invalid}
+        onOwnerDialog={ownerDialogs.open}
       />
       <ExportNotice notice={definitionExportNotice(exporter.state)} />
-      <DraftProblems draft={draft} state={state} onSelect={selectIssue} />
+      <DraftProblems draft={draft} state={state} projects={projects} onSelect={selectIssue} />
       <div inert={state.busy} className="flex min-h-0 flex-1" {...interactions.gestures}>
         <BlockLibrary
           open={libraryOpen}
@@ -439,7 +474,10 @@ export function FlowDetail({
             onChange={change}
             onArranging={interactions.reportArranging}
           />
-          <UnavailableOwnerNotice owner={owner} />
+          <UnavailableOwnerNotice
+            owner={owner}
+            onRescue={() => ownerDialogs.open({ kind: "duplicate" })}
+          />
           <ReadinessPanel
             readiness={readiness}
             agentsChanged={state.agentsChanged}
@@ -458,7 +496,116 @@ export function FlowDetail({
           />
         </div>
       </div>
+      <FlowOwnerDialogs
+        dialogs={ownerDialogs}
+        subject={{ id, name: saved.name, projectId: state.owner }}
+        revision={saved.revision}
+        dirty={state.dirty}
+        definitions={definitions}
+        onChanged={draft.ownerChangedHere}
+      />
     </CanvasLayout>
+  );
+}
+
+type FlowOwnerDialog =
+  | { readonly kind: "change-owner" }
+  | { readonly kind: "duplicate"; readonly target?: string | null };
+
+/** Which owner dialog the Flow editor shows, and opening the Flow a Duplicate created. */
+function useOwnerDialogs(definitions: StudioDefinitions) {
+  const navigate = useStudioNavigation();
+  const [dialog, setDialog] = useState<FlowOwnerDialog | null>(null);
+  return {
+    dialog,
+    open: setDialog,
+    close: () => setDialog(null),
+    async opened(flow: FlowDraft) {
+      setDialog(null);
+      await definitions.listed("flows", flow.id);
+      void navigate({ tab: "flows", flowId: flow.id });
+    },
+  };
+}
+
+function FlowOwnerDialogs({
+  dialogs,
+  subject,
+  revision,
+  dirty,
+  definitions,
+  onChanged,
+}: {
+  dialogs: ReturnType<typeof useOwnerDialogs>;
+  subject: { id: string; name: string; projectId: string | null };
+  revision: number;
+  dirty: boolean;
+  definitions: StudioDefinitions;
+  onChanged: (projectId: string | null) => void;
+}) {
+  const { dialog } = dialogs;
+  if (dialog?.kind === "change-owner")
+    return (
+      <ChangeOwnerDialog
+        kind="Flow"
+        subject={subject}
+        definitions={definitions}
+        onClose={dialogs.close}
+        onChanged={onChanged}
+        onDuplicateInstead={(target) => dialogs.open({ kind: "duplicate", target })}
+      />
+    );
+  if (dialog?.kind === "duplicate")
+    return (
+      <DuplicateFlowDialog
+        source={subject}
+        revision={revision}
+        dirty={dirty}
+        definitions={definitions}
+        initialTarget={dialog.target}
+        onClose={dialogs.close}
+        onDuplicated={(flow) => void dialogs.opened(flow)}
+      />
+    );
+  return null;
+}
+
+/** Change owner… and Duplicate… of the saved Flow, behind the toolbar's More button. */
+function FlowOwnerActions({
+  state,
+  onOpen,
+}: {
+  state: FlowDraftSnapshot;
+  onOpen: (dialog: FlowOwnerDialog) => void;
+}) {
+  const unavailable = state.removed || state.busy;
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="More Flow actions"
+              disabled={unavailable}
+              title={state.removed ? "This Flow was removed elsewhere." : undefined}
+            >
+              <MoreHorizontal aria-hidden />
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>More Flow actions</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onOpen({ kind: "change-owner" })}>
+          Change owner…
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onOpen({ kind: "duplicate" })}>
+          Duplicate…
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -527,6 +674,7 @@ function EditorToolbar({
   exporter,
   fields,
   invalidEntry,
+  onOwnerDialog,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
@@ -538,6 +686,7 @@ function EditorToolbar({
   fields: ReturnType<typeof useInteractionReports>["fields"];
   /** A shown Condition arrival number is invalid, so neither the check nor a save would match it. */
   invalidEntry: boolean;
+  onOwnerDialog: (dialog: FlowOwnerDialog) => void;
 }) {
   const invalidTitle = invalidEntry
     ? "Correct or clear the arrival number marked invalid first."
@@ -580,7 +729,13 @@ function EditorToolbar({
       </Button>
       <MutationGate>
         <Button
-          title={state.removed ? "This Flow was removed elsewhere." : invalidTitle}
+          title={
+            state.removed
+              ? "This Flow was removed elsewhere."
+              : state.ownerChange.status !== "none"
+                ? "Acknowledge the owner changed elsewhere before saving."
+                : invalidTitle
+          }
           disabled={!state.canSave || invalidEntry}
           onClick={() => void draft.save()}
         >
@@ -595,6 +750,7 @@ function EditorToolbar({
         compact
       />
       <RemoveFlowAction draft={draft} state={state} />
+      <FlowOwnerActions state={state} onOpen={onOwnerDialog} />
     </div>
   );
 }
@@ -630,7 +786,14 @@ function StartRunAction({
 }
 
 /** Over the canvas while the owning Project is unavailable: the Flow stays editable but can't start. */
-function UnavailableOwnerNotice({ owner }: { owner: StudioOwner }) {
+function UnavailableOwnerNotice({
+  owner,
+  onRescue,
+}: {
+  owner: StudioOwner;
+  /** Opens Duplicate, which copies this Flow and its Agents into an available owner. */
+  onRescue: () => void;
+}) {
   if (!owner.unavailable) return null;
   return (
     <Alert
@@ -640,8 +803,15 @@ function UnavailableOwnerNotice({ owner }: { owner: StudioOwner }) {
       <TriangleAlert aria-hidden />
       <AlertTitle>{owner.title} is unavailable — this Flow can’t start</AlertTitle>
       <AlertDescription>
-        {owner.unavailable}. You can still edit, export or remove this Flow; Start Run returns once
-        the Project is available again.
+        <p>
+          {owner.unavailable}. You can still edit, export or remove this Flow; Start Run returns
+          once the Project is available again.
+        </p>
+        <MutationGate>
+          <Button type="button" variant="outline" size="sm" className="mt-1.5" onClick={onRescue}>
+            Duplicate to…
+          </Button>
+        </MutationGate>
       </AlertDescription>
     </Alert>
   );
@@ -789,10 +959,12 @@ function RemoveFlowAction({ draft, state }: { draft: FlowDraftModel; state: Flow
 function DraftProblems({
   draft,
   state,
+  projects,
   onSelect,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
+  projects: readonly FactoryProject[];
   onSelect: IssueSelect;
 }) {
   const { conflict } = state;
@@ -800,6 +972,13 @@ function DraftProblems({
     return <StudioRemovedDraft kind="Flow" json={JSON.stringify(state.content, null, 2)} />;
   return (
     <>
+      <OwnerChangeNotice
+        kind="Flow"
+        change={state.ownerChange}
+        projects={projects}
+        onAcknowledge={draft.acknowledgeOwner}
+        className="rounded-none border-x-0 border-t-0"
+      />
       {state.error && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertTitle>{state.error}</AlertTitle>

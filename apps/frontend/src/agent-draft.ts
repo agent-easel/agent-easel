@@ -239,6 +239,7 @@ export function createAgentDraft(
     },
     compare: draft.compare,
     acknowledgeOwner: draft.acknowledgeOwner,
+    ownerChangedHere: draft.ownerChangedHere,
     /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */
     requestLoadLatest(revision: number) {
       const { conflict } = draft.getSnapshot();

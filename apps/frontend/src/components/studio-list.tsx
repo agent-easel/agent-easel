@@ -3,7 +3,7 @@ import { Plus, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import type { ReactNode } from "react";
-import type { ImportResult } from "@t3-factory/contracts";
+import type { FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { DefinitionImportControl } from "./definition-import-control.tsx";
 
 export const studioRowClass =
@@ -17,6 +17,7 @@ export function StudioListHeader({
   onCreate,
   createLabel,
   onImported,
+  projects,
   filter,
 }: {
   title: string;
@@ -26,6 +27,8 @@ export function StudioListHeader({
   onCreate: () => void;
   createLabel: string;
   onImported: (result: ImportResult) => void;
+  /** The Project catalog Import offers as targets. */
+  projects: readonly FactoryProject[];
   /** The owner filter, placed before the search. */
   filter: ReactNode;
 }) {
@@ -50,7 +53,7 @@ export function StudioListHeader({
           className="bg-muted pl-9"
         />
       </div>
-      <DefinitionImportControl onImported={onImported} />
+      <DefinitionImportControl projects={projects} onImported={onImported} />
       <MutationGate>
         <Button onClick={onCreate}>
           <Plus aria-hidden strokeWidth={1.5} />
