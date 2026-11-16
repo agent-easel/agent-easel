@@ -52,8 +52,8 @@ The hook checks the working tree, including uncommitted changes, not only the
 pushed commits; commit or discard local changes before pushing so the result
 matches what you push.
 
-Claude Code sessions in this repository also run `scripts/agent-edit-check.mjs`
-after every file edit (`.claude/settings.json`): it formats the edited file and
+Agent sessions whose harness loads the repository's edit hook (`.claude/settings.json`) also run
+`scripts/agent-edit-check.mjs` after every file edit: it formats the edited file and
 returns its `vp lint` findings to the agent, so steps 1 and 4 fail less often at push.
 
 `pnpm test:e2e` is **not** in the hook. Run it before opening a PR that touches

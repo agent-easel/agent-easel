@@ -176,20 +176,29 @@ report follows, the user can use **Request report** or ask in that worker's T3 t
 Approved remote Factory clients control a Factory host; they do not make remote T3 workers equivalent to local ones. Factory reads and stops only its own worker threads in the Run's
 environment; work a worker delegates to a peer environment counts only through T3's delegated wait answer for the worker. Repository validation targets loopback T3 on the backend host.
 
-### T3 and Codex
+### Harnesses
 
-One bounded local Codex flow (a recent T3 nightly, Codex 0.166 with a GPT-6.1 model) exercised explicit MCP acknowledgement before completion, Agent → Human → Agent delivery, backend restart and
-recorded finished closure, plus native per-stage settlement and waking the same thread. These observations cover those cases and versions only. Native approval/denial modes, report retries, manual
-recovery, Archive interruption, loss-of-response recovery, direct-work races, remote environments, remote-device OAuth and other harnesses remain unverified live.
+Factory treats every harness with [reporting support](t3-integration.md#reporting-installation) the same way: one
+launch, skill and reporting contract, with no harness-specific behavior. Each worker's first message starts with
+`$factory-block`, and T3 turns that mention into the harness's own skill invocation. A harness that expands only one
+skill per message expands the last skill mentioned, so a skill named in an Agent prompt can take precedence; the worker
+then relies on the model loading `factory-block` from its description. Keep other skill mentions out of Agent prompts
+when that matters.
 
 Readiness checks capabilities, reporting installation and the public activity metadata needed for delegation evidence. A version number alone is neither failure nor proof, and available models are never
-substituted. Launches omit `runtimeMode`; T3 chooses permissions for the OAuth grant (one Codex case observed full access, which proves nothing about other grants or native approvals).
+substituted. Launches omit `runtimeMode`; T3 chooses permissions for the OAuth grant, and one observed full-access case proves nothing about other grants or native approvals.
+
+Live evidence is limited to one bounded local flow on a single harness and version. It exercised explicit MCP
+acknowledgement before completion, Agent → Human → Agent delivery, backend restart and recorded finished closure,
+plus native per-stage settlement and waking the same thread. No harness is qualified beyond those cases: native
+approval/denial modes, report retries, manual recovery, Archive interruption, loss-of-response recovery, direct-work
+races, remote environments and remote-device OAuth remain unverified live, and every other harness is unverified live.
 
 ### Execution and safety boundaries
 
 - Prompt screenshots reach workers as T3 launch attachments. Controlled fixtures cover upload, fan-out and recovery; a
   live T3 upload, relays or proxies in front of T3 and whether a model can see the images are unverified. A bounded
-  local Codex qualification of launch attachments is required before calling the feature release-ready.
+  local qualification of launch attachments is required before calling the feature release-ready.
 - A Run's threads share its workspace, the project checkout or that Run's one worktree: no conflict-free editing or exactly-once guarantee. Worktree Runs are not yet qualified against live T3.
 - Uncertain launch/send retries need unchanged authorization and independent, operation-specific continuity and retention proof; the default live proof is absent, and server restart, changed grants and
   unknown retention are never assumed safe. Authorization context tracks grant lineage, not authenticated remote identity, and a Block id does not isolate adversarial processes sharing the OS user.
@@ -208,7 +217,7 @@ substituted. Launches omit `runtimeMode`; T3 chooses permissions for the OAuth g
 
 ## Bounded live verification
 
-Qualify a particular build with a dedicated local harness. Live results apply only to the tested versions and permission modes. Paid workloads and configuration changes need explicit authorization; a feature ticket does not authorize them.
+Qualify a particular build with a dedicated local harness. Live results apply only to the tested versions and the permissions T3 granted. Paid workloads and configuration changes need explicit authorization; a feature ticket does not authorize them.
 
 ### Bounds and evidence
 
@@ -217,13 +226,13 @@ remote host, unknown override or managed restriction. Obtain a human-approved sp
 recovery or Stop cases), a spend cap and a wall-clock limit. Stop at the first incompatibility, unexpected execution, ambiguous attribution or exceeded bound; do not retry with changed permissions, fall
 back to messages, invent replay evidence or add work outside the budget. Readiness checks never launch diagnostic model work.
 
-Record Factory SHA and dirty state, OS and architecture, Node and pnpm, the T3 build, Codex CLI/SDK version, provider/model/options, effective home, permission mode, endpoint and authorization-context
+Record Factory SHA and dirty state, OS and architecture, Node and pnpm, the T3 build, the harness and its CLI/SDK version, provider/model/options, effective home, the permissions T3 applied to the launch (Factory sets none), endpoint and authorization-context
 identity (never credentials). For each step record PASS, FAIL or UNVERIFIED with exact public thread and execution IDs, report acknowledgements, observed states and a sanitized evidence path;
 unperformed checks are UNVERIFIED, never inferred.
 
 ### Qualification matrix
 
-Save each Agent's worker settings (every option and permission mode). Do not configure a Run coordinator. Select only cells that fit the budget and mark the rest UNVERIFIED.
+Save each Agent's worker settings (environment, provider, model and every option). An Agent has no permission field: launches omit `runtimeMode` and T3 chooses permissions ([Studio](studio.md#agent-definitions)). Select only cells that fit the budget and mark the rest UNVERIFIED.
 
 | Case | Required observed result |
 | --- | --- |
@@ -233,7 +242,7 @@ Save each Agent's worker settings (every option and permission mode). Do not con
 | Held release | The handoff stays held until the worker thread is finished (no active run or native request, settled delegated wait); backend restarts while held and after release yield one recipient, no duplicate work and a preserved acknowledgement |
 | Human step | One Human occurrence, answered in Factory without a T3 thread; a correction revisits the same worker with a new activation and execution; another thread's reply cannot impersonate the Human |
 | Continuation | The prompt is queued once on the source worker's thread with the Continuation's Block id; the worker reports it with that id; the response is forwarded only after that thread is finished; later messages pass through without another prompt |
-| Waiting | A `waiting` report shows Needs input with the message; a reply in the worker thread resumes it and settles the attention; the reply turn reports again |
+| Question in chat | A worker that asks the user ends its turn with the question and keeps `working` current; no Needs input appears; a reply in the worker thread resumes it and the reply turn reports; a `waiting` report is refused with `WAITING_RETIRED` |
 | Missing report | Problem with no automatic repair; **Request report** once, a retried click and restart reuse the same request, the new linked execution reports and the original gap stays in history |
 | Parallel and independent release | Fan-out workers progress independently; a ready source releases despite unrelated busy work; its own active runs, native requests and unsettled delegated work hold it |
 | Notification turn | A worker resumed by a notification (for example a PR watch) and idle without a report shows a missing report once T3 settles its latest run, even when `resultRun` names an earlier run |

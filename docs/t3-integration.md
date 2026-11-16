@@ -158,8 +158,8 @@ files. The worker's first message starts with `$factory-block` followed by a `Fa
 a Not installed, Installed or Needs attention status and the one action that applies, with a
 global **Check again**. While any home is Not installed or Needs attention, or the inspection
 fails, the Agent reporting navigation item carries an attention dot; unlike the sidebar Settings
-dot, it counts homes no saved Agent uses. Codex, Claude, Cursor and
-Grok are those homes. Every other provider instance is listed as **Not available**,
+dot, it counts homes no saved Agent uses. Those homes belong to the drivers listed under
+[Reporting installation](#reporting-installation). Every other provider instance is listed as **Not available**,
 with the `factory-runtime` MCP URL to add by hand and no install action. Agent capabilities
 publish the same per-provider `reporting` status, and Start blocks an unsupported provider with
 `harness_unsupported` pointing to Studio → Agents. A provider instance disabled in T3 is left out:
@@ -181,12 +181,8 @@ Agent uses another one.
   diagnostic and **Open Agent reporting** for repair. Changing the provider updates the editor's status before saving.
   Status refreshes on opening Agents or Agent reporting, after saving or removing an Agent and after an installation action;
   visible windows also recheck on focus and periodically. These indicators describe configuration, not verified execution.
-  Discovery for same-user loopback T3 covers standard homes (`~/.codex/config.toml`,
-  `~/.claude.json`, `~/.grok/config.toml`) and explicit `homePath` or persisted `CODEX_HOME`,
-  `CLAUDE_CONFIG_DIR` or `GROK_HOME` values. Cursor always uses `~/.cursor/mcp.json` and ignores
-  `homePath`. Factory's own environment, relative paths and T3's inherited host environment are
-  not consulted.
-  Details and limits are in [Compatibility](t3-integration.md#reporting-installation).
+  Discovery covers the same-user loopback T3's provider homes as described, with their limits, in
+  [Reporting installation](#reporting-installation).
 - **Installed** describes configuration only; it does not prove current live tool visibility,
   so runtime evidence stays **UNVERIFIED** even after a valid report. Fresh harness
   sessions and native trust approvals remain the user's responsibility. No setup action starts a
@@ -319,9 +315,9 @@ and retains existing selections, including false and unavailable values.
 
 The installer needs authorized same-user loopback T3, accessible local state and a matching environment identity; `FACTORY_T3_STATE_DIRECTORY` overrides state discovery, and standard homes assume
 Factory and T3 share an OS user and home. Installed drivers: `codex`, `claudeAgent`, `cursor` and `grok`. Other drivers stay blocked at Start. Discovery applies T3's enablement rule to the persisted settings: an explicit `enabled: false` on the instance or inside its `config` disables it, otherwise the instance flag, then the `config` flag, then the driver default decides. Without a flag, `cursor`, `grok`, `muse`, `pi`, `opencode` and `antigravity` are off and other drivers are on; this default is repeated from T3 and a T3 release that changes it needs the same change here. An instance that a T3 project's settings enable is listed whatever the machine setting. Agent reporting still lists enabled instances of other drivers with the `factory-runtime` MCP URL to add by hand once Factory can tie that harness's calls to a Run. Home resolution for Codex, Claude and Grok uses the trimmed non-empty persisted `config.homePath`, then the last provider environment entry
-(`CODEX_HOME`, `CLAUDE_CONFIG_DIR` or `GROK_HOME`), then the same-user default (`~/.codex/config.toml`, `~/.claude.json` or `<dir>/.claude.json`, `~/.grok/config.toml`). Cursor always uses `~/.cursor/mcp.json`; the Cursor SDK reads that path from the OS home and ignores a provider `homePath`. Tilde paths are expanded; relative
+(`CODEX_HOME`, `CLAUDE_CONFIG_DIR` or `GROK_HOME`), then the same-user default (`~/.codex/config.toml`, `~/.claude.json`, `~/.grok/config.toml`). Skills go to the home's `skills` folder; for Claude that is `~/.claude/skills` with the default home and `<dir>/skills` beside `<dir>/.claude.json` in a configured `CLAUDE_CONFIG_DIR`, the folder Claude Code and T3's skill discovery read. After an upgrade that corrects an installed location, **Repair** or **Reinstall** writes the skills there. Cursor always uses `~/.cursor/mcp.json`; the Cursor SDK reads that path from the OS home and ignores a provider `homePath`. Tilde paths are expanded; relative
 paths are refused. Factory's own environment never redirects discovery and T3's inherited host variables are unobservable, so an undisclosed override needs manual verification. Managed setup,
-shadow homes, custom launch arguments and policy profiles need review; do not switch setup modes to satisfy the installer. Installer support does not qualify live Claude workloads.
+shadow homes, custom launch arguments and policy profiles need review; do not switch setup modes to satisfy the installer. Installer support does not qualify live workloads ([Harnesses](installation.md#harnesses)).
 
 Codex and Grok install `[mcp_servers.factory-runtime]` with `url` (TOML). Claude installs `mcpServers.factory-runtime` as `{ "type": "http", "url" }` and Cursor as `{ "url" }` (JSON); these are
 the shapes each harness's own `mcp add` writes. The URL is the backend's loopback address plus `/mcp`. Conflicting or modified entries, symlink/special/hard-linked files and unsupported TOML
@@ -395,6 +391,10 @@ Any harness session with Factory MCP registered can start a text-only Run withou
 - `factory_start_run` takes `requestId`, `projectId`, `flowId` and the exact prompt text as `input`, and calls the same Start operation as the [composer](runs.md#starting): the same validation and readiness gates, the current saved Flow and Agent revisions at acceptance, the Flow's own workspace setting and asynchronous worker dispatch. The Run title is the prompt's first non-empty line. A rejection returns the actual issues and creates no Task, Run or worker; Factory repairs nothing.
 
 Success is an acceptance receipt: the Run id, number, title, Project and Flow. Its title is the accepted automatic title, also when a title thread later replaces it. It does not show that workers started or finished, waits for neither and carries no link. One submission keeps one `requestId`: retrying it with identical arguments returns the same Run, also after a lost reply or a backend restart, because Factory reuses the accepted request's creation time; changed content under that `requestId` conflicts. A new Run, even with the same prompt, needs a new `requestId`. Images and attachments are not accepted here.
+
+**Following a started Run.** The [Block runtime tools](#factory-mcp-and-block-ids) are scoped by a Block id, which only a
+worker receives, so the starting conversation cannot read the Run through Factory MCP. Follow it in Factory by its
+number, or read it on the Factory host with `GET /api/runs/:id` using the receipt's Run id ([Run HTTP API](runs.md#run-http-api)).
 
 **Direct Start authority.** `factory_start_run` starts a Run as soon as it is called. The user-invoked [`factory-start-run` skill](installation.md#optional-skills) asks for review and explicit confirmation first, but that gate exists only in the skill's instructions: any local caller of Factory MCP can start Runs, launch workers and spend provider budget without it. The host-local boundary [above](#factory-mcp-and-block-ids) is unchanged; reaching Factory from a phone works by driving a T3 conversation on the Factory host, never by exposing Factory MCP remotely.
 

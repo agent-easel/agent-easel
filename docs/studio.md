@@ -104,7 +104,7 @@ editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
-Availability is separate from verified execution support. A provider without Factory reporting support (Codex, Claude, Cursor and Grok have it) stays in the provider menu
+Availability is separate from verified execution support. A provider without Factory reporting support ([Reporting installation](t3-integration.md#reporting-installation) lists the drivers that have it) stays in the provider menu
 as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
 ([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings. Agent reads return the saved settings without contacting T3; Studio judges their availability against the capabilities it loads.
 
@@ -169,6 +169,11 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 
 Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
 filters or assigns them, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
+
+Factory installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
+whole process. For example, a bounded review loop wires a reviewer Agent's changes-requested exit to a Condition whose
+rule **From arrival 3 onward** leads to a Human step and whose Otherwise returns to the implementing Agent, so the third
+request for changes escalates to you instead of looping again ([Condition](#canvas-and-block-configuration)).
 
 ### Canvas and block configuration
 
@@ -488,7 +493,7 @@ Every rejection writes nothing, never repeats prompt text and keeps the chosen f
 `{name, expectedRevision, graph, workspace}`. `workspace` is `{mode: "checkout"}` or
 `{mode: "worktree", base: {kind: "default"} | {kind: "ref", ref}}`; a custom ref is trimmed and
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
-issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting. Factory does not save a Run coordinator on the Flow.
+issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.
 
 `POST /api/flows` accepts a name and optional `graph` and `workspace`. Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [Factory MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
 

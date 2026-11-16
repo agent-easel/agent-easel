@@ -111,12 +111,13 @@ it.for([
   },
 );
 
-it("a Claude home named .claude keeps its config and skills directly inside it", async (context) => {
+it("a configured Claude config directory keeps its config and skills directly inside it", async (context) => {
   // Arrange
   const { factory, home } = await driverHomes(context, {
-    claude: { driver: "claudeAgent", config: { homePath: "~/.claude" } },
+    claude: { driver: "claudeAgent", config: { homePath: "~/claude-work" } },
   });
-  await mkdir(join(home, ".claude"));
+  const configDirectory = join(home, "claude-work");
+  await mkdir(configDirectory);
   const targets = await factory.getReportingInstallations();
   assert(targets.ok);
 
@@ -126,17 +127,17 @@ it("a Claude home named .claude keeps its config and skills directly inside it",
   // Assert
   assert(result.ok);
   expect(result.value.status).toBe("installed");
-  expect(result.value.path).toBe(join(await realpath(home), ".claude", ".claude.json"));
-  expect(await readFile(join(home, ".claude", "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
+  expect(result.value.path).toBe(join(await realpath(configDirectory), ".claude.json"));
+  expect(await readFile(join(configDirectory, "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
     FACTORY_BLOCK_SKILL,
   );
   expect(
-    await readFile(join(home, ".claude", "skills", "factory-start-run", "SKILL.md"), "utf8"),
+    await readFile(join(configDirectory, "skills", "factory-start-run", "SKILL.md"), "utf8"),
   ).toBe(FACTORY_START_RUN_SKILL);
-  expect(await readFile(join(home, ".claude", "skills", "setup-factory", "SKILL.md"), "utf8")).toBe(
+  expect(await readFile(join(configDirectory, "skills", "setup-factory", "SKILL.md"), "utf8")).toBe(
     SETUP_FACTORY_SKILL,
   );
-  expect(existsSync(join(home, ".claude", ".claude", "skills"))).toBe(false);
+  expect(existsSync(join(configDirectory, ".claude"))).toBe(false);
 });
 
 it("repeating a Codex installation after backend restart leaves its config unchanged", async (context) => {
@@ -497,10 +498,7 @@ it("the installed Factory Block skill names its trigger, the Factory tools and b
 
   // Assert
   assert(result.ok);
-  const installed = await readFile(
-    join(home, ".claude", "skills", "factory-block", "SKILL.md"),
-    "utf8",
-  );
+  const installed = await readFile(join(home, "skills", "factory-block", "SKILL.md"), "utf8");
   expect(installed).toContain("name: factory-block");
   expect(installed).toContain("factory_get_block");
   expect(installed).toContain("factory_get_run");
@@ -514,7 +512,7 @@ it("the installed Factory Block skill names its trigger, the Factory tools and b
 it("a missing Factory Block skill stays repairable and Repair rewrites it", async (context) => {
   // Arrange
   const fixture = await installedReportingFixture(context);
-  const skill = join(fixture.home, ".claude", "skills", "factory-block", "SKILL.md");
+  const skill = join(fixture.home, "skills", "factory-block", "SKILL.md");
   await rm(skill);
   const before = await fixture.factory.getReportingInstallations();
   assert(before.ok);
@@ -555,7 +553,7 @@ Every later turn in this thread, including feedback and user replies, starts aga
 it("a Factory Block skill installed by an earlier release needs attention until Repair replaces it", async (context) => {
   // Arrange
   const fixture = await installedReportingFixture(context);
-  const skill = join(fixture.home, ".claude", "skills", "factory-block", "SKILL.md");
+  const skill = join(fixture.home, "skills", "factory-block", "SKILL.md");
   await writeFile(skill, RELEASED_SKILL);
   const before = await fixture.factory.getReportingInstallations();
   assert(before.ok);
@@ -573,7 +571,7 @@ it("a Factory Block skill installed by an earlier release needs attention until 
 it("a missing optional skill leaves reporting installed and offers Reinstall", async (context) => {
   // Arrange
   const { factory, home } = await installedReportingFixture(context);
-  await rm(join(home, ".claude", "skills", "setup-factory", "SKILL.md"));
+  await rm(join(home, "skills", "setup-factory", "SKILL.md"));
 
   // Act
   const result = await factory.getReportingInstallations();
@@ -591,7 +589,7 @@ it("a missing optional skill leaves reporting installed and offers Reinstall", a
 it("an outdated harness launch skill leaves reporting installed", async (context) => {
   // Arrange
   const { factory, home } = await installedReportingFixture(context);
-  await writeFile(join(home, ".claude", "skills", "factory-start-run", "SKILL.md"), "older skill");
+  await writeFile(join(home, "skills", "factory-start-run", "SKILL.md"), "older skill");
 
   // Act
   const result = await factory.getReportingInstallations();
@@ -628,7 +626,7 @@ it("an outdated canonical optional skill leaves reporting installed", async (con
 it("Reinstall restores a missing launch skill and updates the outdated canonical copy", async (context) => {
   // Arrange
   const { factory, home, harness, targetId } = await installedReportingFixture(context);
-  const skill = join(home, ".claude", "skills", "factory-start-run", "SKILL.md");
+  const skill = join(home, "skills", "factory-start-run", "SKILL.md");
   const canonical = join(
     harness.processHome,
     "reporting",
@@ -652,7 +650,7 @@ it("Reinstall restores a missing launch skill and updates the outdated canonical
 it("Repair installs required reporting and leaves a symlinked launch skill unchanged with its explanation", async (context) => {
   // Arrange
   const { factory, home, config, targetId } = await installedReportingFixture(context);
-  const skill = join(home, ".claude", "skills", "factory-start-run", "SKILL.md");
+  const skill = join(home, "skills", "factory-start-run", "SKILL.md");
   const destination = join(home, "unrelated.md");
   await rm(skill);
   await writeFile(destination, "preserve");
@@ -678,7 +676,7 @@ it("Repair installs required reporting and leaves a symlinked launch skill uncha
 it("Repair completes when launch-skill copies are FIFOs, without reading them", async (context) => {
   // Arrange
   const { factory, home, harness, config, targetId } = await installedReportingFixture(context);
-  const skill = join(home, ".claude", "skills", "factory-start-run", "SKILL.md");
+  const skill = join(home, "skills", "factory-start-run", "SKILL.md");
   const canonical = join(
     harness.processHome,
     "reporting",
@@ -712,7 +710,7 @@ it("Repair completes when launch-skill copies are FIFOs, without reading them", 
 it("an unwritable launch-skill location stays explained after Repair installs reporting", async (context) => {
   // Arrange
   const { factory, home, config, targetId } = await installedReportingFixture(context);
-  const directory = join(home, ".claude", "skills", "factory-start-run");
+  const directory = join(home, "skills", "factory-start-run");
   await rm(join(directory, "SKILL.md"));
   await chmod(directory, 0o500);
   context.onTestFinished(() => chmod(directory, 0o700));
@@ -739,7 +737,7 @@ it.runIf(process.platform === "darwin")(
   async (context) => {
     // Arrange
     const { factory, home, config, targetId } = await installedReportingFixture(context);
-    const skill = join(home, ".claude", "skills", "factory-start-run", "SKILL.md");
+    const skill = join(home, "skills", "factory-start-run", "SKILL.md");
     await writeFile(skill, "older skill");
     execFileSync("chflags", ["uchg", skill]);
     context.onTestFinished(() => {

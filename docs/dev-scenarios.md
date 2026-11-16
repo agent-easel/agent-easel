@@ -12,7 +12,7 @@ With development stopped, `pnpm db:reset` restores the seeded baseline, discardi
 after reset. Reset leaves browser-stored state untouched: Run drafts and their images, pending Starts, panel widths and shortcut preferences.
 
 Ordinary restarts retain current-contract demo state. Contract-removal migrations can delete open Runs (most recently when Block ids replaced native call correlation), so reset an upgraded older demo home
-to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's Codex reporting needing **Repair** or a reset.
+to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's demo reporting target needing **Repair** or a reset.
 
 ## Run catalog
 
@@ -64,8 +64,8 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
 - A repository added through **Add repository** gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed.
 - The demo does not simulate connection loss, TLS or revocation; controlled transport and UI fixtures cover those boundaries.
-- Fresh or reset homes install a disposable Codex reporting target, pointing at the demo backend's own Factory MCP URL, and the `$factory-block` skill before creating Runs; real harness homes are never
-  configured. The simulator also offers a **Cursor** provider whose reporting is not installed and which no seeded Agent uses.
+- Fresh or reset homes install a disposable reporting target for the seeded Agents' simulated provider, pointing at the demo backend's own Factory MCP URL, and the `$factory-block` skill before creating Runs; real harness homes are never
+  configured. The simulator also offers a second provider whose reporting is not installed and which no seeded Agent uses.
 
 The saved simulator format is version 5, which records each thread's worktree branch. Startup also restores version 4 without its idle worker threads, which Factory no longer uses, and version 3
 (simulated subagents instead of native delegation and descendant evidence) as checkout threads without a branch, and saves either as version 5. A version 4 home whose Run queued a Block's first visit on

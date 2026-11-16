@@ -9,9 +9,9 @@ behavior is in [Runs](runs.md); live-support limits are in
 
 ## Run state and orchestration
 
-The Run store owns the Run's execution state and reads, including history kept from
-the retired Run coordinator. Its transitions own the mutation lane, the owner,
-authorization, gate and generation guards, generation advances, timeline events and
+The Run store owns the Run's execution state and reads. Its transitions own the
+[mutation lane](../GLOSSARY.md), the owner, authorization,
+[handoff gate](../GLOSSARY.md) and [Run generation](../GLOSSARY.md) guards, generation advances, timeline events and
 publication of committed changes. Each transition keeps the guard facts and
 publication conditions its operation requires. Start, startup ownership and renames
 keep their existing exceptions to the per-Run mutation lane. Reads participate in
@@ -25,7 +25,7 @@ generation, settlement, attention or Block guard. Start, Rename, Archive and man
 settlement use the same transitions inside their own transactions.
 
 Orchestration calls T3, verifies payloads, searches uncertain launches and schedules
-observations, dispatch and retries. Its separate reconciliation lane serializes
+observations, dispatch and retries. Its separate drive lane serializes
 observe and dispatch passes for a Run across T3 calls. That scheduling lane is not
 a persistence guarantee: a report can enter the store's mutation lane while a T3
 read is pending. No Run store transaction spans a T3 call.
@@ -44,9 +44,8 @@ checks that the recipient worker thread is finished at send time.
 
 Each Agent Block gets its own top-level T3 worker. Factory launches it with the Block's first
 visit, never before ([Run workspace](#run-workspace)). There is
-no Run conversation and no native-delegation turn that copies the Agent. Migrations `050`
-and `058` delete open Runs captured under replaced contracts. Runs closed under earlier contracts
-stay readable history: `062` made Finished Runs Settled and `063` Stopped Runs Archived.
+no Run conversation and no native-delegation turn that copies the Agent. Runs closed under
+earlier contracts stay readable history ([upgrade notes](installation.md#current-execution-contract)).
 Captured definitions carry no execution contract, coordination instruction version or
 reporting protocol.
 
@@ -91,7 +90,8 @@ workers share one worktree; its project root stays the Run's project identity.
   Fetch and checkout failures belong to T3's workspace preparation after Start is accepted. Factory names the branch
   `factory/run-<Run number>-<first 8 characters of the Run id>`, so T3 does not rename it
   after the first turn and Runs of different Factory homes on one repository do not share
-  it; T3 rejects the launch if that branch already exists.
+  it; T3 rejects the launch if that branch already exists. The name is not configurable;
+  [Run workspace lifecycle](runs.md#run-workspace-lifecycle) covers cleanup.
 - **Binding.** Factory binds the path and branch once the creator's thread shows both. The
   path is not readiness: T3 queues each worker's turn behind that worker's own workspace
   preparation. Before binding only the creator has a thread, and T3 may show its path before
@@ -112,19 +112,11 @@ workers share one worktree; its project root stays the Run's project identity.
   a missing managed worktree at turn start applies. Factory adds no restoration step; a
   failed send stays unresolved under the usual delivery rules.
 - Factory never removes the worktree; T3's cleanup rules apply to it.
-- **Earlier prepared workers.** Runs started before this contract prepared idle threads for
-  later Agent Blocks. Migration `070` cancels unresolved preparations; their acknowledged idle
-  threads stay in T3, and migration `073` discards Factory's record of them. A first visit already queued as a send to a
-  prepared thread keeps its target and request key, and that thread becomes the Block's worker;
-  the send is released without waiting, since the thread has never run, and is delivered or
-  recovered like any other send. A Block of such a Run that has not been reached
-  launches a new worker on its first arrival, and an idle thread with the same title can make
-  that launch's recovery search ambiguous if its acknowledgement is lost.
 
 ## Start and delivery guarantees
 
 Start checks the connection, project, graph, saved Agent settings, the `$factory-block`
-skill, reporting installation and launch support. It does not require a Run coordinator.
+skill, reporting installation and launch support.
 Accepted Start atomically creates the Run's Task, assigns the Run number, references the
 Flow revision and freezes the current revision of each referenced Agent, and records each
 launch intent before contacting T3. An accepted request key is
@@ -289,14 +281,9 @@ worker reports.
   keep the question as the turn's final message, and records nothing. A `working` report with an
   exit is `EXIT_NOT_ALLOWED`, and one without a message is `MESSAGE_REQUIRED`, all with repair
   guidance.
-- Waiting reports accepted before retirement keep their questions, settled attention and
-  work-period report status. Upgrading settles each pending question as `upgraded-to-working`
-  and makes the latest one of a Block's latest activation that activation's current `working`
-  report, with the question as its message, even after an earlier result. That report's
-  `retired-wait:` id marks it as derived by the upgrade, not reported by the Agent; the upgrade
-  sends nothing and resumes no worker. Request report treats the upgraded work period like one
-  idle in `working`, although it keeps its historical waiting status. Migration `073` discards
-  the wait records with their acknowledgements.
+- Waiting reports accepted before retirement stay readable history. An upgrade turned each
+  pending one into the activation's current `working` report (its id starts with `retired-wait:`),
+  sending nothing and resuming no worker.
 
 Report metadata retains fingerprints and references, not a second message archive.
 [Block ids](t3-integration.md#factory-mcp-and-block-ids) defines the tool contract.
@@ -596,7 +583,7 @@ not read its worker threads: later turns without a report record no work periods
 and leave the Run Settled. Reports, Human answers and Request report are accepted as for an
 Active Run; only an accepted report returns it to Active ([report acceptance](#report-acceptance)).
 Runs settled manually before [manual settlement](#manual-settlement) stopped workers kept their
-gate open; migration `077` leaves them so, and they behave the same way.
+gate open and behave the same way.
 
 ### Manual settlement
 
@@ -742,7 +729,7 @@ dispatch. Accepted results or competing work make the request stale; unknown acc
 authorizes another key.
 
 A linked missing-report Problem settles only after the linked execution completes and reports
-final (or reported waiting before waiting was retired), and the worker thread is finished. The original execution keeps its
+final, and the worker thread is finished. The original execution keeps its
 missing-report history. A `working` reply simply becomes the Block's latest report.
 Recovery can chain through completed reportless turns, but no failure path schedules it
 automatically.
@@ -771,9 +758,7 @@ again after it finishes.
 Automatic Run settlement settles remaining threads within its reconciliation pass; manual
 settlement triggers the Run sweep in the background once it settles. Factory never unsettles. New Runs have no Run
 conversation to organize, and historical Run conversations are not settled. Runs created
-before this behavior was introduced retain Run-level settlement only;
-new Runs use per-Block settlement. The migration preserves existing data and does not
-reorganize existing threads. Failure changes no results or Run state; without native settle support this is
+before per-Block settlement keep Run-level settlement only. Failure changes no results or Run state; without native settle support this is
 a no-op. With no native compare-and-set or replay key, direct activity can still race the
 request; that existing limitation now applies while the Run is still in progress.
 
