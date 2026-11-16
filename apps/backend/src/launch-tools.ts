@@ -36,7 +36,7 @@ export const launchTools: Tool[] = [
   {
     name: "factory_start_run",
     description:
-      "Start a Run immediately, exactly as Factory's Start form does: the same checks, the current saved Flow and Agent revisions and the Flow's own workspace setting. Nothing here asks the user; call it only after the user confirmed the Project, Flow and exact prompt. The reply is an acceptance receipt, not proof that workers started. Retry an unknown outcome with the same requestId and identical arguments: an accepted request returns its Run, and changed content under that requestId is a conflict. A new submission needs a new requestId.",
+      "Start a Run immediately, exactly as Factory's Start form does: the same checks, including that a Project Flow starts only in its owning Project, the current saved Flow and Agent revisions and the Flow's own workspace setting. Nothing here asks the user; call it only after the user confirmed the Project, Flow and exact prompt. The reply is an acceptance receipt, not proof that workers started. Retry an unknown outcome with the same requestId and identical arguments: an accepted request returns its Run, and changed content under that requestId is a conflict. A new submission needs a new requestId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -51,7 +51,8 @@ export const launchTools: Tool[] = [
         },
         flowId: {
           type: "string",
-          description: "A Flow id from factory_list_flows.",
+          description:
+            "A Flow id from factory_list_flows with this projectId: a global Flow or a Flow this Project owns.",
         },
         input: {
           type: "string",
@@ -182,7 +183,9 @@ async function startRun(factory: LaunchOperations, args: Record<string, unknown>
       issues,
       next: issues.some((issue) => issue.code === "start_key_conflict")
         ? "This requestId was accepted with other content. Review the submission with the user again; a confirmed submission gets a new requestId."
-        : (startNext[code] ?? unavailableNext),
+        : issues.some((issue) => issue.code === "flow_project_mismatch")
+          ? "No Run was created. Offer the user the Flows from factory_list_flows with this projectId, or the Flow's owning Project; changing a Flow's owning Project is their separate decision."
+          : (startNext[code] ?? unavailableNext),
     });
   }
   const run = result.value;

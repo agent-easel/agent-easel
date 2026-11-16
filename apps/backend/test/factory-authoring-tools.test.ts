@@ -1,6 +1,14 @@
 import { expect, it } from "@effect/vitest";
-import { authoringMcpClient, toolReply } from "./support/factory-mcp.ts";
+import {
+  authoringMcpClient,
+  clonesMcpClient,
+  mcpFlowToDuplicate,
+  toolReply,
+} from "./support/factory-mcp.ts";
 import { assertOk, sampleAgentInput } from "./support/domain-setup.ts";
+
+/** A listed definition's name and owning Project. */
+type Owned = { readonly name: string; readonly projectId: string | null };
 
 it("a partial-position save arranges the whole graph after creating a ready Flow at revision 1 without positions", async (c) => {
   // Arrange
@@ -689,4 +697,252 @@ it("a removal without an id is a validation error at the id path", async (c) => 
     issues: [{ code: "invalid_id", path: "agentId", message: expect.any(String) }],
     next: "Fix the listed issue paths and call the tool again.",
   });
+});
+
+it("Agents and Flows created for a Project list with the global ones for that Project, never for the other clone, and each names its owning Project", async (c) => {
+  // Arrange
+  const { client, first, second } = await clonesMcpClient(c);
+  const create = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  await create("factory_create_agent", { ...sampleAgentInput("Coder"), projectId: null });
+  await create("factory_create_agent", sampleAgentInput("Releaser", first.id));
+  await create("factory_create_agent", sampleAgentInput("Porter", second.id));
+  await create("factory_create_flow", { name: "Review", projectId: null });
+  await create("factory_create_flow", { name: "Release", projectId: first.id });
+  await create("factory_create_flow", { name: "Port", projectId: second.id });
+  const listed = async (name: string, args: Record<string, unknown>) =>
+    (toolReply(await client.callTool({ name, arguments: args })) as Owned[])
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((definition) => [definition.name, definition.projectId]);
+
+  // Act
+  const forFirst = {
+    agents: await listed("factory_list_agents", { projectId: first.id }),
+    flows: await listed("factory_list_flows", { projectId: first.id }),
+  };
+  const all = {
+    agents: await listed("factory_list_agents", {}),
+    flows: await listed("factory_list_flows", {}),
+  };
+
+  // Assert
+  expect(forFirst).toStrictEqual({
+    agents: [
+      ["Coder", null],
+      ["Releaser", first.id],
+    ],
+    flows: [
+      ["Release", first.id],
+      ["Review", null],
+    ],
+  });
+  expect(all).toStrictEqual({
+    agents: [
+      ["Coder", null],
+      ["Porter", second.id],
+      ["Releaser", first.id],
+    ],
+    flows: [
+      ["Port", second.id],
+      ["Release", first.id],
+      ["Review", null],
+    ],
+  });
+});
+
+it("a Flow created for one clone that places the other clone's Agent is refused with the placement issue and a next step to choose a placeable Agent", async (c) => {
+  // Arrange
+  const { factory, client, first, second } = await clonesMcpClient(c);
+  const other = assertOk(await factory.createAgent(sampleAgentInput("Porter", second.id)));
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_flow",
+    arguments: {
+      name: "Release",
+      projectId: first.id,
+      graph: {
+        flowInput: { targetBlockIds: ["port"] },
+        blocks: [
+          {
+            id: "port",
+            kind: "agent",
+            name: "Port",
+            agentId: other.id,
+            hiddenExitIds: [],
+            localExits: [],
+          },
+        ],
+        connections: [],
+      },
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toStrictEqual({
+    code: "validation",
+    message: expect.any(String),
+    issues: [
+      { code: "agent_scope_mismatch", path: "graph.blocks.0.agentId", message: expect.any(String) },
+    ],
+    next: "A Flow places only global Agents and Agents of its own owning Project. Choose Agents from factory_list_agents with the Flow's projectId, then call the tool again.",
+  });
+  expect(assertOk(await factory.listFlows())).toStrictEqual([]);
+});
+
+it("changing owners moves an Agent into a Project without a revision, and a Flow change from an owner it no longer has is refused with a next step to reread it", async (c) => {
+  // Arrange
+  const { factory, client, first, second } = await clonesMcpClient(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const moved = await client.callTool({
+    name: "factory_change_agent_owner",
+    arguments: { agentId: agent.id, expectedProjectId: null, projectId: first.id },
+  });
+  const stale = await client.callTool({
+    name: "factory_change_flow_owner",
+    arguments: { flowId: flow.id, expectedProjectId: null, projectId: second.id },
+  });
+
+  // Assert
+  expect(moved.isError).toBe(false);
+  expect(toolReply(moved)).toMatchObject({ id: agent.id, projectId: first.id, revision: 1 });
+  expect(stale.isError).toBe(true);
+  expect(toolReply(stale)).toStrictEqual({
+    code: "conflict",
+    message: expect.any(String),
+    issues: [{ code: "stale_owner", path: "expectedProjectId", message: expect.any(String) }],
+    next: "Nothing changed. Read the definition again with factory_get_flow or factory_get_agent, confirm its current projectId with the user and call the tool again with it as expectedProjectId.",
+  });
+  expect(assertOk(await factory.getFlow(flow.id)).projectId).toBe(first.id);
+});
+
+it("a Flow owner change its placed Project Agent blocks names that Agent and points to Duplicate instead", async (c) => {
+  // Arrange
+  const { factory, client, first, second } = await clonesMcpClient(c);
+  const releaser = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = assertOk(
+    await factory.createFlow({
+      name: "Release",
+      projectId: first.id,
+      graph: {
+        flowInput: { targetBlockIds: ["release"] },
+        blocks: [
+          {
+            id: "release",
+            kind: "agent",
+            name: "Release",
+            agentId: releaser.id,
+            hiddenExitIds: [],
+            localExits: [],
+          },
+        ],
+        connections: [],
+      },
+    }),
+  );
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_change_flow_owner",
+    arguments: { flowId: flow.id, expectedProjectId: first.id, projectId: second.id },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toStrictEqual({
+    code: "conflict",
+    message: expect.any(String),
+    issues: [
+      {
+        code: "owner_change_blocked",
+        path: "projectId",
+        message: `This Flow places Agent "Releaser" (${releaser.id}), which the new owner may not place.`,
+      },
+    ],
+    next: "Nothing changed. Ask the user whether to change the definitions the issues name, or to copy into the target with factory_preview_flow_duplicate and factory_duplicate_flow or factory_duplicate_agent instead; never rewrite definitions on your own.",
+  });
+  expect(assertOk(await factory.getFlow(flow.id)).projectId).toBe(first.id);
+});
+
+it("a previewed Flow Duplicate into the other clone commits with copies there, and a commit of a plan that predates a placed Agent's save is refused with a next step to preview again", async (c) => {
+  // Arrange
+  const { factory, client, coder, releaser, flow, second } = await mcpFlowToDuplicate(c);
+  const preview = await client.callTool({
+    name: "factory_preview_flow_duplicate",
+    arguments: { flowId: flow.id, projectId: second.id },
+  });
+  const plan = toolReply(preview);
+  const commit = (agents: unknown) =>
+    client.callTool({
+      name: "factory_duplicate_flow",
+      arguments: { flowId: flow.id, projectId: second.id, expectedRevision: plan.revision, agents },
+    });
+
+  // Act
+  const committed = await commit(plan.agents);
+  assertOk(
+    await factory.updateAgent(coder.id, {
+      ...sampleAgentInput("Coder v2"),
+      expectedRevision: coder.revision,
+      expectedProjectId: coder.projectId,
+    }),
+  );
+  const stale = await commit(plan.agents);
+
+  // Assert
+  expect(preview.isError).toBe(false);
+  expect(
+    plan.agents.map(({ name, choice, changeable }: Record<string, unknown>) => ({
+      name,
+      choice,
+      changeable,
+    })),
+  ).toStrictEqual([
+    { name: "Coder", choice: "keep", changeable: true },
+    { name: "Releaser", choice: "copy", changeable: false },
+  ]);
+  expect(committed.isError).toBe(false);
+  const duplicate = toolReply(committed);
+  expect(duplicate.flow).toMatchObject({ name: "Release copy", projectId: second.id, revision: 1 });
+  expect(duplicate.copies).toStrictEqual([
+    { sourceAgentId: releaser.id, agentId: expect.any(String) },
+  ]);
+  expect(stale.isError).toBe(true);
+  expect(toolReply(stale)).toStrictEqual({
+    code: "conflict",
+    message: expect.any(String),
+    issues: [{ code: "stale_duplicate_plan", path: "agents", message: expect.any(String) }],
+    next: "Nothing was created. Preview the Duplicate again with factory_preview_flow_duplicate, review the new plan with the user and commit it.",
+  });
+  expect(assertOk(await factory.listFlows())).toHaveLength(2);
+});
+
+it("an Agent duplicated into the other clone is a new Agent there at revision 1 with its settings status", async (c) => {
+  // Arrange
+  const { client, releaser, second } = await mcpFlowToDuplicate(c);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_duplicate_agent",
+    arguments: { agentId: releaser.id, projectId: second.id },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const copy = toolReply(result);
+  expect(copy).toMatchObject({
+    name: "Releaser copy",
+    projectId: second.id,
+    revision: 1,
+    prompt: releaser.prompt,
+    settingsStatus: expect.any(Object),
+  });
+  expect(copy.id).not.toBe(releaser.id);
 });

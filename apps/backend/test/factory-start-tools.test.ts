@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { failure } from "../src/result.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { factoryMcpClient, toolReply } from "./support/factory-mcp.ts";
-import { enableRunTitles } from "./support/scenarios.ts";
+import { assertOk } from "./support/domain-setup.ts";
+import { enableRunTitles, projectWorkerFlow } from "./support/scenarios.ts";
 
 /** factory_start_run arguments for the prepared Project and Flow. */
 const startArguments = (fixture: Awaited<ReturnType<typeof prepared>>) => ({
@@ -201,6 +202,30 @@ it("a rejected Start explains its problem and creates no Run", async (c) => {
   const navigation = await fixture.f.listRunNavigation();
   assert(navigation.ok);
   expect(navigation.value).toStrictEqual([]);
+});
+
+it("a Start of a Flow another Project owns is refused with a next step to list this Project's Flows, and creates no Run", async (c) => {
+  // Arrange
+  const fixture = await prepared(c, projectWorkerFlow);
+  const other = assertOk(await fixture.f.addRepository({ path: "/repos/other" }));
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_start_run",
+    arguments: { ...startArguments(fixture), projectId: other.id },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toStrictEqual({
+    code: "validation",
+    message: expect.any(String),
+    issues: [{ code: "flow_project_mismatch", path: "flowId", message: expect.any(String) }],
+    next: "No Run was created. Offer the user the Flows from factory_list_flows with this projectId, or the Flow's owning Project; changing a Flow's owning Project is their separate decision.",
+  });
+  expect(await fixture.f.listRuns(other.id)).toStrictEqual({ ok: true, value: [] });
+  expect(fixture.t3.launches.size).toBe(0);
 });
 
 it("a Start whose reply was lost returns the same Run with its title provenance when retried after restart, without another worker launch", async (c) => {
