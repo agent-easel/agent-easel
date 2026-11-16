@@ -175,7 +175,7 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
   Flow), each with its owner and, for a Flow, the blocks placing the Agent; a listed one opens in Studio. Its **Duplicate to
   *owner*…** opens Duplicate with that target instead; an Agent with unsaved changes must be saved first. The editor's own move
-  needs no acknowledgement; a later delivery naming another owner, including the former one, is followed like a move elsewhere,
+  needs no acknowledgement, also when Studio delivered it before the reply; a later delivery naming another owner, including the former one, is followed like a move elsewhere,
   because live updates can coalesce a move back.
 - **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor header, saved
   Agents only) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
@@ -600,7 +600,8 @@ Every rejection writes nothing, never repeats prompt text and keeps the chosen f
 
 `PUT /api/flows/:id` and `POST /api/flows/:id/validate` take
 `{name, expectedRevision, expectedProjectId, graph, workspace}`; `expectedProjectId` is the owning Project the client last
-saw, or `null` for a global Flow ([Ownership](#ownership)). `workspace` is `{mode: "checkout"}` or
+saw, or `null` for a global Flow ([Ownership](#ownership)); both refuse a stale one with `stale_owner`, so a readiness answer
+is always judged under the owner the client sent. `workspace` is `{mode: "checkout"}` or
 `{mode: "worktree", base: {kind: "default"} | {kind: "ref", ref}}`; a custom ref is trimmed and
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
 issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.

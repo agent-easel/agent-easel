@@ -923,6 +923,23 @@ it("a dirty editor's own Change owner needs no acknowledgement, also before Stud
   });
 });
 
+it("a dirty editor's own Change owner that Studio delivered before its reply needs no acknowledgement", () => {
+  // Arrange
+  const setup = editedAgent();
+  ownerChangedElsewhere(setup, "northwind");
+
+  // Act
+  setup.draft.ownerChangedHere("northwind");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
 it("an owner moved back elsewhere after the editor's own Change owner asks for acknowledgement", () => {
   // Arrange
   const setup = editedAgent();

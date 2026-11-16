@@ -407,10 +407,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     /**
      * This editor's own Change owner moved the definition to `projectId`; nothing to acknowledge.
      * Studio's later deliveries are followed as usual: they cannot be told apart from a move
-     * elsewhere, and a delivery read before the move is followed by the move itself.
+     * elsewhere, and a delivery read before the move is followed by the move itself. Studio may
+     * also have delivered the move before its reply, which then asks nothing either.
      */
     ownerChangedHere(projectId: string | null) {
-      if (!saved || projectId === owner) return;
+      if (!saved) return;
       acceptOwner(projectId);
       publish();
     },
