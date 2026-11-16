@@ -12,8 +12,12 @@ import {
   type Factory,
   type FactoryOptions,
 } from "../../src/index.ts";
+import { unavailableGitHub } from "../../src/adapters/github.ts";
 
-/** Real storage and restartable backend lifetime, without leaking persistence internals. */
+/**
+ * Real storage and restartable backend lifetime, without leaking persistence internals. GitHub is
+ * unavailable unless a test passes its own adapter, so no test runs the host's `gh`.
+ */
 export async function factoryHarness(context: TestContext) {
   // Canonical, as a configured data home is, so a server reopening it sees the same paths.
   const directory = await realpath(await mkdtemp(join(tmpdir(), "t3-factory-")));
@@ -30,6 +34,7 @@ export async function factoryHarness(context: TestContext) {
       const factory = await openFactory({
         databasePath,
         reportingStateDirectory: join(directory, "reporting-state"),
+        github: unavailableGitHub,
         ...options,
       });
       opened.push(factory);
@@ -41,6 +46,7 @@ export async function factoryHarness(context: TestContext) {
         factoryLayer({
           databasePath,
           reportingStateDirectory: join(directory, "reporting-state"),
+          github: unavailableGitHub,
           ...options,
         }),
       ).pipe(Effect.map(Context.get(FactoryService)));

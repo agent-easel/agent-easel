@@ -10,6 +10,7 @@ import type {
   ServerUpdateAction,
 } from "../../../packages/contracts/src/index.ts";
 import { FACTORY_PROTOCOL } from "../../../packages/domain-validation/src/client-access.ts";
+import { unavailableGitHub } from "../../../apps/backend/src/adapters/github.ts";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
@@ -57,6 +58,7 @@ async function remoteFactory(protocol: { protocol: number; minimumPeerProtocol: 
   // Host-side rechecks land quickly so the waiting screen can observe approval on its own.
   const server = await startServer(config, {
     t3: new ControlledT3(),
+    github: unavailableGitHub,
     connectionRetryMs: 1000,
     protocol,
     applicationVersion: "9.0.0",

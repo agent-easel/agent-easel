@@ -52,6 +52,8 @@ export type GitHubFailure =
   | { readonly reason: "no_repository"; readonly message: string }
   /** The repository does not exist or the signed-in login cannot read it. */
   | { readonly reason: "unreadable"; readonly message: string }
+  /** The bound `owner/name` now names a repository with a different node id. */
+  | { readonly reason: "repository_mismatch"; readonly nameWithOwner: string }
   /** GitHub rejected the issue query. */
   | { readonly reason: "query_rejected"; readonly message: string }
   | { readonly reason: "timeout" }
@@ -63,6 +65,12 @@ export type GitHubFailure =
 export type GitHubRead<A> =
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly failure: GitHubFailure };
+
+export const gitHubAnswer = <A>(value: A): GitHubRead<A> => ({ ok: true, value });
+export const gitHubRefusal = (failure: GitHubFailure): GitHubRead<never> => ({
+  ok: false,
+  failure,
+});
 
 /** GitHub reads through the Factory host user's own `gh` login; Factory never writes to GitHub. */
 export interface GitHubAdapter {
@@ -89,12 +97,38 @@ export interface GitHubAdapter {
   ): Promise<GitHubRead<ReadonlyMap<string, GitHubLabelState>>>;
 }
 
+/**
+ * What the person must do about a failure, naming the steps that only work on the Factory host,
+ * so a remote client knows where to act.
+ */
+export function gitHubRepairGuidance(failure: GitHubFailure): string {
+  switch (failure.reason) {
+    case "gh_missing":
+      return "Install GitHub CLI (gh) on the Factory host. Factory looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin; restart a Factory opened from Finder after installing.";
+    case "signed_out":
+      return `On the Factory host, run gh auth login --hostname ${failure.host} as the user Factory runs as.`;
+    case "no_repository":
+      return "Add a GitHub remote to the Project's repository on the Factory host.";
+    case "unreadable":
+      return "Check that the repository exists and that the gh login on the Factory host can read it; run gh auth login on the host to switch accounts.";
+    case "repository_mismatch":
+      return `${failure.nameWithOwner} now names a different repository than the one confirmed. Confirm the repository again.`;
+    case "query_rejected":
+      return "Change the issue query so GitHub accepts it.";
+    case "truncated":
+      return "Narrow the issue query so GitHub's answer fits.";
+    case "timeout":
+    case "failed":
+      return "Check the Factory host's connection to GitHub; the next check tries again.";
+  }
+}
+
 const notAvailable = {
   ok: false,
   failure: { reason: "failed", message: "GitHub access is not available in this build." },
 } as const;
 
-/** Production's GitHub adapter until the live `gh` adapter replaces it: every read fails. */
+/** Every read fails; for development and test hosts that must never run the host's `gh`. */
 export const unavailableGitHub: GitHubAdapter = {
   readiness: async () => notAvailable,
   repository: async () => notAvailable,
