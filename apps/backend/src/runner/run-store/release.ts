@@ -14,25 +14,27 @@ export const passedThrough = (source: { readonly cause: string }) =>
   source.cause.startsWith("pass:");
 
 /** Where a Handoff comes from: a Final result version, a Human occurrence's answer, a Wait
- * arrival's forwarding, or a message a Continuation passed through (cause `pass:`). */
+ * arrival's forwarding, a Condition arrival's selection, or a message a Continuation passed
+ * through (cause `pass:`). */
 type HandoffSource = {
   readonly cause: string;
   readonly report_id: string | null;
   readonly occurrence_id: string | null;
   readonly wait_arrival_id: string | null;
+  readonly condition_arrival_id: string | null;
   readonly source_block_id: string | null;
 };
 
-/** A Human answer or a Wait arrival's forwarding releases the Handoffs it creates, as passing
- * through does. */
+/** A Human answer, a Wait arrival's forwarding or a Condition arrival's selection releases the
+ * Handoffs it creates, as passing through does. */
 function directSourceReleased(sql: SqlClient.SqlClient, runId: string, source: HandoffSource) {
   if (passedThrough(source)) return Effect.succeed(true);
-  return Effect.map(
-    source.wait_arrival_id
-      ? sql`SELECT id FROM wait_arrivals WHERE id=${source.wait_arrival_id} AND run_id=${runId} AND block_id=${source.source_block_id} AND state='forwarded'`
-      : sql`SELECT id FROM human_occurrences WHERE id=${source.occurrence_id} AND run_id=${runId} AND block_id=${source.source_block_id} AND state='answered'`,
-    (rows) => rows.length > 0,
-  );
+  const recorded = source.wait_arrival_id
+    ? sql`SELECT id FROM wait_arrivals WHERE id=${source.wait_arrival_id} AND run_id=${runId} AND block_id=${source.source_block_id} AND state='forwarded'`
+    : source.condition_arrival_id
+      ? sql`SELECT id FROM condition_arrivals WHERE id=${source.condition_arrival_id} AND run_id=${runId} AND block_id=${source.source_block_id} AND state='selected'`
+      : sql`SELECT id FROM human_occurrences WHERE id=${source.occurrence_id} AND run_id=${runId} AND block_id=${source.source_block_id} AND state='answered'`;
+  return Effect.map(recorded, (rows) => rows.length > 0);
 }
 
 /** A Final result version is released once its release record exists under the Run's context. */
@@ -157,8 +159,8 @@ export function openRunRelease(database: RunnerDatabase) {
   return {
     releaseWait,
     releaseFinalResult,
-    /** Whether the Human answer, Wait forwarding or pass-through behind a Handoff or its delivery
-     * is recorded, read at Handoff preparation and again at reservation. */
+    /** Whether the Human answer, Wait forwarding, Condition selection or pass-through behind a
+     * Handoff or its delivery is recorded, read at Handoff preparation and again at reservation. */
     directSourceReleased: (runId: string, source: HandoffSource) =>
       database.transaction((sql) => directSourceReleased(sql, runId, source)),
   };

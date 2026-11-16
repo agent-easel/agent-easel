@@ -1,4 +1,4 @@
-import { Bot, CornerDownLeft, Hourglass, User } from "lucide-react";
+import { Bot, CornerDownLeft, Hourglass, Split, User } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import type { EffectiveExit, ExitSource } from "@t3-factory/domain-validation";
 import { continuedThread } from "./flow-graph.ts";
@@ -17,8 +17,8 @@ interface BlockKind {
   /** The kind badge on the Flow editor's block panel. */
   readonly panelLabel: string;
   readonly name: string;
-  /** It runs in a worker thread of its own. Only an Agent block does; Human steps, Waits and
-   * Continuations work with the worker of the message that reaches them. */
+  /** It runs in a worker thread of its own. Only an Agent block does; Human steps, Waits,
+   * Continuations and Conditions work with the worker of the message that reaches them. */
   readonly workerThread: boolean;
   /** Its frame is dashed on the Flow authoring canvas and the block library's drag preview. */
   readonly dashedFrame: boolean;
@@ -80,6 +80,17 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     singleOutput: true,
     observed: { references: true, freshness: false, noThread: "No T3 thread yet" },
   },
+  condition: {
+    Icon: Split,
+    label: "CONDITION",
+    executionLabel: "CONDITION",
+    panelLabel: "CONDITION",
+    name: "Condition",
+    workerThread: false,
+    dashedFrame: false,
+    singleOutput: false,
+    observed: { references: false, freshness: false, noThread: "A Condition has no T3 thread" },
+  },
 };
 
 /** The kind of block each exit source belongs to: Agent and Flow-local exits leave Agent blocks. */
@@ -89,6 +100,7 @@ const EXIT_SOURCE_KINDS: Record<ExitSource, FlowBlock["kind"]> = {
   human: "human",
   wait: "wait",
   continuation: "continuation",
+  condition: "condition",
 };
 
 /** Whether `exit` is its block's single unnamed output. */
@@ -160,8 +172,22 @@ export function blockReference(
     }
     case "continuation":
       return continuationReference(block, graph);
+    case "condition": {
+      const routes = conditionRoutes(block.rules.length);
+      return {
+        card: { label: "Routes", value: routes, tone: "plain" },
+        line: { text: `${kind} · ${routes}`, tone: "plain" },
+        header: `${kind} · ${routes}`,
+      };
+    }
   }
 }
+
+/** How a Condition routes, by its rule count; an Otherwise-only Condition passes every arrival on. */
+const conditionRoutes = (rules: number) =>
+  rules === 0
+    ? "every arrival to Otherwise"
+    : `by arrival · ${rules.toLocaleString("en-US")} ${rules === 1 ? "rule" : "rules"}, then Otherwise`;
 
 /** A Continuation's reference, with the sentence-case form its block inspector shows as well. */
 export function continuationReference(

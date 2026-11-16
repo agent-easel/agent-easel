@@ -13,6 +13,7 @@ import {
   agentFile,
   exportedAgent,
   factoryFailingInserts,
+  factoryWithVersion1Receipt,
   fileBody,
   flowFile,
   flowUnderCreateLimitBy,
@@ -30,11 +31,14 @@ import { factoryHarness } from "./support/factory.ts";
 import {
   agentBlock,
   blockExit,
+  conditionBlock,
+  conditionRule,
   connection,
   continuationStep,
   controlledExecution,
   flowInput,
   humanStep,
+  OTHERWISE,
   WAIT_OUTPUT,
   waitBlock,
 } from "./support/scenarios.ts";
@@ -73,7 +77,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 2 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 3 })),
   );
 
   // Assert
@@ -83,7 +87,28 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 2, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 3, which this Factory cannot read. Update Factory to import it.",
+    },
+  ]);
+});
+
+it("a version-1 Flow file holding a Condition block is rejected at the block, as version 1 has no such kind", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile({ formatVersion: 1 });
+  const gate = conditionBlock("gate", "Escalate", [conditionRule("ask", "Ask a person", 3)]);
+  const graph = { ...flow.graph, blocks: [...flow.graph.blocks, gate] };
+
+  // Act
+  const review = await factory.reviewImport(fileBody({ ...file, flow: { ...flow, graph } }));
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.issues).toStrictEqual([
+    {
+      code: "invalid_block_kind",
+      path: "flow.graph.blocks.2.kind",
+      message: 'Block "Escalate": use an Agent, Human, Wait or Continuation block.',
     },
   ]);
 });
@@ -417,10 +442,18 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
           waitBlock("cool-off", "Cool off", { amount: 2, unit: "hours" }, { x: 860, y: 20 }),
           continuationStep("polish", "Polish", "Polish the wording.", { x: 1080, y: 20 }),
           { ...agentBlock("unset", "Unset", "", { x: 200, y: 240 }), agentId: null },
+          conditionBlock(
+            "gate",
+            "Escalate",
+            [conditionRule("ask", "Ask a person", 3), conditionRule("later", "", null)],
+            { x: 640, y: 240 },
+          ),
         ],
         connections: [
           connection("coder", "done", "review"),
-          connection("review", "fail", "coder"),
+          connection("review", "fail", "gate"),
+          connection("gate", OTHERWISE, "coder"),
+          connection("gate", "ask", "decide"),
           connection("review", "escalate", "decide"),
           connection("decide", "approve", "cool-off"),
           connection("cool-off", WAIT_OUTPUT, "polish"),
@@ -429,6 +462,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
+  expect(document.formatVersion).toBe(2);
 
   // Act
   const committed = assertOk(
@@ -492,6 +526,36 @@ it("retrying a commit with the same request id and content returns the original 
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });
 
+it("a version-1 Flow file from an earlier release still commits as the Flow it holds", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const file = flowFile({ formatVersion: 1 });
+
+  // Act
+  const committed = await factory.commitImport({
+    requestId: "import-flow",
+    document: file,
+    selections: { "agent-1": controlledExecution() },
+  });
+
+  // Assert
+  assert(committed.ok);
+  const flow = assertOk(await factory.getFlow(committed.value.flowId!));
+  expect(flow).toMatchObject({
+    name: file.flow.name,
+    revision: 1,
+    workspace: file.flow.workspace,
+    graph: {
+      flowInput: file.flow.graph.flowInput,
+      connections: file.flow.graph.connections,
+      blocks: [
+        { id: "review", kind: "agent", agentId: committed.value.agents[0]!.id },
+        { id: "approve", kind: "human" },
+      ],
+    },
+  });
+});
+
 it("retrying a Flow commit whose file lists the same content with fields reordered returns the original result", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
@@ -544,4 +608,20 @@ it("after restart and removal of the imported Agent a retried commit replays its
   // Assert
   expect(retried).toStrictEqual({ ok: true, value: first });
   expect(await reopened.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("after upgrading, a retried commit of a version-1 file replays the receipt the earlier release recorded", async (context) => {
+  // Arrange
+  const { factory, agentId } = await factoryWithVersion1Receipt(context);
+  const document = agentFile(exportedAgent(), { formatVersion: 1 });
+
+  // Act
+  const retried = await factory.commitImport(reviewedCommit("import-1", undefined, document));
+
+  // Assert
+  expect(retried).toStrictEqual({
+    ok: true,
+    value: { agents: [{ key: "agent-1", id: agentId }], flowId: null },
+  });
+  expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });

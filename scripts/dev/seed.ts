@@ -10,6 +10,7 @@ import {
   controlledAgent,
   repliesDiscussed,
   archived,
+  arrivalsNumbered,
   changesRequested,
   controlledTitleModel,
   enableRunTitles,
@@ -208,6 +209,16 @@ export async function seedScenario(
     await resultsReleasedToWait(context, workers, scenario.results);
     return workers[0].runId;
   }
+  if (scenario.state === "results released to a Condition") {
+    const [first, second] = await twoWorkersStarted(context, start);
+    await resultReleasedToHumanReview(
+      context,
+      await resultReported(context, first, scenario.results[0]),
+    );
+    await resultReported(context, second, scenario.results[1]);
+    await arrivalsNumbered(context, first.runId, 2);
+    return first.runId;
+  }
   if (scenario.state === "Run worktree bound") return (await worktreeBound(context, start)).runId;
   if (scenario.state === "generated title applied")
     return generatedTitleRun(context, start, `${namespace.titlePrefix}${scenario.generatedTitle}`);
@@ -278,6 +289,7 @@ async function finishScenario(
         | "two workers started from one prompt"
         | "Run worktree bound"
         | "results released to a Wait"
+        | "results released to a Condition"
         | "settlement unresolved"
         | "generated title applied";
     }
@@ -344,6 +356,12 @@ async function finishScenario(
       await waitContinuedNow(
         context,
         await resultReleasedToWait(context, await resultReported(context, worker, scenario.result)),
+      );
+      break;
+    case "result released to a second worker":
+      await resultReleasedToSecondWorker(
+        context,
+        await resultReported(context, worker, scenario.implementation),
       );
       break;
     case "delegated work pending":

@@ -336,7 +336,8 @@ listener answers `/mcp` with `host_only`, and a request whose `Origin` is not th
 origin is refused, so a cross-origin browser page cannot drive it. Requests may be up to 2 MB to accommodate whole Agent and Flow definitions.
 Alongside the [authoring tools](#authoring-tools), its Block runtime tools are
 `factory_get_block({ blockId })`, read-only `factory_get_run({ blockId })`,
-read-only `factory_get_run_image({ blockId, imageId })` and
+read-only `factory_get_run_image({ blockId, imageId })`,
+read-only `factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` and
 `factory_update_block({ blockId, to, exit?, message? })`, where `to` is `working` or `finished`.
 A `waiting` report from an outdated instruction is refused with `WAITING_RETIRED` and current guidance.
 [Title threads](#title-threads) call `factory_set_run_title({ titleGenerationId, title })` instead.
@@ -371,8 +372,8 @@ A `waiting` report from an outdated instruction is refused with `WAITING_RETIRED
 Any harness session with Factory MCP registered can author definitions without a Block id or an active Run:
 
 - `factory_list_agents`, `factory_get_agent`, `factory_create_agent` and `factory_save_agent` list, read, create and save Agents.
-- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction` under the same [graph shape](studio.md#graph-shape) rules as Studio.
-- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's **Check readiness**, including `agent_model_required` for a block whose Agent Needs a model. It does not validate an unsaved draft or establish live execution readiness.
+- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction`, and Condition blocks their ordered `rules` and fixed `otherwise`, under the same [graph shape](studio.md#graph-shape) rules as Studio; the graph description explains arrival numbering, first-match selection and the Condition readiness rules.
+- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's **Check readiness**, including `agent_model_required` for a block whose Agent Needs a model and the Condition rule-row and cycle findings. It does not validate an unsaved draft or establish live execution readiness.
 - `factory_remove_agent` and `factory_remove_flow` remove an Agent or a Flow by id, exactly as Studio's [Agent removal](studio.md#agent-definitions) and [Flow removal](studio.md#removing-a-flow).
 - `factory_get_agent_capabilities` reads the live T3 catalog of environments, provider instances, models and model options, including each provider's `reporting.supported` flag and explanation.
 
@@ -474,7 +475,8 @@ through this tool. `inputs.results` identifies the exact report that caused the 
 ids. Other visits' reports and unrelated graph neighbors are not inputs to that visit. Flow-input visits have no incoming result.
 A visit a [Wait](runs.md#waits) forwarded has reason `Wait`, no `inputs.results` and the forwarded message, unchanged, in
 `inputs.feedback`; Archive clears it to null. The Wait's local timer calls no T3 operation; the deliveries it creates follow the
-usual authorization and delivery guards.
+usual authorization and delivery guards. A visit a [Condition](runner.md#condition-arrivals) routed has reason `Condition`,
+likewise with no `inputs.results` and the routed message, unchanged and possibly empty, in `inputs.feedback`.
 A result the source Block replaces after hand-off does not change the inputs of a visit it already started.
 
 `inputs.images` is the ordered manifest of the Run's immutable initial images, with entries
@@ -486,8 +488,17 @@ The result message is plain text: it can describe decisions, include artifact UR
 declaration is required, and Factory does not automatically fetch linked artifacts. An Agent's prompt can specify an expected
 format when the next step needs one; the reporting contract's message requirements still apply.
 
-`factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result. It grants no
-routing authority.
+`factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result, plus each
+Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history.
+It grants no routing authority.
+
+`factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` reads one page of
+[Condition evidence](runs.md#conditions) for a Condition of the calling Block's Run: the same page, window, cursor and limits as
+the HTTP read, as `{ code: "CONDITION_ARRIVALS", arrivals, highWater, nextCursor }`. `conditionBlockId` is a Flow block id from
+`factory_get_run`'s `conditions`; `limit` is a JSON integer. A Block id resolves only its own Run, so another Run's Conditions
+are unreachable. An unknown Condition, invalid `limit` or a cursor that does not continue this Condition's window is refused
+with `UNKNOWN_CONDITION`, `INVALID_LIMIT` or `INVALID_CURSOR` and static guidance; as over HTTP, a modified cursor or one issued
+before the server restarted does not continue a window.
 
 ### Run image reads
 

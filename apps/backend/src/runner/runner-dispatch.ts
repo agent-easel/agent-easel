@@ -9,6 +9,7 @@ import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
 import type { FactoryOperations } from "@t3-factory/contracts";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
@@ -24,8 +25,9 @@ import {
 import { catalogProject, unverified, verified } from "./runner-utils.ts";
 import { inRunWorkspace, launchStrategy } from "./run-workspace.ts";
 import type { RunImages } from "../run-images.ts";
-/** A Human occurrence or Wait arrival from a durable Human answer, Wait forwarding or pass-through
- * needs no generation guard; one from a released Final result requires the release's generation. */
+/** A Human occurrence, Wait arrival or Condition arrival from a durable Human answer, Wait
+ * forwarding, Condition selection or pass-through needs no generation guard; one from a released
+ * Final result requires the release's generation. */
 const arrivalGeneration = (release: Exclude<Release, { state: "held" }>) =>
   release.state === "durable" ? undefined : release.run.generation;
 /** Uncertain work may be replayed only within the retry scope recorded at reservation. */
@@ -57,6 +59,18 @@ function storedTarget(
     return unverified("Stored operation target cannot be verified.");
   return verified(target);
 }
+const targetKind = (runRow: RunRow, handoff: Handoff) =>
+  runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
+/** Accepting a Handoff at a Condition sends nothing to T3 and commits atomically: a failed attempt,
+ * such as unavailable storage, committed nothing, so the Handoff stays pending for the next pass.
+ * It is never noted as uncertain T3 work. */
+const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>
+  attempt.pipe(
+    Effect.asVoid,
+    Effect.catchCause((cause) =>
+      Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.void,
+    ),
+  );
 export function openRunnerDispatch(
   store: RunStore,
   ops: EffectOperations<FactoryOperations>,
@@ -67,8 +81,9 @@ export function openRunnerDispatch(
   scheduleWait: (wait: ScheduledWait) => Effect.Effect<void, unknown>,
 ) {
   /** A released Handoff to an Agent becomes a worker launch or a revisit send, a Continuation
-   * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, and a Wait Handoff an
-   * arrival whose wake-up is scheduled. A held Handoff stays a Handoff; reservation asks again. */
+   * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, a Wait Handoff an
+   * arrival whose wake-up is scheduled, and a Condition Handoff a numbered, routed arrival. A held
+   * Handoff stays a Handoff; reservation asks again. */
   function prepareHandoff(
     runRow: RunRow,
     handoff: Handoff,
@@ -92,6 +107,10 @@ export function openRunnerDispatch(
           arrivalGeneration(release),
         );
         if (arrival) yield* scheduleWait(arrival);
+        return;
+      }
+      if (kind === "condition") {
+        yield* store.handoffToConditionArrival(current, handoff, arrivalGeneration(release));
         return;
       }
       return yield* prepareAgentHandoff(current, handoff);
@@ -154,6 +173,8 @@ export function openRunnerDispatch(
           yield* observe(runRow, block, contextId);
         return;
       }
+      if (saved.kind === "handoff" && targetKind(runRow, saved) === "condition")
+        return yield* retriedNextPass(prepareHandoff(runRow, saved));
       let intent: Handoff | Delivery = saved;
       return yield* recoverOperation(
         Effect.gen(function* () {

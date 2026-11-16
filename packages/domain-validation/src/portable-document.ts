@@ -6,11 +6,13 @@ import {
   type FlowBlockInput,
   type FlowInputBlock,
   type FlowWorkspace,
+  type ImportedDocument,
   type OperationError,
   type PortableAgent,
   type PortableDocument,
   type PortableFlow,
   type PortableFlowBlock,
+  type PortableFormatVersion,
   type PortableModelHint,
   type Result,
   type ValidationIssue,
@@ -71,13 +73,44 @@ const CONNECTION_FIELDS = ["sourceBlockId", "exitId", "targetBlockId"];
 const POSITION_FIELDS = ["x", "y"];
 const DURATION_FIELDS = ["amount", "unit"];
 const BLOCK_FIELDS = ["id", "name", "kind", "position"];
-/** Each block kind's own fields; a Map, so an untrusted kind never resolves to a prototype member. */
-const KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
+const CONDITION_RULE_FIELDS = ["id", "name", "fromArrival"];
+const CONDITION_OTHERWISE_FIELDS = ["id"];
+
+/**
+ * One strict reader per readable format version: the block kinds its files hold, each with its own
+ * fields, and how a rejection names them. Kind maps are Maps, so an untrusted kind never resolves
+ * to a prototype member. Every reader decodes into the current definition model.
+ */
+interface FormatReader {
+  readonly version: PortableFormatVersion;
+  readonly kindFields: ReadonlyMap<unknown, readonly string[]>;
+  readonly kindChoice: string;
+}
+
+const VERSION_1_KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
   ["agent", ["agentKey", "hiddenExitIds", "localExits", "revisitInstruction"]],
   ["human", []],
   ["wait", ["duration"]],
   ["continuation", ["prompt"]],
 ]);
+
+/** Version 1 holds no Condition block, so its definitions already are the current model. */
+const VERSION_1: FormatReader = {
+  version: 1,
+  kindFields: VERSION_1_KIND_FIELDS,
+  kindChoice: "an Agent, Human, Wait or Continuation block",
+};
+
+/** Version 2 is version 1 plus the Condition block. */
+const VERSION_2: FormatReader = {
+  version: PORTABLE_DOCUMENT_VERSION,
+  kindFields: new Map([...VERSION_1_KIND_FIELDS, ["condition", ["rules", "otherwise"]]]),
+  kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
+};
+
+const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
+  [VERSION_1, VERSION_2].map((reader) => [reader.version, reader]),
+);
 
 type Issues = ValidationIssue[];
 
@@ -104,7 +137,7 @@ const documentTooLarge = () =>
   ]);
 
 /** The chosen file's bytes as a document: the size limit, UTF-8 JSON, then the format checks. */
-export function parsePortableFile(data: Uint8Array): Result<PortableDocument> {
+export function parsePortableFile(data: Uint8Array): Result<ImportedDocument> {
   if (data.byteLength > PORTABLE_DOCUMENT_LIMIT_BYTES) return documentTooLarge();
   let value: unknown;
   try {
@@ -116,14 +149,15 @@ export function parsePortableFile(data: Uint8Array): Result<PortableDocument> {
 }
 
 /**
- * Strict version-1 decoding, in order: the marker and version, the Agent count, unknown or missing
- * fields at every level, closed key references, then the Agent and Flow domain validators and each
- * definition's save size. Messages name Agents, blocks and fields, never prompt text.
+ * Strict decoding by the file's version reader, in order: the marker and version, the Agent count,
+ * unknown or missing fields at every level, closed key references, then the Agent and Flow domain
+ * validators and each definition's save size. Messages name Agents, blocks and fields, never
+ * prompt text.
  */
-function decodePortableDocument(value: unknown): Result<PortableDocument> {
+function decodePortableDocument(value: unknown): Result<ImportedDocument> {
   const envelope = checkEnvelope(value);
   if (!envelope.ok) return envelope;
-  const fields = envelope.value;
+  const { fields, reader } = envelope.value;
   const agents = fields.agents;
   if (Array.isArray(agents) && agents.length > PORTABLE_DOCUMENT_AGENT_LIMIT)
     return rejected("too_large", [
@@ -133,15 +167,19 @@ function decodePortableDocument(value: unknown): Result<PortableDocument> {
         `This file bundles ${agents.length} Agents; an import accepts at most ${PORTABLE_DOCUMENT_AGENT_LIMIT}.`,
       ),
     ]);
-  const shape = shapeIssues(fields);
+  const shape = shapeIssues(fields, reader);
   if (shape.length > 0) return rejected("validation", shape);
   const entries = agents as readonly Record<string, unknown>[];
   const references = referenceIssues(fields, entries);
   if (references.length > 0) return rejected("validation", references);
-  return fields.kind === "flow" ? flowDocument(fields, entries) : agentDocument(fields, entries);
+  return fields.kind === "flow"
+    ? flowDocument(fields, reader, entries)
+    : agentDocument(fields, reader, entries);
 }
 
-function checkEnvelope(value: unknown): Result<Record<string, unknown>> {
+function checkEnvelope(
+  value: unknown,
+): Result<{ fields: Record<string, unknown>; reader: FormatReader }> {
   if (!isRecord(value) || value.format !== PORTABLE_DOCUMENT_FORMAT)
     return rejected("validation", [
       issue(
@@ -155,7 +193,8 @@ function checkEnvelope(value: unknown): Result<Record<string, unknown>> {
     return rejected("validation", [
       issue("invalid_format_version", "formatVersion", "This file has no valid format version."),
     ]);
-  if (version !== PORTABLE_DOCUMENT_VERSION)
+  const reader = READERS.get(version);
+  if (!reader)
     return rejected("validation", [
       issue(
         "unsupported_format_version",
@@ -169,7 +208,7 @@ function checkEnvelope(value: unknown): Result<Record<string, unknown>> {
     return rejected("validation", [
       issue("invalid_kind", "kind", "A Factory export is an Agent file or a Flow file."),
     ]);
-  return { ok: true, value };
+  return { ok: true, value: { fields: value, reader } };
 }
 
 /** How messages name an Agent: its name when the file gives a usable one, else its position. */
@@ -231,7 +270,7 @@ function checkList(
   return [];
 }
 
-function shapeIssues(fields: Record<string, unknown>): Issues {
+function shapeIssues(fields: Record<string, unknown>, reader: FormatReader): Issues {
   const issues: Issues = [];
   const flow = fields.kind === "flow";
   const envelope = flow ? FLOW_ENVELOPE_FIELDS : ENVELOPE_FIELDS;
@@ -243,7 +282,7 @@ function shapeIssues(fields: Record<string, unknown>): Issues {
   agents.forEach((agent, index) =>
     checkAgentShape(agent, `agents.${index}`, agentLabel(agent, index), issues),
   );
-  if (flow && document && "flow" in document) checkFlowShape(document.flow, issues);
+  if (flow && document && "flow" in document) checkFlowShape(document.flow, reader, issues);
   // The document's own unknown fields are addressed at the top level, not under "document".
   return issues.map((entry) => ({ ...entry, path: entry.path.replace(/^document\.?/, "") }));
 }
@@ -277,14 +316,20 @@ function checkAgentShape(agent: unknown, path: string, subject: string, issues: 
   );
 }
 
-function checkFlowShape(flow: unknown, issues: Issues) {
+function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
   const subject = "The Flow";
   const fields = checkFields(flow, "flow", FLOW_FIELDS, [], subject, issues);
   if (!fields) return;
   if ("graph" in fields) {
     const graph = checkFields(fields.graph, "flow.graph", GRAPH_FIELDS, [], subject, issues);
     checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
-      checkBlockShape(block, `flow.graph.blocks.${index}`, blockLabel(block, index), issues),
+      checkBlockShape(
+        block,
+        `flow.graph.blocks.${index}`,
+        blockLabel(block, index),
+        reader,
+        issues,
+      ),
     );
     checkList(graph?.connections, "flow.graph.connections", subject, issues).forEach(
       (connection, index) =>
@@ -307,15 +352,17 @@ function checkFlowShape(flow: unknown, issues: Issues) {
   if ("workspace" in fields) checkWorkspaceShape(fields.workspace, issues);
 }
 
-function checkBlockShape(block: unknown, path: string, subject: string, issues: Issues) {
-  const kindFields = isRecord(block) ? KIND_FIELDS.get(block.kind) : [];
+function checkBlockShape(
+  block: unknown,
+  path: string,
+  subject: string,
+  reader: FormatReader,
+  issues: Issues,
+) {
+  const kindFields = isRecord(block) ? reader.kindFields.get(block.kind) : [];
   if (!kindFields) {
     issues.push(
-      issue(
-        "invalid_block_kind",
-        `${path}.kind`,
-        `${subject}: use an Agent, Human, Wait or Continuation block.`,
-      ),
+      issue("invalid_block_kind", `${path}.kind`, `${subject}: use ${reader.kindChoice}.`),
     );
     return;
   }
@@ -329,6 +376,20 @@ function checkBlockShape(block: unknown, path: string, subject: string, issues: 
     );
   if (fields.kind === "wait" && fields.duration !== null && fields.duration !== undefined)
     checkFields(fields.duration, `${path}.duration`, DURATION_FIELDS, [], subject, issues);
+  if (fields.kind === "condition") {
+    checkList(fields.rules, `${path}.rules`, subject, issues).forEach((rule, index) =>
+      checkFields(rule, `${path}.rules.${index}`, CONDITION_RULE_FIELDS, [], subject, issues),
+    );
+    if ("otherwise" in fields)
+      checkFields(
+        fields.otherwise,
+        `${path}.otherwise`,
+        CONDITION_OTHERWISE_FIELDS,
+        [],
+        subject,
+        issues,
+      );
+  }
 }
 
 function checkWorkspaceShape(workspace: unknown, issues: Issues) {
@@ -504,13 +565,17 @@ function decodeAgents(entries: readonly Record<string, unknown>[]): Result<Porta
   return { ok: true, value: agents };
 }
 
-/** The envelope in a fixed field order, which the import receipt's fingerprint relies on. */
+/**
+ * The envelope in a fixed field order under the file's own version, which the import receipt's
+ * fingerprint relies on: a version-1 commit retried after an upgrade still matches its receipt.
+ */
 const envelopeOf = <Kind extends PortableDocument["kind"]>(
   fields: Record<string, unknown>,
+  reader: FormatReader,
   kind: Kind,
 ) => ({
   format: PORTABLE_DOCUMENT_FORMAT as typeof PORTABLE_DOCUMENT_FORMAT,
-  formatVersion: PORTABLE_DOCUMENT_VERSION as typeof PORTABLE_DOCUMENT_VERSION,
+  formatVersion: reader.version,
   kind,
   factoryVersion: fields.factoryVersion as string,
   exportedAt: fields.exportedAt as string,
@@ -518,24 +583,29 @@ const envelopeOf = <Kind extends PortableDocument["kind"]>(
 
 function agentDocument(
   fields: Record<string, unknown>,
+  reader: FormatReader,
   entries: readonly Record<string, unknown>[],
-): Result<PortableDocument> {
+): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
-  return { ok: true, value: { ...envelopeOf(fields, "agent"), agents: [agents.value[0]!] } };
+  return {
+    ok: true,
+    value: { ...envelopeOf(fields, reader, "agent"), agents: [agents.value[0]!] },
+  };
 }
 
 function flowDocument(
   fields: Record<string, unknown>,
+  reader: FormatReader,
   entries: readonly Record<string, unknown>[],
-): Result<PortableDocument> {
+): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
   const flow = decodeFlow(fields.flow as Record<string, unknown>);
   if (!flow.ok) return flow;
   return {
     ok: true,
-    value: { ...envelopeOf(fields, "flow"), flow: flow.value, agents: agents.value },
+    value: { ...envelopeOf(fields, reader, "flow"), flow: flow.value, agents: agents.value },
   };
 }
 
@@ -632,7 +702,7 @@ function decodeSelection(
 
 /** The reviewed choice for exactly the document's Agents, in document order. */
 function decodeSelections(
-  document: PortableDocument,
+  document: ImportedDocument,
   value: unknown,
 ): Result<Record<string, AgentExecutionSettings | null>> {
   if (!isRecord(value))

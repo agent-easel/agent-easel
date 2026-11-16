@@ -15,9 +15,9 @@ export type Release =
   /** Its Final result version is released. `run` is the Run as read; what the release allows must
    * still find `run.generation`. */
   | { readonly state: "released"; readonly run: RunRow }
-  /** A Human answer, Wait forwarding or pass-through released it, and no later record undoes that.
-   * A Human occurrence or Wait arrival is recorded from it without a generation guard; every other
-   * transition still requires `run.generation`. */
+  /** A Human answer, Wait forwarding, Condition selection or pass-through released it, and no
+   * later record undoes that. A Human occurrence, Wait arrival or Condition arrival is recorded
+   * from it without a generation guard; every other transition still requires `run.generation`. */
   | { readonly state: "durable"; readonly run: RunRow };
 
 /** A delivery the release rule does not hold at reservation: no Handoff prepared it, or it was
@@ -27,7 +27,7 @@ type Ungated = { readonly state: "ungated" };
 const held: Release = { state: "held" };
 
 /** What releases a Handoff: a Final result version (an Agent's result or a Continuation's
- * response), or a durable Human answer, Wait forwarding or pass-through. A delivery no Handoff
+ * response), or a durable Human answer, Wait forwarding, Condition selection or pass-through. A delivery no Handoff
  * prepared (an entry launch, a Request report or a recovery send) has no source. */
 type Source =
   | { readonly kind: "result"; readonly reportId: string }
@@ -36,7 +36,12 @@ type Source =
 
 function sourceOf(record: Handoff | Delivery): Source {
   if (record.report_id) return { kind: "result", reportId: record.report_id };
-  if (record.occurrence_id || record.wait_arrival_id || passedThrough(record))
+  if (
+    record.occurrence_id ||
+    record.wait_arrival_id ||
+    record.condition_arrival_id ||
+    passedThrough(record)
+  )
     return { kind: "direct" };
   return { kind: "none" };
 }

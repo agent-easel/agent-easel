@@ -32,12 +32,27 @@ export interface WaitDuration {
   readonly amount: number;
   readonly unit: WaitUnit;
 }
+/** The largest arrival number a Condition rule may name: the largest exactly representable
+ * integer, so a saved threshold is never rounded. */
+export const CONDITION_ARRIVAL_MAX = Number.MAX_SAFE_INTEGER;
+/** The fixed id of a Condition's last output, selected when no rule matches. */
+export const CONDITION_OTHERWISE_ID = "otherwise";
+/** One ordered Condition rule: from arrival `fromArrival` onward, select this rule's output, whose
+ * wires leave by the rule's `id`, so renaming or reordering the rule keeps them. */
+export interface ConditionRule {
+  readonly id: string;
+  /** Stored trimmed; blank only in a draft, where readiness reports it. */
+  readonly name: string;
+  /** A whole number from 1 to `CONDITION_ARRIVAL_MAX`; null while the draft has none. */
+  readonly fromArrival: number | null;
+}
 /**
  * An Agent block exposes its Agent's exits, minus those this Flow hides, plus its Flow-local
  * exits and may carry a Revisit instruction. A Human block has the fixed Approve and Request
  * changes exits. A Wait block has one unnamed output; `duration` is null while the draft has none.
  * A Continuation sends its prompt once per Run into the worker thread of the message that reaches
- * it and has one fixed, unnamed output.
+ * it and has one fixed, unnamed output. A Condition routes each arrival by its arrival number: the
+ * first matching rule selects that rule's output, else the fixed last Otherwise output.
  */
 export type FlowBlock = BlockBase &
   (
@@ -57,6 +72,13 @@ export type FlowBlock = BlockBase &
         readonly kind: "continuation";
         /** Stored trimmed; empty only in a draft, where readiness reports it. */
         readonly prompt: string;
+      }
+    | {
+        readonly kind: "condition";
+        /** Checked in order; the first rule whose threshold the arrival number reaches selects. */
+        readonly rules: readonly ConditionRule[];
+        /** Always present and always last; it cannot be renamed, removed or reordered. */
+        readonly otherwise: { readonly id: typeof CONDITION_OTHERWISE_ID };
       }
   );
 export interface FlowConnection {

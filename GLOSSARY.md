@@ -28,7 +28,7 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait or a Continuation. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
@@ -71,11 +71,19 @@ _Avoid_: Timer or delay as the block name; manual resume (not a Wait mode).
 One accepted delivery to a Wait within a Run, with its retained message, worker provenance, absolute deadline counted from the delivery's release, and outcome: pending, forwarded (at its deadline, or early by the user with **Continue now**) or cancelled by Archive or manual settlement. Arrivals never join or reset one another.
 
 **Continuation**:
-A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in a Run sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of the Run, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits and other Continuations pass the worker on.
+A flow block with a name, a prompt and one unnamed output, and no Agent or exits of its own. The first message that reaches it in a Run sends its prompt into the worker thread that message belongs to; the work shows on that worker's Agent block while the Continuation is **sent**. Its response leaves the single output, and from then on, for the rest of the Run, every message **passes through** unchanged with its own worker. It needs an Agent before it; human steps, Waits, Conditions and other Continuations pass the worker on.
 _Avoid_: continuity, follow-up block, reusing a worker by copying its conversation.
 
+**Condition**:
+A Flow-local flow block that routes by arrival number: an ordered list of **From arrival N onward** rules, each with its own named output, followed by the fixed, mandatory **Otherwise** output. The first rule whose number the arrival reaches selects its output; Otherwise is selected when none does and is not an error route. It has no Agent, worker, prompt or reports, cannot be a Flow input target, and does not interpret message text. Written with a capital C it always means this block kind; a lowercase condition is any ordinary requirement or circumstance, such as a readiness or Start condition.
+_Avoid_: Branch, router, switch or decision as the block name; condition for a generic requirement where the block could be meant.
+
+**Condition arrival**:
+One distinct delivery a Condition accepts within a Run, numbered from 1 per Run and Condition and shared by all its incoming wires and workers. A redelivery of the same delivery keeps its number; another delivery with identical text is the next arrival. It records its number, the selected output (the matched rule or Otherwise) and the delivery's worker provenance; the number never resets, and once recorded neither number nor selection changes. An arrival number is not a review or attempt count.
+_Avoid_: Attempt, iteration or review number.
+
 **Worker provenance**:
-The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.
+The worker thread a delivered message belongs to, recorded by its durable T3 thread id, and, when known, the Block activation whose result the message is: an Agent's result carries its worker and activation, a human step's answer the worker and activation of the message it answered, a Continuation's response the thread its prompt ran on, and a Wait, Condition or pass-through forwards what it received unchanged. A Continuation reads the thread from the message it receives; titles never select a thread. Run detail shows a delivery's provenance as its `origin` when both thread and activation are known.
 _Avoid_: delivery origin as a separate term.
 
 **Block exit**:
@@ -127,7 +135,7 @@ The identifier Factory mints for an Agent Block or Continuation when a Run start
 _Avoid_: tool ref, caller correlation.
 
 **Factory MCP**:
-The MCP server a Factory server serves at `/mcp` on its host-local listener. Harnesses register it once by URL. Its Block runtime tools are `factory_get_block`, `factory_get_run`, `factory_get_run_image` and `factory_update_block`; its [authoring tools](docs/t3-integration.md#authoring-tools) list, read, create, save and remove Agents and Flows, check Flow readiness and read Agent capabilities without a Block id, and its [Run Start tools](docs/t3-integration.md#run-start-tools) find a conversation's Project and start a text-only Run. An application update changes its tools without changing harness configuration.
+The MCP server a Factory server serves at `/mcp` on its host-local listener. Harnesses register it once by URL. Its Block runtime tools are `factory_get_block`, `factory_get_run`, `factory_get_run_image`, `factory_get_condition_arrivals` and `factory_update_block`; its [authoring tools](docs/t3-integration.md#authoring-tools) list, read, create, save and remove Agents and Flows, check Flow readiness and read Agent capabilities without a Block id, and its [Run Start tools](docs/t3-integration.md#run-start-tools) find a conversation's Project and start a text-only Run. An application update changes its tools without changing harness configuration.
 _Avoid_: bridge (the retired stdio copy installed per harness).
 
 **Block activation**:
@@ -144,7 +152,7 @@ An explicit, non-final `working` report an Agent sends when it starts its Block 
 _Avoid_: progress report, heartbeat.
 
 **Problem**:
-A pending execution, report or settlement issue already recorded as attention: a missing report, an execution failure, a report problem, or **Settle could not stop workers** when a confirmed manual Settle is unresolved. The settlement Problem is about the Run rather than one Block, and is distinct from the execution failure that stopping never raises. A Problem is distinct from block execution state and from stale or unavailable observations.
+A pending execution, report, integrity or settlement issue already recorded as attention: a missing report, an execution failure, a report problem, a Condition integrity Problem, which only manual settlement or Archive settles, or **Settle could not stop workers** when a confirmed manual Settle is unresolved. The settlement Problem is about the Run rather than one Block, and is distinct from the execution failure that stopping never raises. A Problem is distinct from block execution state and from stale or unavailable observations.
 
 **Inbox**:
 The set of Run attention matters awaiting a response or action. Factory presents pending and settled matters on the Run they belong to. There is no separate global Inbox. The desktop Dock badge and the Run list's **Needs you** filter count and list Runs, not matters, and are not an Inbox.

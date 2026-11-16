@@ -460,6 +460,8 @@ export interface RunDetail extends RunSummary {
   readonly humanOccurrences: readonly HumanOccurrence[];
   readonly waitArrivals: readonly WaitArrival[];
   readonly continuationVisits: readonly ContinuationVisit[];
+  /** One constant-size summary per captured Condition, not its arrival history. */
+  readonly conditions: readonly ConditionSummary[];
   readonly attention: readonly RunAttention[];
   readonly executions: readonly {
     readonly bindingId: string;
@@ -482,6 +484,8 @@ export interface RunDetail extends RunSummary {
     readonly exitId: string | null;
     /** The Wait arrival whose forwarding created this Handoff. */
     readonly waitArrivalId: string | null;
+    /** The Condition arrival whose selection created this Handoff. */
+    readonly conditionArrivalId: string | null;
     readonly origin: WorkerProvenance | null;
     readonly payloadRetained: boolean;
     readonly reference: {
@@ -507,6 +511,8 @@ export interface RunDetail extends RunSummary {
     readonly executionId: string | null;
     readonly causeId: string | null;
     readonly blockId: string | null;
+    /** Only on `condition-selected`: the arrival's number and the output it selected. */
+    readonly condition?: ConditionSelection;
   }[];
 }
 
@@ -529,6 +535,7 @@ export interface RunAttention {
     | "missing-report"
     | "execution-failed"
     | "report-problem"
+    | "condition-integrity"
     | "settlement-unresolved";
   readonly nativeRequestId: string | null;
   readonly occurrenceId: string | null;
@@ -539,13 +546,13 @@ export interface RunAttention {
   readonly settlementReason: string | null;
   /**
    * The Agent's question for `conversation-waiting`, a retired kind kept only as settled history;
-   * null for every other kind.
+   * the recorded reason for `report-problem` and `condition-integrity`; null for every other kind.
    */
   readonly message: string | null;
 }
 
-/** Needs input is a pending question or decision. Problem is an execution, report or settlement
- * issue. */
+/** Needs input is a pending question or decision. Problem is an execution, report, Condition
+ * integrity or settlement issue. */
 export type RunAttentionPresentation = "needs-input" | "problem";
 
 /**
@@ -583,6 +590,7 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "missing-report":
     case "execution-failed":
     case "report-problem":
+    case "condition-integrity":
     case "settlement-unresolved":
       return "problem";
   }
@@ -667,6 +675,67 @@ export interface WaitArrival {
   readonly settledAt: string | null;
 }
 
+/** What a Condition selected for one arrival: its arrival number and the output, a rule's id or
+ * `otherwise`. The selection never changes once recorded. */
+export interface ConditionSelection {
+  readonly arrivalNumber: number;
+  readonly outputId: string;
+}
+
+/**
+ * A Condition's routing in a Run so far. `arrivals` counts every distinct delivery numbered at it,
+ * shared by all its incoming wires and workers; `pending` counts deliveries recorded there and not
+ * yet numbered. `latest` is the most recent selection, not every downstream delivery.
+ */
+export interface ConditionSummary {
+  readonly blockId: string;
+  readonly arrivals: number;
+  readonly pending: number;
+  readonly latest: (ConditionSelection & { readonly acceptedAt: string }) | null;
+}
+
+/** Condition evidence page sizes: the default and the largest allowed; the smallest is 1. */
+export const CONDITION_ARRIVAL_PAGE_DEFAULT = 50;
+export const CONDITION_ARRIVAL_PAGE_MAX = 100;
+/** A Run read's `events` keep each Condition's latest this many selections; its evidence pages
+ * reach the earlier ones. */
+export const CONDITION_TIMELINE_ARRIVALS = 50;
+
+/**
+ * Where one recipient's delivery of a Condition selection stands now: `pending` until it is
+ * delivered (also while queued, being sent or unconfirmed), then `acknowledged` or `cancelled`.
+ */
+export type ConditionRecipientDisposition = "pending" | "acknowledged" | "cancelled";
+
+/** One numbered Condition arrival: its fixed decision, with each recipient's current disposition. */
+export interface ConditionArrivalEvidence extends ConditionSelection {
+  readonly id: string;
+  readonly acceptedAt: string;
+  /** The Flow block whose result, answer or forwarding delivered it. */
+  readonly sourceBlockId: string | null;
+  /** The worker whose message it carries, when known. */
+  readonly origin: WorkerProvenance | null;
+  /** The captured rule whose output was selected; null when Otherwise was. */
+  readonly rule: { readonly id: string; readonly name: string } | null;
+  /** Every recipient of the selected output; empty when that output is unwired. */
+  readonly recipients: readonly {
+    readonly blockId: string;
+    readonly disposition: ConditionRecipientDisposition;
+  }[];
+}
+
+/**
+ * One page of a Condition's arrivals in a Run, in ascending arrival number. A first page fixes its
+ * window at the highest arrival number committed then (`highWater`); its `nextCursor`, null on the
+ * window's last page, continues that window only, so a later arrival appears after a new first
+ * page read.
+ */
+export interface ConditionArrivalPage {
+  readonly arrivals: readonly ConditionArrivalEvidence[];
+  readonly highWater: number;
+  readonly nextCursor: string | null;
+}
+
 export const runOperations = {
   listRunNavigation: operation<never, readonly RunNavigationEntry[]>()({
     method: "GET",
@@ -731,6 +800,16 @@ export const runOperations = {
   continueWaitArrival: operation<never, RunDetail>()({
     method: "POST",
     path: "/api/wait-arrivals/:id/continue",
+  }),
+  /**
+   * One page of a Condition's arrivals in the Run. `limit` is a whole number from 1 to
+   * `CONDITION_ARRIVAL_PAGE_MAX`, empty for the default; `cursor` is empty for a first page, or
+   * the previous page's `nextCursor` for this Run and Condition.
+   */
+  listConditionArrivals: operation<never, ConditionArrivalPage>()({
+    method: "GET",
+    path: "/api/runs/:runId/conditions/:blockId/arrivals",
+    query: ["limit", "cursor"],
   }),
   listAttention: operation<never, readonly RunAttention[]>()({
     method: "GET",

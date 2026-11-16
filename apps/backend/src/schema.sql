@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: run_level_attention
+-- Newest applied migration: condition_recipient_index
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -277,11 +277,11 @@ CREATE TABLE chat_proposals (
 CREATE INDEX chat_proposals_identity ON chat_proposals(identity, state)
 ;
 
-CREATE TABLE chat_report_matters (
+CREATE TABLE "chat_report_matters" (
   matter_id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id),
   notice_id TEXT REFERENCES chat_report_notices(delivery_id),
-  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'settlement-unresolved')),
+  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'settlement-unresolved', 'condition-integrity')),
   -- NULL for a Run-level matter.
   block TEXT,
   appeared_at TEXT NOT NULL,
@@ -360,6 +360,50 @@ CREATE TABLE client_grants (
 CREATE INDEX client_grants_status ON client_grants(status, requested_at)
 ;
 
+CREATE TABLE condition_arrivals (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id),
+  block_id TEXT NOT NULL,
+  -- The logical delivery: a redelivery of the same Handoff finds its arrival and records nothing.
+  incoming_intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),
+  -- `pending` waits in order for its number; `cancelled`: Archive or manual settlement ended it
+  -- before it was numbered.
+  state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'selected', 'cancelled')),
+  arrival_number INTEGER CHECK (arrival_number IS NULL OR
+    (typeof(arrival_number) = 'integer' AND arrival_number BETWEEN 1 AND 9007199254740991)),
+  -- The Run's captured Flow revision, so a matched rule names one of its immutable rule rows.
+  flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
+  -- The matched rule, whose output was selected; null when Otherwise was.
+  rule_id TEXT,
+  -- The forwarded text, kept only while a recipient still reads it.
+  message TEXT,
+  binding_id TEXT REFERENCES run_thread_bindings(id),
+  origin_activation_id TEXT REFERENCES run_activations(id),
+  arrived_at TEXT NOT NULL,
+  accepted_at TEXT,
+  cancelled_at TEXT,
+  CHECK ((state = 'selected') = (arrival_number IS NOT NULL)),
+  CHECK ((state = 'selected') = (accepted_at IS NOT NULL)),
+  CHECK ((state = 'cancelled') = (cancelled_at IS NOT NULL)),
+  CHECK (state = 'selected' OR (rule_id IS NULL AND message IS NULL)),
+  CHECK (origin_activation_id IS NULL OR binding_id IS NOT NULL),
+  UNIQUE (run_id, block_id, arrival_number),
+  FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id),
+  FOREIGN KEY (flow_revision_id, block_id, rule_id) REFERENCES flow_revision_condition_rules(flow_revision_id, block_id, rule_id)
+);
+
+CREATE INDEX condition_arrivals_pending ON condition_arrivals(run_id, block_id) WHERE state = 'pending'
+;
+
+CREATE TABLE condition_counters (
+  run_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  -- The last arrival number committed at this Condition; JSON and SQLite both hold it exactly.
+  arrivals INTEGER NOT NULL DEFAULT 0 CHECK (typeof(arrivals) = 'integer' AND arrivals BETWEEN 0 AND 9007199254740991),
+  PRIMARY KEY (run_id, block_id),
+  FOREIGN KEY (run_id, block_id) REFERENCES run_blocks(run_id, block_id)
+);
+
 CREATE TABLE continuation_visits (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
@@ -432,7 +476,7 @@ CREATE TABLE "flow_revision_blocks" (
   flow_revision_id TEXT NOT NULL REFERENCES flow_revisions(id),
   block_id TEXT NOT NULL,
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
-  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait')),
+  kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition')),
   name TEXT NOT NULL,
   -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),
@@ -455,6 +499,23 @@ CREATE TABLE "flow_revision_blocks" (
 CREATE TRIGGER immutable_flow_revision_block_delete BEFORE DELETE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_block_update BEFORE UPDATE ON flow_revision_blocks BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_condition_rules (
+  flow_revision_id TEXT NOT NULL,
+  block_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL CHECK (rule_id <> 'otherwise'),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  name TEXT NOT NULL,
+  from_arrival INTEGER CHECK (from_arrival IS NULL OR
+    (typeof(from_arrival) = 'integer' AND from_arrival BETWEEN 1 AND 9007199254740991)),
+  PRIMARY KEY (flow_revision_id, block_id, rule_id),
+  UNIQUE (flow_revision_id, block_id, ordinal),
+  FOREIGN KEY (flow_revision_id, block_id) REFERENCES flow_revision_blocks(flow_revision_id, block_id)
+);
+
+CREATE TRIGGER immutable_flow_revision_condition_rule_delete BEFORE DELETE ON flow_revision_condition_rules BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_condition_rule_update BEFORE UPDATE ON flow_revision_condition_rules BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE "flow_revision_connections" (
   flow_revision_id TEXT NOT NULL,
@@ -579,12 +640,15 @@ CREATE TABLE operation_intents (
   reserved_at TEXT,
   result_json TEXT,
   problem TEXT,
-  reconciled_at TEXT, report_id TEXT REFERENCES runtime_reports(id), source_block_id TEXT, exit_id TEXT, occurrence_id TEXT REFERENCES human_occurrences(id), recovery_attempt INTEGER NOT NULL DEFAULT 0, recovery_not_before TEXT, binding_id TEXT REFERENCES run_thread_bindings(id), wait_arrival_id TEXT REFERENCES wait_arrivals(id), origin_activation_id TEXT REFERENCES run_activations(id),
+  reconciled_at TEXT, report_id TEXT REFERENCES runtime_reports(id), source_block_id TEXT, exit_id TEXT, occurrence_id TEXT REFERENCES human_occurrences(id), recovery_attempt INTEGER NOT NULL DEFAULT 0, recovery_not_before TEXT, binding_id TEXT REFERENCES run_thread_bindings(id), wait_arrival_id TEXT REFERENCES wait_arrivals(id), origin_activation_id TEXT REFERENCES run_activations(id), condition_arrival_id TEXT REFERENCES condition_arrivals(id),
   UNIQUE(run_id,cause),
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );
 
 CREATE UNIQUE INDEX one_reservation_per_run ON operation_intents(run_id) WHERE state='reserved'
+;
+
+CREATE INDEX operation_intents_condition_arrival ON operation_intents(condition_arrival_id) WHERE condition_arrival_id IS NOT NULL
 ;
 
 CREATE TABLE project_selection (

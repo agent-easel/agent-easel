@@ -19,8 +19,9 @@ import {
   type CanvasFlowInputContent,
   type CanvasPort,
 } from "./canvas-surface.tsx";
-import { exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
 import { pendingArrivals } from "../wait-display.ts";
+import { conditionActivityText } from "../condition-arrivals.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
 import { AttentionChip } from "./run-attention.tsx";
 import { ContinueNow } from "./wait-arrivals.tsx";
@@ -160,8 +161,10 @@ function continuationActivity(run: RunDetail, blockId: string, state: RunBlock["
   return `pass-through · prompt used ${sent}${passed ? ` · ${passed} passed through` : ""}`;
 }
 
-/** Recorded visit times for the activity line; no progress is inferred. */
+/** Recorded visit times for the activity line; no progress is inferred. A Condition shows its
+ * routing summary instead. */
 function activityText(run: RunDetail, block: FlowBlock, recorded: RunBlock | undefined) {
+  if (block.kind === "condition") return conditionActivityText(run, block.id);
   const visits = blockVisits(run, block);
   const latest = visits[visits.length - 1];
   if (!recorded || recorded.state === "not-started" || !latest) return "Not visited";
@@ -190,7 +193,11 @@ function ExecutionExit({
   return (
     <>
       <span className="truncate text-2xs tracking-label text-subtle-foreground">
-        {continuation ? "output" : exitSourceLabel(exit)}
+        {continuation
+          ? "output"
+          : exit.source === "condition"
+            ? conditionRoute(block, exit.id)
+            : exitSourceLabel(exit)}
       </span>
       <span className="flex-1" />
       <span className="truncate text-xs font-medium text-foreground">
@@ -201,9 +208,10 @@ function ExecutionExit({
   );
 }
 
-function attentionFooterText(human: boolean, needsInput: boolean) {
+function attentionFooterText(kind: FlowBlock["kind"], needsInput: boolean) {
+  if (kind === "condition") return "Settle or Archive the Run";
   if (!needsInput) return "Investigate in T3";
-  return human ? "Waiting for your answer" : "Respond in T3";
+  return kind === "human" ? "Waiting for your answer" : "Respond in T3";
 }
 
 type BlockObservation = ReturnType<typeof blockObservation>;
@@ -339,7 +347,7 @@ function executionFooters(
         {attention.problem && <AttentionChip presentation="problem" />}
         {attention.needsInput !== attention.problem && (
           <span className="truncate text-muted-foreground">
-            {attentionFooterText(block.kind === "human", attention.needsInput)}
+            {attentionFooterText(block.kind, attention.needsInput)}
           </span>
         )}
       </span>,

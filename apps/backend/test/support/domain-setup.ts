@@ -11,7 +11,7 @@ import {
 import { runFactoryProcess } from "./factory-process.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { fileURLToPath } from "node:url";
-import type { AgentDefinition } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 
@@ -213,4 +213,19 @@ export async function waitDraft(context: TestContext) {
   const pause = (duration: Parameters<typeof waitBlock>[2]) =>
     waitBlock("pause", "Cool down", duration, { x: 400, y: 0 });
   return { harness, factory, agent, flowId: created.value.id, pause, save };
+}
+
+/** A saved Flow with an Agent and a Human step, whose graph a test replaces around a Condition. */
+export async function conditionDraft(context: TestContext) {
+  const { harness, factory, created, agent } = await flowWithAgent(context);
+  const save = (graph: Omit<FlowGraph, "flowInput">, targets: readonly string[] = ["coder"]) =>
+    factory.updateFlow(created.value.id, {
+      name: created.value.name,
+      expectedRevision: created.value.revision,
+      workspace: created.value.workspace,
+      graph: { flowInput: flowInput(...targets), ...graph },
+    });
+  const coder = agentBlock("coder", "Coder", agent.id, { x: 0, y: 0 }, [], []);
+  const review = humanStep("human", "Review", { x: 800, y: 0 });
+  return { harness, factory, agent, flowId: created.value.id, coder, review, save };
 }

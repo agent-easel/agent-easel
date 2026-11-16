@@ -24,8 +24,9 @@ and restricted OAuth credentials live outside project repositories.
   execution, recovery and Run history read these revisions, so later edits and removals
   cannot rewrite history.
   External skill files are not frozen. Agent revisions hold the Agent's exits and Flow revisions
-  hold each Agent block's hidden and Flow-local exits and its Revisit instruction, so a Run's block
-  exits and Revisit instructions come from the same frozen revisions. Migration `072` converted
+  hold each Agent block's hidden and Flow-local exits and its Revisit instruction and each
+  Condition's ordered rules, so a Run's block exits, Revisit instructions and Condition rules come
+  from the same frozen revisions. Migration `072` converted
   every stored Flow revision, including those Runs captured: Agents started with no exits, Agent
   block exits became Flow-local with the same IDs, and Human exits became Approve or Request
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
@@ -34,8 +35,16 @@ and restricted OAuth credentials live outside project repositories.
   none. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
+  Migration `098` widened the Flow revision block kinds to include Condition, rebuilding the block
+  table under its restored immutability guards with every stored block unchanged and no Condition
+  inferred, and added immutable Condition rule rows; a Condition's Otherwise output is implicit for
+  the kind and not stored. Migration `099` added Condition arrivals, keyed by their incoming delivery, with a per-Run,
+  per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
+  rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
+  starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
+  recipient deliveries and changes no row.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
-  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays), the created Agent ids by document key and, for a Flow file,
+  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
   definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.
@@ -75,6 +84,8 @@ and restricted OAuth credentials live outside project repositories.
   into a verified check of the application Discord reported, keeps a rejection for another application's token
   until Retry and keeps every other value. Migration `093` records the message carrying each new review's
   button, so its button can be shown disabled once unusable; existing proposals have none and are never edited.
+  Migration `100` rebuilds the record of announced attention matters to admit Condition integrity Problems,
+  keeping every row unchanged.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.
 - A Block reuses its worker conversation across visits. Exact execution identity, report
@@ -82,7 +93,8 @@ and restricted OAuth credentials live outside project repositories.
 - External delivery records retain the exact request, target, key and authorization
   context needed to resolve uncertain outcomes. An acknowledgement is not completion.
   Each delivery also records the [worker provenance](runner.md#worker-provenance) of its message,
-  and each Wait arrival is a durable obligation with an absolute deadline.
+  and each Wait arrival is a durable obligation with an absolute deadline. A Condition delivery is recorded pending in
+  per-Condition order, then numbered and routed in the same transaction.
 - Reports name their Block by the Block id Factory issued; Run and Block identity never come
   from other model-supplied references.
   Attention settlement and the Run's Settled and Archived states remain separate, with cancelled Human work never
@@ -99,7 +111,9 @@ new attempts, and failed Agent work is never retried automatically; see
 are kept indefinitely. A Wait arrival keeps its message while it is pending or needed for
 delivery: after forwarding, until no outgoing Handoff is pending and no current visit of an Agent
 recipient reads it as that visit's input, and never past its cancellation or Archive. Its body is then cleared while
-its outcome, deadline and deduplication identity stay. Other message payloads persist only while needed for pending Human context,
+its outcome, deadline and deduplication identity stay. A Condition arrival follows the same rule once selected; while it waits
+for its number its text stays only in the incoming delivery, and its number, selection, provenance and deduplication identity
+stay. Other message payloads persist only while needed for pending Human context,
 uncertain delivery or recovery, then are cleared while keys, fingerprints and references
 remain. Initial input, including its images, and revision prompts are intentional exceptions;
 staged images no Run references are deleted after 24 hours. The only other image removal is manual

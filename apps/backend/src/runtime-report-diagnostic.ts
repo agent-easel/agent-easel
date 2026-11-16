@@ -1,3 +1,4 @@
+import { CONDITION_ARRIVAL_PAGE_DEFAULT, CONDITION_ARRIVAL_PAGE_MAX } from "@t3-factory/contracts";
 import { SUCCESS_CODES, type RuntimeReply } from "./runtime-types.ts";
 
 const REJECTIONS: Readonly<Record<string, readonly [string, string]>> = {
@@ -24,6 +25,22 @@ const REJECTIONS: Readonly<Record<string, readonly [string, string]>> = {
   IMAGE_READ_FAILED: [
     "A transient failure prevented Factory from reading this image.",
     "Retry the same factory_get_run_image call.",
+  ],
+  CONDITION_BLOCK_ID_REQUIRED: [
+    "Factory needs the Condition's block id to read its arrivals.",
+    "Pass conditionBlockId from the conditions factory_get_run lists.",
+  ],
+  UNKNOWN_CONDITION: [
+    "Your Block's Run has no Condition with this block id.",
+    "Pass conditionBlockId from the conditions factory_get_run lists.",
+  ],
+  INVALID_LIMIT: [
+    `limit must be a whole number from 1 to ${CONDITION_ARRIVAL_PAGE_MAX}.`,
+    `Omit limit for ${CONDITION_ARRIVAL_PAGE_DEFAULT} arrivals per page, or pass a whole number from 1 to ${CONDITION_ARRIVAL_PAGE_MAX}.`,
+  ],
+  INVALID_CURSOR: [
+    "This cursor does not continue this Condition's arrivals in your Block's Run.",
+    "Omit cursor to read the first page again, then pass only the nextCursor it returns.",
   ],
   INVALID_ARGUMENT: [
     "The call has an unexpected argument or argument type.",

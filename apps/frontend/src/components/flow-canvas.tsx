@@ -31,7 +31,7 @@ import {
   type Placement,
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
-import { blockIdentity, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { blockIdentity, conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 
 /** Places a block dragged by `grab` at viewport point x/y, or null when x/y is outside the canvas. */
@@ -307,7 +307,11 @@ function AuthoringExit({
   return (
     <>
       <span className="truncate text-2xs tracking-label text-muted-foreground">
-        {exit.unavailable ? `Agent · ${exit.unavailable}` : exitSourceLabel(exit)}
+        {exit.unavailable
+          ? `Agent · ${exit.unavailable}`
+          : exit.source === "condition"
+            ? conditionRoute(block, exit.id)
+            : exitSourceLabel(exit)}
       </span>
       <span className="flex-1" />
       <span
@@ -399,7 +403,9 @@ function authoringBlock({
         : connectionHandle(
             isSingleOutput(exit)
               ? `Connect output of ${name}`
-              : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`,
+              : exit.source === "condition"
+                ? `Connect output ${exit.name || "Unnamed output"} of ${name}`
+                : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`,
             connectingExitId === exit.id,
             connectFrom(exit),
           ),

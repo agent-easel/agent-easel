@@ -16,6 +16,7 @@ import { recordTitleGeneration, type TitleGenerationPlan } from "./title-generat
 import { worktreeBranch, type RunWorkspace } from "../run-workspace.ts";
 import { createEntryLaunches } from "./activations.ts";
 import type { RunnerDatabase } from "./database.ts";
+import { createConditionCounters } from "./conditions.ts";
 import { appendTimelineEvent } from "./steps.ts";
 
 /** The workspace a Start accepts: worktree Runs carry the base ref resolved before acceptance. */
@@ -66,6 +67,10 @@ function startConfigurationConflict(sql: SqlClient.SqlClient, plan: StartPlan) {
     return undefined;
   });
 }
+
+/** Only blocks a worker reports for get a public Block id; a Human step and a Condition have none. */
+const workerless = (block: RunDefinitions["flow"]["graph"]["blocks"][number]) =>
+  block.kind === "human" || block.kind === "condition";
 
 /** A worktree Run's first Flow-input target creates the worktree on the Run's own branch. */
 function runWorkspace(plan: StartPlan, number: number): RunWorkspace {
@@ -128,7 +133,8 @@ function acceptStartRecords(
     for (const agent of agents)
       yield* sql`INSERT INTO run_agent_revisions(run_id,agent_id,agent_revision_id) SELECT ${plan.runId},agent_id,id FROM agent_revisions WHERE agent_id=${agent.id} AND revision=${agent.revision}`;
     for (const block of plan.definitions.flow.graph.blocks)
-      yield* sql`INSERT INTO run_blocks(run_id,block_id,name,public_id) VALUES(${plan.runId},${block.id},${block.name},${block.kind === "human" ? null : randomUUID()})`;
+      yield* sql`INSERT INTO run_blocks(run_id,block_id,name,public_id) VALUES(${plan.runId},${block.id},${block.name},${workerless(block) ? null : randomUUID()})`;
+    yield* createConditionCounters(sql, plan.runId, plan.definitions);
     const workspace = runWorkspace(plan, number);
     if (workspace.mode === "worktree")
       yield* sql`INSERT INTO run_workspaces(run_id,base_ref,planned_branch,creator_block_id) VALUES(${plan.runId},${workspace.baseRef},${workspace.plannedBranch},${workspace.creatorBlockId})`;

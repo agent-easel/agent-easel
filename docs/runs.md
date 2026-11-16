@@ -274,6 +274,11 @@ fixed Human exits their old exits were mapped to.
 - A [Wait](#waits) is not started before its first arrival, waiting while any arrival is pending, with **until** and the
   nearest deadline (and the count of waiting arrivals when there are several), and finished once every arrival has
   continued. It has no worker, thread or attention.
+- A [Condition](#conditions) reads **Not visited** before anything reaches it, then its arrival total and
+  **latest →** the output its most recent arrival selected (with the count still waiting for a number, if any); the
+  latest selection is not all downstream work. Each output row shows when it is selected (**from arrival *N* onward**
+  or **when no rule matches**). Routing, Otherwise and an unwired selection raise no attention; only a Condition
+  integrity Problem shows on the block.
 - **Needs input** and **Problem** use the same labels as the Run sidebar, are independent of execution state and are not
   cleared by selecting a block. Stale observations say **Not live** and **Last known**; an unknown observation on a started
   block differs from stale; a block that never ran says **Not visited**.
@@ -350,7 +355,7 @@ repository metadata, even when the title fits. Opening a row menu dismisses and 
 menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
-  **Problem**: a pending missing report, execution failure or report problem. Both can show. Stale observations or an unavailable
+  **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip.
 - **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
@@ -516,6 +521,51 @@ early. A forwarded arrival keeps its message only while its recipients still nee
 Needs input or a Problem, and does not wake a Snoozed Run. A Continuation after a Wait continues the thread of the worker
 whose message waited.
 
+## Conditions
+
+Each delivery a [Condition](studio.md#canvas-and-block-configuration) accepts gets the next arrival number at that Condition
+in the Run, whichever wire or worker it came from, and goes unchanged, with its worker, to every recipient of the output its
+rules select ([Runner](runner.md#condition-arrivals)). Run detail carries one constant-size summary per Condition, not its
+history: the arrivals numbered so far, the deliveries waiting there for a number, and the latest selection (arrival number,
+selected output and acceptance time), which is the most recent route, not proof its recipients received it. The timeline
+records one **arrival *N* → *output*** row per arrival with the Condition icon. A Run read carries only each Condition's
+latest 50 selection events, chosen in the query, so a Condition with more arrivals shows its latest 50 in the timeline with a
+note that the earlier ones are in its arrivals details below. An open Run keeps that window as the Condition advances: older
+selections leave the timeline as newer ones arrive, as a fresh read would show. A Condition is never Needs input and its routing raises no
+attention.
+
+When Factory cannot trust a Condition's count, its captured rules and wires (as when they would no longer pass Start) or
+its waiting delivery, or its next arrival number would pass
+9,007,199,254,740,991, it numbers nothing and records one **Condition integrity Problem** on the Condition, with the
+reason, as a Problem like any other: it shows on the Condition's block and in the Run's attention, wakes a Snoozed Run and
+keeps the Run Active, also across restart. The Condition accepts no delivery while it is pending; its waiting deliveries
+stay unnumbered, and other branches continue. No report, **Request report**, Retry or repair clears it. **Settle** or
+**Archive** settles it and cancels the waiting deliveries without numbering them or changing the count
+([Runner](runner.md#condition-integrity-problems)).
+
+A Condition's evidence is a separate bounded read of one Run and Condition
+(`GET /api/runs/:runId/conditions/:blockId/arrivals`, with optional `limit` and `cursor`), available to every client that can
+read the Run. It lists numbered arrivals in ascending arrival number, each with its acceptance time, source block and producing
+worker, matched captured rule (id and name) or Otherwise, selected output and each recipient of that output with its delivery's
+current disposition: `pending` until delivered, then `acknowledged` or `cancelled`. An unwired selection lists no recipients.
+Decisions never change; dispositions are read again on every page, so they are current rather than a snapshot from selection
+time. A page holds 50 arrivals by default and `limit` accepts whole numbers from 1 to 100; any other value is a validation error.
+A first page fixes its window at the highest arrival number committed at that read (`highWater`), and its `nextCursor` continues
+only that window, so arrivals numbered later never shift a page; reading without a cursor opens a new window that includes them.
+A cursor is opaque, signed by the running server and bound to its Run and Condition: one for another Run or Condition, one
+whose content was changed in any way (including a validly re-encoded window), one issued before the server restarted or one
+beyond the committed arrivals is a validation error. Recipients are read only for the page's own arrivals, at most one per Block the
+selected output is wired to. Deliveries still waiting at the Condition for their number are not listed; the summary counts them.
+
+Selecting a Condition shows this evidence in the inspector: the latest selection, then its arrivals in ascending number,
+each with acceptance time, source block and producing worker, the matched rule or **No rule matched** (Otherwise), the
+selected output, and each recipient with its delivery's disposition when that page was read; an arrival whose output is
+not connected says it ends there. A selection is only the route, so the list never shows a recipient as having received
+it until its delivery is acknowledged. The first page opens once the Condition has an arrival; **Load more** continues
+that window and **Refresh** opens a new one. When live Run updates count arrivals after the window, the list says so and
+waits for **Refresh** rather than adding them. A failed read, including a cursor the server refuses, shows its error
+with **Try again** and, for a later page, a refresh from arrival 1.
+
 ## Continuations
 
 A Continuation continues the conversation of the worker whose message reaches it. The first message in a Run queues its prompt on that
@@ -534,7 +584,7 @@ Continuation and cancels waiting messages; its worker thread is interrupted with
 ## Settled Runs
 
 A Run **settles** automatically when every visited Block's current visit has its worker's accepted final result and no later
-working report, every Human step is answered, no Wait arrival is pending, no delivery, launch, handoff or send is outstanding, no attention is pending, and
+working report, every Human step is answered, no Wait arrival is pending, no delivery waits at a Condition, no delivery, launch, handoff or send is outstanding, no attention is pending, and
 a fresh read finds every worker thread finished in T3. Never-visited branches need not run. A report or T3 completion alone keeps
 the Run Active. T3 reads are not an atomic cutoff, so direct T3 activity can arrive just before the Run settles; settling does not
 certify result quality or one reviewed revision.
@@ -574,8 +624,9 @@ the Run's other attention when settlement succeeds (`manual-settlement`) or the 
 attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-and-lifecycle-notices).
 
 Settling cancels unsent launches, sends and handoffs (held or released), unsent Request report turns, pending Human occurrences
-without inventing answers, pending Wait arrivals and messages waiting at a Continuation; a cancelled Wait never forwards, also
-after restart. Pending attention settles as `manual-settlement`, activated
+without inventing answers, pending Wait arrivals, deliveries waiting at a Condition for their number and messages waiting at a
+Continuation; a cancelled Wait never forwards, also after restart. A Condition keeps the arrivals it already numbered, and their
+selections, as history. Pending attention settles as `manual-settlement`, activated
 Blocks without a Final result show stopped, and a send whose T3 reply was lost stays uncertain: Factory never resends it and
 keeps no copy of its message. The Run moves to
 **Settled**, Snooze and Woke clear, and Factory best-effort settles the worker threads in T3. The timeline records the
@@ -597,7 +648,8 @@ Runs. History, input, captured definitions and events remain; no transcript or r
 
 **Archive…** in the row menu and in the Run's ··· menu both ask for confirmation, then end the Run for good.
 Archiving closes the handoff gate, cancels unsent launches and handoffs, cancels pending Human steps without inventing answers,
-cancels pending Wait arrivals so no deadline forwards afterwards and clears every arrival's message, settles pending attention
+cancels pending Wait arrivals so no deadline forwards afterwards, cancels deliveries waiting at a Condition for their number
+(numbered arrivals stay history), clears every Wait and Condition arrival's message, settles pending attention
 as `archived` and shows activated blocks that had not finished, including waiting Waits, as stopped. Factory then asks T3 once to
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.

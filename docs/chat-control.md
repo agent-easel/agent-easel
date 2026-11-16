@@ -656,7 +656,8 @@ meaningful change: an attention notice for new Needs input or Problem matters, a
 when the Run becomes Settled or Archived or returns to Active. Block starts, results, Wait progress and
 Snooze only edit the card. Attention follows the Run's own attention: a pending Human step or native T3
 question or permission is Needs input, and a missing report, an execution failure, a report problem or a
-confirmed Settle that could not stop workers ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
+Condition integrity Problem or a confirmed Settle that could not stop workers
+([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
 observation is never reported as a Problem. A native T3 request is marked to be answered in T3. A Human
 notice names the Human step and when it appeared, and points to asking Factory in the thread: it has no
 answer buttons, and answering still goes through the complete review and the requester's confirmation.

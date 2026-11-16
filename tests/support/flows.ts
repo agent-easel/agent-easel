@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { expect, type Screen } from "e2e";
+import {
+  DEFINITION_REQUEST_LIMIT_BYTES,
+  definitionSaveFits,
+} from "../../packages/domain-validation/src/index.ts";
 import type {
   AgentDefinition,
   FlowDraft,
@@ -110,6 +114,88 @@ export async function saveSingleAgentFlow(
   })) as FlowDraft;
   return created.id;
 }
+
+/**
+ * Saves a new ready checkout Flow at the definition size limit: the Flow input starts one block of
+ * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate holding as many rules as a save
+ * request can carry while staying 1,000 bytes under the limit, so a short rename still saves. Rules
+ * have ID-length IDs, short names (`Route N`) and strictly descending thresholds down to 2; the
+ * last rule and Otherwise reach Human step Review.
+ */
+export async function saveConditionAtSizeLimit(
+  baseUrl: string | undefined,
+  name: string,
+  agentName: string,
+  exitId: string,
+) {
+  const agents = (await flowRequest(baseUrl, "/api/agents")) as AgentDefinition[];
+  const agent = agents.find((item) => item.name === agentName);
+  assert(agent);
+  const condition = {
+    id: "escalate",
+    kind: "condition",
+    name: "Escalate",
+    position: { x: 380, y: 60 },
+    rules: [] as { id: string; name: string; fromArrival: number }[],
+    otherwise: { id: "otherwise" },
+  };
+  const graph = {
+    flowInput: { position: { x: 40, y: 60 }, targetBlockIds: ["worker"] },
+    blocks: [
+      {
+        id: "worker",
+        kind: "agent",
+        name: "Coder",
+        agentId: agent.id,
+        hiddenExitIds: [],
+        localExits: [],
+        revisitInstruction: "",
+        position: { x: 80, y: 260 },
+      },
+      condition,
+      { id: "review", kind: "human", name: "Review", position: { x: 720, y: 60 } },
+    ],
+    connections: [
+      { sourceBlockId: "worker", exitId, targetBlockId: condition.id },
+      { sourceBlockId: condition.id, exitId: "otherwise", targetBlockId: "review" },
+    ],
+  };
+  const body = { name, workspace: { mode: "checkout" }, graph };
+  const budget = DEFINITION_REQUEST_LIMIT_BYTES - 1_000;
+  const withRules = (count: number) => {
+    condition.rules = Array.from({ length: count }, (_, index) => ({
+      id: `rule-${String(index).padStart(31, "0")}`,
+      name: `Route ${index + 1}`,
+      fromArrival: count - index + 1,
+    }));
+    graph.connections[2] = {
+      sourceBlockId: condition.id,
+      exitId: condition.rules.at(-1)!.id,
+      targetBlockId: "review",
+    };
+    return saveBytes(body);
+  };
+  // The largest rule count that still fits the budget.
+  let [fits, overflows] = [1, 100_000];
+  while (overflows - fits > 1) {
+    const count = Math.floor((fits + overflows) / 2);
+    if (withRules(count) <= budget) fits = count;
+    else overflows = count;
+  }
+  const bytes = withRules(fits);
+  assert(definitionSaveFits(body) && bytes <= budget);
+  const created = (await flowRequest(baseUrl, "/api/flows", {
+    method: "POST",
+    headers: mutation,
+    body: JSON.stringify(body),
+  })) as FlowDraft;
+  return { id: created.id, rules: condition.rules, bytes };
+}
+
+/** A save request's size, measured like `definitionSaveFits` at the largest revision. */
+const saveBytes = (body: object) =>
+  new TextEncoder().encode(JSON.stringify({ ...body, expectedRevision: Number.MAX_SAFE_INTEGER }))
+    .byteLength;
 
 /** A repairable graph issue names its cause and prevents opening the Run composer. */
 export async function expectFlowBlocked(screen: Screen, message: RegExp) {

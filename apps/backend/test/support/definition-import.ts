@@ -1,10 +1,11 @@
-import type { TestContext } from "@effect/vitest";
+import { assert, type TestContext } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
 import * as Effect from "effect/Effect";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type { PortableAgent, RawBody } from "@t3-factory/contracts";
 import { DEFINITION_REQUEST_LIMIT_BYTES } from "@t3-factory/domain-validation";
 import { ControlledT3 } from "./controlled-t3.ts";
+import { sampleAgentInput } from "./domain-setup.ts";
 import { factoryHarness } from "./factory.ts";
 import { blockExit, continuationStep, controlledExecution, flowInput } from "./scenarios.ts";
 
@@ -66,10 +67,10 @@ export function withReversedKeys(value: unknown): unknown {
   );
 }
 
-/** A version-1 Agent file as Definition export writes it. */
+/** An Agent file as Definition export writes it (version 2). */
 export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {}) => ({
   format: "t3-factory/definitions",
-  formatVersion: 1,
+  formatVersion: 2,
   kind: "agent",
   factoryVersion: "0.6.0",
   exportedAt: "2026-11-14T10:00:00.000Z",
@@ -77,9 +78,12 @@ export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {
   ...envelope,
 });
 
-/** A version-1 Flow file: a Code review block of `exportedAgent()` whose pass reaches a Human step. */
-export const flowFile = () => ({
-  ...agentFile(),
+/**
+ * A Flow file as Definition export writes it, or as an earlier release did with `formatVersion: 1`:
+ * a Code review block of `exportedAgent()` whose pass reaches a Human step.
+ */
+export const flowFile = (envelope: object = {}) => ({
+  ...agentFile(exportedAgent(), envelope),
   kind: "flow",
   flow: {
     name: "Reviewed change",
@@ -113,11 +117,46 @@ export const fileBody = (content: unknown): RawBody => ({
 });
 
 /** A commit of `agentFile()` choosing the controlled catalog's model for its Agent. */
-export const reviewedCommit = (requestId = "import-1", execution = controlledExecution()) => ({
+export const reviewedCommit = (
+  requestId = "import-1",
+  execution = controlledExecution(),
+  document: object = agentFile(),
+) => ({
   requestId,
-  document: agentFile(),
+  document,
   selections: { "agent-1": execution },
 });
+
+/** The fingerprint release 0.6.0 recorded for `reviewedCommit()` of a version-1 Agent file. */
+const VERSION_1_RECEIPT_FINGERPRINT =
+  "f077cb806441c7cff68a08fb6087d6d6ac59520209f8ec9e0a563cf062fea593";
+
+/**
+ * A Factory upgraded from release 0.6.0, which committed `reviewedCommit()` of a version-1 Agent
+ * file and recorded its receipt for the Agent it created. That release is not runnable here, so
+ * the Agent is created through the current operation and its receipt is written as 0.6.0 wrote it.
+ */
+export async function factoryWithVersion1Receipt(context: TestContext) {
+  const harness = await factoryHarness(context);
+  const first = await harness.open({ t3: new ControlledT3() });
+  const created = await first.createAgent(sampleAgentInput("Code reviewer"));
+  await first.close();
+  assert(created.ok);
+  const database = new DatabaseSync(harness.databasePath);
+  database
+    .prepare(
+      "INSERT INTO definition_import_receipts (request_id, fingerprint, flow_id, created_at) VALUES ('import-1', ?, NULL, ?)",
+    )
+    .run(VERSION_1_RECEIPT_FINGERPRINT, created.value.updatedAt);
+  database
+    .prepare(
+      "INSERT INTO definition_import_receipt_agents (request_id, ordinal, agent_key, agent_id) VALUES ('import-1', 0, 'agent-1', ?)",
+    )
+    .run(created.value.id);
+  database.close();
+  const factory = await harness.open({ t3: new ControlledT3() });
+  return { factory, agentId: created.value.id };
+}
 
 /**
  * A Factory that cannot insert rows into `table`, so a commit fails after it created earlier

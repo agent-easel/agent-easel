@@ -71,6 +71,9 @@ reporting protocol.
   Conversation with the user stays in that worker thread; Factory does not track it.
 - A [Continuation](#continuations) has no worker of its own: its prompt is a later task in the worker
   thread its first message belongs to, with the Continuation's own Block id.
+- A [Condition](studio.md#canvas-and-block-configuration) is captured with its ordered rules as part of
+  the Flow revision; a later save never changes them for a started Run. It has no worker and gets no
+  Block id; it routes each delivery by its [arrival number](#condition-arrivals).
 
 ### Run workspace
 
@@ -378,11 +381,11 @@ of the message it carries: the worker's thread binding and, when known, the Bloc
 is, within the Handoff's Run. An accepted Final result sets both: its activation, and the Block's bound worker or, for a
 Continuation's result, the thread its prompt ran on. A Human occurrence reads both from the incoming delivery it was
 recorded from, which keeps them after acknowledgement, and its answer's Handoffs repeat them with the person's message. A
-Wait arrival keeps what its Handoff carried and its forwarded Handoffs repeat it unchanged, as a pass-through does; neither
-a Wait nor a Human step acquires a worker. Provenance survives queued delivery, restart, fan-out and loop visits and is
+Wait arrival keeps what its Handoff carried and its forwarded Handoffs repeat it unchanged, as a pass-through and a
+Condition arrival's selected Handoffs do; neither a Wait, a Condition nor a Human step acquires a worker. Provenance survives queued delivery, restart, fan-out and loop visits and is
 never reconstructed from the graph or the latest activation, so parallel occurrences and a review answered after a later
 visit of its worker keep their own. A Continuation continues the thread its arriving message is bound to, also after a
-Human step or Wait. Run detail shows the provenance as the delivery's `origin` when both thread and activation are known.
+Human step, Wait or Condition. Run detail shows the provenance as the delivery's `origin` when both thread and activation are known.
 
 ### Continuations
 
@@ -407,7 +410,8 @@ settled natively while a Continuation is sent or a message waits.
 ### Revisit instructions
 
 An Agent block's [Revisit instruction](../GLOSSARY.md#revisit-instruction), captured with the Flow revision at Start,
-goes to every visit of that Block after the first: returns with an Agent's result, Human answers and Wait arrivals. It is
+goes to every visit of that Block after the first: returns with an Agent's result, Human answers, Wait arrivals and Condition
+selections. It is
 composed only where such an arrival becomes a repeated activation of the Agent block. The shared send builder that
 Continuation prompts and [Request report](#manual-request-report) also use never adds it, so neither carries it, and a
 first visit is driven by the Agent prompt alone. When the instruction is set, the revisit message is:
@@ -485,6 +489,57 @@ disables its arrival's wake-up; a stale one, one scheduled again at restart, or 
 settlement finds nothing due. Shutdown stops the
 wake-ups; the deadlines stay in the store.
 
+### Condition arrivals
+
+A [Condition arrival](../GLOSSARY.md#condition-arrival) is one distinct delivery a Condition accepts. Its number counts from 1
+per Run and Condition, shared by every incoming wire and worker, and is never reset: not by a Human answer, restart, automatic
+settlement or the Run's return to Active. Start records each captured Condition's count at 0.
+
+A released Handoff to a Condition is accepted in one guarded transaction under the owner, open gate, live authorization
+context and release generation, as a Wait arrival is. The Handoff is first recorded once, by its identity, as the
+Condition's newest pending delivery; a redelivery of the same Handoff finds it and records nothing, while a distinct delivery
+with identical text and worker is a new arrival. The Condition then numbers its pending deliveries oldest first, so a
+delivery durably pending there is never overtaken by a later one, whatever order their sources completed in. Numbering
+checks that the count matches the arrivals already numbered, that the next number stays within 9,007,199,254,740,991,
+that the captured Condition is still in a shape Start accepts (well-formed rules that pass Condition readiness, and every
+captured wire leaving it on one of its outputs) and that the waiting delivery's Handoff is still pending with an intact
+message; a check that fails is an [integrity refusal](#condition-integrity-problems). Each
+numbered arrival selects the first rule whose threshold the number reaches, else Otherwise; records only its
+number, the matched captured rule (none for Otherwise), acceptance time and the Handoff's [worker provenance](#worker-provenance),
+never a copy of the rules; creates one Handoff to every recipient of the selected output, released from creation and carrying
+the unchanged text, including empty text, and provenance; acknowledges the incoming Handoff; moves the count; and appends
+one `condition-selected` event. An unwired selection counts and ends that arrival without cancelling other work or the Run.
+A Condition creates no worker, prompt or report, and no attention except its integrity Problem; it shows waiting while a
+delivery is pending there and finished once every delivery has been numbered.
+
+Any failure before commit, such as unavailable storage, rolls everything back: no number is consumed, nothing is selected
+and no Problem is recorded. The Handoff stays pending and the next dispatch pass, or reconciliation after restart, retries it;
+it is never noted as uncertain T3 work. After commit, a decision never changes: restart, partial fan-out and downstream
+failures retry only its outstanding outgoing Handoffs under the ordinary delivery rules, and never renumber or reselect.
+A downstream Agent visit a Condition started has reason `Condition` and reads the routed text as its
+[input](t3-integration.md#block-and-run-reads); a Continuation after a Condition continues the thread of the worker whose
+message was routed and, after a Human step, labels that step's reply as usual.
+
+#### Condition integrity Problems
+
+An integrity refusal (a missing count, a count that disagrees with the arrivals already numbered, a next number past
+9,007,199,254,740,991, captured rules that are incomplete or would not pass Start, such as a missing rule a wire still
+leaves by, a threshold of 1 or thresholds out of order, or a waiting delivery whose Handoff is no longer pending and intact)
+commits no number or route, and in the same transaction latches one
+pending `condition-integrity` Problem for that Condition in the Run, recording the refusal's reason. A refusal whose
+transaction fails records nothing and is retried like any failure before commit. The Problem has no execution, worker or
+T3 thread. While it is pending the Condition's acceptance stops: dispatch no longer offers Handoffs to it, so the refused
+delivery and every later one wait unnumbered and are not retried. Factory never selects Otherwise for them, skips them,
+resets the count, fabricates a report or repairs the captured rules. Other Blocks continue, and arrivals already numbered
+keep their decisions and outstanding recipients; a redelivery of a numbered delivery still finds its decision, also at the
+largest number.
+
+This is a deliberate workerless-Problem recovery limit, not worker-report recovery: no report or Request report can settle
+it, and there is no Retry, in-place repair, error exit or automatic failed state. As pending attention it holds automatic
+settlement and stays latched across restart. Only [manual settlement](#manual-settlement) or [Archive](#archive) settles it,
+cancelling the waiting deliveries without numbering them; neither reports success nor changes the count. Flow edits affect
+only later Runs.
+
 ## Run title generations
 
 A [Run title generation](runs.md#run-title-generation) runs beside its Run and is never Run work: it holds no gate,
@@ -521,7 +576,7 @@ settle an Active Run with an open gate automatically. That requires all of the f
 - Every visited Block's current activation has its worker's accepted final result with no
   later `working` report, and no attention is pending; every Human occurrence is answered.
   Unvisited branches need not run.
-- No Wait arrival is pending.
+- No Wait arrival is pending and no delivery waits at a Condition for its arrival number.
 - Every delivery is acknowledged, with no outstanding launch, handoff or send. Handoffs
   cancelled because their result was replaced, and idle-worker preparations of
   [earlier Runs](#run-workspace), owe no delivery; a rejected launch still holds settlement.
@@ -572,7 +627,7 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   [Run title generation](#run-title-generations), records the settlement with attempt 1 and this backend as the attempt's owner, lists the bound workers as
   stopping, records `settlement-requested` and advances the generation, before any Stop. The
   closed gate is the cutoff: no launch, send, release, Continuation forwarding, Wait forwarding
-  (by its timer or **Continue now**), Human answer or Request report crosses it, and observation,
+  (by its timer or **Continue now**), Condition arrival, Human answer or Request report crosses it, and observation,
   recovery settlement and automatic settlement stop. A Wait deadline that passes while stopping
   forwards nothing. Pending Human occurrences remain pending until settlement succeeds; answer conflicts explain that
   Factory is settling the Run and stopping its workers. Navigation suppresses Needs input while settlement is in progress.
@@ -605,7 +660,8 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   unresolved, a transaction guarded by owner, generation, live authorization context and the
   absence of a reserved or uncertain launch closes the gate, marks Blocks with a current Final
   result finished, cancels pending launches, sends and handoffs (`cancelled-on-Settle`), pending
-  Human occurrences, pending Wait arrivals (`wait-cancelled`, clearing their messages) and
+  Human occurrences, pending Wait arrivals (`wait-cancelled`, clearing their messages), Condition
+  deliveries still waiting for their number (numbered arrivals stay history and the count stays) and
   waiting Continuation arrivals, settles pending attention as
   `manual-settlement`, shows other activated Blocks stopped, records every run each worker's
   completion read showed, including a stopped run a newer one replaced as the latest, with the
@@ -636,7 +692,7 @@ work to succeed. Archive stays available during a settlement and its semantics a
 
 Archive is final and completes in one transaction in the Run's lane: it closes the handoff
 gate, records the Run Archived, cancels pending launches, handoffs, Human occurrences, Wait
-arrivals and a pending [Run title generation](#run-title-generations), clears pending delivery text and every Wait arrival's message (keeping its outcome, deadline and identity), settles pending attention as `archived`, marks activated Blocks
+arrivals, Condition deliveries still waiting for their number and a pending [Run title generation](#run-title-generations), clears pending delivery text and every Wait and Condition arrival's message (keeping its outcome, deadline, number, selection and identity), settles pending attention as `archived`, marks activated Blocks
 that had not finished `stopped` and clears Snooze and Woke. No report, answer, dispatch or
 replay crosses the closed gate, and Archived Runs are never reconciled again: in-flight or
 uncertain operations keep their recorded state. Archiving an Archived Run changes nothing and

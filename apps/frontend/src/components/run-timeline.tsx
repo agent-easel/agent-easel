@@ -1,6 +1,10 @@
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { useState } from "react";
-import type { RunAttention, RunDetail } from "@t3-factory/contracts";
+import {
+  CONDITION_TIMELINE_ARRIVALS,
+  type RunAttention,
+  type RunDetail,
+} from "@t3-factory/contracts";
 import { capturedExits } from "../flow-graph.ts";
 import {
   ArrowRight,
@@ -13,6 +17,7 @@ import {
 } from "lucide-react";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { BLOCK_KINDS } from "../block-kind.ts";
+import { conditionOutputName, countText } from "../condition-arrivals.ts";
 import { TitleMark, titleOutcome, titleStateLabel } from "./run-title-generation.tsx";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,6 +125,29 @@ function waitStarted(run: RunDetail, event: RunEvent): EventPhrase {
   };
 }
 
+function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
+  const selection = event.condition;
+  if (!event.blockId || !selection) return { actorId: event.blockId, text: "selected an output" };
+  return {
+    actorId: event.blockId,
+    text: `arrival ${countText(selection.arrivalNumber)} → ${conditionOutputName(run, event.blockId, selection.outputId)}`,
+  };
+}
+
+/**
+ * Conditions whose earlier selections a Run read leaves out: each with the last arrival number
+ * missing from the Timeline, which the Condition's arrivals details still list.
+ */
+function omittedConditionArrivals(run: RunDetail) {
+  const earliest = new Map<string, number>();
+  for (const { blockId, condition } of run.events)
+    if (blockId && condition && !earliest.has(blockId))
+      earliest.set(blockId, condition.arrivalNumber);
+  return [...earliest].flatMap(([blockId, first]) =>
+    first > 1 ? [{ blockId, through: first - 1 }] : [],
+  );
+}
+
 const attentionWords: Record<RunAttention["kind"], string> = {
   human: "needs input · your answer",
   "native-request": "needs input · T3 question or permission",
@@ -127,6 +155,7 @@ const attentionWords: Record<RunAttention["kind"], string> = {
   "missing-report": "problem · no report",
   "report-problem": "problem · report needs a fix",
   "execution-failed": "problem · T3 execution failed",
+  "condition-integrity": "problem · Condition cannot number its next arrival",
   "settlement-unresolved": "problem · Settle could not stop workers",
 };
 
@@ -255,6 +284,7 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
   "continuation-prompt-sent": continuationPromptSent,
   "continuation-forwarded": said("response forwarded"),
   "continuation-passed": continuationPassed,
+  "condition-selected": conditionSelected,
   "operation-unresolved": operationUnresolved,
   "settlement-requested": said("settlement requested · automatic work held"),
   "worker-stop-requested": said("worker Stop requested · awaiting completion confirmation"),
@@ -409,6 +439,17 @@ export function RunTimeline({
             className="h-65 min-h-0 flex-none overflow-auto border-t px-3 py-1"
           >
             <ol>
+              {omittedConditionArrivals(run).map(({ blockId, through }) => (
+                <li
+                  key={`condition-omitted-${blockId}`}
+                  className="flex min-w-0 items-center gap-2 px-3 py-1 text-sm text-subtle-foreground"
+                >
+                  <ActorIcon run={run} actorId={blockId} title={false} />
+                  <span className="min-w-0 truncate">
+                    {`${nameOf(run, blockId)} · Timeline lists its latest ${CONDITION_TIMELINE_ARRIVALS} arrivals · ${through === 1 ? "arrival 1 is" : `arrivals 1–${countText(through)} are`} in its arrivals details`}
+                  </span>
+                </li>
+              ))}
               {rows.map((row) =>
                 row.kind === "event" ? (
                   <TimelineEvent

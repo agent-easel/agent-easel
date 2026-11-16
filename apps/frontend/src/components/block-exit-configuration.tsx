@@ -18,6 +18,8 @@ import { randomId } from "@/lib/ids";
 import { exitRecipients } from "../flow-graph.ts";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
+/** A Condition's outputs are its rules, edited in `ConditionOutputs`. */
+type ExitBlock = Exclude<FlowBlock, { kind: "condition" }>;
 
 export function BlockExitConfiguration({
   block,
@@ -25,7 +27,7 @@ export function BlockExitConfiguration({
   agents,
   onEdit,
 }: {
-  block: FlowBlock;
+  block: ExitBlock;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
   onEdit: (block: FlowBlock) => void;

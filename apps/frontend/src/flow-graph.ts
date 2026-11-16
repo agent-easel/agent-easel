@@ -1,10 +1,11 @@
 import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
-import type {
-  AgentDefinition,
-  FlowBlock,
-  FlowConnection,
-  FlowGraph,
-  RunDefinitions,
+import {
+  CONDITION_OTHERWISE_ID,
+  type AgentDefinition,
+  type FlowBlock,
+  type FlowConnection,
+  type FlowGraph,
+  type RunDefinitions,
 } from "@t3-factory/contracts";
 import {
   continuationSources,
@@ -32,6 +33,7 @@ const DEFAULT_BLOCK_NAMES: Record<FlowBlock["kind"], string> = {
   human: "Human step",
   wait: "Wait",
   continuation: "Continuation",
+  condition: "Condition",
 };
 
 /** Without a drop position, new blocks fill a three-column grid right of the Flow input. */
@@ -59,18 +61,24 @@ export function newBlock(
       revisitInstruction: "",
     };
   if (kind === "wait") return { ...base, kind, duration: null };
+  if (kind === "condition")
+    return { ...base, kind, rules: [], otherwise: { id: CONDITION_OTHERWISE_ID } };
   return kind === "continuation" ? { ...base, kind, prompt: "" } : { ...base, kind };
 }
 
+/** The exits a block owns in this Flow and an edit can remove: Agent local exits and Condition
+ * rule outputs. */
+function removableExitIds(block: FlowBlock | undefined): readonly string[] {
+  if (block?.kind === "agent") return block.localExits.map((exit) => exit.id);
+  if (block?.kind === "condition") return block.rules.map((rule) => rule.id);
+  return [];
+}
+
+/** Replaces a block; wires from a local exit or Condition rule the edit removed go with it. */
 export function replaceBlock(graph: FlowGraph, next: FlowBlock): FlowGraph {
   const previous = graph.blocks.find((block) => block.id === next.id);
-  const removed = new Set(
-    previous?.kind === "agent" && next.kind === "agent"
-      ? previous.localExits
-          .filter((exit) => !next.localExits.some((item) => item.id === exit.id))
-          .map((exit) => exit.id)
-      : [],
-  );
+  const kept = new Set(removableExitIds(next));
+  const removed = new Set(removableExitIds(previous).filter((id) => !kept.has(id)));
   return {
     ...graph,
     blocks: graph.blocks.map((block) => (block.id === next.id ? next : block)),

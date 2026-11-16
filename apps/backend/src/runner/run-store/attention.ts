@@ -161,6 +161,34 @@ export function raiseHumanAttention(
   });
 }
 
+/** A Condition's integrity refusal latches one workerless Problem for the Run's Condition, keeping
+ * the refusal's `reason`. It has no execution and no T3 thread, so no report or recovery settles it;
+ * only manual settlement or Archive does. A refusal already latched records nothing. Answers
+ * whether this one latched it. */
+export function latchConditionIntegrityProblem(
+  sql: SqlClient.SqlClient,
+  runId: string,
+  blockId: string,
+  reason: string,
+  time: string,
+) {
+  return Effect.gen(function* () {
+    const id = yield* newId;
+    const latched =
+      yield* sql`INSERT INTO run_attention(id,run_id,block_id,execution_id,kind,source_key,appeared_at,message) VALUES(${id},${runId},${blockId},'','condition-integrity',${"condition-integrity:" + blockId},${time},${reason}) ON CONFLICT(run_id,source_key) DO NOTHING RETURNING id`;
+    if (!latched.length) return false;
+    yield* appendTimelineEvent(sql, {
+      kind: "attention-appeared",
+      runId,
+      blockId,
+      executionId: "",
+      attentionId: id,
+      observedAt: time,
+    });
+    return true;
+  });
+}
+
 /** An answer settles its Human occurrence's attention; the settlement is recorded once per
  * occurrence. */
 export function settleHumanAttention(

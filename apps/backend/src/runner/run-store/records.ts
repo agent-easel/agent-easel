@@ -4,8 +4,8 @@ import type { DeliveryKind, DeliveryState } from "./states.ts";
 /**
  * The one stored record behind a Handoff and the delivery it becomes. A Handoff is stored with
  * kind `handoff`; turning it into a delivery rewrites the same record's kind to `launch` or `send`,
- * and a Handoff to a Human step or Wait is acknowledged in place when its occurrence or arrival
- * appears. `prepare` is
+ * and a Handoff to a Human step, Wait or Condition is acknowledged in place when its occurrence,
+ * arrival or arrival's selection appears. `prepare` is
  * the retired prepared-worker kind, kept as history only.
  */
 export type DeliveryRecord = {
@@ -17,6 +17,7 @@ export type DeliveryRecord = {
   report_id: string | null;
   occurrence_id: string | null;
   wait_arrival_id: string | null;
+  condition_arrival_id: string | null;
   /** The Block activation whose result the message is, beside `binding_id`; null when unknown. */
   origin_activation_id: string | null;
   source_block_id: string | null;

@@ -1,11 +1,13 @@
-import type {
-  CreateFlowInput,
-  FlowGraphInput,
-  FlowWorkspace,
-  Result,
-  UpdateFlowInput,
-  ValidationIssue,
-  WaitUnit,
+import {
+  CONDITION_ARRIVAL_MAX,
+  CONDITION_OTHERWISE_ID,
+  type CreateFlowInput,
+  type FlowGraphInput,
+  type FlowWorkspace,
+  type Result,
+  type UpdateFlowInput,
+  type ValidationIssue,
+  type WaitUnit,
 } from "@t3-factory/contracts";
 import {
   CONTINUATION_EXIT,
@@ -69,9 +71,11 @@ const KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
   ["human", []],
   ["wait", ["duration"]],
   ["continuation", ["prompt"]],
+  ["condition", ["rules", "otherwise"]],
 ]);
 
-/** An Agent reference, a Wait duration or a Continuation prompt, the fields only one kind has. */
+/** An Agent reference, a Wait duration, a Continuation prompt or a Condition's rules and
+ * Otherwise, the fields only one kind has. */
 function checkKindFields(block: Record<string, unknown>, path: string, issue: IssueReporter) {
   if (block.kind === "agent" && block.agentId !== null && !isId(block.agentId))
     issue(
@@ -89,6 +93,7 @@ function checkKindFields(block: Record<string, unknown>, path: string, issue: Is
       "Enter a Continuation prompt up to 120,000 characters.",
     );
   if (block.kind === "wait") checkWaitDuration(block.duration, `${path}.duration`, issue);
+  if (block.kind === "condition") checkCondition(block, path, issue);
   checkRevisitInstruction(block, `${path}.revisitInstruction`, issue);
 }
 
@@ -129,12 +134,76 @@ function checkBlockFields(
     issue("invalid_block_id", `${path}.id`, "Block IDs must be non-empty and unique.");
   else blockIds.add(block.id);
   if (!kindFields)
-    issue("invalid_block_kind", `${path}.kind`, "Use an Agent, Human, Wait or Continuation block.");
+    issue(
+      "invalid_block_kind",
+      `${path}.kind`,
+      "Use an Agent, Human, Wait, Continuation or Condition block.",
+    );
   if (typeof block.name !== "string" || block.name.length > 200)
     issue("invalid_block_name", `${path}.name`, "Use a block name up to 200 characters.");
   checkKindFields(block, path, issue);
   if (block.position !== undefined && !isCanvasPosition(block.position))
     issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
+}
+
+const CONDITION_RULE_FIELDS = ["id", "name", "fromArrival"];
+
+/** A threshold is null or a whole arrival number SQLite and JSON both hold exactly; it is never
+ * rounded or coerced. Its order and the reachability of each output are readiness rules. */
+const isConditionThreshold = (value: unknown) =>
+  value === null ||
+  (typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value >= 1 &&
+    value <= CONDITION_ARRIVAL_MAX);
+
+/** A Condition's rules and its fixed Otherwise. Rule ids share one scope with the Otherwise id
+ * because wires leave by them; names stay free text, bounded only by the save budget. */
+export function checkCondition(block: Record<string, unknown>, path: string, issue: IssueReporter) {
+  const otherwise = block.otherwise;
+  if (
+    !isRecord(otherwise) ||
+    Object.keys(otherwise).length !== 1 ||
+    otherwise.id !== CONDITION_OTHERWISE_ID
+  )
+    issue(
+      "invalid_condition_otherwise",
+      `${path}.otherwise`,
+      `A Condition ends with the fixed Otherwise output, {"id": "${CONDITION_OTHERWISE_ID}"}.`,
+    );
+  if (!Array.isArray(block.rules)) {
+    issue("invalid_condition_rules", `${path}.rules`, "Supply the Condition's rules in order.");
+    return;
+  }
+  const ids = new Set([CONDITION_OTHERWISE_ID]);
+  block.rules.forEach((rule: unknown, i) => {
+    const rulePath = `${path}.rules.${i}`;
+    if (!isRecord(rule)) {
+      issue("invalid_condition_rule", rulePath, "Supply a rule with an ID, name and arrival.");
+      return;
+    }
+    if (Object.keys(rule).some((key) => !CONDITION_RULE_FIELDS.includes(key)))
+      issue(
+        "condition_rule_fields_forbidden",
+        rulePath,
+        "A Condition rule has only an ID, a name and the arrival it applies from.",
+      );
+    if (!isId(rule.id) || ids.has(rule.id))
+      issue(
+        "invalid_condition_rule_id",
+        `${rulePath}.id`,
+        `Rule IDs must be unique within the Condition and differ from "${CONDITION_OTHERWISE_ID}".`,
+      );
+    else ids.add(rule.id);
+    if (typeof rule.name !== "string")
+      issue("invalid_condition_rule_name", `${rulePath}.name`, "Name the rule's output as text.");
+    if (!isConditionThreshold(rule.fromArrival))
+      issue(
+        "invalid_condition_threshold",
+        `${rulePath}.fromArrival`,
+        `Enter a whole arrival number from 1 to ${CONDITION_ARRIVAL_MAX}, or leave it empty.`,
+      );
+  });
 }
 
 const WAIT_UNITS: readonly string[] = ["minutes", "hours", "days"] satisfies WaitUnit[];
@@ -159,13 +228,16 @@ function checkWaitDuration(duration: unknown, path: string, issue: IssueReporter
 }
 
 /**
- * The exit IDs a connection may leave each block by: a Human block's, Wait's or Continuation's fixed exits,
- * or `inherited` for an Agent block, whose wires may also name Agent exits that readiness resolves.
+ * The exit IDs a connection may leave each block by: a Human block's, Wait's or Continuation's fixed
+ * exits, a Condition's rule and Otherwise outputs, or `inherited` for an Agent block, whose wires
+ * may also name Agent exits that readiness resolves.
  */
 type ConnectableExits = Map<string, ReadonlySet<string> | "inherited">;
-const HUMAN_EXIT_IDS: ReadonlySet<string> = new Set(HUMAN_EXITS.map((exit) => exit.id));
-const WAIT_EXIT_IDS: ReadonlySet<string> = new Set([WAIT_OUTPUT.id]);
-const CONTINUATION_EXIT_IDS: ReadonlySet<string> = new Set([CONTINUATION_EXIT.id]);
+const FIXED_EXIT_IDS: ReadonlyMap<unknown, ReadonlySet<string>> = new Map([
+  ["human", new Set(HUMAN_EXITS.map((exit) => exit.id))],
+  ["wait", new Set([WAIT_OUTPUT.id])],
+  ["continuation", new Set([CONTINUATION_EXIT.id])],
+]);
 const CONTINUATION_PROMPT_LIMIT = 120_000;
 const REVISIT_INSTRUCTION_LIMIT = CONTINUATION_PROMPT_LIMIT;
 
@@ -177,7 +249,7 @@ function checkBlock(
   issue: IssueReporter,
 ) {
   if (!isRecord(block)) {
-    issue("invalid_block", path, "Supply an Agent, Human, Wait or Continuation block.");
+    issue("invalid_block", path, "Supply an Agent, Human, Wait, Continuation or Condition block.");
     return;
   }
   checkBlockFields(block, path, blockIds, issue);
@@ -185,18 +257,21 @@ function checkBlock(
     checkHiddenExits(block.hiddenExitIds, `${path}.hiddenExitIds`, issue);
     checkExits(block.localExits, `${path}.localExits`, false, issue);
   }
-  if (typeof block.id === "string")
-    exits.set(
-      block.id,
-      block.kind === "human"
-        ? HUMAN_EXIT_IDS
-        : block.kind === "wait"
-          ? WAIT_EXIT_IDS
-          : block.kind === "continuation"
-            ? CONTINUATION_EXIT_IDS
-            : "inherited",
-    );
+  if (typeof block.id === "string") exits.set(block.id, connectableExits(block));
 }
+
+function connectableExits(block: Record<string, unknown>): ReadonlySet<string> | "inherited" {
+  if (block.kind === "condition") return conditionExitIds(block.rules);
+  return FIXED_EXIT_IDS.get(block.kind) ?? "inherited";
+}
+
+const conditionExitIds = (rules: unknown): ReadonlySet<string> =>
+  new Set([
+    ...(Array.isArray(rules) ? rules : []).flatMap((rule: unknown) =>
+      isRecord(rule) && isId(rule.id) ? [rule.id] : [],
+    ),
+    CONDITION_OTHERWISE_ID,
+  ]);
 
 const GRAPH_FIELDS = ["blocks", "connections", "flowInput"];
 const FLOW_INPUT_FIELDS = ["position", "targetBlockIds"];
@@ -374,7 +449,8 @@ export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
 
 /**
  * Local exit names are stored trimmed, as Agent exit names are, so reports match them exactly;
- * Continuation prompts and Revisit instructions are stored trimmed, as Agent prompts are.
+ * Condition rule names likewise; Continuation prompts and Revisit instructions are stored trimmed,
+ * as Agent prompts are.
  */
 function trimGraphText(graph: FlowGraphInput): FlowGraphInput {
   return {
@@ -389,6 +465,11 @@ function trimGraphText(graph: FlowGraphInput): FlowGraphInput {
             : { revisitInstruction: block.revisitInstruction.trim() }),
         };
       if (block.kind === "continuation") return { ...block, prompt: block.prompt.trim() };
+      if (block.kind === "condition")
+        return {
+          ...block,
+          rules: block.rules.map((rule) => ({ ...rule, name: rule.name.trim() })),
+        };
       return block;
     }),
   };

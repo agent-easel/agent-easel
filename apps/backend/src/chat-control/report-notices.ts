@@ -46,6 +46,7 @@ const MATTERS: Record<MatterKind, { what: (block: string) => string; pending?: s
   "missing-report": { what: (block) => `${block}: report missing` },
   "execution-failed": { what: (block) => `${block}: execution failed` },
   "report-problem": { what: (block) => `${block}: report problem` },
+  "condition-integrity": { what: (block) => `${block}: Condition cannot number its next arrival` },
   "settlement-unresolved": { what: () => "Settle could not stop workers" },
 };
 

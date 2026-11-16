@@ -13,7 +13,9 @@ export type DemoFlows = Record<
   | "continuation"
   | "wait"
   | "parallelWait"
-  | "humanWait",
+  | "humanWait"
+  | "conditionRounds"
+  | "firstApproval",
   string
 >;
 type Repository = NonNullable<ThreadFacts["repository"]>;
@@ -50,6 +52,11 @@ export type SeedScenario = {
   | { state: "Wait continued now"; result: Report }
   | { state: "results released to a Wait"; results: readonly [Report, Report] }
   | { state: "review approved into a Wait"; result: Report; approval: string }
+  /** The second worker is at work and the Condition after it has no arrival yet. */
+  | { state: "result released to a second worker"; implementation: Report }
+  /** Each worker's result is a Condition arrival in `results` order; the first is with your
+   * Human review. */
+  | { state: "results released to a Condition"; results: readonly [Report, Report] }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
   | ({ grill: Report; approval: string } & (
       | { state: "continuation prompt sent" }
@@ -300,6 +307,37 @@ export const seedScenarioList: readonly SeedScenario[] = [
       {
         exit: "Approved",
         message: "Keyboard navigation works; focus returns to the filter button after closing.",
+      },
+    ],
+  },
+  {
+    key: "condition-unvisited",
+    title: "Condition · First review before the rounds gate",
+    flow: "conditionRounds",
+    state: "result released to a second worker",
+    prompt:
+      "Add sorting by last-opened date to the Atlas project picker. Send it back to me after the third set of review changes.",
+    implementation: {
+      exit: "Ready for review",
+      message:
+        "The picker sorts by last-opened date, with a toggle back to name. Ready for review.",
+    },
+  },
+  {
+    key: "condition-arrivals",
+    title: "Condition · Second approval ended at the gate",
+    flow: "firstApproval",
+    state: "results released to a Condition",
+    prompt:
+      "Review the Atlas share dialog for code quality and keyboard accessibility; the first approval comes to me, later ones end at the gate.",
+    results: [
+      {
+        exit: "Approved",
+        message: "The share dialog code is ready; copy-link errors are handled.",
+      },
+      {
+        exit: "Approved",
+        message: "Focus stays inside the share dialog and Escape returns it to the Share button.",
       },
     ],
   },

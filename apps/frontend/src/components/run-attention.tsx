@@ -28,6 +28,7 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
     "missing-report": "Missing reports",
     "report-problem": "Report problems",
     "execution-failed": "Execution problems",
+    "condition-integrity": "Condition integrity problems",
     "settlement-unresolved": "Settle could not stop workers",
   })[kind];
 
@@ -50,6 +51,8 @@ function attentionExplanation(kind: RunAttention["kind"]) {
       return "A report or its work evidence needs attention. Inspect the recorded reason and the worker in T3.";
     case "execution-failed":
       return "T3 execution did not complete successfully. Continue in T3 to investigate.";
+    case "condition-integrity":
+      return "This Condition cannot number its next arrival, so it accepts none until the Run is Settled or Archived.";
     case "settlement-unresolved":
       return "Settle could not stop this Run's workers. Settle again, remove queued work in T3, or Archive the Run.";
   }
@@ -272,7 +275,7 @@ function MatterKindDetail({
           Thread-level observation; questions and permission approvals may be grouped.
         </p>
       )}
-      {item.kind === "report-problem" && item.message && (
+      {(item.kind === "report-problem" || item.kind === "condition-integrity") && item.message && (
         <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
           {item.message}
         </p>
@@ -319,21 +322,33 @@ function BindingDetail({
   );
 }
 
+/** What resolves a Problem, by kind; Needs input kinds never reach a Problem's detail. */
+function problemResolution(item: RunAttention) {
+  switch (item.kind) {
+    case "missing-report":
+      return "This stays unresolved until an explicit report or successful linked recovery is accepted and confirmed. Recovery never starts automatically.";
+    case "report-problem":
+      return item.message
+        ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
+        : "Inspect the recorded work evidence in T3.";
+    case "condition-integrity":
+      return "Waiting deliveries stay unnumbered. There is no Retry or repair: Settle or Archive the Run to abandon them; neither resets the count.";
+    case "settlement-unresolved":
+      return "This resolves when settlement succeeds or the Run is Archived.";
+    case "execution-failed":
+    case "human":
+    case "native-request":
+    case "conversation-waiting":
+      return "Inspect the failed execution in T3; report recovery does not retry work.";
+  }
+}
+
 function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
   const detail = item.kind === "report-problem" && item.message ? null : recordedProblem(run, item);
   return (
     <p className="text-sm text-muted-foreground">
       {attentionLabel(item.kind)}
-      {item.executionId ? ` · execution ${item.executionId}` : ""}.{" "}
-      {item.kind === "missing-report"
-        ? "This stays unresolved until an explicit report or successful linked recovery is accepted and confirmed. Recovery never starts automatically."
-        : item.kind === "report-problem"
-          ? item.message
-            ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
-            : "Inspect the recorded work evidence in T3."
-          : item.kind === "settlement-unresolved"
-            ? "This resolves when settlement succeeds or the Run is Archived."
-            : "Inspect the failed execution in T3; report recovery does not retry work."}
+      {item.executionId ? ` · execution ${item.executionId}` : ""}. {problemResolution(item)}
       {detail ? ` ${detail}` : ""}
     </p>
   );
@@ -350,9 +365,7 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
           {attentionSubject(item)}
         </h3>
       </div>
-      {(item.kind === "report-problem" || item.kind === "conversation-waiting") && item.message && (
-        <p className="whitespace-pre-wrap">{item.message}</p>
-      )}
+      {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
       {exit && <p>Selected exit: {exit}</p>}
       <p>Settled: {item.settlementReason}</p>
       {reply && (

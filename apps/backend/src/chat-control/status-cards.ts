@@ -69,6 +69,7 @@ const PROBLEMS: Record<string, string> = {
   "missing-report": "report missing",
   "execution-failed": "execution failed",
   "report-problem": "report problem",
+  "condition-integrity": "Condition cannot number its next arrival",
   "settlement-unresolved": "Settle could not stop workers",
 };
 

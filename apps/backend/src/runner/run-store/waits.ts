@@ -1,14 +1,19 @@
 import type { WaitArrival } from "@t3-factory/contracts";
 import { WAIT_OUTPUT, waitDurationMs } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
-import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
 import { now } from "../../time.ts";
 import type { RunRow } from "../runner-types.ts";
 import { writeBlockState } from "./blocks.ts";
 import { readRunRow, type RunnerDatabase } from "./database.ts";
 import { guardsHold } from "./guards.ts";
-import { arrivingHandoff, createHandoffs, storedProvenance, workerProvenance } from "./handoffs.ts";
+import {
+  arrivingHandoff,
+  clearSpentArrivalMessages,
+  createHandoffs,
+  storedProvenance,
+  workerProvenance,
+} from "./handoffs.ts";
 import type { Handoff } from "./records.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
@@ -70,19 +75,6 @@ export function waitArrival(
   };
 }
 
-/**
- * Clears the message of every forwarded arrival of Run `runId` that nothing reads any more: each
- * outgoing Handoff carries its own copy until its recipient records the message, so only a pending
- * Handoff or an Agent visit the arrival started, while it is its Block's current visit, still
- * reads the arrival's message (as that visit's input). Outcome, deadline and identity stay.
- */
-export function clearSpentWaitMessages(sql: SqlClient.SqlClient, runId: string) {
-  return sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${runId} AND state='forwarded' AND message IS NOT NULL
-    AND NOT EXISTS(SELECT 1 FROM operation_intents i WHERE i.wait_arrival_id=wait_arrivals.id AND i.kind='handoff' AND i.state='pending')
-    AND NOT EXISTS(SELECT 1 FROM operation_intents i JOIN run_activations a ON a.run_id=i.run_id AND a.cause=i.cause
-      WHERE i.wait_arrival_id=wait_arrivals.id AND a.phase!='finished' AND NOT EXISTS(SELECT 1 FROM continuation_visits v WHERE v.activation_id=a.id))`;
-}
-
 const addMilliseconds = (time: string, milliseconds: number) =>
   new Date(Date.parse(time) + milliseconds).toISOString();
 
@@ -132,7 +124,7 @@ export function openRunWaits(database: RunnerDatabase) {
             arrivalId: id,
             observedAt: time,
           });
-          yield* clearSpentWaitMessages(sql, runRow.id);
+          yield* clearSpentArrivalMessages(sql, runRow.id);
           yield* advanceGeneration(sql, runRow.id);
           return { id, runId: runRow.id, deadlineAt };
         }),
@@ -209,7 +201,7 @@ export function openRunWaits(database: RunnerDatabase) {
             arrivalId,
             observedAt: time,
           });
-          yield* clearSpentWaitMessages(sql, runId);
+          yield* clearSpentArrivalMessages(sql, runId);
           yield* advanceGeneration(sql, runId);
           return "forwarded";
         }),

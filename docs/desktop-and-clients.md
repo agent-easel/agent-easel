@@ -396,25 +396,25 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **15**. Servers require clients of at least **14**, and clients require servers of at least **15**.
-Protocol 15 adds two required fields to each navigation attention matter: the worker's native
+The current protocol is **16**, and both sides require at least **16**. Protocol 16 adds
+[Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
+fixed Otherwise output to Flows and captured Run definitions, with each Condition's
+[routing summary and selection events](runs.md#conditions) in Run detail, and the
+`condition-integrity` attention kind. Older clients can neither read nor save
+such a Flow, so the server refuses them at the handshake before product screens mount and they must
+update; their credentials and stored data are kept. A current client likewise refuses a protocol 15
+or older server, which rejects or lacks Condition blocks, and shows the update gate naming the server.
+This is an intentional transport break; it needs no stored-data migration of its own.
+Protocol 15 added two required fields to each navigation attention matter: the worker's native
 pending request count (`null` except for a native request, and until it is observed) and the Block
-name. It also declares the attention kind for the **Settle could not stop workers** Problem, which is
+name. It also declared the attention kind for the **Settle could not stop workers** Problem, which is
 about the Run: its Block id and Block name are `null`, in navigation matters and in Run detail
-attention. A current client refuses protocol 13 and 14 servers,
-which lack those fields, and shows the update gate naming the server before product screens mount;
-credentials, approvals and stored data are kept. Protocol 14 clients keep working against a
-protocol 15 server: they ignore the added fields, and an attention kind they do not know is left
-out of their Run detail attention and status without failing, before its `null` Block id is read,
-while Run navigation still shows the Problem the server computes. Updating the server first is therefore safe.
-Protocol 14 drops the appearance grant from theme-color presentations and sources: colors come from
-`t3_theme_read` over the T3 connection. Protocol 13 clients read the grant unguarded, so servers
-require clients of at least 14. Protocol 13 lets an Agent have no execution settings (`execution` is `null`),
-requires the `execution` key on Agent create and save, and adds Agent and Flow export and import
-([definition export](studio.md#definition-export)). Older clients cannot read such an Agent, so the server refuses them before
-product screens mount and they must update; their credentials and stored data are kept. A protocol 13 or 14
-client likewise refuses a protocol 9 to 12 server, which can neither save an Agent without a model nor
-export or import definitions, and shows the update gate naming the server before product screens mount.
+attention. Protocol 15 kept protocol 14 clients working, since they ignore the added fields and leave
+an unknown attention kind out before reading its `null` Block id; protocol 16 refuses them.
+Protocol 14 dropped the appearance grant from theme-color presentations and sources: colors come from
+`t3_theme_read` over the T3 connection. Protocol 13 let an Agent have no execution settings (`execution` is `null`),
+required the `execution` key on Agent create and save, and added Agent and Flow export and import
+([definition export](studio.md#definition-export)).
 Every compatible server therefore serves the Studio live subscription (`WatchStudio`) and names the
 Agent revisions a Flow validation answer was resolved against ([Studio](studio.md#validation)), so
 clients always subscribe. A client repeats the handshake whenever its live socket reconnects, so a

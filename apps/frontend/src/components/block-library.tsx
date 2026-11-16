@@ -116,6 +116,13 @@ export function BlockLibrary({
         dropAt={dropAt}
         onAdd={(position) => onAdd("continuation", undefined, position)}
       />
+      <LibraryItem
+        name="Condition"
+        detail="Routes by arrival number"
+        kind="condition"
+        dropAt={dropAt}
+        onAdd={(position) => onAdd("condition", undefined, position)}
+      />
       <div className="flex items-center">
         <SectionLabel>Saved Agents</SectionLabel>
         <span className="ml-auto text-2xs text-muted-foreground">{agents.length}</span>
@@ -237,6 +244,7 @@ const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
+  condition: "border bg-muted text-muted-foreground",
 };
 
 /** The ghost previews the block a drop would add as it reads before it is connected. */

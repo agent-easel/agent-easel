@@ -1,11 +1,12 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type {
-  FlowBlock,
-  FlowGraph,
-  FlowWorkspace,
-  RunDefinitions,
-  WaitUnit,
+import {
+  CONDITION_OTHERWISE_ID,
+  type FlowBlock,
+  type FlowGraph,
+  type FlowWorkspace,
+  type RunDefinitions,
+  type WaitUnit,
 } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
 
@@ -45,6 +46,13 @@ type ExitRow = {
   name: string;
   description: string;
   message_required: number;
+};
+type ConditionRuleRow = {
+  flow_revision_id: string;
+  block_id: string;
+  rule_id: string;
+  name: string;
+  from_arrival: number | null;
 };
 type HiddenExitRow = { flow_revision_id: string; block_id: string; exit_id: string };
 type ConnectionRow = {
@@ -100,6 +108,14 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
           ${block.kind === "continuation" ? block.prompt : null},
           ${block.kind === "agent" ? block.revisitInstruction : null}, ${block.position.x}, ${block.position.y},
           ${duration?.amount ?? null}, ${duration?.unit ?? null})`;
+        if (block.kind === "condition")
+          yield* Effect.forEach(
+            block.rules,
+            (rule, ruleOrdinal) =>
+              sql`INSERT INTO flow_revision_condition_rules (flow_revision_id, block_id, rule_id, ordinal, name, from_arrival)
+              VALUES (${revisionId}, ${block.id}, ${rule.id}, ${ruleOrdinal}, ${rule.name}, ${rule.fromArrival})`,
+            { discard: true },
+          );
         if (block.kind !== "agent") return;
         yield* Effect.forEach(
           block.localExits,
@@ -150,9 +166,21 @@ const toBlock = (
   row: BlockRow,
   exits: readonly ExitRow[],
   hidden: readonly HiddenExitRow[],
+  rules: readonly ConditionRuleRow[],
 ): FlowBlock => {
   const base = { id: row.block_id, name: row.name, position: { x: row.x, y: row.y } };
   if (row.kind === "human") return { ...base, kind: "human" };
+  if (row.kind === "condition")
+    return {
+      ...base,
+      kind: "condition",
+      rules: rules.map((rule) => ({
+        id: rule.rule_id,
+        name: rule.name,
+        fromArrival: rule.from_arrival,
+      })),
+      otherwise: { id: CONDITION_OTHERWISE_ID },
+    };
   if (row.kind === "wait")
     return {
       ...base,
@@ -204,50 +232,103 @@ export const readFlowRevision = Effect.fnUntraced(function* (
   return flow;
 });
 
+/**
+ * Graphs of stored revisions by revision id. Revisions are immutable, so a graph another reader
+ * still holds, such as an open Studio, Run composer or Run view, is reused instead of re-read:
+ * every Studio change and Run row read would otherwise re-read whole near-limit graphs. The memo
+ * holds graphs weakly, so it never keeps a graph alive by itself. Each open database has its own,
+ * so a backend opened again reads its captured revisions from storage.
+ */
+type GraphMemo = Map<string, WeakRef<FlowGraph>>;
+const memos = new WeakMap<SqlClient.SqlClient, GraphMemo>();
+const collected = new FinalizationRegistry<{ graphs: GraphMemo; revisionId: string }>(
+  ({ graphs, revisionId }) => {
+    if (graphs.get(revisionId)?.deref() === undefined) graphs.delete(revisionId);
+  },
+);
+
+function graphMemo(sql: SqlClient.SqlClient) {
+  const existing = memos.get(sql);
+  if (existing) return existing;
+  const graphs: GraphMemo = new Map();
+  memos.set(sql, graphs);
+  return graphs;
+}
+
 const withGraphs = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   revisions: readonly RevisionRow[],
 ) {
-  if (!revisions.length) return [];
+  const graphs = graphMemo(sql);
+  const known = new Map<string, FlowGraph>();
+  for (const revision of revisions) {
+    const graph = graphs.get(revision.id)?.deref();
+    if (graph) known.set(revision.id, graph);
+  }
+  const unread = revisions.filter((revision) => !known.has(revision.id));
+  for (const [revisionId, graph] of yield* readGraphs(sql, unread)) {
+    graphs.set(revisionId, new WeakRef(graph));
+    collected.register(graph, { graphs, revisionId });
+    known.set(revisionId, graph);
+  }
+  return revisions.map((revision): FlowRevision => ({
+    id: revision.flow_id,
+    name: revision.name,
+    revision: revision.revision,
+    graph: known.get(revision.id)!,
+    workspace: toWorkspace(revision),
+    createdAt: revision.created_at,
+    updatedAt: revision.saved_at,
+  }));
+});
+
+/** The stored graph of each revision, by revision id. */
+const readGraphs = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  revisions: readonly RevisionRow[],
+) {
+  if (!revisions.length) return new Map<string, FlowGraph>();
   const ids = sql.in(revisions.map((revision) => revision.id));
-  const [blocks, exits, hidden, connections, targets] = yield* Effect.all([
+  const [blocks, exits, hidden, rules, connections, targets] = yield* Effect.all([
     sql<BlockRow>`SELECT * FROM flow_revision_blocks WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<ExitRow>`SELECT * FROM flow_revision_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<HiddenExitRow>`SELECT * FROM flow_revision_hidden_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+    sql<ConditionRuleRow>`SELECT * FROM flow_revision_condition_rules WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<ConnectionRow>`SELECT * FROM flow_revision_connections WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
     sql<TargetRow>`SELECT * FROM flow_revision_input_targets WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
   ]);
   const blocksByRevision = groupBy(blocks, byRevision);
   const exitsByBlock = groupBy(exits, byBlock);
   const hiddenByBlock = groupBy(hidden, byBlock);
+  const rulesByBlock = groupBy(rules, byBlock);
   const connectionsByRevision = groupBy(connections, byRevision);
   const targetsByRevision = groupBy(targets, byRevision);
-  return revisions.map((revision): FlowRevision => ({
-    id: revision.flow_id,
-    name: revision.name,
-    revision: revision.revision,
-    graph: {
-      blocks: (blocksByRevision.get(revision.id) ?? []).map((block) =>
-        toBlock(
-          block,
-          exitsByBlock.get(byBlock(block)) ?? [],
-          hiddenByBlock.get(byBlock(block)) ?? [],
+  return new Map(
+    revisions.map((revision): [string, FlowGraph] => [
+      revision.id,
+      {
+        blocks: (blocksByRevision.get(revision.id) ?? []).map((block) =>
+          toBlock(
+            block,
+            exitsByBlock.get(byBlock(block)) ?? [],
+            hiddenByBlock.get(byBlock(block)) ?? [],
+            rulesByBlock.get(byBlock(block)) ?? [],
+          ),
         ),
-      ),
-      connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({
-        sourceBlockId: connection.source_block_id,
-        exitId: connection.exit_id,
-        targetBlockId: connection.target_block_id,
-      })),
-      flowInput: {
-        position: { x: revision.input_x, y: revision.input_y },
-        targetBlockIds: (targetsByRevision.get(revision.id) ?? []).map((target) => target.block_id),
+        connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({
+          sourceBlockId: connection.source_block_id,
+          exitId: connection.exit_id,
+          targetBlockId: connection.target_block_id,
+        })),
+        flowInput: {
+          position: { x: revision.input_x, y: revision.input_y },
+          targetBlockIds: (targetsByRevision.get(revision.id) ?? []).map(
+            (target) => target.block_id,
+          ),
+        },
       },
-    },
-    workspace: toWorkspace(revision),
-    createdAt: revision.created_at,
-    updatedAt: revision.saved_at,
-  }));
+    ]),
+  );
 });
 
 /** The current saved revision number, absent once the Flow is removed. */

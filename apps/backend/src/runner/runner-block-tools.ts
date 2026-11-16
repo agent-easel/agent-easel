@@ -1,5 +1,10 @@
 import * as Effect from "effect/Effect";
-import type { RunDetail, RunImageMimeType } from "@t3-factory/contracts";
+import type {
+  ConditionArrivalPage,
+  Result,
+  RunDetail,
+  RunImageMimeType,
+} from "@t3-factory/contracts";
 import { effectiveExits } from "@t3-factory/domain-validation";
 import type { RunStore } from "./run-store/run-store.ts";
 import { OPEN_TRANSITIONS, type RuntimeReply } from "../runtime-types.ts";
@@ -24,17 +29,28 @@ const imageIdentity = (row: ImageRow): NonNullable<RuntimeReply["image"]> => ({
   sizeBytes: row.size_bytes,
 });
 
-/** Block, Run and image reads addressed by the Block id from the worker's message. */
+/** The arguments each read accepts beside the Block id. */
+const READ_FIELDS = {
+  block: [],
+  run: [],
+  image: ["imageId"],
+  conditionArrivals: ["conditionBlockId", "limit", "cursor"],
+} as const satisfies Record<string, readonly string[]>;
+
+/** Block, Run, image and Condition evidence reads addressed by the Block id from the worker's
+ * message; a Condition evidence read names a Condition of that Block's Run. */
 export function openBlockTools(
   store: RunStore,
   getRun: (id: string) => Effect.Effect<{ ok: true; value: RunDetail } | { ok: false }, unknown>,
   images: RunImages,
 ) {
-  return (kind: "block" | "run" | "image", input: unknown): Effect.Effect<RuntimeReply, unknown> =>
+  return (kind: keyof typeof READ_FIELDS, input: unknown): Effect.Effect<RuntimeReply, unknown> =>
     Effect.gen(function* () {
-      const publicId = blockIdArgument(input, kind === "image" ? ["imageId"] : []);
+      const publicId = blockIdArgument(input, READ_FIELDS[kind]);
       if (typeof publicId !== "string") return reportDiagnostic(publicId);
       const fields = (input as { arguments: Record<string, unknown> }).arguments;
+      if (kind === "conditionArrivals")
+        return yield* readConditionArrivals(store, publicId, fields);
       if (kind === "image") {
         if (!("imageId" in fields)) return reportDiagnostic({ code: "IMAGE_ID_REQUIRED" });
         if (typeof fields.imageId !== "string" || !fields.imageId)
@@ -48,7 +64,9 @@ export function openBlockTools(
       if (!detail.ok) return { code: "RUNTIME_UNAVAILABLE" };
       if (kind === "run") return runView(detail.value);
       const manifest = yield* store.blockImages(block.run_id);
-      return blockView(detail.value, block.block_id, manifest.map(imageIdentity));
+      const routedId = conditionArrivalId(visitCause(detail.value, block.block_id));
+      const routed = routedId ? yield* store.conditionArrivalMessage(block.run_id, routedId) : null;
+      return blockView(detail.value, block.block_id, manifest.map(imageIdentity), routed);
     }).pipe(Effect.catchCause(() => Effect.succeed<RuntimeReply>({ code: "RUNTIME_UNAVAILABLE" })));
 }
 
@@ -70,10 +88,61 @@ function readImage(store: RunStore, images: RunImages, runId: string, imageId: s
   });
 }
 
+/** One page of Condition evidence for a Condition of the Block's Run: the page the HTTP read
+ * answers, or the reason it was refused. */
+function readConditionArrivals(
+  store: RunStore,
+  publicId: string,
+  fields: Readonly<Record<string, unknown>>,
+) {
+  return Effect.gen(function* () {
+    if (!("conditionBlockId" in fields))
+      return reportDiagnostic({ code: "CONDITION_BLOCK_ID_REQUIRED" });
+    const { conditionBlockId, limit, cursor } = fields;
+    if (typeof conditionBlockId !== "string" || ("cursor" in fields && typeof cursor !== "string"))
+      return reportDiagnostic({ code: "INVALID_ARGUMENT" });
+    const block = yield* store.locateBlock(publicId);
+    if (!block) return reportDiagnostic({ code: "UNKNOWN_BLOCK" });
+    const pageSize = !("limit" in fields)
+      ? undefined
+      : typeof limit === "number"
+        ? limit
+        : Number.NaN;
+    return conditionArrivalsReply(
+      yield* store.listConditionArrivals(
+        block.run_id,
+        conditionBlockId,
+        pageSize,
+        cursor as string | undefined,
+      ),
+    );
+  });
+}
+
+function conditionArrivalsReply(page: Result<ConditionArrivalPage>): RuntimeReply {
+  if (page.ok) return { code: "CONDITION_ARRIVALS", ...page.value };
+  if (page.error.code === "not_found") return reportDiagnostic({ code: "UNKNOWN_CONDITION" });
+  return reportDiagnostic({
+    code: page.error.issues[0]?.path === "limit" ? "INVALID_LIMIT" : "INVALID_CURSOR",
+  });
+}
+
+/** The cause of the Block's current visit; empty before its first. */
+function visitCause(detail: RunDetail, blockId: string) {
+  return (
+    detail.activations.filter((activation) => activation.blockId === blockId).at(-1)?.cause ?? ""
+  );
+}
+
+/** The Condition arrival a visit's cause names, if a Condition routed the visit. */
+const conditionArrivalId = (cause: string) => /^condition:([^/]+)/.exec(cause)?.[1];
+
+/** `routed` is the message of the Condition arrival that started the current visit, if one did. */
 function blockView(
   detail: RunDetail,
   blockId: string,
   images: NonNullable<RuntimeReply["inputs"]>["images"],
+  routed: string | null,
 ): RuntimeReply {
   const block = detail.blocks.find((entry) => entry.blockId === blockId);
   const graphBlock = detail.definitions.flow.graph.blocks.find((entry) => entry.id === blockId);
@@ -105,7 +174,7 @@ function blockView(
       input: detail.input,
       images,
       results: incomingResults(detail, cause),
-      feedback: visitFeedback(detail, cause),
+      feedback: conditionArrivalId(cause) ? routed : visitFeedback(detail, cause),
     },
     allowedTransitions: current && detail.gateOpen ? OPEN_TRANSITIONS : [],
   };
@@ -116,6 +185,7 @@ function visitReason(cause: string) {
   if (cause.startsWith("start:")) return "first";
   if (cause.startsWith("human:")) return "Human answer";
   if (cause.startsWith("wait:")) return "Wait";
+  if (cause.startsWith("condition:")) return "Condition";
   return "feedback";
 }
 
@@ -156,6 +226,7 @@ function runView(detail: RunDetail): RuntimeReply {
     title: detail.title,
     input: detail.input,
     state: detail.lifecycle,
+    conditions: detail.conditions,
     blocks: detail.blocks.map((block) => ({
       blockId: block.blockId,
       name: block.name,

@@ -168,10 +168,16 @@ export function currentRun(
     reports: run.reports.map(({ key: _key, ...report }) => report),
     activations: run.activations.map(({ coverage: _coverage, evidence: _evidence, ...a }) => a),
     // Released deliveries came from no Final result, so they carry no origin.
-    intents: run.intents.map((intent) => ({ ...intent, waitArrivalId: null, origin: null })),
+    intents: run.intents.map((intent) => ({
+      ...intent,
+      waitArrivalId: null,
+      conditionArrivalId: null,
+      origin: null,
+    })),
     waitArrivals: [],
-    // Released Flows had no Continuation blocks.
+    // Released Flows had no Continuation or Condition blocks.
     continuationVisits: [],
+    conditions: [],
     coordinationActions: actions,
   };
 }
