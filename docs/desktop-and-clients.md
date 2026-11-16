@@ -311,7 +311,8 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 The current protocol is **15**, and both sides require at least **15**. Protocol 15 adds
 [Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
-fixed Otherwise output to Flows and captured Run definitions. Older clients can neither read nor save
+fixed Otherwise output to Flows and captured Run definitions, with each Condition's
+[routing summary and selection events](runs.md#conditions) in Run detail. Older clients can neither read nor save
 such a Flow, so the server refuses them at the handshake before product screens mount and they must
 update; their credentials and stored data are kept. A current client likewise refuses a protocol 14
 or older server, which rejects or lacks Condition blocks, and shows the update gate naming the server.

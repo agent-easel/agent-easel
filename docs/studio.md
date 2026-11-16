@@ -191,7 +191,7 @@ non-empty instruction shows a small neutral **Revisit instruction** tag in its c
 the block's Agent or copying the Flow's graph keeps the value. Delivery is described in the [Runner](runner.md#revisit-instructions).
 
 A **Continuation** block is configured with only a name and a required **Prompt**; it has no Agent, settings or exits to configure. Its canvas block reads
-**continues *Agent*'s thread**, naming the nearest Agent on its incoming paths (walking back through Human steps, Waits and Continuations), or **the incoming Agent's thread** when
+**continues *Agent*'s thread**, naming the nearest Agent on its incoming paths (walking back through Human steps, Waits, Conditions and Continuations), or **the incoming Agent's thread** when
 several Agents can reach it. It has one unnamed output port, and wires from it carry no exit label. Its panel explains the single output and the once-per-Run rule: the first
 message sends the prompt to that conversation and waits for its response, messages arriving meanwhile wait, and every later message passes through unchanged
 ([Runs](runs.md#continuations)). Returning to the Agent's conversation is shown as this text, not as an extra wire.
@@ -522,14 +522,14 @@ names and thresholds count toward the 2 MB body.
 Unfinished names, unset Agents, an unconnected Flow input, blocks without exits, local exit name or ID collisions and wires from hidden or removed exits can be saved.
 Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
 without a duration (`wait_duration_required`) or outside 1 minute to 7 days inclusive after converting its unit, including a zero or negative amount (`wait_duration_range`), a Wait Flow input target, missing saved
-Agents and blocks unreachable from the Flow input,
+Agents, blocks unreachable from the Flow input,
 a Condition rule without a name (`condition_rule_name_required`) or with the name of another of its outputs, Otherwise included
 (`condition_rule_name_duplicate`), without a threshold (`condition_threshold_required`), never selected because an earlier rule
 already matches from an equal or lower arrival (`condition_rule_shadowed`), or from arrival 1, which leaves Otherwise unreachable
 (`condition_threshold_first_arrival`), each at its rule row, and every directed cycle through a Condition made only of Conditions
 and Continuations, whichever outputs its wires leave by (`condition_cycle`, at the Condition, naming the cycle): a Continuation may
 already pass messages straight through, so such a loop could circle without work. A ready Condition's thresholds therefore
-strictly descend and are at least 2; one with only Otherwise is ready. resolving each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
+strictly descend and are at least 2; one with only Otherwise is ready. Readiness resolves each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
 they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
 terminal exit needs no edge; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 

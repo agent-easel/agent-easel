@@ -623,7 +623,7 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   [Run title generation](#run-title-generations), records the settlement with attempt 1 and this backend as the attempt's owner, lists the bound workers as
   stopping, records `settlement-requested` and advances the generation, before any Stop. The
   closed gate is the cutoff: no launch, send, release, Continuation forwarding, Wait forwarding
-  (by its timer or **Continue now**), Human answer or Request report crosses it, and observation,
+  (by its timer or **Continue now**), Condition arrival, Human answer or Request report crosses it, and observation,
   recovery settlement and automatic settlement stop. A Wait deadline that passes while stopping
   forwards nothing. Pending Human occurrences remain pending until settlement succeeds; answer conflicts explain that
   Factory is settling the Run and stopping its workers. Navigation suppresses Needs input while settlement is in progress.

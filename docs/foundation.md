@@ -41,7 +41,8 @@ and restricted OAuth credentials live outside project repositories.
   the kind and not stored. Migration `098` added Condition arrivals, keyed by their incoming delivery, with a per-Run,
   per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
   rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
-  starts the count of any Condition a Run already captured at 0.
+  starts the count of any Condition a Run already captured at 0. Migration `100` adds an index for reading an arrival's
+  recipient deliveries and changes no row.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
