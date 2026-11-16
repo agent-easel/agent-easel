@@ -21,6 +21,10 @@ on:
         description: Monotonic beta build number
         required: false
         type: string
+      run-checks:
+        description: Run the quality gate and browser journeys; false only when the exact tree already passed them
+        required: true
+        type: boolean
     secrets:
       CSC_LINK:
         required: true
@@ -92,7 +96,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+        if: inputs.run-checks
       - name: Check controlled UI journeys
+        if: inputs.run-checks
         run: |
           pnpm exec e2e-web install chromium
           pnpm exec e2e run --trace on --output .e2e/release/journeys
