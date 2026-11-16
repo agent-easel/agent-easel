@@ -302,6 +302,11 @@ export class AttentionCoordinator {
   private requesting = false;
   private focused = false;
   private held: HeldClick | null = null;
+  /**
+   * Changes synchronously with every selection, lost readiness and revocation, before their
+   * queued work runs, so an announcement can tell that its state ended while it awaited.
+   */
+  private epoch = 0;
 
   private constructor(
     private readonly ledger: AttentionLedger,
@@ -343,6 +348,7 @@ export class AttentionCoordinator {
     const previous = this.selection;
     const selection = server === null ? null : { server };
     this.selection = selection;
+    this.epoch++;
     // A click held for another server never routes into this one.
     if (this.held && this.held.server !== server) this.drop();
     void this.enqueue(async () => {
@@ -363,21 +369,25 @@ export class AttentionCoordinator {
           }
           await this.announce(this.latest, delivery.fresh);
         }),
-      notReady: () =>
-        this.enqueue(async () => {
+      notReady: () => {
+        if (current()) this.epoch++;
+        return this.enqueue(async () => {
           if (!current()) return;
           this.latest = null;
           this.showBadge();
-        }),
-      revoked: () =>
-        this.enqueue(async () => {
+        });
+      },
+      revoked: () => {
+        if (current()) this.epoch++;
+        return this.enqueue(async () => {
           if (!current()) return;
           this.selection = null;
           this.latest = null;
           this.drop();
           this.showBadge();
           await this.withdrawAll(selection!.server);
-        }),
+        });
+      },
     };
   }
 
@@ -494,6 +504,7 @@ export class AttentionCoordinator {
   }
 
   private async announce({ server, rows }: Ready, catchUp: boolean) {
+    const epoch = this.epoch;
     const granted = await this.observePermission();
     const withheld = this.withheld(this.observed);
     const { due, shown, withdrawn } = await this.ledger.change(server, (ledger) => {
@@ -507,6 +518,13 @@ export class AttentionCoordinator {
       };
     });
     if (withdrawn.length > 0) this.port.withdraw(withdrawn);
+    const ended = this.epoch !== epoch;
+    // The selection, readiness or focus changed while this awaited the permission read or the
+    // intent write. Nothing was posted: the appearances are announced by that server's next ready
+    // delivery if still pending, or count as seen in the focused window.
+    if (shown.length > 0 && (ended || this.focused))
+      return this.unpost(server, shown, ended ? null : { state: "foreground-accounted" });
+    if (ended) return;
     // Asked only when a banner would otherwise show now, never at launch.
     const bannerWaitsForPermission =
       !this.focused && this.settings.notifications && this.observed === "undetermined";
@@ -525,6 +543,11 @@ export class AttentionCoordinator {
    */
   private settle(server: string, id: string, outcome: ShowOutcome) {
     void this.enqueue(async () => {
+      // Its server was forgotten meanwhile: withdraw it again and record no history for it.
+      if (!this.ledger.notification(server, id)) {
+        if (outcome.kind === "accepted") this.port.withdraw([id]);
+        return;
+      }
       const late = await this.ledger.change(server, (ledger) => {
         const notification = ledger.notifications[id];
         for (const { id: matterId, revision } of notification?.matters ?? []) {
@@ -539,6 +562,27 @@ export class AttentionCoordinator {
         return outcome.kind === "accepted" && notification?.withdrawn === true;
       });
       if (late) this.port.withdraw([id]);
+    });
+  }
+
+  /**
+   * Replaces intents the notifier never received with `state`, or with no accounting at all
+   * (null), so they are not lost as attempted-unknown; their notification records are dropped.
+   */
+  private async unpost(
+    server: string,
+    notifications: readonly AlertNotification[],
+    state: AppearanceState | null,
+  ) {
+    await this.ledger.change(server, (ledger) => {
+      for (const { id } of notifications) {
+        for (const { id: matterId, revision } of ledger.notifications[id]?.matters ?? []) {
+          const appearances = ledger.matters[matterId]!.appearances;
+          if (state) appearances[revision] = state;
+          else delete appearances[revision];
+        }
+        delete ledger.notifications[id];
+      }
     });
   }
 

@@ -640,6 +640,85 @@ it("a banner Notification Center accepts after its server selection ended is wit
   expect(port.withdrawn).toStrictEqual([port.shown[0]!.id, port.shown[0]!.id]);
 });
 
+it("a banner whose server selection ended while it was being recorded is never posted, and that server catches it up later", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  let grant = () => undefined as void;
+  const reading = new Promise<void>((started) => {
+    port.implementation.permission = () =>
+      new Promise((resolve) => {
+        grant = () => resolve("granted");
+        started();
+      });
+  });
+  const delivered = feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  await reading;
+  coordinator.select("other");
+  grant();
+  await delivered;
+  port.implementation.permission = () => Promise.resolve("granted");
+  const shownForEndedSelection = port.shown.length;
+
+  // Act
+  await coordinator.select(server).deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ shownForEndedSelection, shown: port.shown.length }).toStrictEqual({
+    shownForEndedSelection: 0,
+    shown: 1,
+  });
+});
+
+it("a banner interrupted by a delivery gap shows once navigation is current again", async (c) => {
+  // Arrange
+  const { port, feed } = await installation(c);
+  await feed.deliver({ fresh: true, rows: [run("a", [])] });
+  let grant = () => undefined as void;
+  const reading = new Promise<void>((started) => {
+    port.implementation.permission = () =>
+      new Promise((resolve) => {
+        grant = () => resolve("granted");
+        started();
+      });
+  });
+  const delivered = feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+  await reading;
+  void feed.notReady();
+  grant();
+  await delivered;
+  port.implementation.permission = () => Promise.resolve("granted");
+  const shownDuringGap = port.shown.length;
+
+  // Act
+  await feed.deliver({ fresh: false, rows: [run("a", [matter("a1")])] });
+
+  // Assert
+  expect({ shownDuringGap, shown: port.shown.length }).toStrictEqual({
+    shownDuringGap: 0,
+    shown: 1,
+  });
+});
+
+it("a banner Notification Center accepts after its server was forgotten is withdrawn again", async (c) => {
+  // Arrange
+  const { port, coordinator, feed } = await installation(c);
+  let accept = () => undefined as void;
+  port.answer = () =>
+    new Promise((resolve) => {
+      accept = () => resolve({ kind: "accepted" });
+    });
+  await feed.deliver({ fresh: true, rows: [run("a", [matter("a1")])] });
+  coordinator.select(null);
+  await coordinator.forget(server);
+
+  // Act
+  accept();
+  await coordinator.close();
+
+  // Assert
+  expect(port.withdrawn).toStrictEqual([port.shown[0]!.id, port.shown[0]!.id]);
+});
+
 it("clicking a notification whose one matter is still pending opens its Run with that Block selected", async (c) => {
   // Arrange
   const { port, coordinator, feed } = await installation(c);

@@ -154,7 +154,7 @@ it("a revoked desktop client that the owner approves again resumes its Dock badg
   const selection = await clientSelection(c, prepared.server, prepared.laptop.credential);
   const alerts = await desktopAttention(c, selection);
   await nativeQuestionAsked(prepared);
-  await alerts.until(() => alerts.badges.at(-1) === "1");
+  await alerts.until(() => alerts.shown.length === 1 && alerts.badges.at(-1) === "1");
   await prepared.server.host("POST", `/api/host/clients/${prepared.laptop.id}/revoke`);
   await alerts.until(() => alerts.withdrawn.length > 0);
   const again = await prepared.server.approved("Laptop");
