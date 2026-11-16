@@ -13,6 +13,10 @@ const stapler = fileURLToPath(new URL("stapler.sh", import.meta.url));
 
 export default function notarize({ appOutDir, packager }) {
   const app = join(appOutDir, `${packager.appInfo.productFilename}.app`);
+  const missing = ["APPLE_API_KEY", "APPLE_API_KEY_ID", "APPLE_API_ISSUER"].filter(
+    (name) => !process.env[name],
+  );
+  if (missing.length > 0) throw new Error(`Notarization requires ${missing.join(", ")}.`);
   const credentials = [
     "--key",
     process.env.APPLE_API_KEY,
