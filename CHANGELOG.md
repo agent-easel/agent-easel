@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/alimek/t3-factory/compare/v0.7.0...v0.7.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* install Claude skills in a configured CLAUDE_CONFIG_DIR and correct stale docs ([#456](https://github.com/alimek/t3-factory/issues/456)) ([287c44c](https://github.com/alimek/t3-factory/commit/287c44c9246fd99cae659bc7d9735e61c174fa08))
+
 ## [0.7.0](https://github.com/alimek/t3-factory/compare/v0.6.0...v0.7.0) (2026-11-16)
 
 
