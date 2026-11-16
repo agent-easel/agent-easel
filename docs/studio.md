@@ -99,8 +99,8 @@ records why a per-project variant is an independent copy rather than an override
 - **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
   for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
   new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
-  names it). Studio's **New Flow**, **+ Add agent** and **Import** create global definitions; **Duplicate…** keeps the source
-  Agent's owner. Studio does not yet show or choose owners.
+  names it). Studio's **New Flow** and **+ Add agent** choose the owner ([Owners in Studio](#owners-in-studio)); **Import**
+  creates global definitions and **Duplicate…** keeps the source Agent's owner.
 - **Placement rule.** Any Flow may place a global Agent, and a Project Flow may also place Agents of its own Project, never
   another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
   naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
@@ -112,6 +112,27 @@ records why a per-project variant is an independent copy rather than an override
 
 Ownership adds no model or environment restriction: a Project Agent's execution settings are checked as any Agent's.
 
+### Owners in Studio
+
+- **Grouped lists.** The Flow list and the Agent list group definitions as **Global** first, then one group per owning Project
+  ordered by title. Each Project group shows the Project's last-known title and repository path; when two Projects still read
+  alike, its environment and endpoint are added, then an id suffix. An unavailable Project's group shows its availability reason
+  (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
+  name their owner; the Agent editor header shows an **Owned by *Project*** badge and the Flow editor's toolbar an owner badge.
+  The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
+- **Owner filter.** **Owner: All**, **Global** or one Project filters both lists together. It starts at All whenever Studio
+  opens and never follows the Run composer's selected Project. A Project shows global definitions and that Project's.
+- **Choosing an owner.** **New Flow** and **+ Add agent** always show the owner choice: **Global** or **Project** with an
+  **Owning Project** menu of every Project, unavailable ones disabled with their reason. The default comes from the filter (All
+  or Global gives Global, a Project gives that Project); an Agent added through the Flow editor library's **New Agent
+  definition** defaults to that Flow's owner, also when the Flow is global. An unavailable default stays chosen, with its reason,
+  and blocks Create until another owner is chosen; it is never replaced silently. The owner is part of the create, not of the
+  draft's unsaved changes, and a saved definition's owner is not edited here.
+- **Flow editor.** The block library offers only the Agents this Flow may place under the placement rule, grouped as **Global
+  Agents** and the owning Project's Agents; blocks already on the canvas keep resolving every saved Agent. While the owning
+  Project is unavailable a banner over the canvas names it and its reason, the Flow stays editable, saveable, exportable and
+  removable, and **Start Run** is disabled with the reason.
+
 ## Agent definitions
 
 Open **Studio → Agents** (`/studio/agents`) to create, edit or duplicate reusable definitions; an existing one opens at `/studio/agents/:agentId` and a new one at `/studio/agents/new`. A
@@ -122,7 +143,7 @@ defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs 
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with **Search Agents**, **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
+A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
 drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Export** (after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
@@ -300,7 +321,7 @@ validates the draft through the backend without saving and is cleared by any cha
 places, by the Flow's removal and while Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
 content, baseline revision and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent revisions Studio does not show yet, is
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
-**Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
+**Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen, and only while the owning Project is available. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
 the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a block whose Agent this Flow's owning Project may not place, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
 inspects its block; a Condition rule issue also scrolls to that rule and focuses its name or arrival number. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
