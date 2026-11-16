@@ -2,7 +2,11 @@ import type { TestContext } from "@effect/vitest";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import type { Factory } from "../../src/index.ts";
 import { runtimeMcpHandler } from "../../src/runtime-mcp.ts";
-import { openFactoryWithApprovedT3 } from "./domain-setup.ts";
+import {
+  discoveredClones,
+  openFactoryWithApprovedT3,
+  projectFlowToDuplicate,
+} from "./domain-setup.ts";
 
 /**
  * A worker's MCP client on the Factory MCP handler of an open backend, over Streamable HTTP
@@ -39,6 +43,18 @@ export async function factoryMcpClient(
 export async function authoringMcpClient(c: TestContext) {
   const { factory, t3 } = await openFactoryWithApprovedT3(c);
   return { factory, t3, client: await factoryMcpClient(c, factory) };
+}
+
+/** A session's MCP client on a backend that discovered two available clones of one repository. */
+export async function clonesMcpClient(c: TestContext) {
+  const clones = await discoveredClones(c);
+  return { ...clones, client: await factoryMcpClient(c, clones.factory) };
+}
+
+/** A session's MCP client on `projectFlowToDuplicate`'s backend. */
+export async function mcpFlowToDuplicate(c: TestContext) {
+  const setup = await projectFlowToDuplicate(c);
+  return { ...setup, client: await factoryMcpClient(c, setup.factory) };
 }
 
 /** `factory_get_run_image` for one image of the Block's Run. */
