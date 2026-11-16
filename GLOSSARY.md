@@ -248,6 +248,17 @@ It is held until the source worker thread is finished and no execution failure i
 pending on that Block; acceptance alone does not start work. A held handoff is cancelled when its Final result is
 replaced before release. Each recipient and repeated arrival proceeds independently, using the routing rules of the Run's captured Flow revision.
 
+**Handoff gate**:
+A Run's switch that permits releasing Handoffs, forwarding Wait arrivals and dispatching new work. It is open from Start; a confirmed manual settlement and Archive close it for good, and automatic settlement leaves it open so owed Handoffs are still delivered.
+_Avoid_: Treating Settled as a closed gate.
+
+**Run generation**:
+A counter on each Run that its state transitions advance. An operation that read the Run and then called T3 commits a dependent change, such as releasing a Handoff, only while the generation it read is unchanged, so a concurrent report or lifecycle change is never overwritten.
+_Avoid_: Confusing it with Run title generation or a Chat control conversation's generation.
+
+**Lane**:
+A per-Run queue in the backend that runs one operation at a time. The Run store's **mutation lane** serializes a Run's state transitions; the Runner's **drive lane** serializes its observe and dispatch passes across T3 calls. Lanes order work within one backend process and are not persistence guarantees.
+
 **Human occurrence**:
 One arrival at a Human step within a Run, with its own pending context and settlement. An occurrence from an Agent result activates only after that result is released; it has no T3 session. Answering or cancelling one occurrence does not settle another arrival.
 

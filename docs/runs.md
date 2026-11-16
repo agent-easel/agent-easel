@@ -199,6 +199,45 @@ input card carries it rather than a Block.
 
 A T3 conversation on the Factory host, including one driven from a phone, can start a text-only Run through the [Run Start tools](t3-integration.md#run-start-tools), normally by the user invoking the [`factory-start-run` skill](installation.md#optional-skills). It shares the composer's Start operation, readiness gates, captured definitions, workspace behavior and idempotency; its title is the prompt's first non-empty line with automatic provenance and its creation time is when Factory first accepted the request. It has no draft, images or per-Run workspace override. Unless the skill has seen **Generate Run titles** reported off, its review adds one line saying the title may be replaced by a generated title; the receipt still reports the accepted automatic title, and generation then applies as for any automatic Run.
 
+The receipt carries the Run id and number but no link, and the conversation has no Block id, so it cannot use the Block
+runtime tools to watch progress. Open the Run in Factory, or read it on the host with `GET /api/runs/:id`
+([Run HTTP API](#run-http-api)).
+
+### Run workspace lifecycle
+
+The Flow's [workspace setting](studio.md#workspace-setting) applies to every Run of that Flow; Start has no per-Run
+workspace or base override. To start from another base, change the Flow's **Base** (or save a copy of the Flow with it)
+before Start.
+
+- **Creation.** For a worktree Flow, the first Flow-input worker's T3 launch creates one worktree from the resolved base,
+  on a new branch named `factory/run-<Run number>-<first 8 characters of the Run id>`. The name is fixed and not
+  configurable; T3 rejects the launch if that branch already exists. Details are in the [Runner](runner.md#run-workspace).
+- **Sharing.** Every other worker of the Run joins that worktree on its first visit, so parallel Blocks of one Run edit
+  the same files. Separate Runs get separate worktrees.
+- **After the Run.** Settling or archiving a Run leaves the worktree and branch in place, and Factory never removes
+  either: T3's own worktree cleanup applies. Remove one yourself when its work is merged or abandoned, for example
+  with `git worktree remove <path>` and `git branch -d <branch>` in the Project repository. A later message to a worker
+  of a Settled Run whose worktree was removed lets T3 recreate a missing managed worktree at turn start; do not remove
+  a worktree while its Run is still Active.
+
+### Run HTTP API
+
+The Factory UI uses these routes; any client that can reach the host-local listener, or an approved client, can call
+them with the protocol headers described in [Protocol compatibility](desktop-and-clients.md#protocol-compatibility).
+Mutations also need `X-Factory-Request: 1` ([Configuration and storage](installation.md#configuration-and-storage)).
+
+| HTTP | Purpose |
+| --- | --- |
+| `GET /api/runs?projectId=` | List Runs, optionally for one Project |
+| `GET /api/runs/:id` | Read one Run's detail, as the Run screen shows it |
+| `POST /api/runs` | Start a Run, as the composer does |
+| `PATCH /api/runs/:id` | Rename a Run |
+| `POST /api/runs/:id/settle` | [Settle](#settled-runs) a Run |
+| `POST /api/runs/:id/archive` | [Archive](#archive) a Run |
+| `POST /api/runs/:runId/request-report` | [Request report](#reports-and-attention) for one Block |
+| `GET /api/runs/:runId/conditions/:blockId/arrivals` | Read a [Condition](#conditions)'s arrivals |
+
+
 ## Live viewing
 
 The Run screen and sidebar update live, including reports, attention, timeline and

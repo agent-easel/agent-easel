@@ -40,14 +40,19 @@ remove it from earlier commits; revoke exposed credentials before coordinating c
   trust; revoke access on the host when no longer needed.
 - The execution host, OS account, T3, configured harnesses and selected project are
   trusted. Factory does not isolate malicious processes running as the same OS user.
-  Agent threads share a project checkout; there is no worktree isolation guarantee.
+  A Flow's [workspace setting](docs/studio.md#workspace-setting) decides where its workers
+  edit: new Flows give each Run its own Git worktree, shared by all of that Run's workers,
+  and a project-checkout Flow works in the project checkout. A worktree separates Runs'
+  edits; it is not a security boundary.
 - Keep OAuth credentials, TLS private keys and Factory data homes private. For browser
   clients, installing a host's Factory CA grants broader issuer trust; compare
   fingerprints and read the [transport security guidance](docs/desktop-and-clients.md#transport-security).
 - `pnpm dev --tailscale` exposes development tooling through the Vite proxy. Use the
   approved-client HTTPS listener for remote access to real data.
-- Stopping the backend does not Stop agent work in T3. A Run Stop requests cancellation
-  and does not undo repository edits.
+- Stopping the backend does not stop agent work in T3. [Archive](docs/runs.md#archive)
+  asks T3 once to interrupt the Run's worker threads without confirming termination, and
+  [manual settlement](docs/runs.md#settled-runs) stops workers only when you choose to.
+  Neither undoes repository edits.
 
 Configuration presence and controlled tests do not establish live execution safety.
 See [T3 integration](docs/t3-integration.md) and

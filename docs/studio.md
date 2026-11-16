@@ -170,6 +170,11 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
 filters or assigns them, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
+Factory installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
+whole process. For example, a bounded review loop wires a reviewer Agent's changes-requested exit to a Condition whose
+rule **From arrival 3 onward** leads to a Human step and whose Otherwise returns to the implementing Agent, so the third
+request for changes escalates to you instead of looping again ([Condition](#canvas-and-block-configuration)).
+
 ### Canvas and block configuration
 
 The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions; **Search Agents**, **Collapse**/**Expand library**) and the canvas. Add a block with the row's
@@ -488,7 +493,7 @@ Every rejection writes nothing, never repeats prompt text and keeps the chosen f
 `{name, expectedRevision, graph, workspace}`. `workspace` is `{mode: "checkout"}` or
 `{mode: "worktree", base: {kind: "default"} | {kind: "ref", ref}}`; a custom ref is trimmed and
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
-issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting. Factory does not save a Run coordinator on the Flow.
+issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.
 
 `POST /api/flows` accepts a name and optional `graph` and `workspace`. Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [Factory MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
 

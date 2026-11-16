@@ -1,4 +1,6 @@
-import { basename, join } from "node:path";
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
 /** A home the instance's T3 settings can redirect: `homePath`, then `envName`, then the default. */
 export type ResolvedHome = {
@@ -39,9 +41,11 @@ const profiles = {
     home: { kind: "resolved", envName: "CLAUDE_CONFIG_DIR", defaultDirectory: null },
     config: { file: ".claude.json", format: "json" },
     entry: (url) => ({ type: "http", url }),
-    // `~/.claude.json` keeps its skills under `~/.claude`; a configured `.claude` home holds them.
+    // The default `~/.claude.json` keeps its skills under `~/.claude`; a configured
+    // CLAUDE_CONFIG_DIR, whatever its name, holds both `.claude.json` and `skills`, which is where
+    // Claude Code and T3's skill discovery read them.
     skillsFolder: (home) =>
-      basename(home) === ".claude" ? homeSkills(home) : join(home, ".claude", "skills"),
+      home === realpathSync(homedir()) ? join(home, ".claude", "skills") : homeSkills(home),
   },
   cursor: {
     // The Cursor SDK always reads os.homedir()/.cursor/mcp.json. A provider homePath would
