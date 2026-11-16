@@ -95,12 +95,9 @@ it("List Flows gives the model global Flows and the permitted Project's Flows, n
   await mkdir(otherRoot);
   const other = await factory.addRepository({ path: otherRoot });
   assert(other.ok);
-  for (const [name, projectId] of [
-    ["Review", null],
-    ["Release", project.id],
-    ["Port", other.value.id],
-  ] as const)
-    assert((await factory.createFlow({ name, projectId })).ok);
+  assert((await factory.createFlow({ name: "Review", projectId: null })).ok);
+  assert((await factory.createFlow({ name: "Release", projectId: project.id })).ok);
+  assert((await factory.createFlow({ name: "Port", projectId: other.value.id })).ok);
   model.script({ toolCalls: [{ name: "list_flows", input: {} }] }, { text: "Two Flows." });
 
   // Act

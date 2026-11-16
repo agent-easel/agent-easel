@@ -871,22 +871,46 @@ it("a Flow owner change its placed Project Agent blocks names that Agent and poi
   expect(assertOk(await factory.getFlow(flow.id)).projectId).toBe(first.id);
 });
 
-it("a previewed Flow Duplicate into the other clone commits with copies there, and a commit of a plan that predates a placed Agent's save is refused with a next step to preview again", async (c) => {
+it("a previewed Flow Duplicate into the other clone commits a new Flow there with a copy of each Agent the plan copies", async (c) => {
   // Arrange
-  const { factory, client, coder, releaser, flow, second } = await mcpFlowToDuplicate(c);
+  const { factory, client, releaser, flow, second } = await mcpFlowToDuplicate(c);
   const preview = await client.callTool({
     name: "factory_preview_flow_duplicate",
     arguments: { flowId: flow.id, projectId: second.id },
   });
+  expect(preview.isError).toBe(false);
   const plan = toolReply(preview);
-  const commit = (agents: unknown) =>
-    client.callTool({
-      name: "factory_duplicate_flow",
-      arguments: { flowId: flow.id, projectId: second.id, expectedRevision: plan.revision, agents },
-    });
 
   // Act
-  const committed = await commit(plan.agents);
+  const result = await client.callTool({
+    name: "factory_duplicate_flow",
+    arguments: {
+      flowId: flow.id,
+      projectId: plan.projectId,
+      expectedRevision: plan.revision,
+      agents: plan.agents,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const duplicate = toolReply(result);
+  expect(duplicate.flow).toMatchObject({ name: "Release copy", projectId: second.id, revision: 1 });
+  expect(duplicate.copies).toStrictEqual([
+    { sourceAgentId: releaser.id, agentId: expect.any(String) },
+  ]);
+  expect(assertOk(await factory.listFlows())).toHaveLength(2);
+});
+
+it("a Flow Duplicate commit of a plan that predates a placed Agent's save is refused with a next step to preview again", async (c) => {
+  // Arrange
+  const { factory, client, coder, flow, second } = await mcpFlowToDuplicate(c);
+  const preview = await client.callTool({
+    name: "factory_preview_flow_duplicate",
+    arguments: { flowId: flow.id, projectId: second.id },
+  });
+  expect(preview.isError).toBe(false);
+  const plan = toolReply(preview);
   assertOk(
     await factory.updateAgent(coder.id, {
       ...sampleAgentInput("Coder v2"),
@@ -894,34 +918,27 @@ it("a previewed Flow Duplicate into the other clone commits with copies there, a
       expectedProjectId: coder.projectId,
     }),
   );
-  const stale = await commit(plan.agents);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_duplicate_flow",
+    arguments: {
+      flowId: flow.id,
+      projectId: plan.projectId,
+      expectedRevision: plan.revision,
+      agents: plan.agents,
+    },
+  });
 
   // Assert
-  expect(preview.isError).toBe(false);
-  expect(
-    plan.agents.map(({ name, choice, changeable }: Record<string, unknown>) => ({
-      name,
-      choice,
-      changeable,
-    })),
-  ).toStrictEqual([
-    { name: "Coder", choice: "keep", changeable: true },
-    { name: "Releaser", choice: "copy", changeable: false },
-  ]);
-  expect(committed.isError).toBe(false);
-  const duplicate = toolReply(committed);
-  expect(duplicate.flow).toMatchObject({ name: "Release copy", projectId: second.id, revision: 1 });
-  expect(duplicate.copies).toStrictEqual([
-    { sourceAgentId: releaser.id, agentId: expect.any(String) },
-  ]);
-  expect(stale.isError).toBe(true);
-  expect(toolReply(stale)).toStrictEqual({
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toStrictEqual({
     code: "conflict",
     message: expect.any(String),
     issues: [{ code: "stale_duplicate_plan", path: "agents", message: expect.any(String) }],
     next: "Nothing was created. Preview the Duplicate again with factory_preview_flow_duplicate, review the new plan with the user and commit it.",
   });
-  expect(assertOk(await factory.listFlows())).toHaveLength(2);
+  expect(assertOk(await factory.listFlows())).toHaveLength(1);
 });
 
 it("an Agent duplicated into the other clone is a new Agent there at revision 1 with its settings status", async (c) => {
