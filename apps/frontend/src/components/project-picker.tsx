@@ -27,18 +27,12 @@ import { useLiveLaunchChoices } from "../live/launch-choices.ts";
 import { cn } from "../lib/utils.ts";
 import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
+import { projectAvailabilityLabels } from "../use-projects.ts";
 
-const availabilityLabels: Record<FactoryProject["availability"], string> = {
-  available: "Available",
-  "directory-unavailable": "Repository unavailable",
-  "project-unavailable": "Project unavailable",
-  "connection-unavailable": "T3 connection unavailable",
-  "different-environment": "Different environment",
-};
 
 function ProjectOption({ project, busy }: { project: FactoryProject; busy: boolean }) {
   const available = project.availability === "available";
-  const availability = availabilityLabels[project.availability];
+  const availability = projectAvailabilityLabels[project.availability];
   return (
     <DropdownMenuRadioItem
       value={project.id}
@@ -413,7 +407,7 @@ function ProjectAvailability({
       {" "}
       {selected && selected.availability !== "available" && (
         <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          {availabilityLabels[selected.availability]} · New Runs blocked. Choose another project.
+          {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another project.
         </p>
       )}
       {catalog && catalog.projects.length === 0 && (
