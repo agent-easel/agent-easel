@@ -236,17 +236,30 @@ export const readFlowRevision = Effect.fnUntraced(function* (
  * Graphs of stored revisions by revision id. Revisions are immutable, so a graph another reader
  * still holds, such as an open Studio, Run composer or Run view, is reused instead of re-read:
  * every Studio change and Run row read would otherwise re-read whole near-limit graphs. The memo
- * holds graphs weakly, so it never keeps a graph alive by itself.
+ * holds graphs weakly, so it never keeps a graph alive by itself. Each open database has its own,
+ * so a backend opened again reads its captured revisions from storage.
  */
-const graphs = new Map<string, WeakRef<FlowGraph>>();
-const collected = new FinalizationRegistry<string>((revisionId) => {
-  if (graphs.get(revisionId)?.deref() === undefined) graphs.delete(revisionId);
-});
+type GraphMemo = Map<string, WeakRef<FlowGraph>>;
+const memos = new WeakMap<SqlClient.SqlClient, GraphMemo>();
+const collected = new FinalizationRegistry<{ graphs: GraphMemo; revisionId: string }>(
+  ({ graphs, revisionId }) => {
+    if (graphs.get(revisionId)?.deref() === undefined) graphs.delete(revisionId);
+  },
+);
+
+function graphMemo(sql: SqlClient.SqlClient) {
+  const existing = memos.get(sql);
+  if (existing) return existing;
+  const graphs: GraphMemo = new Map();
+  memos.set(sql, graphs);
+  return graphs;
+}
 
 const withGraphs = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   revisions: readonly RevisionRow[],
 ) {
+  const graphs = graphMemo(sql);
   const known = new Map<string, FlowGraph>();
   for (const revision of revisions) {
     const graph = graphs.get(revision.id)?.deref();
@@ -255,7 +268,7 @@ const withGraphs = Effect.fnUntraced(function* (
   const unread = revisions.filter((revision) => !known.has(revision.id));
   for (const [revisionId, graph] of yield* readGraphs(sql, unread)) {
     graphs.set(revisionId, new WeakRef(graph));
-    collected.register(graph, revisionId);
+    collected.register(graph, { graphs, revisionId });
     known.set(revisionId, graph);
   }
   return revisions.map((revision): FlowRevision => ({

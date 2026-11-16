@@ -501,7 +501,9 @@ Condition's newest pending delivery; a redelivery of the same Handoff finds it a
 with identical text and worker is a new arrival. The Condition then numbers its pending deliveries oldest first, so a
 delivery durably pending there is never overtaken by a later one, whatever order their sources completed in. Numbering
 checks that the count matches the arrivals already numbered, that the next number stays within 9,007,199,254,740,991,
-that the captured rules are complete and that the waiting delivery's Handoff is still pending with an intact message; a check that fails is an [integrity refusal](#condition-integrity-problems). Each
+that the captured Condition is still in a shape Start accepts (well-formed rules that pass Condition readiness, and every
+captured wire leaving it on one of its outputs) and that the waiting delivery's Handoff is still pending with an intact
+message; a check that fails is an [integrity refusal](#condition-integrity-problems). Each
 numbered arrival selects the first rule whose threshold the number reaches, else Otherwise; records only its
 number, the matched captured rule (none for Otherwise), acceptance time and the Handoff's [worker provenance](#worker-provenance),
 never a copy of the rules; creates one Handoff to every recipient of the selected output, released from creation and carrying
@@ -521,7 +523,9 @@ message was routed and, after a Human step, labels that step's reply as usual.
 #### Condition integrity Problems
 
 An integrity refusal (a missing count, a count that disagrees with the arrivals already numbered, a next number past
-9,007,199,254,740,991, incomplete captured rules or a waiting delivery whose Handoff is no longer pending and intact) commits no number or route, and in the same transaction latches one
+9,007,199,254,740,991, captured rules that are incomplete or would not pass Start, such as a missing rule a wire still
+leaves by, a threshold of 1 or thresholds out of order, or a waiting delivery whose Handoff is no longer pending and intact)
+commits no number or route, and in the same transaction latches one
 pending `condition-integrity` Problem for that Condition in the Run, recording the refusal's reason. A refusal whose
 transaction fails records nothing and is retried like any failure before commit. The Problem has no execution, worker or
 T3 thread. While it is pending the Condition's acceptance stops: dispatch no longer offers Handoffs to it, so the refused

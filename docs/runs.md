@@ -518,7 +518,8 @@ latest 50 selection events, chosen in the query, so a Condition with more arriva
 note that the earlier ones are in its arrivals details below. A Condition is never Needs input and its routing raises no
 attention.
 
-When Factory cannot trust a Condition's count, captured rules or waiting delivery, or its next arrival number would pass
+When Factory cannot trust a Condition's count, its captured rules and wires (as when they would no longer pass Start) or
+its waiting delivery, or its next arrival number would pass
 9,007,199,254,740,991, it numbers nothing and records one **Condition integrity Problem** on the Condition, with the
 reason, as a Problem like any other: it shows on the Condition's block and in the Run's attention, wakes a Snoozed Run and
 keeps the Run Active, also across restart. The Condition accepts no delivery while it is pending; its waiting deliveries

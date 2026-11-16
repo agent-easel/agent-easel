@@ -159,7 +159,7 @@ const isConditionThreshold = (value: unknown) =>
 
 /** A Condition's rules and its fixed Otherwise. Rule ids share one scope with the Otherwise id
  * because wires leave by them; names stay free text, bounded only by the save budget. */
-function checkCondition(block: Record<string, unknown>, path: string, issue: IssueReporter) {
+export function checkCondition(block: Record<string, unknown>, path: string, issue: IssueReporter) {
   const otherwise = block.otherwise;
   if (
     !isRecord(otherwise) ||

@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { CONDITION_ARRIVAL_MAX } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import {
+  capturedConditionRuleDeleted,
   conditionCountAtMaximum,
   conditionStorageInterrupted,
 } from "./support/condition-storage.ts";
@@ -489,6 +490,45 @@ it.effect(
           .filter((intent) => intent.blockId === "gate")
           .map((intent) => intent.state),
       ).toStrictEqual(["acknowledged", "pending"]);
+    }),
+);
+
+it.effect(
+  "a captured rule deleted from storage while a wire still leaves by its output latches one Condition Problem after restart and numbers nothing",
+  (c) =>
+    Effect.gen(function* () {
+      // Arrange
+      const f = yield* preparedService(c, loopConditionFlow);
+      const worker = yield* Effect.promise(() => workerAtWork(f.world, f.input));
+      yield* Effect.promise(() => resultReported(f.world, worker, { message: "First pass." }));
+      yield* f.close;
+      capturedConditionRuleDeleted(f.h.databasePath, "escalate");
+      const recovered = yield* f.reopen;
+
+      // Act
+      const reconciled = yield* recovered.reconcileRuns();
+
+      // Assert
+      assert(reconciled.ok);
+      const run = yield* recovered.getRun(worker.runId);
+      assert(run.ok);
+      expect(run.value.attention).toMatchObject([
+        {
+          blockId: "gate",
+          kind: "condition-integrity",
+          settledAt: null,
+          message: "The captured Condition's rules or wires are inconsistent.",
+        },
+      ]);
+      expect(run.value.conditions).toStrictEqual([
+        { blockId: "gate", arrivals: 0, pending: 1, latest: null },
+      ]);
+      expect(conditionSelections(run.value)).toStrictEqual([]);
+      expect(
+        run.value.intents
+          .filter((intent) => intent.blockId === "gate")
+          .map((intent) => intent.state),
+      ).toStrictEqual(["pending"]);
     }),
 );
 

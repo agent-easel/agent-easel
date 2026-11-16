@@ -37,3 +37,20 @@ export function conditionCountAtMaximum(databasePath: string) {
   database.prepare("UPDATE condition_counters SET arrivals=?").run(BigInt(CONDITION_ARRIVAL_MAX));
   database.close();
 }
+
+/**
+ * Deletes captured Condition rule `ruleId` from every stored Flow revision while the backend is
+ * closed, leaving the wires that leave by its output. Captured revisions are immutable, so the
+ * immutability trigger is dropped for the change and recreated as the schema defines it.
+ */
+export function capturedConditionRuleDeleted(databasePath: string, ruleId: string) {
+  const database = openStorage(databasePath);
+  database.exec("BEGIN");
+  database.exec("DROP TRIGGER immutable_flow_revision_condition_rule_delete");
+  database.prepare("DELETE FROM flow_revision_condition_rules WHERE rule_id=?").run(ruleId);
+  database.exec(
+    "CREATE TRIGGER immutable_flow_revision_condition_rule_delete BEFORE DELETE ON flow_revision_condition_rules BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+  );
+  database.exec("COMMIT");
+  database.close();
+}

@@ -19,6 +19,7 @@ import {
   inheritedExits,
   type IssueReporter,
 } from "./block-exits.ts";
+import { checkCondition } from "./flow.ts";
 
 export const TASK_TITLE_LIMIT = 500;
 
@@ -240,6 +241,28 @@ function conditionReadiness(
       );
     lowest = Math.min(lowest, rule.fromArrival);
   });
+}
+
+/**
+ * Whether a captured Condition still has a shape Start accepts: well-formed rules and the fixed
+ * Otherwise, every output selectable, and every wire leaving it on one of its outputs. A captured
+ * revision is immutable, so only damaged storage fails this; the Runner checks it before numbering.
+ */
+export function conditionStartReady(
+  block: Extract<FlowBlockInput, { kind: "condition" }>,
+  connections: FlowGraphInput["connections"],
+) {
+  let ready = true;
+  const add: IssueReporter = () => {
+    ready = false;
+  };
+  checkCondition({ ...block }, "", add);
+  conditionReadiness(block, "", add);
+  const outputs = new Set([CONDITION_OTHERWISE.id, ...block.rules.map((rule) => rule.id)]);
+  return (
+    ready &&
+    connections.every((edge) => edge.sourceBlockId !== block.id || outputs.has(edge.exitId))
+  );
 }
 
 /** Names, Agent references and exits of one block. */

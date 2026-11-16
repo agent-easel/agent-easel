@@ -4,6 +4,7 @@ import {
   type ConditionSummary,
   type RunDefinitions,
 } from "@t3-factory/contracts";
+import { conditionStartReady } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { intactPayload } from "../../fingerprint.ts";
@@ -47,7 +48,8 @@ export function createConditionCounters(
 
 /**
  * The Condition's next arrival number, with its captured rules: the integrity check before any
- * number is committed. It refuses when the captured rules are not a started Run's, the waiting
+ * number is committed. It refuses when the captured Condition is no longer in a shape Start
+ * accepts (its rules or a wire leaving it on an output it lacks), the waiting
  * delivery's Handoff is no longer pending with an intact message, the counter is missing or
  * disagrees with the numbers already committed, or the next number is not representable. A refusal
  * numbers and selects nothing; the delivery stays pending in order and the Condition's integrity
@@ -55,6 +57,7 @@ export function createConditionCounters(
  */
 function nextArrival(
   block: ConditionBlock | undefined,
+  connections: RunDefinitions["flow"]["graph"]["connections"],
   counter: { readonly arrivals: number; readonly committed: number } | undefined,
   incoming: DeliveryRecord | undefined,
 ): Checked<{
@@ -62,8 +65,8 @@ function nextArrival(
   readonly number: number;
   readonly incoming: DeliveryRecord & { readonly payload_json: string };
 }> {
-  if (!block || block.rules.some((rule) => rule.fromArrival === null))
-    return unverified("The captured Condition rules are incomplete.");
+  if (!block || !conditionStartReady(block, connections))
+    return unverified("The captured Condition's rules or wires are inconsistent.");
   if (!incoming || !intactPayload(incoming))
     return unverified("The delivery waiting for a number at the Condition is inconsistent.");
   if (!counter) return unverified("The Condition's arrival count is missing.");
@@ -102,7 +105,12 @@ function numberPendingArrivals(
       }>`SELECT c.arrivals,COALESCE((SELECT MAX(a.arrival_number) FROM condition_arrivals a WHERE a.run_id=c.run_id AND a.block_id=c.block_id),0) AS committed FROM condition_counters c WHERE c.run_id=${runRow.id} AND c.block_id=${blockId}`;
       const [incoming] =
         yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${head.incoming_intent_id} AND state='pending'`;
-      const next = nextArrival(captured, counter, incoming);
+      const next = nextArrival(
+        captured,
+        runRow.definitions.flow.graph.connections,
+        counter,
+        incoming,
+      );
       if (!next.ok)
         return {
           numbered,
