@@ -23,6 +23,7 @@ import {
   workerAtWork,
   workerHandle,
   generatedTitleApplied,
+  observeFor,
 } from "../../../apps/backend/test/support/scenarios.ts";
 import type { RunDetail } from "../../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../../packages/domain-validation/src/index.ts";
@@ -43,6 +44,48 @@ const exitOf = (run: RunDetail) => {
   assert.equal(exits.length, 1, "Journey worker must have one exit");
   return exits[0]!.id;
 };
+
+/**
+ * From the worker at work on a Flow whose one Condition returns its selections to the worker: the
+ * worker reports `Pass N.` as the Condition's next arrival, and is back at work on its next turn,
+ * until the Condition has numbered `through` arrivals. The last of them may select an output that
+ * does not return to the worker.
+ */
+async function conditionArrivalsThrough(context: Context, id: string, through: number) {
+  let run = requireSuccess(await context.factory.getRun(id));
+  const conditions = run.definitions.flow.graph.blocks.filter(
+    (block) => block.kind === "condition",
+  );
+  assert.equal(conditions.length, 1, "The journey Flow must have one Condition");
+  const condition = conditions[0]!.id;
+  const numbered = (detail: RunDetail) =>
+    detail.conditions.find((summary) => summary.blockId === condition)?.arrivals ?? 0;
+  const returnsToWorker = (detail: RunDetail) => {
+    const latest = detail.conditions.find((summary) => summary.blockId === condition)?.latest;
+    return detail.definitions.flow.graph.connections.some(
+      (wire) =>
+        wire.sourceBlockId === condition &&
+        wire.exitId === latest?.outputId &&
+        wire.targetBlockId === "worker",
+    );
+  };
+  while (numbered(run) < through) {
+    const arrival = numbered(run) + 1;
+    const worker = workerOf(context, run);
+    await resultReported(context, worker, { exit: exitOf(run), message: `Pass ${arrival}.` });
+    run = await observeFor(`number arrival ${arrival}`, context, id, (detail) => {
+      if (numbered(detail) !== arrival) return false;
+      if (arrival === through && !returnsToWorker(detail)) return true;
+      const block = detail.blocks.find((item) => item.blockId === "worker");
+      return (
+        block?.executionId !== worker.executionId &&
+        block?.state === "working" &&
+        block.freshness === "fresh"
+      );
+    });
+  }
+  assert.equal(numbered(run), through, `The Condition already numbered past ${through}`);
+}
 
 /** Only the named module states current journeys use are exposed. */
 function runTransitions(context: Context) {
@@ -419,6 +462,10 @@ export async function scenariosFixture(host: Host) {
         const run = requireSuccess(await factory.getRun(id));
         const outcome = await transitions[input.state](run, input.message);
         return { outcome };
+      },
+      /** The worker of Run `id` reports results until its Flow's Condition numbered `through`. */
+      async arriveAtCondition({ id, through }: { id: string; through: number }) {
+        await conditionArrivalsThrough(context, id, through);
       },
     },
     async reset() {

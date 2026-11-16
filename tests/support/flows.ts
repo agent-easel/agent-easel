@@ -117,7 +117,7 @@ export async function saveSingleAgentFlow(
 
 /**
  * Saves a new ready checkout Flow at the definition size limit: the Flow input starts one block of
- * the named saved Agent, whose `exitId` reaches Condition Escalate holding as many rules as a save
+ * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate holding as many rules as a save
  * request can carry while staying 1,000 bytes under the limit, so a short rename still saves. Rules
  * have ID-length IDs, short names (`Route N`) and strictly descending thresholds down to 2; the
  * last rule and Otherwise reach Human step Review.
@@ -140,10 +140,10 @@ export async function saveConditionAtSizeLimit(
     otherwise: { id: "otherwise" },
   };
   const graph = {
-    flowInput: { position: { x: 40, y: 60 }, targetBlockIds: ["coder"] },
+    flowInput: { position: { x: 40, y: 60 }, targetBlockIds: ["worker"] },
     blocks: [
       {
-        id: "coder",
+        id: "worker",
         kind: "agent",
         name: "Coder",
         agentId: agent.id,
@@ -156,7 +156,7 @@ export async function saveConditionAtSizeLimit(
       { id: "review", kind: "human", name: "Review", position: { x: 720, y: 60 } },
     ],
     connections: [
-      { sourceBlockId: "coder", exitId, targetBlockId: condition.id },
+      { sourceBlockId: "worker", exitId, targetBlockId: condition.id },
       { sourceBlockId: condition.id, exitId: "otherwise", targetBlockId: "review" },
     ],
   };
