@@ -25,7 +25,6 @@ import { RunTitleSettings } from "./run-title-settings.tsx";
 import { ChatModelSettings } from "./chat-model-settings.tsx";
 import { ChatDiscordSettings } from "./chat-discord-settings.tsx";
 import { useChatModelAttention, useDiscordAttention } from "../chat-control-attention.ts";
-import { StudioLink } from "./app-link.tsx";
 import { useClientScope } from "../client-scope.ts";
 import { desktopBridge } from "../desktop-bridge.ts";
 import { RuntimeSettings } from "../routes/runtime.tsx";
@@ -267,12 +266,6 @@ function SettingsNav({
           </p>
         )}
       </nav>
-      <div className="mt-auto grid gap-0.5 pl-2 text-2xs tracking-label text-muted-foreground max-sm:hidden">
-        <p>
-          Flows and Agents live in <StudioLink selection={{ tab: "flows" }}>Studio</StudioLink>.
-        </p>
-        <p>Opened from ⚙ in the Run sidebar · Esc closes</p>
-      </div>
     </aside>
   );
 }
