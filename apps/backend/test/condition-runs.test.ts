@@ -67,12 +67,13 @@ it("arrivals from two workers share one count, and each selection forwards its o
 
   // Act
   const run = await observeFor(
-    "observe the second arrival and the follow-up launch",
+    "observe the second arrival, the follow-up launch and the Human review",
     f.world,
     first.runId,
     (detail) =>
       detail.conditions[0]?.arrivals === 2 &&
-      detail.blocks.some((block) => block.blockId === "follow-up" && block.threadId !== null),
+      detail.blocks.some((block) => block.blockId === "follow-up" && block.threadId !== null) &&
+      detail.humanOccurrences.length > 0,
   );
 
   // Assert
@@ -124,7 +125,12 @@ it("a later result with identical text is the next arrival and escalates from ar
   await resultReported(f.world, again, { message: "Same." });
 
   // Act
-  const run = await arrivalsNumbered(f.world, worker.runId, 2);
+  const run = await observeFor(
+    "observe the second arrival and its Human review",
+    f.world,
+    worker.runId,
+    (detail) => detail.conditions[0]?.arrivals === 2 && detail.humanOccurrences.length > 0,
+  );
 
   // Assert
   expect(revisit.message).toMatch(/Same\.$/);
