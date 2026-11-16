@@ -47,23 +47,31 @@ export function createConditionCounters(
 
 /**
  * The Condition's next arrival number, with its captured rules: the integrity check before any
- * number is committed. It refuses when the captured rules are not a started Run's, the counter is
- * missing or disagrees with the numbers already committed, or the next number is not
- * representable. A refusal numbers and selects nothing; the delivery stays pending in order and
- * the Condition's integrity Problem latches.
+ * number is committed. It refuses when the captured rules are not a started Run's, the waiting
+ * delivery's Handoff is no longer pending with an intact message, the counter is missing or
+ * disagrees with the numbers already committed, or the next number is not representable. A refusal
+ * numbers and selects nothing; the delivery stays pending in order and the Condition's integrity
+ * Problem latches.
  */
 function nextArrival(
   block: ConditionBlock | undefined,
   counter: { readonly arrivals: number; readonly committed: number } | undefined,
-): Checked<{ readonly block: ConditionBlock; readonly number: number }> {
+  incoming: DeliveryRecord | undefined,
+): Checked<{
+  readonly block: ConditionBlock;
+  readonly number: number;
+  readonly incoming: DeliveryRecord & { readonly payload_json: string };
+}> {
   if (!block || block.rules.some((rule) => rule.fromArrival === null))
     return unverified("The captured Condition rules are incomplete.");
+  if (!incoming || !intactPayload(incoming))
+    return unverified("The delivery waiting for a number at the Condition is inconsistent.");
   if (!counter) return unverified("The Condition's arrival count is missing.");
   if (counter.arrivals !== counter.committed)
     return unverified("The Condition's arrival count disagrees with its numbered arrivals.");
   if (counter.arrivals >= CONDITION_ARRIVAL_MAX)
     return unverified("The Condition's next arrival number is not representable.");
-  return verified({ block, number: counter.arrivals + 1 });
+  return verified({ block, number: counter.arrivals + 1, incoming });
 }
 
 /** The rule whose output a Condition selects for arrival `number`: the first one it reaches;
@@ -92,7 +100,9 @@ function numberPendingArrivals(
         arrivals: number;
         committed: number;
       }>`SELECT c.arrivals,COALESCE((SELECT MAX(a.arrival_number) FROM condition_arrivals a WHERE a.run_id=c.run_id AND a.block_id=c.block_id),0) AS committed FROM condition_counters c WHERE c.run_id=${runRow.id} AND c.block_id=${blockId}`;
-      const next = nextArrival(captured, counter);
+      const [incoming] =
+        yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${head.incoming_intent_id} AND state='pending'`;
+      const next = nextArrival(captured, counter, incoming);
       if (!next.ok)
         return {
           numbered,
@@ -104,17 +114,13 @@ function numberPendingArrivals(
             time,
           ),
         };
-      const { block, number } = next.value;
-      const [incoming] =
-        yield* sql<DeliveryRecord>`SELECT * FROM operation_intents WHERE id=${head.incoming_intent_id} AND state='pending'`;
-      if (!incoming || !intactPayload(incoming))
-        return yield* Effect.fail(Error("Invalid arrival message"));
-      const message = (JSON.parse(incoming.payload_json) as { message: string }).message;
+      const { block, number, incoming: delivery } = next.value;
+      const message = (JSON.parse(delivery.payload_json) as { message: string }).message;
       const rule = selectedRule(block, number);
       const outputId = rule?.id ?? CONDITION_OTHERWISE_ID;
       yield* sql`UPDATE condition_arrivals SET state='selected',arrival_number=${number},rule_id=${rule?.id ?? null},message=${message},accepted_at=${time} WHERE id=${head.id}`;
       yield* sql`UPDATE condition_counters SET arrivals=${number} WHERE run_id=${runRow.id} AND block_id=${blockId}`;
-      yield* sql`UPDATE operation_intents SET state='acknowledged',payload_json=NULL,problem=NULL,reconciled_at=${time} WHERE id=${incoming.id}`;
+      yield* sql`UPDATE operation_intents SET state='acknowledged',payload_json=NULL,problem=NULL,reconciled_at=${time} WHERE id=${delivery.id}`;
       const recipients = [
         ...new Set(
           runRow.definitions.flow.graph.connections
