@@ -266,7 +266,7 @@ only proposes, and Factory itself reviews and performs it (see [Actions](#action
 | Tool | Returns |
 | --- | --- |
 | List Projects | The Projects the thread's parent channel grants the requester: stable ID, name, repository path and availability |
-| List Flows | Saved Flows: stable ID, name, workspace setting and readiness with its first reasons; a Project Flow starts only in its [owning Project](studio.md#ownership) |
+| List Flows | Global Flows and the Flows owned by the Projects the thread permits: stable ID, owning Project ID (`null` for global), name, workspace setting and readiness with its first reasons; a Project Flow starts only in its [owning Project](studio.md#ownership) |
 | Find Runs | Runs of those Projects: ID, Run number, title, Project name and repository path, Flow and state |
 | Read Run | One such Run as Factory has it now, by its captured definitions, in an overview with readable sections |
 | Start Run | Nothing to perform: a validated proposal whose review Factory posts, or why it cannot be proposed |
@@ -433,8 +433,11 @@ Start Run takes a permitted Project ID, a saved Flow ID and the Run's complete p
 text only and must be copied exactly from the requester's current message or the human reply they
 selected; text the model wrote must be marked composed, and the review labels it so. Factory refuses,
 before any review, a prompt that is blank, is not found verbatim in its stated source, exceeds 8,000
-Unicode characters or 16 KiB UTF-8, a Project the thread does not permit or that is unavailable, and
-an unknown or not-ready Flow; the model is told why so it can ask. Nothing is appended, shortened or
+Unicode characters or 16 KiB UTF-8, a Project the thread does not permit or that is unavailable, an
+unknown or not-ready Flow and a Flow another Project owns (`flow_project_mismatch`); the model is told
+why so it can ask. Acceptance checks both rules again: the Project grant inside the acceptance
+transaction and Flow ownership through the shared Start, so a Flow moved to another Project after the
+review gets a not-accepted receipt. Nothing is appended, shortened or
 inferred, there are no attachments and no per-Run workspace override.
 
 ### Human answer proposals
