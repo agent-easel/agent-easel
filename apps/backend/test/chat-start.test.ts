@@ -699,6 +699,7 @@ it("confirming a Start whose Agent lost its model after the review starts no Run
     execution: null,
     exits: agent.value.exits,
     expectedRevision: agent.value.revision,
+    expectedProjectId: agent.value.projectId,
   });
   assert(cleared.ok, JSON.stringify(cleared));
 

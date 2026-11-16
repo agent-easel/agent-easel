@@ -1,5 +1,5 @@
 /** Agents: reusable definitions of how an Agent block's work runs, and their operations. */
-import type { BlockExit } from "./flow.ts";
+import type { BlockExit, ChangeOwnerInput } from "./flow.ts";
 import { operation } from "./operation.ts";
 import type { DefinitionExport, PortableAgentDocument } from "./portable-document.ts";
 
@@ -124,6 +124,8 @@ export interface CreateAgentInput extends AgentContentInput {
 /** A save never changes the owning Project. */
 export interface UpdateAgentInput extends AgentContentInput {
   readonly expectedRevision: number;
+  /** The owning Project the client last saw; a save after Change owner moved it is refused. */
+  readonly expectedProjectId: string | null;
 }
 
 export interface DuplicateAgentInput {
@@ -154,6 +156,12 @@ export const agentOperations = {
   updateAgent: operation<UpdateAgentInput, AgentDefinition>()({
     method: "PUT",
     path: "/api/agents/:id",
+    body: "json",
+  }),
+  /** Change owner; refused while a current Flow could no longer place the Agent afterwards. */
+  changeAgentOwner: operation<ChangeOwnerInput, AgentDefinition>()({
+    method: "PUT",
+    path: "/api/agents/:id/owner",
     body: "json",
   }),
   removeAgent: operation()({ method: "DELETE", path: "/api/agents/:id" }),

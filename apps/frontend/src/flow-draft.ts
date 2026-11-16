@@ -208,7 +208,12 @@ export function createFlowDraft(
       if (!saved || !canSave) return;
       await draft.save({
         submitted: content,
-        send: () => source.updateFlow(id, { ...content, expectedRevision: saved.revision }),
+        send: () =>
+          source.updateFlow(id, {
+            ...content,
+            expectedRevision: saved.revision,
+            expectedProjectId: saved.projectId,
+          }),
         unknownMessage: unknownOutcome,
         fallback: "Could not save Flow.",
       });
@@ -236,6 +241,7 @@ export function createFlowDraft(
         const { agentRevisions, ...answer } = await operations.validateFlow(id, {
           ...content,
           expectedRevision: saved.revision,
+          expectedProjectId: saved.projectId,
         });
         // An Agent change Studio has not delivered yet also makes the answer stale.
         const shown = agentStamp(content.graph, source.getSnapshot().agents.value);

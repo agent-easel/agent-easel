@@ -18,6 +18,7 @@ it("a saved Flow reaches launch-choice subscribers without another read", async 
   const saved = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: created.value.revision,
+    expectedProjectId: created.value.projectId,
     workspace: created.value.workspace,
     graph: { ...unconnectedGraph, flowInput: flowInput("coder") },
   });

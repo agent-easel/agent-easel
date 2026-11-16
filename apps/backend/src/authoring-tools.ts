@@ -38,6 +38,11 @@ const expectedRevision = {
   description:
     "The revision you last read. A save on an older revision is refused with a conflict.",
 };
+const expectedProjectId = {
+  type: ["string", "null"],
+  description:
+    "The projectId you last read: the owning Project's id, or null for a global definition. A save after the owner changed is refused with a conflict; a save never changes the owner.",
+};
 const exit = {
   type: "object",
   properties: {
@@ -181,8 +186,16 @@ export const authoringTools: Tool[] = [
       "Save an Agent's name, prompt, model settings and exits as its next immutable revision, exactly as a Studio save.",
     inputSchema: {
       type: "object",
-      properties: { agentId, expectedRevision, ...agentFields },
-      required: ["agentId", "expectedRevision", "name", "prompt", "execution", "exits"],
+      properties: { agentId, expectedRevision, expectedProjectId, ...agentFields },
+      required: [
+        "agentId",
+        "expectedRevision",
+        "expectedProjectId",
+        "name",
+        "prompt",
+        "execution",
+        "exits",
+      ],
       additionalProperties: false,
     },
   },
@@ -228,8 +241,8 @@ export const authoringTools: Tool[] = [
       "Save a Flow's name, whole graph and workspace as its next immutable revision, exactly as a Studio save. If any position is omitted the server auto-arranges the whole graph; otherwise positions are kept. The reply includes readiness.",
     inputSchema: {
       type: "object",
-      properties: { flowId, expectedRevision, ...flowFields },
-      required: ["flowId", "expectedRevision", "name", "graph"],
+      properties: { flowId, expectedRevision, expectedProjectId, ...flowFields },
+      required: ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
       additionalProperties: false,
     },
   },

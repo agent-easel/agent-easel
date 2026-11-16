@@ -15,6 +15,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
   const saved = await factory.updateAgent(created.value.id, {
     ...sampleAgentInput("Reviewer"),
     expectedRevision: created.value.revision,
+    expectedProjectId: created.value.projectId,
   });
   assert(saved.ok);
 
@@ -103,6 +104,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
       workspace: created.workspace,
       graph,
     }),

@@ -126,6 +126,8 @@ export type FlowWorkspace =
 export interface UpdateFlowInput {
   readonly name: string;
   readonly expectedRevision: number;
+  /** The owning Project the client last saw; a save after Change owner moved it is refused. */
+  readonly expectedProjectId: string | null;
   readonly graph: FlowGraphInput;
   /** Protocol 1–3 clients cannot see it and omit it; such a save keeps the saved setting. */
   readonly workspace?: FlowWorkspace;
@@ -165,6 +167,15 @@ export interface FlowDraft {
   readonly readiness: FlowReadiness;
 }
 
+/**
+ * Change owner of a Flow or Agent: moves it to `projectId` (null for global) only while its
+ * owning Project is still `expectedProjectId`. It appends no revision and changes nothing else.
+ */
+export interface ChangeOwnerInput {
+  readonly expectedProjectId: string | null;
+  readonly projectId: string | null;
+}
+
 /** The Flow operations the Factory facade implements. */
 export const flowOperations = {
   listFlows: operation<never, readonly FlowDraft[]>()({ method: "GET", path: "/api/flows" }),
@@ -184,6 +195,12 @@ export const flowOperations = {
   updateFlow: operation<UpdateFlowInput, FlowDraft>()({
     method: "PUT",
     path: "/api/flows/:id",
+    body: "json",
+  }),
+  /** Change owner; refused while any Agent the Flow places could not be placed afterwards. */
+  changeFlowOwner: operation<ChangeOwnerInput, FlowDraft>()({
+    method: "PUT",
+    path: "/api/flows/:id/owner",
     body: "json",
   }),
   /** The latest saved revision with each Agent it references as a portable document. */

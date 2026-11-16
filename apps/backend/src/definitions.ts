@@ -22,16 +22,19 @@ import {
   type ProjectCatalog,
   type Result,
   type StudioDefinitions,
+  type ValidationIssue,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
   flowAgentRevisions,
   flowReadiness,
+  mayPlaceAgent,
   parsePortableFile,
   placementIssues,
   readinessAgent,
   type OwningProject,
   type ReadinessAgent,
+  validateChangeOwner,
   validateCommitImport,
   validateCreateAgent,
   validateCreateFlow,
@@ -93,11 +96,26 @@ const staleRevision = (kind: "Agent" | "Flow") =>
     ],
   );
 
+/** Saves and Change owner name the owning Project the client saw; another client moved it since. */
+const staleOwner = (kind: "Agent" | "Flow") =>
+  failure(
+    "conflict",
+    `This ${kind}'s owning Project changed elsewhere, so nothing was written. Review its current owner before trying again.`,
+    [
+      {
+        code: "stale_owner",
+        path: "expectedProjectId",
+        message: `Compare the ${kind}'s current owning Project with the one you opened.`,
+      },
+    ],
+  );
+
 type DefinitionOperations = Pick<
   EffectOperations<FactoryOperations>,
   | "createFlow"
   | "validateFlow"
   | "updateFlow"
+  | "changeFlowOwner"
   | "removeFlow"
   | "listFlows"
   | "getFlow"
@@ -106,6 +124,7 @@ type DefinitionOperations = Pick<
   | "getAgent"
   | "createAgent"
   | "updateAgent"
+  | "changeAgentOwner"
   | "duplicateAgent"
   | "removeAgent"
   | "exportAgent"
@@ -117,9 +136,11 @@ type DefinitionOperations = Pick<
 const LIVE_PUBLISHING_OPERATIONS: ReadonlySet<keyof DefinitionOperations> = new Set([
   "createFlow",
   "updateFlow",
+  "changeFlowOwner",
   "removeFlow",
   "createAgent",
   "updateAgent",
+  "changeAgentOwner",
   "duplicateAgent",
   "removeAgent",
   "commitImport",
@@ -215,8 +236,9 @@ export const makeDefinitions = (
         );
       });
     /**
-     * Refuses a new definition's owning Project unless it is global or a Factory Project available
-     * for new Runs, so a definition is never created where it could not start.
+     * Refuses a new or changed owning Project unless it is global or a Factory Project available
+     * for new Runs, so a definition never moves where it could not start. Called inside the
+     * committing transaction.
      */
     const ownerRefusal = (projectId: OwningProject) =>
       Effect.gen(function* () {
@@ -241,11 +263,15 @@ export const makeDefinitions = (
         );
       });
     /** The saved Flow a save may replace, or the refusal that stops the save. */
-    const savedFlowFor = (id: string, expectedRevision: number) =>
+    const savedFlowFor = (
+      id: string,
+      expected: { readonly revision: number; readonly projectId: OwningProject },
+    ) =>
       Effect.gen(function* () {
         const [saved] = yield* readCurrentFlows(sql, id);
         if (!saved) return flowNotFound();
-        if (saved.revision !== expectedRevision) return staleRevision("Flow");
+        if (saved.revision !== expected.revision) return staleRevision("Flow");
+        if (saved.projectId !== expected.projectId) return staleOwner("Flow");
         return { ok: true as const, value: saved };
       });
     const loadCapabilities = Effect.fn("Definitions.loadCapabilities")(function* () {
@@ -378,16 +404,19 @@ export const makeDefinitions = (
         if (!validated.ok) return Effect.succeed(validated);
         return provideSql<FlowDraft>(
           Effect.gen(function* () {
-            const { expectedRevision } = validated.value;
+            const expected = {
+              revision: validated.value.expectedRevision,
+              projectId: validated.value.expectedProjectId,
+            };
             // Refuse a missing or stale Flow before any layout, so the refusal names the real cause.
-            const current = yield* savedFlowFor(id, expectedRevision);
+            const current = yield* savedFlowFor(id, expected);
             if (!current.ok) return current;
             const positioned = yield* positionGraph(validated.value.graph);
             if (!positioned.ok) return positioned;
             return yield* sql.withTransaction(
               Effect.gen(function* () {
                 // Checked again: another save may have landed while the graph was arranged.
-                const latest = yield* savedFlowFor(id, expectedRevision);
+                const latest = yield* savedFlowFor(id, expected);
                 if (!latest.ok) return latest;
                 const saved = latest.value;
                 const refused = yield* placementRefusal(positioned.value, saved.projectId);
@@ -405,6 +434,42 @@ export const makeDefinitions = (
                 return { ok: true as const, value: toDraft(flow, yield* readinessAgents) };
               }),
             );
+          }),
+        );
+      },
+      changeFlowOwner(id, input) {
+        const validated = validateChangeOwner(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const { expectedProjectId, projectId } = validated.value;
+        return transaction<FlowDraft>(
+          Effect.gen(function* () {
+            const [flow] = yield* readCurrentFlows(sql, id);
+            if (!flow) return flowNotFound();
+            if (flow.projectId !== expectedProjectId) return staleOwner("Flow");
+            const agents = yield* readinessAgents;
+            if (projectId === flow.projectId)
+              return { ok: true as const, value: toDraft(flow, agents) };
+            const refused = yield* ownerRefusal(projectId);
+            if (refused) return refused;
+            const blockers = new Map<string, ValidationIssue>();
+            for (const block of flow.graph.blocks) {
+              if (block.kind !== "agent") continue;
+              const agent = agents.find((candidate) => candidate.id === block.agentId);
+              if (agent && !mayPlaceAgent(projectId, agent.projectId))
+                blockers.set(agent.id, {
+                  code: "owner_change_blocked",
+                  path: "projectId",
+                  message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
+                });
+            }
+            if (blockers.size)
+              return failure(
+                "conflict",
+                "This Flow places Agents its new owner may not place. Remove them from the Flow, or Duplicate it into the target instead.",
+                [...blockers.values()],
+              );
+            yield* sql`UPDATE flows SET project_id=${projectId} WHERE id=${id}`;
+            return { ok: true as const, value: toDraft({ ...flow, projectId }, agents) };
           }),
         );
       },
@@ -490,6 +555,8 @@ export const makeDefinitions = (
               Effect.gen(function* () {
                 if (saved.revision !== validated.value.expectedRevision)
                   return staleRevision("Agent");
+                if (saved.projectId !== validated.value.expectedProjectId)
+                  return staleOwner("Agent");
                 const unsupported = unsupportedReportingFailure(
                   validated.value.execution,
                   capabilities,
@@ -510,6 +577,36 @@ export const makeDefinitions = (
             ),
           );
         });
+      },
+      changeAgentOwner(id, input) {
+        const validated = validateChangeOwner(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const { expectedProjectId, projectId } = validated.value;
+        return transaction(
+          withSavedAgent<AgentDefinition>(id, (agent) =>
+            Effect.gen(function* () {
+              if (agent.projectId !== expectedProjectId) return staleOwner("Agent");
+              if (projectId === agent.projectId) return { ok: true as const, value: agent };
+              const refused = yield* ownerRefusal(projectId);
+              if (refused) return refused;
+              const blockers = (yield* currentFlowsReferencingAgent(sql, id)).filter(
+                (flow) => !mayPlaceAgent(flow.project_id, projectId),
+              );
+              if (blockers.length)
+                return failure(
+                  "conflict",
+                  "Flows outside the new owner place this Agent. Remove it from those Flows, or Duplicate it into the target instead.",
+                  blockers.map((flow) => ({
+                    code: "owner_change_blocked",
+                    path: "projectId",
+                    message: `Flow "${flow.name}" (${flow.id}) places this Agent and may not place it under the new owner.`,
+                  })),
+                );
+              yield* sql`UPDATE agents SET project_id=${projectId} WHERE id=${id}`;
+              return { ok: true as const, value: { ...agent, projectId } };
+            }),
+          ),
+        );
       },
       duplicateAgent(id, input) {
         const validated = validateDuplicateAgent(input);

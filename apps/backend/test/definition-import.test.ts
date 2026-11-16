@@ -424,6 +424,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
       workspace: { mode: "worktree", base: { kind: "ref", ref: "release/2.0" } },
       graph: {
         flowInput: flowInput(["coder"], { x: 10, y: 20 }),

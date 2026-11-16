@@ -137,6 +137,7 @@ export async function reviewedFlow(context: TestContext) {
     const saved = await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: revision,
+      expectedProjectId: created.projectId,
       workspace: created.workspace,
       graph: graph(block),
     });
@@ -149,6 +150,7 @@ export async function reviewedFlow(context: TestContext) {
       ...reviewerInput,
       exits,
       expectedRevision: assertOk(await factory.getAgent(reviewer.id)).revision,
+      expectedProjectId: reviewer.projectId,
     });
   return { factory, flowId: created.id, reviewer, review, save, editReviewer };
 }
@@ -180,8 +182,9 @@ export async function discoveredClones(context: TestContext) {
 }
 
 /**
- * Sets a Flow's or Agent's owning Project in the open backend's storage without a revision, as
- * Change owner will. No public operation changes an owner yet, so this stands in for it.
+ * Sets a Flow's or Agent's owning Project in the open backend's storage without a revision or any
+ * placement check. Change owner refuses the out-of-rule owners this produces, so it stands in only
+ * for stored states no public operation can reach.
  */
 export function ownerChangedInStorage(
   databasePath: string,
@@ -241,6 +244,7 @@ export async function waitDraft(context: TestContext) {
     factory.updateFlow(created.value.id, {
       name: created.value.name,
       expectedRevision: created.value.revision,
+      expectedProjectId: created.value.projectId,
       workspace: created.value.workspace,
       graph: graph(wait, targets),
     });
@@ -256,6 +260,7 @@ export async function conditionDraft(context: TestContext) {
     factory.updateFlow(created.value.id, {
       name: created.value.name,
       expectedRevision: created.value.revision,
+      expectedProjectId: created.value.projectId,
       workspace: created.value.workspace,
       graph: { flowInput: flowInput(...targets), ...graph },
     });

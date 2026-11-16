@@ -557,7 +557,7 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
-export { mayPlaceAgent, type OwningProject } from "./placement.ts";
+export { mayPlaceAgent, type OwningProject, validateChangeOwner } from "./placement.ts";
 export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,

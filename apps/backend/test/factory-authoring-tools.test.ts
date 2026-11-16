@@ -75,6 +75,7 @@ it("a partial-position save arranges the whole graph after creating a ready Flow
       flowId: flow.id,
       name: flow.name,
       expectedRevision: flow.revision,
+      expectedProjectId: flow.projectId,
       graph: { ...graph, flowInput: { ...graph.flowInput, position: { x: -10000, y: 10000 } } },
     },
   });
@@ -98,6 +99,7 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
       ...sampleAgentInput("Coder"),
       prompt: "Studio's edit",
       expectedRevision: opened.revision,
+      expectedProjectId: opened.projectId,
     }),
   );
 
@@ -109,6 +111,7 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
       agentId: opened.id,
       prompt: "The agent's edit",
       expectedRevision: opened.revision,
+      expectedProjectId: opened.projectId,
     },
   });
 
@@ -143,6 +146,7 @@ it("an Agent save choosing a provider without Factory reporting support is refus
       ...sampleAgentInput("Coder"),
       agentId: saved.id,
       expectedRevision: saved.revision,
+      expectedProjectId: saved.projectId,
       execution: { ...saved.execution, providerInstanceId: "future-main" },
     },
   });
@@ -222,6 +226,7 @@ it("factory_save_agent with execution null saves the next revision without a mod
       ...sampleAgentInput("Coder"),
       agentId: saved.id,
       expectedRevision: saved.revision,
+      expectedProjectId: saved.projectId,
       execution: null,
     },
   });
@@ -243,7 +248,12 @@ it("factory_save_agent without the execution key is refused and keeps the model"
   // Act
   const result = await client.callTool({
     name: "factory_save_agent",
-    arguments: { ...withoutExecution, agentId: saved.id, expectedRevision: saved.revision },
+    arguments: {
+      ...withoutExecution,
+      agentId: saved.id,
+      expectedRevision: saved.revision,
+      expectedProjectId: saved.projectId,
+    },
   });
 
   // Assert
@@ -276,6 +286,7 @@ it.for([
         ...sampleAgentInput("Coder"),
         agentId: saved.id,
         expectedRevision: saved.revision,
+        expectedProjectId: saved.projectId,
         execution: partial,
       },
     });
@@ -298,6 +309,7 @@ it("a stale Flow save whose graph is too large to arrange is refused as a confli
     await factory.updateFlow(opened.id, {
       name: "Studio's edit",
       expectedRevision: opened.revision,
+      expectedProjectId: opened.projectId,
       graph: opened.graph,
     }),
   );
@@ -310,6 +322,7 @@ it("a stale Flow save whose graph is too large to arrange is refused as a confli
       flowId: opened.id,
       name: "The agent's edit",
       expectedRevision: opened.revision,
+      expectedProjectId: opened.projectId,
       graph: {
         flowInput: { targetBlockIds: [] },
         blocks: ids.map((id) => ({ id, kind: "human", name: id })),
@@ -498,6 +511,7 @@ it("factory_save_flow replaces an Agent block's Revisit instruction and factory_
       flowId: created.id,
       name: created.name,
       expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
       graph: revisitGraph(agent.id, "Verify the fixes and the newly affected scope."),
     },
   });

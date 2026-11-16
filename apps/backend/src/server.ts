@@ -372,6 +372,11 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
       body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateFlow(parameters.id, input)),
     },
+    changeFlowOwner: {
+      body: standardBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.changeFlowOwner(parameters.id, input)),
+    },
     exportFlow: { handle: ({ parameters }) => answer(() => factory.exportFlow(parameters.id)) },
   };
 }
@@ -393,6 +398,11 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
     updateAgent: {
       body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateAgent(parameters.id, input)),
+    },
+    changeAgentOwner: {
+      body: standardBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.changeAgentOwner(parameters.id, input)),
     },
     removeAgent: { handle: ({ parameters }) => answer(() => factory.removeAgent(parameters.id)) },
     exportAgent: { handle: ({ parameters }) => answer(() => factory.exportAgent(parameters.id)) },

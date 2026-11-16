@@ -18,7 +18,7 @@ import {
   isRecord,
   type IssueReporter,
 } from "./block-exits.ts";
-import { parseOwningProject } from "./placement.ts";
+import { parseExpectedOwner, parseOwningProject } from "./placement.ts";
 
 /** Structural save validation is deliberately separate from execution readiness. */
 function validateFlowName(input: unknown): Result<Pick<CreateFlowInput, "name">> {
@@ -444,10 +444,17 @@ export function validateCreateFlow(input: unknown): Result<CreateFlowInput> {
 export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
   const checked = checkFlowBody(input, true);
   if (!checked.ok) return checked;
+  const expectedProjectId = parseExpectedOwner(input);
+  if (!expectedProjectId.ok) return expectedProjectId;
   const { graph, ...rest } = checked.value;
   return {
     ok: true,
-    value: { ...rest, expectedRevision: checked.expectedRevision, graph: graph! },
+    value: {
+      ...rest,
+      expectedRevision: checked.expectedRevision,
+      expectedProjectId: expectedProjectId.value,
+      graph: graph!,
+    },
   };
 }
 
