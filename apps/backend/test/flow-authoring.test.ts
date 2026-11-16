@@ -996,6 +996,30 @@ it("saving a Flow under an owner it no longer has is refused and appends no revi
   expect(assertOk(await factory.getFlow(flow.id))).toMatchObject({ name: "Release", revision: 1 });
 });
 
+it("checking a Flow's readiness under an owner it no longer has is refused", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const checked = await factory.validateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: null,
+    graph: flow.graph,
+  });
+
+  // Assert
+  assert(!checked.ok);
+  expect(checked.error.code).toBe("conflict");
+  expect(checked.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+});
+
 it("an Agent owner change gives a Flow placing it a new readiness stamp without a revision", async (context) => {
   // Arrange
   const { factory, first } = await discoveredClones(context);

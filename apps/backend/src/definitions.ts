@@ -482,6 +482,8 @@ export const makeDefinitions = (
         return transaction(
           withSavedFlow<FlowValidation>(id, (flow) =>
             Effect.gen(function* () {
+              // Readiness depends on the owner, so an answer judged under another one is stale.
+              if (flow.projectId !== validated.value.expectedProjectId) return staleOwner("Flow");
               const agents = yield* readinessAgents;
               const { graph } = validated.value;
               return {
