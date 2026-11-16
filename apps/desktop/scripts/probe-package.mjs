@@ -202,7 +202,11 @@ const untilFrame = (name, frame) => `(async () => {
   return record.frames;
 })()`;
 
-/** A pinned-TLS WebSocket server standing in for a remote `/api/live`; it echoes frames. */
+/**
+ * A pinned-TLS WebSocket server standing in for a remote `/api/live`; it echoes frames.
+ * The main process's attention subscription connects to it too, so a renderer's socket is
+ * found by a marker frame the renderer sends, never by connection order.
+ */
 async function liveStandIn() {
   const { ensureRemoteCertificate } = await import(
     pathToFileURL(join(repository, "apps/backend/dist/remote-certificates.js")).href
@@ -217,9 +221,14 @@ async function liveStandIn() {
   const live = new WebSocketServer({ server });
   live.on("connection", (socket, request) => {
     const { origin, authorization } = request.headers;
-    upgrades.push({ url: request.url, origin, authorization: authorization !== undefined });
+    socket.upgrade = { url: request.url, origin, authorization: authorization !== undefined };
+    upgrades.push(socket.upgrade);
+    socket.received = [];
     socket.closed = new Promise((resolve) => socket.once("close", (code) => resolve(code)));
-    socket.on("message", (data, binary) => socket.send(data, { binary }));
+    socket.on("message", (data, binary) => {
+      socket.received.push(Buffer.from(data).toString());
+      socket.send(data, { binary });
+    });
     sockets.push(socket);
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -231,7 +240,9 @@ async function liveStandIn() {
       fingerprint: certificate.fingerprint,
     },
     upgrades,
-    sockets,
+    /** The socket whose peer sent `marker`. */
+    receivedBy: (marker) =>
+      until(async () => sockets.find((socket) => socket.received.includes(marker)), 10_000),
     close: () => {
       for (const socket of live.clients) socket.terminate();
       server.closeAllConnections();
@@ -428,6 +439,7 @@ try {
   const ready = () =>
     until(() => evaluate(9444, "typeof window.factoryDesktop?.openLive === 'function'"), 60_000);
 
+  let rendererSocket;
   await stage("the client relay round-trips live frames over pinned TLS", async () => {
     await ready();
     await evaluate(9444, liveShim);
@@ -437,14 +449,15 @@ try {
     );
     if (!outcome.open) throw new Error(`Live socket did not open: ${JSON.stringify(outcome)}`);
     await evaluate(9444, "window.live.socket.send('ping')");
-    standIn.sockets[0].send("pushed by server");
+    rendererSocket = await standIn.receivedBy("ping");
+    rendererSocket.send("pushed by server");
     const frames = await withTimeout(
       evaluate(9444, untilFrame("live", "pushed by server")),
       10_000,
     );
     if (!frames.includes("ping") || !frames.includes("pushed by server"))
       throw new Error(`Frames missing: ${JSON.stringify(frames)}`);
-    const upgrade = standIn.upgrades[0];
+    const upgrade = rendererSocket.upgrade;
     if (upgrade.url !== `/api/live?${liveQuery}` || upgrade.origin !== standIn.url)
       throw new Error(`Unexpected upgrade ${JSON.stringify(upgrade)}`);
     return { frames, upgrade };
@@ -453,7 +466,7 @@ try {
   await stage("reloading the renderer closes its live socket in the main process", async () => {
     const target = await page(9444);
     await cdp(target.webSocketDebuggerUrl, "Page.reload");
-    const code = await withTimeout(standIn.sockets[0].closed, 10_000);
+    const code = await withTimeout(rendererSocket.closed, 10_000);
     return { serverSawClose: code };
   });
 
@@ -461,7 +474,8 @@ try {
     await evaluate(9444, liveShim);
     const outcome = await withTimeout(evaluate(9444, openLiveSocket("live")), 15_000);
     if (!outcome.open) throw new Error(`Live socket did not open: ${JSON.stringify(outcome)}`);
-    const server = standIn.sockets[1];
+    await evaluate(9444, "window.live.socket.send('forget')");
+    const server = await standIn.receivedBy("forget");
     const closed = await withTimeout(
       evaluate(9444, "window.factoryDesktop.forgetServer().then(() => window.live.closed)"),
       10_000,
@@ -485,7 +499,8 @@ try {
     await evaluate(9445, liveShim);
     const outcome = await withTimeout(evaluate(9445, openLiveSocket("live")), 15_000);
     if (!outcome.open) throw new Error(`Live socket did not open: ${JSON.stringify(outcome)}`);
-    const server = standIn.sockets[2];
+    await evaluate(9445, "window.live.socket.send('close')");
+    const server = await standIn.receivedBy("close");
     await closeWindow(9445);
     const code = await withTimeout(server.closed, 10_000);
     reopened.child.kill("SIGTERM");
