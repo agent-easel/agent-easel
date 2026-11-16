@@ -11,8 +11,9 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
+import { ControlledGitHub } from "./controlled-github.ts";
 
-/** Disposable T3 state and harness home for a controlled, approved T3. */
+/** Disposable T3 state and harness home for a controlled, approved T3 and a controlled GitHub. */
 async function preparedHomes(processHome: string) {
   const root = join(processHome, "neutral");
   await mkdir(root);
@@ -23,7 +24,7 @@ async function preparedHomes(processHome: string) {
   await mkdir(reportingStateDirectory);
   await mkdir(reportingHome);
   await writeReportingState(reportingStateDirectory, t3.environmentId, reportingHome);
-  return { root, t3, reportingStateDirectory };
+  return { root, t3, github: new ControlledGitHub(), reportingStateDirectory };
 }
 
 /** Connects T3, installs reporting, adds the project and saves the ready Flow: the single-worker
@@ -68,15 +69,16 @@ export async function prepared(
   { discordApiUrl }: { readonly discordApiUrl?: string } = {},
 ) {
   const h = await factoryHarness(c);
-  const { root, t3, reportingStateDirectory } = await preparedHomes(h.processHome);
+  const { root, t3, github, reportingStateDirectory } = await preparedHomes(h.processHome);
   const f = await h.open({
     t3,
+    github,
     reportingStateDirectory,
     connectionRetryMs: 60_000,
     ...(discordApiUrl ? { discordApiUrl } : {}),
   });
   c.onTestFinished(() => f.close());
-  return { h, f, t3, ...(await readyFlow(f, t3, root, shape)) };
+  return { h, f, t3, github, ...(await readyFlow(f, t3, root, shape)) };
 }
 
 /**
@@ -95,7 +97,7 @@ export function preparedService(
 ) {
   return Effect.gen(function* () {
     const h = yield* Effect.promise(() => factoryHarness(c));
-    const { root, t3, reportingStateDirectory } = yield* Effect.promise(() =>
+    const { root, t3, github, reportingStateDirectory } = yield* Effect.promise(() =>
       preparedHomes(h.processHome),
     );
     const testScope = yield* Effect.scope;
@@ -106,6 +108,7 @@ export function preparedService(
       const service = yield* h
         .service({
           t3,
+          github,
           reportingStateDirectory,
           connectionRetryMs,
           ...(discordApiUrl === undefined ? {} : { discordApiUrl }),
@@ -141,6 +144,7 @@ export function preparedService(
       close,
       reopen: Effect.map(open, (opened) => opened.factory),
       t3,
+      github,
       ...ready,
     };
   });

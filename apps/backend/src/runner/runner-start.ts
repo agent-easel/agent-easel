@@ -28,7 +28,12 @@ import {
 import * as Effect from "effect/Effect";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
-import type { RunStore, StartPlan, StartWorkspace } from "./run-store/run-store.ts";
+import type {
+  AcceptanceCommit,
+  RunStore,
+  StartPlan,
+  StartWorkspace,
+} from "./run-store/run-store.ts";
 import type { RunnerLifecycle, RunnerOptions } from "./runner-types.ts";
 import { catalogProject } from "./runner-utils.ts";
 import { fingerprint } from "../fingerprint.ts";
@@ -39,8 +44,12 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
   readonly check: Effect.Effect<Result<undefined>, unknown>;
-  /** Local state only: this runs inside the Run acceptance transaction. */
-  readonly commit: Effect.Effect<Result<undefined>, unknown>;
+  /**
+   * Local state only: this runs inside the Run acceptance transaction after the accepted Run's
+   * records are written, so its own writes may reference `runId`. A refusal rolls back the whole
+   * acceptance, including those writes.
+   */
+  readonly commit: AcceptanceCommit;
 }
 
 /** Request identity and choices; the prompt itself is validated by `validateStartPrompt`. */

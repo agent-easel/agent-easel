@@ -15,6 +15,7 @@ import { makeDefinitions } from "./definitions.ts";
 import * as RuntimeSetup from "./runtime-setup.ts";
 import * as ReportingInstaller from "./reporting-installation.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
+import type { GitHubAdapter } from "./adapters/github.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
@@ -86,6 +87,7 @@ export const makeFactoryService = (
   options: FactoryOptions,
   owner: Awaited<ReturnType<typeof acquireRunnerOwner>>,
   t3: T3Adapter,
+  github: GitHubAdapter,
   credentialsDirectory: string,
 ) =>
   Effect.gen(function* () {

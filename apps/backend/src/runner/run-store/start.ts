@@ -39,6 +39,17 @@ export type StartPlan = {
   titleGeneration: TitleGenerationPlan | undefined;
 };
 
+/** A trusted caller's last local check and writes, given the Run being accepted. */
+export type AcceptanceCommit = (runId: string) => Effect.Effect<Result<undefined>, unknown>;
+
+/** Fails the acceptance transaction so a caller's refusal after the Run's writes rolls them back. */
+class AcceptanceRefused {
+  readonly refusal: Extract<Result<undefined>, { ok: false }>;
+  constructor(refusal: AcceptanceRefused["refusal"]) {
+    this.refusal = refusal;
+  }
+}
+
 /** Rechecks saved revisions, context and project inside the acceptance transaction. */
 function startConfigurationConflict(sql: SqlClient.SqlClient, plan: StartPlan) {
   return Effect.gen(function* () {
@@ -94,7 +105,7 @@ function acceptStartRecords(
   sql: SqlClient.SqlClient,
   plan: StartPlan,
   hasFile: RunImages["hasFile"],
-  authorize?: Effect.Effect<Result<undefined>, unknown>,
+  commit?: AcceptanceCommit,
 ) {
   return Effect.gen(function* () {
     const [duplicate] = yield* sql<{
@@ -115,10 +126,6 @@ function acceptStartRecords(
     if (conflict) return conflict;
     const unstaged = yield* stagedManifestProblem(sql, plan.prompt.images, hasFile);
     if (unstaged) return unstaged;
-    if (authorize) {
-      const permitted = yield* authorize;
-      if (!permitted.ok) return permitted;
-    }
     const title = plan.input.title.trim();
     yield* sql`INSERT INTO tasks(id,project_id,title,created_at) VALUES(${plan.taskId},${plan.project.id},${title},${plan.time})`;
     const project = plan.project;
@@ -162,6 +169,10 @@ function acceptStartRecords(
       prompt: plan.prompt,
       project,
     });
+    if (commit) {
+      const permitted = yield* commit(plan.runId);
+      if (!permitted.ok) return yield* Effect.fail(new AcceptanceRefused(permitted));
+    }
     return { ok: true as const, value: plan.runId };
   });
 }
@@ -170,16 +181,17 @@ export function openRunStart(database: RunnerDatabase) {
   /** Accepts a Start in one transaction outside any Run's lane (no Run exists yet; the Runner's
    * Start permit serializes it). A replayed key with the same content answers its existing Run; a
    * changed key, changed configuration or an unstaged image refuses. The staged image manifest is
-   * checked and Run image records are written through the Run images module. Publishes the Run's
-   * live change after the commit when accepted. */
-  const acceptStart = (
-    plan: StartPlan,
-    hasFile: RunImages["hasFile"],
-    authorize?: Effect.Effect<Result<undefined>, unknown>,
-  ) =>
+   * checked and Run image records are written through the Run images module. A caller's `commit`
+   * refusal rolls the acceptance back. Publishes the Run's live change after the commit when
+   * accepted. */
+  const acceptStart = (plan: StartPlan, hasFile: RunImages["hasFile"], commit?: AcceptanceCommit) =>
     database
-      .transaction((sql) => acceptStartRecords(sql, plan, hasFile, authorize))
+      .transaction((sql) => acceptStartRecords(sql, plan, hasFile, commit))
       .pipe(
+        Effect.catchIf(
+          (error) => error instanceof AcceptanceRefused,
+          (refused) => Effect.succeed(refused.refusal),
+        ),
         Effect.tap((accepted) =>
           Effect.sync(() => {
             if (accepted.ok) database.changes.runChanged(accepted.value);

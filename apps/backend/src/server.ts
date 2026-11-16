@@ -658,6 +658,7 @@ function handleHttpRequestInner(
 export interface ServerOptions {
   readonly uiDirectory?: string | null;
   readonly t3?: FactoryOptions["t3"];
+  readonly github?: FactoryOptions["github"];
   readonly connectionRetryMs?: number;
   readonly reportingStateDirectory?: string;
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
@@ -680,6 +681,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),
     ...(options.t3 ? { t3: options.t3 } : {}),
+    ...(options.github ? { github: options.github } : {}),
     ...(options.connectionRetryMs !== undefined
       ? { connectionRetryMs: options.connectionRetryMs }
       : {}),

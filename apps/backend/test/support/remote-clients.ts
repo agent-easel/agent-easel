@@ -343,6 +343,7 @@ export async function remotePrepared(context: TestContext) {
   const server = await remoteServer(context, {
     home: fixture.h.processHome,
     t3: fixture.t3,
+    github: fixture.github,
     reportingStateDirectory: join(fixture.h.processHome, "reporting-state"),
     connectionRetryMs: 60_000,
   });

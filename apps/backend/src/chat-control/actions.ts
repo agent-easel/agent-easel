@@ -490,13 +490,14 @@ export function makeChatActions(
           return failure("conflict", "Discord no longer permits this confirmation.");
         return { ok: true as const, value: undefined };
       }),
-      commit: Effect.gen(function* () {
-        const allowed = yield* local;
-        if (!allowed.ok) return allowed;
-        return click.accessCurrent()
-          ? allowed
-          : failure("conflict", "Discord access changed before Factory accepted the Start.");
-      }),
+      commit: () =>
+        Effect.gen(function* () {
+          const allowed = yield* local;
+          if (!allowed.ok) return allowed;
+          return click.accessCurrent()
+            ? allowed
+            : failure("conflict", "Discord access changed before Factory accepted the Start.");
+        }),
     };
   };
 
