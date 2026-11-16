@@ -12,8 +12,6 @@ export type CanvasDimensions = {
     readonly divider: number;
     readonly exitPaddingTop: number;
     readonly exitPaddingBottom: number;
-    /** The border included in port anchors, which are measured from the block's outer edge. */
-    readonly anchorBorder: number;
     readonly inputY: number;
     readonly exitRow: number;
     readonly footer: number;
@@ -21,7 +19,6 @@ export type CanvasDimensions = {
   readonly flowInput: {
     readonly width: number;
     readonly border: number;
-    readonly anchorBorder: number;
     readonly header: number;
     readonly title: number;
     readonly outputY: number;
@@ -34,8 +31,6 @@ export type CanvasDimensions = {
   readonly port: {
     /** The drawn circle. */
     readonly size: number;
-    /** How far a circle reaches past the block's inner edge. */
-    readonly outset: number;
     /** The hit area of a port that starts a connection. */
     readonly handle: number;
     /** The circle of the input a connection being drawn will use. */
@@ -46,7 +41,7 @@ function dimensionPorts({ block }: CanvasDimensions): BlockPorts {
   return {
     inputY: block.inputY,
     firstExitY:
-      block.anchorBorder +
+      block.border +
       block.header +
       block.title +
       block.divider +
@@ -65,10 +60,6 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
 };
 
-/**
- * Authoring rows retain their existing border-relative port offsets: anchors are measured
- * from the outer edge while ports sit inside the border.
- */
 export const AUTHORING_DIMENSIONS: CanvasDimensions = {
   block: {
     width: 240,
@@ -79,7 +70,6 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
     divider: 1,
     exitPaddingTop: 4,
     exitPaddingBottom: 6,
-    anchorBorder: 0,
     inputY: 51,
     exitRow: 24,
     footer: 0,
@@ -87,7 +77,6 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
   flowInput: {
     width: 200,
     border: 1,
-    anchorBorder: 0,
     header: 30,
     title: 44,
     outputY: 51,
@@ -95,7 +84,7 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
     promptImages: 0,
     statusLine: 0,
   },
-  port: { size: 12, outset: 6, handle: 20, highlight: 16 },
+  port: { size: 12, handle: 20, highlight: 16 },
 };
 
 /** Node sizes and anchors shared by the canvas and server-side authoring layout. */
