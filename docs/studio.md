@@ -173,7 +173,8 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
   Flow), each with its owner and, for a Flow, the blocks placing the Agent; a listed one opens in Studio. Its **Duplicate to
   *owner*…** opens Duplicate with that target instead; an Agent with unsaved changes must be saved first. The editor's own move
-  never asks for acknowledgement.
+  needs no acknowledgement; a later delivery naming another owner, including the former one, is followed like a move elsewhere,
+  because live updates can coalesce a move back.
 - **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor header, saved
   Agents only) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
   its reason and blocks Duplicate until another target is picked. Flow Duplicate also takes the new name (the plan's
@@ -188,7 +189,8 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   appends no revision. Without unsaved changes it simply shows the new owner. With unsaved changes it keeps them, shows
   **This *kind* is now owned by *owner*** (or **is now Global**) and disables Save until **Acknowledge new owner**; the next
   save then expects the new owner. A save refused as `stale_owner` before Studio delivered the move keeps the draft, shows
-  the refusal and waits for the new owner, then asks for the same acknowledgement instead of a revision comparison. Moving
+  the refusal and waits for the new owner, then asks for the same acknowledgement instead of a revision comparison; when Studio
+  already shows an owner other than the one the save expected, it asks at once. Moving
   back to the acknowledged owner needs no acknowledgement.
 
 ## Agent definitions
@@ -377,8 +379,8 @@ The editor header also offers **Export** (see [Definition export](#definition-ex
 
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by keeping the local draft against one, by a change to an Agent the draft
-places, by the Flow's removal and while Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
-content, baseline revision and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent revisions Studio does not show yet, is
+places, by a change of the Flow's owner (elsewhere or by the editor's own Change owner), by the Flow's removal and while Studio's saved definitions are not synchronized, also while a switch to a newer revision waits; **Start Run** stays disabled while readiness is unknown. A check result applies only to the
+content, baseline revision, owner and placed Agent revisions it was requested for: an answer arriving after any of them changed, or resolved against Agent revisions Studio does not show yet, is
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen, and only while the owning Project is available. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
