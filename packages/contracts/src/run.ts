@@ -675,6 +675,9 @@ export interface ConditionSummary {
 /** Condition evidence page sizes: the default and the largest allowed; the smallest is 1. */
 export const CONDITION_ARRIVAL_PAGE_DEFAULT = 50;
 export const CONDITION_ARRIVAL_PAGE_MAX = 100;
+/** A Run read's `events` keep each Condition's latest this many selections; its evidence pages
+ * reach the earlier ones. */
+export const CONDITION_TIMELINE_ARRIVALS = 50;
 
 /**
  * Where one recipient's delivery of a Condition selection stands now: `pending` until it is

@@ -513,8 +513,10 @@ in the Run, whichever wire or worker it came from, and goes unchanged, with its 
 rules select ([Runner](runner.md#condition-arrivals)). Run detail carries one constant-size summary per Condition, not its
 history: the arrivals numbered so far, the deliveries waiting there for a number, and the latest selection (arrival number,
 selected output and acceptance time), which is the most recent route, not proof its recipients received it. The timeline
-records one **arrival *N* → *output*** row per arrival with the Condition icon. A Condition is never Needs input and its
-routing raises no attention.
+records one **arrival *N* → *output*** row per arrival with the Condition icon. A Run read carries only each Condition's
+latest 50 selection events, chosen in the query, so a Condition with more arrivals shows its latest 50 in the timeline with a
+note that the earlier ones are in its arrivals details below. A Condition is never Needs input and its routing raises no
+attention.
 
 When Factory cannot trust a Condition's count, captured rules or waiting delivery, or its next arrival number would pass
 9,007,199,254,740,991, it numbers nothing and records one **Condition integrity Problem** on the Condition, with the

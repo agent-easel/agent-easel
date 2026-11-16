@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { CONDITION_TIMELINE_ARRIVALS } from "@t3-factory/contracts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   arrivalsNumbered,
@@ -6,6 +7,7 @@ import {
   chainedConditionFlow,
   conditionFlow,
   conditionLoopedThrough,
+  conditionSelections,
   resultReported,
   selfLoopConditionFlow,
   workerAtWork,
@@ -100,6 +102,26 @@ it("later pages stay within the first page's window while new arrivals land", as
   const run = await f.f.getRun(worker.runId);
   assert(run.ok);
   expect(run.value.conditions[0]?.arrivals).toBe(4);
+});
+
+it("a Run read keeps only a Condition's latest selections while its evidence still reaches arrival 1", async (c) => {
+  // Arrange
+  const f = await prepared(c, selfLoopConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await conditionLoopedThrough(f.world, worker, CONDITION_TIMELINE_ARRIVALS + 1);
+
+  // Act
+  const run = await f.f.getRun(worker.runId);
+
+  // Assert
+  assert(run.ok);
+  const numbers = conditionSelections(run.value).map((selection) => selection.arrivalNumber);
+  expect(numbers).toHaveLength(CONDITION_TIMELINE_ARRIVALS);
+  expect(numbers[0]).toBe(2);
+  expect(numbers.at(-1)).toBe(CONDITION_TIMELINE_ARRIVALS + 1);
+  const page = await f.f.listConditionArrivals(worker.runId, "gate", "1", "");
+  assert(page.ok);
+  expect(page.value.arrivals.map((arrival) => arrival.arrivalNumber)).toStrictEqual([1]);
 });
 
 it.for([

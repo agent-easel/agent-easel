@@ -1,6 +1,10 @@
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { useState } from "react";
-import type { RunAttention, RunDetail } from "@t3-factory/contracts";
+import {
+  CONDITION_TIMELINE_ARRIVALS,
+  type RunAttention,
+  type RunDetail,
+} from "@t3-factory/contracts";
 import { capturedExits } from "../flow-graph.ts";
 import {
   ArrowRight,
@@ -128,6 +132,20 @@ function conditionSelected(run: RunDetail, event: RunEvent): EventPhrase {
     actorId: event.blockId,
     text: `arrival ${countText(selection.arrivalNumber)} → ${conditionOutputName(run, event.blockId, selection.outputId)}`,
   };
+}
+
+/**
+ * Conditions whose earlier selections a Run read leaves out: each with the last arrival number
+ * missing from the Timeline, which the Condition's arrivals details still list.
+ */
+function omittedConditionArrivals(run: RunDetail) {
+  const earliest = new Map<string, number>();
+  for (const { blockId, condition } of run.events)
+    if (blockId && condition && !earliest.has(blockId))
+      earliest.set(blockId, condition.arrivalNumber);
+  return [...earliest].flatMap(([blockId, first]) =>
+    first > 1 ? [{ blockId, through: first - 1 }] : [],
+  );
 }
 
 const attentionWords: Record<RunAttention["kind"], string> = {
@@ -420,6 +438,17 @@ export function RunTimeline({
             className="h-65 min-h-0 flex-none overflow-auto border-t px-3 py-1"
           >
             <ol>
+              {omittedConditionArrivals(run).map(({ blockId, through }) => (
+                <li
+                  key={`condition-omitted-${blockId}`}
+                  className="flex min-w-0 items-center gap-2 px-3 py-1 text-sm text-subtle-foreground"
+                >
+                  <ActorIcon run={run} actorId={blockId} title={false} />
+                  <span className="min-w-0 truncate">
+                    {`${nameOf(run, blockId)} · Timeline lists its latest ${CONDITION_TIMELINE_ARRIVALS} arrivals · ${through === 1 ? "arrival 1 is" : `arrivals 1–${countText(through)} are`} in its arrivals details`}
+                  </span>
+                </li>
+              ))}
               {rows.map((row) =>
                 row.kind === "event" ? (
                   <TimelineEvent

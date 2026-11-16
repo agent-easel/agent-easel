@@ -13,6 +13,7 @@ import { workerProvenance } from "./handoffs.ts";
 import { readConditionSummaries } from "./conditions.ts";
 import {
   CONDITION_OTHERWISE_ID,
+  CONDITION_TIMELINE_ARRIVALS,
   type Result,
   type RunAttention,
   type RunDetail,
@@ -266,8 +267,10 @@ export function openRunQueries(database: RunnerDatabase) {
           yield* sql<BlockRow>`SELECT * FROM run_blocks WHERE run_id=${id} ORDER BY rowid`;
         const intents =
           yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
+        // A Condition's selections grow with every arrival, so a Run read keeps only its latest
+        // ones; the bounded evidence page reaches the rest.
         const events =
-          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id WHERE e.run_id=${id} ORDER BY e.sequence`;
+          yield* sql<RunEventRow>`SELECT e.*,c.arrival_number,CASE WHEN c.id IS NULL THEN NULL ELSE COALESCE(c.rule_id,${CONDITION_OTHERWISE_ID}) END AS output_id FROM run_events e LEFT JOIN condition_arrivals c ON e.kind='condition-selected' AND c.id=e.cause_id WHERE e.run_id=${id} AND (e.kind<>'condition-selected' OR c.arrival_number>(SELECT k.arrivals FROM condition_counters k WHERE k.run_id=c.run_id AND k.block_id=c.block_id)-${CONDITION_TIMELINE_ARRIVALS}) ORDER BY e.sequence`;
         const reports =
           yield* sql<ResultRecord>`SELECT * FROM runtime_reports WHERE run_id=${id} ORDER BY rowid`;
         const executions = yield* sql<ExecutionRow>`SELECT x.*,

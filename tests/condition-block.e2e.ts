@@ -543,3 +543,44 @@ test("a Condition's arrival list offers arrivals numbered while it is open for r
   await details.getByRole("listitem", "Arrival 56, Stop").scrollIntoView();
   await app.screenshot("condition-run-arrivals-loaded-past-50");
 });
+
+test("the Timeline lists only a Condition's latest 50 arrivals and notes that the earlier ones are in its arrivals details", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const flowId = await saveConditionFlow(
+    app.baseUrl,
+    "Count rounds past the Timeline window",
+    [
+      { id: "stop", name: "Stop", fromArrival: 60 },
+      { id: "again", name: "Keep going", fromArrival: 3 },
+    ],
+    [
+      ["stop", "review"],
+      ["again", "worker"],
+      ["otherwise", "worker"],
+    ],
+  );
+  const { id: runId } = await fixture.scenarios.ensure({
+    key: "condition-timeline-window",
+    flow: { id: flowId },
+  });
+  await fixture.scenarios.arriveAtCondition({ id: runId, through: 52 });
+  await app.open(`/runs/${runId}`);
+
+  // Act
+  const timeline = await openTimeline(app, screen, "condition-timeline-window-run");
+
+  // Assert
+  await expect(timeline).toContainText(
+    "Escalate · Timeline lists its latest 50 arrivals · arrivals 1–2 are in its arrivals details",
+  );
+  await expect(timeline).toContainText("arrival 3 → Keep going");
+  await expect(timeline).toContainText("arrival 52 → Keep going");
+  await expect(timeline).not.toContainText("→ Otherwise");
+  await app.screenshot("condition-timeline-window");
+});
