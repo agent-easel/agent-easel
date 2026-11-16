@@ -9,6 +9,8 @@ export const channels = {
   retryBackend: "factory:retry-backend",
   setLaunchAtLogin: "factory:set-launch-at-login",
   setMenuBarIcon: "factory:set-menu-bar-icon",
+  setAlertSetting: "factory:set-alert-setting",
+  openNotificationSettings: "factory:open-notification-settings",
   checkForUpdates: "factory:check-for-updates",
   downloadUpdate: "factory:download-update",
   installUpdate: "factory:install-update",
@@ -21,4 +23,8 @@ export const channels = {
   setMenuState: "factory:set-menu-state",
   /** Main → renderer: a menu item chosen with the pointer; the renderer executes it. */
   menuCommand: "factory:menu-command",
+  /** Main → renderer: a notification or Dock click route for the window to apply. */
+  route: "factory:route",
+  /** Renderer → main: the page listens for routes; answers the route chosen before it did. */
+  takeRoute: "factory:take-route",
 } as const;

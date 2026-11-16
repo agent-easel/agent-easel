@@ -1,7 +1,13 @@
 import { expect, type TestFixtures } from "e2e";
 import type { Browser } from "@e2e-dev/web";
 import assert from "node:assert/strict";
-import type { Result, RunNavigationEntry } from "../../packages/contracts/src/index.ts";
+import {
+  mattersNeedingOwner,
+  type Result,
+  type RunNavigationEntry,
+} from "../../packages/contracts/src/index.ts";
+import type { DesktopRoute } from "../../packages/contracts/src/desktop-bridge.ts";
+import { desktopBridgeOptions, desktopBridgeScript } from "./desktop-bridge.ts";
 
 async function navigation(baseUrl: string | undefined) {
   const response = await fetch(new URL("/api/run-navigation", baseUrl));
@@ -87,4 +93,24 @@ export async function prepareSidebarPreview(
 export async function expectFlatSearch(screen: TestFixtures["screen"]) {
   await expect(screen.getByRole("button", /^Snoozed \d+$/)).toBeHidden();
   await expect(screen.getByRole("button", /^Settled \d+$/)).toBeHidden();
+}
+
+/** The Runs every desktop installation's Dock badge counts, in the Run list's creation order. */
+export async function badgeRunTitles(baseUrl: string | undefined) {
+  return (await navigation(baseUrl))
+    .filter((run) => mattersNeedingOwner(run).length > 0)
+    .map((run) => run.title);
+}
+
+/** Opens the New Run view in the desktop UI through the stand-in bridge, which can route the window. */
+export async function openDesktopWindow({ app, screen, browser }: SidebarFixtures) {
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+  await browser.setViewport({ width: 1440, height: 1100 });
+  await app.open("/runs/new");
+  await expect(screen.getByRole("navigation", "Open Runs")).toBeVisible();
+}
+
+/** Stands in for the main process routing the window after a notification or Dock click. */
+export async function routeWindow(browser: Browser, route: DesktopRoute) {
+  await browser.evaluate(`window.__route(${JSON.stringify(route)})`);
 }

@@ -28,7 +28,10 @@ same conflict in the other direction.
 ## Lifecycle
 
 - Closing the last window leaves the server (and its Runs) running. The Dock icon and
-  launching the app again reopen the panel.
+  launching the app again reopen the panel at the view it last showed, unless a Dock click
+  [routes](#notifications-and-dock-badge) to waiting Runs.
+- Closing the last window also leaves [notifications and the Dock badge](#notifications-and-dock-badge)
+  running, in both roles; they stop with Quit.
 - **Settings → Desktop app → Show Factory in the menu bar** (desktop only) is off by
   default. When enabled, a menu-bar icon shows the installation's role and status with
   **Open Factory** and **Quit Factory**. The choice is stored per installation and
@@ -105,6 +108,90 @@ the original request key and resolve to the same Run, and Settle or Archive is n
 reported successful without the server's response. Clients and servers interoperate
 across releases when their protocol ranges overlap; see the
 [compatibility range](#protocol-compatibility).
+
+## Notifications and Dock badge
+
+Every desktop installation, in either role, follows its server's Run navigation with its own
+live subscription in the main process, independent of any window: the server role over the
+supervised loopback backend, the client role over the pinned HTTPS connection with its
+credential. A server, role, credential or backend change replaces the subscription; any loss
+reconnects automatically. Browser profiles show no OS notifications, the menu-bar icon keeps showing only
+role and status, and [Chat control](chat-control.md) notices are unaffected.
+
+- **Dock badge**: the number of Runs with at least one pending **Needs input** or **Problem**
+  matter, not the number of matters. Snoozed, Settled and Archived Runs (which leave navigation)
+  do not count, nor do a Run's Human steps and native requests while a confirmed Settle is
+  stopping or unresolved. More than 99 Runs show `99+`; none removes the badge. The badge does not depend on
+  notification permission. Turning **Dock badge** off clears it.
+- **Readiness**: only the installation's own subscription qualifies the badge and notifications:
+  an accepted (approved, compatible) connection whose navigation snapshot is applied and
+  current. While it is offline, unauthorized, incompatible, synchronizing after a gap, or the
+  backend is stopped, the badge is cleared and nothing is notified from retained data.
+- **Notifications**: matters that become pending in one committed change share one notification
+  per Run, with `+N more` for the others; a later matter gets its own notification. A rise in a
+  worker's native pending-question count notifies once per increase (1, 2, 1, 2 is two
+  increases). By default the text is generic: "A Run needs your input" or "A Run has a problem".
+  **Show Run details in notifications** adds the project, Run title and Block name; message,
+  report or question text and paths never appear. Notifications play no sound and the Dock icon
+  never bounces. Ordinary Agent chat questions are not attention and never notify.
+- **Snooze and Settle hold**: a [Snoozed](runs.md#snooze-and-woke) Run is silent. Matters
+  pending or appearing while it is Snoozed never notify, also after **Restore**, which returns it
+  to the badge without a notification; new attention that wakes it (Woke) notifies as usual.
+  While a confirmed [Settle](runs.md#settled-runs) is stopping or unresolved, answers are
+  refused, so the Run's Human steps and native requests do not notify; its Problems, including
+  **Settle could not stop workers**, still do.
+- **Withdrawal**: a delivered notification is withdrawn, best effort, once none of the matters
+  it announced still counts: they resolved, or the Run was Snoozed, Settled, Archived or held by
+  a confirmed Settle. macOS alerts again for a notification posted again, so one whose matters
+  resolve only in part is withdrawn and not replaced; the rest stay on the badge and never
+  notify again. Withdrawing never makes a matter notify again.
+- **Focused window**: while any Factory window of this installation is focused, no notification
+  is shown. Matters that became pending meanwhile count as seen and never notify later, also
+  after switching to another app.
+- **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
+  **Notifications** (on), **Dock badge** (on) and **Show Run details in notifications** (off).
+  They are stored with the desktop settings, apply immediately and are never synchronized
+  through the server, so each Mac is tuned on its own. While **Notifications** is off nothing is
+  shown; turning it on shows what is still pending, at most one notification per Run.
+- **Permission**: macOS asks the first time a notification would be shown, never at launch and
+  never while it would be suppressed. Factory reads the permission without a window at startup,
+  before each delivery, when the app becomes active or the Mac wakes, and about every 60
+  seconds; a newly noticed grant shows what is still pending, at most one notification per Run.
+  A denial leaves the badge working and Factory never asks again. Settings shows the permission
+  status and, after a denial, **Open System Settings**, which opens this app's page in System
+  Settings → Notifications. A prompt left unanswered when Factory quits counts as denied.
+- **Restart and reconnect**: each installation keeps a ledger of what it announced in
+  `desktop-attention.json` beside its desktop settings, per server. After a restart or reconnect
+  the fresh snapshot catches up with at most one notification per Run for matters still pending
+  that were never announced; matters that appeared and resolved meanwhile are never reported. A
+  notification is recorded as attempted before it is posted, so a crash can lose a banner but
+  never repeats one; one macOS refused is retried only at the next catch-up.
+- **Routing**: clicking a notification focuses or opens the window and opens that Run as it is
+  now: with the Block selected while exactly one matter the notification announced is still
+  pending (a native request's Block offers **Open in T3**), otherwise the Run overview. An
+  Archived Run opens its read-only history and a Run that no longer exists shows that it is
+  unavailable. A notification clicked after Quit relaunches Factory and opens its Run once the
+  connection is ready, behind the connection gate. A Dock click with no window open opens the
+  single waiting Run (its Block selected when it has one matter), the Run list's
+  [Needs you (N)](runs.md#run-list) filter when several wait, or the last view when none does; with
+  a window open it only brings the window forward. Routing only navigates, never acts on a Run:
+  Settings and Studio still ask before discarding unsaved edits, and leaving the New Run view
+  keeps its draft. Clicks on another server's or a revoked selection's notifications open only
+  the window.
+- **Selection boundaries**: switching server or role, or the server refusing this client's
+  credential after a revocation, clears the badge, withdraws the previous selection's
+  notifications and ignores whatever the previous selection's subscription still delivers. The
+  ledger is kept per server, so switching back without forgetting repeats nothing. **Forget
+  server** deletes that server's ledger: connecting to it again announces what is still pending,
+  at most one notification per Run. A revoked client keeps reconnecting; once its new access
+  request is approved, alerts resume within about ten seconds.
+
+Notifications are posted through `UNUserNotificationCenter` by a small native module, not
+Electron's `Notification` API: Electron withdraws its notifications when the app quits and asks
+for permission on its first call. Clicks arrive through Electron, which restores delivered
+notifications only once permission is decided; a notification that relaunched Factory is read
+from the launch before any window opens. macOS accepts notifications only from an app registered from a
+non-temporary location, so a package run from a temporary folder badges but cannot notify.
 
 ## Native window appearance
 
@@ -309,13 +396,23 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **14**. Servers require clients of at least **14**, and clients require servers of at least **13**.
+The current protocol is **15**. Servers require clients of at least **14**, and clients require servers of at least **15**.
+Protocol 15 adds two required fields to each navigation attention matter: the worker's native
+pending request count (`null` except for a native request, and until it is observed) and the Block
+name. It also declares the attention kind for the **Settle could not stop workers** Problem, which is
+about the Run: its Block id and Block name are `null`, in navigation matters and in Run detail
+attention. A current client refuses protocol 13 and 14 servers,
+which lack those fields, and shows the update gate naming the server before product screens mount;
+credentials, approvals and stored data are kept. Protocol 14 clients keep working against a
+protocol 15 server: they ignore the added fields, and an attention kind they do not know is left
+out of their Run detail attention and status without failing, before its `null` Block id is read,
+while Run navigation still shows the Problem the server computes. Updating the server first is therefore safe.
 Protocol 14 drops the appearance grant from theme-color presentations and sources: colors come from
 `t3_theme_read` over the T3 connection. Protocol 13 clients read the grant unguarded, so servers
-require clients of at least 14; a current client still accepts protocol 13 servers. Protocol 13 lets an Agent have no execution settings (`execution` is `null`),
+require clients of at least 14. Protocol 13 lets an Agent have no execution settings (`execution` is `null`),
 requires the `execution` key on Agent create and save, and adds Agent and Flow export and import
 ([definition export](studio.md#definition-export)). Older clients cannot read such an Agent, so the server refuses them before
-product screens mount and they must update; their credentials and stored data are kept. A current
+product screens mount and they must update; their credentials and stored data are kept. A protocol 13 or 14
 client likewise refuses a protocol 9 to 12 server, which can neither save an Agent without a model nor
 export or import definitions, and shows the update gate naming the server before product screens mount.
 Every compatible server therefore serves the Studio live subscription (`WatchStudio`) and names the

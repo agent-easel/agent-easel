@@ -14,6 +14,11 @@
       "types": "./dist/live-rpc.d.ts",
       "default": "./dist/live-rpc.js"
     },
+    "./live-session": {
+      "factory-source": "./src/live-session.ts",
+      "types": "./dist/live-session.d.ts",
+      "default": "./dist/live-session.js"
+    },
     "./desktop-bridge": {
       "factory-source": "./src/desktop-bridge.ts",
       "types": "./dist/desktop-bridge.d.ts",

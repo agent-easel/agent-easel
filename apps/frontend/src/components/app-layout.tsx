@@ -9,6 +9,7 @@ import { useStudio, useSettings } from "../settings-navigation.ts";
 import { KeyboardCommandsProvider } from "../keyboard-commands.tsx";
 import { DesktopTitlebar } from "./desktop-titlebar.tsx";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
+import { useDesktopRoutes } from "../desktop-routes.ts";
 
 const sidebarBounds: PanelBounds = {
   variable: "--factory-sidebar-width",
@@ -22,6 +23,7 @@ function AppShell() {
   const studio = useStudio();
   const settings = useSettings();
   const backgroundInert = !!studio || !!settings;
+  useDesktopRoutes();
   return (
     <div className="flex h-dvh">
       <aside className="relative flex w-[var(--factory-sidebar-width,17.5rem)] max-w-[50vw] shrink-0 flex-col min-h-0 border-r bg-sidebar min-[1280px]:w-[var(--factory-sidebar-width,18.75rem)] max-sm:w-[var(--factory-sidebar-width,14rem)]">

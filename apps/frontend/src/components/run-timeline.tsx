@@ -127,6 +127,7 @@ const attentionWords: Record<RunAttention["kind"], string> = {
   "missing-report": "problem · no report",
   "report-problem": "problem · report needs a fix",
   "execution-failed": "problem · T3 execution failed",
+  "settlement-unresolved": "problem · Settle could not stop workers",
 };
 
 /** The message a Continuation event is about, named by the delivery that arrived. */

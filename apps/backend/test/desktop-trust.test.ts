@@ -20,7 +20,11 @@ async function wrongHostnameClient(c: TestContext) {
       credential: null,
     },
   });
-  const client = await ApprovedClient.open(profile.store, new ControlledProtection());
+  const client = await ApprovedClient.open(
+    profile.store,
+    new ControlledProtection(),
+    () => undefined,
+  );
   c.onTestFinished(() => client.close());
   return client;
 }

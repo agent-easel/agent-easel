@@ -1,7 +1,9 @@
 // Prepares `stage/`, the Electron application directory: the bundle from `build/`, a
-// minimal package.json and the native lock module rebuilt for Electron's arm64 ABI.
+// minimal package.json, the native lock module rebuilt for Electron's arm64 ABI and the
+// macOS notifications module.
 // Run `pnpm --filter @t3-factory/desktop build` first. Requires the Xcode Command Line
 // Tools and network access to Electron's header download.
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -89,6 +91,31 @@ await cp(join(root, "build"), join(stage, "build"), { recursive: true });
 await cp(join(isolated, "node_modules", "fs-ext"), join(stage, "build", "native", "fs-ext"), {
   recursive: true,
 });
+// The notifications module uses only N-API, which is ABI-stable: it builds against Node's
+// headers and loads in Electron. It is never part of `pnpm install`, so Linux CI never builds it.
+execFileSync(
+  "clang++",
+  [
+    "-std=c++20",
+    "-fobjc-arc",
+    "-arch",
+    "arm64",
+    "-mmacosx-version-min=13.0",
+    "-DNODE_GYP_MODULE_NAME=notifications",
+    `-I${join(process.execPath, "..", "..", "include", "node")}`,
+    "-bundle",
+    "-undefined",
+    "dynamic_lookup",
+    "-framework",
+    "Foundation",
+    "-framework",
+    "UserNotifications",
+    join(root, "native", "notifications.mm"),
+    "-o",
+    join(stage, "build", "native", "notifications.node"),
+  ],
+  { stdio: "inherit" },
+);
 const packagedManifest = JSON.parse(await readFile(join(stage, "package.json"), "utf8"));
 packagedManifest.dependencies = {};
 await writeFile(join(stage, "package.json"), JSON.stringify(packagedManifest, null, 2) + "\n");

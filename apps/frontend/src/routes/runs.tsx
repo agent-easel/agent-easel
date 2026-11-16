@@ -3,6 +3,7 @@ import { RunConversationAction, RunConversationNotice } from "../components/run-
 import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
+import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 import {
@@ -123,11 +124,25 @@ function useOpenRunActions(entry: RunNavigationEntry | undefined, detail: RunDet
 /** What the inspector shows besides the overview: a selected Block, or the Run title, which is not a Block. */
 type Inspected = { readonly blockId: string } | "run-title" | null;
 
+/** A desktop route selects its Block, or shows the overview, once per navigation that carries it. */
+function useRoutedInspection(setInspected: (inspected: Inspected) => void) {
+  const routedKey = useLocation({
+    select: ({ state }) => (state.routedBlock === undefined ? undefined : state.__TSR_key),
+  });
+  const routedBlock = useLocation({ select: ({ state }) => state.routedBlock ?? null });
+  const [appliedKey, setAppliedKey] = useState<string>();
+  if (routedKey !== undefined && routedKey !== appliedKey) {
+    setAppliedKey(routedKey);
+    setInspected(routedBlock === null ? null : { blockId: routedBlock });
+  }
+}
+
 export function RunScreen({ id }: { id: string }) {
   const observed = useRunObservation(id);
   const { value: runs } = useLiveNavigation();
   const navigationRun = runs?.find((run) => run.id === id);
   const [inspected, setInspected] = useState<Inspected>(null);
+  useRoutedInspection(setInspected);
   const deselect = useCallback(() => setInspected(null), []);
   const seenError = useRunOpened(id, !observed.unavailable);
   useEscapeToDeselect(inspected !== null, deselect);

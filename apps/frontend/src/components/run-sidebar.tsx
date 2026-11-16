@@ -5,7 +5,8 @@ import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { runActions, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
-import type { RunNavigationEntry } from "@t3-factory/contracts";
+import { runListView, useRunListView } from "../run-list-view.ts";
+import { mattersNeedingOwner, type RunNavigationEntry } from "@t3-factory/contracts";
 import type { RunActionAvailability } from "../run-actions.ts";
 import {
   Archive,
@@ -110,23 +111,29 @@ function NewRunButton({ current }: { current: boolean }) {
   );
 }
 
+/** The Run list as its search or Needs you filter shows it; groups hide while it is filtered. */
+function useRunListRows(runs: readonly RunNavigationEntry[]) {
+  const drafts = useRunDrafts();
+  const { search, needsYou } = useRunListView();
+  const query = search.trim().toLocaleLowerCase();
+  const groups = needsYou ? needsYouGroup(runs) : navigationGroups(runs, drafts, query);
+  return { ...groups, search, needsYou, query, filtered: !!query || needsYou };
+}
+
 export function RunSidebar({ path }: { path: string }) {
   const { runs, loaded, loadError } = useRunNavigation();
-  const drafts = useRunDrafts();
   const composition = useRunDraft();
-  const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
-  const query = search.trim().toLocaleLowerCase();
-  const { open, snoozed, settled, matches, total } = navigationGroups(runs, drafts, query);
+  const { open, snoozed, settled, matches, total, search, needsYou, query, filtered } =
+    useRunListRows(runs);
   const actionError = useRunActionsState((state) => state.error);
-  const queryKey = query;
   useLayoutEffect(() => {
     publishSidebarNavigation({
-      visibleRows: sidebarRows(open, snoozed, settled, queryKey, snoozedExpanded, expanded),
-      searching: !!queryKey,
+      visibleRows: sidebarRows(open, snoozed, settled, filtered, snoozedExpanded, expanded),
+      searching: filtered,
       focusSearch: () => searchRef.current?.focus(),
     });
     return () =>
@@ -135,13 +142,14 @@ export function RunSidebar({ path }: { path: string }) {
         searching: false,
         focusSearch: () => undefined,
       });
-  }, [open, snoozed, settled, expanded, queryKey, snoozedExpanded]);
+  }, [open, snoozed, settled, expanded, filtered, snoozedExpanded]);
   return (
     <section aria-label="Run navigation" className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-2 px-3 pt-3 pb-2">
-        <RunSearchField ref={searchRef} value={search} onChange={setSearch} />
+        <RunSearchField ref={searchRef} value={search} onChange={runListView.search} />
         <NewRunButton current={path === "/runs/new"} />
       </div>
+      {needsYou && <NeedsYouFilter count={open.length} />}
       {(loadError || actionError) && (
         <p role="alert" className="px-3 pb-2 text-xs text-destructive">
           {loadError || actionError}
@@ -158,6 +166,8 @@ export function RunSidebar({ path }: { path: string }) {
           onExpandSnoozed={() => setSnoozedExpanded(!snoozedExpanded)}
           expanded={expanded}
           query={query}
+          filtered={filtered}
+          needsYou={needsYou}
           search={search.trim()}
           loaded={loaded}
           total={total}
@@ -177,14 +187,14 @@ function sidebarRows(
   open: readonly (RunNavigationEntry | SavedRunDraft)[],
   snoozed: readonly RunNavigationEntry[],
   settled: readonly RunNavigationEntry[],
-  query: string,
+  filtered: boolean,
   showSnoozed: boolean,
   showSettled: boolean,
 ) {
   return [
     ...open,
-    ...(!query && showSnoozed ? snoozed : []),
-    ...(!query && showSettled ? settled : []),
+    ...(!filtered && showSnoozed ? snoozed : []),
+    ...(!filtered && showSettled ? settled : []),
   ].map((entry) => ({
     kind: "presentation" in entry ? ("run" as const) : ("draft" as const),
     id: entry.id,
@@ -236,6 +246,38 @@ function navigationGroups(
     matches: runMatches.length + draftMatches.length,
     total: runs.length + drafts.length,
   };
+}
+
+/**
+ * Needs you: exactly the Runs each desktop installation's Dock badge counts, in creation order.
+ * A view of the Run list, not an Inbox: rows show their own Needs input and Problem chips.
+ */
+function needsYouGroup(runs: readonly RunNavigationEntry[]) {
+  const waiting = runs.filter((run) => mattersNeedingOwner(run).length > 0).toSorted(byCreation);
+  return { open: waiting, snoozed: [], settled: [], matches: waiting.length, total: runs.length };
+}
+
+/** The active Needs you filter; choosing it again shows the whole Run list. */
+function NeedsYouFilter({ count }: { count: number }) {
+  return (
+    <div className="flex shrink-0 px-3 pb-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="secondary"
+            size="xs"
+            aria-pressed
+            className="border-brand-soft-border bg-brand-soft text-link hover:bg-brand-soft"
+            onClick={runListView.clearNeedsYou}
+          >
+            Needs you ({count})
+            <X aria-hidden strokeWidth={1.5} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Show all Runs</TooltipContent>
+      </Tooltip>
+    </div>
+  );
 }
 
 /** Snoozed and Settled matches are shown at reduced contrast in search results only. */
@@ -302,8 +344,10 @@ function navigationEmptyState(
   matches: number,
   open: number,
   search: string,
+  needsYou: boolean,
 ) {
   if (!loaded) return undefined;
+  if (needsYou && !open) return { title: "Nothing needs you", body: "You're all caught up." };
   if (!total)
     return {
       title: "No Runs yet",
@@ -389,6 +433,8 @@ function RunGroups({
   expanded,
   snoozedExpanded,
   query,
+  filtered,
+  needsYou,
   search,
   loaded,
   total,
@@ -405,6 +451,8 @@ function RunGroups({
   expanded: boolean;
   snoozedExpanded: boolean;
   query: string;
+  filtered: boolean;
+  needsYou: boolean;
   search: string;
   loaded: boolean;
   total: number;
@@ -427,7 +475,7 @@ function RunGroups({
         onRename={() => onRenameDraft(entry)}
       />
     );
-  const empty = navigationEmptyState(loaded, total, matches, open.length, search);
+  const empty = navigationEmptyState(loaded, total, matches, open.length, search, needsYou);
   // Open rows scroll on their own; the groups stay pinned below them with capped heights,
   // so a long Settled history never pushes open Runs out of view. On a short sidebar the
   // groups yield first: the open list keeps a floor and the groups scroll as one block.
@@ -447,7 +495,7 @@ function RunGroups({
       <div className="flex min-h-0 flex-col overflow-y-auto px-2 py-1.5">
         <RunGroup
           loaded={loaded}
-          searching={!!query}
+          searching={filtered}
           name="Snoozed"
           expanded={snoozedExpanded}
           onExpand={onExpandSnoozed}
@@ -457,7 +505,7 @@ function RunGroups({
         </RunGroup>
         <RunGroup
           loaded={loaded}
-          searching={!!query}
+          searching={filtered}
           name="Settled"
           expanded={expanded}
           onExpand={onExpand}

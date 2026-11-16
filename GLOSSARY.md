@@ -144,10 +144,10 @@ An explicit, non-final `working` report an Agent sends when it starts its Block 
 _Avoid_: progress report, heartbeat.
 
 **Problem**:
-A pending execution or report issue already recorded as attention: a missing report, an execution failure, or a report problem. It is distinct from block execution state and from stale or unavailable observations.
+A pending execution, report or settlement issue already recorded as attention: a missing report, an execution failure, a report problem, or **Settle could not stop workers** when a confirmed manual Settle is unresolved. The settlement Problem is about the Run rather than one Block, and is distinct from the execution failure that stopping never raises. A Problem is distinct from block execution state and from stale or unavailable observations.
 
 **Inbox**:
-The set of Run attention matters awaiting a response or action. Factory presents pending and settled matters on the Run they belong to. There is no separate global Inbox.
+The set of Run attention matters awaiting a response or action. Factory presents pending and settled matters on the Run they belong to. There is no separate global Inbox. The desktop Dock badge and the Run list's **Needs you** filter count and list Runs, not matters, and are not an Inbox.
 
 **Runner**:
 The executor of a flow's declared transitions and conditions. Agent results determine which permitted path it follows.

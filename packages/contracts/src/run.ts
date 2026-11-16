@@ -510,14 +510,17 @@ export interface RunDetail extends RunSummary {
   }[];
 }
 
-/** Native questions AND approvals are addressed in T3. No native response body is retained. */
+/** Native questions AND approvals are addressed in T3. No native response body is retained.
+ * A `settlement-unresolved` matter is about the Run: it has no Block, execution or link, and its
+ * blocked workers are the Run's settlement workers that are not resolved. */
 export interface RunAttention {
   readonly bindingId?: string;
   readonly id: string;
   readonly runId: string;
   readonly taskTitle: string;
-  readonly blockId: string;
-  readonly blockName: string;
+  /** Null for a Run-level matter. */
+  readonly blockId: string | null;
+  readonly blockName: string | null;
   readonly executionId: string;
   readonly kind:
     | "human"
@@ -525,7 +528,8 @@ export interface RunAttention {
     | "conversation-waiting"
     | "missing-report"
     | "execution-failed"
-    | "report-problem";
+    | "report-problem"
+    | "settlement-unresolved";
   readonly nativeRequestId: string | null;
   readonly occurrenceId: string | null;
   readonly link: string | null;
@@ -540,7 +544,8 @@ export interface RunAttention {
   readonly message: string | null;
 }
 
-/** Needs input is a pending question or decision. Problem is an execution or report issue. */
+/** Needs input is a pending question or decision. Problem is an execution, report or settlement
+ * issue. */
 export type RunAttentionPresentation = "needs-input" | "problem";
 
 /**
@@ -552,9 +557,15 @@ export interface RunAttentionMatter {
   readonly id: string;
   readonly kind: RunAttention["kind"];
   readonly presentation: RunAttentionPresentation;
-  readonly blockId: string;
+  /** Null for a matter that is not about one Block. */
+  readonly blockId: string | null;
   readonly occurrenceId: string | null;
   readonly nativeRequestId: string | null;
+  /** The worker's current native pending request count for a `native-request` matter, null until
+   * observed and for every other kind. */
+  readonly pendingRequestCount: number | null;
+  /** Null for a matter that is not about one Block. */
+  readonly blockName: string | null;
 }
 
 export interface RunAttentionSummary {
@@ -572,8 +583,20 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "missing-report":
     case "execution-failed":
     case "report-problem":
+    case "settlement-unresolved":
       return "problem";
   }
+}
+
+/**
+ * The Run's matters that need the owner now: they put it on each desktop installation's Dock
+ * badge and in the Run list's Needs you filter, and they may notify. None on a Snoozed, Settled or
+ * Archived Run, and no Human or native request while a confirmed Settle refuses answers.
+ */
+export function mattersNeedingOwner(row: RunNavigationEntry): readonly RunAttentionMatter[] {
+  if (row.lifecycle !== "active" || row.presentation.snoozed) return [];
+  if (row.settlement === null) return row.attention.matters;
+  return row.attention.matters.filter((matter) => matter.presentation === "problem");
 }
 
 /**

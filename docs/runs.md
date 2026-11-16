@@ -354,6 +354,12 @@ menu items never opens a row preview.
   project are not Problems and opening a Run clears no chip.
 - **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
+- **Needs you (N)** filters the list to exactly the Runs the desktop
+  [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input
+  or Problem, leaving out Human steps and native requests during a confirmed Settle that is stopping or unresolved. A Dock click
+  with no window open and several such Runs opens the list with it; it clears the title search, and typing a search or choosing
+  the filter again shows the whole list. Rows keep their own chips, groups are hidden, drafts are left out, and with no such Run it shows
+  **Nothing needs you**. It is a view of the Run list, not an Inbox.
 - When Runs exist but none are open, the open list shows **Nothing open** / **You're all caught up.**
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.
   A Settle still stopping workers focuses the row; when the Run settles later, focus moves to the destination only if it is
@@ -405,6 +411,11 @@ recorded Needs input or Problem identity, or a higher native pending-question co
 wakes it (**Woke**). Ordinary progress, stale observations and re-reads of the same matter do not. Opening a Run clears only Woke;
 **Restore** returns it to the main list. Snooze state survives reload and restart. Settling or archiving a Run clears both;
 Settled Runs cannot be snoozed. T3 reports only a count, so a replacement question with an unchanged count cannot be detected.
+
+On every desktop installation a Snoozed Run is silent: it leaves the Dock badge, its delivered notifications are withdrawn, and
+matters that are pending or appear while it is Snoozed never notify, also after Snooze ends. **Restore** returns it to the badge
+without a notification; Woke notifies for the new matter as usual. See
+[Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
 
 ## Reports and attention
 
@@ -465,6 +476,10 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   handoffs **Cancelled**, and a same-exit update after hand-off says it was not handed off again. Activations show the current
   result, and the latest Agent visit shows the Block's current execution state. **Work periods** list each exact execution with
   its own state, the finished or working report (or a historical waiting report) accepted during it, and its T3 link; elapsed times are approximate observations.
+
+Pending Needs input and Problems also drive each desktop installation's macOS notifications and Dock badge, which clear when
+the matter resolves, never because a Run was viewed; see
+[Notifications and Dock badge](desktop-and-clients.md#notifications-and-dock-badge).
 
 ## Human steps
 
@@ -550,6 +565,14 @@ settlement is not a lifecycle state: there is no Resume, and **Archive** remains
 thread keeps the settlement unresolved until it is removed in T3 or runs; Factory deletes nothing and does not stop a worker
 that only queued work keeps unfinished.
 
+A settlement pass that ends unresolved raises the Run's **Settle could not stop workers** Problem; a settlement that is only
+stopping raises none. It is about the Run rather than one Block, so it appears in the Run's attention, not in a Block's. It
+names the workers shown not resolved, and any lost launch still searched for, with what blocks each, and the recovery options:
+**Settle** again, remove queued work in T3, or **Archive**. An unresolved episode has one such Problem: a retry keeps it pending,
+and when the retry ends unresolved again the same Problem shows the current workers, without a new appearance. It settles with
+the Run's other attention when settlement succeeds (`manual-settlement`) or the Run is Archived (`archived`). As ordinary
+attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-and-lifecycle-notices).
+
 Settling cancels unsent launches, sends and handoffs (held or released), unsent Request report turns, pending Human occurrences
 without inventing answers, pending Wait arrivals and messages waiting at a Continuation; a cancelled Wait never forwards, also
 after restart. Pending attention settles as `manual-settlement`, activated
@@ -558,7 +581,7 @@ keeps no copy of its message. The Run moves to
 **Settled**, Snooze and Woke clear, and Factory best-effort settles the worker threads in T3. The timeline records the
 confirmation and each retry, each Stop request, each worker found stopped and the settlement. Each worker's last run keeps
 the status T3 showed when it ended, such as interrupted, with its end time. Stopping raises no execution-failure Problem, and a
-Problem recorded before Settle, such as a failed run, stays. T3 Stop has no exact-run fence: a turn started directly in T3 around the Stop request may be stopped
+Problem recorded before Settle, such as a failed run, stays; only a settlement left unresolved raises its own settlement Problem. T3 Stop has no exact-run fence: a turn started directly in T3 around the Stop request may be stopped
 too, or start after the Run settled; settling does not delete T3 conversations or roll back repository edits.
 
 A manually settled Run's work stays ended: a later report from one of its Blocks, including a delayed one from stopped work, is

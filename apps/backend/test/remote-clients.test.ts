@@ -82,17 +82,29 @@ it("a protocol 12 client, which cannot read Agents without a model, is told to u
   expect(reply.body.error.message).toMatch(/Update this client/);
 });
 
+it("a protocol 14 client, which ignores the protocol 15 attention fields, keeps reading Run navigation", async (c) => {
+  // Arrange
+  const server = await remoteServer(c);
+  const old = await server.approved("Laptop", "desktop", { protocol: 14, minimum: 13 });
+
+  // Act
+  const reply = await old.send("GET", "/api/run-navigation");
+
+  // Assert
+  expect(reply).toMatchObject({ status: 200, body: { ok: true, value: [] } });
+});
+
+const serverUpdate = {
+  status: 426,
+  body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
+} as const;
+
 it.for([
-  [
-    12,
-    {
-      status: 426,
-      body: { ok: false, error: { message: expect.stringMatching(/Update the Factory server/) } },
-    },
-  ],
-  [13, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [13, serverUpdate],
+  [14, serverUpdate],
+  [15, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which imports and exports definitions, refuses a protocol %i server only when it predates 13",
+  "the current client, which reads protocol 15 attention matters, refuses a protocol %i server only when it predates 15",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });

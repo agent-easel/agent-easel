@@ -46,6 +46,7 @@ const MATTERS: Record<MatterKind, { what: (block: string) => string; pending?: s
   "missing-report": { what: (block) => `${block}: report missing` },
   "execution-failed": { what: (block) => `${block}: execution failed` },
   "report-problem": { what: (block) => `${block}: report problem` },
+  "settlement-unresolved": { what: () => "Settle could not stop workers" },
 };
 
 const LIFECYCLE_EMOJI: Record<Lifecycle, string> = { active: "🟢", settled: "✅", archived: "🗄️" };
@@ -66,7 +67,8 @@ const APPLICATION_NOTICE =
 type MatterRow = {
   matter_id: string;
   kind: MatterKind;
-  block: string;
+  /** Null for a Run-level matter. */
+  block: string | null;
   appeared_at: string;
   resolved: number;
 };

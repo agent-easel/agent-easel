@@ -4,6 +4,9 @@ import {
   type OperationError,
   type RunViewLiveMessage,
 } from "@t3-factory/contracts";
+import type { LiveSession, LiveWatch, OpenLiveSession } from "@t3-factory/contracts/live-session";
+
+export type { LiveWatch, SubscriptionEvents } from "@t3-factory/contracts/live-session";
 
 /**
  * `connecting`: no socket is open and none has failed since the window attached.
@@ -26,17 +29,6 @@ export type LivePart =
   | { readonly kind: "studio" }
   /** Theme colors: optional presentation, held only for reading. */
   | { readonly kind: "appearance" };
-
-export type LiveWatch =
-  | { readonly rpc: "WatchConnection" }
-  | { readonly rpc: "WatchLaunchChoices" }
-  | { readonly rpc: "WatchStudio" }
-  | { readonly rpc: "WatchAppearance" }
-  | {
-      readonly rpc: "WatchRunView";
-      readonly navigation: boolean;
-      readonly runIds: readonly string[];
-    };
 
 type LiveMessage = { readonly _tag: string };
 type Snapshot<M extends LiveMessage> = Extract<M, { readonly _tag: "snapshot" }>;
@@ -64,22 +56,8 @@ export interface LiveScopeView<V> {
   readonly error: OperationError | null;
 }
 
-export interface SubscriptionEvents {
-  message(envelope: LiveEnvelope<LiveMessage>): void;
-  /** The server refused the subscription with a typed error. */
-  failed(error: OperationError): void;
-  /** The stream ended or the connection failed underneath it. */
-  lost(): void;
-}
-
-/** One socket. Its events must stop being relevant once the owner closes it. */
-export interface LiveSession {
-  subscribe(watch: LiveWatch, events: SubscriptionEvents): () => void;
-  close(): void;
-}
-
 export interface LiveEnvironment {
-  open(events: { connected(): void; disconnected(): void }): LiveSession;
+  open: OpenLiveSession;
   setTimer(run: () => void, ms: number): () => void;
   random(): number;
   /** Repeated open failures: classify through the HTTP handshake (incompatible, unauthorized). */
