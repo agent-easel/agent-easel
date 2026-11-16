@@ -99,8 +99,8 @@ records why a per-project variant is an independent copy rather than an override
 - **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
   for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
   new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
-  names it). Studio's **New Flow** and **+ Add agent** choose the owner ([Owners in Studio](#owners-in-studio)); **Import**
-  creates global definitions and **Duplicate…** keeps the source Agent's owner.
+  names it). Studio's **New Flow** and **+ Add agent** choose the owner, and Import and Duplicate a target
+  ([Owners in Studio](#owners-in-studio)).
 - **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming a Factory
   Project available for new Runs, or `null` for Global. Duplicate defaults to the source's owning Project and Import to Global.
   A target unavailable when the copy is committed is refused with its availability reason, as for create, so an unavailable
@@ -117,7 +117,6 @@ records why a per-project variant is an independent copy rather than an override
   since the preview, or a different set of Agents, is refused as `stale_duplicate_plan`; changing a fixed choice is refused as
   `duplicate_choice_not_allowed`. The answer holds the new Flow and its copies by source Agent. The source Flow and its Agents
   never change, so duplicating out of an unavailable Project into another Project or Global rescues a Flow and its Agents.
-  Studio does not offer Flow Duplicate yet.
 - **Placement rule.** Any Flow may place a global Agent, and a Project Flow may also place Agents of its own Project, never
   another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
   naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
@@ -136,11 +135,10 @@ records why a per-project variant is an independent copy rather than an override
     move from one Project to another is blocked by the old Project's Flows that place it.
 
   The answer is the definition with its new owner, and Studio's live definition updates deliver it. Moving a definition out of
-  an unavailable Project follows the same rule. Studio has no Change owner action yet.
+  an unavailable Project follows the same rule.
 - **Saves expect the owner.** Flow and Agent saves carry `expectedProjectId` beside `expectedRevision`. A save after Change
   owner moved the definition is refused (conflict, `stale_owner`), appends nothing and keeps the editor's draft. Studio's
-  editors take an owner change from its synchronized lists without a new revision, so their next save expects the new owner;
-  only a save sent before that delivery is refused.
+  editors follow owner changes live ([Owners in Studio](#owners-in-studio)).
 - **Unavailable owner.** Definitions owned by an unavailable Project, for any availability reason, stay listed, editable,
   exportable, duplicable and removable; only Start is refused ([Runs](runs.md#starting)). Removing an Agent is still refused while the
   latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability.
@@ -168,7 +166,30 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
 - **Flow editor.** The block library offers only the Agents this Flow may place under the placement rule, grouped as **Global
   Agents** and the owning Project's Agents; blocks already on the canvas keep resolving every saved Agent. While the owning
   Project is unavailable a banner over the canvas names it and its reason, the Flow stays editable, saveable, exportable and
-  removable, and **Start Run** is disabled with the reason.
+  removable, **Start Run** is disabled with the reason, and the banner's **Duplicate to…** opens Flow Duplicate to rescue it.
+- **Change owner….** The Agent editor header and the Flow editor's **More Flow actions** menu open **Change owner of
+  “*name*”** with a **New owner** menu of Global and every Project, unavailable ones disabled with their reason; the current
+  owner stays chosen until another is picked, and an unavailable chosen owner blocks the change. A refusal turns the dialog
+  into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
+  Flow), each with its owner and, for a Flow, the blocks placing the Agent; a listed one opens in Studio. Its **Duplicate to
+  *owner*…** opens Duplicate with that target instead; an Agent with unsaved changes must be saved first. The editor's own move
+  never asks for acknowledgement.
+- **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor header, saved
+  Agents only) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
+  its reason and blocks Duplicate until another target is picked. Flow Duplicate also takes the new name (the plan's
+  `<name> copy` until edited) and shows **Agents in this Flow** from the preview: each global Agent offers **Keep shared** or
+  **Copy**, a Project Agent the target can't place reads **Copied into target**, and an Agent of the target itself reads
+  **Kept**. Changing the target previews again, a summary names what is created, and a stale plan is previewed again with
+  the reason and never committed blindly. Flow Duplicate copies the saved revision (unsaved edits are named as left out) and
+  opens the new Flow once Studio lists it; Agent Duplicate opens the copy.
+- **Import target.** The import review has a **Target owner** menu, starting at **Global**; Confirm creates every definition
+  in the chosen target and is disabled while an unavailable Project is chosen.
+- **Owner changed elsewhere.** An open editor follows its definition's owning Project from Studio's synchronized lists, which
+  appends no revision. Without unsaved changes it simply shows the new owner. With unsaved changes it keeps them, shows
+  **This *kind* is now owned by *owner*** (or **is now Global**) and disables Save until **Acknowledge new owner**; the next
+  save then expects the new owner. A save refused as `stale_owner` before Studio delivered the move keeps the draft, shows
+  the refusal and waits for the new owner, then asks for the same acknowledgement instead of a revision comparison. Moving
+  back to the acknowledged owner needs no acknowledgement.
 
 ## Agent definitions
 
@@ -181,7 +202,7 @@ are distinct and non-empty. A new Agent starts with one exit, `done`, which need
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
 A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows name, revision, **Duplicate…**, **Export** (after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
+drafts); narrow screens stack list and editor. The header shows name, revision, the owner badge, **Change owner…**, **Duplicate…**, **Export** (an icon button, after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**; a retained Flow draft keeps its own guard.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
@@ -208,7 +229,7 @@ The editor follows the current provider choice, explains installation problems a
 Installed configuration does not establish full execution readiness or live report visibility; Start still checks those gates.
 
 **Saving.** Each accepted create or save appends one immutable Agent revision holding the name, prompt, settings and exits; a stale or invalid save returns an error,
-appends nothing and keeps local edits. Duplicate creates a variant with a new identity from the saved revision, so save edits first; `POST /api/agents/:id/duplicate`
+appends nothing and keeps local edits. Duplicate creates a variant with a new identity from the saved revision in the chosen [target](#owners-in-studio), so save edits first; `POST /api/agents/:id/duplicate`
 takes an optional `name` and [target](#ownership) `projectId`. Create and save bodies may be up to 2 MB, enough for a 120,000-character prompt.
 A save response arriving after leaving refreshes the list without reopening the editor. Mention skills directly in the prompt (for example `$review-code`); there is no skill field or interpolation.
 
@@ -541,7 +562,7 @@ review applies the same option rule.
 Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
 enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
 model). Confirm sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`), a request id
-the dialog generated for this import and an optional [target](#ownership) `projectId` (Global when omitted; Studio does not choose one yet). The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
+the dialog generated for this import and an optional [target](#ownership) `projectId` (Global when omitted; the review's **Target owner**). The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
 exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names and, for a
 Flow file, the Flow at revision 1 with each `agentKey` replaced by the new Agent's id, all in one transaction. It never reuses or updates an
 existing Agent or Flow and never starts a Run. A block whose `agentKey` is `null` arrives without an Agent, which readiness reports as a
