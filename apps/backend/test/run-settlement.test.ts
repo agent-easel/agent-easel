@@ -719,8 +719,10 @@ it("a Stop-support check T3 cannot answer keeps the worker's Stop for a later pa
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   stopsEndThreads(f.t3);
-  failNextStopSupportCheck(f.t3);
+  // The Settle attempt holds the Run's lane from its failed check until it records the outcome.
+  const checked = failNextStopSupportCheck(f.t3);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+  await checked;
 
   // Act
   await f.f.reconcileRuns();
