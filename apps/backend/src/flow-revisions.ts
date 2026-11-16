@@ -232,11 +232,49 @@ export const readFlowRevision = Effect.fnUntraced(function* (
   return flow;
 });
 
+/**
+ * Graphs of stored revisions by revision id. Revisions are immutable, so a graph another reader
+ * still holds, such as an open Studio, Run composer or Run view, is reused instead of re-read:
+ * every Studio change and Run row read would otherwise re-read whole near-limit graphs. The memo
+ * holds graphs weakly, so it never keeps a graph alive by itself.
+ */
+const graphs = new Map<string, WeakRef<FlowGraph>>();
+const collected = new FinalizationRegistry<string>((revisionId) => {
+  if (graphs.get(revisionId)?.deref() === undefined) graphs.delete(revisionId);
+});
+
 const withGraphs = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   revisions: readonly RevisionRow[],
 ) {
-  if (!revisions.length) return [];
+  const known = new Map<string, FlowGraph>();
+  for (const revision of revisions) {
+    const graph = graphs.get(revision.id)?.deref();
+    if (graph) known.set(revision.id, graph);
+  }
+  const unread = revisions.filter((revision) => !known.has(revision.id));
+  for (const [revisionId, graph] of yield* readGraphs(sql, unread)) {
+    graphs.set(revisionId, new WeakRef(graph));
+    collected.register(graph, revisionId);
+    known.set(revisionId, graph);
+  }
+  return revisions.map((revision): FlowRevision => ({
+    id: revision.flow_id,
+    name: revision.name,
+    revision: revision.revision,
+    graph: known.get(revision.id)!,
+    workspace: toWorkspace(revision),
+    createdAt: revision.created_at,
+    updatedAt: revision.saved_at,
+  }));
+});
+
+/** The stored graph of each revision, by revision id. */
+const readGraphs = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  revisions: readonly RevisionRow[],
+) {
+  if (!revisions.length) return new Map<string, FlowGraph>();
   const ids = sql.in(revisions.map((revision) => revision.id));
   const [blocks, exits, hidden, rules, connections, targets] = yield* Effect.all([
     sql<BlockRow>`SELECT * FROM flow_revision_blocks WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
@@ -252,33 +290,32 @@ const withGraphs = Effect.fnUntraced(function* (
   const rulesByBlock = groupBy(rules, byBlock);
   const connectionsByRevision = groupBy(connections, byRevision);
   const targetsByRevision = groupBy(targets, byRevision);
-  return revisions.map((revision): FlowRevision => ({
-    id: revision.flow_id,
-    name: revision.name,
-    revision: revision.revision,
-    graph: {
-      blocks: (blocksByRevision.get(revision.id) ?? []).map((block) =>
-        toBlock(
-          block,
-          exitsByBlock.get(byBlock(block)) ?? [],
-          hiddenByBlock.get(byBlock(block)) ?? [],
-          rulesByBlock.get(byBlock(block)) ?? [],
+  return new Map(
+    revisions.map((revision): [string, FlowGraph] => [
+      revision.id,
+      {
+        blocks: (blocksByRevision.get(revision.id) ?? []).map((block) =>
+          toBlock(
+            block,
+            exitsByBlock.get(byBlock(block)) ?? [],
+            hiddenByBlock.get(byBlock(block)) ?? [],
+            rulesByBlock.get(byBlock(block)) ?? [],
+          ),
         ),
-      ),
-      connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({
-        sourceBlockId: connection.source_block_id,
-        exitId: connection.exit_id,
-        targetBlockId: connection.target_block_id,
-      })),
-      flowInput: {
-        position: { x: revision.input_x, y: revision.input_y },
-        targetBlockIds: (targetsByRevision.get(revision.id) ?? []).map((target) => target.block_id),
+        connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({
+          sourceBlockId: connection.source_block_id,
+          exitId: connection.exit_id,
+          targetBlockId: connection.target_block_id,
+        })),
+        flowInput: {
+          position: { x: revision.input_x, y: revision.input_y },
+          targetBlockIds: (targetsByRevision.get(revision.id) ?? []).map(
+            (target) => target.block_id,
+          ),
+        },
       },
-    },
-    workspace: toWorkspace(revision),
-    createdAt: revision.created_at,
-    updatedAt: revision.saved_at,
-  }));
+    ]),
+  );
 });
 
 /** The current saved revision number, absent once the Flow is removed. */
