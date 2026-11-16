@@ -22,6 +22,8 @@ interface MemoryFactory extends Operations {
   latest(): FlowDraft;
   /** Another client saves the Flow, appending the next revision. */
   saveElsewhere(name: string, readiness?: FlowReadiness): FlowDraft;
+  /** Another client changes the Flow's owner, which appends no revision. */
+  moveElsewhere(projectId: string | null): FlowDraft;
 }
 
 const ready: FlowReadiness = { ready: true, issues: [] };
@@ -79,11 +81,21 @@ export function memoryFactory(): MemoryFactory {
   return {
     latest: () => latest,
     saveElsewhere: (name, readiness = ready) => append({ name, readiness }),
+    moveElsewhere(projectId) {
+      latest = { ...latest, projectId };
+      return latest;
+    },
     updateFlow: vi.fn<FlowOperations["updateFlow"]>(
-      async (_id, { expectedRevision, name, graph, workspace }) => {
+      async (_id, { expectedRevision, expectedProjectId, name, graph, workspace }) => {
         if (removed) throw rejection({ code: "not_found", message: "Flow was removed." });
         if (expectedRevision !== latest.revision)
           throw rejection({ code: "conflict", message: "Flow changed in another window." });
+        if (expectedProjectId !== latest.projectId)
+          throw rejection({
+            code: "conflict",
+            message: "This Flow's owning Project changed elsewhere.",
+            issues: [{ code: "stale_owner", path: "expectedProjectId", message: "Compare." }],
+          });
         // Studio always sends a fully positioned graph, so no server layout is simulated.
         return append({ name, graph: graph as FlowGraph, ...(workspace && { workspace }) });
       },

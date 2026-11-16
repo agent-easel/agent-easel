@@ -334,14 +334,15 @@ it("a removal elsewhere dismisses the comparison and its confirmation and keeps 
   });
 });
 
-it("an Agent Duplicate returns the new copy", async () => {
+it("an Agent Duplicate creates the copy in the chosen target owner and returns it", async () => {
   // Arrange
   const setup = agentDraft();
 
   // Act
-  const copy = await setup.draft.duplicate();
+  const copy = await setup.draft.duplicate("northwind");
 
   // Assert
+  expect(setup.factory.duplicateAgent).toHaveBeenCalledWith("agent", { projectId: "northwind" });
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
 });
 
@@ -384,7 +385,7 @@ it("an Agent removed elsewhere refuses Duplicate", async () => {
   removedElsewhere(setup);
 
   // Act
-  const copy = await setup.draft.duplicate();
+  const copy = await setup.draft.duplicate(null);
 
   // Assert
   expect(copy).toBeUndefined();

@@ -482,3 +482,23 @@ it("a retained Flow refuses a readiness request", async () => {
   expect(factory.validateFlow).not.toHaveBeenCalled();
   expect(draft.getSnapshot().readiness).toBe(null);
 });
+
+it("a dirty Flow editor saves expecting the owner it acknowledged after a change elsewhere", async () => {
+  // Arrange
+  const setup = editedFlow("Mine");
+  setup.published(setup.factory.moveElsewhere("northwind"));
+  setup.draft.acknowledgeOwner("northwind");
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.factory.updateFlow).toHaveBeenCalledWith(
+    "flow",
+    expect.objectContaining({ name: "Mine", expectedRevision: 1, expectedProjectId: "northwind" }),
+  );
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 2, name: "Mine", projectId: "northwind" },
+    dirty: false,
+  });
+});

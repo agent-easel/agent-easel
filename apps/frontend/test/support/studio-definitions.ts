@@ -2,6 +2,7 @@ import { vi, type Mock } from "vite-plus/test";
 import type {
   FactoryProject,
   FlowDraft,
+  FlowDuplicatePlan,
   LaunchChoicesLiveMessage,
   ProjectCatalog,
   StudioDefinitions as SavedDefinitions,
@@ -64,8 +65,51 @@ export function studioFactory(): Operations {
       savedAgent({ id: "copy", name: "Reviewer copy" }),
     ),
     removeAgent: vi.fn<StudioDefinitionsOperations["removeAgent"]>(async () => undefined),
+    changeFlowOwner: vi.fn<StudioDefinitionsOperations["changeFlowOwner"]>(
+      async (id, { projectId }) => savedFlow("Moved", { id, projectId }),
+    ),
+    changeAgentOwner: vi.fn<StudioDefinitionsOperations["changeAgentOwner"]>(
+      async (id, { projectId }) => savedAgent({ id, projectId }),
+    ),
+    previewFlowDuplicate: vi.fn<StudioDefinitionsOperations["previewFlowDuplicate"]>(
+      async (flowId, { projectId }) => duplicatePlan({ flowId, projectId: projectId ?? null }),
+    ),
+    duplicateFlow: vi.fn<StudioDefinitionsOperations["duplicateFlow"]>(async () => ({
+      flow: savedFlow("Release copy", { id: "release-copy" }),
+      copies: [],
+    })),
   };
 }
+
+/**
+ * The plan Factory previews for duplicating Northwind's Release Flow into `projectId`: a global
+ * Coder kept by default, and Northwind's QA Agent, which the target can't place, always copied.
+ */
+export const duplicatePlan = (change: Partial<FlowDuplicatePlan> = {}): FlowDuplicatePlan => ({
+  flowId: "release",
+  revision: 2,
+  projectId: "ledgerly",
+  name: "Release copy",
+  agents: [
+    {
+      agentId: "coder",
+      name: "Coder",
+      projectId: null,
+      revision: 3,
+      choice: "keep",
+      changeable: true,
+    },
+    {
+      agentId: "qa",
+      name: "Northwind QA",
+      projectId: "northwind",
+      revision: 1,
+      choice: "copy",
+      changeable: false,
+    },
+  ],
+  ...change,
+});
 
 /**
  * Studio is open over Factory's saved definitions, with the window's live owner over scripted

@@ -4,11 +4,14 @@ import type {
   AgentDefinition,
   FactoryProject,
   FlowDraft,
+  FlowDuplicate,
+  FlowDuplicateChoice,
+  FlowDuplicatePlan,
   LaunchChoices,
   OperationError,
   StudioDefinitions as SavedDefinitions,
 } from "@t3-factory/contracts";
-import { api } from "./api.ts";
+import { api, ApiError } from "./api.ts";
 import type { LiveOwner, LiveScopeView } from "./live/owner.ts";
 import { launchChoicesScope } from "./live/launch-choices.ts";
 import { studioScope } from "./live/studio.ts";
@@ -24,6 +27,10 @@ export type StudioDefinitionsOperations = Pick<
   | "updateAgent"
   | "duplicateAgent"
   | "removeAgent"
+  | "changeFlowOwner"
+  | "changeAgentOwner"
+  | "previewFlowDuplicate"
+  | "duplicateFlow"
 >;
 
 /** One saved list, with the live scope's three facts and their meaning. */
@@ -192,6 +199,10 @@ export function createStudioDefinitions(
     updateAgent: operations.updateAgent,
     duplicateAgent: operations.duplicateAgent,
     removeAgent: operations.removeAgent,
+    changeFlowOwner: operations.changeFlowOwner,
+    changeAgentOwner: operations.changeAgentOwner,
+    previewFlowDuplicate: operations.previewFlowDuplicate,
+    duplicateFlow: operations.duplicateFlow,
   };
 }
 
@@ -338,7 +349,7 @@ export function defaultOwner(
 }
 
 /** One owner a new definition may be given; an unavailable Project is offered disabled. */
-interface OwnerTarget {
+export interface OwnerTarget {
   readonly owner: StudioOwner;
   /** Why the target cannot own a new definition, or null when it can. */
   readonly disabled: string | null;
@@ -365,3 +376,216 @@ export function placeableAgents(
 ): AgentDefinition[] {
   return agents.filter((agent) => mayPlaceAgent(flow.projectId, agent.projectId));
 }
+
+/** A small store of one dialog's state; each write publishes a new snapshot. */
+function dialogStore<S extends object>(initial: S) {
+  let snapshot = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => snapshot,
+    set(change: Partial<S>) {
+      snapshot = { ...snapshot, ...change };
+      listeners.forEach((notify) => notify());
+    },
+    subscribe(notify: () => void) {
+      listeners.add(notify);
+      return () => {
+        listeners.delete(notify);
+      };
+    },
+  };
+}
+
+const failureMessage = (cause: unknown, fallback: string) =>
+  cause instanceof Error ? cause.message : fallback;
+
+/** A definition a refused Change owner named because the placement rule would break for it. */
+export interface OwnerChangeBlocker {
+  /** Factory's sentence naming the blocking definition and its id. */
+  readonly message: string;
+  /** The blocking Flow or Agent as Studio lists it; null when Studio does not hold it. */
+  readonly definition: FlowDraft | AgentDefinition | null;
+}
+
+export interface ChangeOwnerSnapshot {
+  /** The new owner: a Project, or null for Global. */
+  readonly target: string | null;
+  readonly changing: boolean;
+  readonly error: string;
+  /** The definitions that refused the last change; empty unless it was blocked. */
+  readonly blockers: readonly OwnerChangeBlocker[];
+}
+
+/**
+ * The Change owner dialog of one Flow or Agent: it sends the owner the dialog opened with as the
+ * expected one, and names the Flows or Agents that refuse the move, resolved from Studio's lists
+ * by the id Factory's issue names.
+ */
+export function createChangeOwner(
+  subject: {
+    readonly kind: "flow" | "agent";
+    readonly id: string;
+    /** The owning Project the editor shows; Factory refuses the change once it is stale. */
+    readonly expected: string | null;
+  },
+  definitions: Pick<StudioDefinitions, "getSnapshot" | "changeFlowOwner" | "changeAgentOwner">,
+) {
+  const store = dialogStore<ChangeOwnerSnapshot>({
+    target: subject.expected,
+    changing: false,
+    error: "",
+    blockers: [],
+  });
+  /** A Flow refusal names Agents it places; an Agent refusal names Flows that place it. */
+  function blockers(cause: ApiError): OwnerChangeBlocker[] {
+    const lists = definitions.getSnapshot();
+    const candidates: readonly (FlowDraft | AgentDefinition)[] =
+      (subject.kind === "flow" ? lists.agents.value : lists.flows.value) ?? [];
+    return cause.detail.issues
+      .filter((issue) => issue.code === "owner_change_blocked")
+      .map((issue) => ({
+        message: issue.message,
+        definition: candidates.find((entry) => issue.message.includes(`(${entry.id})`)) ?? null,
+      }));
+  }
+  return {
+    getSnapshot: store.get,
+    subscribe: store.subscribe,
+    setTarget(target: string | null) {
+      if (!store.get().changing) store.set({ target, error: "", blockers: [] });
+    },
+    /** Moves the definition; its new state on success, undefined when refused or failed. */
+    async confirm(): Promise<FlowDraft | AgentDefinition | undefined> {
+      const { target, changing } = store.get();
+      if (changing || target === subject.expected) return undefined;
+      store.set({ changing: true, error: "", blockers: [] });
+      const input = { expectedProjectId: subject.expected, projectId: target };
+      try {
+        const moved =
+          subject.kind === "flow"
+            ? await definitions.changeFlowOwner(subject.id, input)
+            : await definitions.changeAgentOwner(subject.id, input);
+        store.set({ changing: false });
+        return moved;
+      } catch (cause) {
+        store.set({
+          changing: false,
+          error: failureMessage(cause, "Factory could not change the owner."),
+          blockers: cause instanceof ApiError ? blockers(cause) : [],
+        });
+        return undefined;
+      }
+    },
+  };
+}
+
+export type ChangeOwnerModel = ReturnType<typeof createChangeOwner>;
+
+export interface FlowDuplicateSnapshot {
+  /** The copy's owner: a Project, or null for Global. */
+  readonly target: string | null;
+  /** The new Flow's name; the plan's default until the user edits it. */
+  readonly name: string;
+  /** The plan for `target` with the chosen treatment of each Agent; null until previewed. */
+  readonly plan: FlowDuplicatePlan | null;
+  readonly previewing: boolean;
+  readonly committing: boolean;
+  readonly error: string;
+}
+
+const isStalePlan = (cause: unknown) =>
+  cause instanceof ApiError &&
+  cause.detail.issues.some((issue) => issue.code === "stale_duplicate_plan");
+
+/**
+ * The Flow Duplicate dialog: it previews the plan for the target, defaulting to the source's
+ * owning Project, lets each changeable global Agent switch between keep and copy, and commits
+ * exactly the previewed plan. A plan gone stale is previewed again and never committed blindly.
+ */
+export function createFlowDuplicate(
+  source: Pick<FlowDraft, "id" | "projectId">,
+  definitions: Pick<StudioDefinitions, "previewFlowDuplicate" | "duplicateFlow">,
+  target: string | null = source.projectId,
+) {
+  const store = dialogStore<FlowDuplicateSnapshot>({
+    target,
+    name: "",
+    plan: null,
+    previewing: false,
+    committing: false,
+    error: "",
+  });
+  let nameEdited = false;
+  /** Advances with every preview, so only the latest answer applies. */
+  let request = 0;
+  async function preview(error = "") {
+    const asked = ++request;
+    const { target: projectId } = store.get();
+    store.set({ previewing: true, plan: null, error });
+    try {
+      const plan = await definitions.previewFlowDuplicate(source.id, { projectId });
+      if (asked !== request) return;
+      store.set({ plan, previewing: false, ...(!nameEdited && { name: plan.name }) });
+    } catch (cause) {
+      if (asked !== request) return;
+      store.set({
+        previewing: false,
+        error: failureMessage(cause, "Factory could not prepare this Duplicate."),
+      });
+    }
+  }
+  return {
+    getSnapshot: store.get,
+    subscribe: store.subscribe,
+    /** Asks Factory for the plan of the current target. */
+    preview: () => preview(),
+    async setTarget(projectId: string | null) {
+      if (store.get().committing) return;
+      store.set({ target: projectId });
+      await preview();
+    },
+    setName(name: string) {
+      nameEdited = true;
+      store.set({ name });
+    },
+    /** Switches a changeable Agent between keep and copy; a choice the plan fixes stays. */
+    choose(agentId: string, choice: FlowDuplicateChoice) {
+      const { plan, committing } = store.get();
+      if (!plan || committing) return;
+      const agents = plan.agents.map((agent) =>
+        agent.agentId === agentId && agent.changeable ? { ...agent, choice } : agent,
+      );
+      store.set({ plan: { ...plan, agents } });
+    },
+    /** Commits the plan shown; the result on success, undefined when refused or failed. */
+    async confirm(): Promise<FlowDuplicate | undefined> {
+      const { plan, name, target: projectId, committing, previewing } = store.get();
+      if (!plan || committing || previewing) return undefined;
+      store.set({ committing: true, error: "" });
+      try {
+        const result = await definitions.duplicateFlow(source.id, {
+          name,
+          projectId,
+          expectedRevision: plan.revision,
+          agents: plan.agents.map(({ agentId, revision, projectId: owner, choice }) => ({
+            agentId,
+            revision,
+            projectId: owner,
+            choice,
+          })),
+        });
+        store.set({ committing: false });
+        return result;
+      } catch (cause) {
+        store.set({ committing: false });
+        const message = failureMessage(cause, "Factory could not duplicate this Flow.");
+        if (isStalePlan(cause))
+          await preview(`${message} Review the updated plan, then Duplicate again.`);
+        else store.set({ error: message });
+        return undefined;
+      }
+    },
+  };
+}
+
+export type FlowDuplicateModel = ReturnType<typeof createFlowDuplicate>;

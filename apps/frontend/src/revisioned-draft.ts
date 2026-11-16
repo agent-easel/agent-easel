@@ -3,10 +3,11 @@ import { ApiError } from "./api.ts";
 import type { StudioRead } from "./studio-definitions.ts";
 import { OfflineError } from "./transport.ts";
 
-/** A saved definition with revisions, such as an Agent or a Flow. */
+/** A saved definition with revisions and an owning Project, such as an Agent or a Flow. */
 interface Revisioned {
   readonly id: string;
   readonly revision: number;
+  readonly projectId: string | null;
 }
 
 /** JSON with sorted object keys, so equal content compares equal whatever its key order. */
@@ -41,6 +42,16 @@ export type RevisionConflict<D> =
   | { readonly status: "comparing" }
   | { readonly status: "compared"; readonly latest: D };
 
+/**
+ * Another client changed the definition's owning Project, which appends no revision, while the
+ * draft had unsaved changes. `waiting`: a save was refused for it before Studio delivered the new
+ * owner; `changed`: Studio shows the owner `to`, which the draft must acknowledge before saving.
+ */
+export type OwnerChange =
+  | { readonly status: "none" }
+  | { readonly status: "waiting" }
+  | { readonly status: "changed"; readonly from: string | null; readonly to: string | null };
+
 /** What every revisioned draft shows; each editor adds its own fields. */
 export interface RevisionedDraftState<D, C> {
   /** The saved revision the draft is based on and the next save expects; null before a Create. */
@@ -56,6 +67,12 @@ export interface RevisionedDraftState<D, C> {
   /** Factory's validation issues behind `error`. */
   readonly issues: readonly ValidationIssue[];
   readonly conflict: RevisionConflict<D>;
+  /**
+   * The owning Project Studio shows now, or null for a global definition. Whenever saving is
+   * allowed it is also the owner the draft acknowledged, so saves expect it.
+   */
+  readonly owner: string | null;
+  readonly ownerChange: OwnerChange;
   /** A clean draft switched to this revision saved elsewhere, until the next change. */
   readonly updatedTo: number | null;
   /** Studio no longer holds the definition a synchronized read showed; the draft is kept. */
@@ -77,6 +94,12 @@ export interface SaveRequest<D, C> {
 }
 
 const noConflict = { status: "none" } as const;
+const noOwnerChange = { status: "none" } as const;
+
+/** A refusal because the definition's owning Project is no longer the one the save expected. */
+const isStaleOwner = (cause: ApiError) =>
+  cause.detail.code === "conflict" &&
+  cause.detail.issues.some((issue) => issue.code === "stale_owner");
 
 function outcomeOf(cause: unknown): SaveOutcome {
   if (!(cause instanceof OfflineError)) return "rejected";
@@ -117,6 +140,10 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** The newer revision a dirty draft names, once Studio holds it. */
   let newest: D | null = null;
   let updatedTo: number | null = null;
+  /** The owning Project Studio shows now, and the one the user last accepted for saving. */
+  let owner = config.saved?.projectId ?? null;
+  let acknowledgedOwner = owner;
+  let ownerChange: OwnerChange = noOwnerChange;
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -144,11 +171,18 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       error,
       issues,
       conflict,
+      owner,
+      ownerChange,
       updatedTo,
       removed,
       removing,
       removalError,
-      canSave: !removed && !saving && !removing && conflict.status === "none",
+      canSave:
+        !removed &&
+        !saving &&
+        !removing &&
+        conflict.status === "none" &&
+        ownerChange.status === "none",
     };
   }
   let snapshot = view(state());
@@ -164,9 +198,16 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     conflict = noConflict;
     newest = null;
   }
+  /** The draft accepts `projectId` as its owning Project, so its saves expect it. */
+  function acceptOwner(projectId: string | null) {
+    owner = projectId;
+    acknowledgedOwner = projectId;
+    ownerChange = noOwnerChange;
+  }
   /** The saved revision replaces the draft, which is clean and shows no conflict or error. */
   function adopt(next: D) {
     saved = next;
+    acceptOwner(next.projectId);
     content = contentOf(next);
     baseline = content;
     closeConflict();
@@ -178,14 +219,16 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     if (!(cause instanceof ApiError))
       return showError(cause instanceof Error ? cause.message : fallback);
     showError(cause.message, cause.detail.issues);
-    // Reconciling afterwards names the newer revision once Studio holds it.
-    if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
+    // Reconciling afterwards names the new owner, or the newer revision, once Studio holds it.
+    if (isStaleOwner(cause)) ownerChange = { status: "waiting" };
+    else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */
   function noteAbsence() {
     if (!seen) return false;
     removed = true;
     closeConflict();
+    ownerChange = noOwnerChange;
     updatedTo = null;
     showError("");
     removalError = "";
@@ -220,6 +263,27 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         : { status: "detected", revision: latest.revision };
     return true;
   }
+  /**
+   * Follows the owning Project Studio shows: a clean draft accepts it, while a dirty one keeps its
+   * edits and must acknowledge it before saving. A stale-owner refusal keeps waiting while Studio
+   * still shows the owner the draft expected.
+   */
+  function followOwner(latest: D): boolean {
+    const shown = owner;
+    owner = latest.projectId;
+    if (owner === acknowledgedOwner) {
+      if (ownerChange.status !== "changed") return owner !== shown;
+      ownerChange = noOwnerChange;
+      return true;
+    }
+    if (!isDirty()) {
+      acceptOwner(owner);
+      return true;
+    }
+    if (ownerChange.status === "changed" && ownerChange.to === owner) return false;
+    ownerChange = { status: "changed", from: acknowledgedOwner, to: owner };
+    return true;
+  }
   /** Applies Studio's saved list to the draft; returns whether anything shown changed. */
   function apply(): boolean {
     if (!saved || removed || removing || removedHere) return false;
@@ -240,9 +304,12 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     if (latest.revision === saved.revision) {
       if (latest === saved) return changed;
       saved = latest;
+      followOwner(latest);
       return true;
     }
-    return recognisesLostSave(latest) || follow(latest) || changed;
+    if (recognisesLostSave(latest) || follow(latest)) changed = true;
+    // A clean draft adopting `latest` has already accepted its owner.
+    return followOwner(latest) || changed;
   }
   /** Applies `change` only while `revision` is still the one compared, then shows it. */
   function onCompared(revision: number, change: (latest: D) => void) {
@@ -312,6 +379,16 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         apply();
         publish();
       }
+    },
+    /**
+     * Accepts owning Project `projectId`, changed elsewhere, while it is still the change shown:
+     * the edits stay and the next save expects it.
+     */
+    acknowledgeOwner(projectId: string | null) {
+      if (ownerChange.status !== "changed" || ownerChange.to !== projectId) return;
+      acceptOwner(projectId);
+      showError("");
+      publish();
     },
     /** The user checked an unknown save's outcome themselves, so the draft may send again. */
     acknowledgeUnknownSave() {

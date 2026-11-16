@@ -1,7 +1,10 @@
 import { expect, it, vi } from "vite-plus/test";
+import { ApiError } from "../src/api.ts";
 import { notReady } from "./support/flow-draft.ts";
 import { savedAgent } from "./support/agent-draft.ts";
 import {
+  createChangeOwner,
+  createFlowDuplicate,
   defaultOwner,
   ownerGroups,
   ownerPicker,
@@ -10,6 +13,7 @@ import {
 import {
   currentWindow,
   deliveredStudio,
+  duplicatePlan,
   factoryProject,
   liveStudio,
   projectCatalog,
@@ -323,4 +327,172 @@ it("a global Flow's Agent library offers only global Agents", () => {
 
   // Assert
   expect(library).toStrictEqual([coder]);
+});
+
+it("Change owner sends the owner the dialog opened with as expected and the chosen new owner", async () => {
+  // Arrange
+  const { definitions, factory } = deliveredStudio({ agents: [savedAgent()], flows: [] });
+  const change = createChangeOwner({ kind: "agent", id: "agent", expected: null }, definitions);
+  change.setTarget("northwind");
+
+  // Act
+  const moved = await change.confirm();
+
+  // Assert
+  expect(factory.changeAgentOwner).toHaveBeenCalledWith("agent", {
+    expectedProjectId: null,
+    projectId: "northwind",
+  });
+  expect(moved).toMatchObject({ id: "agent", projectId: "northwind" });
+});
+
+it("a refused Change owner names each blocking Flow as Studio lists it", async () => {
+  // Arrange
+  const implement = savedFlow("Implement + Review", { id: "implement" });
+  const migrations = savedFlow("Ledgerly migrations", { id: "migrations", projectId: "ledgerly" });
+  const { definitions, factory } = deliveredStudio({
+    agents: [savedAgent()],
+    flows: [implement, migrations],
+  });
+  const blocked = (flow: string, id: string) => ({
+    code: "owner_change_blocked",
+    path: "projectId",
+    message: `Flow "${flow}" (${id}) places this Agent outside the new owner.`,
+  });
+  factory.changeAgentOwner.mockRejectedValueOnce(
+    new ApiError({
+      code: "conflict",
+      message: "Flows outside the new owner place this Agent.",
+      issues: [blocked("Implement + Review", "implement"), blocked("Gone", "removed-flow")],
+    }),
+  );
+  const change = createChangeOwner({ kind: "agent", id: "agent", expected: null }, definitions);
+  change.setTarget("northwind");
+
+  // Act
+  const moved = await change.confirm();
+
+  // Assert
+  expect(moved).toBeUndefined();
+  expect(change.getSnapshot()).toMatchObject({
+    target: "northwind",
+    changing: false,
+    error: "Flows outside the new owner place this Agent.",
+    blockers: [
+      { definition: implement },
+      { definition: null, message: 'Flow "Gone" (removed-flow) places this Agent outside the new owner.' },
+    ],
+  });
+});
+
+it("Flow Duplicate previews into the source's owning Project and starts from the plan's defaults", async () => {
+  // Arrange
+  const { definitions, factory } = deliveredStudio({ agents: [], flows: [] });
+  const duplicate = createFlowDuplicate({ id: "release", projectId: "northwind" }, definitions);
+
+  // Act
+  await duplicate.preview();
+
+  // Assert
+  expect(factory.previewFlowDuplicate).toHaveBeenCalledWith("release", { projectId: "northwind" });
+  expect(duplicate.getSnapshot()).toMatchObject({
+    target: "northwind",
+    name: "Release copy",
+    plan: {
+      agents: [
+        { agentId: "coder", choice: "keep", changeable: true },
+        { agentId: "qa", choice: "copy", changeable: false },
+      ],
+    },
+  });
+});
+
+it("changing the Duplicate target previews the plan again for that target, keeping an edited name", async () => {
+  // Arrange
+  const { definitions, factory } = deliveredStudio({ agents: [], flows: [] });
+  const duplicate = createFlowDuplicate({ id: "release", projectId: "northwind" }, definitions);
+  await duplicate.preview();
+  duplicate.setName("Release (Ledgerly)");
+
+  // Act
+  await duplicate.setTarget("ledgerly");
+
+  // Assert
+  expect(factory.previewFlowDuplicate).toHaveBeenLastCalledWith("release", {
+    projectId: "ledgerly",
+  });
+  expect(duplicate.getSnapshot()).toMatchObject({
+    target: "ledgerly",
+    name: "Release (Ledgerly)",
+    plan: { projectId: "ledgerly" },
+  });
+});
+
+it("Duplicate commits the previewed revision, the target and every Agent's choice, a global Agent switched to Copy", async () => {
+  // Arrange
+  const { definitions, factory } = deliveredStudio({ agents: [], flows: [] });
+  const duplicate = createFlowDuplicate(
+    { id: "release", projectId: "northwind" },
+    definitions,
+    "ledgerly",
+  );
+  await duplicate.preview();
+  duplicate.choose("coder", "copy");
+
+  // Act
+  const result = await duplicate.confirm();
+
+  // Assert
+  expect(factory.duplicateFlow).toHaveBeenCalledWith("release", {
+    name: "Release copy",
+    projectId: "ledgerly",
+    expectedRevision: 2,
+    agents: [
+      { agentId: "coder", revision: 3, projectId: null, choice: "copy" },
+      { agentId: "qa", revision: 1, projectId: "northwind", choice: "copy" },
+    ],
+  });
+  expect(result).toMatchObject({ flow: { id: "release-copy" } });
+});
+
+it("a Duplicate choice the plan fixes cannot be changed", async () => {
+  // Arrange
+  const { definitions } = deliveredStudio({ agents: [], flows: [] });
+  const duplicate = createFlowDuplicate({ id: "release", projectId: "northwind" }, definitions);
+  await duplicate.preview();
+
+  // Act
+  duplicate.choose("qa", "keep");
+
+  // Assert
+  expect(duplicate.getSnapshot().plan?.agents[1]).toMatchObject({ agentId: "qa", choice: "copy" });
+});
+
+it("a Duplicate refused as a stale plan previews the plan again and says why", async () => {
+  // Arrange
+  const { definitions, factory } = deliveredStudio({ agents: [], flows: [] });
+  const duplicate = createFlowDuplicate({ id: "release", projectId: "northwind" }, definitions);
+  await duplicate.preview();
+  factory.duplicateFlow.mockRejectedValueOnce(
+    new ApiError({
+      code: "conflict",
+      message: "The Flow or an Agent it places changed after this Duplicate was previewed.",
+      issues: [{ code: "stale_duplicate_plan", path: "agents", message: "Preview again." }],
+    }),
+  );
+  factory.previewFlowDuplicate.mockResolvedValueOnce(
+    duplicatePlan({ revision: 3, projectId: "northwind" }),
+  );
+
+  // Act
+  const result = await duplicate.confirm();
+
+  // Assert
+  expect(result).toBeUndefined();
+  expect(factory.duplicateFlow).toHaveBeenCalledTimes(1);
+  expect(duplicate.getSnapshot()).toMatchObject({
+    committing: false,
+    plan: { revision: 3 },
+    error: "The Flow or an Agent it places changed after this Duplicate was previewed. Review the updated plan, then Duplicate again.",
+  });
 });

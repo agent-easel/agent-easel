@@ -93,6 +93,7 @@ function saveRequest(
   agent: AgentDefinition | null,
   draft: AgentContent,
   operations: AgentDraftOperations,
+  /** The owning Project a save expects, or the one a create gives the new Agent. */
   owner: string | null,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
@@ -106,7 +107,7 @@ function saveRequest(
     const validation = validateUpdateAgent({
       ...content,
       expectedRevision: agent.revision,
-      expectedProjectId: agent.projectId,
+      expectedProjectId: owner,
     });
     if (!validation.ok) return { error: validation.error.message };
     const { expectedRevision: _, expectedProjectId: __, ...submitted } = validation.value;
@@ -208,10 +209,11 @@ export function createAgentDraft(
       return unsubscribe;
     },
     edit,
-    async duplicate() {
+    /** Copies the saved revision into target `projectId`: a Project, or null for Global. */
+    async duplicate(projectId: string | null) {
       const { saved, removed, dirty, saving, removing } = draft.getSnapshot();
       if (removed || !saved || dirty || saving || removing) return;
-      return source.duplicateAgent(saved.id, {});
+      return source.duplicateAgent(saved.id, { projectId });
     },
     setEnvironmentId(id: string) {
       edit({ execution: { ...execution(), environmentId: id } });
@@ -227,14 +229,16 @@ export function createAgentDraft(
      * (null for a global Agent); a save never changes the owner.
      */
     async save(owner: string | null = null) {
-      const { saved, content, canSave } = draft.getSnapshot();
-      if (!canSave) return undefined;
-      const request = saveRequest(saved, content, source, owner);
+      const snapshot = draft.getSnapshot();
+      if (!snapshot.canSave) return undefined;
+      const { saved, content } = snapshot;
+      const request = saveRequest(saved, content, source, saved ? snapshot.owner : owner);
       if (!("error" in request)) return draft.save(request);
       draft.report(request.error);
       return undefined;
     },
     compare: draft.compare,
+    acknowledgeOwner: draft.acknowledgeOwner,
     /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */
     requestLoadLatest(revision: number) {
       const { conflict } = draft.getSnapshot();

@@ -204,7 +204,7 @@ export function createFlowDraft(
     },
     /** Saves the content against the saved revision; a stale revision enters the conflict. */
     async save() {
-      const { saved, content, canSave } = draft.getSnapshot();
+      const { saved, content, canSave, owner } = draft.getSnapshot();
       if (!saved || !canSave) return;
       await draft.save({
         submitted: content,
@@ -212,7 +212,7 @@ export function createFlowDraft(
           source.updateFlow(id, {
             ...content,
             expectedRevision: saved.revision,
-            expectedProjectId: saved.projectId,
+            expectedProjectId: owner,
           }),
         unknownMessage: unknownOutcome,
         fallback: "Could not save Flow.",
@@ -232,7 +232,7 @@ export function createFlowDraft(
     clearRemovalError: draft.clearRemovalError,
     /** Validates the content without saving it. */
     async check() {
-      const { saved, content, removed, busy } = draft.getSnapshot();
+      const { saved, content, removed, busy, owner } = draft.getSnapshot();
       if (!saved || removed || busy) return;
       checking = true;
       const asked = ++readinessRequest;
@@ -241,7 +241,7 @@ export function createFlowDraft(
         const { agentRevisions, ...answer } = await operations.validateFlow(id, {
           ...content,
           expectedRevision: saved.revision,
-          expectedProjectId: saved.projectId,
+          expectedProjectId: owner,
         });
         // An Agent change Studio has not delivered yet also makes the answer stale.
         const shown = agentStamp(content.graph, source.getSnapshot().agents.value);
@@ -270,6 +270,7 @@ export function createFlowDraft(
     },
     /** Replaces the local draft with compared `revision` while it is still the one compared. */
     takeLatest: draft.takeLatest,
+    acknowledgeOwner: draft.acknowledgeOwner,
     /**
      * Keeps the local content, unsaved, against compared `revision` for another explicit save,
      * only while that revision is still the one compared; its readiness check no longer applies.

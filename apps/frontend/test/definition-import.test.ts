@@ -82,7 +82,7 @@ it("changing a row's model keeps the hint options it accepts and recomputes the 
   });
 });
 
-it("Confirm commits every row as reviewed even when every Agent needs a model", async () => {
+it("Confirm commits every row as reviewed into Global by default, even when every Agent needs a model", async () => {
   // Arrange
   const { model, operations } = await reviewedImport();
 
@@ -95,8 +95,23 @@ it("Confirm commits every row as reviewed even when every Agent needs a model", 
     requestId: "request-1",
     document,
     selections: { "agent-1": null },
+    projectId: null,
   });
   expect(model.getSnapshot().file).toBeNull();
+});
+
+it("Confirm creates the imported definitions in the chosen target Project", async () => {
+  // Arrange
+  const { model, operations } = await reviewedImport();
+  model.setTarget("northwind");
+
+  // Act
+  await model.confirm();
+
+  // Assert
+  expect(operations.commitImport).toHaveBeenCalledWith(
+    expect.objectContaining({ requestId: "request-1", projectId: "northwind" }),
+  );
 });
 
 it("a review rejected for one field lists that field's path under the matching headline", async () => {
