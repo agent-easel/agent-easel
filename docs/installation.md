@@ -176,39 +176,29 @@ report follows, the user can use **Request report** or ask in that worker's T3 t
 Approved remote Factory clients control a Factory host; they do not make remote T3 workers equivalent to local ones. Factory reads and stops only its own worker threads in the Run's
 environment; work a worker delegates to a peer environment counts only through T3's delegated wait answer for the worker. Repository validation targets loopback T3 on the backend host.
 
-### T3 and Codex
+### Harnesses
 
-One bounded local Codex flow (a recent T3 nightly, Codex 0.166 with a GPT-6.1 model) exercised explicit MCP acknowledgement before completion, Agent → Human → Agent delivery, backend restart and
-recorded finished closure, plus native per-stage settlement and waking the same thread. These observations cover those cases and versions only. Native approval/denial modes, report retries, manual
-recovery, Archive interruption, loss-of-response recovery, direct-work races, remote environments, remote-device OAuth and other harnesses remain unverified live.
+Factory treats every harness with [reporting support](t3-integration.md#reporting-installation) the same way: one
+launch, skill and reporting contract, with no harness-specific behavior. Each worker's first message starts with
+`$factory-block`, and T3 turns that mention into the harness's own skill invocation. A harness that expands only one
+skill per message expands the last skill mentioned, so a skill named in an Agent prompt can take precedence; the worker
+then relies on the model loading `factory-block` from its description. Keep other skill mentions out of Agent prompts
+when that matters.
 
 Readiness checks capabilities, reporting installation and the public activity metadata needed for delegation evidence. A version number alone is neither failure nor proof, and available models are never
-substituted. Launches omit `runtimeMode`; T3 chooses permissions for the OAuth grant (one Codex case observed full access, which proves nothing about other grants or native approvals).
+substituted. Launches omit `runtimeMode`; T3 chooses permissions for the OAuth grant, and one observed full-access case proves nothing about other grants or native approvals.
 
-### T3 and Claude
-
-Claude (`claudeAgent`) workers use the same launch, skill and reporting contract as Codex; nothing in a
-worker's launch is Codex-specific. The first message starts with `$factory-block`; for Claude, T3 turns
-the last `$<skill>` mention of a message that names a discovered skill into Claude Code's `/<skill>`
-invocation. Claude Code expands only one skill per message, so an Agent prompt that itself mentions a
-skill (for example `$review-code`) is the one expanded, and the worker then relies on the model loading
-`factory-block` from its description. Mention other skills in the Agent prompt sparingly for Claude workers.
-
-Reporting installation writes Factory MCP to `.claude.json` and the skills to the Claude skills folder:
-`~/.claude.json` and `~/.claude/skills` for the default home, or `.claude.json` and `skills` directly
-inside a configured `CLAUDE_CONFIG_DIR` (T3's **CLAUDE_CONFIG_DIR path**), where Claude Code and T3's
-skill discovery read them ([Reporting installation](t3-integration.md#reporting-installation)).
-After an upgrade that corrects an installed location, **Repair** or **Reinstall** writes the skills there.
-
-Claude workers are exercised only against the controlled T3. No live Claude Run has been qualified:
-launch, skill expansion, reporting before completion, held release, Archive interruption and restart
-are unverified live for Claude.
+Live evidence is limited to one bounded local flow on a single harness and version. It exercised explicit MCP
+acknowledgement before completion, Agent → Human → Agent delivery, backend restart and recorded finished closure,
+plus native per-stage settlement and waking the same thread. No harness is qualified beyond those cases: native
+approval/denial modes, report retries, manual recovery, Archive interruption, loss-of-response recovery, direct-work
+races, remote environments and remote-device OAuth remain unverified live, and every other harness is unverified live.
 
 ### Execution and safety boundaries
 
 - Prompt screenshots reach workers as T3 launch attachments. Controlled fixtures cover upload, fan-out and recovery; a
   live T3 upload, relays or proxies in front of T3 and whether a model can see the images are unverified. A bounded
-  local Codex qualification of launch attachments is required before calling the feature release-ready.
+  local qualification of launch attachments is required before calling the feature release-ready.
 - A Run's threads share its workspace, the project checkout or that Run's one worktree: no conflict-free editing or exactly-once guarantee. Worktree Runs are not yet qualified against live T3.
 - Uncertain launch/send retries need unchanged authorization and independent, operation-specific continuity and retention proof; the default live proof is absent, and server restart, changed grants and
   unknown retention are never assumed safe. Authorization context tracks grant lineage, not authenticated remote identity, and a Block id does not isolate adversarial processes sharing the OS user.
@@ -236,7 +226,7 @@ remote host, unknown override or managed restriction. Obtain a human-approved sp
 recovery or Stop cases), a spend cap and a wall-clock limit. Stop at the first incompatibility, unexpected execution, ambiguous attribution or exceeded bound; do not retry with changed permissions, fall
 back to messages, invent replay evidence or add work outside the budget. Readiness checks never launch diagnostic model work.
 
-Record Factory SHA and dirty state, OS and architecture, Node and pnpm, the T3 build, Codex CLI/SDK version, provider/model/options, effective home, the permissions T3 applied to the launch (Factory sets none), endpoint and authorization-context
+Record Factory SHA and dirty state, OS and architecture, Node and pnpm, the T3 build, the harness and its CLI/SDK version, provider/model/options, effective home, the permissions T3 applied to the launch (Factory sets none), endpoint and authorization-context
 identity (never credentials). For each step record PASS, FAIL or UNVERIFIED with exact public thread and execution IDs, report acknowledgements, observed states and a sanitized evidence path;
 unperformed checks are UNVERIFIED, never inferred.
 
