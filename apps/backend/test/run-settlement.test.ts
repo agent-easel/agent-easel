@@ -25,6 +25,7 @@ import {
   resultReported,
   sentTurnBegins,
   settled,
+  settleUnresolved,
   snoozed,
   turnBegins,
   twoWorkersStarted,
@@ -652,6 +653,7 @@ it("an acknowledged Stop does not settle the Run while T3 still shows the worker
       attempt: 1,
       workers: [{ blockId: "worker", state: "stopping", problem: "T3 shows a run in progress." }],
     },
+    attention: [],
   });
   expect(f.t3.threadStops).toHaveLength(1);
 });
@@ -711,7 +713,117 @@ it("retrying an unresolved settlement requests Stop again and settles the Run", 
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.lifecycle).toBe("settled");
+  expect(run.value.attention).toMatchObject([
+    {
+      kind: "settlement-unresolved",
+      settledAt: expect.any(String),
+      settlementReason: "manual-settlement",
+    },
+  ]);
   expect(f.t3.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
+});
+
+it("a confirmed Settle that cannot stop its worker raises one Run-level Settle could not stop workers Problem", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+  f.t3.stopSupported = false;
+  assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.attention).toMatchObject([
+    { kind: "settlement-unresolved", blockId: null, blockName: null, settledAt: null },
+  ]);
+  const navigation = await f.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value[0]?.attention).toStrictEqual({
+    needsInput: false,
+    problem: true,
+    matters: [
+      {
+        id: run.value.attention[0]?.id,
+        kind: "settlement-unresolved",
+        presentation: "problem",
+        blockId: null,
+        occurrenceId: null,
+        nativeRequestId: null,
+        pendingRequestCount: null,
+        blockName: null,
+      },
+    ],
+  });
+});
+
+it("a retried Settle that ends unresolved again keeps its one Problem without a new appearance", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = {
+    ...setup,
+    ...(await settleUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
+  const before = await f.f.getRun(f.runId);
+  assert(before.ok);
+  assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.settlement).toMatchObject({ state: "unresolved", attempt: 2 });
+  expect(run.value.attention).toMatchObject([
+    { id: before.value.attention[0]?.id, kind: "settlement-unresolved", settledAt: null },
+  ]);
+  expect(run.value.events.filter((event) => event.kind === "attention-appeared")).toHaveLength(1);
+});
+
+it("archiving a Run whose Settle could not stop workers resolves its Problem", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = {
+    ...setup,
+    ...(await settleUnresolved(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
+
+  // Act
+  const archivedRun = await f.f.archiveRun(f.runId);
+
+  // Assert
+  assert(archivedRun.ok);
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.attention).toMatchObject([
+    { kind: "settlement-unresolved", settledAt: expect.any(String), settlementReason: "archived" },
+  ]);
+});
+
+it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = {
+    ...setup,
+    ...(await snoozed(setup.world, await workerAtWork(setup.world, setup.input))),
+  };
+  f.t3.stopSupported = false;
+  assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const navigation = await f.f.listRunNavigation();
+  assert(navigation.ok);
+  expect(navigation.value[0]).toMatchObject({
+    settlement: "unresolved",
+    presentation: { snoozed: false, woke: true },
+    attention: { problem: true },
+  });
 });
 
 it("a Stop-support check T3 cannot answer keeps the worker's Stop for a later pass", async (c) => {
@@ -1047,6 +1159,10 @@ it("a launch whose reply was lost during Settle holds the Run unresolved while F
   const navigation = await f.listRunNavigation();
   assert(navigation.ok);
   expect(navigation.value[0]?.settlement).toBe(run.value.settlement?.state);
+  expect(navigation.value[0]?.attention).toMatchObject({
+    problem: true,
+    matters: [{ kind: "settlement-unresolved", blockId: null }],
+  });
 });
 
 it("a worker found after its launch reply was lost during Settle is stopped before the Run settles", async (c) => {

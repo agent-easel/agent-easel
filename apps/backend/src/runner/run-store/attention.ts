@@ -8,7 +8,8 @@ import { appendTimelineEvent } from "./steps.ts";
 type PendingMatter = {
   readonly id: string;
   readonly runId: string;
-  readonly blockId: string;
+  /** Null for a Run-level matter. */
+  readonly blockId: string | null;
   readonly executionId: string;
   readonly bindingId?: string;
 };
@@ -115,6 +116,28 @@ export function settlePendingAttention(
       reason,
       time,
     );
+  });
+}
+
+/** The Run-level Settle could not stop workers Problem, raised unless one is pending: one matter
+ * per unresolved episode, kept across retried attempts. It has no Block or execution. Answers
+ * whether it was raised. */
+export function raiseSettlementAttention(sql: SqlClient.SqlClient, runId: string, time: string) {
+  return Effect.gen(function* () {
+    const pending =
+      yield* sql`SELECT id FROM run_attention WHERE run_id=${runId} AND kind='settlement-unresolved' AND settled_at IS NULL`;
+    if (pending.length) return false;
+    const id = yield* newId;
+    yield* sql`INSERT INTO run_attention(id,run_id,block_id,execution_id,kind,source_key,appeared_at) VALUES(${id},${runId},NULL,'','settlement-unresolved',${"attention:" + id},${time})`;
+    yield* appendTimelineEvent(sql, {
+      kind: "attention-appeared",
+      runId,
+      blockId: null,
+      executionId: "",
+      attentionId: id,
+      observedAt: time,
+    });
+    return true;
   });
 }
 

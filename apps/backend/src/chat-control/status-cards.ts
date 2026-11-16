@@ -70,6 +70,7 @@ const PROBLEMS: Record<string, string> = {
   "execution-failed": "execution failed",
   "report-problem": "report problem",
   "condition-integrity": "Condition cannot number its next arrival",
+  "settlement-unresolved": "Settle could not stop workers",
 };
 
 function resultLine(result: RunReport["latestResults"][number]) {
@@ -130,7 +131,7 @@ function statusCardText(report: RunReport, replacedApplication: boolean) {
   );
   const problems = report.problems.map(
     (matter) =>
-      `⚠️ ${name(matter.block)} — ${PROBLEMS[matter.kind]} since ${at(matter.appearedAt)}${
+      `⚠️ ${matter.block === null ? "" : `${name(matter.block)} — `}${PROBLEMS[matter.kind]} since ${at(matter.appearedAt)}${
         OBSERVATIONS[matter.observation] ?? ""
       }`,
   );

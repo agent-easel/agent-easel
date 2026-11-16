@@ -14,12 +14,14 @@ import {
   MessageChannelMain,
   nativeImage,
   nativeTheme,
+  powerMonitor,
   protocol,
   safeStorage,
   session,
   shell,
   Tray,
   type IpcMainInvokeEvent,
+  type WebContents,
   type WebFrameMain,
 } from "electron";
 import {
@@ -31,19 +33,24 @@ import {
 } from "@t3-factory/contracts";
 import type {
   Appearance,
+  DesktopAlertSettings,
   DesktopMenuState,
   DesktopResult,
   DesktopRole,
+  DesktopRoute,
   DesktopState,
   FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
 import { ApprovedClient } from "./approved-client.ts";
+import { AttentionCoordinator } from "./attention-coordinator.ts";
+import { AttentionSubscription, type AttentionSelection } from "./attention-subscription.ts";
 import { BackendSupervisor } from "./backend.ts";
 import { channels } from "./ipc.ts";
 import { buildApplicationMenu, parseMenuState, withoutOpenRun } from "./menu.ts";
-import { hostLiveSocket, livePath, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
+import { openLiveSocket, refuseLive, relayLive, type LivePort } from "./live-relay.ts";
+import { loadNativeNotifications, MacAlerts } from "./macos-alerts.ts";
 import { appOrigin, factoryProtocolHandler, type ApiTarget } from "./protocol.ts";
-import { SettingsStore } from "./settings-store.ts";
+import { SettingsStore, type DesktopSettings, type RememberedServer } from "./settings-store.ts";
 import { buildChannel, Updates } from "./updates.ts";
 
 // Disposable profiles for probes and side-by-side installs; FACTORY_HOME selects server data.
@@ -68,7 +75,20 @@ let store: SettingsStore;
 let approvedClient: ApprovedClient;
 let backend: BackendSupervisor;
 let updates: Updates;
+let alerts: MacAlerts;
+let attention: AttentionCoordinator;
+let attentionSubscription: AttentionSubscription;
+let permissionCheck: NodeJS.Timeout | undefined;
+/** The local backend the attention subscription follows in the server role. */
+let attentionHost: string | null = null;
 let window: BrowserWindow | null = null;
+/** The window's page once it listens for routes; a route chosen before that waits in `pendingRoute`. */
+let routeReceiver: WebContents | null = null;
+let pendingRoute: DesktopRoute | null = null;
+/** The page a closed window showed; reopening the window returns to it. */
+let lastView = `${appOrigin}/`;
+/** The notification whose click launched this process, read before any window exists. */
+let launchActivation: string | null = null;
 let tray: Tray | null = null;
 let menuState: DesktopMenuState | null = null;
 /** Set only after the local user confirmed and the backend stopped in order. */
@@ -78,6 +98,18 @@ let installingUpdate = false;
 let serverInstallAccepted = false;
 
 const updateChannel = (): UpdateChannel => store.get().updateChannel ?? buildChannel();
+
+const alertSettings = ({
+  notifications,
+  dockBadge,
+  showRunDetails,
+}: DesktopSettings): DesktopAlertSettings => ({ notifications, dockBadge, showRunDetails });
+
+const alertSettingNames = new Set<unknown>([
+  "notifications",
+  "dockBadge",
+  "showRunDetails",
+] satisfies (keyof DesktopAlertSettings)[]);
 
 function desktopState(): DesktopState {
   const settings = store.get();
@@ -90,6 +122,8 @@ function desktopState(): DesktopState {
     backend: backend.state,
     launchAtLogin: settings.launchAtLogin,
     menuBarIcon: settings.menuBarIcon,
+    alerts: alertSettings(settings),
+    notificationPermission: attention.permission,
     updateChannel: updateChannel(),
     update: updates.current,
     // macOS keeps a minimized window's document "visible"; live delivery detaches on this.
@@ -111,6 +145,49 @@ function apiTarget(): ApiTarget {
       : { kind: "host", base: `http://127.0.0.1:${backend.port}` };
   const connection = approvedClient.capture();
   return connection ? { kind: "remote", connection } : null;
+}
+
+/** The running local backend the server role's attention follows. */
+const attentionHostBase = () =>
+  backend.state.state === "running" && backend.port !== null
+    ? `http://127.0.0.1:${backend.port}`
+    : null;
+
+/** A remembered server's identity in the attention ledger. */
+const clientServer = ({ url, trust }: RememberedServer) => `client ${url} ${trust.fingerprint}`;
+
+/**
+ * The server whose attention this installation follows, independent of any window and of
+ * whether it is reachable: a stopped local backend leaves the selection, and its
+ * notifications, in place.
+ */
+function attentionSelection(): AttentionSelection | null {
+  const settings = store.get();
+  if (settings.role === "server") {
+    const base = attentionHostBase();
+    return { server: "server", target: base ? { kind: "host", base } : null };
+  }
+  if (settings.role !== "client" || !settings.server) return null;
+  const connection = approvedClient.capture();
+  return {
+    server: clientServer(settings.server),
+    target: connection ? { kind: "remote", connection } : null,
+  };
+}
+
+/** Replaces the subscription after a server, role, credential or backend change. */
+function followAttention() {
+  // A route chosen for the previous selection never opens in the next one.
+  pendingRoute = null;
+  attentionHost = store.get().role === "server" ? attentionHostBase() : null;
+  attentionSubscription.follow(attentionSelection());
+}
+
+/** Quit: alerts stop with the process; delivered notifications stay in Notification Center. */
+function stopAttention() {
+  clearInterval(permissionCheck);
+  attentionSubscription.stop();
+  void attention.close();
 }
 
 async function openRunCount(): Promise<number | null> {
@@ -169,6 +246,22 @@ async function stopBackendFor(action: keyof typeof interruption): Promise<boolea
   return true;
 }
 
+/**
+ * Applies a click's route in the window, which the caller already opened. The page applies it
+ * through its own navigation, behind its connection gate, so its draft guards still ask.
+ */
+function openRoute(route: DesktopRoute | null) {
+  if (!route) return;
+  if (routeReceiver) routeReceiver.send(channels.route, route);
+  else pendingRoute = route;
+}
+
+/** A notification click focuses or opens the window, then routes to the Run's current state. */
+function activateNotification(id: string) {
+  openWindow();
+  void attention.activate(id).then(openRoute);
+}
+
 function openWindow() {
   if (window) {
     if (window.isMinimized()) window.restore();
@@ -207,15 +300,25 @@ function openWindow() {
     if (!url.startsWith(`${appOrigin}/`)) event.preventDefault();
   });
   created.once("ready-to-show", () => created.show());
+  // A reload replaces the page and its route listener; in-page navigation keeps both.
+  created.webContents.on("did-navigate", () => {
+    routeReceiver = null;
+  });
+  created.on("close", () => {
+    const url = created.webContents.getURL();
+    if (url.startsWith(`${appOrigin}/`)) lastView = url;
+  });
   created.on("minimize", broadcast);
   created.on("restore", broadcast);
   // Closing the window never stops the backend; the Dock and the optional tray reopen it.
   created.on("closed", () => {
     window = null;
+    routeReceiver = null;
+    attention.focus(false);
     applyMenuState(withoutOpenRun(menuState));
   });
   window = created;
-  void created.loadURL(`${appOrigin}/`);
+  void created.loadURL(lastView);
 }
 
 function trayImage() {
@@ -284,6 +387,7 @@ async function chooseRole(role: DesktopRole): Promise<DesktopResult> {
   // Local data stays where it is; nothing is copied to or from another server.
   await approvedClient.chooseRole(role);
   if (role === "server") backend.start();
+  followAttention();
   broadcast();
   return { ok: true };
 }
@@ -294,6 +398,7 @@ async function connectServer(url: string, fingerprint: string): Promise<DesktopR
   } catch (error) {
     return failed(String(error));
   }
+  followAttention();
   broadcast();
   return { ok: true };
 }
@@ -316,6 +421,18 @@ async function setMenuBarIcon(enabled: boolean): Promise<DesktopResult> {
     return failed(`The menu bar setting could not be saved: ${String(error)}`);
   }
   applyMenuBarIcon();
+  broadcast();
+  return { ok: true };
+}
+
+async function setAlertSetting(name: unknown, enabled: boolean): Promise<DesktopResult> {
+  if (!alertSettingNames.has(name)) return failed("Unknown notification setting.");
+  try {
+    await store.update({ [name as keyof DesktopAlertSettings]: enabled });
+  } catch (error) {
+    return failed(`The notification setting could not be saved: ${String(error)}`);
+  }
+  await attention.configure(alertSettings(store.get()));
   broadcast();
   return { ok: true };
 }
@@ -410,11 +527,8 @@ function closeLive(reason: string) {
 
 /** Captures the current target: a later selection or backend change closes this channel. */
 function openLive(query: string, port: LivePort) {
-  const target = apiTarget();
-  if (!target) return refuseLive(port, "The Factory server is unreachable.");
-  const path = livePath(query);
-  const socket =
-    target.kind === "host" ? hostLiveSocket(target.base, path) : target.connection.openSocket(path);
+  const socket = openLiveSocket(apiTarget(), query);
+  if (!socket) return refuseLive(port, "The Factory server is unreachable.");
   const channel = relayLive(socket, port, () => liveChannels.delete(channel));
   liveChannels.add(channel);
 }
@@ -427,7 +541,7 @@ function trustedFrame(event: IpcMainInvokeEvent) {
 }
 
 /** Bridge methods the page calls over `ipcRenderer.invoke`; the rest are main → page pushes. */
-type BridgeRequest = Exclude<keyof FactoryDesktop, "onState" | "onMenuCommand">;
+type BridgeRequest = Exclude<keyof FactoryDesktop, "onState" | "onMenuCommand" | "onRoute">;
 type BridgeAnswer<Name extends BridgeRequest> = Awaited<ReturnType<FactoryDesktop[Name]>>;
 
 /**
@@ -460,7 +574,10 @@ const bridgeHandlers: BridgeHandlers = {
   },
   connectServer: (_frame, url: string, fingerprint: string) => connectServer(url, fingerprint),
   forgetServer: async () => {
+    const forgotten = store.get().server;
     await approvedClient.forget();
+    followAttention();
+    if (forgotten) await attention.forget(clientServer(forgotten));
     broadcast();
     return { ok: true };
   },
@@ -470,6 +587,12 @@ const bridgeHandlers: BridgeHandlers = {
   },
   setLaunchAtLogin: (_frame, enabled: boolean) => setLaunchAtLogin(enabled === true),
   setMenuBarIcon: (_frame, enabled: boolean) => setMenuBarIcon(enabled === true),
+  setAlertSetting: (_frame, name: unknown, enabled: boolean) =>
+    setAlertSetting(name, enabled === true),
+  openNotificationSettings: async () => {
+    await shell.openExternal(alerts.systemSettingsUrl);
+    return { ok: true };
+  },
   checkForUpdates: async () => {
     await updates.check();
     return { ok: true };
@@ -500,6 +623,13 @@ const bridgeHandlers: BridgeHandlers = {
 };
 
 function registerBridge() {
+  ipcMain.handle(channels.takeRoute, (event: IpcMainInvokeEvent) => {
+    trustedFrame(event);
+    routeReceiver = event.sender;
+    const route = pendingRoute;
+    pendingRoute = null;
+    return route;
+  });
   for (const name of Object.keys(bridgeHandlers) as BridgeRequest[]) {
     const run = bridgeHandlers[name] as (frame: WebFrameMain, ...args: unknown[]) => unknown;
     ipcMain.handle(channels[name], (event: IpcMainInvokeEvent, ...args: unknown[]) =>
@@ -526,13 +656,23 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on("second-instance", openWindow);
-  app.on("activate", openWindow);
+  // A Dock click: an open window only comes forward; otherwise the window opens where attention waits.
+  app.on("activate", () => {
+    const windowOpen = window !== null;
+    openWindow();
+    void attention.dock(windowOpen).then(openRoute);
+  });
+  app.once("ready", (_event, launchInfo) => {
+    if ("identifier" in launchInfo && typeof launchInfo.identifier === "string")
+      launchActivation = launchInfo.identifier;
+  });
   // Background operation: the last window closing leaves the server and app running.
   app.on("window-all-closed", () => undefined);
   app.on("before-quit", (event) => {
     if (quitting) return;
     event.preventDefault();
     const finish = () => {
+      stopAttention();
       approvedClient.close();
       quitting = true;
       app.quit();
@@ -557,7 +697,8 @@ if (!app.requestSingleInstanceLock()) {
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
   applyNativeAppearance(store.get().appearance);
-  approvedClient = await ApprovedClient.open(store, safeStorage);
+  // A newly issued credential replaces the attention subscription at once.
+  approvedClient = await ApprovedClient.open(store, safeStorage, followAttention);
   backend = new BackendSupervisor(
     join(here, "backend-host.js"),
     {
@@ -566,6 +707,7 @@ async function start() {
     },
     (state) => {
       if (state.state !== "running") closeLive("The Factory server stopped.");
+      if (store.get().role === "server" && attentionHostBase() !== attentionHost) followAttention();
       broadcast();
     },
     {
@@ -594,11 +736,34 @@ async function start() {
       .stop()
       .catch(() => undefined)
       .finally(() => {
+        stopAttention();
         approvedClient.close();
         quitting = true;
         app.quit();
       });
   });
+  // Alerts run in the main process for the installation's lifetime, with every window closed.
+  alerts = new MacAlerts(
+    loadNativeNotifications(join(here, "native", "notifications.node")),
+    app.dock!,
+    activateNotification,
+  );
+  attention = await AttentionCoordinator.open(app.getPath("userData"), alerts, {
+    settings: alertSettings(store.get()),
+    permissionChanged: broadcast,
+  });
+  attentionSubscription = new AttentionSubscription(attention);
+  // No window is needed: a grant made in System Settings is noticed here and catches up.
+  const checkPermission = () => void attention.checkPermission();
+  permissionCheck = setInterval(checkPermission, 60_000);
+  app.on("did-become-active", checkPermission);
+  powerMonitor.on("resume", checkPermission);
+  app.on("browser-window-focus", () => attention.focus(true));
+  app.on("browser-window-blur", () => attention.focus(false));
+  followAttention();
+  void alerts.listenForClicks();
+  // A relaunch from a notification routes once the subscription is ready, behind the connection gate.
+  if (launchActivation) void attention.activate(launchActivation).then(openRoute);
   registerUi();
   registerBridge();
   applyMenuState(null);

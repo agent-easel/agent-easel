@@ -34,14 +34,15 @@ export type TimelineEvent = { readonly runId: string; readonly observedAt: strin
   | { readonly kind: "human-cancelled"; readonly blockId: string; readonly occurrenceId: string }
   | {
       readonly kind: "attention-appeared";
-      readonly blockId: string;
+      /** Null for a Run-level matter. */
+      readonly blockId: string | null;
       readonly executionId: string;
       readonly attentionId: string;
     }
   | { readonly kind: "attention-appeared"; readonly blockId: string; readonly occurrenceId: string }
   | {
       readonly kind: "attention-settled";
-      readonly blockId: string;
+      readonly blockId: string | null;
       readonly executionId: string;
       readonly attentionId: string;
       readonly bindingId?: string;

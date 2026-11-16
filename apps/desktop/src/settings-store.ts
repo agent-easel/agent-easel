@@ -1,7 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateChannel } from "@t3-factory/contracts";
-import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
+import type { Appearance, DesktopAlertSettings } from "@t3-factory/contracts/desktop-bridge";
 
 /** How this client trusts its server: a pinned Factory authority, or the system's trust store. */
 export type ServerTrust =
@@ -19,7 +19,7 @@ export interface RememberedServer {
  * Per-installation desktop settings, kept outside the Factory database because a client
  * installation has none. Versioned like stored JSON: readers accept only known versions.
  */
-export interface DesktopSettings {
+export interface DesktopSettings extends DesktopAlertSettings {
   readonly version: 1;
   readonly role: "server" | "client" | null;
   readonly server: RememberedServer | null;
@@ -40,6 +40,9 @@ const initialSettings: DesktopSettings = {
   menuBarIcon: false,
   updateChannel: null,
   appearance: "dark",
+  notifications: true,
+  dockBadge: true,
+  showRunDetails: false,
 };
 
 function isTrust(value: unknown): value is ServerTrust {
@@ -67,8 +70,9 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
   const role = value.role === "server" || value.role === "client" ? value.role : null;
   const server = value.server === null || value.server === undefined ? null : value.server;
   if (server !== null && !isServer(server)) return undefined;
-  // The update channel, menu-bar icon and appearance were added within version 1; files without
-  // them follow the build's channel, keep the icon hidden and open Dark.
+  // The update channel, menu-bar icon, appearance and alert switches were added within version
+  // 1; files without them follow the build's channel, keep the icon hidden, open Dark, notify
+  // and badge, and keep Run details out of notifications.
   return {
     version: 1,
     role,
@@ -80,6 +84,9 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
         ? value.updateChannel
         : null,
     appearance: value.appearance === "light" ? "light" : "dark",
+    notifications: value.notifications !== false,
+    dockBadge: value.dockBadge !== false,
+    showRunDetails: value.showRunDetails === true,
   };
 }
 

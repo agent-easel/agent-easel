@@ -281,8 +281,9 @@ CREATE TABLE "chat_report_matters" (
   matter_id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id),
   notice_id TEXT REFERENCES chat_report_notices(delivery_id),
-  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'condition-integrity')),
-  block TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('human', 'native-request', 'conversation-waiting', 'missing-report', 'execution-failed', 'report-problem', 'settlement-unresolved', 'condition-integrity')),
+  -- NULL for a Run-level matter.
+  block TEXT,
   appeared_at TEXT NOT NULL,
   resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1))
 );
@@ -725,7 +726,8 @@ CREATE TRIGGER immutable_run_agent_revision_update BEFORE UPDATE ON run_agent_re
 CREATE TABLE run_attention (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),
-  block_id TEXT NOT NULL,
+  -- NULL for a Run-level matter.
+  block_id TEXT,
   execution_id TEXT NOT NULL,
   kind TEXT NOT NULL,
   source_key TEXT NOT NULL,
@@ -733,7 +735,9 @@ CREATE TABLE run_attention (
   occurrence_id TEXT,
   appeared_at TEXT NOT NULL,
   settled_at TEXT,
-  settlement_reason TEXT, message TEXT, binding_id TEXT REFERENCES run_thread_bindings(id),
+  settlement_reason TEXT,
+  message TEXT,
+  binding_id TEXT REFERENCES run_thread_bindings(id),
   UNIQUE(run_id,source_key),
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );

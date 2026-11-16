@@ -29,6 +29,7 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
     "report-problem": "Report problems",
     "execution-failed": "Execution problems",
     "condition-integrity": "Condition integrity problems",
+    "settlement-unresolved": "Settle could not stop workers",
   })[kind];
 
 /** Needs input / Problem on Run-local surfaces: the same Run/StatusChip as Run navigation. */
@@ -52,6 +53,8 @@ function attentionExplanation(kind: RunAttention["kind"]) {
       return "T3 execution did not complete successfully. Continue in T3 to investigate.";
     case "condition-integrity":
       return "This Condition cannot number its next arrival, so it accepts none until the Run is Settled or Archived.";
+    case "settlement-unresolved":
+      return "Settle could not stop this Run's workers. Settle again, remove queued work in T3, or Archive the Run.";
   }
 }
 
@@ -80,6 +83,27 @@ function ObservationLine({
     <p className="text-2xs tracking-label text-subtle-foreground">
       Observation: {unavailable ? "stale" : freshness}
     </p>
+  );
+}
+
+/** What a matter is about: its Block, or the Run for a Run-level matter. */
+const attentionSubject = (item: RunAttention) => item.blockName ?? "Run";
+
+/** The workers a Settle could not resolve, each with what keeps it from finishing and its T3
+ * thread, where queued work can be removed. */
+function BlockedWorkers({ run }: { run: RunDetail }) {
+  const blocked = (run.settlement?.workers ?? []).filter((worker) => worker.state === "unresolved");
+  if (!blocked.length) return null;
+  return (
+    <ul aria-label="Blocked workers" className="flex flex-col gap-2">
+      {blocked.map((worker) => (
+        <li key={worker.threadId ?? worker.blockId} className="flex min-w-0 flex-col gap-1">
+          <p className="text-sm font-medium text-foreground">{worker.blockName}</p>
+          {worker.problem && <p className="text-sm text-muted-foreground">{worker.problem}</p>}
+          {worker.link && <OpenInT3 href={worker.link} />}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -217,11 +241,35 @@ function PendingMatter({
     >
       <div className="flex min-w-0 items-center gap-2">
         {answerable && <AttentionChip presentation={presentation} />}
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">{item.blockName}</h3>
+        <h3 className="truncate text-2xs font-medium text-muted-foreground">
+          {attentionSubject(item)}
+        </h3>
       </div>
       {answerable && (
         <p className="text-sm font-medium text-foreground">{attentionExplanation(item.kind)}</p>
       )}
+      <MatterKindDetail run={run} item={item} binding={binding} />
+      {binding && <BindingDetail binding={binding} executionId={item.executionId} />}
+      {item.blockId !== null && (
+        <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
+      )}
+      {item.kind === "human" && <PendingHuman run={run} item={item} />}
+      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
+    </article>
+  );
+}
+
+function MatterKindDetail({
+  run,
+  item,
+  binding,
+}: {
+  run: RunDetail;
+  item: RunAttention;
+  binding: RunDetail["threadBindings"][number] | undefined;
+}) {
+  return (
+    <>
       {item.kind === "native-request" && (
         <p className="text-sm text-muted-foreground">
           Thread-level observation; questions and permission approvals may be grouped.
@@ -237,8 +285,9 @@ function PendingMatter({
           Worker failed. Report recovery cannot repeat or replace worker work.
         </p>
       )}
-      {presentation === "problem" && <ProblemDetail run={run} item={item} />}
-      {item.kind === "missing-report" && (
+      {attentionPresentation(item.kind) === "problem" && <ProblemDetail run={run} item={item} />}
+      {item.kind === "settlement-unresolved" && <BlockedWorkers run={run} />}
+      {item.kind === "missing-report" && item.blockId !== null && (
         <RequestReport
           run={run}
           blockId={item.blockId}
@@ -246,25 +295,52 @@ function PendingMatter({
           recovery={run.recoveries.find((r) => r.attentionId === item.id)}
         />
       )}
-      {binding && (
-        <dl className="flex flex-col gap-0.5 text-2xs leading-4 text-muted-foreground">
-          <div className="flex gap-2">
-            <dt className="w-14 shrink-0">{bindingRole[binding.role]}</dt>
-            <dd className="min-w-0 font-mono break-all">{binding.threadId}</dd>
-          </div>
-          {item.executionId && (
-            <div className="flex gap-2">
-              <dt className="w-14 shrink-0">Execution</dt>
-              <dd className="min-w-0 font-mono break-all">{item.executionId}</dd>
-            </div>
-          )}
-        </dl>
-      )}
-      <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
-      {item.kind === "human" && <PendingHuman run={run} item={item} />}
-      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
-    </article>
+    </>
   );
+}
+
+function BindingDetail({
+  binding,
+  executionId,
+}: {
+  binding: RunDetail["threadBindings"][number];
+  executionId: string;
+}) {
+  return (
+    <dl className="flex flex-col gap-0.5 text-2xs leading-4 text-muted-foreground">
+      <div className="flex gap-2">
+        <dt className="w-14 shrink-0">{bindingRole[binding.role]}</dt>
+        <dd className="min-w-0 font-mono break-all">{binding.threadId}</dd>
+      </div>
+      {executionId && (
+        <div className="flex gap-2">
+          <dt className="w-14 shrink-0">Execution</dt>
+          <dd className="min-w-0 font-mono break-all">{executionId}</dd>
+        </div>
+      )}
+    </dl>
+  );
+}
+
+/** What resolves a Problem, by kind; Needs input kinds never reach a Problem's detail. */
+function problemResolution(item: RunAttention) {
+  switch (item.kind) {
+    case "missing-report":
+      return "This stays unresolved until an explicit report or successful linked recovery is accepted and confirmed. Recovery never starts automatically.";
+    case "report-problem":
+      return item.message
+        ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
+        : "Inspect the recorded work evidence in T3.";
+    case "condition-integrity":
+      return "Waiting deliveries stay unnumbered. There is no Retry or repair: Settle or Archive the Run to abandon them; neither resets the count.";
+    case "settlement-unresolved":
+      return "This resolves when settlement succeeds or the Run is Archived.";
+    case "execution-failed":
+    case "human":
+    case "native-request":
+    case "conversation-waiting":
+      return "Inspect the failed execution in T3; report recovery does not retry work.";
+  }
 }
 
 function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
@@ -272,16 +348,7 @@ function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
   return (
     <p className="text-sm text-muted-foreground">
       {attentionLabel(item.kind)}
-      {item.executionId ? ` · execution ${item.executionId}` : ""}.{" "}
-      {item.kind === "missing-report"
-        ? "This stays unresolved until an explicit report or successful linked recovery is accepted and confirmed. Recovery never starts automatically."
-        : item.kind === "report-problem"
-          ? item.message
-            ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
-            : "Inspect the recorded work evidence in T3."
-          : item.kind === "condition-integrity"
-            ? "Waiting deliveries stay unnumbered. There is no Retry or repair: Settle or Archive the Run to abandon them; neither resets the count."
-            : "Inspect the failed execution in T3; report recovery does not retry work."}
+      {item.executionId ? ` · execution ${item.executionId}` : ""}. {problemResolution(item)}
       {detail ? ` ${detail}` : ""}
     </p>
   );
@@ -294,7 +361,9 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
     <article className="flex flex-col gap-1.5 rounded-lg border bg-muted p-3 text-sm">
       <div className="flex min-w-0 items-center gap-2">
         <AttentionChip presentation={attentionPresentation(item.kind)} />
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">{item.blockName}</h3>
+        <h3 className="truncate text-2xs font-medium text-muted-foreground">
+          {attentionSubject(item)}
+        </h3>
       </div>
       {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
       {exit && <p>Selected exit: {exit}</p>}
@@ -323,7 +392,13 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
         Factory is settling this Run and stopping its workers, so it accepts no answers.
       </p>
     );
-  return <HumanResponseForm blockName={item.blockName} occurrence={occurrence} link={item.link} />;
+  return (
+    <HumanResponseForm
+      blockName={attentionSubject(item)}
+      occurrence={occurrence}
+      link={item.link}
+    />
+  );
 }
 
 /** A Human step answers with one of its fixed exits: Approve, or Request changes with a message. */

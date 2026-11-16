@@ -31,6 +31,20 @@ it("a live connection declaring an incompatible protocol is refused with 426 bef
   expect(status).toBe(426);
 });
 
+it.for([13, 14])(
+  "the current client's live connection to a protocol %i server is refused with 426 before the upgrade",
+  async (protocol, c) => {
+    // Arrange
+    const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
+
+    // Act
+    const status = await refusedUpgrade(server.hostLive());
+
+    // Assert
+    expect(status).toBe(426);
+  },
+);
+
 it("a remote live connection without an approved credential is refused with 401 before the upgrade", async (c) => {
   // Arrange
   const server = await remoteServer(c);

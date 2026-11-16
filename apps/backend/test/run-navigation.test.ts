@@ -1,7 +1,13 @@
 import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { unnumberedRun } from "./support/navigation.ts";
-import { repositoryFactsObserved, twoRunsOfOneFlow, workerLaunched } from "./support/scenarios.ts";
+import { recordThreadFacts } from "./support/controlled-thread.ts";
+import {
+  observeFor,
+  repositoryFactsObserved,
+  twoRunsOfOneFlow,
+  workerLaunched,
+} from "./support/scenarios.ts";
 
 const repository = {
   branch: "feature/search",
@@ -313,4 +319,23 @@ it("navigation and Run detail preserve an absent stored Run number", async (c) =
   const detail = await f.getRun(runId);
   assert(detail.ok);
   expect(detail.value.number).toBeNull();
+});
+
+it("a pending native request in navigation carries the worker's pending request count and its Block name", async (c) => {
+  // Arrange
+  const { f, world, input } = await prepared(c);
+  const worker = await workerLaunched(world, input);
+  recordThreadFacts(world.t3, worker.threadId, { pendingRequestCount: 2 });
+  await observeFor("observe the native requests", world, worker.runId, (run) =>
+    run.attention.some((matter) => matter.kind === "native-request" && !matter.settledAt),
+  );
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  expect(navigation.value[0]?.attention.matters).toMatchObject([
+    { kind: "native-request", pendingRequestCount: 2, blockName: "Entry worker" },
+  ]);
 });

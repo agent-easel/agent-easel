@@ -64,7 +64,7 @@ export async function desktopProfile(
   context.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const store = await SettingsStore.open(directory);
   await store.update({ role: "client" });
-  const client = await ApprovedClient.open(store, protection);
+  const client = await ApprovedClient.open(store, protection, () => undefined);
   context.onTestFinished(() => client.close());
   return {
     client,
@@ -73,7 +73,11 @@ export async function desktopProfile(
     protection,
     async reopen() {
       client.close();
-      const restored = await ApprovedClient.open(await SettingsStore.open(directory), protection);
+      const restored = await ApprovedClient.open(
+        await SettingsStore.open(directory),
+        protection,
+        () => undefined,
+      );
       context.onTestFinished(() => restored.close());
       return restored;
     },

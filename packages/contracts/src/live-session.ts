@@ -1,14 +1,47 @@
+/**
+ * The transport-neutral live client: one RPC session over any WebSocket constructor, so the
+ * browser, the desktop renderer's relayed socket and the desktop main process can share it.
+ */
 import { Cause, Effect, Layer, Schedule, Stream } from "effect";
 import { RpcClient, RpcClientError, RpcSerialization } from "effect/rpc";
 import { Socket } from "effect/socket";
-import type { LiveEnvelope, OperationError } from "@t3-factory/contracts";
-import { FactoryLive } from "@t3-factory/contracts/live-rpc";
-import type { LiveEnvironment, LiveWatch, SubscriptionEvents } from "./owner.ts";
+import type { LiveEnvelope } from "./live.ts";
+import { FactoryLive } from "./live-rpc.ts";
+import type { OperationError } from "./result.ts";
+
+export type LiveWatch =
+  | { readonly rpc: "WatchConnection" }
+  | { readonly rpc: "WatchLaunchChoices" }
+  | { readonly rpc: "WatchStudio" }
+  | { readonly rpc: "WatchAppearance" }
+  | {
+      readonly rpc: "WatchRunView";
+      readonly navigation: boolean;
+      readonly runIds: readonly string[];
+    };
+
+type LiveMessage = { readonly _tag: string };
+
+export interface SubscriptionEvents {
+  message(envelope: LiveEnvelope<LiveMessage>): void;
+  /** The server refused the subscription with a typed error. */
+  failed(error: OperationError): void;
+  /** The stream ended or the connection failed underneath it. */
+  lost(): void;
+}
+
+/** One socket. Its events must stop being relevant once the owner closes it. */
+export interface LiveSession {
+  subscribe(watch: LiveWatch, events: SubscriptionEvents): () => void;
+  close(): void;
+}
+
+export type OpenLiveSession = (events: { connected(): void; disconnected(): void }) => LiveSession;
 
 type Client = RpcClient.FromGroup<typeof FactoryLive, RpcClientError.RpcClientError>;
 
 type LiveStream = Stream.Stream<
-  LiveEnvelope<{ readonly _tag: string }>,
+  LiveEnvelope<LiveMessage>,
   OperationError | RpcClientError.RpcClientError
 >;
 
@@ -27,7 +60,7 @@ function watchStream(client: Client, watch: LiveWatch): LiveStream {
 export function rpcSessions(
   url: string,
   constructor: Layer.Layer<Socket.WebSocketConstructor>,
-): LiveEnvironment["open"] {
+): OpenLiveSession {
   return (events) => {
     const hooks = Layer.succeed(RpcClient.ConnectionHooks, {
       onConnect: Effect.sync(events.connected),

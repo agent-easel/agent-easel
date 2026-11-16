@@ -235,6 +235,14 @@ export function runOverview(identity: RunIdentity, detail: RunDetail) {
   const pending = detail.attention.filter((matter) => matter.settledAt === null);
   const blockProblem = (blockId: string) =>
     detail.blocks.find((block) => block.blockId === blockId)?.problem ?? null;
+  /** The Run-level settlement Problem's detail: the workers keeping Settle from completing, and
+   * the user's recovery options. */
+  const settlementProblem = () => {
+    const blocked = (detail.settlement?.workers ?? [])
+      .filter((worker) => worker.state === "unresolved")
+      .map((worker) => `${worker.blockName}: ${worker.problem ?? "not resolved"}`);
+    return `Not resolved: ${blocked.join("; ")}. Settle again, remove queued work in T3, or Archive the Run.`;
+  };
 
   const run = {
     id: identity.id,
@@ -318,7 +326,7 @@ export function runOverview(identity: RunIdentity, detail: RunDetail) {
         block: matter.blockName,
         appearedAt: matter.appearedAt,
         observation: matter.freshness,
-        detail: blockProblem(matter.blockId),
+        detail: matter.blockId === null ? settlementProblem() : blockProblem(matter.blockId),
       })),
     humanOccurrences: detail.humanOccurrences
       .filter((occurrence) => occurrence.state === "pending")

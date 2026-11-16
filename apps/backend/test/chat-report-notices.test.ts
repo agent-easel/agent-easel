@@ -17,9 +17,11 @@ import {
   resultReleasedToHumanReview,
   resultReported,
   settled,
+  settleUnresolved,
   woke,
   workingReported,
 } from "./support/scenarios.ts";
+import { stopsEndThreads } from "./support/controlled-thread.ts";
 import { chatStartedRun, messageShows } from "./support/status-cards.ts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
@@ -173,6 +175,46 @@ it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it
   expect(notice.content).toMatch(
     new RegExp(
       `^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 request · since ${AT} — answer it in T3$`,
+    ),
+  );
+});
+
+it("a confirmed Settle that could not stop workers posts a Problem notice in the originating thread", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+
+  // Act
+  await settleUnresolved(world.world, worker);
+
+  // Assert
+  const notice = await noticeCreated(world.discord);
+  expect(notice.channelId).toBe(THREAD);
+  expect(notice.content).toMatch(
+    new RegExp(
+      `^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers · since ${AT}$`,
+    ),
+  );
+});
+
+it("settling the Run after Settle could not stop its workers edits the Problem notice to resolved", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, worker } = await chatStartedRun(world);
+  await settleUnresolved(world.world, worker);
+  const notice = await noticeCreated(world.discord);
+  world.world.t3.stopSupported = true;
+  stopsEndThreads(world.world.t3);
+
+  // Act
+  const settledRun = await world.factory.settleRun(runId, { stopWorkers: true });
+
+  // Assert
+  assert(settledRun.ok, JSON.stringify(settledRun));
+  const shown = await messageShows(world.discord, notice, /· ✅ resolved\n/);
+  expect(shown.content).toMatch(
+    new RegExp(
+      `^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem · ✅ resolved\\n• ~~Settle could not stop workers · since ${AT}~~ ✅$`,
     ),
   );
 });

@@ -1,4 +1,9 @@
-import { attentionPresentation, type RunBlock, type RunDetail } from "@t3-factory/contracts";
+import {
+  attentionPresentation,
+  type RunAttention,
+  type RunBlock,
+  type RunDetail,
+} from "@t3-factory/contracts";
 
 /** The one Run-level status the Run header shows; block states stay on the canvas. */
 export type RunStatus =
@@ -10,9 +15,15 @@ export type RunStatus =
 /** Active blocks; a `sent` Continuation's work already shows on its `working` Agent. */
 const activeStates = new Set<RunBlock["state"]>(["working", "waiting"]);
 
-function blockNames(run: RunDetail, blockIds: readonly string[]) {
-  const ids = new Set(blockIds);
-  return run.blocks.filter((block) => ids.has(block.blockId)).map((block) => block.name);
+/** The blocks `items` are about; a Run-level settlement Problem is about the workers its
+ * settlement could not resolve. */
+function blockNames(run: RunDetail, items: readonly RunAttention[]) {
+  const ids = new Set(items.map((item) => item.blockId));
+  const blocked = items.some((item) => item.kind === "settlement-unresolved")
+    ? (run.settlement?.workers ?? []).filter((worker) => worker.state === "unresolved")
+    : [];
+  const names = run.blocks.filter((block) => ids.has(block.blockId)).map((block) => block.name);
+  return [...new Set([...names, ...blocked.map((worker) => worker.blockName)])];
 }
 
 /** When the Run last entered `kind`. */
@@ -33,10 +44,7 @@ export function runStatus(run: RunDetail): RunStatus {
   if (problems.length)
     return {
       kind: "problem",
-      blocks: blockNames(
-        run,
-        problems.map((item) => item.blockId),
-      ),
+      blocks: blockNames(run, problems),
     };
   // As in Run navigation: a confirmed Settle answers nothing, so its questions no longer ask.
   const questions = run.settlement
@@ -45,10 +53,7 @@ export function runStatus(run: RunDetail): RunStatus {
   if (questions.length)
     return {
       kind: "needs-input",
-      blocks: blockNames(
-        run,
-        questions.map((item) => item.blockId),
-      ),
+      blocks: blockNames(run, questions),
     };
   const active = run.blocks.filter((block) => activeStates.has(block.state));
   if (active.length) return { kind: "working", blocks: active.map((block) => block.name) };

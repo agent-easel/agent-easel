@@ -16,6 +16,39 @@ it("a pending Problem outranks Needs input in the Run status", () => {
   expect(status).toStrictEqual({ kind: "problem", blocks: ["worker"] });
 });
 
+it("a Settle that could not stop workers names its blocked workers as the Run's Problem", () => {
+  // Arrange
+  const worker = {
+    threadId: "thread",
+    link: null,
+    stopRequestedAt: null,
+    problem: "T3 cannot stop worker threads.",
+  };
+  const run = {
+    ...runDetail(),
+    blocks: [block("worker"), block("second")],
+    attention: [
+      { ...attention("worker", "settlement-unresolved"), blockId: null, blockName: null },
+    ],
+    settlement: {
+      state: "unresolved" as const,
+      requestedAt: "2026-11-08T10:00:00Z",
+      attempt: 1,
+      attemptedAt: "2026-11-08T10:00:00Z",
+      workers: [
+        { ...worker, blockId: "worker", blockName: "Entry worker", state: "finished" as const },
+        { ...worker, blockId: "second", blockName: "Second entry", state: "unresolved" as const },
+      ],
+    },
+  };
+
+  // Act
+  const status = runStatus(run);
+
+  // Assert
+  expect(status).toStrictEqual({ kind: "problem", blocks: ["Second entry"] });
+});
+
 it("a Settled Run shows Settled with its settle time instead of its block states", () => {
   // Arrange
   const run = {

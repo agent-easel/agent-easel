@@ -42,8 +42,8 @@ export default {
   directories: { app: "stage", output: "release", buildResources: "resources" },
   files: ["build/**/*", "!build/**/*.map", "package.json"],
   asar: true,
-  asarUnpack: ["build/native/fs-ext/build/Release/*.node"],
-  // stage.mjs already rebuilt the one native module for this Electron ABI.
+  asarUnpack: ["build/native/fs-ext/build/Release/*.node", "build/native/notifications.node"],
+  // stage.mjs already built the native modules for this Electron ABI.
   npmRebuild: false,
   nodeGypRebuild: false,
   electronFuses: {

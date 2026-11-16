@@ -35,13 +35,13 @@ and restricted OAuth credentials live outside project repositories.
   none. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
   its restored immutability guards with every revision id, number and Run reference intact.
-  Migration `097` widened the Flow revision block kinds to include Condition, rebuilding the block
+  Migration `098` widened the Flow revision block kinds to include Condition, rebuilding the block
   table under its restored immutability guards with every stored block unchanged and no Condition
   inferred, and added immutable Condition rule rows; a Condition's Otherwise output is implicit for
-  the kind and not stored. Migration `098` added Condition arrivals, keyed by their incoming delivery, with a per-Run,
+  the kind and not stored. Migration `099` added Condition arrivals, keyed by their incoming delivery, with a per-Run,
   per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
   rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
-  starts the count of any Condition a Run already captured at 0. Migration `100` adds an index for reading an arrival's
+  starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
   recipient deliveries and changes no row.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
@@ -84,7 +84,7 @@ and restricted OAuth credentials live outside project repositories.
   into a verified check of the application Discord reported, keeps a rejection for another application's token
   until Retry and keeps every other value. Migration `093` records the message carrying each new review's
   button, so its button can be shown disabled once unusable; existing proposals have none and are never edited.
-  Migration `099` rebuilds the record of announced attention matters to admit Condition integrity Problems,
+  Migration `100` rebuilds the record of announced attention matters to admit Condition integrity Problems,
   keeping every row unchanged.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.

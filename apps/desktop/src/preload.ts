@@ -5,6 +5,7 @@ import {
   livePortMessage,
   type DesktopMenuCommandId,
   type DesktopResult,
+  type DesktopRoute,
   type DesktopState,
   type FactoryDesktop,
 } from "@t3-factory/contracts/desktop-bridge";
@@ -29,6 +30,9 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
     ipcRenderer.invoke(channels.setLaunchAtLogin, enabled === true),
   setMenuBarIcon: (enabled: boolean) =>
     ipcRenderer.invoke(channels.setMenuBarIcon, enabled === true),
+  setAlertSetting: (name: string, enabled: boolean) =>
+    ipcRenderer.invoke(channels.setAlertSetting, String(name), enabled === true),
+  openNotificationSettings: () => ipcRenderer.invoke(channels.openNotificationSettings),
   checkForUpdates: () => ipcRenderer.invoke(channels.checkForUpdates),
   downloadUpdate: () => ipcRenderer.invoke(channels.downloadUpdate),
   installUpdate: () => ipcRenderer.invoke(channels.installUpdate),
@@ -44,6 +48,16 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
     ipcRenderer.on(channels.menuCommand, handler);
     return () => {
       ipcRenderer.removeListener(channels.menuCommand, handler);
+    };
+  },
+  onRoute(listener) {
+    const handler = (_event: IpcRendererEvent, route: DesktopRoute) => listener(route);
+    ipcRenderer.on(channels.route, handler);
+    void ipcRenderer
+      .invoke(channels.takeRoute)
+      .then((route: DesktopRoute | null) => route && listener(route));
+    return () => {
+      ipcRenderer.removeListener(channels.route, handler);
     };
   },
   /**
