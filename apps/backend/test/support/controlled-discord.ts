@@ -16,11 +16,16 @@ export interface ControlledDiscordBot {
   readonly manageThreads?: boolean;
 }
 
-/** A server the bot is a member of, with its text channels. */
+/** A server the bot is a member of, with its channels: text unless `type` names another kind. */
 export interface ControlledDiscordGuild {
   readonly id: string;
   readonly name: string;
-  readonly channels: readonly { readonly id: string; readonly name: string }[];
+  readonly channels: readonly {
+    readonly id: string;
+    readonly name: string;
+    /** Discord's channel type; 0 (text) when absent. */
+    readonly type?: number;
+  }[];
 }
 
 /** One REST request as Discord received it; `path` omits the query, `body` is parsed JSON. */
@@ -193,7 +198,7 @@ const guildCreate = (
   guild_scheduled_events: [],
   channels: guild.channels.map((channel, position) => ({
     id: channel.id,
-    type: 0,
+    type: channel.type ?? 0,
     guild_id: guild.id,
     name: channel.name,
     position,
@@ -528,7 +533,7 @@ export async function startControlledDiscord() {
               status: 200,
               body: {
                 id: match[1],
-                type: 0,
+                type: guild.channels.find((channel) => channel.id === match[1])!.type ?? 0,
                 guild_id: guild.id,
                 name: "channel",
                 permission_overwrites: [...(hiddenChannels.get(match[1]!) ?? [])].map((id) => ({

@@ -139,7 +139,8 @@ type Access = "permitted" | "denied" | "unavailable";
 
 /**
  * Where an explicit invocation was made: a new human message of an ordinary type that mentions
- * or replies to the bot in a text or announcement channel or a thread. Anything else is ignored.
+ * or replies to the bot in a text or announcement channel or a thread, a forum post included.
+ * Anything else is ignored.
  */
 function explicitInvocation(message: Message<true>, botUserId: string) {
   if (message.author.bot || message.webhookId !== null || message.system) return undefined;
@@ -228,7 +229,8 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         parent._tag === "Failure" ||
         !parent.success ||
         (parent.success.type !== ChannelType.GuildText &&
-          parent.success.type !== ChannelType.GuildAnnouncement)
+          parent.success.type !== ChannelType.GuildAnnouncement &&
+          parent.success.type !== ChannelType.GuildForum)
       )
         return "unavailable";
       const member = yield* Effect.result(

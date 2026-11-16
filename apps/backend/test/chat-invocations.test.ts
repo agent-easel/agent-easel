@@ -6,6 +6,7 @@ import {
   chatControlWorld,
   discordBot,
   discordGuild,
+  FORUM_CHANNEL,
   OTHER_CHANNEL,
   POSTS,
   requestsBesides,
@@ -17,6 +18,7 @@ import {
 const SENTINEL = "390000000000000001";
 const THREAD = "500000000000000001";
 const PRIVATE_THREAD = "500000000000000002";
+const FORUM_POST = "500000000000000003";
 const OUTSIDER = "200000000000000099";
 const ORIGINAL = /^\/api\/v10\/webhooks\/\d+\/[^/]+\/messages\/%40original$/;
 const CALLBACK = /^\/api\/v10\/interactions\/\d+\/[^/]+\/callback$/;
@@ -340,6 +342,35 @@ it("a repeated delivery of a reset is answered once", async (c) => {
     "/api/v10/interactions/600000000000000005/interaction-token-600000000000000005/callback",
     "/api/v10/interactions/600000000000000006/interaction-token-600000000000000006/callback",
   ]);
+});
+
+it("a reset in a forum post of an allowed forum channel is accepted", async (c) => {
+  // Arrange
+  const { discord, factory, project } = await operating(c);
+  const saved = await factory.updateDiscordAccess({
+    revision: 1,
+    users: [PARTICIPANT_ID],
+    channels: [{ channelId: FORUM_CHANNEL, projectIds: [project.id] }],
+  });
+  assert(saved.ok);
+  discord.addThread({
+    id: FORUM_POST,
+    guildId: discordGuild.id,
+    parentId: FORUM_CHANNEL,
+    name: "post",
+    private: false,
+    members: [],
+  });
+
+  // Act
+  discord.deliver(
+    reset("600000000000000011", {
+      channel: { id: FORUM_POST, parentId: FORUM_CHANNEL, private: false },
+    }),
+  );
+
+  // Assert
+  expect(await resetReply(discord)).toMatch(/^Factory cleared this thread/);
 });
 
 it("a reset in a private thread the requester belongs to is accepted after Discord confirms the membership", async (c) => {
