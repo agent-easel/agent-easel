@@ -20,6 +20,7 @@ import {
   type IssueReporter,
 } from "./block-exits.ts";
 import { checkCondition } from "./flow.ts";
+import { mayPlaceAgent, type OwningProject } from "./placement.ts";
 
 export const TASK_TITLE_LIMIT = 500;
 
@@ -152,14 +153,31 @@ export function flowGraphReferencesAgent(graph: FlowGraphInput, agentId: string)
 }
 
 /**
- * A saved Agent as Flow readiness sees it: its name, its current exits, whether it has execution
- * settings (never their live availability) and, for naming a wire whose exit the Agent has since
- * removed, the last name of each exit its earlier revisions had.
+ * A saved Agent as Flow readiness sees it: its name, its current exits, its owning Project,
+ * whether it has execution settings (never their live availability) and, for naming a wire whose
+ * exit the Agent has since removed, the last name of each exit its earlier revisions had.
  */
 export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "name" | "exits"> {
+  readonly projectId: OwningProject;
   readonly hasExecution: boolean;
   readonly formerExitNames: ReadonlyMap<string, string>;
 }
+
+/**
+ * A saved Agent as Flow readiness sees it. Agents are global: their definitions record no owning
+ * Project.
+ */
+export const readinessAgent = (
+  agent: AgentDefinition,
+  formerExitNames: ReadonlyMap<string, string>,
+): ReadinessAgent => ({
+  id: agent.id,
+  name: agent.name,
+  exits: agent.exits,
+  projectId: null,
+  hasExecution: agent.execution !== null,
+  formerExitNames,
+});
 
 const blockLabel = (block: FlowBlockInput) => block.name || block.id;
 
@@ -270,6 +288,7 @@ function blockReadiness(
   block: FlowBlockInput,
   path: string,
   agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
   add: IssueReporter,
 ) {
   const label = blockLabel(block);
@@ -285,6 +304,12 @@ function blockReadiness(
   if (block.kind !== "agent") return;
   const agent = agents.find((candidate) => candidate.id === block.agentId);
   if (!agent) add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  else if (!mayPlaceAgent(flowProject, agent.projectId))
+    add(
+      "agent_scope_mismatch",
+      `${path}.agentId`,
+      `${label}: ${agent.name} is owned by another Project, so this Flow cannot place it.`,
+    );
   else if (!agent.hasExecution)
     add("agent_model_required", `${path}.agentId`, `${label}: ${agent.name} needs a model.`);
   if (!effectiveExits(block, agents).length)
@@ -451,12 +476,14 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 }
 
 /**
- * Graph and saved-Agent readiness against the given saved Agents; live T3 settings availability,
- * project and provisioning gates remain separate. Issues block Start, never a save.
+ * Graph and saved-Agent readiness against the given saved Agents, placed by a Flow owned by
+ * `flowProject`; live T3 settings availability, project and provisioning gates remain separate.
+ * Issues block Start, never a save.
  */
 export function flowReadiness(
   graph: FlowGraphInput,
   agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
 ): FlowReadiness {
   const issues: ValidationIssue[] = [];
   const add = (code: string, path: string, message: string) => issues.push({ code, path, message });
@@ -475,7 +502,9 @@ export function flowReadiness(
         "Connect the Flow input to Agents only; a Wait cannot start a Run.",
       );
   });
-  graph.blocks.forEach((block, i) => blockReadiness(block, `graph.blocks.${i}`, agents, add));
+  graph.blocks.forEach((block, i) =>
+    blockReadiness(block, `graph.blocks.${i}`, agents, flowProject, add),
+  );
   connectionReadiness(graph, agents, add);
   conditionCycleReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
@@ -511,6 +540,7 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
+export { mayPlaceAgent, type OwningProject } from "./placement.ts";
 export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,

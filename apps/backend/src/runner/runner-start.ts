@@ -21,6 +21,7 @@ import {
   isStartTitleProvenance,
   promptText,
   promptTitle,
+  readinessAgent,
   TASK_TITLE_LIMIT,
   validateStartPrompt,
   type StartPrompt,
@@ -450,11 +451,8 @@ export function openRunnerStart(
         issues.push(
           ...flowReadiness(
             flow.graph,
-            read.map((agent) => ({
-              ...agent,
-              hasExecution: agent.execution !== null,
-              formerExitNames: new Map(),
-            })),
+            read.map((agent) => readinessAgent(agent, new Map())),
+            null,
           ).issues,
         );
       for (const agent of read) {

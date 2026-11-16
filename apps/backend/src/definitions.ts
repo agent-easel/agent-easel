@@ -26,6 +26,7 @@ import {
   flowAgentRevisions,
   flowReadiness,
   parsePortableFile,
+  readinessAgent,
   type ReadinessAgent,
   validateCommitImport,
   validateCreateAgent,
@@ -71,7 +72,7 @@ const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
 const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
-  readiness: flowReadiness(flow.graph, agents),
+  readiness: flowReadiness(flow.graph, agents, null),
 });
 const flowNotFound = () => failure("not_found", "This Flow does not exist.");
 const staleRevision = (kind: "Agent" | "Flow") =>
@@ -146,12 +147,8 @@ export const makeDefinitions = (
       const agents = yield* readCurrentAgents(sql);
       const formerExitNames = yield* readFormerExitNames(sql);
       return agents.map((agent): ReadinessAgent & Pick<AgentRevision, "revision"> => ({
-        id: agent.id,
-        name: agent.name,
+        ...readinessAgent(agent, formerExitNames.get(agent.id) ?? new Map()),
         revision: agent.revision,
-        exits: agent.exits,
-        hasExecution: agent.execution !== null,
-        formerExitNames: formerExitNames.get(agent.id) ?? new Map(),
       }));
     });
     const positionGraph = (input: FlowGraphInput) =>
@@ -329,7 +326,7 @@ export const makeDefinitions = (
             return {
               ok: true as const,
               value: {
-                ...flowReadiness(graph, agents),
+                ...flowReadiness(graph, agents, null),
                 agentRevisions: flowAgentRevisions(graph, agents),
               },
             };
