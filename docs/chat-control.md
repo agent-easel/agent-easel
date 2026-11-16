@@ -115,7 +115,7 @@ authenticated session reports another application, that is an **application repl
 shared conversations are cleared, the previous application's waiting consent ends for good, its
 messages are no longer edited and eligible Runs get new status cards from the new bot (see
 [Confirmation](#confirmation), [Status cards](#status-cards) and
-[Attention and lifecycle notices](#attention-and-lifecycle-notices)). A new token of the same
+[Attention notices](#attention-notices)). A new token of the same
 application keeps everything. When the owner replaces the token, the page says that a token of
 another application is treated this way.
 
@@ -468,12 +468,10 @@ whatever pages the model read, the selected answer and the exact message, labell
 a replied-to message or was composed by the assistant. A context too long for a 32,000-character
 review stays readable through Read Run but cannot be confirmed in chat; nothing is shortened.
 
-A Start review is likewise Factory's own: the Project's name and repository path, the Flow's name
-(and its ID only when another saved Flow has the same name), its current workspace setting, the
-automatic title derived from the prompt's first non-empty line and the exact prompt in full. When
-Generate Run titles is on or could not be read, the title line says it may be replaced by a generated
-title; when it is off, nothing is added. One line discloses that the Flow's and its Agents' current
-saved definitions, workspace included, are resolved at confirmation without another review. A
+A Start review is likewise Factory's own and minimal: one line naming the Flow (and its ID only when
+another saved Flow has the same name) and the Project, then the exact prompt in full. The Flow's and
+its Agents' current saved definitions, workspace included, are resolved at confirmation without
+another review, and the Run's automatic title is the prompt's first non-empty line. A
 review is at most 32,000 Unicode characters and goes out as fully visible ordered messages; only
 after every part was delivered does Factory post the last message with one **Confirm** button, which
 says that only the requester can confirm and when the review expires, as a Discord relative
@@ -503,8 +501,8 @@ place in the conversation's queue, and a reset or clearing removes the conversat
 Only the requester's click within the lifetime, in the review's thread, confirms. Factory
 acknowledges each click as a deferred update of the button's message. A click that decides the
 review disables its button for everyone, as **✅ Confirmed** when Factory accepted the action or
-**🚫 No longer valid** when it definitively rejected it, and the receipt follows in the thread; no
-private reply is sent. Every other click (someone else's, an expired, used or voided review, a denied
+**🚫 No longer valid** when it definitively rejected it, and the result follows in the thread (an
+accepted Start's status card, otherwise the receipt); no private reply is sent. Every other click (someone else's, an expired, used or voided review, a denied
 or unconfirmed access check, a moment Factory cannot decide, an outcome still being established) gets
 a private ephemeral reply and leaves the button as it is, so a requester whose consent is still live
 or still being reconciled can click again. It checks again that Chat control is On, Access still
@@ -560,11 +558,13 @@ edited after an application replacement.
 
 ### Receipts and delivery
 
-Factory writes the receipt from the accepted facts, in one or two short lines: for a Start the Run's
-number, its accepted automatic title, the Project and the Flow; for a Human answer the accepted
+Factory writes the receipt from the decided facts, in one or two short lines. An accepted Start
+has no receipt: its [status card](#status-cards), created in the same thread, is its only message.
+For a Human answer the accepted
 answer, the Human step and the Run; for an Archive the Run and what Archive cancelled and requested,
-without any claim of rollback or confirmed termination; or the rejection with its reasons. The decided outcome, the Run's
-originating thread and the owed receipt commit together. The receipt goes to the thread where the
+without any claim of rollback or confirmed termination; or the rejection with its reasons, a
+rejected Start included. The decided outcome, the Run's originating thread and the owed receipt
+commit together. The receipt goes to the thread where the
 action was requested and depends on that channel still granting the Project and on the bot's access
 there, not on the requester remaining allowed; an Access save that revokes the destination cancels
 the owed receipt and keeps the accepted Run. After an application replacement, owed receipts go out
@@ -601,16 +601,16 @@ delivery is independent of the Run's card.
 ### Status cards
 
 Each chat-started Run has one status card in its originating thread, which Factory edits as the Run
-changes: the Run's number, title, Project, Flow and state (Active, Snoozed, Settled or Archived), a
-confirmed Settle still stopping workers, active Blocks, the latest accepted result of each Block with
-its exit, whether its worker finished and where its handoffs went, pending Waits with their deadlines,
-and pending Needs input and Problems. An observation that is stale or not yet made is shown as such,
-never as a Problem. Block starts, results and Wait progress edit the card; they never post a message,
-and the card never carries report bodies or prompts: participants read those with Read Run. Long
-lists are summarized so the card always fits one message. Each line leads with an emoji for its
-state (for example 🟢 Active, 💤 Snoozed, ✅ Settled, 🗄️ Archived; ⚙️ working, ⏳ waiting, ✅ finished,
-⚠️ Problem, 🙋 Needs input, ⏰ Wait deadline), and times are Discord timestamps that each reader's client
-shows relative to now in their own time zone. The card mentions nobody. Replying to the
+changes; it is the accepted Start's only message. It is deliberately small: one line with the Run's
+number, title, state (Active, Snoozed, Settled or Archived) and Flow, then only what is happening now:
+a confirmed Settle still stopping workers, active Blocks, pending Waits with their deadlines, and
+pending Needs input and Problems. An observation that is stale or not yet made is shown as such, never
+as a Problem. Block starts, results, Wait progress and lifecycle changes edit the card; they never post
+a message, and the card never carries results, report bodies or prompts: participants read those with
+Read Run. Long lists are summarized so the card always fits one message. Each line leads with an emoji
+for its state (for example 🟢 Active, 💤 Snoozed, ✅ Settled, 🗄️ Archived; ⚙️ working, ⏳ waiting,
+⚠️ Problem, 🙋 Needs input, ⏰ Wait deadline), and Wait deadlines are Discord timestamps that each
+reader's client shows relative to now in their own time zone. The card mentions nobody. Replying to the
 card points Factory's conversation at its Run: the model receives only the Run's ID and reads the Run
 afresh within the thread's current scope, never the card's text.
 
@@ -632,7 +632,7 @@ does not stop the card: it depends on the channel's grant and the bot's access.
 
 Editing in an archived thread needs it unarchived: when Discord refuses the edit because the thread is
 archived and a fresh read shows it unlocked, Factory unarchives it and edits the card without posting
-anything; a new message, such as a receipt, reopens the thread by itself. Factory never unlocks,
+anything; a new message, such as a notice, reopens the thread by itself. Factory never unlocks,
 recreates or relocates a thread, and it reads the thread before each new message: it posts nothing in a
 locked thread, even though Discord would accept posts from a bot holding Manage Threads. A locked thread, a thread Discord no longer shows the bot, missing
 permissions or Discord's active-thread limit is a failed delivery in Settings with its correction and
@@ -650,47 +650,43 @@ new bot, which says once that the previous bot's messages are no longer updated;
 Archived Runs get none. The old cards stay as they are, and an old create whose outcome is unknown
 stays unknown. Rotating the same application's token keeps editing the same cards.
 
-### Attention and lifecycle notices
+### Attention notices
 
-Besides the card, Factory posts a new message in a chat-started Run's originating thread only for a
-meaningful change: an attention notice for new Needs input or Problem matters, and a lifecycle notice
-when the Run becomes Settled or Archived or returns to Active. Block starts, results, Wait progress and
-Snooze only edit the card. Attention follows the Run's own attention: a pending Human step or native T3
+Besides the card, Factory posts a new message in a chat-started Run's originating thread only when the
+Run needs someone, because an edit notifies nobody: an attention notice for new Needs input or Problem
+matters. Block starts, results, Wait progress and every lifecycle change, Settle and Archive included,
+only edit the card. Attention follows the Run's own attention: a pending Human step or native T3
 question or permission is Needs input, and a missing report, an execution failure, a report problem or a
 Condition integrity Problem or a confirmed Settle that could not stop workers
 ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
 observation is never reported as a Problem. A native T3 request is marked to be answered in T3. A Human
-notice names the Human step and when it appeared, and points to asking Factory in the thread: it has no
-answer buttons, and answering still goes through the complete review and the requester's confirmation.
-A Settled notice reports the settlement only, not results or worker completion, which the card and Read
-Run keep apart; an Archived notice makes no claim of rollback or confirmed termination.
+notice names the Human step and points to asking Factory in the thread: it has no answer buttons, and
+answering still goes through the complete review and the requester's confirmation.
 
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
-own line with its Block and appearance time, up to eight per notice; the settlement Problem is about the
+own short line with its Block, up to eight per notice; the settlement Problem is about the
 Run and names no Block, and a retried Settle keeps its one notice. When a matter resolves, Factory
 edits the notice that announced it to show that line resolved, without posting anything. Notices
 mention nobody: every Factory message allows no mentions, and an `@` in a Run title or Block name is
 followed by an invisible space so it cannot read as a user, role or mass mention.
 
 Factory captures notices with the card from the Run's committed facts, comparing the Run's pending
-matters and lifecycle with what its notices already accounted for. So a matter that appeared and
-resolved between two captures, while Off or while the backend was stopped, is never reported, and a
-lifecycle change undone before its notice was posted is dropped. What accrues while no session serves
-(Off, an outage that ended the Discord session, or the backend being stopped) is posted, once a session
-serves again, as one catch-up per Run: the matters still pending that were never announced, each on its
-own line, and the latest lifecycle outcome labelled delivered late with the time it happened. Matters
+matters with what its notices already accounted for. So a matter that appeared and resolved between
+two captures, while Off or while the backend was stopped, is never reported. What accrues while no
+session serves (Off, an outage that ended the Discord session, or the backend being stopped) is posted,
+once a session serves again, as one catch-up per Run: the matters still pending that were never
+announced, each on its own line. Matters
 announced earlier are not repeated, and a Run whose notices were all delivered gets nothing merely
 because Factory reconnected. A catch-up not yet posted when the session ends again is the same catch-up
 next time. An owed outcome has no age limit.
 
 While the thread's channel does not grant the Run's Project, nothing accrues and owed notices are
 cancelled. After a regrant, notices start from the Run's current state: matters pending then stay on the
-card without a notice, the lifecycle at that moment is taken as reported, and a notice already posted is
-corrected silently when one of its matters resolved meanwhile. After an application replacement,
-the new bot cannot edit the old bot's notices: their edits are no longer owed and
-nothing is posted again for them. A notice still owed from before the change is posted by the new bot,
-and when a quiet Run's card stays the old bot's, that Run's catch-up says once that the previous bot's
-messages are no longer updated.
+card without a notice, and a notice already posted is corrected silently when one of its matters
+resolved meanwhile. After an application replacement, the new bot cannot edit the old bot's notices:
+their edits are no longer owed and nothing is posted again for them. A notice still owed from before
+the change is posted by the new bot; its Run has a pending matter, so it also gets a new card that says
+the previous bot's messages are no longer updated.
 
 Notice deliveries follow the card's rules: intent is recorded before each create, edits are repeated
 with waits, a create still unproven after its nonce re-attempts is unknown and only the warned Retry sends it again, and failures appear in
@@ -731,6 +727,8 @@ private answers to repeated, expired and superseded clicks, and deterministic re
 acknowledgement and clearing; status card edits and lifecycle notices; recovery after Off with an
 archived thread (unarchived without a wake-up message, card corrected, one catch-up labelled delivered
 late); and a locked thread left locked with its correction and a successful host Retry after unlocking.
+It predates the compact messages: the Start receipt and lifecycle notices it confirmed were removed
+since, and the compact review, card and notice texts are covered by automated tests only.
 It found and fixed two incompatibilities: command registration replaced the application's other
 commands, and Discord accepts posts in a locked thread from a bot holding Manage Threads.
 

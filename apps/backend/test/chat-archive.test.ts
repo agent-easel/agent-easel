@@ -34,9 +34,7 @@ it("an Archive proposal reviews the Run with final archival, cancelled owed work
       "↩️ Nothing is rolled back in the repository or worktree; the Run's history stays readable in Factory.",
     ].join("\n"),
   );
-  expect(confirmation!.content).toMatch(
-    /^🔒 Only the person who asked can confirm · expires <t:\d+:R>$/,
-  );
+  expect(confirmation!.content).toMatch(/^🔒 Only the requester can confirm · expires <t:\d+:R>$/);
   expect(button).toMatch(/^factory-confirm:/);
   expect(await lifecycleOf(world.factory, world.runId)).toBe("active");
 });

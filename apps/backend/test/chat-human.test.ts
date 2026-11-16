@@ -47,9 +47,7 @@ it("a Human answer proposal reviews the Run, the exact occurrence with its compl
       ].join("\n"),
     ),
   );
-  expect(confirmation!.content).toMatch(
-    /^🔒 Only the person who asked can confirm · expires <t:\d+:R>$/,
-  );
+  expect(confirmation!.content).toMatch(/^🔒 Only the requester can confirm · expires <t:\d+:R>$/);
   expect(confirmations(world.discord)).toHaveLength(1);
   expect(button).toMatch(/^factory-confirm:/);
   expect(

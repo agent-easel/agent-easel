@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: condition_recipient_index
+-- Newest applied migration: no_lifecycle_notices
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -294,15 +294,9 @@ CREATE INDEX chat_report_matters_notice ON chat_report_matters(notice_id)
 CREATE INDEX chat_report_matters_run ON chat_report_matters(run_id)
 ;
 
-CREATE TABLE chat_report_notices (
+CREATE TABLE "chat_report_notices" (
   delivery_id TEXT PRIMARY KEY REFERENCES chat_deliveries(id),
-  run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id),
-  lifecycle TEXT CHECK (lifecycle IN ('active', 'settled', 'archived')),
-  previous_lifecycle TEXT CHECK (previous_lifecycle IN ('active', 'settled', 'archived')),
-  lifecycle_at TEXT,
-  late INTEGER NOT NULL DEFAULT 0 CHECK (late IN (0, 1)),
-  application_notice INTEGER NOT NULL DEFAULT 0 CHECK (application_notice IN (0, 1)),
-  CHECK ((lifecycle IS NULL) = (lifecycle_at IS NULL))
+  run_id TEXT NOT NULL REFERENCES chat_run_origins(run_id)
 );
 
 CREATE INDEX chat_report_notices_run ON chat_report_notices(run_id)
@@ -320,11 +314,10 @@ CREATE TABLE chat_run_origins (
 
 CREATE TABLE chat_run_reporting (
   run_id TEXT PRIMARY KEY REFERENCES chat_run_origins(run_id),
-  lifecycle TEXT CHECK (lifecycle IN ('active', 'settled', 'archived')),
   reference TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',
   final INTEGER NOT NULL DEFAULT 0 CHECK (final IN (0, 1))
-);
+, baseline INTEGER NOT NULL DEFAULT 0 CHECK (baseline IN (0, 1)));
 
 CREATE TABLE chat_sdk_cache (
   cache_key TEXT PRIMARY KEY,

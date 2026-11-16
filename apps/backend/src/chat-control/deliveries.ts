@@ -512,7 +512,7 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
           AND sent_by_application_id<>${sender.applicationId}
           AND id IN (SELECT delivery_id FROM chat_status_cards WHERE reportable=1)`;
         // Notices that accrued while no session served are posted as one catch-up per Run.
-        yield* catchUpNotices(sql, sender.applicationId);
+        yield* catchUpNotices(sql);
         return yield* dispatcher.run(deliverDue(sender));
       });
 

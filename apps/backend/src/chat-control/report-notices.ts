@@ -4,13 +4,12 @@ import { newId } from "../ids.ts";
 import { now } from "../time.ts";
 import type { ReportConsumer, ReportOrigin, RunReport } from "./run-reports.ts";
 import { runReference } from "./run-tools.ts";
-import { at, clip, MESSAGE_LIMIT, name, runHeading } from "./status-cards.ts";
+import { clip, MESSAGE_LIMIT, name, runHeading } from "./status-cards.ts";
 
-type Lifecycle = "active" | "settled" | "archived";
 type MatterKind = RunReport["needsInput"][number]["kind"];
 /** A pending attention matter as a report lists it. */
 type Matter = Pick<RunReport["needsInput"][number], "id" | "kind" | "block" | "appearedAt">;
-type NoticePurpose = "attention" | "lifecycle" | "catch-up";
+type NoticePurpose = "attention" | "catch-up";
 type DeliveryState =
   | "owed"
   | "sending"
@@ -21,14 +20,10 @@ type DeliveryState =
   | "lost"
   | "retired";
 
-/** Snooze changes presentation only, so a Snoozed Run counts as Active for notices. */
-const lifecycleOf = (state: RunReport["run"]["state"]): Lifecycle =>
-  state === "snoozed" ? "active" : state;
-
 /** Matters one attention notice lists, so each keeps its own line within one Discord message. */
 const MATTERS_PER_NOTICE = 8;
-/** Entries a catch-up lists before summarizing the rest, shrunk until it fits one message. */
-const CATCH_UP_LIMITS = [Infinity, 8, 4, 2, 1, 0] as const;
+/** Entries a notice lists before summarizing the rest, shrunk until it fits one message. */
+const NOTICE_LIMITS = [Infinity, 8, 4, 2, 1, 0] as const;
 
 const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversation-waiting"]);
 
@@ -36,7 +31,7 @@ const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversatio
 const MATTERS: Record<MatterKind, { what: (block: string) => string; pending?: string }> = {
   human: {
     what: (block) => `Human step ${block} waits for an answer`,
-    pending: "ask here to review it; answering needs your confirmation",
+    pending: "ask here to answer it",
   },
   "native-request": {
     what: (block) => `${block} has a T3 request`,
@@ -50,21 +45,6 @@ const MATTERS: Record<MatterKind, { what: (block: string) => string; pending?: s
   "settlement-unresolved": { what: () => "Settle could not stop workers" },
 };
 
-const LIFECYCLE_EMOJI: Record<Lifecycle, string> = { active: "🟢", settled: "✅", archived: "🗄️" };
-const LIFECYCLE_SENTENCES: Record<Lifecycle, string> = {
-  active: "is Active again",
-  settled: "is Settled",
-  archived: "was Archived",
-};
-const LIFECYCLE_LABELS: Record<Lifecycle, string> = {
-  active: "🟢 Active again",
-  settled: "✅ Settled",
-  archived: "🗄️ Archived",
-};
-
-const APPLICATION_NOTICE =
-  "_Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated._";
-
 type MatterRow = {
   matter_id: string;
   kind: MatterKind;
@@ -77,11 +57,6 @@ type MatterRow = {
 type NoticeRow = {
   delivery_id: string;
   run_id: string;
-  lifecycle: Lifecycle | null;
-  previous_lifecycle: Lifecycle | null;
-  lifecycle_at: string | null;
-  late: number;
-  application_notice: number;
   purpose: NoticePurpose;
   state: DeliveryState;
   text: string;
@@ -93,7 +68,7 @@ type NoticeRow = {
 
 const matterLine = (matter: MatterRow) => {
   const kind = MATTERS[matter.kind];
-  const what = `${kind.what(name(matter.block))} · since ${at(matter.appeared_at)}`;
+  const what = kind.what(name(matter.block));
   if (matter.resolved === 1) return `• ~~${what}~~ ✅`;
   return `• ${what}${kind.pending ? ` — ${kind.pending}` : ""}`;
 };
@@ -113,40 +88,22 @@ function attentionHeading(heading: string, matters: readonly MatterRow[]) {
 
 /**
  * A notice's text from what it records: the matters it announced (resolved ones shown struck
- * through once the message exists, left out before), the lifecycle change it reports, and for a
- * catch-up, that it reports what happened while Factory could not post here. Nobody is mentioned
- * and every name is inert.
+ * through once the message exists, left out before), and for a catch-up, that it reports what
+ * accrued while Factory could not post here. Nobody is mentioned and every name is inert.
  */
 function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   const heading = runHeading(notice.reference, notice.title);
-  const intro = notice.application_notice === 1 ? [APPLICATION_NOTICE, ""] : [];
-  const late = notice.late === 1 ? ", delivered late" : "";
-  const lifecycleLine =
-    notice.lifecycle === null
-      ? []
-      : [`• ${LIFECYCLE_LABELS[notice.lifecycle]} ${at(notice.lifecycle_at!)}${late}`];
   const render = (limit: number) => {
     const lines = matters.slice(0, limit).map(matterLine);
     const rest = matters.length - lines.length;
     if (rest > 0) lines.push(`• and ${rest} more; the status card shows what is pending`);
-    switch (notice.purpose) {
-      case "attention":
-        return [...intro, attentionHeading(heading, matters), ...lines];
-      case "lifecycle":
-        return [
-          ...intro,
-          `${LIFECYCLE_EMOJI[notice.lifecycle!]} ${heading} ${LIFECYCLE_SENTENCES[notice.lifecycle!]} ${at(notice.lifecycle_at!)}`,
-        ];
-      case "catch-up":
-        return [
-          ...intro,
-          `📬 ${heading} · while Factory could not post in this thread:`,
-          ...lifecycleLine,
-          ...lines,
-        ];
-    }
+    const first =
+      notice.purpose === "attention"
+        ? attentionHeading(heading, matters)
+        : `📬 ${heading} · while Factory could not post in this thread:`;
+    return [first, ...lines];
   };
-  for (const limit of CATCH_UP_LIMITS) {
+  for (const limit of NOTICE_LIMITS) {
     const text = render(limit).join("\n");
     if (text.length <= MESSAGE_LIMIT) return text;
   }
@@ -156,8 +113,8 @@ function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
 /**
  * The state a notice's message record moves to for `text`. A message that exists owes an edit
  * when its text changes, and a cancelled one is corrected silently once its channel grants the
- * Run again. A message never created that has nothing left to say retires: a matter resolved or a
- * lifecycle change undone before it was posted is not reported. Other states take the text.
+ * Run again. A message never created that has nothing left to say retires: a matter resolved
+ * before it was posted is not reported. Other states take the text.
  */
 function nextState(notice: NoticeRow, text: string, obsolete: boolean): DeliveryState {
   if (notice.message_id !== null) {
@@ -169,8 +126,7 @@ function nextState(notice: NoticeRow, text: string, obsolete: boolean): Delivery
     : notice.state;
 }
 
-const NOTICE_COLUMNS = `n.delivery_id,n.run_id,n.lifecycle,n.previous_lifecycle,n.lifecycle_at,n.late,
-  n.application_notice,d.purpose,d.state,d.text,d.message_id,d.created_at,r.reference,r.title`;
+const NOTICE_COLUMNS = `n.delivery_id,n.run_id,d.purpose,d.state,d.text,d.message_id,d.created_at,r.reference,r.title`;
 
 /** Brings one notice's message record to the text its current records render. */
 const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
@@ -182,7 +138,7 @@ const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
       FROM chat_report_matters WHERE notice_id=${id} ORDER BY appeared_at,matter_id`;
     const announced = notice!.message_id !== null || notice!.state === "sending";
     const matters = announced ? all : all.filter((matter) => matter.resolved === 0);
-    const obsolete = notice!.lifecycle === null && matters.length === 0;
+    const obsolete = matters.length === 0;
     const text = obsolete ? notice!.text : noticeText(notice!, matters);
     const state = nextState(notice!, text, obsolete);
     if (state !== notice!.state)
@@ -194,16 +150,13 @@ const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
 /** A notice message never created and not being sent: new content may still join it. */
 const OPEN = "d.state='owed' AND d.message_id IS NULL";
 
-type ReportingRow = { lifecycle: Lifecycle | null };
-
 /**
- * Attention and lifecycle notices: new messages in a chat-started Run's originating thread for
- * each new Needs input or Problem matter, for becoming Settled or Archived and for returning to
- * Active. Each capture compares the Run's pending matters and lifecycle with what notices
- * accounted for, so a matter that appeared and resolved between two captures, or a lifecycle
- * change undone, is never reported. Matters appearing together share one notice, each on its own
+ * Attention notices: new messages in a chat-started Run's originating thread for each new Needs
+ * input or Problem matter; everything else only edits the status card. Each capture compares the
+ * Run's pending matters with what notices accounted for, so a matter that appeared and resolved
+ * between two captures is never reported. Matters appearing together share one notice, each on its own
  * line; a resolved matter edits the notice that announced it. While the thread's channel does not
- * grant the Run nothing accrues; the first capture after a regrant takes the Run's current state
+ * grant the Run nothing accrues; the first capture after a regrant takes the Run's pending matters
  * as its baseline without a message, and known messages are corrected silently.
  */
 export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
@@ -256,32 +209,6 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       return notices;
     });
 
-  /**
-   * Reports a lifecycle change: a lifecycle notice not posted yet takes the newest change, and
-   * reports none when the Run is back to what was accounted for before it; otherwise a new
-   * lifecycle notice reports it.
-   */
-  const lifecycleChanged = (
-    origin: ReportOrigin,
-    report: RunReport,
-    accounted: Lifecycle,
-    current: Lifecycle,
-  ) =>
-    Effect.gen(function* () {
-      const [open] = yield* sql<{ id: string; previous_lifecycle: Lifecycle | null }>`
-        SELECT d.id,n.previous_lifecycle FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
-        WHERE n.run_id=${origin.runId} AND ${sql.literal(OPEN)} AND d.purpose IN ('lifecycle','catch-up')
-        ORDER BY d.created_at DESC,d.rowid DESC LIMIT 1`;
-      const id = open?.id ?? (yield* insertNotice(origin, report, "lifecycle"));
-      const previous = open?.previous_lifecycle ?? accounted;
-      if (previous === current)
-        yield* sql`UPDATE chat_report_notices SET lifecycle=NULL,previous_lifecycle=NULL,lifecycle_at=NULL WHERE delivery_id=${id}`;
-      else
-        yield* sql`UPDATE chat_report_notices SET lifecycle=${current},previous_lifecycle=${previous},
-          lifecycle_at=${report.lifecycleAt} WHERE delivery_id=${id}`;
-      return id;
-    });
-
   /** Whether an Archived Run's notices owe nothing more, so later captures can skip it. */
   const finished = (runId: string) =>
     Effect.map(
@@ -294,23 +221,21 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
     );
 
   /**
-   * Records how the Run is named now and returns what its notices accounted for: the first
-   * capture after Start reports from Active, and a NULL lifecycle asks for a baseline.
+   * Records how the Run is named now and returns whether this capture is a baseline: the first
+   * capture after Start announces what is pending, the first after a regrant does not.
    */
   const accounting = (runId: string, report: RunReport) =>
-    Effect.gen(function* (): Effect.fn.Return<
-      { readonly baseline: boolean; readonly accounted: Lifecycle },
-      unknown
-    > {
+    Effect.gen(function* () {
       const reference = runReference(report.run);
-      const [row] =
-        yield* sql<ReportingRow>`SELECT lifecycle FROM chat_run_reporting WHERE run_id=${runId}`;
+      const [row] = yield* sql<{
+        baseline: number;
+      }>`SELECT baseline FROM chat_run_reporting WHERE run_id=${runId}`;
       if (!row) {
-        yield* sql`INSERT INTO chat_run_reporting (run_id,lifecycle,reference,title) VALUES (${runId},'active',${reference},${report.run.title})`;
-        return { baseline: false, accounted: "active" };
+        yield* sql`INSERT INTO chat_run_reporting (run_id,reference,title) VALUES (${runId},${reference},${report.run.title})`;
+        return false;
       }
       yield* sql`UPDATE chat_run_reporting SET reference=${reference},title=${report.run.title} WHERE run_id=${runId}`;
-      return { baseline: row.lifecycle === null, accounted: row.lifecycle ?? "active" };
+      return row.baseline === 1;
     });
 
   /**
@@ -353,50 +278,19 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       Effect.gen(function* () {
         if (!report) return;
         const { runId } = origin;
-        const current = lifecycleOf(report.run.state);
-        const { baseline, accounted } = yield* accounting(runId, report);
+        const baseline = yield* accounting(runId, report);
         const touched = new Set(yield* capturedMatters(origin, report, baseline));
-        const changed = current !== accounted;
-        if (changed && !baseline)
-          touched.add(yield* lifecycleChanged(origin, report, accounted, current));
-        if (changed || baseline)
-          yield* sql`UPDATE chat_run_reporting SET lifecycle=${current} WHERE run_id=${runId}`;
+        if (baseline) yield* sql`UPDATE chat_run_reporting SET baseline=0 WHERE run_id=${runId}`;
         for (const id of yield* cancelledMessages(runId)) touched.add(id);
         for (const id of touched) yield* refreshNotice(sql, id);
-        const final = current === "archived" && (yield* finished(runId));
+        const final = report.run.state === "archived" && (yield* finished(runId));
         yield* sql`UPDATE chat_run_reporting SET final=${final ? 1 : 0} WHERE run_id=${runId}`;
       }),
   };
 };
 
-/**
- * Whether the Run's card is another application's message that gets no replacement, because the
- * Run is quiet: its catch-up then says that the old bot's messages are no longer updated.
- */
-const orphanedCard = (sql: SqlClient.SqlClient, runId: string, applicationId: string) =>
-  Effect.map(
-    sql<{ orphaned: number }>`SELECT COUNT(*) AS orphaned FROM chat_status_cards c
-      JOIN chat_deliveries d ON d.id=c.delivery_id WHERE c.run_id=${runId} AND c.reportable=0
-        AND d.message_id IS NOT NULL AND d.sent_by_application_id<>${applicationId}`,
-    ([row]) => row!.orphaned > 0,
-  );
-
-/** The latest lifecycle change of `notices`, unless the Run is back to what preceded the first. */
-function netChange(notices: readonly NoticeRow[]) {
-  const changes = notices.filter((notice) => notice.lifecycle !== null);
-  const latest = changes.at(-1);
-  const previous = changes[0]?.previous_lifecycle ?? null;
-  return latest && latest.lifecycle !== previous
-    ? { lifecycle: latest.lifecycle, at: latest.lifecycle_at, previous }
-    : { lifecycle: null, at: null, previous: null };
-}
-
-/** Merges a Run's never-created notices into one catch-up, which reports their content late. */
-const mergedCatchUp = (
-  sql: SqlClient.SqlClient,
-  notices: readonly NoticeRow[],
-  applicationId: string,
-) =>
+/** Merges a Run's never-created notices into one catch-up. */
+const mergedCatchUp = (sql: SqlClient.SqlClient, notices: readonly NoticeRow[]) =>
   Effect.gen(function* () {
     const target = notices.find((notice) => notice.purpose === "catch-up") ?? notices[0]!;
     const others = notices
@@ -407,21 +301,17 @@ const mergedCatchUp = (
       yield* sql`DELETE FROM chat_report_notices WHERE delivery_id IN ${sql.in(others)}`;
       yield* sql`DELETE FROM chat_deliveries WHERE id IN ${sql.in(others)}`;
     }
-    const change = netChange(notices);
-    const orphaned = yield* orphanedCard(sql, target.run_id, applicationId);
     yield* sql`UPDATE chat_deliveries SET purpose='catch-up' WHERE id=${target.delivery_id}`;
-    yield* sql`UPDATE chat_report_notices SET lifecycle=${change.lifecycle},previous_lifecycle=${change.previous},
-      lifecycle_at=${change.at},late=1,application_notice=${orphaned ? 1 : 0} WHERE delivery_id=${target.delivery_id}`;
     yield* refreshNotice(sql, target.delivery_id);
   });
 
 /**
  * Coalesces what accrued while no session served into one catch-up per Run, when a session
  * starts serving: every notice of the Run never created merges into one, which reports its
- * pending matters and its latest lifecycle change as delivered late. A notice whose message may
- * exist, or that waits for the host's Retry, is left as it is.
+ * pending matters. A notice whose message may exist, or that waits for the host's Retry, is left
+ * as it is.
  */
-export const catchUpNotices = (sql: SqlClient.SqlClient, applicationId: string) =>
+export const catchUpNotices = (sql: SqlClient.SqlClient) =>
   sql.withTransaction(
     Effect.gen(function* () {
       const owed = yield* sql<NoticeRow>`SELECT ${sql.literal(NOTICE_COLUMNS)}
@@ -431,6 +321,6 @@ export const catchUpNotices = (sql: SqlClient.SqlClient, applicationId: string) 
       const byRun = new Map<string, NoticeRow[]>();
       for (const notice of owed)
         byRun.set(notice.run_id, [...(byRun.get(notice.run_id) ?? []), notice]);
-      for (const notices of byRun.values()) yield* mergedCatchUp(sql, notices, applicationId);
+      for (const notices of byRun.values()) yield* mergedCatchUp(sql, notices);
     }),
   );

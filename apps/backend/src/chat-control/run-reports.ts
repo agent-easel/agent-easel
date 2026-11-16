@@ -17,8 +17,7 @@ type Overview = ReturnType<typeof runOverview>;
 
 /**
  * What Factory reports about a Run, from its committed facts and the definitions it captured:
- * identity and lifecycle, Blocks, the latest accepted result of each Block with worker completion
- * and handoff release kept apart, pending Waits with deadlines, and pending attention matters
+ * identity and lifecycle, Blocks, pending Waits with deadlines, and pending attention matters
  * with their exact identities. Observation freshness is a fact of its own: a stale or unknown
  * observation is never a Problem by itself. Long texts (results, prompts, Human context) are not
  * part of a report; Read Run serves them.
@@ -31,26 +30,9 @@ export interface RunReport {
     Overview["lists"]["blocks"][number],
     "blockId" | "name" | "state" | "observation"
   >[];
-  readonly latestResults: readonly Omit<Overview["lists"]["latestResults"][number], "result">[];
   readonly pendingWaits: readonly Omit<Overview["lists"]["pendingWaits"][number], "message">[];
   readonly needsInput: Overview["lists"]["needsInput"];
   readonly problems: readonly Omit<Overview["lists"]["problems"][number], "detail">[];
-  /** When the Run became what its state shows: Settled, Archived, or Active (again). */
-  readonly lifecycleAt: string;
-}
-
-const LIFECYCLE_EVENTS: Record<RunIdentity["state"], string> = {
-  active: "run-activated",
-  snoozed: "run-activated",
-  settled: "run-settled",
-  archived: "run-archived",
-};
-
-/** The latest timeline event of the Run's current lifecycle; an Active Run never settled began at Start. */
-function lifecycleAt(identity: RunIdentity, detail: Parameters<typeof runOverview>[1]) {
-  const kind = LIFECYCLE_EVENTS[identity.state];
-  const events = detail.events.filter((event) => event.kind === kind);
-  return events.at(-1)?.observedAt ?? detail.startedAt;
 }
 
 /** A Run's report from its identity and current detail, as Read Run describes the same facts. */
@@ -65,11 +47,9 @@ function runReport(identity: RunIdentity, detail: Parameters<typeof runOverview>
       state,
       observation,
     })),
-    latestResults: lists.latestResults.map(({ result: _result, ...rest }) => rest),
     pendingWaits: lists.pendingWaits.map(({ message: _message, ...rest }) => rest),
     needsInput: lists.needsInput,
     problems: lists.problems.map(({ detail: _detail, ...rest }) => rest),
-    lifecycleAt: lifecycleAt(identity, detail),
   };
 }
 

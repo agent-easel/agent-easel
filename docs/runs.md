@@ -431,8 +431,8 @@ Authorized [Chat control](chat-control.md#finding-and-reading-runs) participants
 Projects their Discord channel grants, including Runs started here. Reading in chat changes nothing about the Run, and its
 views here and on approved clients carry no Discord identifiers. A Run started through a chat confirmation also has a
 [status card](chat-control.md#status-cards) in its originating thread, which Factory keeps current from the Run's
-facts, and [notices](chat-control.md#attention-and-lifecycle-notices) there for new Needs input and Problems, for
-becoming Settled or Archived and for returning to Active. Snooze changes only what the card shows.
+facts, and [notices](chat-control.md#attention-notices) there for new Needs input and Problems. Lifecycle changes,
+including Snooze, change only what the card shows.
 
 ### Branches and pull requests
 
@@ -660,7 +660,7 @@ names the workers shown not resolved, and any lost launch still searched for, wi
 **Settle** again, remove queued work in T3, or **Archive**. An unresolved episode has one such Problem: a retry keeps it pending,
 and when the retry ends unresolved again the same Problem shows the current workers, without a new appearance. It settles with
 the Run's other attention when settlement succeeds (`manual-settlement`) or the Run is Archived (`archived`). As ordinary
-attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-and-lifecycle-notices).
+attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-notices).
 
 Settling cancels unsent launches, sends and handoffs (held or released), unsent Request report turns, pending Human occurrences
 without inventing answers, pending Wait arrivals, deliveries waiting at a Condition for their number and messages waiting at a
