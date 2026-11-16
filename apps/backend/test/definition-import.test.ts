@@ -154,8 +154,9 @@ it("a file bundling more than 500 Agents is refused as over the limit", async (c
 it("a Flow whose create request fits 2 MB but whose later save would not is refused as over the limit", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
-  // The create request is 10 bytes under the limit; a save adds `"expectedRevision":…`.
-  const flow = flowUnderCreateLimitBy(10);
+  // The create request is 100 bytes under the limit; a save adds `"expectedRevision":…` and an
+  // `"expectedProjectId":…` that may name a Project id of up to 256 characters.
+  const flow = flowUnderCreateLimitBy(100);
 
   // Act
   const review = await factory.reviewImport(fileBody({ ...flowFile(), agents: [], flow }));

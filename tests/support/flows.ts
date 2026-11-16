@@ -3,6 +3,7 @@ import { expect, type Screen } from "e2e";
 import {
   DEFINITION_REQUEST_LIMIT_BYTES,
   definitionSaveFits,
+  saveRequestBound,
 } from "../../packages/domain-validation/src/index.ts";
 import type {
   AgentDefinition,
@@ -44,6 +45,7 @@ export async function saveFlowCopy(
     body: JSON.stringify({
       name,
       expectedRevision: 1,
+      expectedProjectId: created.projectId,
       workspace,
       graph: {
         ...seeded.graph,
@@ -192,10 +194,9 @@ export async function saveConditionAtSizeLimit(
   return { id: created.id, rules: condition.rules, bytes };
 }
 
-/** A save request's size, measured like `definitionSaveFits` at the largest revision. */
+/** A save request's size, measured like `definitionSaveFits` at the largest revision and owner. */
 const saveBytes = (body: object) =>
-  new TextEncoder().encode(JSON.stringify({ ...body, expectedRevision: Number.MAX_SAFE_INTEGER }))
-    .byteLength;
+  new TextEncoder().encode(JSON.stringify(saveRequestBound(body))).byteLength;
 
 /** A repairable graph issue names its cause and prevents opening the Run composer. */
 export async function expectFlowBlocked(screen: Screen, message: RegExp) {
@@ -241,6 +242,7 @@ export async function saveFlowElsewhere(
       graph: flow.graph,
       workspace: flow.workspace,
       expectedRevision: flow.revision,
+      expectedProjectId: flow.projectId,
       ...change,
     }),
   })) as FlowDraft;

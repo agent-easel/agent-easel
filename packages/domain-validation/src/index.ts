@@ -617,6 +617,7 @@ export {
   DEFINITION_REQUEST_LIMIT_BYTES,
   definitionSaveFits,
   parsePortableFile,
+  saveRequestBound,
   PORTABLE_DOCUMENT_AGENT_LIMIT,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,

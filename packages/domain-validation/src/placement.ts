@@ -11,6 +11,9 @@ import type {
  */
 export type OwningProject = string | null;
 
+/** The longest Factory Project id an owner field accepts. */
+export const OWNING_PROJECT_ID_LIMIT = 256;
+
 /**
  * The placement rule: any Flow may place a global Agent, and a Project Flow may also place the
  * Agents of its own owning Project. A global Flow therefore places only global Agents.
@@ -49,7 +52,7 @@ function ownerField(input: unknown, path: string): Result<OwningProject | undefi
       ? (input as Record<string, unknown>)[path]
       : undefined;
   if (value === undefined || value === null) return { ok: true, value };
-  if (typeof value === "string" && value.length > 0 && value.length <= 256)
+  if (typeof value === "string" && value.length > 0 && value.length <= OWNING_PROJECT_ID_LIMIT)
     return { ok: true, value };
   return invalid([ownerIssue(path)]);
 }

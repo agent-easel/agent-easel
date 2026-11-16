@@ -20,7 +20,7 @@ import {
 import { validateCreateAgent, validateExecutionSettings, validateModelReference } from "./agent.ts";
 import { isRecord } from "./block-exits.ts";
 import { validateCreateFlow } from "./flow.ts";
-import { parseOwningProject } from "./placement.ts";
+import { OWNING_PROJECT_ID_LIMIT, parseOwningProject } from "./placement.ts";
 
 /** The largest create or save request for one Agent or Flow definition. */
 export const DEFINITION_REQUEST_LIMIT_BYTES = 2_000_000;
@@ -41,14 +41,20 @@ const jsonByteLength = (value: unknown) =>
 
 /**
  * Whether a definition's later save request fits the definition limit: its create body plus the
- * `expectedRevision` every save sends, measured at the largest revision a save may name so the
- * definition stays savable at any revision it reaches.
+ * `expectedRevision` and `expectedProjectId` every save sends, measured at the largest revision and
+ * longest owner a save may name so the definition stays savable at any revision and owner it reaches.
  */
 export function definitionSaveFits(body: object): boolean {
-  return (
-    jsonByteLength({ ...body, expectedRevision: Number.MAX_SAFE_INTEGER }) <=
-    DEFINITION_REQUEST_LIMIT_BYTES
-  );
+  return jsonByteLength(saveRequestBound(body)) <= DEFINITION_REQUEST_LIMIT_BYTES;
+}
+
+/** A save request at the largest revision and longest owner it may name. */
+export function saveRequestBound(body: object) {
+  return {
+    ...body,
+    expectedRevision: Number.MAX_SAFE_INTEGER,
+    expectedProjectId: "0".repeat(OWNING_PROJECT_ID_LIMIT),
+  };
 }
 
 const KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
