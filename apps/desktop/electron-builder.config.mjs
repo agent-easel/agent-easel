@@ -7,6 +7,7 @@
 // Without a feed the package reports updates as unsupported instead of pointing at the
 // private source repository with a shared token.
 import { readFileSync } from "node:fs";
+import notarize from "./scripts/notarize.mjs";
 
 const { factoryBuild } = JSON.parse(
   readFileSync(new URL("stage/package.json", import.meta.url), "utf8"),
@@ -31,6 +32,7 @@ const publish = generic
       ]
     : null;
 const signed = Boolean(process.env.CSC_LINK || process.env.CSC_NAME);
+const notarized = signed && Boolean(process.env.APPLE_API_KEY);
 
 export default {
   appId: "dev.t3factory.desktop",
@@ -75,8 +77,10 @@ export default {
     // Apple Silicon kills unsigned binaries, and fuse flipping voids Electron's linker
     // signature: developer packages are ad-hoc signed ("-"), which is not a release signature.
     identity: signed ? undefined : "-",
-    notarize: signed && Boolean(process.env.APPLE_API_KEY),
+    // scripts/notarize.mjs notarizes in afterSign instead, so stapling can retry.
+    notarize: false,
   },
+  afterSign: notarized ? notarize : undefined,
   dmg: { sign: false },
   // A generic feed is one directory for both tracks: stable builds also refresh `beta-mac.yml`
   // so beta installations receive a stable Release newer than the last beta.

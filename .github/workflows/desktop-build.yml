@@ -144,7 +144,7 @@ jobs:
         run: |
           app='apps/desktop/release/mac-arm64/T3 Factory.app'
           codesign --verify --deep --strict --verbose=2 -R='anchor apple generic' "$app"
-          xcrun stapler validate "$app"
+          apps/desktop/scripts/stapler.sh validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
           pnpm desktop:probe "$PWD/.e2e/release/packaged-probe.json"
           hdiutil verify apps/desktop/release/*.dmg
@@ -162,7 +162,7 @@ jobs:
           trap 'hdiutil detach "$mounted"' EXIT
           for app in "$unpacked/T3 Factory.app" "$mounted/T3 Factory.app"; do
             codesign --verify --deep --strict --verbose=2 -R='anchor apple generic' "$app"
-            xcrun stapler validate "$app"
+            apps/desktop/scripts/stapler.sh validate "$app"
             if [[ "$(cdhash "$app")" != "$expected" ]]; then
               echo "::error::$app differs from the probed application."
               exit 1

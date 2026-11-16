@@ -39,7 +39,7 @@ These are deployment prerequisites, not repository content:
 | Variable | Purpose |
 | --- | --- |
 | `CSC_LINK`, `CSC_KEY_PASSWORD` | Developer ID Application certificate; enables the hardened runtime and `resources/entitlements.mac.plist` (JIT only) |
-| `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Notarization (only with signing) |
+| `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | Notarization (only with signing): `notarytool` in electron-builder's `afterSign` hook, then stapling with retries, because Apple's ticket service intermittently drops the connection from CI runners. The workflow's `stapler validate` checks retry the same way |
 | `FACTORY_UPDATE_URL` | Generic update feed (`latest-mac.yml`, `beta-mac.yml`, zip, blockmap) readable without credentials; a Release also rewrites `beta-mac.yml` so beta installations receive it |
 | `FACTORY_UPDATE_GITHUB_OWNER`, `FACTORY_UPDATE_GITHUB_REPO` | GitHub Releases feed, only for a repository whose releases are public |
 
@@ -93,7 +93,7 @@ The following are maintainer prerequisites outside the repository; workflow file
 | `APPLE_API_KEY_ID` | That API key's Key ID |
 | `APPLE_API_ISSUER` | The team's Issuer ID |
 
-Developer ID requires active Apple Developer Program membership. The Account Holder can create a **Developer ID Application** certificate through Xcode's account settings. For notarization, create a **Team Key** with **App Manager** access in **App Store Connect → Users and Access → Integrations → App Store Connect API**, as [`@electron/notarize`](https://github.com/electron/notarize#usage-with-app-store-connect-api-key) (used by electron-builder) documents; the `.p8` file downloads only once. Keep the exported certificate, private key and API key outside the repository; CI removes its temporary API key even when a step fails.
+Developer ID requires active Apple Developer Program membership. The Account Holder can create a **Developer ID Application** certificate through Xcode's account settings. For notarization, create a **Team Key** with **App Manager** access in **App Store Connect → Users and Access → Integrations → App Store Connect API**, which `notarytool` authenticates with; the `.p8` file downloads only once. Keep the exported certificate, private key and API key outside the repository; CI removes its temporary API key even when a step fails.
 
 Also configure:
 
