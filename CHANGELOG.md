@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0](https://github.com/alimek/t3-factory/compare/v0.7.1...v0.8.0) (2026-11-16)
+
+
+### Features
+
+* **chat-control:** keep Discord Run messages compact and post only when a human is needed ([#463](https://github.com/alimek/t3-factory/issues/463)) ([541b14d](https://github.com/alimek/t3-factory/commit/541b14d42b242ec71b18cf1eef1f4faad3a08a2f))
+
+
+### Bug Fixes
+
+* **chat-control:** accept forum posts when refreshing requester access ([#461](https://github.com/alimek/t3-factory/issues/461)) ([42a076d](https://github.com/alimek/t3-factory/commit/42a076dd92d54f6030dae9e0149479c7b70f1a78))
+* **settings:** remove the Studio and opening hint footer from the Settings sidebar ([#473](https://github.com/alimek/t3-factory/issues/473)) ([e2557d5](https://github.com/alimek/t3-factory/commit/e2557d5361d658e735cd11a3dc4dabbdcf1fd4b8))
+
 ## [0.7.1](https://github.com/alimek/t3-factory/compare/v0.7.0...v0.7.1) (2026-11-16)
 
 
