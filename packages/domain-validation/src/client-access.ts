@@ -11,15 +11,16 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 16;
-/** Protocol 16 Flows and Runs may contain Condition blocks with their rules and outputs, which
- * older clients can neither read nor save. Protocol 15 adds attention fields and the Run-level
- * `settlement-unresolved` kind, whose Block id is null. Protocol 14 theme-color presentations and
- * sources carry no appearance grant. */
-export const FACTORY_MINIMUM_PEER_PROTOCOL = 16;
-/** The current UI reads and saves Condition blocks, which older servers reject or lack, and reads
- * each navigation attention matter's native pending request count and Block name. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 16;
+export const FACTORY_PROTOCOL = 17;
+/** Protocol 17 Flows and Agents have an owning Project and Flow validation is per Flow, naming
+ * each placed Agent's revision and owner, which older clients can neither send nor compare.
+ * Protocol 16 Flows and Runs may contain Condition blocks with their rules and outputs. Protocol
+ * 15 adds attention fields and the Run-level `settlement-unresolved` kind, whose Block id is null.
+ * Protocol 14 theme-color presentations and sources carry no appearance grant. */
+export const FACTORY_MINIMUM_PEER_PROTOCOL = 17;
+/** The current UI validates a Flow by its id and compares each placed Agent's owner, which older
+ * servers lack, and reads and saves Condition blocks. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 17;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

@@ -196,7 +196,7 @@ export interface RunThreadBinding {
  * Readiness and settings availability are live authoring checks, not part of a revision.
  */
 export interface RunDefinitions {
-  readonly flow: Omit<FlowDraft, "readiness">;
+  readonly flow: Omit<FlowDraft, "readiness" | "projectId">;
   readonly agents: readonly CapturedAgent[];
 }
 export interface RunBlock {

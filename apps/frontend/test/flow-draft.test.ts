@@ -326,6 +326,21 @@ it("a readiness check answered after a saved Agent changed is dropped", async ()
   expect(draft.getSnapshot().readiness).toBeNull();
 });
 
+it("a readiness check answered after a saved Agent changed owner without a new revision is dropped", async () => {
+  // Arrange
+  const { draft, factory, agentChanged } = editedFlow();
+  const answer = held(factory.validateFlow);
+  const checking = draft.check();
+  agentChanged(savedAgent({ projectId: "project-one" }));
+
+  // Act
+  answer.answer(validated());
+  await checking;
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
+});
+
 it("a readiness check answered after the editor was hidden is dropped", async () => {
   // Arrange
   const { draft, factory } = editedFlow();

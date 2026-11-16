@@ -26,10 +26,14 @@ interface MemoryFactory extends Operations {
 
 const ready: FlowReadiness = { ready: true, issues: [] };
 
-/** Readiness Factory validated against the saved Agent at revision 3. */
-export const validated = (readiness: FlowReadiness = ready, revision = 3): FlowValidation => ({
+/** Readiness Factory validated against the global saved Agent at revision 3. */
+export const validated = (
+  readiness: FlowReadiness = ready,
+  revision = 3,
+  projectId: string | null = null,
+): FlowValidation => ({
   ...readiness,
-  agentRevisions: { agent: revision },
+  agentRevisions: { agent: { revision, projectId } },
 });
 
 export const notReady: FlowReadiness = {
@@ -44,6 +48,7 @@ export function memoryFactory(): MemoryFactory {
   let removed = false;
   let latest: FlowDraft = {
     id: "flow",
+    projectId: null,
     name: "Review",
     revision: 1,
     graph: {

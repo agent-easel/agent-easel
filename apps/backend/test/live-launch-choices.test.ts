@@ -71,6 +71,9 @@ it("an unchanged project observation sends only its observation times", async (c
   const delivered = await choices.until((messages) => messages.length > 1);
   expect(delivered[1]).toStrictEqual({
     _tag: "observed",
-    projects: [{ id: first.projects[0]!.id, observedAt: observed.projects[0]!.observedAt }],
+    projects: [
+      { id: first.projects[0]!.id, observedAt: observed.projects[0]!.observedAt },
+      { id: first.projects[1]!.id, observedAt: observed.projects[1]!.observedAt },
+    ],
   } satisfies LaunchChoicesLiveMessage);
 });

@@ -1,3 +1,4 @@
+import type { OwningProject } from "@t3-factory/domain-validation";
 import { createHash } from "node:crypto";
 import { crc32, deflateSync } from "node:zlib";
 import type {
@@ -364,6 +365,8 @@ export interface ScenarioWorld {
     };
   };
   readonly t3: ControlledT3;
+  /** The Project the scenario starts Runs in, when it added one. */
+  readonly projectId?: string;
 }
 
 /** One launched worker, taken only from the public Run read and the adapter. */
@@ -534,6 +537,8 @@ export interface SingleWorkerVariant {
   readonly workspace?: FlowWorkspace;
   readonly revisit?: boolean;
   readonly revisitInstruction?: string;
+  /** The owning Project of the Flow and its Agent; global when omitted. */
+  readonly projectId?: OwningProject;
 }
 
 /** The Revisit instruction tests give Entry worker. */
@@ -544,6 +549,7 @@ async function workerAgent(
   world: ScenarioWorld,
   step: string,
   exits: readonly BlockExit[] = [blockExit("done", "Done", "Completed")],
+  projectId: OwningProject = null,
 ) {
   const agent = stepResult(
     step,
@@ -552,6 +558,7 @@ async function workerAgent(
       prompt: "Follow repository instructions.",
       execution: controlledExecution(world.t3.environmentId),
       exits,
+      projectId,
     }),
   );
   if (agent.execution === null) stepFailed(step, "the Agent was saved without a model.");
@@ -563,8 +570,12 @@ async function saveFlow(
   name: string,
   graph: FlowGraph,
   workspace: FlowWorkspace = { mode: "checkout" },
+  projectId: OwningProject = null,
 ) {
-  const draft = stepResult(`create the ${name} Flow`, await world.factory.createFlow({ name }));
+  const draft = stepResult(
+    `create the ${name} Flow`,
+    await world.factory.createFlow({ name, projectId }),
+  );
   return stepResult(
     `save the ${name} Flow`,
     await world.factory.updateFlow(draft.id, {
@@ -578,7 +589,12 @@ async function saveFlow(
 
 /** Saves the ready single-worker Flow: Flow input to Entry worker (block `worker`) and its Agent. */
 export async function singleWorkerFlow(world: ScenarioWorld, variant: SingleWorkerVariant = {}) {
-  const agent = await workerAgent(world, "create the single worker's Agent", variant.exits);
+  const agent = await workerAgent(
+    world,
+    "create the single worker's Agent",
+    variant.exits,
+    variant.projectId,
+  );
   const flow = await saveFlow(
     world,
     "Single worker",
@@ -598,9 +614,14 @@ export async function singleWorkerFlow(world: ScenarioWorld, variant: SingleWork
       connections: variant.revisit ? [connection("worker", "done", "worker")] : [],
     },
     variant.workspace,
+    variant.projectId,
   );
   return { agent, flow };
 }
+
+/** The single-worker Flow and its Agent, both owned by the Project the scenario starts Runs in. */
+export const projectWorkerFlow: ReadyFlowShape = (world) =>
+  singleWorkerFlow(world, { projectId: world.projectId ?? null });
 
 /** A saved ready Flow and the Agent its Entry worker runs. */
 type ReadyFlow = Awaited<ReturnType<typeof singleWorkerFlow>>;

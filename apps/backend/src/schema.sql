@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: no_lifecycle_notices
+-- Newest applied migration: definition_owning_project
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -53,7 +53,7 @@ CREATE TRIGGER immutable_agent_revision_update BEFORE UPDATE ON agent_revisions 
 
 CREATE TABLE agents (
   id TEXT PRIMARY KEY NOT NULL,
-  created_at TEXT NOT NULL, removed_at TEXT);
+  created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id));
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
 
@@ -592,7 +592,7 @@ CREATE TRIGGER immutable_flow_revision_update BEFORE UPDATE ON flow_revisions BE
 
 CREATE TABLE flows (
   id TEXT PRIMARY KEY NOT NULL,
-  created_at TEXT NOT NULL, removed_at TEXT);
+  created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id));
 
 CREATE INDEX flows_listing ON flows (created_at DESC, id ASC);
 

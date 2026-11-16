@@ -17,6 +17,8 @@ export interface CreateFlowInput {
   readonly name: string;
   readonly graph?: FlowGraphInput;
   readonly workspace?: FlowWorkspace;
+  /** The owning Project's Factory id, or null (the default when omitted) for a global Flow. */
+  readonly projectId?: string | null;
 }
 
 interface BlockBase {
@@ -120,6 +122,7 @@ export type FlowWorkspaceBase =
 export type FlowWorkspace =
   | { readonly mode: "checkout" }
   | { readonly mode: "worktree"; readonly base: FlowWorkspaceBase };
+/** A save never changes the owning Project. */
 export interface UpdateFlowInput {
   readonly name: string;
   readonly expectedRevision: number;
@@ -133,8 +136,13 @@ export interface FlowReadiness {
   readonly issues: readonly ValidationIssue[];
 }
 
-/** The saved revision of each Agent a graph places, by Agent id; null for one that does not exist. */
-export type FlowAgentRevisions = Readonly<Record<string, number | null>>;
+/**
+ * The saved revision and owning Project of each Agent a graph places, by Agent id; null for one
+ * that does not exist. An owner change appends no revision, so both decide readiness.
+ */
+export type FlowAgentRevisions = Readonly<
+  Record<string, { readonly revision: number; readonly projectId: string | null } | null>
+>;
 
 /** Readiness of submitted Flow content and the saved Agents it was resolved against. */
 export interface FlowValidation extends FlowReadiness {
@@ -143,6 +151,11 @@ export interface FlowValidation extends FlowReadiness {
 
 export interface FlowDraft {
   readonly id: string;
+  /**
+   * The owning Project's Factory id, or null for a global Flow. It belongs to the Flow identity,
+   * not to its revisions, so a Run's captured Flow carries none.
+   */
+  readonly projectId: string | null;
   readonly name: string;
   readonly revision: number;
   readonly graph: FlowGraph;
@@ -160,9 +173,10 @@ export const flowOperations = {
     path: "/api/flows",
     body: "json",
   }),
+  /** Readiness of unsaved content for this Flow, placed under its owning Project. */
   validateFlow: operation<UpdateFlowInput, FlowValidation>()({
     method: "POST",
-    path: "/api/flows/validate",
+    path: "/api/flows/:id/validate",
     body: "json",
   }),
   getFlow: operation<never, FlowDraft>()({ method: "GET", path: "/api/flows/:id" }),

@@ -47,10 +47,17 @@ export interface CapturedAgent extends AgentFields {
 }
 
 /**
- * One saved Agent revision. `execution` is complete or null, never partial: an Agent without
- * execution settings Needs a model and cannot run.
+ * The content of one saved Agent revision. `execution` is complete or null, never partial: an
+ * Agent without execution settings Needs a model and cannot run.
  */
-export type AgentDefinition = CapturedAgent | (AgentFields & { readonly execution: null });
+export type AgentRevisionContent = CapturedAgent | (AgentFields & { readonly execution: null });
+
+/**
+ * A saved Agent: its latest revision and its owning Project, the Factory Project id it belongs to
+ * or null for a global Agent. Ownership belongs to the Agent identity, not to its revisions, so a
+ * Run's captured revisions carry none.
+ */
+export type AgentDefinition = AgentRevisionContent & { readonly projectId: string | null };
 
 export interface AgentEnvironment {
   readonly environmentId: string;
@@ -100,7 +107,8 @@ export interface AgentCapabilities {
   readonly providers: readonly AgentProviderCapability[];
 }
 
-export interface CreateAgentInput {
+/** What every Agent create and save writes as the next revision. */
+interface AgentContentInput {
   readonly name: string;
   readonly prompt: string;
   /** Required: complete settings, or null for an Agent that Needs a model. */
@@ -108,7 +116,13 @@ export interface CreateAgentInput {
   readonly exits: readonly BlockExit[];
 }
 
-export interface UpdateAgentInput extends CreateAgentInput {
+export interface CreateAgentInput extends AgentContentInput {
+  /** The owning Project's Factory id, or null (the default when omitted) for a global Agent. */
+  readonly projectId?: string | null;
+}
+
+/** A save never changes the owning Project. */
+export interface UpdateAgentInput extends AgentContentInput {
   readonly expectedRevision: number;
 }
 

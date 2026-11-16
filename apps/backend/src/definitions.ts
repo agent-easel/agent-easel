@@ -16,8 +16,10 @@ import {
   type FlowDraft,
   type FlowGraph,
   type FlowGraphInput,
+  type FlowValidation,
   type ImportResult,
   type PortableFlow,
+  type ProjectCatalog,
   type Result,
   type StudioDefinitions,
 } from "@t3-factory/contracts";
@@ -26,7 +28,9 @@ import {
   flowAgentRevisions,
   flowReadiness,
   parsePortableFile,
+  placementIssues,
   readinessAgent,
+  type OwningProject,
   type ReadinessAgent,
   validateCommitImport,
   validateCreateAgent,
@@ -40,13 +44,14 @@ import type { T3Adapter } from "./adapters/t3.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { failure } from "./result.ts";
+import { projectUnavailableIssue } from "./projects.ts";
 import { now as currentTime } from "./time.ts";
 import { newId } from "./ids.ts";
 import {
   appendFlowRevision,
   currentFlowsReferencingAgent,
   readCurrentFlows,
-  type FlowRevision,
+  type CurrentFlow,
 } from "./flow-revisions.ts";
 import {
   appendAgentRevision,
@@ -70,9 +75,9 @@ import {
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
-const toDraft = (flow: FlowRevision, agents: readonly ReadinessAgent[]): FlowDraft => ({
+const toDraft = (flow: CurrentFlow, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
-  readiness: flowReadiness(flow.graph, agents, null),
+  readiness: flowReadiness(flow.graph, agents, flow.projectId),
 });
 const flowNotFound = () => failure("not_found", "This Flow does not exist.");
 const staleRevision = (kind: "Agent" | "Flow") =>
@@ -123,6 +128,7 @@ const LIVE_PUBLISHING_OPERATIONS: ReadonlySet<keyof DefinitionOperations> = new 
 export const makeDefinitions = (
   t3: T3Adapter,
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
+  projects: { readCatalog(): Effect.Effect<Result<ProjectCatalog>, unknown> },
   changes: LiveChanges,
   /** Recorded in exported files for information only. */
   factoryVersion: string,
@@ -208,6 +214,32 @@ export const makeDefinitions = (
           ),
         );
       });
+    /**
+     * Refuses a new definition's owning Project unless it is global or a Factory Project available
+     * for new Runs, so a definition is never created where it could not start.
+     */
+    const ownerRefusal = (projectId: OwningProject) =>
+      Effect.gen(function* () {
+        if (projectId === null) return undefined;
+        const catalog = yield* projects.readCatalog();
+        const project = catalog.ok
+          ? catalog.value.projects.find((candidate) => candidate.id === projectId)
+          : undefined;
+        if (project?.availability === "available") return undefined;
+        const issue = projectUnavailableIssue(project, "projectId");
+        return failure("validation", issue.message, [issue]);
+      });
+    /** Refuses a Flow graph that places an Agent its owning Project may not place. */
+    const placementRefusal = (graph: FlowGraphInput, flowProject: OwningProject) =>
+      Effect.gen(function* () {
+        const issues = placementIssues(graph, yield* readinessAgents, flowProject);
+        if (!issues.length) return undefined;
+        return failure(
+          "validation",
+          "This Flow places an Agent it may not use. Place a global Agent or an Agent of the Flow's owning Project.",
+          issues,
+        );
+      });
     /** The saved Flow a save may replace, or the refusal that stops the save. */
     const savedFlowFor = (id: string, expectedRevision: number) =>
       Effect.gen(function* () {
@@ -247,7 +279,7 @@ export const makeDefinitions = (
     /** Runs `operation` on the current revision of Agent `id`, refusing a missing Agent. */
     const withSavedAgent = <A>(
       id: string,
-      operation: (agent: AgentRevision) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
+      operation: (agent: AgentDefinition) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
     ) =>
       Effect.gen(function* () {
         const [agent] = yield* readCurrentAgents(sql, id);
@@ -282,7 +314,7 @@ export const makeDefinitions = (
       createFlow(input) {
         const validated = validateCreateFlow(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return provideSql(
+        return provideSql<FlowDraft>(
           Effect.gen(function* () {
             const positioned = yield* positionGraph(
               validated.value.graph ?? {
@@ -292,12 +324,18 @@ export const makeDefinitions = (
               },
             );
             if (!positioned.ok) return positioned;
+            const projectId = validated.value.projectId ?? null;
             return yield* sql.withTransaction(
               Effect.gen(function* () {
+                const refused =
+                  (yield* ownerRefusal(projectId)) ??
+                  (yield* placementRefusal(positioned.value, projectId));
+                if (refused) return refused;
                 const id = yield* newId;
                 const now = yield* currentTime;
-                const flow: FlowRevision = {
+                const flow: CurrentFlow = {
                   id,
+                  projectId,
                   name: validated.value.name,
                   revision: 1,
                   graph: positioned.value,
@@ -308,7 +346,7 @@ export const makeDefinitions = (
                   createdAt: now,
                   updatedAt: now,
                 };
-                yield* sql`INSERT INTO flows (id, created_at) VALUES (${id}, ${now})`;
+                yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
                 yield* appendFlowRevision(sql, { ...flow, savedAt: now });
                 return { ok: true as const, value: toDraft(flow, yield* readinessAgents) };
               }),
@@ -316,17 +354,19 @@ export const makeDefinitions = (
           }),
         );
       },
-      validateFlow(input) {
+      validateFlow(id, input) {
         const validated = validateUpdateFlow(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return provideSql(
+        return transaction<FlowValidation>(
           Effect.gen(function* () {
+            const [flow] = yield* readCurrentFlows(sql, id);
+            if (!flow) return flowNotFound();
             const agents = yield* readinessAgents;
             const { graph } = validated.value;
             return {
               ok: true as const,
               value: {
-                ...flowReadiness(graph, agents, null),
+                ...flowReadiness(graph, agents, flow.projectId),
                 agentRevisions: flowAgentRevisions(graph, agents),
               },
             };
@@ -350,8 +390,10 @@ export const makeDefinitions = (
                 const latest = yield* savedFlowFor(id, expectedRevision);
                 if (!latest.ok) return latest;
                 const saved = latest.value;
+                const refused = yield* placementRefusal(positioned.value, saved.projectId);
+                if (refused) return refused;
                 const now = yield* currentTime;
-                const flow: FlowRevision = {
+                const flow: CurrentFlow = {
                   ...saved,
                   name: validated.value.name,
                   revision: saved.revision + 1,
@@ -416,9 +458,13 @@ export const makeDefinitions = (
                 capabilities,
               );
               if (unsupported) return unsupported;
+              const projectId = validated.value.projectId ?? null;
+              const refused = yield* ownerRefusal(projectId);
+              if (refused) return refused;
               const now = yield* currentTime;
-              const agent: AgentRevision = {
+              const agent: AgentDefinition = {
                 id: yield* newId,
+                projectId,
                 name: validated.value.name,
                 prompt: validated.value.prompt,
                 execution: validated.value.execution,
@@ -427,7 +473,7 @@ export const makeDefinitions = (
                 createdAt: now,
                 updatedAt: now,
               };
-              yield* sql`INSERT INTO agents (id, created_at) VALUES (${agent.id}, ${now})`;
+              yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${agent.id}, ${now}, ${projectId})`;
               yield* appendAgentRevision(sql, agent);
               return { ok: true as const, value: agent };
             }),
@@ -449,7 +495,7 @@ export const makeDefinitions = (
                   capabilities,
                 );
                 if (unsupported) return unsupported;
-                const agent: AgentRevision = {
+                const agent: AgentDefinition = {
                   ...saved,
                   name: validated.value.name,
                   prompt: validated.value.prompt,
@@ -472,7 +518,8 @@ export const makeDefinitions = (
           withSavedAgent(id, (saved) =>
             Effect.gen(function* () {
               const now = yield* currentTime;
-              const copy: AgentRevision = {
+              // A copy keeps the source's owning Project until Duplicate takes a target.
+              const copy: AgentDefinition = {
                 ...saved,
                 id: yield* newId,
                 name: validated.value.name ?? `${saved.name.trim()} copy`,
@@ -480,7 +527,7 @@ export const makeDefinitions = (
                 createdAt: now,
                 updatedAt: now,
               };
-              yield* sql`INSERT INTO agents (id, created_at) VALUES (${copy.id}, ${now})`;
+              yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${copy.id}, ${now}, ${copy.projectId})`;
               yield* appendAgentRevision(sql, copy);
               return { ok: true as const, value: copy };
             }),

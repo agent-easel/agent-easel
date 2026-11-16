@@ -10,8 +10,10 @@ import {
 } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
 
-/** A saved Flow revision as Studio and Start read it; readiness is derived separately. */
+/** One saved Flow revision as a Run captures it; readiness is derived separately. */
 export type FlowRevision = RunDefinitions["flow"];
+/** The latest saved revision of a current Flow with its owning Project. */
+export type CurrentFlow = FlowRevision & { readonly projectId: string | null };
 
 type RevisionRow = {
   id: string;
@@ -207,17 +209,25 @@ const toBlock = (
   };
 };
 
-/** The latest revision of each non-removed Flow (or only `flowId`), newest Flow first. */
+/**
+ * The latest revision of each non-removed Flow (or only `flowId`) with its owning Project, newest
+ * Flow first.
+ */
 export const readCurrentFlows = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   flowId?: string,
 ) {
-  const revisions = yield* sql<RevisionRow>`SELECT r.*, f.created_at FROM flows f
+  const revisions = yield* sql<RevisionRow & { project_id: string | null }>`
+    SELECT r.*, f.created_at, f.project_id FROM flows f
     JOIN flow_revisions r ON r.flow_id = f.id
       AND r.revision = (SELECT max(revision) FROM flow_revisions WHERE flow_id = f.id)
     WHERE f.removed_at IS NULL ${flowId === undefined ? sql`` : sql`AND f.id = ${flowId}`}
     ORDER BY f.created_at DESC, f.id ASC`;
-  return yield* withGraphs(sql, revisions);
+  const flows = yield* withGraphs(sql, revisions);
+  return flows.map((flow, index): CurrentFlow => ({
+    ...flow,
+    projectId: revisions[index]!.project_id,
+  }));
 });
 
 /** One stored revision by its id, also after a later save or the Flow's removal. */

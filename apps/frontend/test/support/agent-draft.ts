@@ -78,6 +78,7 @@ export const capabilities: AgentCapabilities = {
 export function savedAgent(change: Partial<AgentDefinition> = {}): AgentDefinition {
   return {
     id: "agent",
+    projectId: null,
     revision: 3,
     name: "Reviewer",
     prompt: "Review the change.",

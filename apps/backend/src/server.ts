@@ -364,7 +364,7 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
     },
     validateFlow: {
       body: definitionBody,
-      handle: ({ input }) => answer(() => factory.validateFlow(input)),
+      handle: ({ parameters, input }) => answer(() => factory.validateFlow(parameters.id, input)),
     },
     getFlow: { handle: ({ parameters }) => answer(() => factory.getFlow(parameters.id)) },
     removeFlow: { handle: ({ parameters }) => answer(() => factory.removeFlow(parameters.id)) },

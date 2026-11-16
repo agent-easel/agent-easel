@@ -163,10 +163,7 @@ export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "name" | "e
   readonly formerExitNames: ReadonlyMap<string, string>;
 }
 
-/**
- * A saved Agent as Flow readiness sees it. Agents are global: their definitions record no owning
- * Project.
- */
+/** A saved Agent as Flow readiness sees it. */
 export const readinessAgent = (
   agent: AgentDefinition,
   formerExitNames: ReadonlyMap<string, string>,
@@ -174,7 +171,7 @@ export const readinessAgent = (
   id: agent.id,
   name: agent.name,
   exits: agent.exits,
-  projectId: null,
+  projectId: agent.projectId,
   hasExecution: agent.execution !== null,
   formerExitNames,
 });
@@ -308,7 +305,9 @@ function blockReadiness(
     add(
       "agent_scope_mismatch",
       `${path}.agentId`,
-      `${label}: ${agent.name} is owned by another Project, so this Flow cannot place it.`,
+      flowProject === null
+        ? `${label}: ${agent.name} is a Project Agent, so this global Flow cannot place it.`
+        : `${label}: ${agent.name} is owned by another Project, so this Flow cannot place it.`,
     );
   else if (!agent.hasExecution)
     add("agent_model_required", `${path}.agentId`, `${label}: ${agent.name} needs a model.`);
@@ -512,19 +511,37 @@ export function flowReadiness(
 }
 
 /**
+ * The out-of-rule placements of a Flow owned by `flowProject`, as its readiness reports them
+ * (`agent_scope_mismatch`). Saving refuses a graph that has any.
+ */
+export function placementIssues(
+  graph: FlowGraphInput,
+  agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
+): ValidationIssue[] {
+  return flowReadiness(graph, agents, flowProject).issues.filter(
+    (issue) => issue.code === "agent_scope_mismatch",
+  );
+}
+
+/**
  * The dependency stamp of Flow readiness: readiness depends only on the graph and the saved
- * revisions of the Agents it places, because an Agent's exits and former exit names are fixed
- * per revision. Equal stamps for the same graph mean equal readiness.
+ * revision and owning Project of each Agent it places, because an Agent's exits and former exit
+ * names are fixed per revision while its owner changes without one. Equal stamps for the same
+ * graph mean equal readiness.
  */
 export function flowAgentRevisions(
   graph: FlowGraphInput,
-  agents: readonly Pick<AgentDefinition, "id" | "revision">[],
+  agents: readonly Pick<AgentDefinition, "id" | "revision" | "projectId">[],
 ): FlowAgentRevisions {
-  const revisions: Record<string, number | null> = {};
+  const revisions: Record<string, FlowAgentRevisions[string]> = {};
   for (const block of graph.blocks)
-    if (block.kind === "agent" && block.agentId)
-      revisions[block.agentId] =
-        agents.find((agent) => agent.id === block.agentId)?.revision ?? null;
+    if (block.kind === "agent" && block.agentId) {
+      const agent = agents.find((candidate) => candidate.id === block.agentId);
+      revisions[block.agentId] = agent
+        ? { revision: agent.revision, projectId: agent.projectId }
+        : null;
+    }
   return revisions;
 }
 

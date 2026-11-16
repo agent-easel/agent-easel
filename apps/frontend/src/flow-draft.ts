@@ -46,8 +46,8 @@ const contentOf = (flow: FlowDraft): FlowContent => ({
 });
 
 /**
- * The saved revisions of the Agents `graph` places, comparable with a validation answer's; null
- * while Studio holds no Agents.
+ * The saved revisions and owning Projects of the Agents `graph` places, comparable with a
+ * validation answer's; null while Studio holds no Agents.
  */
 const agentStamp = (graph: FlowGraph, agents: readonly AgentDefinition[] | null) =>
   agents ? canonical(flowAgentRevisions(graph, agents)) : null;
@@ -233,7 +233,7 @@ export function createFlowDraft(
       const asked = ++readinessRequest;
       draft.report("");
       try {
-        const { agentRevisions, ...answer } = await operations.validateFlow({
+        const { agentRevisions, ...answer } = await operations.validateFlow(id, {
           ...content,
           expectedRevision: saved.revision,
         });

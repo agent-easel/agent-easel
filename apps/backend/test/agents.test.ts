@@ -1,5 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
+  assertOk,
+  discoveredClones,
   openFactoryWithApprovedT3,
   readAgentAfterRestart,
   sampleAgentInput,
@@ -195,5 +197,49 @@ it("a whitespace-only Agent name is rejected without creating a definition", asy
   // Assert
   assert(!result.ok);
   expect(result.error.code).toBe("validation");
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("an Agent created for a Project is a Project Agent of that Project", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+
+  // Act
+  const created = await factory.createAgent(sampleAgentInput("Releaser", first.id));
+
+  // Assert
+  assert(created.ok);
+  expect(created.value.projectId).toBe(first.id);
+  expect(assertOk(await factory.getAgent(created.value.id)).projectId).toBe(first.id);
+});
+
+it("saving a Project Agent keeps its owning Project even when the save names another", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const created = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+
+  // Act
+  const saved = await factory.updateAgent(created.id, {
+    ...sampleAgentInput("Release manager", second.id),
+    expectedRevision: created.revision,
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value).toMatchObject({ name: "Release manager", revision: 2, projectId: first.id });
+});
+
+it("an Agent whose owner is not a Factory Project id or null is rejected without creating a definition", async (context) => {
+  // Arrange
+  const { factory } = await discoveredClones(context);
+
+  // Act
+  const created = await factory.createAgent({ ...sampleAgentInput(), projectId: 7 });
+
+  // Assert
+  assert(!created.ok);
+  expect(created.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "invalid_project", path: "projectId" },
+  ]);
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
 });

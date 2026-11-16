@@ -12,17 +12,21 @@ import { runFactoryProcess } from "./factory-process.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { fileURLToPath } from "node:url";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
+import type { OwningProject } from "@t3-factory/domain-validation";
+import { DatabaseSync } from "node:sqlite";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 
 /** A new Agent's single exit, as the Agent editor starts it. */
 const doneExit = blockExit("done", "done", "", false);
 
-export const sampleAgentInput = (name = "Coder") => ({
+/** A create input for an Agent owned by `projectId`, or a global one when omitted. */
+export const sampleAgentInput = (name = "Coder", projectId: OwningProject = null) => ({
   name,
   prompt: "Improve the empty search state.\nUse $review-code when helpful.",
   execution: controlledExecution(),
   exits: [doneExit],
+  projectId,
 });
 
 export async function openFactoryWithApprovedT3(context: TestContext) {
@@ -149,16 +153,46 @@ export async function reviewedFlow(context: TestContext) {
   return { factory, flowId: created.id, reviewer, review, save, editReviewer };
 }
 
+/** Factory connected to a T3 that lists two independent clones of one repository. */
 export async function projectsHarness(context: TestContext) {
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
   t3.authorized = true;
   t3.projects = [
     { projectId: "one", title: "First clone", workspaceRoot: "/repos/one", available: true },
+    {
+      projectId: "clone",
+      title: "Second clone",
+      workspaceRoot: "/repos/clone",
+      available: true,
+    },
   ];
   const factory = await harness.open({ t3 });
   assertOk(await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" }));
   return { harness, factory, t3 };
+}
+
+/** `projectsHarness` with both clones discovered as available Factory Projects. */
+export async function discoveredClones(context: TestContext) {
+  const setup = await projectsHarness(context);
+  const [first, second] = assertOk(await setup.factory.recheckProjects()).projects;
+  return { ...setup, first: first!, second: second! };
+}
+
+/**
+ * Sets a Flow's or Agent's owning Project in the open backend's storage without a revision, as
+ * Change owner will. No public operation changes an owner yet, so this stands in for it.
+ */
+export function ownerChangedInStorage(
+  databasePath: string,
+  definition: { readonly kind: "flow" | "agent"; readonly id: string },
+  projectId: OwningProject,
+) {
+  const database = new DatabaseSync(databasePath);
+  database.exec("PRAGMA busy_timeout = 5000");
+  const table = definition.kind === "flow" ? "flows" : "agents";
+  database.prepare(`UPDATE ${table} SET project_id=? WHERE id=?`).run(projectId, definition.id);
+  database.close();
 }
 
 export async function uncertainProjectCreation(context: TestContext) {

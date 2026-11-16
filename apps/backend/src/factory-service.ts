@@ -99,6 +99,7 @@ export const makeFactoryService = (
     const definitions = yield* makeDefinitions(
       t3,
       connection,
+      projects,
       changes,
       options.applicationVersion ?? "source",
     );

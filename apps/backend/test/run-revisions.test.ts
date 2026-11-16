@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { workerMessage } from "./support/run-worker.ts";
 import { handoffFlow, resultReported, workerAtWork } from "./support/scenarios.ts";
+import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
 
 it("each Start of the same Flow revision shows the Agent revision, with its exits, current when it started", async (c) => {
   // Arrange
@@ -139,4 +140,22 @@ it("a Flow save after Start leaves the Run on the Revisit instruction it capture
   expect(saved.value.graph.blocks[0]).toMatchObject({
     revisitInstruction: "Review everything again.",
   });
+});
+
+it("a Run keeps its captured revisions, list entry and detail after its Flow and Agent change owner", async (c) => {
+  // Arrange
+  const { h, f, input, flow, agent, project } = await prepared(c);
+  const started = await f.startRun(input);
+  assert(started.ok);
+  await f.reconcileRuns();
+  const detail = assertOk(await f.getRun(started.value.id));
+  const listed = assertOk(await f.listRuns(project.id));
+
+  // Act
+  ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+  ownerChangedInStorage(h.databasePath, { kind: "flow", id: flow.id }, project.id);
+
+  // Assert
+  expect(await f.getRun(started.value.id)).toStrictEqual({ ok: true, value: detail });
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: listed });
 });
