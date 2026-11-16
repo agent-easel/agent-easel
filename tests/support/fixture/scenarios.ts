@@ -288,6 +288,7 @@ async function createOwnershipSet(
       await factory.updateFlow(flow.id, {
         name,
         expectedRevision: flow.revision,
+        expectedProjectId: projectId,
         workspace: { mode: "checkout" },
         graph: {
           flowInput: flowInput("worker"),
