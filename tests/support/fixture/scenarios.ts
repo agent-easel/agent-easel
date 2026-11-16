@@ -135,7 +135,8 @@ export type FixtureState = keyof ReturnType<typeof runTransitions>;
  * The fixture scenario set: Flows, Agents, repositories and provider models only UI journeys use,
  * built like the development seed's. Answers its ready Flows by key.
  */
-async function createFixtureScenarioSet({ factory, t3, home, world }: Host) {
+async function createFixtureScenarioSet(host: Host) {
+  const { factory, t3, home, world } = host;
   // A one-minute Wait lets the Wait journey observe a real forwarding without a long Run.
   const pause = await saveFlow(factory, "UI wait · Pause a minute", {
     flowInput: flowInput("worker"),
@@ -256,7 +257,71 @@ async function createFixtureScenarioSet({ factory, t3, home, world }: Host) {
     connections: [],
   });
   requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
+  await createOwnershipSet(host, unselectedModelOptions);
   return { pause, launch };
+}
+
+/**
+ * Project-owned definitions for Studio's owner grouping: Northwind stays available, while Docs
+ * site has left T3's project list, so its Flow is kept and editable but cannot start.
+ */
+async function createOwnershipSet(
+  { factory, t3, home }: Host,
+  execution: ReturnType<typeof controlledExecution>,
+) {
+  async function repository(name: string, title: string) {
+    const root = join(home, name);
+    await mkdir(root);
+    await promisify(execFile)("git", ["init", root], {
+      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home },
+    });
+    const added = requireSuccess(await factory.addRepository({ path: root }));
+    t3.projects = t3.projects.map((entry) =>
+      entry.projectId === added.projectId ? { ...entry, title } : entry,
+    );
+    requireSuccess(await factory.recheckProjects());
+    return added;
+  }
+  async function projectFlow(name: string, projectId: string, agentId: string) {
+    const flow = requireSuccess(await factory.createFlow({ name, projectId }));
+    requireSuccess(
+      await factory.updateFlow(flow.id, {
+        name,
+        expectedRevision: flow.revision,
+        workspace: { mode: "checkout" },
+        graph: {
+          flowInput: flowInput("worker"),
+          blocks: [agentBlock("worker", "Owned worker", agentId, { x: 320, y: 180 }, [], [])],
+          connections: [],
+        },
+      }),
+    );
+  }
+  const done = [blockExit("done", "Done", "Complete", false)];
+  const northwind = await repository("northwind", "Northwind");
+  const qa = requireSuccess(
+    await factory.createAgent({
+      name: "Northwind QA",
+      prompt: "Check the Northwind release.",
+      execution,
+      exits: done,
+      projectId: northwind.id,
+    }),
+  );
+  await projectFlow("Northwind release", northwind.id, qa.id);
+  const docs = await repository("docs-site", "Docs site");
+  const writer = requireSuccess(
+    await factory.createAgent({
+      name: "Docs writer",
+      prompt: "Refresh the docs site.",
+      execution,
+      exits: done,
+      projectId: docs.id,
+    }),
+  );
+  await projectFlow("Docs refresh", docs.id, writer.id);
+  t3.projects = t3.projects.filter((entry) => entry.projectId !== docs.projectId);
+  requireSuccess(await factory.recheckProjects());
 }
 
 type FixtureFlows = Awaited<ReturnType<typeof createFixtureScenarioSet>>;
