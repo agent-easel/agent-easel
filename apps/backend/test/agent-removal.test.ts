@@ -80,7 +80,11 @@ it("a removed Flow rejects saves without being recreated and removing it again s
   assert((await f.removeFlow(flow.id)).ok);
 
   // Act
-  const saved = await f.updateFlow(flow.id, { ...flow, expectedRevision: flow.revision });
+  const saved = await f.updateFlow(flow.id, {
+    ...flow,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+  });
   const removedAgain = await f.removeFlow(flow.id);
 
   // Assert
@@ -115,6 +119,7 @@ it("a removed Agent rejects saves, leaves the catalog and removing it again succ
   const edited = await f.updateAgent(saved.value.id, {
     ...sampleAgentInput("Revived"),
     expectedRevision: saved.value.revision,
+    expectedProjectId: saved.value.projectId,
   });
   const duplicated = await f.duplicateAgent(saved.value.id, {});
   const removedAgain = await f.removeAgent(saved.value.id);

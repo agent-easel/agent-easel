@@ -8,6 +8,7 @@ import {
   savedAgentWhileCapabilitiesFail,
 } from "./support/domain-setup.ts";
 import { subscribe } from "./support/live.ts";
+import { agentBlock, flowInput } from "./support/scenarios.ts";
 
 const reviewExits = [
   { id: "pass", name: "pass", description: "The change is ready.", messageRequired: false },
@@ -41,6 +42,7 @@ it("an Agent saved without a model reads back after restart with no execution se
     ...sampleAgentInput(),
     execution: null,
     expectedRevision: created.value.revision,
+    expectedProjectId: created.value.projectId,
   });
   assert(cleared.ok);
   await factory.close();
@@ -65,6 +67,7 @@ it("renaming an Agent exit appends a revision that keeps the exit's identity", a
     ...sampleAgentInput(),
     exits: renamed,
     expectedRevision: saved.value.revision,
+    expectedProjectId: saved.value.projectId,
   });
 
   // Assert
@@ -106,6 +109,44 @@ it("duplicateAgent copies execution settings under a new identity", async (conte
   expect(duplicate.value.execution).toStrictEqual(saved.value.execution);
 });
 
+it("duplicating a Project Agent into another Project creates a copy owned by the target and leaves the source as it was", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const source = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+
+  // Act
+  const duplicate = await factory.duplicateAgent(source.id, { projectId: second.id });
+
+  // Assert
+  assert(duplicate.ok);
+  expect(duplicate.value).toMatchObject({
+    name: "Releaser copy",
+    revision: 1,
+    projectId: second.id,
+    prompt: source.prompt,
+    execution: source.execution,
+  });
+  expect(await factory.getAgent(source.id)).toStrictEqual({ ok: true, value: source });
+});
+
+it("duplicating an Agent of an unavailable Project into its default target is refused and creates nothing", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const source = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const duplicate = await factory.duplicateAgent(source.id, {});
+
+  // Assert
+  assert(!duplicate.ok);
+  expect(duplicate.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(assertOk(await factory.listAgents())).toStrictEqual([source]);
+});
+
 it("a stale Agent save conflicts and the accepted save survives restart", async (context) => {
   // Arrange
   const { harness, factory } = await openFactoryWithApprovedT3(context);
@@ -114,6 +155,7 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
   const updated = await factory.updateAgent(saved.value.id, {
     ...sampleAgentInput("Coder updated"),
     expectedRevision: saved.value.revision,
+    expectedProjectId: saved.value.projectId,
   });
   assert(updated.ok);
 
@@ -121,6 +163,7 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
   const conflict = await factory.updateAgent(saved.value.id, {
     ...sampleAgentInput("Lost edit"),
     expectedRevision: saved.value.revision,
+    expectedProjectId: saved.value.projectId,
   });
 
   // Assert
@@ -222,6 +265,7 @@ it("saving a Project Agent keeps its owning Project even when the save names ano
   const saved = await factory.updateAgent(created.id, {
     ...sampleAgentInput("Release manager", second.id),
     expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
   });
 
   // Assert
@@ -242,4 +286,163 @@ it("an Agent whose owner is not a Factory Project id or null is rejected without
     { code: "invalid_project", path: "projectId" },
   ]);
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+/** Creates Flow `name` owned by `projectId` whose one Agent block places `agentId`. */
+const flowPlacing = async (
+  factory: Awaited<ReturnType<typeof discoveredClones>>["factory"],
+  name: string,
+  agentId: string,
+  projectId: string | null,
+) =>
+  assertOk(
+    await factory.createFlow({
+      name,
+      projectId,
+      graph: {
+        flowInput: flowInput("worker"),
+        blocks: [agentBlock("worker", "Worker", agentId)],
+        connections: [],
+      },
+    }),
+  );
+
+it("a Project Agent of an unavailable Project moves to global without a revision while its Project's Flow places it", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = await flowPlacing(factory, "Release", own.id, first.id);
+  t3.projects = t3.projects.filter((project) => project.projectId !== first.projectId);
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const changed = await factory.changeAgentOwner(own.id, {
+    expectedProjectId: first.id,
+    projectId: null,
+  });
+
+  // Assert
+  assert(changed.ok);
+  expect(changed.value).toStrictEqual({ ...own, projectId: null });
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [changed.value] });
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [flow] });
+});
+
+it("a global Agent moves to a Project whose Flows are the only ones placing it", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const shared = assertOk(await factory.createAgent(sampleAgentInput("Releaser")));
+  await flowPlacing(factory, "Release", shared.id, first.id);
+
+  // Act
+  const changed = await factory.changeAgentOwner(shared.id, {
+    expectedProjectId: null,
+    projectId: first.id,
+  });
+
+  // Assert
+  assert(changed.ok);
+  expect(changed.value).toMatchObject({ projectId: first.id, revision: shared.revision });
+});
+
+it("moving a global Agent to a Project is refused naming each global and other-Project Flow placing it", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const shared = assertOk(await factory.createAgent(sampleAgentInput("Releaser")));
+  await flowPlacing(factory, "Release", shared.id, first.id);
+  const hotfix = await flowPlacing(factory, "Hotfix", shared.id, second.id);
+  const review = await flowPlacing(factory, "Review", shared.id, null);
+
+  // Act
+  const changed = await factory.changeAgentOwner(shared.id, {
+    expectedProjectId: null,
+    projectId: first.id,
+  });
+
+  // Assert
+  assert(!changed.ok);
+  expect(changed.error.code).toBe("conflict");
+  expect(changed.error.issues).toStrictEqual([
+    {
+      code: "owner_change_blocked",
+      path: "projectId",
+      message: `Flow "Hotfix" (${hotfix.id}) places this Agent and may not place it under the new owner.`,
+    },
+    {
+      code: "owner_change_blocked",
+      path: "projectId",
+      message: `Flow "Review" (${review.id}) places this Agent and may not place it under the new owner.`,
+    },
+  ]);
+  expect(assertOk(await factory.getAgent(shared.id)).projectId).toBeNull();
+});
+
+it("moving a Project Agent to the other clone is refused naming its Project's Flow placing it", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const release = await flowPlacing(factory, "Release", own.id, first.id);
+
+  // Act
+  const changed = await factory.changeAgentOwner(own.id, {
+    expectedProjectId: first.id,
+    projectId: second.id,
+  });
+
+  // Assert
+  assert(!changed.ok);
+  expect(changed.error.issues).toStrictEqual([
+    {
+      code: "owner_change_blocked",
+      path: "projectId",
+      message: `Flow "Release" (${release.id}) places this Agent and may not place it under the new owner.`,
+    },
+  ]);
+  expect(assertOk(await factory.getAgent(own.id)).projectId).toBe(first.id);
+});
+
+it("changing an Agent's owner from an owner it no longer has is refused and leaves the owner", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  assertOk(
+    await factory.changeAgentOwner(own.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Act
+  const changed = await factory.changeAgentOwner(own.id, {
+    expectedProjectId: first.id,
+    projectId: null,
+  });
+
+  // Assert
+  assert(!changed.ok);
+  expect(changed.error.code).toBe("conflict");
+  expect(changed.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+});
+
+it("saving an Agent under an owner it no longer has is refused and appends no revision", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  assertOk(
+    await factory.changeAgentOwner(own.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Act
+  const saved = await factory.updateAgent(own.id, {
+    ...sampleAgentInput("Release manager"),
+    expectedRevision: own.revision,
+    expectedProjectId: first.id,
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.code).toBe("conflict");
+  expect(saved.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+  expect(assertOk(await factory.getAgent(own.id))).toMatchObject({ name: "Releaser", revision: 1 });
 });

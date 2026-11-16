@@ -581,6 +581,7 @@ async function saveFlow(
     await world.factory.updateFlow(draft.id, {
       name: draft.name,
       expectedRevision: draft.revision,
+      expectedProjectId: draft.projectId,
       workspace,
       graph,
     }),

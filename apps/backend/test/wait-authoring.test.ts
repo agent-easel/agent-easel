@@ -176,6 +176,7 @@ it("an unconnected Wait saves but cannot run", async (c) => {
   const saved = await draft.factory.updateFlow(draft.flowId, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: {
       flowInput: flowInput("coder"),
@@ -200,6 +201,7 @@ it("Start refuses a saved Flow whose input targets a Wait and creates no Run", a
   const saved = await f.updateFlow(flow.id, {
     name: flow.name,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     workspace: flow.workspace,
     graph: {
       flowInput: flowInput("worker", "pause"),

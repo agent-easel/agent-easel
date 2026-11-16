@@ -145,6 +145,11 @@ export interface CommitImportInput {
   readonly document: ImportedDocument;
   /** The reviewed choice for every bundled Agent by key: complete settings, or null (Needs a model). */
   readonly selections: Readonly<Record<string, AgentExecutionSettings | null>>;
+  /**
+   * The import target owning every created definition: a Factory Project id available for new
+   * Runs, or null (the default when omitted) for Global.
+   */
+  readonly projectId?: string | null;
 }
 
 /** The definitions an import created, by document key. They may have been removed since. */

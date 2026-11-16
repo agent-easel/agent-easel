@@ -48,10 +48,12 @@ and restricted OAuth credentials live outside project repositories.
   starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
   recipient deliveries and changes no row.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
-  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
+  a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
+  the created Flow id. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
-  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.
+  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
+  receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import
+  that was always global, so they replay as global imports and conflict with a retry naming a Project; new receipts are version 2.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the

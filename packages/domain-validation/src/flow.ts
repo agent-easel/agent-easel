@@ -2,8 +2,11 @@ import {
   CONDITION_ARRIVAL_MAX,
   CONDITION_OTHERWISE_ID,
   type CreateFlowInput,
+  type DuplicateFlowInput,
+  type FlowDuplicateAgentChoice,
   type FlowGraphInput,
   type FlowWorkspace,
+  type PreviewFlowDuplicateInput,
   type Result,
   type UpdateFlowInput,
   type ValidationIssue,
@@ -18,7 +21,7 @@ import {
   isRecord,
   type IssueReporter,
 } from "./block-exits.ts";
-import { parseOwningProject } from "./placement.ts";
+import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
 
 /** Structural save validation is deliberately separate from execution readiness. */
 function validateFlowName(input: unknown): Result<Pick<CreateFlowInput, "name">> {
@@ -444,10 +447,84 @@ export function validateCreateFlow(input: unknown): Result<CreateFlowInput> {
 export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
   const checked = checkFlowBody(input, true);
   if (!checked.ok) return checked;
+  const expectedProjectId = parseExpectedOwner(input);
+  if (!expectedProjectId.ok) return expectedProjectId;
   const { graph, ...rest } = checked.value;
   return {
     ok: true,
-    value: { ...rest, expectedRevision: checked.expectedRevision, graph: graph! },
+    value: {
+      ...rest,
+      expectedRevision: checked.expectedRevision,
+      expectedProjectId: expectedProjectId.value,
+      graph: graph!,
+    },
+  };
+}
+
+export function validatePreviewFlowDuplicate(input: unknown): Result<PreviewFlowDuplicateInput> {
+  const projectId = parseTargetOwner(input);
+  if (!projectId.ok) return projectId;
+  return { ok: true, value: projectId.value === undefined ? {} : { projectId: projectId.value } };
+}
+
+const isRevision = (value: unknown): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= 1;
+
+/** A planned Agent as the plan listed it; fields the plan adds for display are ignored. */
+function checkDuplicateChoice(
+  value: unknown,
+  path: string,
+  issue: IssueReporter,
+): FlowDuplicateAgentChoice | undefined {
+  const fields = isRecord(value) ? value : {};
+  const { agentId, revision, choice } = fields;
+  const projectId = parseTargetOwner(fields);
+  if (
+    typeof agentId !== "string" ||
+    agentId.length === 0 ||
+    agentId.length > 256 ||
+    !isRevision(revision) ||
+    !projectId.ok ||
+    projectId.value === undefined ||
+    (choice !== "keep" && choice !== "copy")
+  ) {
+    issue(
+      "invalid_duplicate_agent",
+      path,
+      "Send each planned Agent's agentId, revision and projectId as the plan listed them, with choice keep or copy.",
+    );
+    return undefined;
+  }
+  return { agentId, revision, projectId: projectId.value, choice };
+}
+
+/** A Flow Duplicate commit: the previewed plan's source revision and every planned Agent's choice. */
+export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput> {
+  const fields = isRecord(input) ? input : {};
+  const name = fields.name === undefined ? undefined : validateFlowName(fields);
+  if (name && !name.ok) return name;
+  const projectId = parseTargetOwner(fields);
+  if (!projectId.ok) return projectId;
+  const issues: ValidationIssue[] = [];
+  const issue: IssueReporter = (code, path, message) => issues.push({ code, path, message });
+  if (!isRevision(fields.expectedRevision))
+    issue("invalid_revision", "expectedRevision", "Include the source revision the plan copies.");
+  const agents = Array.isArray(fields.agents) && fields.agents.length <= 500 ? fields.agents : [];
+  if (agents !== fields.agents)
+    issue("invalid_duplicate_agents", "agents", "Send the plan's Agents, at most 500.");
+  const choices = agents.flatMap(
+    (agent, index) => checkDuplicateChoice(agent, `agents.${index}`, issue) ?? [],
+  );
+  if (issues.length)
+    return { ok: false, error: { code: "validation", message: issues[0]!.message, issues } };
+  return {
+    ok: true,
+    value: {
+      ...name?.value,
+      ...(projectId.value === undefined ? {} : { projectId: projectId.value }),
+      expectedRevision: fields.expectedRevision as number,
+      agents: choices,
+    },
   };
 }
 

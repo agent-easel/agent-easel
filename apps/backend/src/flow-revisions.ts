@@ -357,7 +357,8 @@ export const currentFlowsReferencingAgent = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   agentId: string,
 ) {
-  return yield* sql<{ id: string; name: string }>`SELECT f.id, r.name FROM flows f
+  return yield* sql<{ id: string; name: string; project_id: string | null }>`
+    SELECT f.id, r.name, f.project_id FROM flows f
     JOIN flow_revisions r ON r.flow_id = f.id
       AND r.revision = (SELECT max(revision) FROM flow_revisions WHERE flow_id = f.id)
     WHERE f.removed_at IS NULL AND EXISTS (SELECT 1 FROM flow_revision_blocks b

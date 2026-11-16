@@ -34,6 +34,7 @@ it("editing an Agent preserves the dispatched Run definitions", async (c) => {
     name: "Changed",
     prompt: "Changed prompt",
     expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
   });
 
   // Assert
@@ -190,6 +191,7 @@ it("runtime readiness rejects a saved model option outside the permitted domain"
   await f.updateAgent(agent.id, {
     ...agent,
     expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
     execution: { ...agent.execution, modelOptions: [{ id: "reasoning", value: true }] },
   });
 

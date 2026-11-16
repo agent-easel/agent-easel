@@ -103,9 +103,13 @@ function saveRequest(
   });
   const fallback = "Could not save this Agent. Your edits are still here.";
   if (agent) {
-    const validation = validateUpdateAgent({ ...content, expectedRevision: agent.revision });
+    const validation = validateUpdateAgent({
+      ...content,
+      expectedRevision: agent.revision,
+      expectedProjectId: agent.projectId,
+    });
     if (!validation.ok) return { error: validation.error.message };
-    const { expectedRevision: _, ...submitted } = validation.value;
+    const { expectedRevision: _, expectedProjectId: __, ...submitted } = validation.value;
     return {
       submitted: asContent(submitted),
       send: () => operations.updateAgent(agent.id, validation.value),

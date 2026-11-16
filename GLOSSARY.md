@@ -28,8 +28,16 @@ _Avoid_: shared (one definition in several Projects is not a supported concept).
 A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow.
 _Avoid_: override, overlay, per-project configuration of a shared Flow.
 
+**Change owner**:
+The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards. A refusal names the blocking definitions; nothing else is edited or copied.
+_Avoid_: reassign, transfer, move as the action's name.
+
 **Placement rule**:
 Which Agents a Flow may place: any Flow may place a global Agent, and a Project Flow may also place Agents of its own owning Project. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
+
+**Flow Duplicate**:
+A new, independent Flow copied from another Flow's latest saved revision into a target (Global or one available Project). Its plan lists each Agent the source places as kept (the copy places the same Agent) or copied (a new Agent in the target); an Agent the target may not place is always copied. The source Flow and its Agents never change, and a Flow Duplicate is never synchronized with its source.
+_Avoid_: clone, fork, move (Change owner keeps the identity; Duplicate creates a new one).
 
 **Flow revision**:
 One immutable saved version of a Flow's name, graph and workspace setting. Every successful create or save appends the next revision; Studio shows the latest, and removing a Flow keeps its revisions.
@@ -61,7 +69,7 @@ A JSON file holding the latest saved revision of an Agent, or of a Flow with eac
 _Avoid_: backup, sync.
 
 **Import receipt**:
-The durable record of one committed import: the client's request id, a fingerprint of the document and reviewed model choices, and the definitions it created. A retry with the same content returns the original result instead of a copy.
+The durable record of one committed import: the client's request id, a versioned fingerprint of the document, reviewed model choices and import target, and the definitions it created. A retry with the same content and target returns the original result instead of a copy; a receipt from before imports took a target replays only as a global import.
 _Avoid_: import history, provenance.
 
 **Studio**:

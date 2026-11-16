@@ -89,6 +89,9 @@ Flows and Agents reference their owning Project by this Factory id, never by pat
 remote, so ownership survives a rename or move in T3 and each clone owns its own definitions.
 An unavailable owning Project keeps its definitions editable; Start of its Flows reports the
 same `project_<availability>` reason as project readiness.
+[Change owner](studio.md#ownership) moves a definition to another Project or to global without a
+revision: it refuses a target that is unknown or unavailable with that same reason, and moves
+definitions out of an unavailable Project whenever the placement rule allows.
 
 Discovery refreshes at startup, periodically and on explicit checks. Incomplete pagination,
 invalid results or changed authorization fail the refresh, rather than reporting an empty

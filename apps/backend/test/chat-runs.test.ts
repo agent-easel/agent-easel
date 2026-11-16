@@ -216,6 +216,7 @@ it("Read Run describes a Run with the definitions it captured after its Flow was
       blocks: fixture.flow.graph.blocks.map((block) => ({ ...block, name: "Renamed worker" })),
     },
     expectedRevision: fixture.flow.revision,
+    expectedProjectId: fixture.flow.projectId,
   });
   assert(saved.ok, JSON.stringify(saved));
   fixture.model.script(calls(readRun({ run: `#${run.number}` })), { text: "Read." });

@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: definition_owning_project
+-- Newest applied migration: import_receipt_fingerprint_version
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -448,7 +448,7 @@ CREATE TABLE definition_import_receipts (
   fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
   flow_id TEXT UNIQUE REFERENCES flows(id),
   created_at TEXT NOT NULL
-);
+, fingerprint_version INTEGER NOT NULL DEFAULT 1 CHECK (fingerprint_version IN (1, 2)));
 
 CREATE TRIGGER immutable_definition_import_receipt_delete BEFORE DELETE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 

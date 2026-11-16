@@ -24,7 +24,12 @@ it("concurrent edits from two approved clients keep revision conflicts", async (
   const browser = await server.approved("Browser profile", "browser");
   const created = await server.factory.createFlow({ name: "Shared plan" });
   assert(created.ok);
-  const edit = (name: string) => ({ name, expectedRevision: 1, graph: created.value.graph });
+  const edit = (name: string) => ({
+    name,
+    expectedRevision: 1,
+    expectedProjectId: null,
+    graph: created.value.graph,
+  });
   assert((await laptop.send("PUT", `/api/flows/${created.value.id}`, edit("Laptop edit"))).body.ok);
 
   // Act
@@ -46,6 +51,7 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   const checkout = await server.factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: { mode: "checkout" },
     graph: created.value.graph,
   });
@@ -55,6 +61,7 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   const reply = await laptop.send("PUT", `/api/flows/${created.value.id}`, {
     name: "Laptop edit",
     expectedRevision: 2,
+    expectedProjectId: null,
     graph: created.value.graph,
   });
 
