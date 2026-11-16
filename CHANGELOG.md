@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/alimek/t3-factory/compare/v0.6.0...v0.7.0) (2026-11-16)
+
+
+### Features
+
+* Condition with durable arrival-number routing ([#455](https://github.com/alimek/t3-factory/issues/455)) ([c689591](https://github.com/alimek/t3-factory/commit/c689591ed9335ae9b67429ef75372dd7475c2bd4))
+* desktop notifications and Dock badge for required owner action ([#454](https://github.com/alimek/t3-factory/issues/454)) ([b58aa3a](https://github.com/alimek/t3-factory/commit/b58aa3a0333f2dc24d716741d40f91e340e194ab))
+
+
+### Bug Fixes
+
+* **frontend:** centre canvas ports on their wire anchors ([#438](https://github.com/alimek/t3-factory/issues/438)) ([ff601ab](https://github.com/alimek/t3-factory/commit/ff601ab21d446ac3b282d212178c758eb2f08b0c))
+* Mod+Backspace in the Flow editor, chat control page template, one admission rule and shared helpers ([#427](https://github.com/alimek/t3-factory/issues/427)) ([49476f4](https://github.com/alimek/t3-factory/commit/49476f4c51bd33067d25a3712cff8959c2e22eb6))
+
 ## [0.6.0](https://github.com/alimek/t3-factory/compare/v0.5.0...v0.6.0) (2026-11-15)
 
 
