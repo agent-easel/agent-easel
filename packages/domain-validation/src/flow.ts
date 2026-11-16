@@ -21,7 +21,12 @@ import {
   isRecord,
   type IssueReporter,
 } from "./block-exits.ts";
-import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
+import {
+  parseDuplicateCommitTarget,
+  parseExpectedOwner,
+  parseOwningProject,
+  parseTargetOwner,
+} from "./placement.ts";
 
 /** Structural save validation is deliberately separate from execution readiness. */
 function validateFlowName(input: unknown): Result<Pick<CreateFlowInput, "name">> {
@@ -498,12 +503,15 @@ function checkDuplicateChoice(
   return { agentId, revision, projectId: projectId.value, choice };
 }
 
-/** A Flow Duplicate commit: the previewed plan's source revision and every planned Agent's choice. */
+/**
+ * A Flow Duplicate commit: the previewed plan's resolved target, its source revision and every
+ * planned Agent's choice.
+ */
 export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput> {
   const fields = isRecord(input) ? input : {};
   const name = fields.name === undefined ? undefined : validateFlowName(fields);
   if (name && !name.ok) return name;
-  const projectId = parseTargetOwner(fields);
+  const projectId = parseDuplicateCommitTarget(fields);
   if (!projectId.ok) return projectId;
   const issues: ValidationIssue[] = [];
   const issue: IssueReporter = (code, path, message) => issues.push({ code, path, message });
@@ -521,7 +529,7 @@ export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput
     ok: true,
     value: {
       ...name?.value,
-      ...(projectId.value === undefined ? {} : { projectId: projectId.value }),
+      projectId: projectId.value,
       expectedRevision: fields.expectedRevision as number,
       agents: choices,
     },

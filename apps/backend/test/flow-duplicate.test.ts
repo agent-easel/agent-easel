@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { assertOk, projectFlowToDuplicate, sampleAgentInput } from "./support/domain-setup.ts";
+import { agentBlock, flowInput } from "./support/scenarios.ts";
 
 it("previewing a Duplicate into the source's Project lists each placed Agent once, keeps both and lets only the global Agent be copied", async (context) => {
   // Arrange
@@ -63,6 +64,7 @@ it("a Duplicate keeping every Agent creates a new Flow in the source's Project p
 
   // Act
   const duplicate = await factory.duplicateFlow(flow.id, {
+    projectId: plan.projectId,
     expectedRevision: plan.revision,
     agents: plan.agents,
   });
@@ -160,6 +162,7 @@ it("a Duplicate whose plan predates a save of a placed Agent is refused as stale
 
   // Act
   const duplicate = await factory.duplicateFlow(flow.id, {
+    projectId: plan.projectId,
     expectedRevision: plan.revision,
     agents: plan.agents,
   });
@@ -171,6 +174,39 @@ it("a Duplicate whose plan predates a save of a placed Agent is refused as stale
     { code: "stale_duplicate_plan", path: "agents" },
   ]);
   expect(assertOk(await factory.listFlows())).toHaveLength(1);
+});
+
+it("a Duplicate commit that omits the target is refused, so a Flow moved after the preview is never copied into the new owner", async (context) => {
+  // Arrange
+  const { factory, first, second, coder } = await projectFlowToDuplicate(context);
+  const flow = assertOk(
+    await factory.createFlow({
+      name: "Build",
+      projectId: first.id,
+      graph: {
+        flowInput: flowInput("build"),
+        blocks: [agentBlock("build", "Build", coder.id)],
+        connections: [],
+      },
+    }),
+  );
+  const plan = assertOk(await factory.previewFlowDuplicate(flow.id, {}));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: first.id, projectId: second.id }),
+  );
+
+  // Act
+  const duplicate = await factory.duplicateFlow(flow.id, {
+    expectedRevision: plan.revision,
+    agents: plan.agents,
+  });
+
+  // Assert
+  assert(!duplicate.ok);
+  expect(duplicate.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "invalid_project", path: "projectId" },
+  ]);
+  expect(assertOk(await factory.listFlows())).toHaveLength(2);
 });
 
 it("a Duplicate into a Project that became unavailable after the preview is refused at commit and creates nothing", async (context) => {

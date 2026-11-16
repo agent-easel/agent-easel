@@ -102,7 +102,8 @@ records why a per-project variant is an independent copy rather than an override
   names it). Studio's **New Flow** and **+ Add agent** choose the owner, and Import and Duplicate a target
   ([Owners in Studio](#owners-in-studio)).
 - **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming a Factory
-  Project available for new Runs, or `null` for Global. Duplicate defaults to the source's owning Project and Import to Global.
+  Project available for new Runs, or `null` for Global. Flow Duplicate preview and Agent Duplicate default to the source's
+  owning Project, Import to Global; a Flow Duplicate commit names the plan's resolved target explicitly.
   A target unavailable when the copy is committed is refused with its availability reason, as for create, so an unavailable
   default must be changed before commit.
 - **Flow Duplicate** copies the source's latest saved revision (name, graph, positions and workspace) into a new Flow at
@@ -111,7 +112,8 @@ records why a per-project variant is an independent copy rather than an override
   Agent the Flow places, in block order, with its revision, owning Project, `choice` (`keep` or `copy`) and whether that choice is
   `changeable`. A global Agent defaults to keep and may be copied into the target; a Project Agent the target may not place is
   always copied; an Agent of the target Project itself is always kept. `POST /api/flows/:id/duplicate` commits the plan in one
-  transaction with `expectedRevision` and every planned Agent's choice: each copied Agent is created once, under its own name,
+  transaction with the plan's `projectId` (required; Change owner appends no revision, so an omitted target could otherwise
+  follow a later owner change), `expectedRevision` and every planned Agent's choice: each copied Agent is created once, under its own name,
   from its latest saved revision in the target, and every block placing it is retargeted to the copy. A block whose Agent is
   unset, missing or removed is copied unchanged and stays missing. A source revision, Agent revision or Agent owner that changed
   since the preview, or a different set of Agents, is refused as `stale_duplicate_plan`; changing a fixed choice is refused as

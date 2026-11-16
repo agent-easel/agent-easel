@@ -230,10 +230,10 @@ export interface DuplicateFlowInput {
   /** The new Flow's name; omitted, the plan's default name. */
   readonly name?: string;
   /**
-   * The target: a Factory Project id available for new Runs, or null for Global. Omitted, the
-   * source's owning Project, which must then be available.
+   * The plan's resolved target, sent back explicitly: a Factory Project id available for new Runs,
+   * or null for Global.
    */
-  readonly projectId?: string | null;
+  readonly projectId: string | null;
   /** The source revision the plan was prepared from. */
   readonly expectedRevision: number;
   /** Every planned Agent with its choice; a plan whose Flow or Agents changed since is refused. */

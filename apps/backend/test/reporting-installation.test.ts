@@ -464,7 +464,7 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
     ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
     ["flowId", "expectedProjectId", "projectId"],
     ["flowId"],
-    ["flowId", "expectedRevision", "agents"],
+    ["flowId", "projectId", "expectedRevision", "agents"],
     ["flowId"],
     ["flowId"],
     undefined,

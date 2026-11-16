@@ -607,7 +607,7 @@ export const makeDefinitions = (
         return transaction(
           withSavedFlow<FlowDuplicate>(id, (source) =>
             Effect.gen(function* () {
-              const { projectId = source.projectId, expectedRevision } = validated.value;
+              const { projectId, expectedRevision } = validated.value;
               const refused = yield* ownerRefusal(projectId);
               if (refused) return refused;
               if (source.revision !== expectedRevision)

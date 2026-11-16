@@ -557,13 +557,13 @@ export function createFlowDuplicate(
     },
     /** Commits the plan shown; the result on success, undefined when refused or failed. */
     async confirm(): Promise<FlowDuplicate | undefined> {
-      const { plan, name, target: projectId, committing, previewing } = store.get();
+      const { plan, name, committing, previewing } = store.get();
       if (!plan || committing || previewing) return undefined;
       store.set({ committing: true, error: "" });
       try {
         const result = await definitions.duplicateFlow(source.id, {
           name,
-          projectId,
+          projectId: plan.projectId,
           expectedRevision: plan.revision,
           agents: plan.agents.map(({ agentId, revision, projectId: owner, choice }) => ({
             agentId,

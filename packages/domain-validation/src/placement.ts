@@ -78,6 +78,15 @@ export function parseTargetOwner(input: unknown): Result<OwningProject | undefin
   return ownerField(input, "projectId");
 }
 
+/**
+ * The target a Flow Duplicate commit names explicitly: the plan's resolved `projectId`, a Factory
+ * Project id or null for Global. Requiring it binds the commit to the target the user reviewed;
+ * the source's owning Project may have changed since the preview without a new revision.
+ */
+export function parseDuplicateCommitTarget(input: unknown): Result<OwningProject> {
+  return requiredOwner(input, "projectId");
+}
+
 /** The owning Project a save expects, which it must name explicitly (null for global). */
 export function parseExpectedOwner(input: unknown): Result<OwningProject> {
   return requiredOwner(input, "expectedProjectId");

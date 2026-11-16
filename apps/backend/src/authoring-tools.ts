@@ -335,13 +335,17 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_duplicate_flow",
     description:
-      "Commit a previewed Flow Duplicate atomically: a new Flow at revision 1 owned by projectId, with each copied Agent created once in the target and the copy retargeted to it. The source Flow and its Agents never change. Refused as stale when the Flow or a planned Agent changed since the preview.",
+      "Commit a previewed Flow Duplicate atomically: a new Flow at revision 1 owned by the plan's projectId, with each copied Agent created once in the target and the copy retargeted to it. The source Flow and its Agents never change. Refused as stale when the Flow or a planned Agent changed since the preview.",
     inputSchema: {
       type: "object",
       properties: {
         flowId,
         name: { type: "string", description: "The new Flow's name; omitted, the plan's name." },
-        projectId: duplicateTarget,
+        projectId: {
+          type: ["string", "null"],
+          description:
+            "The plan's projectId exactly as the preview answered it: the Project id, or null for global.",
+        },
         expectedRevision: {
           type: "integer",
           minimum: 1,
@@ -363,7 +367,7 @@ export const authoringTools: Tool[] = [
           },
         },
       },
-      required: ["flowId", "expectedRevision", "agents"],
+      required: ["flowId", "projectId", "expectedRevision", "agents"],
       additionalProperties: false,
     },
   },
