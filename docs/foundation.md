@@ -18,6 +18,10 @@ and restricted OAuth credentials live outside project repositories.
   Structural validity permits incomplete drafts, while readiness is a separate launch gate.
   Each Flow save appends an immutable relational revision and each Agent save an immutable
   Agent revision; removing either hides it from Studio and Start but keeps its revisions.
+  The [owning Project](studio.md#ownership) is stored on the Flow and Agent identity, referencing
+  the never-deleted Factory Project row, and is not part of any revision. Migration `103` added it
+  with every existing Flow and Agent global, keeping ids, revisions, references, Runs and import
+  receipts unchanged and needing no user action.
 - Start atomically records the Run input, references the current Flow revision and freezes
   the current revision of every Agent that Flow references, including blocks it may never
   visit; each Agent activation references that frozen revision. Runs keep no separate copy:

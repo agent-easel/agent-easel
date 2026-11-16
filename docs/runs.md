@@ -3,7 +3,8 @@
 ## Starting
 
 Open **New Run (+)** (`/runs/new`; the Flow editor's **Start Run** opens a fresh composition with its saved Flow selected). Choose an
-available project, a global ready Flow and a required initial prompt. Factory checks the project and connection, the Flow's
+available project, a ready Flow that may start there (a global Flow, or a Flow
+[owned by](studio.md#ownership) that Project) and a required initial prompt. Factory checks the project and connection, the Flow's
 [readiness](studio.md#saving-and-readiness) against the current saved Agents, every referenced Agent's settings, reporting
 installation and explicit-call API compatibility before accepting Start.
 Failures explain recovery and keep the draft. Start collects setup problems for every referenced Agent,
@@ -15,6 +16,14 @@ custom ref verified as a commit, read through bounded `git` calls without a shel
 a T3 endpoint that is not on this computer rejects Start with a `workspace.*` issue and the **Open Studio → Flows** repair
 action; no Run, Task or worker is created. Correct configuration, accepted Start and accepted Block result are separate
 levels of evidence. A configuration check alone proves neither execution nor report acceptance.
+
+- **Ownership.** Start refuses a Project Flow in any Project but its owner (`flow_project_mismatch` at `flowId`) and,
+  in its owner, while that Project is unavailable for any reason, with the Project's availability reason
+  (`project_<availability>` at `projectId`, such as `project_directory-unavailable`). A placement the
+  [placement rule](studio.md#ownership) forbids is a readiness issue (`agent_scope_mismatch`), so Start refuses it too.
+  Factory checks the Flow's and every placed Agent's owner again inside the acceptance transaction: an owner change
+  while Start was validating refuses it with a conflict. No refusal creates a Task, Run or worker. Ownership adds no
+  model or environment check; every other Start gate applies unchanged.
 
 Worktree Runs require T3 to advertise the boolean `workspaceStrategy.startFromOrigin` option.
 Update T3 before using worktree Flows with this Factory version. If its launch schema lacks
@@ -76,7 +85,9 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   uses those revisions: the full graph and each Agent's prompt, settings and labels. Captured execution settings are always
   complete: Start rejects a Flow that places an Agent that [Needs a model](../GLOSSARY.md#needs-a-model) through its
   readiness (`agent_model_required`), and a launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
-  Start uses the current saved Agents. Later edits and removals affect only future Runs.
+  Start uses the current saved Agents. Later edits and removals affect only future Runs, and so do later owner changes
+  and the owning Project becoming unavailable. Captured definitions carry no owner, so Run detail and the Run list
+  show none.
 - **Launch.** Factory launches one top-level worker per Agent block visit, using that Agent's saved provider, model and
   options. Agents connected to the Flow input start in parallel and independently (no Agent is told about the others). There
   is no Run conversation. A lost launch is searched for by its saved title and verified thread evidence; Factory does not

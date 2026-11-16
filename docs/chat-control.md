@@ -266,7 +266,7 @@ only proposes, and Factory itself reviews and performs it (see [Actions](#action
 | Tool | Returns |
 | --- | --- |
 | List Projects | The Projects the thread's parent channel grants the requester: stable ID, name, repository path and availability |
-| List Flows | Saved global Flows: stable ID, name, workspace setting and readiness with its first reasons |
+| List Flows | Saved Flows: stable ID, name, workspace setting and readiness with its first reasons; a Project Flow starts only in its [owning Project](studio.md#ownership) |
 | Find Runs | Runs of those Projects: ID, Run number, title, Project name and repository path, Flow and state |
 | Read Run | One such Run as Factory has it now, by its captured definitions, in an overview with readable sections |
 | Start Run | Nothing to perform: a validated proposal whose review Factory posts, or why it cannot be proposed |

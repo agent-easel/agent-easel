@@ -1,6 +1,6 @@
 # Studio
 
-Studio is the modal authoring surface for global Flows and reusable Agent definitions. It opens over the current Run or the Run composer and leaves that screen mounted, so closing it returns
+Studio is the modal authoring surface for Flows and reusable Agent definitions, each global or owned by one Project ([Ownership](#ownership)). It opens over the current Run or the Run composer and leaves that screen mounted, so closing it returns
 there with its draft intact. Settings holds connection, Agent reporting and keyboard preferences and does not list Agents.
 
 ## Shell
@@ -88,11 +88,35 @@ editable draft is kept, the comparison is dismissed and the save error is cleare
 the editor's own submitted removal is not a removal elsewhere. Each editor's removed-elsewhere
 notice and recovery are described with it.
 
+## Ownership
+
+Every Flow and Agent is a [global Flow or global Agent](../GLOSSARY.md#global-flow--global-agent) or is owned by one
+Project, referenced by its Factory Project identity, so two clones of one repository are distinct owners and a rename or move
+in T3 keeps ownership. The owning Project belongs to the definition, not to its revisions: a save appends a revision and never
+changes it, and Runs capture revisions without an owner. The [ADR](adr/0001-project-ownership-instead-of-per-project-flow-overlays.md)
+records why a per-project variant is an independent copy rather than an override of a shared Flow.
+
+- **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
+  for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
+  new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
+  names it). Studio's **New Flow**, **+ Add agent** and **Import** create global definitions; **Duplicate…** keeps the source
+  Agent's owner. Studio does not yet show or choose owners.
+- **Placement rule.** Any Flow may place a global Agent, and a Project Flow may also place Agents of its own Project, never
+  another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
+  naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
+  other client go through the same check.
+- **Unavailable owner.** Definitions owned by an unavailable Project, for any availability reason, stay listed, editable,
+  exportable and removable; only Start is refused ([Runs](runs.md#starting)). Removing an Agent is still refused while the
+  latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability.
+- **Export** carries no Project; an imported definition is global.
+
+Ownership adds no model or environment restriction: a Project Agent's execution settings are checked as any Agent's.
+
 ## Agent definitions
 
 Open **Studio → Agents** (`/studio/agents`) to create, edit or duplicate reusable definitions; an existing one opens at `/studio/agents/:agentId` and a new one at `/studio/agents/new`. A
 definition stores a name, plain-text prompt, optional execution settings (T3 environment, provider, model and thinking options) and its exits. There is no runtime-mode, permission or tools field: T3 chooses launch
-defaults. Definitions are global and Runs supply project context.
+defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs supply project context.
 
 **Exits.** An Agent declares the exits its worker can finish with, managed in a compact table under the Prompt: **Name**, **Description**, **Message required** and a remove action. **+ Add exit** adds a row; **Save** stores the edited exits in a new Agent revision. Each exit has a stable ID; names
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
@@ -167,8 +191,8 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 
 ## Flow authoring
 
-Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. All Flows are global: project selection never
-filters or assigns them, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
+Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. A Flow is global or a Project Flow
+([Ownership](#ownership)); the composer's project selection never assigns one, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
 Factory installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
 whole process. For example, a bounded review loop wires a reviewer Agent's changes-requested exit to a Condition whose
@@ -264,8 +288,8 @@ no longer exists.
 The toolbar's **Workspace** control holds the Flow's [workspace setting](../GLOSSARY.md): **Project checkout** or **New worktree**, and for a
 worktree its **Base**, either **Default branch** (the Project repository's `origin/HEAD`, such as `origin/main`; no branch name is assumed across projects) or **Custom ref** (a
 branch, tag or commit such as `develop`). New Flows use a new worktree from the default branch; Flows saved before the setting existed keep the project checkout. A changed
-setting is part of the unsaved draft: it clears readiness and is saved, compared on conflict and retained like the graph. Studio does not check the ref, because Flows
-are global; Start resolves it against the selected Project ([Runs](runs.md#starting)).
+setting is part of the unsaved draft: it clears readiness and is saved, compared on conflict and retained like the graph. Studio does not check the ref, because a
+global Flow runs in any Project; Start resolves it against the selected Project ([Runs](runs.md#starting)).
 
 ### Saving and readiness
 
@@ -278,7 +302,7 @@ content, baseline revision and placed Agent revisions it was requested for: an a
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
-the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
+the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a block whose Agent this Flow's owning Project may not place, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
 inspects its block; a Condition rule issue also scrolls to that rule and focuses its name or arrival number. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
@@ -489,13 +513,13 @@ Every rejection writes nothing, never repeats prompt text and keeps the chosen f
 
 ## Validation contract
 
-`PUT /api/flows/:id` and `POST /api/flows/validate` take
+`PUT /api/flows/:id` and `POST /api/flows/:id/validate` take
 `{name, expectedRevision, graph, workspace}`. `workspace` is `{mode: "checkout"}` or
 `{mode: "worktree", base: {kind: "default"} | {kind: "ref", ref}}`; a custom ref is trimmed and
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
 issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.
 
-`POST /api/flows` accepts a name and optional `graph` and `workspace`. Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [Factory MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
+`POST /api/flows` accepts a name and optional `graph`, `workspace` and `projectId` ([Ownership](#ownership)). Creation validates the supplied graph and workspace and stores them atomically as revision 1; a rejected creation leaves no Flow or revision. Without a graph it creates an empty Flow, and without a workspace it uses a new worktree from the default branch. Studio's **New Flow** sends only the name; [Factory MCP authoring tools](t3-integration.md#authoring-tools) can create a Flow with its graph and workspace in one call.
 
 ### Graph shape
 
@@ -525,7 +549,7 @@ from any of its outputs, including fan-out and Otherwise wires, is one connectio
 names and thresholds count toward the 2 MB body.
 
 Unfinished names, unset Agents, an unconnected Flow input, blocks without exits, local exit name or ID collisions and wires from hidden or removed exits can be saved.
-Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
+Readiness reports these gaps (`flow_input_required`: connect the Flow input to at least one Agent; `agent_model_required`; `agent_scope_mismatch`, which a save also refuses; `continuation_prompt_required`; `exit_name_conflict`, `exit_id_conflict`, `exit_hidden`, `exit_missing`), a Wait
 without a duration (`wait_duration_required`) or outside 1 minute to 7 days inclusive after converting its unit, including a zero or negative amount (`wait_duration_range`), a Wait Flow input target, missing saved
 Agents, blocks unreachable from the Flow input,
 a Condition rule without a name (`condition_rule_name_required`) or with the name of another of its outputs, Otherwise included
@@ -538,9 +562,10 @@ strictly descend and are at least 2; one with only Otherwise is ready. Readiness
 they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
 terminal exit needs no edge; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
-Readiness depends only on the graph and the saved revisions of the Agents it places, because an Agent's exits and former exit names are fixed per revision. Validating unsaved content
-(`POST /api/flows/validate`, Studio's **Check readiness**) therefore also answers `agentRevisions`: the saved revision of each placed Agent by id, `null` for a missing one, against which that
-readiness was resolved, so a client can compare it with the Agents it shows.
+Readiness depends only on the graph, the Flow's owning Project and the saved revision and owning Project of each Agent it places, because an Agent's exits and former exit names
+are fixed per revision while its owner is not part of a revision. Validating unsaved content (`POST /api/flows/:id/validate`, Studio's **Check readiness**) resolves it under the saved
+Flow's owner and therefore also answers `agentRevisions`: `{revision, projectId}` of each placed Agent by id, `null` for a missing one, against which that readiness was resolved, so a
+client can compare it with the Agents it shows and discard an answer after an owner change that appended no revision.
 
 ### Revisions
 

@@ -396,7 +396,14 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **16**, and both sides require at least **16**. Protocol 16 adds
+The current protocol is **17**, and both sides require at least **17**. Protocol 17 gives every
+Flow and Agent an [owning Project](studio.md#ownership) (`projectId`, null for a global definition) that
+create accepts, validates a Flow's unsaved content by its id (`POST /api/flows/:id/validate`) and names
+each placed Agent's revision and owning Project in the answer. A protocol 16 client neither sends that
+route nor compares those answers, and a current client needs a server that sends them, so each side
+refuses the other at the handshake and shows the update gate; credentials and stored data are kept.
+This is an intentional transport break beside migration `103`.
+Protocol 16 added
 [Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
 fixed Otherwise output to Flows and captured Run definitions, with each Condition's
 [routing summary and selection events](runs.md#conditions) in Run detail, and the

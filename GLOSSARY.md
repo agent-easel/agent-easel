@@ -14,7 +14,22 @@ A signed prerelease of `main`, tagged `vX.Y.(Z+1)-beta.N`, built nightly when `m
 A local repository represented by a T3 project, providing the context for Tasks and Runs. Independent local clones are distinct projects even when they share a remote repository.
 
 **Flow**:
-A user-defined graph of work steps and control rules. Its design determines which parts run autonomously and which require human participation.
+A user-defined graph of work steps and control rules. Its design determines which parts run autonomously and which require human participation. Every Flow is either a global Flow or a Project Flow.
+
+**Owning Project**:
+The one Project a Project Flow or Project Agent belongs to, identified by Factory's Project identity rather than a path, name or remote. It belongs to the definition, not to its revisions, and is kept when the Project becomes unavailable. A definition is "owned by" its Project.
+_Avoid_: owner as the property's name, scope, assignment, local, availability (which says whether a Project can take new Runs).
+
+**Global Flow** / **global Agent**:
+A Flow or Agent with no owning Project. A global Flow starts in any available Project and places only global Agents.
+_Avoid_: shared (one definition in several Projects is not a supported concept).
+
+**Project Flow** / **Project Agent**:
+A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow.
+_Avoid_: override, overlay, per-project configuration of a shared Flow.
+
+**Placement rule**:
+Which Agents a Flow may place: any Flow may place a global Agent, and a Project Flow may also place Agents of its own owning Project. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
 
 **Flow revision**:
 One immutable saved version of a Flow's name, graph and workspace setting. Every successful create or save appends the next revision; Studio shows the latest, and removing a Flow keeps its revisions.
@@ -32,7 +47,7 @@ A constituent element of a flow: the Flow input block, an agent block, a human s
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
-A reusable worker definition consisting of a prompt, optional execution settings and its exits, independent of a particular project. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
+A reusable worker definition consisting of a prompt, optional execution settings and its exits; it is a global Agent or a Project Agent, and ownership adds no execution restriction. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
 
 **Agent revision**:
 One immutable saved version of an Agent's name, prompt, execution settings (complete or none) and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
@@ -50,7 +65,7 @@ The durable record of one committed import: the client's request id, a fingerpri
 _Avoid_: import history, provenance.
 
 **Studio**:
-The modal authoring surface for global Flows and reusable Agent definitions. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.
+The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.
 _Avoid_: Settings as the Agent editor; a Flows destination in the Run sidebar.
 
 **Factory server**:
@@ -311,8 +326,8 @@ repeatedly wake the same Run.
 Retired. Earlier releases recorded a permanent Finished or Stopped outcome with each worker thread as observed; such Runs are now Settled or Archived and keep that evidence as history. See Settled and Archived.
 
 **Run composer**:
-The full-page launch surface for choosing a Project, global Flow and required
-initial prompt, with optional attached images. It edits one Run draft at a time and opens a fresh composition from
+The full-page launch surface for choosing a Project, a Flow that may start there (a
+global Flow or a Flow owned by that Project) and the required initial prompt, with optional attached images. It edits one Run draft at a time and opens a fresh composition from
 New Run or a Flow's Start Run; opening it does not start execution. Start always uses
 the current saved Flow and Agent definitions.
 
