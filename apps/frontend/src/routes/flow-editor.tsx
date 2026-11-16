@@ -776,7 +776,8 @@ function StartRunAction({
         title={state.removed ? "This Flow was removed elsewhere." : unavailable || undefined}
         disabled={!state.canStartRun || Boolean(unavailable)}
         onClick={() => {
-          if (draft.getSnapshot().canStartRun && !unavailable) openFlowComposer(flowId);
+          if (draft.getSnapshot().canStartRun && !unavailable)
+            openFlowComposer({ id: flowId, projectId: owner.projectId });
         }}
       >
         Start Run

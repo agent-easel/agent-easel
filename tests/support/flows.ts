@@ -247,3 +247,17 @@ export async function saveFlowElsewhere(
     }),
   })) as FlowDraft;
 }
+
+/** Another client places saved Agent `agentId` in Agent block `blockId` of Flow `id`. */
+export async function placeAgentElsewhere(
+  baseUrl: string | undefined,
+  id: string,
+  blockId: string,
+  agentId: string,
+) {
+  const flow = await readFlow(baseUrl, id);
+  const blocks = flow.graph.blocks.map((block) =>
+    block.kind === "agent" && block.id === blockId ? { ...block, agentId } : block,
+  );
+  return saveFlowElsewhere(baseUrl, flow, { graph: { ...flow.graph, blocks } });
+}

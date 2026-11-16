@@ -99,6 +99,14 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
 - **Composer.** Project and Flow choices are remembered locally per selected Factory server, like drafts. Each blocking condition is a notice with a recovery action, and
   fields that cause it are marked. The Project picker keeps searchable paths, **Recheck projects** and **Add repository**;
   unavailable references stay visible in history but cannot be selected for a new Run.
+- **Flow picker.** The Flow picker is disabled until a Project is chosen. With a Project it lists ready global Flows
+  under **Global**, then ready Flows owned by that Project under its title; a chosen Flow that stops being ready stays
+  listed and marked **Not ready**. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
+  owned by another Project. Clearing the Project clears the Flow, and neither New Run nor choosing a Project again
+  restores it. These clears are silent: the composer shows no notice or label, and the prompt and images always stay.
+  The Flow editor's **Start Run** on a Project Flow selects its owning Project; on a global Flow it uses the remembered
+  Project, or with none shows the Flow in the disabled picker until a Project is chosen. Start stays disabled for a Flow
+  the selected Project may not start.
 - **Drafts.** Typing a prompt with a non-whitespace character or attaching an image creates a Run draft; removing all
   text and images removes it. A draft with images but no text is listed as **Untitled draft** and cannot Start. Image
   bytes are kept in the browser's IndexedDB per selected Factory server and draft, saved before the draft refers to them;
@@ -112,8 +120,11 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   Flow editor's **Start Run** does the same with its Flow. Project and Flow choices update live; while they are
   synchronizing or offline the last choices stay visible, the draft is kept and Start is disabled. A Start issued while
   current still sends its image uploads and request if a catch-up begins meanwhile; going offline stops it. A selected Project or Flow
-  is cleared only when a current live delivery no longer lists it; a non-current or failed delivery changes nothing, and
-  choosing a just-created Project or Flow waits for the delivery that lists it. Confirmed Start removes the draft and opens its Run; a confirmed
+  is cleared only when a current live delivery no longer lists it, and a Flow when current choices show that another
+  Project owns it, including in a restored draft, which keeps its Project, prompt and images; a non-current or failed
+  delivery changes nothing, and choosing a just-created Project or Flow waits for the delivery that lists it. A draft
+  awaiting a Start outcome is never cleared: **Check same request** sends the submitted request unchanged, and Factory
+  resolves it by request key and content before any ownership, availability or readiness check. Confirmed Start removes the draft and opens its Run; a confirmed
   rejection keeps it editable. A draft's title follows its first non-empty prompt line until it is renamed; a manual title
   survives prompt edits, reload and other tabs' saves, and a title or selection alone never creates a draft.
 

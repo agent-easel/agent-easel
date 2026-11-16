@@ -2,7 +2,15 @@ import { expect, it } from "vite-plus/test";
 import { RUN_IMAGE_MAX_BYTES } from "@t3-factory/domain-validation";
 import { ApiError } from "../src/api.ts";
 import { draftTitle } from "../src/run-draft.ts";
-import { composer, plain, pngFile, references, reopen } from "./support/run-draft.ts";
+import {
+  composer,
+  delivery,
+  launchFlow,
+  plain,
+  pngFile,
+  references,
+  reopen,
+} from "./support/run-draft.ts";
 
 const savedBeforeImages = {
   current: "draft-1",
@@ -370,4 +378,19 @@ it("overlapping picks never attach more than eight images", async (context) => {
 
   // Assert
   expect(draft.getSnapshot().images).toHaveLength(8);
+});
+
+it("a Flow cleared by a Project switch keeps the prompt's images and references", async (context) => {
+  // Arrange
+  const setup = composer(context);
+  await setup.draft.attachImages([pngFile("header.png", 1)], references);
+  setup.draft.receiveChoices(delivery([launchFlow("flow", "project")]));
+  const { segments, images } = setup.draft.getSnapshot();
+
+  // Act
+  setup.draft.edit({ projectId: "other-project" });
+
+  // Assert
+  expect(reopen(setup).draft.getSnapshot()).toMatchObject({ flowId: "", segments, images });
+  expect(segments).toStrictEqual([{ type: "image", imageId: images[0]?.imageId }]);
 });

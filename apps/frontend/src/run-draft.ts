@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type {
+  FlowDraft,
+  LaunchChoices,
   PromptSegment,
   RunImage,
   StartRunInput,
@@ -19,6 +21,7 @@ import { randomId } from "./lib/ids.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { admittedStart, api, ApiError } from "./api.ts";
 import { transport } from "./transport.ts";
+import type { LiveScopeView } from "./live/owner.ts";
 import {
   indexedDbImages,
   readImageFile,
@@ -115,6 +118,20 @@ const unknownOutcome =
 
 const unsavedUnknownOutcome =
   "Start outcome unknown, and this browser could not save the request for recovery after a reload. Keep this window open and check the same request again to recover its Run without creating a duplicate.";
+
+/**
+ * The Flows the composer's picker offers: ready global Flows, then ready Flows of the selected
+ * Project, keeping the selected Flow listed if it stopped being ready. Without a Project the
+ * picker is disabled and offers none.
+ */
+export function composerFlows(flows: readonly FlowDraft[], projectId: string, flowId: string) {
+  const listed = (flow: FlowDraft) => flow.readiness.ready || flow.id === flowId;
+  return {
+    disabled: !projectId,
+    global: projectId ? flows.filter((flow) => flow.projectId === null && listed(flow)) : [],
+    project: projectId ? flows.filter((flow) => flow.projectId === projectId && listed(flow)) : [],
+  };
+}
 
 export function draftTitle(draft: Pick<SavedRunDraft, "segments" | "manualTitle">) {
   return draft.manualTitle ?? promptTitle(promptText(draft.segments)) ?? "Untitled draft";
@@ -318,6 +335,8 @@ export function createRunDraft(
   let remedy: StartRemedy = "studio";
   let issues: readonly ValidationIssue[] = [];
   let saveFailed = false;
+  /** The owners of the latest current delivery's Flows by id; absent while choices are not current. */
+  let currentOwners: ReadonlyMap<string, string | null> | undefined;
   const unsaved = new Map<string, SavedRunDraft | undefined>();
   const inFlight = new Set<string>();
   let draft: Readonly<RunDraft> = snapshot();
@@ -469,10 +488,24 @@ export function createRunDraft(
       // The next composer load deletes bytes no draft references.
     });
   }
+  /**
+   * A Flow fits a global Flow or one of the composition's Project; a Flow current choices don't
+   * list yet is kept, since only current data confirms an owner.
+   */
+  function fits(flowId: string, projectId: string) {
+    const owner = currentOwners?.get(flowId);
+    return owner === undefined || owner === null || owner === projectId;
+  }
   /** False while the draft awaits a Start outcome: its submitted content stays as sent. */
   function edit(change: Partial<Pick<Composition, Choice | "segments">>) {
     if (find(currentId)?.submission) return false;
     current = { ...current, ...change };
+    // Clearing the Project clears the Flow too; another Project keeps only a Flow that fits it.
+    if (
+      change.projectId !== undefined &&
+      (!current.projectId || !fits(current.flowId, current.projectId))
+    )
+      current = { ...current, flowId: "" };
     error = "";
     issues = [];
     imageRejections = [];
@@ -485,24 +518,50 @@ export function createRunDraft(
     // A stale tab's save keeps another tab's unresolved Start instead.
     return !find(currentId)?.submission;
   }
-  function openComposition(next: SavedRunDraft | undefined, flowId?: string) {
+  /**
+   * Opens a saved draft, or a fresh composition with the remembered choices or a Flow's Start Run:
+   * a Project Flow selects its owning Project, and a global Flow without a remembered Project is
+   * held until one is chosen.
+   */
+  function openComposition(
+    next: SavedRunDraft | undefined,
+    flow?: Pick<FlowDraft, "id" | "projectId">,
+  ) {
     leaveComposition();
     show(next);
     if (!next)
       current = {
-        projectId: remembered("project") || current.projectId,
-        flowId: flowId ?? (remembered("flow") || current.flowId),
+        projectId: flow?.projectId ?? (remembered("project") || current.projectId),
+        flowId: flow?.id ?? (remembered("flow") || current.flowId),
         segments: [],
         images: [],
       };
+    if (!find(currentId)?.submission && !fits(current.flowId, current.projectId))
+      current = { ...current, flowId: "" };
     if (server !== undefined) store(server, latestDrafts(server));
     publish();
   }
-  /** Clears a selected Project or Flow that a successful catalog read no longer lists. */
-  function forgetUnavailable(choice: Choice, available: readonly string[]) {
-    if (!current[choice] || available.includes(current[choice])) return;
-    if (find(currentId)?.submission) return;
-    current = { ...current, [choice]: "" };
+  /**
+   * Applies a launch-choice delivery. A current one clears a Project or Flow it no longer lists
+   * and a Flow that doesn't fit the Project, silently and keeping the prompt; a non-current one
+   * changes nothing. A draft awaiting a Start outcome keeps its submitted choices.
+   */
+  function receiveChoices({
+    value,
+    synchronized,
+  }: Pick<LiveScopeView<LaunchChoices>, "value" | "synchronized">) {
+    currentOwners =
+      value && synchronized
+        ? new Map(value.flows.map((flow) => [flow.id, flow.projectId]))
+        : undefined;
+    if (!value || !currentOwners || find(currentId)?.submission) return;
+    const projectId = value.catalog.projects.some((project) => project.id === current.projectId)
+      ? current.projectId
+      : "";
+    const flowId =
+      currentOwners.has(current.flowId) && fits(current.flowId, projectId) ? current.flowId : "";
+    if (projectId === current.projectId && flowId === current.flowId) return;
+    current = { ...current, projectId, flowId };
     save();
     publish();
   }
@@ -779,7 +838,7 @@ export function createRunDraft(
     /** New Run: an empty prompt with remembered choices; the previous draft stays saved. */
     openFresh: () => openComposition(undefined),
     /** Start Run from a Flow: a fresh composition with that Flow. */
-    openFlow: (flowId: string) => openComposition(undefined, flowId),
+    openFlow: (flow: Pick<FlowDraft, "id" | "projectId">) => openComposition(undefined, flow),
     openDraft(id: string) {
       const saved = find(id);
       if (saved && saved.id !== currentId) openComposition(saved);
@@ -788,7 +847,7 @@ export function createRunDraft(
     leave() {
       if (leaveComposition()) publish();
     },
-    forgetUnavailable,
+    receiveChoices,
     rename,
     discard,
     start,
@@ -810,8 +869,8 @@ export function useRunDrafts() {
 
 export function useComposerNavigation() {
   const navigate = useNavigate();
-  function openFlowComposer(flowId: string) {
-    runDraft.openFlow(flowId);
+  function openFlowComposer(flow: Pick<FlowDraft, "id" | "projectId">) {
+    runDraft.openFlow(flow);
     void navigate({ to: "/runs/new" });
   }
   return { openFlowComposer };

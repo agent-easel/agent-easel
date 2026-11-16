@@ -1,4 +1,6 @@
+import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
+import type { ProjectCatalog, Result } from "../../packages/contracts/src/index.ts";
 import { expect, type App, type Screen } from "e2e";
 
 async function selectComposerFlow(screen: Screen, flowName: string) {
@@ -10,6 +12,36 @@ async function selectComposerFlow(screen: Screen, flowName: string) {
   await expect(screen.getByRole("menu")).toBeVisible();
   await screen.getByRole("menuitemradio", { name: flowName, exact: true }).tap();
   await expect(screen.getByRole("menu")).toBeHidden();
+}
+
+/** Chooses a Project in the composer's picker by its title, or none with `null`. */
+export async function selectComposerProject(screen: Screen, title: string | null) {
+  await screen.getByRole("button", /^Select project: /).tap();
+  await expect(screen.getByRole("group", "Projects")).toBeVisible();
+  await screen
+    .getByRole("menuitemradio", title === null ? "No project selected" : new RegExp(`^${title} · `))
+    .tap();
+  await expect(screen.getByRole("menu")).toBeHidden();
+}
+
+const selectionPath = "/api/projects/selection";
+
+/** Factory's selected Project, which the Project picker changes for every client. */
+export async function projectSelection(baseUrl: string | undefined) {
+  const response = await fetch(new URL("/api/projects", baseUrl));
+  const catalog = (await response.json()) as Result<ProjectCatalog>;
+  assert(catalog.ok);
+  return catalog.value.selectedProjectId;
+}
+
+/** Restores Factory's selected Project for the journeys that follow. */
+export async function restoreProjectSelection(baseUrl: string | undefined, id: string | null) {
+  const response = await fetch(new URL(selectionPath, baseUrl), {
+    method: "PUT",
+    headers: { "content-type": "application/json", "X-Factory-Request": "1" },
+    body: JSON.stringify({ id }),
+  });
+  assert(response.ok);
 }
 
 export async function openComposerWithFlow(app: App, screen: Screen, flowName: string) {
