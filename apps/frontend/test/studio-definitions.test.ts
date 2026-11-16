@@ -1,7 +1,12 @@
 import { expect, it, vi } from "vite-plus/test";
 import { notReady } from "./support/flow-draft.ts";
 import { savedAgent } from "./support/agent-draft.ts";
-import { defaultOwner, ownerGroups, ownerPicker, placeableAgents } from "../src/studio-definitions.ts";
+import {
+  defaultOwner,
+  ownerGroups,
+  ownerPicker,
+  placeableAgents,
+} from "../src/studio-definitions.ts";
 import {
   currentWindow,
   deliveredStudio,

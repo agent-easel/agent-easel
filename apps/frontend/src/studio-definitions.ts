@@ -197,6 +197,21 @@ export function createStudioDefinitions(
 
 export type StudioDefinitions = ReturnType<typeof createStudioDefinitions>;
 
+/** Studio's Project catalog (empty until read) and the owner filter both lists share. */
+export function useStudioOwners(definitions: StudioDefinitions) {
+  const projects = useSyncExternalStore(
+    definitions.subscribe,
+    () => definitions.getSnapshot().projects.value,
+  );
+  const filter = useSyncExternalStore(
+    definitions.subscribe,
+    () => definitions.getSnapshot().filter,
+  );
+  return { projects: projects ?? noProjects, filter, setFilter: definitions.setFilter };
+}
+
+const noProjects: readonly FactoryProject[] = [];
+
 export function useStudioRead<K extends StudioList>(
   definitions: StudioDefinitions,
   list: K,
@@ -273,7 +288,8 @@ export function studioOwner(
 ): StudioOwner {
   if (projectId === null) return globalOwner;
   const project = projects.find((entry) => entry.id === projectId);
-  if (!project) return { projectId, title: "Unknown Project", detail: projectId, unavailable: null };
+  if (!project)
+    return { projectId, title: "Unknown Project", detail: projectId, unavailable: null };
   return {
     projectId,
     title: project.title,
@@ -322,7 +338,7 @@ export function defaultOwner(
 }
 
 /** One owner a new definition may be given; an unavailable Project is offered disabled. */
-export interface OwnerTarget {
+interface OwnerTarget {
   readonly owner: StudioOwner;
   /** Why the target cannot own a new definition, or null when it can. */
   readonly disabled: string | null;

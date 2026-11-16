@@ -466,7 +466,8 @@ type FlowCanvasProps = {
   selectedWire: FlowWire | null;
   /** Width the floating block configuration covers; fit frames the graph beside it. */
   reservedRight: number;
-  scope: string;
+  /** The Flow's id, which scopes the saved view, and its owner in words under the canvas. */
+  flow: { readonly id: string; readonly ownerNote: string };
   savedGraph: FlowGraph | undefined;
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
@@ -542,7 +543,7 @@ export function FlowCanvas({
   selected,
   selectedWire,
   reservedRight,
-  scope,
+  flow,
   savedGraph,
   busy,
   placementRef,
@@ -560,7 +561,7 @@ export function FlowCanvas({
       ref={ref}
       label="Flow canvas"
       className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px]"
-      scope={savedGraph ? scope : null}
+      scope={savedGraph ? flow.id : null}
       graph={graph}
       agents={agents}
       dimensions={AUTHORING_DIMENSIONS}
@@ -580,7 +581,7 @@ export function FlowCanvas({
       gesture={gestures.gesture}
       points={gestures.points}
       onTap={() => onSelect(null)}
-      note="Global Flow · shared by all projects"
+      note={flow.ownerNote}
       controls={{
         kind: "labelled",
         hint: "Pan empty canvas · zoom · fit · auto-arrange. Graph coordinates stay saved.",

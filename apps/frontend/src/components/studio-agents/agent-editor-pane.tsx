@@ -3,7 +3,7 @@ import { MutationGate } from "@/client-gate";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
 import { useState } from "react";
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, FactoryProject } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, CheckCircle2 } from "lucide-react";
@@ -32,11 +32,28 @@ import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportControl } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
+import { OwnerBadge, OwnerPicker } from "../studio-owner.tsx";
+import type { StudioOwner } from "../../studio-definitions.ts";
+
+/** A saved Agent's owner, or the owner choice of a new one. */
+type AgentOwnership =
+  | { readonly kind: "saved"; readonly owner: StudioOwner }
+  | {
+      readonly kind: "new";
+      readonly chosen: string | null;
+      readonly initial: string | null;
+      readonly projects: readonly FactoryProject[];
+      readonly hint: string;
+      /** Why the chosen owner cannot own a new Agent; Create waits for another choice. */
+      readonly blocked: string | null;
+      readonly onChange: (owner: string | null) => void;
+    };
 
 type AgentEditorProps = {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
   capabilities: AgentCapabilities | null;
+  ownership: AgentOwnership;
   flowUsage: number;
   duplicating: boolean;
   onSave: () => Promise<void>;
@@ -85,6 +102,17 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 className="bg-muted"
               />
             </div>
+            {props.ownership.kind === "new" && (
+              <OwnerPicker
+                kind="Agent"
+                chosen={props.ownership.chosen}
+                projects={props.ownership.projects}
+                onChange={props.ownership.onChange}
+                disabled={saving}
+                initial={props.ownership.initial}
+                hint={props.ownership.hint}
+              />
+            )}
             <ExecutionSettingsFields
               role="worker"
               capabilities={capabilities}
@@ -170,11 +198,12 @@ function AgentReportingNotice({ providerId }: { providerId: string }) {
 }
 
 function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boolean }) {
-  const { state, flowUsage, name, saving } = props;
+  const { state, flowUsage, name, saving, ownership } = props;
   const agent = state.saved;
+  const owner = ownership.kind === "saved" ? ownership.owner : null;
   const statusLine = state.removed
     ? "Removed elsewhere · retained draft"
-    : agentEditorStatus(agent, flowUsage);
+    : `${agentEditorStatus(agent, flowUsage)}${owner?.projectId ? ` Only ${owner.title} Flows can place this Agent.` : ""}`;
   const saveLabel = agent ? "Save" : "Create Agent";
   return (
     <header className="min-w-0 shrink-0 border-b px-4 pt-5 pb-4 sm:px-6 md:px-8">
@@ -185,12 +214,15 @@ function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boo
         <span className="rounded-full border bg-muted px-2 py-0.75 text-2xs font-medium text-subtle-foreground">
           Agent definition · {agent ? `rev ${agent.revision}` : "new"}
         </span>
+        {owner && <OwnerBadge owner={owner} prefix="Owned by " />}
         <span className="flex-1" />
         {agent && <SavedAgentActions {...props} agent={agent} />}
         <MutationGate>
           <Button
             type="submit"
-            disabled={saving || !state.canSave}
+            disabled={
+              saving || !state.canSave || (ownership.kind === "new" && Boolean(ownership.blocked))
+            }
             title={saveBlockedReason(state)}
           >
             {saving ? "Saving…" : saveLabel}

@@ -120,7 +120,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         <WorkspaceDialogHeader
           title="Studio"
           section={selection.tab === "agents" ? "Agents" : "Flows"}
-          description="Author global Flows and reusable Agent definitions."
+          description="Author Flows and reusable Agent definitions, global or owned by one Project."
           onClose={close}
           closeLabel="Back to Runs"
           closeDisabled={creating}
@@ -139,7 +139,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         <DraftDiscardDialog blocker={blocker} onKeepEditing={keepEditing} />
         {creating && (
           <CreateFlow
-            createFlow={definitions.createFlow}
+            definitions={definitions}
             onClose={() => setCreating(false)}
             onCreated={(flow) => {
               finishCreating(flow);
@@ -305,6 +305,8 @@ function StudioSidebar({
   );
 }
 
+const noAgentSelection: { agentId?: string; fromFlow?: string } = {};
+
 function StudioContent({
   selection,
   definitions,
@@ -332,7 +334,7 @@ function StudioContent({
     }
   }, [selection]);
   const flowId = selection.tab === "flows" ? selection.flowId : undefined;
-  const agentId = selection.tab === "agents" ? selection.agentId : undefined;
+  const { agentId, fromFlow } = selection.tab === "agents" ? selection : noAgentSelection;
   // Keep the current Flow mounted across library and Agent navigation, including its local draft.
   const [openedFlowId, setOpenedFlowId] = useState(flowId);
   if (flowId && openedFlowId !== flowId) setOpenedFlowId(flowId);
@@ -346,6 +348,7 @@ function StudioContent({
       {selection.tab === "agents" ? (
         <StudioAgentsPage
           agentId={agentId}
+          fromFlow={fromFlow}
           definitions={definitions}
           reportAgentDraft={reportAgentDraft}
         />

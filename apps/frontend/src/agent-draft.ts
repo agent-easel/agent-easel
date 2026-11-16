@@ -93,6 +93,7 @@ function saveRequest(
   agent: AgentDefinition | null,
   draft: AgentContent,
   operations: AgentDraftOperations,
+  owner: string | null,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
@@ -113,12 +114,12 @@ function saveRequest(
       fallback,
     };
   }
-  const validation = validateCreateAgent(content);
+  const validation = validateCreateAgent({ ...content, projectId: owner });
   if (!validation.ok) return { error: validation.error.message };
-  const input = validation.value;
+  const { projectId: _, ...input } = validation.value;
   return {
     submitted: asContent(input),
-    send: () => operations.createAgent(input),
+    send: () => operations.createAgent(validation.value),
     unknownMessage:
       "Save outcome unknown. Factory may have created this Agent; check the Agent list before creating it again.",
     fallback,
@@ -217,11 +218,14 @@ export function createAgentDraft(
     dismissUpdate: draft.dismissUpdate,
     clearRemovalError: draft.clearRemovalError,
     remove: () => draft.remove(source.removeAgent, "Factory could not delete this Agent."),
-    /** Validates and sends the draft against its saved revision, or creates it. */
-    async save() {
+    /**
+     * Validates and sends the draft against its saved revision, or creates it owned by `owner`
+     * (null for a global Agent); a save never changes the owner.
+     */
+    async save(owner: string | null = null) {
       const { saved, content, canSave } = draft.getSnapshot();
       if (!canSave) return undefined;
-      const request = saveRequest(saved, content, source);
+      const request = saveRequest(saved, content, source, owner);
       if (!("error" in request)) return draft.save(request);
       draft.report(request.error);
       return undefined;

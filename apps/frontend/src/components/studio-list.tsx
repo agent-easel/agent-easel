@@ -2,6 +2,7 @@ import { MutationGate } from "@/client-gate";
 import { Plus, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import type { ReactNode } from "react";
 import type { ImportResult } from "@t3-factory/contracts";
 import { DefinitionImportControl } from "./definition-import-control.tsx";
 
@@ -16,6 +17,7 @@ export function StudioListHeader({
   onCreate,
   createLabel,
   onImported,
+  filter,
 }: {
   title: string;
   description: string;
@@ -24,6 +26,8 @@ export function StudioListHeader({
   onCreate: () => void;
   createLabel: string;
   onImported: (result: ImportResult) => void;
+  /** The owner filter, placed before the search. */
+  filter: ReactNode;
 }) {
   return (
     <header className="flex flex-wrap items-center gap-4">
@@ -31,6 +35,7 @@ export function StudioListHeader({
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
+      {filter}
       <div className="relative w-60">
         <Search
           aria-hidden

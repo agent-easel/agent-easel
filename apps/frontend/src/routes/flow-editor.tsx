@@ -5,7 +5,17 @@ import { CanvasLayout } from "../components/screen-layout.tsx";
 import { useComposerNavigation } from "../run-draft.ts";
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from "react";
 import type { AgentDefinition, FlowBlock, FlowDraft, FlowGraph } from "@t3-factory/contracts";
-import { ArrowLeft, Check, CircleDot, ListChecks, RefreshCw, Save, Trash2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  CircleDot,
+  ListChecks,
+  RefreshCw,
+  Save,
+  Trash2,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,7 +64,15 @@ import {
   type FlowDraftSnapshot,
 } from "../flow-draft.ts";
 import type { RevisionConflict } from "../revisioned-draft.ts";
-import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
+import {
+  placeableAgents,
+  studioOwner,
+  useStudioOwners,
+  useStudioRead,
+  type StudioDefinitions,
+  type StudioOwner,
+} from "../studio-definitions.ts";
+import { OwnerBadge } from "../components/studio-owner.tsx";
 
 /**
  * This editor's Flow draft, following the Flow through Studio's saved definitions and told when
@@ -286,12 +304,27 @@ function useThresholdEntries(graph: FlowGraph) {
 
 const noEntries: ReadonlyMap<string, string> = new Map();
 
-/** Studio's saved Agents for the block library; the last read stays offered during refreshes. */
-function useLibraryAgents(definitions: StudioDefinitions) {
+/** The Flow's owner in words, under its canvas. */
+const ownerNote = (owner: StudioOwner) =>
+  owner.projectId === null
+    ? "Global Flow · usable in every project"
+    : `Project Flow · owned by ${owner.title}`;
+
+/**
+ * Studio's saved Agents for the canvas, and for the block library only those the Flow's owner
+ * may place; the last read stays offered during refreshes.
+ */
+function useLibraryAgents(definitions: StudioDefinitions, saved: FlowDraft | null) {
   const { value, error } = useStudioRead(definitions, "agents");
+  const { projects } = useStudioOwners(definitions);
+  const agents = value ?? noAgents;
+  const projectId = saved?.projectId ?? null;
+  const owner = studioOwner(projectId, projects);
   return {
-    agents: value ?? noAgents,
+    agents,
     agentError: error ? "Could not load saved Agents. Reopen this Flow to try again." : "",
+    owner,
+    library: { owner, projects, agents: placeableAgents(agents, { projectId }) },
   };
 }
 
@@ -325,9 +358,9 @@ export function FlowDetail({
     created,
   );
   const exporter = useDefinitionExport(() => api.exportFlow(id));
-  const { agents, agentError } = useLibraryAgents(definitions);
-  const [libraryOpen, setLibraryOpen] = useState(true);
   const { saved, error, readiness } = state;
+  const { agents, agentError, owner, library } = useLibraryAgents(definitions, saved);
+  const [libraryOpen, setLibraryOpen] = useState(true);
   const { graph, name } = state.content;
   const change = (next: FlowGraph) => draft.edit({ graph: next });
   const editBlock = (next: FlowBlock) => change(replaceBlock(graph, next));
@@ -370,6 +403,7 @@ export function FlowDetail({
         state={state}
         revision={saved.revision}
         flowId={id}
+        owner={owner}
         exporter={exporter}
         fields={interactions.fields}
         invalidEntry={thresholds.invalid}
@@ -380,7 +414,8 @@ export function FlowDetail({
         <BlockLibrary
           open={libraryOpen}
           onOpenChange={setLibraryOpen}
-          agents={agents}
+          flowId={id}
+          {...library}
           agentError={agentError}
           onAdd={add}
           dropAt={dropAt}
@@ -393,7 +428,7 @@ export function FlowDetail({
             selected={selected}
             selectedWire={wire}
             reservedRight={reservedRight}
-            scope={id}
+            flow={{ id, ownerNote: ownerNote(owner) }}
             savedGraph={saved.id === id ? saved.graph : undefined}
             busy={state.busy}
             placementRef={placement}
@@ -404,6 +439,7 @@ export function FlowDetail({
             onChange={change}
             onArranging={interactions.reportArranging}
           />
+          <UnavailableOwnerNotice owner={owner} />
           <ReadinessPanel
             readiness={readiness}
             agentsChanged={state.agentsChanged}
@@ -487,6 +523,7 @@ function EditorToolbar({
   state,
   revision,
   flowId,
+  owner,
   exporter,
   fields,
   invalidEntry,
@@ -495,13 +532,13 @@ function EditorToolbar({
   state: FlowDraftSnapshot;
   revision: number;
   flowId: string;
+  owner: StudioOwner;
   exporter: ReturnType<typeof useDefinitionExport>;
   /** Reports typing in the toolbar's fields, which a newer revision waits for. */
   fields: ReturnType<typeof useInteractionReports>["fields"];
   /** A shown Condition arrival number is invalid, so neither the check nor a save would match it. */
   invalidEntry: boolean;
 }) {
-  const { openFlowComposer } = useComposerNavigation();
   const invalidTitle = invalidEntry
     ? "Correct or clear the arrival number marked invalid first."
     : undefined;
@@ -529,6 +566,7 @@ function EditorToolbar({
         onChange={(workspace) => draft.edit({ workspace })}
       />
       <span className="flex-1" />
+      <OwnerBadge owner={owner} />
       <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
       <FlowSaveStatus state={state} revision={revision} />
       <Separator orientation="vertical" className="h-5!" />
@@ -549,17 +587,7 @@ function EditorToolbar({
           <Save aria-hidden /> Save Flow
         </Button>
       </MutationGate>
-      <MutationGate>
-        <Button
-          title={state.removed ? "This Flow was removed elsewhere." : undefined}
-          disabled={!state.canStartRun}
-          onClick={() => {
-            if (draft.getSnapshot().canStartRun) openFlowComposer(flowId);
-          }}
-        >
-          Start Run
-        </Button>
-      </MutationGate>
+      <StartRunAction draft={draft} state={state} flowId={flowId} owner={owner} />
       <DefinitionExportControl
         {...exporter}
         dirty={state.dirty}
@@ -568,6 +596,54 @@ function EditorToolbar({
       />
       <RemoveFlowAction draft={draft} state={state} />
     </div>
+  );
+}
+
+/** Start Run opens a composition with this Flow once it is ready and its owning Project available. */
+function StartRunAction({
+  draft,
+  state,
+  flowId,
+  owner,
+}: {
+  draft: FlowDraftModel;
+  state: FlowDraftSnapshot;
+  flowId: string;
+  owner: StudioOwner;
+}) {
+  const { openFlowComposer } = useComposerNavigation();
+  const unavailable =
+    owner.unavailable && `${owner.title}: ${owner.unavailable}. This Flow can’t start.`;
+  return (
+    <MutationGate>
+      <Button
+        title={state.removed ? "This Flow was removed elsewhere." : unavailable || undefined}
+        disabled={!state.canStartRun || Boolean(unavailable)}
+        onClick={() => {
+          if (draft.getSnapshot().canStartRun && !unavailable) openFlowComposer(flowId);
+        }}
+      >
+        Start Run
+      </Button>
+    </MutationGate>
+  );
+}
+
+/** Over the canvas while the owning Project is unavailable: the Flow stays editable but can't start. */
+function UnavailableOwnerNotice({ owner }: { owner: StudioOwner }) {
+  if (!owner.unavailable) return null;
+  return (
+    <Alert
+      variant="attention"
+      className="absolute top-4 left-1/2 z-10 w-140 max-w-[calc(100%-2rem)] -translate-x-1/2"
+    >
+      <TriangleAlert aria-hidden />
+      <AlertTitle>{owner.title} is unavailable — this Flow can’t start</AlertTitle>
+      <AlertDescription>
+        {owner.unavailable}. You can still edit, export or remove this Flow; Start Run returns once
+        the Project is available again.
+      </AlertDescription>
+    </Alert>
   );
 }
 

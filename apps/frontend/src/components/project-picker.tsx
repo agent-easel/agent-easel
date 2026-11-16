@@ -29,7 +29,6 @@ import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.t
 import { ProjectIcon } from "./project-icon.tsx";
 import { projectAvailabilityLabels } from "../use-projects.ts";
 
-
 function ProjectOption({ project, busy }: { project: FactoryProject; busy: boolean }) {
   const available = project.availability === "available";
   const availability = projectAvailabilityLabels[project.availability];
@@ -407,7 +406,8 @@ function ProjectAvailability({
       {" "}
       {selected && selected.availability !== "available" && (
         <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another project.
+          {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another
+          project.
         </p>
       )}
       {catalog && catalog.projects.length === 0 && (
