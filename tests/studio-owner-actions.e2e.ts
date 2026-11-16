@@ -153,6 +153,7 @@ test("Import creates the file's definitions in the chosen target Project", async
   const northwind = await ownedFlow(app.baseUrl, "Northwind release");
   const file = await exportFlowFile(app.baseUrl, northwind);
   await app.open("/studio/flows");
+  await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
   const review = screen.getByRole("dialog", "Review the import");
   await expect(review.getByRole("button", "Target owner")).toContainText("Global");
