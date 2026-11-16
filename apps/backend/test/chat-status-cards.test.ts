@@ -2,7 +2,6 @@ import { assert, expect, it } from "@effect/vitest";
 import {
   besidesReports,
   clicked,
-  isNotice,
   isStatusCard,
   proposedStart,
   runsOf,
@@ -66,17 +65,15 @@ it("ordinary Block activity edits the Run's one status card in its originating t
   await finished(world.world, worker);
 
   // Assert
-  const shown = await messageShows(world.discord, card, /· ✅ Settled\n/);
+  const shown = await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(shown.channelId).toBe(THREAD);
-  expect(shown.content).toMatch(
-    /^\*\*Run #1 · Improve search\*\* · ✅ Settled\n📁 [^\n]+ · 🔀 Single worker\n✅ Entry worker — finished via “Done” <t:\d+:R> · worker finished\n/,
-  );
+  expect(shown.content).toBe("**Run #1 · Improve search** · ✅ Settled · 🔀 Single worker");
   expect(shown.content).not.toContain("Implemented the requested result.");
   expect(besidesReports(world.discord)).toHaveLength(messages);
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("a new card shows the Run's identity, its active Block and that Factory keeps it current", async (c) => {
+it("a new card shows the Run's identity, its Flow and its active Block", async (c) => {
   // Arrange
   const world = await startingWorld(c);
 
@@ -86,7 +83,7 @@ it("a new card shows the Run's identity, its active Block and that Factory keeps
   // Assert
   const shown = await messageShows(world.discord, card, /⚙️ Entry worker — working/);
   expect(shown.content).toBe(
-    `**Run #1 · Improve search** · 🟢 Active\n📁 ${world.project.title} · \`${world.project.workspaceRoot}\` · 🔀 Single worker\n⚙️ Entry worker — working\n_Ask Factory to read Run #1 for details._`,
+    "**Run #1 · Improve search** · 🟢 Active · 🔀 Single worker\n⚙️ Entry worker — working",
   );
 });
 
@@ -102,7 +99,7 @@ it("Snooze keeps the card reported, and a failing language model does not stop i
 
   // Assert
   assert(snoozed.ok, JSON.stringify(snoozed));
-  await messageShows(world.discord, card, /^\*\*Run #1 · Improve search\*\* · 💤 Snoozed\n/);
+  await messageShows(world.discord, card, /^\*\*Run #1 · Improve search\*\* · 💤 Snoozed · /);
   expect(world.model.requests).toHaveLength(requests);
 });
 
@@ -118,7 +115,7 @@ it("while Chat control is Off the card is not edited, and turning it On brings t
   await turnedOn(world.factory, world.discord, 2);
 
   // Assert
-  await messageShows(world.discord, card, /· ✅ Settled\n/);
+  await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(
     world.discord.edits.slice(0, editsWhileOff).some((edit) => edit.content.includes("Settled")),
   ).toBe(false);
@@ -140,7 +137,7 @@ it("a Run that settled while Discord was unreachable gets its card brought curre
   await world.open();
 
   // Assert
-  await messageShows(world.discord, card, /· ✅ Settled\n/);
+  await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
@@ -158,7 +155,7 @@ it("revoking the thread's Project stops card edits, and a regrant silently corre
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
 
   // Assert
-  await messageShows(world.discord, card, /· ✅ Settled\n/);
+  await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(
     world.discord.edits
       .slice(0, editsWhileRevoked)
@@ -177,14 +174,14 @@ it("removing only the initiating user from Access keeps the Run's card maintaine
   await finished(world.world, worker);
 
   // Assert
-  await messageShows(world.discord, card, /· ✅ Settled\n/);
+  await messageShows(world.discord, card, /· ✅ Settled · /);
 });
 
 it("a regrant creates the card an Active Run never got because its destination was revoked", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
-  world.discord.faultMessages("delivered", "refused");
+  world.discord.faultMessages("refused");
   await clicked(world.discord, button, "610000000000000001", 1);
   await cardProblem(world.factory, "failed");
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
@@ -198,7 +195,7 @@ it("a regrant creates the card an Active Run never got because its destination w
   expect(statusCardsIn(world.discord)).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringMatching(/^\*\*Run #1 · Improve search\*\* · 🟢 Active\n/),
+      content: expect.stringMatching(/^\*\*Run #1 · Improve search\*\* · 🟢 Active · /),
     }),
   ]);
   const settings = await discordSettingsWhen(
@@ -213,8 +210,7 @@ it("after the Discord application is replaced, only the Active Run gets a new ca
   const world = await startingWorld(c);
   const quiet = await chatStartedRun(world, 1, "Settle first\nQuickly.");
   await finished(world.world, quiet.worker);
-  await messageShows(world.discord, quiet.card, /· ✅ Settled\n/);
-  await world.discord.createdWhere(isNotice, 1);
+  await messageShows(world.discord, quiet.card, /· ✅ Settled · /);
   const active = await chatStartedRun(world, 2, "Keep going\nSlowly.");
   world.discord.addBot(otherBot);
   assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
@@ -235,7 +231,7 @@ it("after the Discord application is replaced, only the Active Run gets a new ca
   expect(replacement).toStrictEqual([
     expect.objectContaining({
       channelId: THREAD,
-      content: expect.stringContaining(`${NOTICE}\n\n**Run #2 · Keep going** · 🟢 Active\n`),
+      content: expect.stringContaining(`${NOTICE}\n\n**Run #2 · Keep going** · 🟢 Active · `),
     }),
   ]);
   expect([quiet.card.content, active.card.content]).toStrictEqual(oldCards);
@@ -256,22 +252,22 @@ it("rotating the same application's token keeps editing the same card", async (c
   await finished(world.world, worker);
 
   // Assert
-  await messageShows(world.discord, card, /· ✅ Settled\n/);
+  await messageShows(world.discord, card, /· ✅ Settled · /);
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
 it("an archived, unlocked thread is reopened to edit the card, without posting a message to wake it", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker, card } = await chatStartedRun(world);
+  const { runId, card } = await chatStartedRun(world);
   world.discord.archiveThread(THREAD);
   const messages = world.discord.created.length;
 
   // Act
-  await resultHeld(world.world, worker);
+  assert((await world.factory.snoozeRun(runId)).ok);
 
   // Assert
-  await messageShows(world.discord, card, /Entry worker — (?:finished|reported waiting)/);
+  await messageShows(world.discord, card, / · 💤 Snoozed · /);
   expect(world.discord.threadArchived(THREAD)).toBe(false);
   expect(
     world.discord.requested("PATCH", new RegExp(`^/api/v10/channels/${THREAD}$`)),
@@ -305,9 +301,9 @@ it("a locked thread is never unlocked: the card edit shows as a failed delivery 
 it("after the host unlocks the thread, Retry edits the card and clears the failure", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker, card } = await chatStartedRun(world);
+  const { runId, card } = await chatStartedRun(world);
   world.discord.archiveThread(THREAD, { locked: true });
-  await resultHeld(world.world, worker);
+  assert((await world.factory.snoozeRun(runId)).ok);
   const [problem] = (await cardProblem(world.factory, "failed")).delivery.problems;
   world.discord.unlockThread(THREAD);
 
@@ -319,7 +315,7 @@ it("after the host unlocks the thread, Retry edits the card and clears the failu
 
   // Assert
   assert(retried.ok, JSON.stringify(retried));
-  await messageShows(world.discord, card, /Entry worker — (?:finished|reported waiting)/);
+  await messageShows(world.discord, card, / · 💤 Snoozed · /);
   const settings = await discordSettingsWhen(
     world.factory,
     (current) => current.delivery.problems.length === 0,
@@ -339,7 +335,7 @@ it("a card Discord proved deleted is replaced once automatically with the curren
   // Assert
   await world.discord.createdWhere(isStatusCard, 2);
   const replacement = statusCardsIn(world.discord)[1]!;
-  await messageShows(world.discord, replacement, /· ✅ Settled\n/);
+  await messageShows(world.discord, replacement, /· ✅ Settled · /);
   expect(replacement.channelId).toBe(THREAD);
 });
 
@@ -386,7 +382,7 @@ it("the host's Retry after a lost replacement creates one new card with the curr
   // Assert
   assert(retried.ok, JSON.stringify(retried));
   await world.discord.createdWhere(isStatusCard, 3);
-  expect(statusCardsIn(world.discord)[2]!.content).toMatch(/· ✅ Settled\n/);
+  expect(statusCardsIn(world.discord)[2]!.content).toMatch(/· ✅ Settled · /);
   await discordSettingsWhen(world.factory, (current) => current.delivery.problems.length === 0);
 });
 
@@ -394,7 +390,7 @@ it("a card create Discord may already have performed is not repeated and is show
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
-  world.discord.faultMessages("delivered", ...unproven("lost"));
+  world.discord.faultMessages(...unproven("lost"));
 
   // Act
   await clicked(world.discord, button, "610000000000000001", 1);
@@ -416,7 +412,7 @@ it("the warned Retry of an unknown card create posts it once more with the curre
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
-  world.discord.faultMessages("delivered", ...unproven("lost"));
+  world.discord.faultMessages(...unproven("lost"));
   await clicked(world.discord, button, "610000000000000001", 1);
   const [problem] = (await cardProblem(world.factory, "unknown")).delivery.problems;
   world.discord.nonceWindowPassed();
@@ -433,7 +429,7 @@ it("the warned Retry of an unknown card create posts it once more with the curre
   // Assert
   assert(retried.ok, JSON.stringify(retried));
   await world.discord.createdWhere(isStatusCard, 2);
-  expect(statusCardsIn(world.discord)[1]!.content).toMatch(/· 💤 Snoozed\n/);
+  expect(statusCardsIn(world.discord)[1]!.content).toMatch(/· 💤 Snoozed · /);
   expect(await runsOf(world.factory)).toHaveLength(1);
   await discordSettingsWhen(world.factory, (current) => current.delivery.problems.length === 0);
 });
@@ -442,7 +438,7 @@ it("Retry still requires duplicate-risk acceptance after a lost create response 
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000091010", 2);
-  world.discord.faultMessages("delivered", "lost", "refused");
+  world.discord.faultMessages("lost", "refused");
   await clicked(world.discord, button, "610000000000091010", 1);
   const settings = await discordSettingsWhen(
     world.factory,

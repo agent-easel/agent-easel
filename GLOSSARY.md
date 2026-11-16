@@ -351,16 +351,16 @@ _Avoid_: Run owner; assigning an origin to a Run read or acted on from chat.
 
 **Status card**:
 The one Discord message Factory maintains in a chat-started Run's originating thread and edits from the
-Run's committed facts: identity, state, active Blocks, latest results, pending Waits, Needs input and
-Problems. Ordinary Block activity edits it rather than posting; it never carries report bodies. See
+Run's committed facts: identity, state, Flow, active Blocks, pending Waits, Needs input and Problems.
+It is an accepted chat Start's only message, and Block activity and lifecycle changes edit it rather than
+posting; it never carries results, report bodies or prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
 **Run notice**:
-A new Discord message in a chat-started Run's originating thread for a meaningful change: an attention
-notice for new Needs input or Problem matters, a lifecycle notice for becoming Settled or Archived or
-returning to Active, or one catch-up per Run for what accrued while Factory could not post. Resolving a
-matter edits the notice that announced it; notices mention nobody. See
-[Chat control](docs/chat-control.md#attention-and-lifecycle-notices).
-_Avoid_: Replaying Block transitions or matters that opened and resolved while Factory could not post;
-answer buttons on a notice.
+A new Discord message in a chat-started Run's originating thread only when the Run needs someone: an
+attention notice for new Needs input or Problem matters, or one catch-up per Run for such matters that
+accrued while Factory could not post. Resolving a matter edits the notice that announced it; notices
+mention nobody. See [Chat control](docs/chat-control.md#attention-notices).
+_Avoid_: Notices for Block transitions or lifecycle changes; replaying matters that opened and resolved
+while Factory could not post; answer buttons on a notice.

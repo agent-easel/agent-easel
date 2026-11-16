@@ -37,7 +37,7 @@ const REVIEW_CHARACTER_LIMIT = 32_000;
 
 /** The text of a review's last message, which carries the button: who confirms, and until when. */
 const confirmationText = (expiresAt: string) =>
-  `🔒 Only the person who asked can confirm · expires ${at(expiresAt)}`;
+  `🔒 Only the requester can confirm · expires ${at(expiresAt)}`;
 
 /** The latest expiry whose Discord timestamp has as many digits as any expiry Factory posts. */
 const LONGEST_EXPIRY = new Date(9_999_999_999_000).toISOString();
@@ -78,7 +78,8 @@ export type ActionOutcome =
 /**
  * One mutation kind's binding to its shared Factory operation. `execute` performs the exact
  * parameters under the action's stable identity; `reconcile` only reads whether that identity
- * was accepted (`unavailable` proves it was not); `receipt` renders the deterministic result.
+ * was accepted (`unavailable` proves it was not); `receipt` renders the deterministic result, or
+ * nothing when the outcome's own report (an accepted Start's status card) announces it.
  */
 export interface ChatOperation {
   readonly name: ChatOperationName;
@@ -94,7 +95,7 @@ export interface ChatOperation {
   readonly receipt: (
     outcome: Extract<ActionOutcome, { facts: JSONValue }>,
     parameters: JSONValue,
-  ) => string;
+  ) => string | undefined;
   /** One line for the requester's repeated click: what this decided outcome was. */
   readonly summary: (outcome: Extract<ActionOutcome, { facts: JSONValue }>) => string;
   /** The primary target whose newer proposal corrects an older one: a Project, occurrence or Run. */
@@ -171,12 +172,12 @@ const REPLIES = {
   notNow:
     "⚠️ Factory could not act on this right now and did nothing. Try again before the review expires.",
   unknown:
-    "❓ Factory cannot tell yet whether this was accepted. It will not perform it again; the receipt follows here once Factory knows.",
+    "❓ Factory cannot tell yet whether this was accepted. It will not perform it again; the result follows here once Factory knows.",
 } as const;
 
 /**
  * How Factory answers a confirmation click: privately to the clicker, or, once the click decided
- * the review, by disabling its button in place (the receipt follows in the thread).
+ * the review, by disabling its button in place (its result follows in the thread).
  */
 export type ClickAnswer =
   | { readonly kind: "ephemeral"; readonly text: string }
@@ -439,13 +440,15 @@ export function makeChatActions(
             yield* sql`INSERT INTO chat_run_origins (run_id,application_id,guild_id,parent_channel_id,thread_id,action_id,recorded_at)
                 VALUES (${outcome.originRunId},${row.application_id},${row.guild_id},${row.parent_channel_id},${row.thread_id},${actionId},${decidedAt})
                 ON CONFLICT DO NOTHING`;
-          yield* oweDelivery(sql, {
-            purpose: "receipt",
-            actionId,
-            destination: destinationOf(row),
-            projectIds: JSON.parse(row.project_ids_json) as string[],
-            text: operation.receipt(outcome, parameters),
-          });
+          const receipt = operation.receipt(outcome, parameters);
+          if (receipt !== undefined)
+            yield* oweDelivery(sql, {
+              purpose: "receipt",
+              actionId,
+              destination: destinationOf(row),
+              projectIds: JSON.parse(row.project_ids_json) as string[],
+              text: receipt,
+            });
         }),
       );
       if (outcome.kind === "accepted" && outcome.originRunId !== undefined)

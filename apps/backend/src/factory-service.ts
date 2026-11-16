@@ -147,7 +147,6 @@ export const makeFactoryService = (
       listProjects: projects.listProjects,
       getFlow: definitions.getFlow,
       listFlows: definitions.listFlows,
-      getRunTitleSetting: runTitles.getRunTitleSetting,
       startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
       acceptedStart: (requestId) => runner.acceptedStart(requestId),
     });

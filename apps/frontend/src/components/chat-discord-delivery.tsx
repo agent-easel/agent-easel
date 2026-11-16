@@ -27,7 +27,6 @@ const PURPOSE_LABELS: Record<ChatDeliveryProblem["purpose"], string> = {
   receipt: "Action receipt",
   "status-card": "Status card",
   attention: "Attention notice",
-  lifecycle: "Lifecycle notice",
   "catch-up": "Catch-up notice",
 };
 

@@ -233,7 +233,7 @@ export async function runsOf(factory: Pick<Factory, "listRunNavigation">) {
 }
 
 const STATUS_CARD =
-  /^(?:_[^\n]+_\n\n)?\*\*Run [^\n]+\*\* · (?:🟢 Active|💤 Snoozed|✅ Settled|🗄️ Archived)\n/;
+  /^(?:_[^\n]+_\n\n)?\*\*Run [^\n]+\*\* · (?:🟢 Active|💤 Snoozed|✅ Settled|🗄️ Archived) · 🔀 /;
 /** A status card or notice: its first line names the Run in bold, after an emoji for notices. */
 const RUN_REPORT = /^(?:_[^\n]+_\n\n)?(?:\S+ )?\*\*Run \S+ · [^\n]+\*\* /;
 
@@ -244,7 +244,7 @@ export const isStatusCard = (message: Pick<CreatedMessage, "content">) =>
 /** The status cards Discord shows, in creation order. */
 export const statusCardsIn = (discord: ControlledDiscord) => discord.created.filter(isStatusCard);
 
-/** Whether Discord shows `message` as an attention, lifecycle or catch-up notice about a Run. */
+/** Whether Discord shows `message` as an attention or catch-up notice about a Run. */
 export const isNotice = (message: Pick<CreatedMessage, "content">) =>
   RUN_REPORT.test(message.content) && !isStatusCard(message);
 

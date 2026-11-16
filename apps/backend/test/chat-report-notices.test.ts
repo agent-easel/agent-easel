@@ -19,7 +19,6 @@ import {
   settled,
   settleUnresolved,
   woke,
-  workingReported,
 } from "./support/scenarios.ts";
 import { stopsEndThreads } from "./support/controlled-thread.ts";
 import { chatStartedRun, messageShows } from "./support/status-cards.ts";
@@ -27,8 +26,6 @@ import { chatStartedRun, messageShows } from "./support/status-cards.ts";
 type World = Awaited<ReturnType<typeof startingWorld>>;
 type Worker = Awaited<ReturnType<typeof chatStartedRun>>["worker"];
 
-/** A Discord timestamp in a notice. */
-const AT = "<t:\\d+:R>";
 const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
 /** The other application a replaced Discord connection names. */
 const otherBot = { token: "other-bot-token.discord.secret", applicationId: "123456789012345679" };
@@ -78,25 +75,21 @@ async function applicationReplaced(world: World) {
   assert(replaced.ok, JSON.stringify(replaced));
 }
 
-it("a Run becoming Settled posts one lifecycle notice in its originating thread, while its Block activity only edits the card", async (c) => {
+it("a Run becoming Settled only edits its card in the originating thread and posts no message", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
+  const { worker, card } = await chatStartedRun(world);
   const messages = world.discord.created.length;
 
   // Act
   await finished(world, worker);
 
   // Assert
-  const notice = await noticeCreated(world.discord);
-  expect(notice.channelId).toBe(THREAD);
-  expect(notice.content).toMatch(
-    new RegExp(`^✅ \\*\\*Run #1 · Improve search\\*\\* is Settled ${AT}$`),
-  );
-  expect(world.discord.created.slice(messages)).toStrictEqual([notice]);
+  await messageShows(world.discord, card, /^\*\*Run #1 · Improve search\*\* · ✅ Settled · /);
+  expect(world.discord.created).toHaveLength(messages);
 });
 
-it("a Run settling in a locked thread posts no notice there, even though the bot may post in locked threads, and Settings asks to unlock it", async (c) => {
+it("a Needs input matter in a locked thread posts no notice there, even though the bot may post in locked threads, and Settings asks to unlock it", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
@@ -104,15 +97,15 @@ it("a Run settling in a locked thread posts no notice there, even though the bot
   const messages = world.discord.created.length;
 
   // Act
-  await finished(world, worker);
+  await nativeRequestShown(world.world, worker);
 
   // Assert
   const settings = await discordSettingsWhen(world.factory, (current) =>
-    current.delivery.problems.some((problem) => problem.purpose === "lifecycle"),
+    current.delivery.problems.some((problem) => problem.purpose === "attention"),
   );
   expect(settings.delivery.problems).toContainEqual(
     expect.objectContaining({
-      purpose: "lifecycle",
+      purpose: "attention",
       state: "failed",
       threadId: THREAD,
       message:
@@ -135,7 +128,7 @@ it("a new Human step posts one Needs input notice that leads to a review in the 
   const notice = await noticeCreated(world.discord);
   expect(notice.content).toMatch(
     new RegExp(
-      `^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Human step Review waits for an answer · since ${AT} — ask here to review it; answering needs your confirmation$`,
+      "^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Human step Review waits for an answer — ask here to answer it$",
     ),
   );
   expect(notice.components).toEqual([]);
@@ -156,7 +149,7 @@ it("answering the Human step edits its notice in place to resolved, without a ne
   const shown = await messageShows(world.discord, notice, /· ✅ resolved\n/);
   expect(shown.content).toMatch(
     new RegExp(
-      `^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input · ✅ resolved\\n• ~~Human step Review waits for an answer · since ${AT}~~ ✅$`,
+      "^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input · ✅ resolved\\n• ~~Human step Review waits for an answer~~ ✅$",
     ),
   );
   expect(world.discord.created).toHaveLength(messages);
@@ -174,7 +167,7 @@ it("a native T3 request of a Snoozed Run posts a Needs input notice to answer it
   const notice = await noticeCreated(world.discord);
   expect(notice.content).toMatch(
     new RegExp(
-      `^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 request · since ${AT} — answer it in T3$`,
+      "^🙋 \\*\\*Run #1 · Improve search\\*\\* needs input\\n• Entry worker has a T3 request — answer it in T3$",
     ),
   );
 });
@@ -192,7 +185,7 @@ it("a confirmed Settle that could not stop workers posts a Problem notice in the
   expect(notice.channelId).toBe(THREAD);
   expect(notice.content).toMatch(
     new RegExp(
-      `^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers · since ${AT}$`,
+      "^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n• Settle could not stop workers$",
     ),
   );
 });
@@ -214,7 +207,7 @@ it("settling the Run after Settle could not stop its workers edits the Problem n
   const shown = await messageShows(world.discord, notice, /· ✅ resolved\n/);
   expect(shown.content).toMatch(
     new RegExp(
-      `^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem · ✅ resolved\\n• ~~Settle could not stop workers · since ${AT}~~ ✅$`,
+      "^⚠️ \\*\\*Run #1 · Improve search\\*\\* has a Problem · ✅ resolved\\n• ~~Settle could not stop workers~~ ✅$",
     ),
   );
 });
@@ -225,7 +218,7 @@ it("notices mention nobody: mention syntax in a Run's title stays inert and ever
   const { worker } = await chatStartedRun(world, 1, "@everyone fix <@&123456789012345678>\nNow.");
 
   // Act
-  await finished(world, worker);
+  await nativeRequestShown(world.world, worker);
 
   // Assert
   const notice = await noticeCreated(world.discord);
@@ -254,7 +247,7 @@ it("after Chat control was Off, one catch-up lists each matter still pending on 
   const notice = await noticeCreated(world.discord);
   expect(notice.content).toMatch(
     new RegExp(
-      `^📬 \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• Entry worker has a T3 request · since ${AT} — answer it in T3\\n• Second entry: report missing · since ${AT}$`,
+      `^📬 \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• Entry worker has a T3 request — answer it in T3\\n• Second entry: report missing$`,
     ),
   );
   expect(world.discord.created.slice(messages)).toStrictEqual([notice]);
@@ -273,55 +266,9 @@ it("resolving one matter of a catch-up edits only its own line in place", async 
   // Assert
   const shown = await messageShows(world.discord, notice, /~~/);
   expect(shown.content).toMatch(
-    new RegExp(
-      `\\n• ~~Entry worker has a T3 request · since ${AT}~~ ✅\\n• Second entry: report missing · since ${AT}$`,
-    ),
+    new RegExp("\\n• ~~Entry worker has a T3 request~~ ✅\\n• Second entry: report missing$"),
   );
   expect(noticesIn(world.discord)).toHaveLength(1);
-});
-
-it("a Run that settled while Chat control was Off gets one catch-up after a restart, labelled delivered late", async (c) => {
-  // Arrange
-  const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
-  await turnedOff(world);
-  await finished(world, worker);
-  await world.factory.close();
-  const reopened = await world.open();
-
-  // Act
-  await turnedOn(reopened, world.discord, 2);
-
-  // Assert
-  const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(
-    new RegExp(
-      `^📬 \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• ✅ Settled ${AT}, delivered late$`,
-    ),
-  );
-  expect(noticesIn(world.discord)).toHaveLength(1);
-});
-
-it("a Settled outcome already posted gets nothing more when Chat control is turned Off and On again", async (c) => {
-  // Arrange
-  const world = await startingWorld(c);
-  const { runId, worker, card } = await chatStartedRun(world);
-  await finished(world, worker);
-  const settledNotice = await noticeCreated(world.discord);
-  await turnedOff(world);
-  assert((await world.factory.renameRun(runId, { title: "Renamed while Off" })).ok);
-
-  // Act
-  await turnedOn(world.factory, world.discord, 2);
-
-  // Assert
-  // Once the renamed card shows, the session serves; a later Archive's notice comes after
-  // anything turning On would have posted.
-  await messageShows(world.discord, card, /Renamed while Off/);
-  assert((await world.factory.archiveRun(runId)).ok);
-  const archivedNotice = await noticeCreated(world.discord, 2);
-  expect(archivedNotice.content).toMatch(/^🗄️ \*\*Run #1 · Renamed while Off\*\* was Archived </);
-  expect(noticesIn(world.discord)).toStrictEqual([settledNotice, archivedNotice]);
 });
 
 it("a catch-up Discord rate-limited before an Off and On flap is posted once", async (c) => {
@@ -329,7 +276,7 @@ it("a catch-up Discord rate-limited before an Off and On flap is posted once", a
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
   await turnedOff(world);
-  await finished(world, worker);
+  await nativeRequestShown(world.world, worker);
   const posts = world.discord.requested("POST", MESSAGES).length;
   world.discord.faultMessages("rate-limited");
   await turnedOn(world.factory, world.discord, 2);
@@ -341,32 +288,16 @@ it("a catch-up Discord rate-limited before an Off and On flap is posted once", a
 
   // Assert
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(/\n• ✅ Settled <t:\d+:R>, delivered late$/);
+  expect(notice.content).toMatch(/\n• Entry worker has a T3 request — answer it in T3$/);
   expect(noticesIn(world.discord)).toHaveLength(1);
 });
 
-it("a Settled Run whose Agent reports again posts a notice that it returned to Active", async (c) => {
-  // Arrange
-  const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
-  await finished(world, worker);
-  await noticeCreated(world.discord);
-
-  // Act
-  await workingReported(world.world, worker);
-
-  // Assert
-  const notice = await noticeCreated(world.discord, 2);
-  expect(notice.content).toMatch(
-    new RegExp(`^🟢 \\*\\*Run #1 · Improve search\\*\\* is Active again ${AT}$`),
-  );
-});
-
-it("Archive edits the pending matter's notice to resolved and posts one notice that the Run was Archived", async (c) => {
+it("Archive edits the pending matter's notice to resolved and the card to Archived, without a new message", async (c) => {
   // Arrange
   const world = await startingWorld(c, humanReviewFlow);
-  const { runId } = await reviewPending(world);
+  const { runId, card } = await reviewPending(world);
   const pending = await noticeCreated(world.discord);
+  const messages = world.discord.created.length;
 
   // Act
   const archived = await world.factory.archiveRun(runId);
@@ -378,17 +309,14 @@ it("Archive edits the pending matter's notice to resolved and posts one notice t
     pending,
     /^🙋 \*\*Run #1 · Improve search\*\* needs input · ✅ resolved\n/,
   );
-  const notice = await noticeCreated(world.discord, 2);
-  expect(notice.content).toMatch(
-    new RegExp(`^🗄️ \\*\\*Run #1 · Improve search\\*\\* was Archived ${AT}$`),
-  );
-  expect(noticesIn(world.discord)).toHaveLength(2);
+  await messageShows(world.discord, card, / · 🗄️ Archived · /);
+  expect(world.discord.created).toHaveLength(messages);
 });
 
 it("while the thread's Project is revoked nothing accrues, and a regrant posts no notice for what happened meanwhile", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { runId, worker, card } = await chatStartedRun(world);
+  const { worker, card } = await chatStartedRun(world);
   const other = await addedProject({ f: world.factory, h: world.harness }, "other");
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
   await nativeRequestShown(world.world, worker);
@@ -397,12 +325,12 @@ it("while the thread's Project is revoked nothing accrues, and a regrant posts n
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
 
   // Assert
-  // Once the card shows the request, the regrant was captured; a later Archive's notice comes
+  // Once the card shows the request, the regrant was captured; a later Problem's notice comes
   // after anything the regrant would have posted.
   await messageShows(world.discord, card, /\n🙋 /);
-  assert((await world.factory.archiveRun(runId)).ok);
+  await settleUnresolved(world.world, worker);
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(/^🗄️ \*\*Run #1 · Improve search\*\* was Archived </);
+  expect(notice.content).toMatch(/^⚠️ \*\*Run #1 · Improve search\*\* has a Problem\n/);
   expect(noticesIn(world.discord)).toStrictEqual([notice]);
 });
 
@@ -429,31 +357,10 @@ it("after the Discord application is replaced, the old bot's notice is not edite
   expect(world.discord.requested("PATCH", new RegExp(`/messages/${notice.id}$`))).toEqual([]);
 });
 
-it("a quiet Run that settled while the application was replaced gets its outcome once from the new bot, which says the old bot's messages are no longer updated", async (c) => {
-  // Arrange
-  const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
-  await applicationReplaced(world);
-  await finished(world, worker);
-
-  // Act
-  await turnedOn(world.factory, world.discord, 2);
-
-  // Assert
-  const notice = await noticeCreated(world.discord);
-  expect(notice.applicationId).toBe(otherBot.applicationId);
-  expect(notice.content).toMatch(
-    new RegExp(
-      `^_Factory's Discord application changed\\. Messages the previous bot posted in this thread are no longer updated\\._\\n\\n📬 \\*\\*Run #1 · Improve search\\*\\* · while Factory could not post in this thread:\\n• ✅ Settled ${AT}, delivered late$`,
-    ),
-  );
-  expect(noticesIn(world.discord)).toHaveLength(1);
-});
-
 it("a notice Discord proved deleted is not recreated when its matter resolves", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { runId, worker } = await chatStartedRun(world);
+  const { worker } = await chatStartedRun(world);
   await nativeRequestShown(world.world, worker);
   const notice = await noticeCreated(world.discord);
   world.discord.deleteMessage(notice.id);
@@ -463,12 +370,12 @@ it("a notice Discord proved deleted is not recreated when its matter resolves", 
 
   // Assert
   await world.discord.request("PATCH", new RegExp(`/messages/${notice.id}$`));
-  // Archiving afterwards orders a later notice after anything the lost notice would have posted.
-  assert((await world.factory.archiveRun(runId)).ok);
-  const archived = await noticeCreated(world.discord, 2);
+  // A later Problem orders its notice after anything the lost notice would have posted.
+  await settleUnresolved(world.world, worker);
+  const problem = await noticeCreated(world.discord, 2);
   expect(noticesIn(world.discord)).toStrictEqual([
     expect.objectContaining({ id: notice.id, deleted: true }),
-    archived,
+    problem,
   ]);
 });
 
@@ -496,15 +403,15 @@ it("a notice whose create Discord may have performed leaves Settings without a R
   expect(noticesIn(world.discord)).toHaveLength(1);
 });
 
-it("the warned Retry of a Settled notice Discord may not have created posts it once and starts nothing", async (c) => {
+it("the warned Retry of a notice Discord may not have created posts it once and starts nothing", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
   world.discord.faultMessages(...unproven("failed"));
-  await finished(world, worker);
+  await nativeRequestShown(world.world, worker);
   const settings = await discordSettingsWhen(world.factory, (current) =>
     current.delivery.problems.some(
-      (problem) => problem.purpose === "lifecycle" && problem.state === "unknown",
+      (problem) => problem.purpose === "attention" && problem.state === "unknown",
     ),
   );
 
@@ -517,7 +424,7 @@ it("the warned Retry of a Settled notice Discord may not have created posts it o
   // Assert
   assert(retried.ok, JSON.stringify(retried));
   const notice = await noticeCreated(world.discord);
-  expect(notice.content).toMatch(/^✅ \*\*Run #1 · Improve search\*\* is Settled </);
+  expect(notice.content).toMatch(/^🙋 \*\*Run #1 · Improve search\*\* needs input\n/);
   expect(await runsOf(world.factory)).toHaveLength(1);
   await discordSettingsWhen(world.factory, (current) => current.delivery.problems.length === 0);
 });
