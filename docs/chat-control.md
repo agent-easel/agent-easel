@@ -160,7 +160,8 @@ every later Discord event when it returns. It lists:
 
 - allowed Discord user IDs;
 - allowed parent channels, each with the Factory Projects it grants. Threads inherit their parent
-  channel's grant.
+  channel's grant. A parent is a text, announcement or forum channel; a forum post is a thread of
+  its forum.
 
 IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, channel or
 Project grant is refused rather than merged. Names are not used to match anything. A channel without

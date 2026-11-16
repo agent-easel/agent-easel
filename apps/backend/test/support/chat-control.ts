@@ -70,6 +70,7 @@ export async function savedDiscordConnection(
 
 export const ALLOWED_CHANNEL = "400000000000000002";
 export const OTHER_CHANNEL = "400000000000000003";
+export const FORUM_CHANNEL = "400000000000000004";
 
 /** The server the controlled Discord's bot is a member of. */
 export const discordGuild = {
@@ -78,6 +79,7 @@ export const discordGuild = {
   channels: [
     { id: ALLOWED_CHANNEL, name: "factory" },
     { id: OTHER_CHANNEL, name: "general" },
+    { id: FORUM_CHANNEL, name: "posts", type: 15 },
   ],
 } as const;
 
