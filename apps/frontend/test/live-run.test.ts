@@ -1,7 +1,31 @@
 import { expect, it } from "vite-plus/test";
-import type { RunHeader } from "@t3-factory/contracts";
+import type { ConditionSummary, RunDetail, RunHeader } from "@t3-factory/contracts";
 import { runScope } from "../src/live/run.ts";
 import { block, event, runDetail } from "./support/run.ts";
+
+/** The header a committed change carries for `run`. */
+const headerOf = (run: RunDetail): RunHeader => ({
+  id: run.id,
+  number: run.number,
+  title: run.title,
+  titleProvenance: run.titleProvenance,
+  titleGeneration: run.titleGeneration,
+  lifecycle: run.lifecycle,
+  task: run.task,
+  flowId: run.flowId,
+  flowName: run.flowName,
+  currentFlowRevision: run.currentFlowRevision,
+  repositories: run.repositories,
+  startedAt: run.startedAt,
+  input: run.input,
+  segments: run.segments,
+  images: run.images,
+  workspace: run.workspace,
+  coordinationActions: run.coordinationActions,
+  runCoordinator: run.runCoordinator,
+  gateOpen: run.gateOpen,
+  settlement: run.settlement,
+});
 
 it("a committed Run update preserves entity order and untouched identities without duplicating history", () => {
   // Arrange
@@ -9,26 +33,11 @@ it("a committed Run update preserves entity order and untouched identities witho
   const replacement = { ...block("worker"), workingMessage: "Updated" };
   const appended = block("new");
   const header: RunHeader = {
-    id: run.id,
-    number: run.number,
+    ...headerOf(run),
     title: "Renamed",
     titleProvenance: "manual",
     titleGeneration: null,
     lifecycle: "settled",
-    task: run.task,
-    flowId: run.flowId,
-    flowName: run.flowName,
-    currentFlowRevision: run.currentFlowRevision,
-    repositories: run.repositories,
-    startedAt: run.startedAt,
-    input: run.input,
-    segments: run.segments,
-    images: run.images,
-    workspace: run.workspace,
-    coordinationActions: run.coordinationActions,
-    runCoordinator: run.runCoordinator,
-    gateOpen: run.gateOpen,
-    settlement: run.settlement,
   };
 
   // Act
@@ -101,4 +110,41 @@ it("observation metadata updates only matching Blocks, bindings and the historic
   expect(next.events).toBe(run.events);
   expect(next.reports).toBe(run.reports);
   expect(before.runCoordinator.observedAt).toBe("earlier");
+});
+
+const selection = (arrivalNumber: number): RunDetail["events"][number] => ({
+  ...event(100 + arrivalNumber),
+  kind: "condition-selected",
+  blockId: "gate",
+  condition: { arrivalNumber, outputId: "otherwise" },
+});
+const summary = (arrivals: number): ConditionSummary => ({
+  blockId: "gate",
+  arrivals,
+  pending: 0,
+  latest: { arrivalNumber: arrivals, outputId: "otherwise", acceptedAt: "2026-11-08T00:00:00Z" },
+});
+const arrivalRange = (from: number, through: number) =>
+  Array.from({ length: through - from + 1 }, (_, offset) => from + offset);
+
+it("a held Run whose Condition advances past its Timeline window keeps the window a fresh read lists", () => {
+  // Arrange
+  const run: RunDetail = {
+    ...runDetail(),
+    events: [event(1), ...arrivalRange(3, 52).map(selection)],
+    conditions: [summary(52)],
+  };
+
+  // Act
+  const next = runScope(run.id).apply(run, {
+    _tag: "changed",
+    header: headerOf(run),
+    entities: { conditions: { upserts: [summary(103)], removals: [] } },
+    events: arrivalRange(54, 103).map(selection),
+  });
+
+  // Assert
+  expect(
+    next.events.map((entry) => entry.condition?.arrivalNumber ?? entry.sequence),
+  ).toStrictEqual([1, ...arrivalRange(54, 103)]);
 });

@@ -2,7 +2,7 @@ import type { AgentDefinition } from "./agent.ts";
 import type { FlowDraft } from "./flow.ts";
 import type { OperationError } from "./result.ts";
 import type { ProjectCatalog } from "./project.ts";
-import type { RunDetail, RunNavigationEntry } from "./run.ts";
+import { CONDITION_TIMELINE_ARRIVALS, type RunDetail, type RunNavigationEntry } from "./run.ts";
 import type { T3Connection } from "./connection.ts";
 import type { T3Appearance } from "./appearance.ts";
 
@@ -133,9 +133,24 @@ function replaceEntities<K extends RunEntityCollection>(
   ) as RunDetail[K];
 }
 
+/** `events` without Condition selections that have left their Condition's window; the same array
+ * when none has. */
+function withinConditionWindows(run: RunDetail, events: RunDetail["events"]) {
+  const counts = new Map(run.conditions.map((summary) => [summary.blockId, summary.arrivals]));
+  const kept = events.filter(
+    ({ blockId, condition }) =>
+      !blockId ||
+      !condition ||
+      condition.arrivalNumber > (counts.get(blockId) ?? 0) - CONDITION_TIMELINE_ARRIVALS,
+  );
+  return kept.length === events.length ? events : kept;
+}
+
 /**
  * Folds one committed change into the Run a client holds. Untouched entities keep their
  * identity; timeline entries at or below the current maximum sequence are never duplicated.
+ * Condition selections keep the window a fresh Run read lists: each Condition's latest
+ * `CONDITION_TIMELINE_ARRIVALS` arrivals by its current count.
  */
 export function applyRunChange(
   run: RunDetail,
@@ -151,7 +166,9 @@ export function applyRunChange(
       sequence = event.sequence;
       return true;
     });
-    if (events.length) next.events = [...run.events, ...events];
+    const appended = events.length ? [...run.events, ...events] : run.events;
+    const windowed = withinConditionWindows(next, appended);
+    if (windowed !== run.events) next.events = windowed;
     return next;
   }
   const blocks = new Map(message.blocks.map((block) => [block.blockId, block.observedAt]));

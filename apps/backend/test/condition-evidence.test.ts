@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { CONDITION_TIMELINE_ARRIVALS } from "@t3-factory/contracts";
+import { appliedRun, subscribe, watchRun } from "./support/live.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   arrivalsNumbered,
@@ -122,6 +123,29 @@ it("a Run read keeps only a Condition's latest selections while its evidence sti
   const page = await f.f.listConditionArrivals(worker.runId, "gate", "1", "");
   assert(page.ok);
   expect(page.value.arrivals.map((arrival) => arrival.arrivalNumber)).toStrictEqual([1]);
+});
+
+it("an open Run subscription keeps a Condition's Timeline window as it advances past it", async (c) => {
+  // Arrange
+  const f = await prepared(c, selfLoopConditionFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  const turn = await conditionLoopedThrough(f.world, worker, CONDITION_TIMELINE_ARRIVALS + 1);
+  const live = subscribe(c, watchRun(f.f.live, worker.runId));
+  await live.until((messages) => messages.length > 0);
+
+  // Act
+  await conditionLoopedThrough(f.world, turn, CONDITION_TIMELINE_ARRIVALS + 2);
+
+  // Assert
+  const messages = await live.until(
+    (received) => appliedRun(received)?.conditions[0]?.arrivals === CONDITION_TIMELINE_ARRIVALS + 2,
+  );
+  const fresh = await f.f.getRun(worker.runId);
+  assert(fresh.ok);
+  expect(conditionSelections(appliedRun(messages)!)).toStrictEqual(
+    conditionSelections(fresh.value),
+  );
+  expect(conditionSelections(fresh.value)[0]?.arrivalNumber).toBe(3);
 });
 
 it.for([

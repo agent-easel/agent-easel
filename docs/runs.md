@@ -515,7 +515,8 @@ history: the arrivals numbered so far, the deliveries waiting there for a number
 selected output and acceptance time), which is the most recent route, not proof its recipients received it. The timeline
 records one **arrival *N* → *output*** row per arrival with the Condition icon. A Run read carries only each Condition's
 latest 50 selection events, chosen in the query, so a Condition with more arrivals shows its latest 50 in the timeline with a
-note that the earlier ones are in its arrivals details below. A Condition is never Needs input and its routing raises no
+note that the earlier ones are in its arrivals details below. An open Run keeps that window as the Condition advances: older
+selections leave the timeline as newer ones arrive, as a fresh read would show. A Condition is never Needs input and its routing raises no
 attention.
 
 When Factory cannot trust a Condition's count, its captured rules and wires (as when they would no longer pass Start) or
