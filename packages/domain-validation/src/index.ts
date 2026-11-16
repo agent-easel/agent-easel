@@ -557,7 +557,12 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
-export { mayPlaceAgent, type OwningProject, validateChangeOwner } from "./placement.ts";
+export {
+  duplicateTreatment,
+  mayPlaceAgent,
+  type OwningProject,
+  validateChangeOwner,
+} from "./placement.ts";
 export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
@@ -597,6 +602,8 @@ export {
   CANVAS_COORD_MIN,
   isCanvasPosition,
   validateCreateFlow,
+  validateDuplicateFlow,
+  validatePreviewFlowDuplicate,
   validateUpdateFlow,
 } from "./flow.ts";
 export {

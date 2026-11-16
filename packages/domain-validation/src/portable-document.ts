@@ -20,6 +20,7 @@ import {
 import { validateCreateAgent, validateExecutionSettings, validateModelReference } from "./agent.ts";
 import { isRecord } from "./block-exits.ts";
 import { validateCreateFlow } from "./flow.ts";
+import { parseOwningProject } from "./placement.ts";
 
 /** The largest create or save request for one Agent or Flow definition. */
 export const DEFINITION_REQUEST_LIMIT_BYTES = 2_000_000;
@@ -753,8 +754,15 @@ export function validateCommitImport(input: unknown): Result<CommitImportInput> 
       definitionSizeIssue(agent, `agents.${index}`, selections.value[agent.key]) ?? [],
   );
   if (oversized.length > 0) return rejected("too_large", oversized);
+  const projectId = parseOwningProject(fields);
+  if (!projectId.ok) return projectId;
   return {
     ok: true,
-    value: { requestId, document: document.value, selections: selections.value },
+    value: {
+      requestId,
+      document: document.value,
+      selections: selections.value,
+      projectId: projectId.value,
+    },
   };
 }

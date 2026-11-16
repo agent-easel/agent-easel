@@ -10,7 +10,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import { parseAgentExits } from "./block-exits.ts";
-import { parseExpectedOwner, parseOwningProject } from "./placement.ts";
+import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
 
 /** What a save writes: everything a create does except the owning Project. */
 type UpdateAgentContent = Omit<UpdateAgentInput, "expectedRevision" | "expectedProjectId">;
@@ -309,7 +309,10 @@ export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInp
       },
     };
   }
-  if (!("name" in input) || input.name === undefined) return { ok: true, value: {} };
+  const projectId = parseTargetOwner(input);
+  if (!projectId.ok) return projectId;
+  const target = projectId.value === undefined ? {} : { projectId: projectId.value };
+  if (!("name" in input) || input.name === undefined) return { ok: true, value: target };
   const name = parseTrimmedString(
     input.name,
     "name",
@@ -318,5 +321,5 @@ export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInp
     agentNameIssue().message,
   );
   if (!name.ok) return name;
-  return { ok: true, value: { name: name.value } };
+  return { ok: true, value: { name: name.value, ...target } };
 }

@@ -14,6 +14,9 @@ import {
   type FactoryOperations,
   type FlowBlock,
   type FlowDraft,
+  type FlowDuplicate,
+  type FlowDuplicateAgentChoice,
+  type FlowDuplicatePlan,
   type FlowGraph,
   type FlowGraphInput,
   type FlowValidation,
@@ -22,10 +25,10 @@ import {
   type ProjectCatalog,
   type Result,
   type StudioDefinitions,
-  type ValidationIssue,
 } from "@t3-factory/contracts";
 import {
   CANVAS_COORD_MESSAGE,
+  duplicateTreatment,
   flowAgentRevisions,
   flowReadiness,
   mayPlaceAgent,
@@ -39,6 +42,8 @@ import {
   validateCreateAgent,
   validateCreateFlow,
   validateDuplicateAgent,
+  validateDuplicateFlow,
+  validatePreviewFlowDuplicate,
   validateUpdateAgent,
   validateUpdateFlow,
 } from "@t3-factory/domain-validation";
@@ -69,12 +74,7 @@ import {
   portableFlow,
   unsupportedSelections,
 } from "./portable-definitions.ts";
-import {
-  importFingerprint,
-  readImportReceipt,
-  replayedImport,
-  writeImportReceipt,
-} from "./import-receipts.ts";
+import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
 
@@ -110,6 +110,68 @@ const staleOwner = (kind: "Agent" | "Flow") =>
     ],
   );
 
+const staleDuplicatePlan = (path: "expectedRevision" | "agents") =>
+  failure(
+    "conflict",
+    "The Flow or an Agent it places changed after this Duplicate was previewed.",
+    [{ code: "stale_duplicate_plan", path, message: "Preview the Duplicate again." }],
+  );
+
+/** The distinct saved Agents a Flow places, in the order its blocks first place them. */
+function placedAgents(flow: CurrentFlow, agents: readonly AgentDefinition[]) {
+  const current = new Map(agents.map((agent) => [agent.id, agent]));
+  const placed = new Map<string, AgentDefinition>();
+  for (const block of flow.graph.blocks) {
+    const agent = block.kind === "agent" && block.agentId !== null && current.get(block.agentId);
+    if (agent) placed.set(agent.id, agent);
+  }
+  return [...placed.values()];
+}
+
+/**
+ * The Agents a Flow Duplicate commit copies: refused as stale unless the choices name exactly the
+ * placed Agents at their current revision and owner, and refused where a choice the plan fixes
+ * was changed.
+ */
+function agentsToCopy(
+  placed: readonly AgentDefinition[],
+  target: OwningProject,
+  choices: readonly FlowDuplicateAgentChoice[],
+): Result<AgentDefinition[]> {
+  const chosen = new Map(choices.map((choice, index) => [choice.agentId, { ...choice, index }]));
+  const matched = placed.flatMap((agent) => {
+    const choice = chosen.get(agent.id);
+    return choice?.revision === agent.revision && choice.projectId === agent.projectId
+      ? [{ agent, choice }]
+      : [];
+  });
+  if (
+    matched.length !== placed.length ||
+    chosen.size !== choices.length ||
+    chosen.size !== placed.length
+  )
+    return staleDuplicatePlan("agents");
+  const issues = matched.flatMap(({ agent, choice }) => {
+    const treatment = duplicateTreatment(target, agent.projectId);
+    if (treatment.changeable || choice.choice === treatment.choice) return [];
+    return [
+      {
+        code: "duplicate_choice_not_allowed",
+        path: `agents.${choice.index}.choice`,
+        message:
+          treatment.choice === "copy"
+            ? `${agent.name} cannot be placed in the target, so the Duplicate must copy it.`
+            : `${agent.name} belongs to the target Project, so the Duplicate keeps it.`,
+      },
+    ];
+  });
+  if (issues.length) return failure("validation", issues[0]!.message, issues);
+  return {
+    ok: true,
+    value: matched.filter(({ choice }) => choice.choice === "copy").map(({ agent }) => agent),
+  };
+}
+
 type DefinitionOperations = Pick<
   EffectOperations<FactoryOperations>,
   | "createFlow"
@@ -117,6 +179,8 @@ type DefinitionOperations = Pick<
   | "updateFlow"
   | "changeFlowOwner"
   | "removeFlow"
+  | "previewFlowDuplicate"
+  | "duplicateFlow"
   | "listFlows"
   | "getFlow"
   | "getAgentCapabilities"
@@ -138,6 +202,7 @@ const LIVE_PUBLISHING_OPERATIONS: ReadonlySet<keyof DefinitionOperations> = new 
   "updateFlow",
   "changeFlowOwner",
   "removeFlow",
+  "duplicateFlow",
   "createAgent",
   "updateAgent",
   "changeAgentOwner",
@@ -312,11 +377,42 @@ export const makeDefinitions = (
         if (!agent) return failure("not_found", "This Agent does not exist.");
         return yield* operation(agent);
       });
+    /** Runs `operation` on the current revision of Flow `id`, refusing a missing Flow. */
+    const withSavedFlow = <A>(
+      id: string,
+      operation: (flow: CurrentFlow) => Effect.Effect<Result<A>, unknown, SqlClient.SqlClient>,
+    ) =>
+      Effect.gen(function* () {
+        const [flow] = yield* readCurrentFlows(sql, id);
+        if (!flow) return flowNotFound();
+        return yield* operation(flow);
+      });
+    /** Creates a new Agent at revision 1 from `source`'s latest saved revision, owned by `projectId`. */
+    const insertAgentCopy = Effect.fnUntraced(function* (
+      source: AgentDefinition,
+      projectId: OwningProject,
+      name: string,
+      now: string,
+    ) {
+      const copy: AgentDefinition = {
+        ...source,
+        id: yield* newId,
+        projectId,
+        name,
+        revision: 1,
+        createdAt: now,
+        updatedAt: now,
+      };
+      yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${copy.id}, ${now}, ${projectId})`;
+      yield* appendAgentRevision(sql, copy);
+      return copy;
+    });
     /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
      * block and exit ids, positions and the workspace arrive as exported. */
     const importFlow = Effect.fnUntraced(function* (
       flow: PortableFlow,
       agentIds: ReadonlyMap<string, string>,
+      projectId: OwningProject,
       now: string,
     ) {
       const id = yield* newId;
@@ -325,7 +421,7 @@ export const makeDefinitions = (
         const { agentKey, ...rest } = block;
         return { ...rest, agentId: agentKey === null ? null : agentIds.get(agentKey)! };
       });
-      yield* sql`INSERT INTO flows (id, created_at) VALUES (${id}, ${now})`;
+      yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
       yield* appendFlowRevision(sql, {
         id,
         revision: 1,
@@ -383,20 +479,20 @@ export const makeDefinitions = (
       validateFlow(id, input) {
         const validated = validateUpdateFlow(input);
         if (!validated.ok) return Effect.succeed(validated);
-        return transaction<FlowValidation>(
-          Effect.gen(function* () {
-            const [flow] = yield* readCurrentFlows(sql, id);
-            if (!flow) return flowNotFound();
-            const agents = yield* readinessAgents;
-            const { graph } = validated.value;
-            return {
-              ok: true as const,
-              value: {
-                ...flowReadiness(graph, agents, flow.projectId),
-                agentRevisions: flowAgentRevisions(graph, agents),
-              },
-            };
-          }),
+        return transaction(
+          withSavedFlow<FlowValidation>(id, (flow) =>
+            Effect.gen(function* () {
+              const agents = yield* readinessAgents;
+              const { graph } = validated.value;
+              return {
+                ok: true as const,
+                value: {
+                  ...flowReadiness(graph, agents, flow.projectId),
+                  agentRevisions: flowAgentRevisions(graph, agents),
+                },
+              };
+            }),
+          ),
         );
       },
       updateFlow(id, input) {
@@ -451,22 +547,18 @@ export const makeDefinitions = (
               return { ok: true as const, value: toDraft(flow, agents) };
             const refused = yield* ownerRefusal(projectId);
             if (refused) return refused;
-            const blockers = new Map<string, ValidationIssue>();
-            for (const block of flow.graph.blocks) {
-              if (block.kind !== "agent") continue;
-              const agent = agents.find((candidate) => candidate.id === block.agentId);
-              if (agent && !mayPlaceAgent(projectId, agent.projectId))
-                blockers.set(agent.id, {
-                  code: "owner_change_blocked",
-                  path: "projectId",
-                  message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
-                });
-            }
-            if (blockers.size)
+            const blockers = placedAgents(flow, yield* readCurrentAgents(sql)).filter(
+              (agent) => !mayPlaceAgent(projectId, agent.projectId),
+            );
+            if (blockers.length)
               return failure(
                 "conflict",
                 "This Flow places Agents its new owner may not place. Remove them from the Flow, or Duplicate it into the target instead.",
-                [...blockers.values()],
+                blockers.map((agent) => ({
+                  code: "owner_change_blocked",
+                  path: "projectId",
+                  message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
+                })),
               );
             yield* sql`UPDATE flows SET project_id=${projectId} WHERE id=${id}`;
             return { ok: true as const, value: toDraft({ ...flow, projectId }, agents) };
@@ -479,6 +571,84 @@ export const makeDefinitions = (
             yield* sql`UPDATE flows SET removed_at=${yield* currentTime} WHERE id=${id} AND removed_at IS NULL`;
             return { ok: true as const, value: undefined };
           }),
+        );
+      },
+      previewFlowDuplicate(id, input) {
+        const validated = validatePreviewFlowDuplicate(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        return transaction(
+          withSavedFlow<FlowDuplicatePlan>(id, (flow) =>
+            Effect.gen(function* () {
+              const { projectId = flow.projectId } = validated.value;
+              const agents = placedAgents(flow, yield* readCurrentAgents(sql));
+              return {
+                ok: true as const,
+                value: {
+                  flowId: flow.id,
+                  revision: flow.revision,
+                  projectId,
+                  name: `${flow.name} copy`,
+                  agents: agents.map((agent) => ({
+                    agentId: agent.id,
+                    name: agent.name,
+                    projectId: agent.projectId,
+                    revision: agent.revision,
+                    ...duplicateTreatment(projectId, agent.projectId),
+                  })),
+                },
+              };
+            }),
+          ),
+        );
+      },
+      duplicateFlow(id, input) {
+        const validated = validateDuplicateFlow(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        return transaction(
+          withSavedFlow<FlowDuplicate>(id, (source) =>
+            Effect.gen(function* () {
+              const { projectId = source.projectId, expectedRevision } = validated.value;
+              const refused = yield* ownerRefusal(projectId);
+              if (refused) return refused;
+              if (source.revision !== expectedRevision)
+                return staleDuplicatePlan("expectedRevision");
+              const placed = placedAgents(source, yield* readCurrentAgents(sql));
+              const copied = agentsToCopy(placed, projectId, validated.value.agents);
+              if (!copied.ok) return copied;
+              const now = yield* currentTime;
+              const copies = yield* Effect.forEach(copied.value, (agent) =>
+                insertAgentCopy(agent, projectId, agent.name, now).pipe(
+                  Effect.map((copy) => ({ sourceAgentId: agent.id, agentId: copy.id })),
+                ),
+              );
+              const copyIds = new Map(copies.map((copy) => [copy.sourceAgentId, copy.agentId]));
+              const flow: CurrentFlow = {
+                id: yield* newId,
+                projectId,
+                name: validated.value.name ?? `${source.name} copy`,
+                revision: 1,
+                graph: {
+                  ...source.graph,
+                  blocks: source.graph.blocks.map((block) => {
+                    const copyId =
+                      block.kind === "agent" && block.agentId !== null
+                        ? copyIds.get(block.agentId)
+                        : undefined;
+                    return copyId ? { ...block, agentId: copyId } : block;
+                  }),
+                },
+                workspace: source.workspace,
+                createdAt: now,
+                updatedAt: now,
+              };
+              yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${flow.id}, ${now}, ${projectId})`;
+              yield* appendFlowRevision(sql, { ...flow, savedAt: now });
+              return {
+                ok: true as const,
+                value: { flow: toDraft(flow, yield* readinessAgents), copies },
+              };
+            }),
+          ),
         );
       },
       listFlows() {
@@ -612,20 +782,17 @@ export const makeDefinitions = (
         const validated = validateDuplicateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
         return transaction(
-          withSavedAgent(id, (saved) =>
+          withSavedAgent<AgentDefinition>(id, (saved) =>
             Effect.gen(function* () {
-              const now = yield* currentTime;
-              // A copy keeps the source's owning Project until Duplicate takes a target.
-              const copy: AgentDefinition = {
-                ...saved,
-                id: yield* newId,
-                name: validated.value.name ?? `${saved.name.trim()} copy`,
-                revision: 1,
-                createdAt: now,
-                updatedAt: now,
-              };
-              yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${copy.id}, ${now}, ${copy.projectId})`;
-              yield* appendAgentRevision(sql, copy);
+              const { projectId = saved.projectId } = validated.value;
+              const refused = yield* ownerRefusal(projectId);
+              if (refused) return refused;
+              const copy = yield* insertAgentCopy(
+                saved,
+                projectId,
+                validated.value.name ?? `${saved.name.trim()} copy`,
+                yield* currentTime,
+              );
               return { ok: true as const, value: copy };
             }),
           ),
@@ -713,10 +880,10 @@ export const makeDefinitions = (
         const validated = validateCommitImport(input);
         if (!validated.ok) return Effect.succeed(validated);
         const commit = validated.value;
-        const fingerprint = importFingerprint(commit);
-        // A receipt answers before the catalog is read, so a replay never depends on T3.
+        // A receipt answers before the catalog and the target's availability are read, so a
+        // replay depends on neither T3 nor the target Project.
         const replay = readImportReceipt(sql, commit.requestId).pipe(
-          Effect.map((receipt) => receipt && replayedImport(receipt, fingerprint)),
+          Effect.map((receipt) => receipt && replayedImport(receipt, commit)),
         );
         return provideSql<ImportResult>(
           Effect.gen(function* () {
@@ -728,13 +895,16 @@ export const makeDefinitions = (
                 // Checked again: a retry of the same request may have committed meanwhile.
                 const raced = yield* replay;
                 if (raced) return raced;
+                const projectId = commit.projectId ?? null;
+                const refused = yield* ownerRefusal(projectId);
+                if (refused) return refused;
                 const unsupported = unsupportedSelections(commit, capabilities);
                 if (unsupported) return unsupported;
                 const now = yield* currentTime;
                 const agents = yield* Effect.forEach(commit.document.agents, (entry) =>
                   Effect.gen(function* () {
                     const id = yield* newId;
-                    yield* sql`INSERT INTO agents (id, created_at) VALUES (${id}, ${now})`;
+                    yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
                     yield* appendAgentRevision(sql, {
                       id,
                       name: entry.name,
@@ -753,11 +923,12 @@ export const makeDefinitions = (
                     ? yield* importFlow(
                         document.flow,
                         new Map(agents.map((a) => [a.key, a.id])),
+                        projectId,
                         now,
                       )
                     : null;
                 const result: ImportResult = { agents, flowId };
-                yield* writeImportReceipt(sql, commit.requestId, fingerprint, now, result);
+                yield* writeImportReceipt(sql, commit, now, result);
                 return { ok: true as const, value: result };
               }),
             );

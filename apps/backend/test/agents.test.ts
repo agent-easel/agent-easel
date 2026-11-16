@@ -109,6 +109,44 @@ it("duplicateAgent copies execution settings under a new identity", async (conte
   expect(duplicate.value.execution).toStrictEqual(saved.value.execution);
 });
 
+it("duplicating a Project Agent into another Project creates a copy owned by the target and leaves the source as it was", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const source = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+
+  // Act
+  const duplicate = await factory.duplicateAgent(source.id, { projectId: second.id });
+
+  // Assert
+  assert(duplicate.ok);
+  expect(duplicate.value).toMatchObject({
+    name: "Releaser copy",
+    revision: 1,
+    projectId: second.id,
+    prompt: source.prompt,
+    execution: source.execution,
+  });
+  expect(await factory.getAgent(source.id)).toStrictEqual({ ok: true, value: source });
+});
+
+it("duplicating an Agent of an unavailable Project into its default target is refused and creates nothing", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const source = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const duplicate = await factory.duplicateAgent(source.id, {});
+
+  // Assert
+  assert(!duplicate.ok);
+  expect(duplicate.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(assertOk(await factory.listAgents())).toStrictEqual([source]);
+});
+
 it("a stale Agent save conflicts and the accepted save survives restart", async (context) => {
   // Arrange
   const { harness, factory } = await openFactoryWithApprovedT3(context);

@@ -1,4 +1,9 @@
-import type { ChangeOwnerInput, Result, ValidationIssue } from "@t3-factory/contracts";
+import type {
+  ChangeOwnerInput,
+  FlowDuplicatePlanAgent,
+  Result,
+  ValidationIssue,
+} from "@t3-factory/contracts";
 
 /**
  * The owning Project of a Flow or Agent: the Factory Project id it belongs to, or null for a
@@ -14,6 +19,19 @@ export function mayPlaceAgent(flowProject: OwningProject, agentProject: OwningPr
   return agentProject === null || agentProject === flowProject;
 }
 
+/**
+ * How Flow Duplicate treats an Agent owned by `agentProject` in a copy owned by `target`: an Agent
+ * the target may not place is always copied, a global Agent is kept unless the user copies it, and
+ * an Agent of the target Project itself is always kept.
+ */
+export function duplicateTreatment(
+  target: OwningProject,
+  agentProject: OwningProject,
+): Pick<FlowDuplicatePlanAgent, "choice" | "changeable"> {
+  if (!mayPlaceAgent(target, agentProject)) return { choice: "copy", changeable: false };
+  return { choice: "keep", changeable: agentProject === null };
+}
+
 const ownerIssue = (path: string): ValidationIssue => ({
   code: "invalid_project",
   path,
@@ -24,32 +42,48 @@ const invalid = (issues: readonly ValidationIssue[]): Result<never> => ({
   error: { code: "validation", message: issues[0]!.message, issues },
 });
 
-/** The owning Project named by field `path`, which must be present unless `optional`. */
-function ownerField(input: unknown, path: string, optional: boolean): Result<OwningProject> {
+/** The owning Project in field `path`: a Factory Project id, null, or undefined when omitted. */
+function ownerField(input: unknown, path: string): Result<OwningProject | undefined> {
   const value =
     typeof input === "object" && input !== null && path in input
       ? (input as Record<string, unknown>)[path]
       : undefined;
-  if (value === null || (optional && value === undefined)) return { ok: true, value: null };
+  if (value === undefined || value === null) return { ok: true, value };
   if (typeof value === "string" && value.length > 0 && value.length <= 256)
     return { ok: true, value };
   return invalid([ownerIssue(path)]);
 }
 
+/** The owning Project in field `path`, which must be named explicitly (null for global). */
+function requiredOwner(input: unknown, path: string): Result<OwningProject> {
+  const owner = ownerField(input, path);
+  if (!owner.ok) return owner;
+  return owner.value === undefined ? invalid([ownerIssue(path)]) : { ok: true, value: owner.value };
+}
+
 /** A create's owning Project: an omitted `projectId` creates a global definition. */
 export function parseOwningProject(input: unknown): Result<OwningProject> {
-  return ownerField(input, "projectId", true);
+  const target = parseTargetOwner(input);
+  return target.ok ? { ok: true, value: target.value ?? null } : target;
+}
+
+/**
+ * The target owner of a Duplicate or Import: a Factory Project id, null for Global, or undefined
+ * when `projectId` is omitted and the operation's default applies.
+ */
+export function parseTargetOwner(input: unknown): Result<OwningProject | undefined> {
+  return ownerField(input, "projectId");
 }
 
 /** The owning Project a save expects, which it must name explicitly (null for global). */
 export function parseExpectedOwner(input: unknown): Result<OwningProject> {
-  return ownerField(input, "expectedProjectId", false);
+  return requiredOwner(input, "expectedProjectId");
 }
 
 /** Change owner names both the owning Project the client saw and the new one (null for global). */
 export function validateChangeOwner(input: unknown): Result<ChangeOwnerInput> {
   const expected = parseExpectedOwner(input);
-  const target = ownerField(input, "projectId", false);
+  const target = requiredOwner(input, "projectId");
   if (expected.ok && target.ok)
     return { ok: true, value: { expectedProjectId: expected.value, projectId: target.value } };
   return invalid([

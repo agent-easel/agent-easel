@@ -368,6 +368,16 @@ function flowRoutes(factory: Factory): RouteEntries<typeof flowOperations> {
     },
     getFlow: { handle: ({ parameters }) => answer(() => factory.getFlow(parameters.id)) },
     removeFlow: { handle: ({ parameters }) => answer(() => factory.removeFlow(parameters.id)) },
+    previewFlowDuplicate: {
+      body: standardBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.previewFlowDuplicate(parameters.id, input)),
+    },
+    duplicateFlow: {
+      body: definitionBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.duplicateFlow(parameters.id, input), 201),
+    },
     updateFlow: {
       body: definitionBody,
       handle: ({ parameters, input }) => answer(() => factory.updateFlow(parameters.id, input)),

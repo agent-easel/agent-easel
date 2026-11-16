@@ -130,6 +130,11 @@ export interface UpdateAgentInput extends AgentContentInput {
 
 export interface DuplicateAgentInput {
   readonly name?: string;
+  /**
+   * The copy's owning Project: a Factory Project id available for new Runs, or null for Global.
+   * Omitted, the copy keeps the source's owning Project, which must then be available.
+   */
+  readonly projectId?: string | null;
 }
 
 /** The Agent operations the Factory facade implements. */
