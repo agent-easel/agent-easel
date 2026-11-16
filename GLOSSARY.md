@@ -28,6 +28,10 @@ _Avoid_: shared (one definition in several Projects is not a supported concept).
 A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow.
 _Avoid_: override, overlay, per-project configuration of a shared Flow.
 
+**Change owner**:
+The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards. A refusal names the blocking definitions; nothing else is edited or copied.
+_Avoid_: reassign, transfer, move as the action's name.
+
 **Placement rule**:
 Which Agents a Flow may place: any Flow may place a global Agent, and a Project Flow may also place Agents of its own owning Project. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
 

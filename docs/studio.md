@@ -105,6 +105,25 @@ records why a per-project variant is an independent copy rather than an override
   another Project's. A create or save whose graph breaks the rule is refused with an `agent_scope_mismatch` issue per block,
   naming the block and Agent, and stores nothing; readiness reports the same issue, which blocks Start. Factory MCP and every
   other client go through the same check.
+- **Change owner.** `PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner` take `{expectedProjectId, projectId}`: the
+  owning Project the client last saw and the new one, each a Factory Project id or `null` for global. The move appends no
+  revision and changes nothing else: no other definition is edited, copied or made global, and Runs keep what they captured.
+  It is refused when the definition's owner is no longer `expectedProjectId` (conflict, `stale_owner` at
+  `expectedProjectId`), when the new owning Project is unknown or unavailable (`project_not_found` or
+  `project_<availability>` at `projectId`, checked in the committing transaction), and when the placement rule would no longer
+  hold for the latest revision of a current Flow (conflict, one `owner_change_blocked` issue at `projectId` per blocking
+  definition, naming it and its id):
+  - a Flow moves only if the new owner may place every Agent it places, so a global Flow can move to any Project, while a
+    Project Flow can move to global or another Project only if it places none of its own Project's Agents;
+  - an Agent moves to global always; it moves to a Project only if no current Flow outside that Project places it, so a
+    move from one Project to another is blocked by the old Project's Flows that place it.
+
+  The answer is the definition with its new owner, and Studio's live definition updates deliver it. Moving a definition out of
+  an unavailable Project follows the same rule. Studio has no Change owner action yet.
+- **Saves expect the owner.** Flow and Agent saves carry `expectedProjectId` beside `expectedRevision`. A save after Change
+  owner moved the definition is refused (conflict, `stale_owner`), appends nothing and keeps the editor's draft. Studio's
+  editors take an owner change from its synchronized lists without a new revision, so their next save expects the new owner;
+  only a save sent before that delivery is refused.
 - **Unavailable owner.** Definitions owned by an unavailable Project, for any availability reason, stay listed, editable,
   exportable and removable; only Start is refused ([Runs](runs.md#starting)). Removing an Agent is still refused while the
   latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability.
@@ -514,7 +533,8 @@ Every rejection writes nothing, never repeats prompt text and keeps the chosen f
 ## Validation contract
 
 `PUT /api/flows/:id` and `POST /api/flows/:id/validate` take
-`{name, expectedRevision, graph, workspace}`. `workspace` is `{mode: "checkout"}` or
+`{name, expectedRevision, expectedProjectId, graph, workspace}`; `expectedProjectId` is the owning Project the client last
+saw, or `null` for a global Flow ([Ownership](#ownership)). `workspace` is `{mode: "checkout"}` or
 `{mode: "worktree", base: {kind: "default"} | {kind: "ref", ref}}`; a custom ref is trimmed and
 must be 1–255 characters without whitespace, control characters or a leading `-`, and its
 issues use `workspace.*` paths. A save that omits `workspace` keeps the saved setting.
@@ -572,7 +592,7 @@ client can compare it with the Agents it shows and discard an answer after an ow
 Each successful create or save appends one immutable Flow revision whose name, graph and
 workspace setting are stored as rows owned by that revision; Studio reads the latest revision of each Flow that is
 not removed, and `revision` is that revision's number. An update compares the expected revision
-atomically: a stale or invalid request returns an error and appends nothing, and an accepted save
+and owning Project atomically: a stale or invalid request returns an error and appends nothing, and an accepted save
 advances the revision exactly once. Within a revision, connections reference blocks of the same
 revision, and the Flow input targets blocks of that revision.
 Agent references are resolved against saved definitions at read time, so a draft may still name a
