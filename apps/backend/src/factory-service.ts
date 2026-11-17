@@ -105,9 +105,14 @@ export const makeFactoryService = (
       changes,
       options.applicationVersion ?? "source",
     );
+    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
     const triggers = yield* makeTriggers(
       github,
-      { listProjects: projects.listProjects, getFlow: definitions.getFlow },
+      {
+        listProjects: projects.listProjects,
+        getFlow: definitions.getFlow,
+        startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
+      },
       changes,
     );
     const clients = yield* makeClientAccess;
@@ -150,7 +155,6 @@ export const makeFactoryService = (
     );
     const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
     const discordGateway = yield* makeDiscordGateway(options.discordApiUrl ?? DISCORD_API_URL);
-    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
     const chatStart = startAction({
       listProjects: projects.listProjects,
       getFlow: definitions.getFlow,
@@ -257,6 +261,7 @@ export const makeFactoryService = (
       getTrigger: (id) => triggers.getTrigger(id),
       updateTrigger: (id, input) => triggers.updateTrigger(id, input),
       setTriggerEnabled: (id, input) => triggers.setTriggerEnabled(id, input),
+      runTrigger: (id) => triggers.runTrigger(id),
       removeTrigger: (id) => triggers.removeTrigger(id),
       startRun: (i) => runner.startRun(i),
       getRunImageInfo: (sha256) => images.getRunImageInfo(sha256),

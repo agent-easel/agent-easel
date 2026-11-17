@@ -63,6 +63,7 @@ const execution = (bindingId: string): RunDetail["executions"][number] => ({
 export function runDetail(): RunDetail {
   return {
     id: "run",
+    origin: null,
     number: 1,
     title: "Run",
     titleProvenance: "automatic",

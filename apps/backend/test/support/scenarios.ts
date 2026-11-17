@@ -77,6 +77,25 @@ export async function triggerSaved(
   if (!saved.ok) throw new Error(saved.error.message);
   return saved.value.trigger;
 }
+/** A saved Trigger that is enabled, so it checks; it has not checked yet. */
+export async function triggerEnabled(
+  factory: Pick<FactoryOperations, "createTrigger" | "setTriggerEnabled">,
+  input: CreateTriggerInput,
+) {
+  const saved = await triggerSaved(factory, input);
+  const enabled = await factory.setTriggerEnabled(saved.id, { enabled: true });
+  if (!enabled.ok) throw new Error(enabled.error.message);
+  return enabled.value;
+}
+/** The Trigger checked once; it throws unless the check completed. */
+export async function triggerChecked(
+  factory: Pick<FactoryOperations, "runTrigger">,
+  triggerId: string,
+) {
+  const checked = await factory.runTrigger(triggerId);
+  if (!checked.ok) throw new Error(checked.error.message);
+  return checked.value;
+}
 /** A cheap model the controlled catalog offers only beside the Agents' model, so T3 can withdraw
  * it without affecting the Flow. */
 export const cheapTitleModel = {

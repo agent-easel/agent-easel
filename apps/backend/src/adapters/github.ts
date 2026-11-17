@@ -52,6 +52,8 @@ export type GitHubFailure =
   | { readonly reason: "no_repository"; readonly message: string }
   /** The repository does not exist or the signed-in login cannot read it. */
   | { readonly reason: "unreadable"; readonly message: string }
+  /** The bound `owner/name` now names a repository with a different node id. */
+  | { readonly reason: "repository_mismatch"; readonly nameWithOwner: string }
   /** GitHub rejected the issue query. */
   | { readonly reason: "query_rejected"; readonly message: string }
   | { readonly reason: "timeout" }
@@ -87,6 +89,33 @@ export interface GitHubAdapter {
     issueNodeIds: readonly string[],
     label: string,
   ): Promise<GitHubRead<ReadonlyMap<string, GitHubLabelState>>>;
+}
+
+/**
+ * What the person must do about a failure, naming the steps that only work on the Factory host,
+ * so a remote client knows where to act.
+ */
+export function gitHubRepairGuidance(failure: GitHubFailure): string {
+  switch (failure.reason) {
+    case "gh_missing":
+      return "GitHub CLI (gh) was not found on the Factory host. Install gh on the host, then restart a Factory opened from Finder.";
+    case "signed_out":
+      return `gh is not signed in to ${failure.host}. Run gh auth login on the Factory host.`;
+    case "no_repository":
+      return `This Project's folder has no remote that gh recognizes as a GitHub repository. ${failure.message}`;
+    case "unreadable":
+      return `The host's GitHub login cannot read this repository. ${failure.message}`;
+    case "repository_mismatch":
+      return `${failure.nameWithOwner} is not the repository this Trigger confirmed. Edit the Trigger and confirm the Project's repository again.`;
+    case "query_rejected":
+      return `GitHub rejected the query. ${failure.message}`;
+    case "timeout":
+      return "GitHub did not answer in time. Try again.";
+    case "truncated":
+      return "GitHub's answer was larger than Factory reads. Narrow the query.";
+    case "failed":
+      return `GitHub could not be read. ${failure.message}`;
+  }
 }
 
 const notAvailable = {

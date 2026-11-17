@@ -167,3 +167,115 @@ export const triggersWatching = (
       JOIN run_trigger_github_issues g ON g.trigger_id = t.id
     WHERE g.repository_node_id = ${nodeId} AND t.id IS NOT ${exceptId}
     ORDER BY t.name`.pipe(Effect.map((rows) => rows.map((row) => row.name)));
+
+/** Runs `triggerId` started that are neither Settled nor Archived. */
+export const activeTriggerRuns = (sql: SqlClient.SqlClient, triggerId: string) =>
+  sql<{ active: number }>`SELECT COUNT(*) AS active FROM run_trigger_origins o
+      JOIN runs r ON r.id = o.run_id
+    WHERE o.trigger_id = ${triggerId} AND r.settled_at IS NULL AND r.archived_at IS NULL`.pipe(
+    Effect.map(([row]) => row!.active),
+  );
+
+/** Each guarded issue of `triggerId` and the labelling it was admitted for. */
+export const readTriggerAdmissions = (sql: SqlClient.SqlClient, triggerId: string) =>
+  sql<{ issue_node_id: string; labelling_event_id: string | null }>`
+    SELECT issue_node_id, labelling_event_id FROM run_trigger_admissions
+    WHERE trigger_id = ${triggerId}`.pipe(
+    Effect.map((rows) =>
+      rows.map((row) => ({
+        issueNodeId: row.issue_node_id,
+        labellingEventId: row.labelling_event_id,
+      })),
+    ),
+  );
+
+/** One admission attempt: the guard row a check writes before it calls Start. */
+export interface AdmissionAttempt {
+  readonly triggerId: string;
+  readonly issueNodeId: string;
+  readonly labellingEventId: string | null;
+  readonly requestId: string;
+  readonly payload: unknown;
+  readonly checkId: string;
+  readonly createdAt: string;
+}
+
+/** Writes the attempt's guard, replacing a guard an earlier labelling of the issue left. */
+export const writeAdmissionAttempt = (sql: SqlClient.SqlClient, attempt: AdmissionAttempt) =>
+  sql`INSERT INTO run_trigger_admissions (
+      trigger_id, issue_node_id, labelling_event_id, request_id, start_payload_json, check_id,
+      created_at
+    ) VALUES (
+      ${attempt.triggerId}, ${attempt.issueNodeId}, ${attempt.labellingEventId},
+      ${attempt.requestId}, ${JSON.stringify(attempt.payload)}, ${attempt.checkId},
+      ${attempt.createdAt}
+    )
+    ON CONFLICT (trigger_id, issue_node_id) DO UPDATE SET
+      labelling_event_id = excluded.labelling_event_id, request_id = excluded.request_id,
+      start_payload_json = excluded.start_payload_json, check_id = excluded.check_id,
+      run_id = NULL, created_at = excluded.created_at`;
+
+/** The Run Start accepted for the attempt `requestId`, or null when it accepted none. */
+export const admittedRun = (sql: SqlClient.SqlClient, requestId: string) =>
+  sql<{ run_id: string | null }>`SELECT run_id FROM run_trigger_admissions
+    WHERE request_id = ${requestId}`.pipe(Effect.map(([row]) => row?.run_id ?? null));
+
+/** Releases the guards of issues whose ready label is gone. */
+export const deleteAdmissions = (
+  sql: SqlClient.SqlClient,
+  triggerId: string,
+  issueNodeIds: readonly string[],
+) =>
+  issueNodeIds.length === 0
+    ? Effect.void
+    : sql`DELETE FROM run_trigger_admissions
+        WHERE trigger_id = ${triggerId} AND issue_node_id IN ${sql.in(issueNodeIds)}`.pipe(
+        Effect.asVoid,
+      );
+
+/** Releases the guard of an attempt Start did not accept. */
+export const deleteAttempt = (sql: SqlClient.SqlClient, requestId: string) =>
+  sql`DELETE FROM run_trigger_admissions WHERE request_id = ${requestId} AND run_id IS NULL`;
+
+/** Releases every guard of `triggerId` whose Start was never accepted. */
+export const deleteUnadmitted = (sql: SqlClient.SqlClient, triggerId: string) =>
+  sql`DELETE FROM run_trigger_admissions WHERE trigger_id = ${triggerId} AND run_id IS NULL`;
+
+/** What one check did, and the problem that stopped it, if any. */
+export interface CheckOutcome {
+  readonly started: number;
+  readonly waiting: number;
+  readonly notStarted: readonly TriggerMissedIssue[];
+  readonly problem: { readonly code: string; readonly message: string } | null;
+}
+
+/**
+ * Replaces the latest check and sets or clears the current error. A repeated problem keeps its
+ * first sighting and counts the checks that hit it. Does nothing once the Trigger is removed.
+ */
+export const writeCheckOutcome = Effect.fnUntraced(function* (
+  sql: SqlClient.SqlClient,
+  triggerId: string,
+  outcome: CheckOutcome,
+  time: string,
+) {
+  const [current] = yield* sql<{
+    error_code: string | null;
+    error_first_seen_at: string | null;
+    error_count: number | null;
+  }>`SELECT error_code, error_first_seen_at, error_count FROM run_triggers WHERE id = ${triggerId}`;
+  if (!current) return;
+  const { problem } = outcome;
+  const repeated = problem !== null && current.error_code === problem.code;
+  yield* sql`UPDATE run_triggers SET latest_check_at = ${time},
+      latest_check_started = ${outcome.started}, latest_check_waiting = ${outcome.waiting},
+      error_code = ${problem?.code ?? null}, error_message = ${problem?.message ?? null},
+      error_first_seen_at = ${problem === null ? null : repeated ? current.error_first_seen_at : time},
+      error_last_seen_at = ${problem === null ? null : time},
+      error_count = ${problem === null ? null : repeated ? current.error_count! + 1 : 1}
+    WHERE id = ${triggerId}`;
+  yield* sql`DELETE FROM run_trigger_check_misses WHERE trigger_id = ${triggerId}`;
+  for (const [position, miss] of outcome.notStarted.entries())
+    yield* sql`INSERT INTO run_trigger_check_misses (trigger_id, position, issue, reason)
+      VALUES (${triggerId}, ${position}, ${miss.issue}, ${miss.reason})`;
+});

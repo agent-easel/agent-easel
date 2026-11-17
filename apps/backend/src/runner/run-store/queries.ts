@@ -17,6 +17,7 @@ import {
   type Result,
   type RunAttention,
   type RunDetail,
+  type RunOrigin,
   type RunWorkspaceDetail,
   type TaskSummary,
 } from "@t3-factory/contracts";
@@ -252,6 +253,31 @@ function taskSummary(sql: SqlClient.SqlClient, task: TaskRow) {
   });
 }
 
+/** The Trigger and issue a Run was started from; null for a Run no Trigger started. */
+const readRunOrigin = (sql: SqlClient.SqlClient, runId: string) =>
+  sql<{
+    trigger_id: string;
+    trigger_name: string;
+    repository: string;
+    issue_number: number;
+    issue_node_id: string;
+    issue_url: string;
+    issue_title: string;
+  }>`SELECT * FROM run_trigger_origins WHERE run_id=${runId}`.pipe(
+    Effect.map(([row]): RunOrigin | null =>
+      row
+        ? {
+            trigger: { id: row.trigger_id, name: row.trigger_name },
+            repository: row.repository,
+            issueNumber: row.issue_number,
+            issueNodeId: row.issue_node_id,
+            url: row.issue_url,
+            title: row.issue_title,
+          }
+        : null,
+    ),
+  );
+
 export function openRunQueries(database: RunnerDatabase) {
   const { run, transaction } = database;
   function getRun(id: string): Effect.Effect<Result<RunDetail>, unknown> {
@@ -304,6 +330,7 @@ export function openRunQueries(database: RunnerDatabase) {
           ok: true as const,
           value: {
             id: runRow.id,
+            origin: yield* readRunOrigin(sql, id),
             number: runRow.number,
             title: runRow.title,
             titleProvenance: runRow.title_provenance,

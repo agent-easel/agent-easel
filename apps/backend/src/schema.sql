@@ -1009,6 +1009,19 @@ CREATE TABLE run_title_settings (
   CHECK ((diagnostic_run_id IS NULL) = (diagnostic_at IS NULL))
 );
 
+CREATE TABLE run_trigger_admissions (
+  trigger_id TEXT NOT NULL REFERENCES run_triggers(id) ON DELETE CASCADE,
+  issue_node_id TEXT NOT NULL CHECK (length(issue_node_id) > 0),
+  -- The latest `labeled` event for the ready label; NULL when GitHub records none.
+  labelling_event_id TEXT,
+  request_id TEXT NOT NULL UNIQUE,
+  start_payload_json TEXT NOT NULL,
+  check_id TEXT NOT NULL,
+  run_id TEXT REFERENCES runs(id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (trigger_id, issue_node_id)
+);
+
 CREATE TABLE run_trigger_check_misses (
   trigger_id TEXT NOT NULL REFERENCES run_triggers(id) ON DELETE CASCADE,
   position INTEGER NOT NULL CHECK (position >= 0),
@@ -1028,6 +1041,26 @@ CREATE TABLE run_trigger_github_issues (
 
 CREATE INDEX run_trigger_github_issues_repository ON run_trigger_github_issues (repository_node_id)
 ;
+
+CREATE TABLE run_trigger_origins (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id),
+  trigger_id TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  repository TEXT NOT NULL,
+  issue_number INTEGER NOT NULL CHECK (issue_number >= 1),
+  issue_node_id TEXT NOT NULL,
+  issue_url TEXT NOT NULL,
+  issue_title TEXT NOT NULL
+);
+
+CREATE INDEX run_trigger_origins_trigger ON run_trigger_origins (trigger_id)
+;
+
+CREATE TRIGGER immutable_run_trigger_origin_delete BEFORE DELETE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END;
+
+CREATE TRIGGER immutable_run_trigger_origin_update BEFORE UPDATE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END;
 
 CREATE TABLE run_triggers (
   id TEXT PRIMARY KEY,

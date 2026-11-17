@@ -64,3 +64,40 @@ CREATE TABLE run_trigger_github_issues (
 )
 -- statement-breakpoint
 CREATE INDEX run_trigger_github_issues_repository ON run_trigger_github_issues (repository_node_id)
+-- statement-breakpoint
+-- The hidden admission guard: one row per Trigger and issue, so an issue starts once per labelling
+-- of its ready label. A check writes it, with Start's request id and payload, before calling Start;
+-- Start's acceptance sets run_id in the same transaction that accepts the Run.
+CREATE TABLE run_trigger_admissions (
+  trigger_id TEXT NOT NULL REFERENCES run_triggers(id) ON DELETE CASCADE,
+  issue_node_id TEXT NOT NULL CHECK (length(issue_node_id) > 0),
+  -- The latest `labeled` event for the ready label; NULL when GitHub records none.
+  labelling_event_id TEXT,
+  request_id TEXT NOT NULL UNIQUE,
+  start_payload_json TEXT NOT NULL,
+  check_id TEXT NOT NULL,
+  run_id TEXT REFERENCES runs(id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (trigger_id, issue_node_id)
+)
+-- statement-breakpoint
+-- Where a Trigger-started Run came from, copied when Start accepted it. It names the Trigger
+-- without referencing it, so it outlives the Trigger's rename and removal.
+CREATE TABLE run_trigger_origins (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id),
+  trigger_id TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  repository TEXT NOT NULL,
+  issue_number INTEGER NOT NULL CHECK (issue_number >= 1),
+  issue_node_id TEXT NOT NULL,
+  issue_url TEXT NOT NULL,
+  issue_title TEXT NOT NULL
+)
+-- statement-breakpoint
+CREATE INDEX run_trigger_origins_trigger ON run_trigger_origins (trigger_id)
+-- statement-breakpoint
+CREATE TRIGGER immutable_run_trigger_origin_update BEFORE UPDATE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END
+-- statement-breakpoint
+CREATE TRIGGER immutable_run_trigger_origin_delete BEFORE DELETE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END

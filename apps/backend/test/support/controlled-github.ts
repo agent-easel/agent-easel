@@ -12,7 +12,7 @@ import type {
 type GitHubCall = keyof GitHubAdapter;
 
 /** An issue as GitHub holds it, with every `labeled` event it has had. */
-interface ControlledIssue extends GitHubIssue {
+export interface ControlledIssue extends GitHubIssue {
   readonly repositoryNodeId: string;
   open: boolean;
   /** False when the issue no longer meets the query's conditions other than its labels. */

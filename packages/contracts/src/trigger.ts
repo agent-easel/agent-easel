@@ -170,6 +170,14 @@ export const triggerOperations = {
     path: "/api/triggers/:id/enabled",
     body: "json",
   }),
+  /**
+   * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
+   * check's summary. Every limit of a scheduled check applies.
+   */
+  runTrigger: operation<never, TriggerDefinition>()({
+    method: "POST",
+    path: "/api/triggers/:id/run",
+  }),
   /** Deletes the Trigger and everything it keeps; Runs it started are not affected. */
   removeTrigger: operation()({ method: "DELETE", path: "/api/triggers/:id" }),
 };

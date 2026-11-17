@@ -6,6 +6,7 @@ import { block, event, runDetail } from "./support/run.ts";
 /** The header a committed change carries for `run`. */
 const headerOf = (run: RunDetail): RunHeader => ({
   id: run.id,
+  origin: run.origin,
   number: run.number,
   title: run.title,
   titleProvenance: run.titleProvenance,

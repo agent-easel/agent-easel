@@ -17,11 +17,12 @@ import {
   validateUpdateTrigger,
   type TriggerSettings,
 } from "@t3-factory/domain-validation";
-import type {
-  GitHubAdapter,
-  GitHubFailure,
-  GitHubRead,
-  GitHubRepository,
+import {
+  gitHubRepairGuidance,
+  type GitHubAdapter,
+  type GitHubFailure,
+  type GitHubRead,
+  type GitHubRepository,
 } from "../adapters/github.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
@@ -29,6 +30,7 @@ import { newId } from "../ids.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
+import { makeTriggerCheck, type TriggerStart } from "./trigger-check.ts";
 import {
   deleteTrigger,
   readTriggers,
@@ -46,34 +48,13 @@ type TriggerOperations = Pick<
   | "getTrigger"
   | "updateTrigger"
   | "setTriggerEnabled"
+  | "runTrigger"
   | "removeTrigger"
 >;
 
-/** The host steps each GitHub problem needs; a remote client cannot do them for the host. */
-function gitHubProblem(failure: GitHubFailure): string {
-  switch (failure.reason) {
-    case "gh_missing":
-      return "GitHub CLI (gh) was not found on the Factory host. Install gh on the host, then restart a Factory opened from Finder.";
-    case "signed_out":
-      return `gh is not signed in to ${failure.host}. Run gh auth login on the Factory host.`;
-    case "no_repository":
-      return `This Project's folder has no remote that gh recognizes as a GitHub repository. ${failure.message}`;
-    case "unreadable":
-      return `The host's GitHub login cannot read this repository. ${failure.message}`;
-    case "query_rejected":
-      return `GitHub rejected the query. ${failure.message}`;
-    case "timeout":
-      return "GitHub did not answer in time. Try again.";
-    case "truncated":
-      return "GitHub's answer was larger than Factory reads. Narrow the query.";
-    case "failed":
-      return `GitHub could not be read. ${failure.message}`;
-  }
-}
-
 /** A GitHub read that did not answer refuses the save; only the query is the author's to fix. */
 function gitHubRefusal(failure: GitHubFailure): Result<never> {
-  const message = gitHubProblem(failure);
+  const message = gitHubRepairGuidance(failure);
   if (failure.reason === "query_rejected")
     return refusal("validation", "trigger_query_rejected", "github.query", message);
   if (failure.reason === "no_repository" || failure.reason === "unreadable")
@@ -163,7 +144,8 @@ function repositoryReadiness(
   if (repository.ok) return { ready: true, repository: repository.value };
   return {
     ready: false,
-    problem: "failure" in repository ? gitHubProblem(repository.failure) : repository.error.message,
+    problem:
+      "failure" in repository ? gitHubRepairGuidance(repository.failure) : repository.error.message,
   };
 }
 
@@ -182,7 +164,9 @@ interface GitHubSettlement {
 
 export const makeTriggers = (
   github: GitHubAdapter,
-  deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow">,
+  deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow"> & {
+    readonly startTextRun: TriggerStart;
+  },
   changes: LiveChanges,
 ) =>
   Effect.gen(function* () {
@@ -333,7 +317,7 @@ export const makeTriggers = (
           value: {
             gitHub: login.ok
               ? { ready: true, login: login.value.login }
-              : { ready: false, problem: gitHubProblem(login.failure) },
+              : { ready: false, problem: gitHubRepairGuidance(login.failure) },
             repository: repository && repositoryReadiness(repository),
             flow: flow && (flow.ok ? flow.value.readiness : missingFlowReadiness),
           },
@@ -349,6 +333,15 @@ export const makeTriggers = (
           }),
         ),
       );
+
+    const { check } = makeTriggerCheck({
+      sql,
+      github,
+      getFlow: deps.getFlow,
+      hostLocalProject,
+      readTrigger,
+      startTextRun: deps.startTextRun,
+    });
 
     const operations: TriggerOperations = {
       getTriggerReadiness: readiness,
@@ -385,6 +378,7 @@ export const makeTriggers = (
           ),
         );
       },
+      runTrigger: (id) => published(check(id)),
       removeTrigger: (id) =>
         published(deleteTrigger(sql, id).pipe(Effect.as({ ok: true as const, value: undefined }))),
     };
