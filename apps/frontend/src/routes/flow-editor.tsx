@@ -4,7 +4,15 @@ import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { useComposerNavigation } from "../run-draft.ts";
 import type { OwnerMove } from "../revisioned-draft.ts";
-import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FocusEvent,
+  type RefObject,
+} from "react";
 import type {
   AgentDefinition,
   FactoryProject,
@@ -89,22 +97,16 @@ import {
 import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
 import { ChangeOwnerDialog, DuplicateFlowDialog } from "../components/studio-owner-dialogs.tsx";
 
-/**
- * This editor's Flow draft, following the Flow through Studio's saved definitions. Studio's guard
- * learns of changes to unsaved changes from the draft's notification itself, before any render,
- * and only when that fact changes.
- */
+/** This editor's Flow draft, following the Flow through Studio's saved definitions. */
 function useOpenedFlowDraft(
   id: string,
   definitions: StudioDefinitions,
-  reportDraft: ReportDraft,
   created: FlowDraft | undefined,
 ) {
   const [draft] = useState(() =>
     createFlowDraft(id, definitions, api, created?.id === id ? created : undefined),
   );
   useEffect(() => draft.open(), [draft]);
-  useDraftGuard(draft, id, reportDraft);
   const interactions = useInteractionReports(draft);
   return { draft, state: useFlowDraftSnapshot(draft), interactions };
 }
@@ -313,6 +315,30 @@ function useThresholdEntries(graph: FlowGraph) {
 
 const noEntries: ReadonlyMap<string, string> = new Map();
 
+/**
+ * Tells Studio's guard about this editor's unsaved work: the draft's own changes, learnt from its
+ * notification before any render, and an invalid Condition arrival entry, which lives only in this
+ * editor and is lost when it closes.
+ */
+function useFlowDraftGuard(
+  draft: FlowDraftModel,
+  id: string,
+  reportDraft: ReportDraft,
+  invalidEntry: boolean,
+) {
+  const guarded = useMemo(
+    () => ({
+      subscribe: draft.subscribe,
+      getSnapshot: () => {
+        const { dirty, removed } = draft.getSnapshot();
+        return { dirty: dirty || invalidEntry, removed };
+      },
+    }),
+    [draft, invalidEntry],
+  );
+  useDraftGuard(guarded, id, reportDraft);
+}
+
 /** The Flow's owner in words, under its canvas. */
 const ownerNote = (owner: StudioOwner) =>
   owner.projectId === null
@@ -386,7 +412,7 @@ export function FlowDetail({
 }) {
   const canvas = useRef<HTMLElement>(null);
   const placement = useRef<DropAt | null>(null);
-  const { draft, state, interactions } = useOpenedFlowDraft(id, definitions, reportDraft, created);
+  const { draft, state, interactions } = useOpenedFlowDraft(id, definitions, created);
   const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { saved, error, readiness } = state;
   const { agents, agentError, owner, projects, library } = useLibraryAgents(
@@ -404,6 +430,7 @@ export function FlowDetail({
     registerEscape,
   );
   const thresholds = useThresholdEntries(graph);
+  useFlowDraftGuard(draft, id, reportDraft, thresholds.invalid);
   const { selectBlock, selectIssue, conditionEditing } = useRuleFocus(select, thresholds);
   const block = graph.blocks.find((b) => b.id === selected);
   const closing = usePanelBlock(block);

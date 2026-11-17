@@ -9,6 +9,7 @@ import {
 } from "./support/flows.ts";
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
+import type { StudioFixtures } from "./support/studio.ts";
 
 /**
  * Saves a Flow whose Coder (block `worker`, a Runtime worker with one exit, `done`) reaches
@@ -54,6 +55,20 @@ async function saveConditionFlow(
     },
   });
   return id;
+}
+
+/** A saved Flow whose Condition Escalate has one rule, from arrival 3, is open with Escalate selected. */
+async function openOneRuleCondition({ app, screen, browser }: StudioFixtures, name: string) {
+  await browser.setViewport({ width: 1920, height: 1000 });
+  const flowId = await saveConditionFlow(
+    app.baseUrl,
+    name,
+    [{ id: "human", name: "Human", fromArrival: 3 }],
+    [["human", "review"]],
+  );
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Condition Escalate").tap();
+  return flowId;
 }
 
 /** Adds a block from the library row `row` and names and places it in its configuration. */
@@ -183,15 +198,7 @@ test("an arrival number that is not a whole number from 1 stays shown as invalid
   browser,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1920, height: 1000 });
-  const flowId = await saveConditionFlow(
-    app.baseUrl,
-    "Invalid Condition threshold",
-    [{ id: "human", name: "Human", fromArrival: 3 }],
-    [["human", "review"]],
-  );
-  await app.open(`/studio/flows/${flowId}`);
-  await screen.getByRole("button", "Condition Escalate").tap();
+  await openOneRuleCondition({ app, screen, browser }, "Invalid Condition threshold");
   await screen.getByLabel("Rule 1 output name").fill("Ask a person");
   await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
 
@@ -207,6 +214,27 @@ test("an arrival number that is not a whole number from 1 stays shown as invalid
   await expect(screen.getByRole("button", "Check readiness")).toBeDisabled();
   await screen.getByLabel("Rule 1 from arrival").fill("");
   await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
+});
+
+test("leaving a Flow with only an invalid arrival number asks first, and Keep editing keeps the text", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await openOneRuleCondition({ app, screen, browser }, "Invalid threshold on leave");
+  await screen.getByLabel("Rule 1 from arrival").fill("2.5");
+  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
+
+  // Act
+  await screen
+    .getByRole("dialog", "Discard unsaved Flow changes?")
+    .getByRole("button", "Keep editing", { exact: true })
+    .tap();
+
+  // Assert
+  await expect(browser).toHaveURL(`/studio/flows/${flowId}`);
+  await expect(screen.getByLabel("Rule 1 from arrival")).toHaveValue("2.5");
 });
 
 test("a Condition authored and wired in Studio routes a started Run's arrivals by number to Otherwise, a rule and an unwired output, shown on the canvas, inspector and Timeline", async ({

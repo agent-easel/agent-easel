@@ -364,7 +364,7 @@ rule row edits its output name and **From arrival** number and offers **Move rul
 keyboard buttons. Renaming or moving a rule keeps its output and wires; removing it removes its wires in the same edit. An empty
 arrival number stays empty (none) rather than defaulting. An entry that is not a whole number from 1 to 9,007,199,254,740,991 is
 shown as typed and marked invalid, never rounded or saved as another value: **Save Flow** and **Check readiness** stay unavailable
-until it is corrected or cleared. **Otherwise** stays last with its recipients and cannot be renamed, moved or removed. The canvas
+until it is corrected or cleared, and leaving the Flow asks first like any unsaved change. **Otherwise** stays last with its recipients and cannot be renamed, moved or removed. The canvas
 row of each output reads **from arrival *N* onward** with its name, and Otherwise **when no rule matches**. A Condition has no rule
 quota of its own, so within the [2 MB definition limit](#validation) it may hold tens of thousands of rules: the panel renders only
 the rule rows near its visible part as it scrolls, and the canvas draws a port for every wired rule, Otherwise and the first eight
