@@ -59,6 +59,10 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   const overrides = screen.getByRole("list", "Project overrides");
   await picker.tap();
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
+  // A screen reader hears the override's Worker on its row, not only the Project.
+  await expect(
+    overrides.getByRole("button", /^Edit override for Northwind: .*GPT 6 Astra/),
+  ).toBeVisible();
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.revision, agent.revision + 1);
   assert.deepEqual(

@@ -86,13 +86,15 @@ export function ProjectOverridesSection({
       <ul aria-label="Project overrides" className="grid min-w-0">
         {overrides.map((override) => {
           const owner = studioOwner(override.projectId, projects);
+          const worker = agentRuntimeMeta(override.execution, capabilities);
           return (
             <li key={override.projectId} className="group flex min-w-0 items-center gap-1">
               <Button
                 type="button"
                 variant="ghost"
                 disabled={disabled}
-                aria-label={`Edit override for ${owner.title}`}
+                // The label replaces the row's text, so it names the override's Worker too.
+                aria-label={`Edit override for ${owner.title}: ${worker}`}
                 title={owner.unavailable ?? undefined}
                 className={rowLayout}
                 onClick={() => onEdit({ projectId: override.projectId, isNew: false })}
@@ -114,7 +116,7 @@ export function ProjectOverridesSection({
                   {ownerName(owner)}
                 </span>
                 <span className="min-w-0 truncate text-2xs tracking-label text-subtle-foreground">
-                  {agentRuntimeMeta(override.execution, capabilities)}
+                  {worker}
                 </span>
               </Button>
               <Tooltip>
