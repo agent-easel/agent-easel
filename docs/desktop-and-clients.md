@@ -349,7 +349,9 @@ access state (`GET /api/client-access`), access requests (rate-limited to five p
 per minute) and the public certificate (`/factory-ca.pem`); static UI files carry no
 product data. Reporting installation is an approved-client product operation; it uses
 the same server-side installer as the host panel and accepts only a discovered target
-identifier, not a client-supplied filesystem path. Factory MCP (`/mcp`), endpoint changes
+identifier, not a client-supplied filesystem path. [Trigger](studio.md#triggers) management is
+likewise an approved-client product operation: bodies carry typed Trigger fields only, never commands,
+flags, paths or environment, and every check runs the host's `gh` with Factory's fixed arguments. Factory MCP (`/mcp`), endpoint changes
 (`PUT /api/connection`), host reauthorization (`POST /api/connection/authorize`, which
 retires the current context), changing **Generate Run titles**
 (`PUT /api/settings/run-titles`) and every [Chat control](chat-control.md) operation, reads
@@ -397,10 +399,11 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 ## Protocol compatibility
 
 The current protocol is **17**. A server accepts clients from protocol **16**; a current client
-requires a protocol **17** server. Protocol 17 adds the Trigger operations over the product HTTP API
-and a `triggers` list to the Studio live subscription (snapshots and change sets). Protocol 16
-clients keep working against a protocol 17 server, since they never call the new routes and ignore
-the added list. A current client manages Triggers in Studio, so it refuses a protocol 16 server and
+requires a protocol **17** server. Protocol 17 adds the [Trigger operations](studio.md#trigger-http-api)
+over the product HTTP API, a `triggers` list to the Studio live subscription (snapshots and change
+sets) and the [Run origin](runs.md#starting-from-a-trigger) (`origin`) to Run detail and navigation.
+Protocol 16 clients keep working against a protocol 17 server, since they never call the new routes
+and ignore the added list and field. A current client manages Triggers in Studio, so it refuses a protocol 16 server and
 shows the update gate naming the server. Protocol 16 added
 [Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
 fixed Otherwise output to Flows and captured Run definitions, with each Condition's

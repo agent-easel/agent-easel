@@ -12,7 +12,8 @@ With development stopped, `pnpm db:reset` restores the seeded baseline, discardi
 after reset. Reset leaves browser-stored state untouched: Run drafts and their images, pending Starts, panel widths and shortcut preferences.
 
 Ordinary restarts retain current-contract demo state. Contract-removal migrations can delete open Runs (most recently when Block ids replaced native call correlation), so reset an upgraded older demo home
-to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's demo reporting target needing **Repair** or a reset.
+to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's demo reporting target needing **Repair** or a reset. A home seeded
+before Triggers has no saved GitHub stand-in, so startup asks for `pnpm db:reset`.
 
 ## Run catalog
 

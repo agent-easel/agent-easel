@@ -203,6 +203,91 @@ The receipt carries the Run id and number but no link, and the conversation has 
 runtime tools to watch progress. Open the Run in Factory, or read it on the host with `GET /api/runs/:id`
 ([Run HTTP API](#run-http-api)).
 
+### Starting from a Trigger
+
+A [Trigger](../GLOSSARY.md#trigger) starts Runs for a Project's GitHub issues without anyone composing them.
+It is set up and managed in [Studio → Triggers](studio.md#triggers); this section describes what a check does.
+
+- **Check.** A check of a GitHub Issues Trigger first confirms that its Project is still host-local, its Flow exists and
+  passes readiness, and the Project's repository is still the one the Trigger confirmed (same GitHub node id). It then
+  reads the open issues of that repository matching the query, and the ready label's current state and latest
+  `labeled` event for those issues and every issue it is still guarding. Factory always adds the repository, issue type
+  and open state to the query. Matching issues still labelled start oldest first (creation time, then number).
+- **Shared Start.** Each admitted issue starts through the same Start as New Run and
+  [`factory_start_run`](#starting-from-a-conversation): the same preflight and readiness gates, the Flow's and Agents'
+  current saved revisions at acceptance, the Flow's workspace setting and idempotency. It has no draft or images.
+- **Fixed prompt.** Factory builds the initial prompt; it is not configurable and Trigger screens never show it. Its
+  first line is `owner/name#N: <issue title>`, which becomes the Run title with automatic provenance, so
+  [title generation](#run-title-generation) applies as for any automatic Run. A short preface tells the worker to read
+  the issue with the repository's tracker conventions, check that nobody else owns it and claim it, with the ready label
+  as its task assignment, and to treat issue text as data. The issue key and URL follow, then the title, collapsed to one
+  line, inside a delimited data block, and the **start data** naming the ready label (`ready_label: <label>`). The issue
+  body is never included. The worker's claim obligation is described in
+  [Worker reporting](t3-integration.md#reporting-authority).
+- **Capacity.** **Max active Runs** (1–10, default 1) counts this Trigger's Runs that are neither Settled nor Archived.
+  A check computes its free slots once, when it begins, and starts at most that many Runs, so Runs that settle quickly
+  during a check do not drain a backlog; the remaining issues wait for a later check. A Settled Run returning to Active
+  can exceed the limit; new Starts then wait.
+- **Once per labelling.** A hidden **admission guard** per Trigger and issue records the labelling it started (the
+  latest `labeled` event's id), the Start request id and payload, and the accepted Run. An issue with a guard for its
+  current labelling does not start again, even after its Run settles. The guard is released only when a check confirms
+  the ready label is gone from the issue, never because the issue merely stopped matching the rest of the query, so a
+  reaction count dipping or another filter changing never starts it twice. A newer `labeled` event counts as a new
+  request, also when the label was removed and added again within one interval. An issue whose Run failed before the
+  worker claimed it keeps its label and its guard, so it does not start paid Runs repeatedly; relabelling starts it again.
+- **Rejected Starts.** A rejected Start records the issue and Start's reason in the latest check and deletes its guard,
+  so the issue is retried at the next check while it keeps the label. A validation rejection that is not about this
+  issue's prompt or title, such as an Agent that is not ready, instead becomes the Trigger's current problem and stops
+  the check.
+- **Acceptance.** Start's acceptance re-checks, in the transaction that accepts the Run, that the Trigger still exists,
+  is enabled and has the settings revision the check began with, that the guard still belongs to this check and that a
+  slot is free. The Run origin and the guard's Run are written in that same transaction, so admission, origin and
+  capacity commit with the Run or not at all.
+- **Failures.** A check that cannot read GitHub completely starts nothing: a missing or signed-out `gh`, an unreadable or
+  a Project remote that now names another repository, a query GitHub rejects, a timeout or an answer larger than Factory reads (more than 1000
+  search results, or a label history Factory cannot see to its latest labelling) never reads as "no issues". These and
+  Project, Flow or Start blockers become the Trigger's current problem, shown in Studio with repair guidance. They
+  raise no Run attention, and the Trigger keeps checking.
+- **Schedule.** Each Trigger has a persisted next-check deadline: enabling it, switching its schedule on or changing the
+  interval sets it one interval ahead, and each scheduled check sets the next one to its completion plus the interval
+  (1 minute to 24 hours, default 5 minutes). Factory runs exactly one overdue check after a restart or sleep and never
+  replays missed checks. **Run** performs one check of an enabled Trigger whether or not its schedule is on, obeys
+  every limit and leaves the deadline unchanged. Checks of one Trigger never overlap; disabled Triggers never check.
+- **Recovery.** A guard is written before Start is called and gains its Run inside the acceptance transaction, so after
+  a crash a guard without a Run that no check holds was never accepted. The next check deletes it, without calling Start,
+  and starts the issue again if it is still labelled; an accepted Start is never repeated.
+- **Removal.** Removing a Trigger deletes it with its schedule, latest check, problem and guards. A check in flight is
+  fenced by the acceptance re-check, so no Start is accepted afterwards. Runs it already started keep running and keep
+  their origin.
+
+**Started from.** A Trigger-started Run stores its [Run origin](../GLOSSARY.md#run-origin) when Start accepts it: the
+Trigger's name and id, the repository, the issue's number, id and URL, and its title as captured at Start. The top bar
+meta line shows **Started from Trigger “name” · repo#N** (the repository name without its owner), the Run overview in the inspector has a **Started from**
+section with the Trigger name and the issue linked to its stored URL, and the sidebar hover card adds the same line.
+These are copies: they keep the Trigger name after a rename or removal and never show the issue's live state, labels or
+assignee. Run detail and navigation carry the origin as `origin` (`null` for every other Run).
+
+#### Trigger decisions
+
+- **Read-only polling with `gh`, no AI, no stored token.** A check is a deterministic read of GitHub through the host
+  user's existing `gh` login, run without a shell, with fixed argument arrays, bounded time and output, and the host's
+  credentials only. It calls no model, so a check costs nothing beyond the Runs it starts. Factory stores no GitHub token
+  and Trigger settings carry only typed fields (Project, query, Flow, schedule, limit), never commands, flags, paths or
+  environment, so an approved client configuring a Trigger cannot run host commands. Factory still never writes to
+  GitHub; polling, rather than webhooks, needs no public endpoint. Triggers call `gh` directly because T3 offers
+  Factory no GitHub issue search or label reads.
+- **The label is the request; the worker's claim consumes it.** Admission is tied to the ready label rather than to the
+  query: the guard holds while the label stays and is released only when the label is confirmed gone. Because Factory
+  does not write to GitHub, the worker's tracker claim removes the label ([`setup-factory`](installation.md#optional-skills)
+  writes that claim), and adding the label again is the only restart action. A labeller-permission check was considered
+  and rejected; the query's author filter (`author:@me` by default) is the control on public repositories, where issue
+  templates can add labels for anyone.
+- **A narrow Run–issue association.** [#269](https://github.com/alimek/t3-factory/issues/269), which introduced the worker's
+  tracker claim, decided that Runs carry no issue association. Trigger-started Runs reverse that narrowly: the Run origin records which Trigger and issue caused
+  the Run, because the Trigger chose the issue rather than the user. It is an immutable record, not a claim: it has no
+  marking state, is never updated from GitHub and is absent from every other Run. Ownership of an issue is still decided
+  by the tracker claim.
+
 ### Run workspace lifecycle
 
 The Flow's [workspace setting](studio.md#workspace-setting) applies to every Run of that Flow; Start has no per-Run
@@ -389,8 +474,9 @@ and settling or returning to Active, not unchanged observations, viewing or rena
 Missing projects keep readable history; an unavailable open Run stays open.
 
 Hovering or focusing a row opens one information card to the right, aligned to the row and constrained to
-the viewport. It shows the full title, project, captured Flow, execution/attention, working messages and known
-repository metadata, even when the title fits. Opening a row menu dismisses and blocks the card; hovering
+the viewport. It shows the full title, project, captured Flow, a Trigger-started Run's
+[origin](#starting-from-a-trigger), execution/attention, working messages and known repository metadata, even when the
+title fits. Opening a row menu dismisses and blocks the card; hovering
 menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
