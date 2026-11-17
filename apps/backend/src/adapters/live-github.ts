@@ -53,8 +53,11 @@ const unexpected = () => failed("gh answered in an unexpected shape.");
 const bounded = (message: string) => message.trim().slice(0, messageLimit);
 const isRecord = (value: unknown): value is Json =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+/** A connection's `nodes`, or undefined unless every member is an object to read fields from. */
 const records = (value: unknown): Json[] | undefined =>
-  isRecord(value) && Array.isArray(value.nodes) ? (value.nodes as Json[]) : undefined;
+  isRecord(value) && Array.isArray(value.nodes) && value.nodes.every(isRecord)
+    ? value.nodes
+    : undefined;
 
 function parseJson(stdout: string): unknown {
   try {

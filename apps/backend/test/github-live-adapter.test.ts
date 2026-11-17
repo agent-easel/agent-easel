@@ -5,6 +5,7 @@ import {
   emptySearchPage,
   fakeGh,
   fakeRepository,
+  nullNodeSearchPage,
   pageInfolessLabelStates,
 } from "./support/fake-gh.ts";
 
@@ -112,6 +113,22 @@ it("label states whose labeled events come without page info fail the read, not 
   // Assert
   assert(!states.ok);
   expect(states.failure.reason).toBe("failed");
+});
+
+it("a search page holding a null issue node fails the read, not with an exception", async (context) => {
+  // Arrange
+  const gh = await fakeGh(context);
+  const adapter = gh.adapter([await gh.directory("path", { stdout: nullNodeSearchPage() })]);
+
+  // Act
+  const issues = await adapter.openIssues(fakeRepository, "label:factory:ready");
+
+  // Assert
+  assert(!issues.ok);
+  expect(issues.failure).toStrictEqual({
+    reason: "failed",
+    message: "gh answered in an unexpected shape.",
+  });
 });
 
 it("a gh that does not answer in time fails as a timeout", async (context) => {

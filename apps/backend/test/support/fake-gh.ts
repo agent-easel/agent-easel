@@ -52,6 +52,15 @@ export const cursorlessSearchPage = () =>
     },
   });
 
+/** One GraphQL search page whose only issue node is null. */
+export const nullNodeSearchPage = () =>
+  JSON.stringify({
+    data: {
+      repository: { id: fakeRepository.nodeId },
+      search: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [null] },
+    },
+  });
+
 /** One GraphQL label-state answer for a labelled issue whose `labeled` events come without page info. */
 export const pageInfolessLabelStates = () =>
   JSON.stringify({
