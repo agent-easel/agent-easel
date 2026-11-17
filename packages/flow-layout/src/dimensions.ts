@@ -5,8 +5,6 @@ export type CanvasDimensions = {
   readonly block: {
     readonly width: number;
     readonly border: number;
-    /** The border of a selected block; extra width is drawn but not counted in block geometry. */
-    readonly selectedBorder: number;
     readonly header: number;
     readonly title: number;
     readonly divider: number;
@@ -64,7 +62,6 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
   block: {
     width: 240,
     border: 1,
-    selectedBorder: 2,
     header: 30,
     title: 44,
     divider: 1,
@@ -132,8 +129,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
     flowInputBox,
     blockHeight,
     reservedHeight,
-    incomingGrowth: (block: B, border = rows.border) =>
-      Math.max(0, bodyHeight(block) - baseHeight(block) - 2 * (border - rows.border)),
+    incomingGrowth: (block: B) => bodyHeight(block) - baseHeight(block),
   };
 }
 

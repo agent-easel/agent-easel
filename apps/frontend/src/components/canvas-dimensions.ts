@@ -4,7 +4,6 @@ export const EXECUTION_DIMENSIONS: CanvasDimensions = {
   block: {
     width: 240,
     border: 1.5,
-    selectedBorder: 1.5,
     header: 26,
     title: 62,
     divider: 1,

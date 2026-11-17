@@ -62,6 +62,55 @@ export async function expectFollowingReview(screen: Screen) {
 }
 
 /**
+ * Opens a seeded Flow fitted in a 1000 px tall viewport with one of its blocks. The worktree
+ * Flow's Implement change block has one exit and only the Flow input wired into it; at 2800 px the
+ * hold-for-release Flow fits at 100 %, so its Approve release Human step shows real pixels.
+ */
+export async function openFittedFlowBlock(
+  { app, screen, browser }: { app: App; screen: Screen; browser: Browser },
+  { flow, name, width }: { flow: string; name: string; width: number },
+) {
+  await browser.setViewport({ width, height: 1000 });
+  await app.open("/studio/flows");
+  await screen.getByRole("heading", flow, { exact: true }).tap();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  const label = `Block ${name}`;
+  const block = screen.getByRole("article", label, { exact: true });
+  const selector = JSON.stringify(`[aria-label="${label}"]`);
+  return {
+    height: () => drawnHeight(browser, label),
+    /** The computed style of the frame's selected edge. */
+    outlineStyle: () =>
+      browser.evaluate<string>(
+        `getComputedStyle(document.querySelector(${selector})).outlineStyle`,
+      ),
+    /** Selects the block by its name and waits for its inspector. */
+    async selectByName() {
+      await block.getByText(name, { exact: true }).first().tap();
+      await expect(screen.getByLabel("Block name")).toHaveValue(name);
+    },
+  };
+}
+
+export const worktreeImplementBlock = {
+  flow: "Demo · Build and review in a worktree",
+  name: "Implement change",
+  width: 1600,
+};
+
+export const releaseApprovalHumanStep = {
+  flow: "Demo · Approve, then hold for release",
+  name: "Approve release",
+  width: 2800,
+};
+
+/** The layout height of the canvas node with this accessible name, unaffected by canvas zoom. */
+export async function drawnHeight(browser: Browser, label: string) {
+  const selector = JSON.stringify(`[aria-label="${label}"]`);
+  return Number(await browser.evaluate(`document.querySelector(${selector}).offsetHeight`));
+}
+
+/**
  * The largest distance, in viewport px, between an end of a Flow canvas wire and the centre of
  * the port it starts or ends at.
  */

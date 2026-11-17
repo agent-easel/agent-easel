@@ -75,7 +75,7 @@ export function createCanvasGeometry(
       x: graph.flowInput.position.x + input.width,
       y: graph.flowInput.position.y + input.outputY,
     },
-    /** Room below the rows for incoming ports, in a frame drawn with `border`. */
+    /** Room below the rows for incoming ports. */
     incomingGrowth,
   };
 }
