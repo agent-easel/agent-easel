@@ -5,6 +5,7 @@ import {
   emptySearchPage,
   fakeGh,
   fakeRepository,
+  pageInfolessLabelStates,
 } from "./support/fake-gh.ts";
 
 it("gh on the inherited PATH is used before the fallback directories", async (context) => {
@@ -98,6 +99,19 @@ it("a search page that claims more issues without a cursor fails the read, not a
     reason: "failed",
     message: "GitHub said more issues match but gave no cursor to read them.",
   });
+});
+
+it("label states whose labeled events come without page info fail the read, not as never labelled", async (context) => {
+  // Arrange
+  const gh = await fakeGh(context);
+  const adapter = gh.adapter([await gh.directory("path", { stdout: pageInfolessLabelStates() })]);
+
+  // Act
+  const states = await adapter.labelStates(fakeRepository, ["I_1"], "factory:ready");
+
+  // Assert
+  assert(!states.ok);
+  expect(states.failure.reason).toBe("failed");
 });
 
 it("a gh that does not answer in time fails as a timeout", async (context) => {

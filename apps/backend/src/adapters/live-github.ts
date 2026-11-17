@@ -395,8 +395,8 @@ function labelStateOf(
     return gitHubAnswer(null);
   const latest = events.findLast((event) => event?.label === label);
   const pageInfo = node.timelineItems.pageInfo;
-  if (!latest && isRecord(pageInfo) && pageInfo.hasPreviousPage === true)
-    return gitHubRefusal({ reason: "truncated" });
+  if (!isRecord(pageInfo) || typeof pageInfo.hasPreviousPage !== "boolean") return unexpected();
+  if (!latest && pageInfo.hasPreviousPage) return gitHubRefusal({ reason: "truncated" });
   return gitHubAnswer({
     nodeId: node.id,
     state: {
