@@ -210,6 +210,11 @@ export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition
   };
   /** Saving now would store no model: the Worker selection is empty or incomplete. */
   readonly needsModel: boolean;
+  /**
+   * The saved Agent is a Project Agent now (moved elsewhere) while the draft holds Project
+   * overrides, which only a global Agent has; Save waits until they are removed or it is global.
+   */
+  readonly strandedOverrides: boolean;
   /** The compared revision **Load latest revision** is waiting to be confirmed for. */
   readonly confirmingLoad: number | null;
 }
@@ -244,9 +249,12 @@ export function createAgentDraft(
     view(state): AgentDraftSnapshot {
       const { conflict } = state;
       const unknownCreate = !state.saved && state.saveOutcome === "unknown";
+      const strandedOverrides =
+        state.saved !== null && state.owner !== null && state.content.projectOverrides.length > 0;
       return {
         ...state,
-        canSave: state.canSave && !unknownCreate,
+        canSave: state.canSave && !unknownCreate && !strandedOverrides,
+        strandedOverrides,
         choices: executionChoices(capabilities, state.content.execution),
         needsModel: savedExecution(state.content.execution) === null,
         confirmingLoad:
@@ -295,6 +303,10 @@ export function createAgentDraft(
     },
     removeOverride(projectId: string) {
       edit({ projectOverrides: overrides().filter((entry) => entry.projectId !== projectId) });
+    },
+    /** Removes every Project override from the draft, as a saved Project Agent's editor offers. */
+    removeOverrides() {
+      edit({ projectOverrides: [] });
     },
     clearWorker() {
       edit({ execution: NO_WORKER });

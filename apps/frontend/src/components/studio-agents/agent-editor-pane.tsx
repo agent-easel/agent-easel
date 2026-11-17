@@ -3,7 +3,12 @@ import { MutationGate } from "@/client-gate";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
 import { useState } from "react";
-import type { AgentCapabilities, AgentDefinition, FactoryProject } from "@t3-factory/contracts";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  AgentProjectOverride,
+  FactoryProject,
+} from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, CheckCircle2 } from "lucide-react";
@@ -27,14 +32,14 @@ import {
   type AgentDraftSnapshot,
 } from "../../agent-draft.ts";
 import { editedLabel } from "../studio-list.tsx";
-import { flowUsageLabel } from "@/lib/agent-display";
+import { agentRuntimeMeta, flowUsageLabel } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportControl } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
 import { AgentProjectOverrides } from "./agent-project-overrides.tsx";
-import { OwnerBadge, OwnerChangeNotice, OwnerPicker } from "../studio-owner.tsx";
-import type { StudioOwner } from "../../studio-definitions.ts";
+import { OwnerBadge, OwnerChangeNotice, OwnerPicker, ownerName } from "../studio-owner.tsx";
+import { studioOwner, type StudioOwner } from "../../studio-definitions.ts";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
 type AgentOwnership =
@@ -145,7 +150,17 @@ export function AgentEditorPane(props: AgentEditorProps) {
             {settings.execution.providerInstanceId && (
               <AgentReportingNotice providerId={settings.execution.providerInstanceId} />
             )}
-            {!global && projectOverrides.length > 0 && (
+            {!global && state.strandedOverrides && (
+              <StrandedOverrides
+                overrides={projectOverrides}
+                owner={ownership.kind === "saved" ? ownership.owner.title : ""}
+                projects={ownership.projects}
+                capabilities={capabilities}
+                disabled={saving}
+                onRemove={draft.removeOverrides}
+              />
+            )}
+            {!global && !state.saved && projectOverrides.length > 0 && (
               <Alert role="status" variant="attention">
                 <CircleAlert aria-hidden />
                 <AlertTitle>Project overrides left out</AlertTitle>
@@ -214,6 +229,50 @@ export function AgentEditorPane(props: AgentEditorProps) {
         </div>
       </form>
     </>
+  );
+}
+
+/**
+ * A saved Agent moved to a Project elsewhere while this draft held Project overrides: they stay
+ * visible here, and Save waits until they are removed or the Agent is made global again.
+ */
+function StrandedOverrides({
+  overrides,
+  owner,
+  projects,
+  capabilities,
+  disabled,
+  onRemove,
+}: {
+  overrides: readonly AgentProjectOverride[];
+  owner: string;
+  projects: readonly FactoryProject[];
+  capabilities: AgentCapabilities | null;
+  disabled: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <Alert role="alert" variant="attention" aria-label="Project overrides this Agent cannot keep">
+      <CircleAlert aria-hidden />
+      <AlertTitle>Project overrides can't be saved</AlertTitle>
+      <AlertDescription>
+        <p>
+          This Agent is owned by {owner} now, and a Project Agent has no Project overrides. Remove
+          them from this draft to save, or use Change owner… to make it Global again and keep them.
+        </p>
+        <ul className="list-disc pl-4">
+          {overrides.map((override) => (
+            <li key={override.projectId}>
+              {ownerName(studioOwner(override.projectId, projects))}:{" "}
+              {agentRuntimeMeta(override.execution, capabilities)}
+            </li>
+          ))}
+        </ul>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={onRemove}>
+          Remove Project overrides from draft
+        </Button>
+      </AlertDescription>
+    </Alert>
   );
 }
 
@@ -353,6 +412,8 @@ function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   if (state.conflict.status !== "none") return "Compare the latest revision before saving.";
   if (state.ownerChange.status !== "none")
     return "Acknowledge the owner changed elsewhere before saving.";
+  if (state.strandedOverrides)
+    return "Remove the Project overrides a Project Agent can't keep, or make it Global again.";
   if (!state.saved && state.saveOutcome === "unknown")
     return "Check the Agent list before creating this Agent again.";
   return undefined;

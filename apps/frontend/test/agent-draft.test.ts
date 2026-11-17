@@ -9,6 +9,7 @@ import {
   agentDraft,
   comparedAgent,
   editedAgent,
+  ownerChangedElsewhere,
   pendingSave,
   removedElsewhere,
   savedElsewhere,
@@ -474,4 +475,26 @@ it("Agent revisions giving the same settings to two Projects with one title read
 
   // Assert
   expect(shown[0]).not.toBe(shown[1]);
+});
+
+it("a saved Agent moved to a Project elsewhere keeps the draft's Project overrides and saves only once they are removed", async () => {
+  // Arrange
+  const setup = agentDraft();
+  const override = { projectId: "northwind", execution: savedAgent().execution! };
+  setup.draft.setOverride(override);
+  ownerChangedElsewhere(setup, "ledgerly");
+  setup.draft.acknowledgeOwner("ledgerly");
+  const stranded = setup.draft.getSnapshot();
+
+  // Act
+  setup.draft.removeOverrides();
+  await setup.draft.save();
+
+  // Assert
+  expect(stranded).toMatchObject({ strandedOverrides: true, canSave: false });
+  expect(stranded.content.projectOverrides).toStrictEqual([override]);
+  expect(setup.factory.updateAgent).toHaveBeenCalledWith(
+    "agent",
+    expect.objectContaining({ expectedProjectId: "ledgerly", projectOverrides: [] }),
+  );
 });
