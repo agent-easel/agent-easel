@@ -167,7 +167,8 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
   name their owner; the Agent editor header shows the owner as text above the name, in the same tones (Global neutral, a Project
   in brand cyan, an unavailable Project in the attention color with its reason in the tooltip; a Project's tooltip says only
-  its Flows can place the Agent), and the Flow editor's toolbar an owner badge.
+  its Flows can place the Agent), and the Flow editor's toolbar shows an owner badge for a Project-owned Flow only (none for a
+  Global Flow).
   The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
 - **Owner menus.** Like the Run composer's picker, the Owner filter and every owner menu below offer Global and the available
   Projects only, so they never offer a Project T3 has removed. The catalog keeps references to Projects T3 no longer
@@ -334,8 +335,10 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 
 ### Canvas and block configuration
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions; **Search Agents**, **Collapse**/**Expand library**) and the canvas. Add a block with the row's
-**Add** action or drag the row onto the canvas (a ghost shows the drop position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
+header (**LIBRARY** with the **Collapse library** icon button; collapsed, **Expand library**) and its **Search steps and Agents** field, which filters both
+steps and Agents by name, stay pinned while the library scrolls. A row's drag handle and **Add** show on hover or keyboard focus; they are hidden, never removed, so
+the row's name and action stay the same. Add a block by activating the row or drag the row onto the canvas (a ghost shows the drop position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow
 input and are selected. Drag a block's header or edit its X/Y fields; wires follow live and the draft changes once, on drop. Escape cancels any drag.
 
 Selecting a block (click, or focus + Enter) opens **Block configuration**, a panel floating over the canvas's right edge. It renames the block, chooses its saved Agent, lists its exits
@@ -426,7 +429,9 @@ global Flow runs in any Project; Start resolves it against the selected Project 
 
 ### Saving and readiness
 
-The editor header also offers **Export** (see [Definition export](#definition-export)).
+The toolbar's ⋯ **More Flow actions** menu holds **Duplicate…**, **Change owner…** ([Owners in Studio](#owners-in-studio)), **Export JSON** (see
+[Definition export](#definition-export)) and **Remove…** (see [Removing a Flow](#removing-a-flow)). A disabled item shows its reason under its label, and
+focus returns to ⋯ when an item's dialog closes.
 
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by keeping the local draft against one, by a change to an Agent the draft
@@ -446,7 +451,7 @@ lists Factory's validation issues under its error; selecting one that names a bl
 
 ### Removing a Flow
 
-**Remove** in Flow details removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
+**Remove…** in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
 the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
 Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
@@ -455,8 +460,8 @@ Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) p
 **Removed elsewhere.** A Flow already opened in Studio keeps its URL and editable draft when another
 client removes it, even if it was clean or an interaction is in progress. The persistent **This Flow
 was removed elsewhere. Your draft is kept.** notice replaces revision notices and dismisses comparison
-and unsubmitted Remove confirmations. Save Flow, Start Run, Check readiness and further Remove are
-disabled with an explanation; their handlers also refuse these actions. An already submitted Remove
+and unsubmitted Remove confirmations. Save Flow, Start Run, Check readiness and every **More Flow
+actions** item are disabled with an explanation; their handlers also refuse these actions. An already submitted Remove
 completes normally and returns to the list without another discard prompt. Removal wins over a late
 save reply, and the retained draft stays editable while that reply is pending. The backend still
 rejects saves and Starts targeting removed Flows and never recreates them.
@@ -591,7 +596,7 @@ refused. There are no Factory MCP tools for Triggers.
 
 ## Definition export
 
-**Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
+**Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export JSON** in the Flow editor's **More Flow actions** menu downloads the
 Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
 example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
 a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."

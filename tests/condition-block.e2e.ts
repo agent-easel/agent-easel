@@ -5,6 +5,7 @@ import { readFlow, saveConditionAtSizeLimit, saveSingleAgentFlow } from "./suppo
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
+import { chooseFlowAction } from "./support/studio.ts";
 
 /** Adds a block from the library row `row` and names and places it in its configuration. */
 async function addBlock(screen: Screen, row: string, name: string, x: string, y: string) {
@@ -180,7 +181,7 @@ test("removing a Flow with only an invalid arrival number opens the Flow list wi
   // Arrange
   const flowId = await openOneRuleCondition({ app, screen, browser }, "Invalid threshold removed");
   await screen.getByLabel("Rule 1 from arrival").fill("2.5");
-  await screen.getByRole("button", "Remove", { exact: true }).tap();
+  await chooseFlowAction(screen, "Remove");
 
   // Act
   await screen

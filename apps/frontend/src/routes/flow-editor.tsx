@@ -1,5 +1,5 @@
 import { StudioRemovedDraft } from "../components/studio-removed-draft.tsx";
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { useComposerNavigation } from "../run-draft.ts";
@@ -23,6 +23,8 @@ import type {
 import {
   Check,
   CircleDot,
+  Copy,
+  FolderGit2,
   ListChecks,
   MoreHorizontal,
   RefreshCw,
@@ -41,6 +43,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -63,9 +66,11 @@ import { IssueLink, ReadinessPanel, type IssueSelect } from "../components/flow-
 import type { ConditionEditing, RuleFocus } from "../components/condition-rules.tsx";
 import { FlowWorkspaceControl } from "../components/flow-workspace-control.tsx";
 import {
-  DefinitionExportControl,
+  DefinitionExportDialog,
+  DefinitionExportMenuItem,
   definitionExportNotice,
 } from "../components/definition-export-control.tsx";
+import { useMenuActions } from "../components/menu-actions.ts";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
@@ -583,42 +588,98 @@ function FlowOwnerDialogs({
   return null;
 }
 
-/** Change owner… and Duplicate… of the saved Flow, behind the toolbar's More button. */
-function FlowOwnerActions({
+const removedReason = "This Flow was removed elsewhere.";
+
+/**
+ * Figma S02: Duplicate…, Change owner…, Export JSON and Remove… of the saved Flow. Their dialogs
+ * live outside the menu, which closes on select.
+ */
+function FlowMoreActions({
+  draft,
   state,
-  onOpen,
+  exporter,
+  onOwnerDialog,
 }: {
+  draft: FlowDraftModel;
   state: FlowDraftSnapshot;
-  onOpen: (dialog: FlowOwnerDialog) => void;
+  exporter: ReturnType<typeof useDefinitionExport>;
+  onOwnerDialog: (dialog: FlowOwnerDialog) => void;
 }) {
-  const unavailable = state.removed || state.busy;
+  const { trigger, queue, onCloseAutoFocus } = useMenuActions();
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  if (confirmingRemove && state.removed && !state.removing) setConfirmingRemove(false);
+  const writable = useMutationsAllowed() && !state.removed;
+  const reason = state.removed ? removedReason : undefined;
   return (
-    <DropdownMenu>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="More Flow actions"
-              disabled={unavailable}
-              title={state.removed ? "This Flow was removed elsewhere." : undefined}
-            >
-              <MoreHorizontal aria-hidden />
-            </Button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>More Flow actions</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={() => onOpen({ kind: "change-owner" })}>
-          Change owner…
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => onOpen({ kind: "duplicate" })}>
-          Duplicate…
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                ref={trigger}
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="More Flow actions"
+                disabled={state.busy}
+              >
+                <MoreHorizontal aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More Flow actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-58" onCloseAutoFocus={onCloseAutoFocus}>
+          <DropdownMenuItem
+            disabled={!writable}
+            description={reason}
+            onSelect={() => queue(() => onOwnerDialog({ kind: "duplicate" }))}
+          >
+            <Copy aria-hidden />
+            Duplicate…
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={!writable}
+            description={reason}
+            onSelect={() => queue(() => onOwnerDialog({ kind: "change-owner" }))}
+          >
+            <FolderGit2 aria-hidden />
+            Change owner…
+          </DropdownMenuItem>
+          <DefinitionExportMenuItem
+            state={exporter.state}
+            disabled={state.removed}
+            description={reason}
+            onSelect={() => queue(() => void exporter.model.request(state.dirty))}
+          />
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            variant="destructive"
+            aria-label="Remove"
+            disabled={!writable || state.removing}
+            description={reason}
+            onSelect={() =>
+              queue(() => {
+                if (draft.getSnapshot().removed) return;
+                draft.clearRemovalError();
+                setConfirmingRemove(true);
+              })
+            }
+          >
+            <Trash2 aria-hidden />
+            Remove…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DefinitionExportDialog {...exporter} />
+      <RemoveFlowDialog
+        open={confirmingRemove}
+        draft={draft}
+        state={state}
+        onClose={() => setConfirmingRemove(false)}
+      />
+    </>
   );
 }
 
@@ -723,7 +784,7 @@ function EditorToolbar({
         onChange={(workspace) => draft.edit({ workspace })}
       />
       <span className="flex-1" />
-      <OwnerBadge owner={owner} />
+      {owner.projectId !== null && <OwnerBadge owner={owner} />}
       <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
       <FlowSaveStatus state={state} revision={revision} />
       <Separator orientation="vertical" className="h-5!" />
@@ -751,13 +812,12 @@ function EditorToolbar({
         </Button>
       </MutationGate>
       <StartRunAction draft={draft} state={state} flowId={flowId} owner={owner} />
-      <DefinitionExportControl
-        {...exporter}
-        dirty={state.dirty}
-        disabled={state.busy || state.removed}
+      <FlowMoreActions
+        draft={draft}
+        state={state}
+        exporter={exporter}
+        onOwnerDialog={onOwnerDialog}
       />
-      <RemoveFlowAction draft={draft} state={state} />
-      <FlowOwnerActions state={state} onOpen={onOwnerDialog} />
     </div>
   );
 }
@@ -882,84 +942,75 @@ function UpdatedNotice({ revision }: { revision: number | null }) {
   );
 }
 
-function RemoveFlowAction({ draft, state }: { draft: FlowDraftModel; state: FlowDraftSnapshot }) {
+/** Remove… confirms; it closes on a removal elsewhere. */
+function RemoveFlowDialog({
+  open,
+  draft,
+  state,
+  onClose,
+}: {
+  open: boolean;
+  draft: FlowDraftModel;
+  state: FlowDraftSnapshot;
+  onClose: () => void;
+}) {
   const navigate = useStudioNavigation();
-  const [open, setOpen] = useState(false);
-  const { removing, removalError, busy, dirty, content } = state;
-  if (open && state.removed && !removing) setOpen(false);
+  const { removing, removalError, dirty, content } = state;
   async function confirmRemove() {
     if (!(await draft.remove())) return;
-    setOpen(false);
+    onClose();
     void navigate({ tab: "flows" });
   }
   return (
-    <>
-      <MutationGate>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={busy || removing || state.removed}
-          title={state.removed ? "This Flow was removed elsewhere." : undefined}
-          className="text-destructive hover:text-destructive"
-          onClick={() => {
-            if (draft.getSnapshot().removed) return;
-            draft.clearRemovalError();
-            setOpen(true);
-          }}
-        >
-          <Trash2 aria-hidden /> Remove
-        </Button>
-      </MutationGate>
-      <Dialog open={open} onOpenChange={(next) => !removing && setOpen(next)}>
-        <DialogContent
-          onKeyDownCapture={(event) => {
-            if (event.key === "Escape" && !removing) event.stopPropagation();
-          }}
-        >
-          <DialogHeader>
-            <DialogTitle>Remove “{content.name}”?</DialogTitle>
-            <DialogDescription asChild>
-              <div className="grid gap-2 text-sm text-muted-foreground">
-                <p>
-                  This removes the Flow from Studio with no restore. Its saved revisions are kept,
-                  so existing Runs and their history keep the Flow they started with.
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && !removing) onClose();
+      }}
+    >
+      <DialogContent
+        onKeyDownCapture={(event) => {
+          if (event.key === "Escape" && !removing) event.stopPropagation();
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>Remove “{content.name}”?</DialogTitle>
+          <DialogDescription asChild>
+            <div className="grid gap-2 text-sm text-muted-foreground">
+              <p>
+                This removes the Flow from Studio with no restore. Its saved revisions are kept, so
+                existing Runs and their history keep the Flow they started with.
+              </p>
+              {dirty && (
+                <p className="text-attention">
+                  You have unsaved changes in this editor. Removing the Flow discards them.
                 </p>
-                {dirty && (
-                  <p className="text-attention">
-                    You have unsaved changes in this editor. Removing the Flow discards them.
-                  </p>
-                )}
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-          {removalError && (
-            <p role="alert" className="text-sm text-destructive">
-              {removalError}
-            </p>
-          )}
-          <DialogFooter>
+              )}
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+        {removalError && (
+          <p role="alert" className="text-sm text-destructive">
+            {removalError}
+          </p>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
+            Cancel
+          </Button>
+          <MutationGate>
             <Button
               type="button"
-              variant="outline"
-              disabled={removing}
-              onClick={() => setOpen(false)}
+              variant="destructive"
+              disabled={removing || state.removed}
+              onClick={() => void confirmRemove()}
             >
-              Cancel
+              {removing ? "Removing…" : "Remove Flow"}
             </Button>
-            <MutationGate>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={removing || state.removed}
-                onClick={() => void confirmRemove()}
-              >
-                {removing ? "Removing…" : "Remove Flow"}
-              </Button>
-            </MutationGate>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          </MutationGate>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
