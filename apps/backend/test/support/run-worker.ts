@@ -82,19 +82,21 @@ export function sweepDuringNextThreadRead({ factory, t3 }: ScenarioWorld) {
   };
 }
 
-/** A new working report arrives during the per-Block sweep's external completion read. */
+/** A new working report arrives during the per-Block sweep's external completion read, the
+ * first delegated-settlement read after the next sweep's second inspection: its observe pass
+ * takes the first, the per-Block sweep the second. */
 export function reopenDuringSettlement(world: ScenarioWorld, worker: WorkerHandle) {
   const { t3 } = world;
-  const inspect = t3.inspectSettleSupport.bind(t3);
   const read = t3.readDelegatedSettlement.bind(t3);
-  t3.inspectSettleSupport = async (target) => {
-    t3.inspectSettleSupport = inspect;
+  let inspections = 0;
+  t3.beforeInspection = () => {
+    if (++inspections < 2) return;
+    delete t3.beforeInspection;
     t3.readDelegatedSettlement = async (...args) => {
       t3.readDelegatedSettlement = read;
       assert((await report(world, worker, workingReport())) === "ACCEPTED");
       return read(...args);
     };
-    return inspect(target);
   };
 }
 
@@ -106,23 +108,24 @@ export function settleDuringNextLaunch({ factory, t3 }: ScenarioWorld, runId: st
   };
 }
 
-/** T3 authorization changes to another grant while Factory checks Stop support. */
-export function changeAuthorizationBeforeStop(t3: ControlledT3) {
-  const inspect = t3.inspectStopSupport.bind(t3);
-  t3.inspectStopSupport = async (target) => {
-    t3.inspectStopSupport = inspect;
-    const support = await inspect(target);
+/** T3 authorization changes to another grant right after T3 answers the next worker thread
+ * read, such as a settlement pass's read under its snapshot. */
+export function changeAuthorizationAfterNextRead(t3: ControlledT3) {
+  const read = t3.readExecution.bind(t3);
+  t3.readExecution = async (target, threadId) => {
+    t3.readExecution = read;
+    const thread = await read(target, threadId);
     t3.approve("different-grant");
-    return support;
+    return thread;
   };
 }
 
-/** T3 cannot answer the next Stop-support check; resolves once that check was asked. */
-export function failNextStopSupportCheck(t3: ControlledT3) {
-  const inspect = t3.inspectStopSupport.bind(t3);
+/** T3 cannot answer the next inspection, such as a settlement pass's snapshot; resolves once it
+ * was asked. */
+export function failNextInspection(t3: ControlledT3) {
   return new Promise<void>((resolve) => {
-    t3.inspectStopSupport = async () => {
-      t3.inspectStopSupport = inspect;
+    t3.beforeInspection = () => {
+      delete t3.beforeInspection;
       resolve();
       throw new Error("T3 is unreachable");
     };

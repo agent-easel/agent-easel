@@ -70,9 +70,7 @@ export interface T3Adapter {
     threadId: string,
     runId: string,
   ): Promise<import("./delegated-settlement.ts").DelegatedSettlement>;
-  inspectSettleSupport(target: T3Endpoint): Promise<ReportSupport>;
   settleThread(target: T3Endpoint, payload: { threadId: string }): Promise<void>;
-  inspectStopSupport(target: T3Endpoint): Promise<ReportSupport>;
   /** Thread scope, including delegated work; no run fence. */
   stopThread(
     target: T3Endpoint,

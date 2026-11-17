@@ -111,9 +111,7 @@ export const makeRunTitles = (
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    /** The authorization context T3 effects on a title thread require: the Run's, still live. */
-    const liveContextId = () => Effect.map(snapshots.latest(), (snapshot) => snapshot.contextId);
-    const ownedThreads = openOwnedThreads(t3, liveContextId);
+    const ownedThreads = openOwnedThreads(t3);
 
     const getRunTitleSetting = () =>
       Effect.map(
@@ -243,7 +241,7 @@ export const makeRunTitles = (
 
     /** T3 effects on the title thread happen only under the Run's authorization context. */
     const contextLive = (generation: LaunchedTitleGeneration) =>
-      Effect.map(liveContextId(), (contextId) => contextId === generation.context_id);
+      Effect.map(snapshots.latest(), (snapshot) => snapshot.contextId === generation.context_id);
 
     /**
      * Launches the pending title thread once, beside the Flow: eligibility is checked again, the
@@ -341,7 +339,8 @@ export const makeRunTitles = (
     /**
      * Cleanup after an outcome, while the cleanup window lasts: one keyed Stop while the thread
      * may still be running, then one T3 thread settlement once it is finished, each sent as an
-     * owned thread's request. Neither blocks the Run.
+     * owned thread's request under a fresh T3 contract snapshot taken for it. Neither blocks the
+     * Run.
      */
     const cleanUp = (generation: LaunchedTitleGeneration) =>
       Effect.gen(function* () {
@@ -361,7 +360,7 @@ export const makeRunTitles = (
         };
         const thread = yield* readTitleThread(generation, threadId);
         if (thread?.finished) {
-          const settle = yield* ownedThreads.settler(owner);
+          const settle = ownedThreads.settler(owner, yield* snapshots.fresh());
           if (settle)
             yield* settle({
               threadId,
@@ -370,7 +369,7 @@ export const makeRunTitles = (
           return;
         }
         if (generation.stop_requested_at) return;
-        const stop = yield* ownedThreads.stopper(owner);
+        const stop = ownedThreads.stopper(owner, yield* snapshots.fresh());
         if (stop)
           yield* stop({
             threadId,

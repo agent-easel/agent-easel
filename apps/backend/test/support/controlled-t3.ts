@@ -38,18 +38,10 @@ export class ControlledT3 implements T3Adapter {
   beforeInspection?: () => void | Promise<void>;
   readonly settledThreads = new Set<string>();
   readonly settlements: { threadId: string }[] = [];
-  async inspectSettleSupport(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return this.supportAnswers().settle;
-  }
   async settleThread(_target: T3Endpoint, payload: { threadId: string }) {
     if (!this.available || !this.authorized) throw Error("Unavailable");
     this.settlements.push(payload);
     this.settledThreads.add(payload.threadId);
-  }
-  async inspectStopSupport(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return this.supportAnswers().stop;
   }
   readonly threadStops: { threadId: string; clientRequestId: string }[] = [];
   async stopThread(

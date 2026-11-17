@@ -867,9 +867,6 @@ export class LiveT3Adapter implements T3Adapter {
       ),
     );
   }
-  async inspectSettleSupport(target: T3Endpoint) {
-    return (await this.inspect(target)).support.settle;
-  }
   async settleThread(target: T3Endpoint, payload: { threadId: string }) {
     await this.withAuthorizedClient(target, async (client) => {
       const result = await client.callTool(
@@ -912,9 +909,6 @@ export class LiveT3Adapter implements T3Adapter {
         delivery: body.delivery,
       };
     });
-  }
-  async inspectStopSupport(target: T3Endpoint) {
-    return (await this.inspect(target)).support.stop;
   }
   async stopThread(target: T3Endpoint, payload: { threadId: string; clientRequestId: string }) {
     await this.withAuthorizedClient(target, async (client) => {

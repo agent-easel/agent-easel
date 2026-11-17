@@ -1,7 +1,9 @@
 import type { Result, RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import { NO_T3_SUPPORT } from "../adapters/t3-contract.ts";
+import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import { threadHref } from "../thread-link.ts";
 import type { BoundWorker, RunStore, SettlementWorkerRecord } from "./run-store/run-store.ts";
@@ -42,6 +44,8 @@ const CONTEXT_UNAVAILABLE: SettlementRead = {
   stoppable: false,
   problem: "The T3 connection is unavailable or its authorization changed.",
 };
+/** The snapshot of a pass with no worker thread to read, which asks T3 nothing. */
+const UNREAD_SNAPSHOT: T3ContractSnapshot = { contextId: null, support: NO_T3_SUPPORT };
 
 /** What still keeps an unfinished worker thread from counting as finished. */
 function blocker(worker: WorkerThread) {
@@ -76,7 +80,7 @@ export function openRunnerSettle(
   store: RunStore,
   t3: T3Adapter,
   lifecycle: RunnerLifecycle,
-  liveContextId: () => Effect.Effect<string | null, unknown>,
+  freshSnapshot: ContractSnapshots["fresh"],
   ownedThreads: OwnedThreads,
 ) {
   /** A worker thread T3 cannot read now keeps the Run Active until a later sweep. */
@@ -100,8 +104,10 @@ export function openRunnerSettle(
       if (!run || run.archived_at || run.settled_at || !run.gate_open) return;
       const threads = yield* store.reportedBlockThreads(run.id);
       if (!threads || !(yield* threadsFinished(run, threads))) return;
-      if ((yield* liveContextId()) !== run.context_id) return;
-      if (yield* store.settleAutomatically(run)) yield* settleWorkerThreads(run);
+      const snapshot = yield* freshSnapshot();
+      if (snapshot.contextId !== run.context_id) return;
+      if (yield* store.settleAutomatically(run))
+        yield* settleWorkerThreads(run, Effect.succeed(snapshot));
     });
   }
 
@@ -112,9 +118,10 @@ export function openRunnerSettle(
     return Effect.gen(function* () {
       const run = yield* store.readRun(id);
       if (!run || run.archived_at) return;
-      const settle = yield* ownedThreads.settler(ownerOf(run));
-      if (!settle) return;
       const candidates = yield* store.threadSettlementCandidates(run.id);
+      if (!candidates.length) return;
+      const settle = ownedThreads.settler(ownerOf(run), yield* freshSnapshot());
+      if (!settle) return;
       for (const candidate of candidates) {
         const ready = yield* recoverOperation(
           Effect.tryPromise(async () => {
@@ -134,12 +141,14 @@ export function openRunnerSettle(
 
   /** Best-effort native organization of a Settled Run's worker threads. A possibly issued
    * settlement is never replayed for the same run of a thread, so a manual reopen in T3 is
-   * preserved; Factory never unsettles. */
-  function settleWorkerThreads(run: RunRow) {
+   * preserved; Factory never unsettles. `snapshot` is taken only when there is a thread. */
+  function settleWorkerThreads(run: RunRow, snapshot: Effect.Effect<T3ContractSnapshot, unknown>) {
     return Effect.gen(function* () {
-      const settle = yield* ownedThreads.settler(ownerOf(run));
+      const threads = yield* store.settledRunThreads(run.id);
+      if (!threads.length) return;
+      const settle = ownedThreads.settler(ownerOf(run), yield* snapshot);
       if (!settle) return;
-      for (const thread of yield* store.settledRunThreads(run.id))
+      for (const thread of threads)
         yield* settle({
           threadId: thread.thread_id,
           claim: store.claimSettledRunThreadSettlement(run, thread.thread_id, thread.execution_id),
@@ -185,10 +194,15 @@ export function openRunnerSettle(
     );
   }
 
+  /** The pass's T3 contract snapshot, taken only when the pass has worker threads to read. */
+  function passSnapshot(workers: readonly BoundWorker[]) {
+    return workers.length ? freshSnapshot() : Effect.succeed(UNREAD_SNAPSHOT);
+  }
+
   /** Fresh reads of every bound worker, under the Run's live authorization context. */
-  function readWorkers(run: RunRow, workers: readonly BoundWorker[]) {
+  function readWorkers(run: RunRow, workers: readonly BoundWorker[], snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
-      const live = !workers.length || (yield* liveContextId()) === run.context_id;
+      const live = snapshot.contextId === run.context_id;
       const reads = new Map<string, SettlementRead>();
       for (const worker of workers)
         reads.set(
@@ -199,23 +213,18 @@ export function openRunnerSettle(
     });
   }
 
-  /** One T3 thread Stop per unfinished worker of the attempt, each recorded before it is sent and
-   * only under the Run's live authorization context, rechecked for every Stop. Stop is
-   * thread-scoped, covers delegated work and has no run fence. */
+  /** One T3 thread Stop per unfinished worker of the attempt, each recorded before it is sent,
+   * only when the pass's snapshot supports Stop and under the Run's live authorization context,
+   * rechecked for every Stop. Stop is thread-scoped, covers delegated work and has no run fence. */
   function requestStops(
     run: RunRow,
     attempt: number,
     workers: readonly BoundWorker[],
     reads: ReadonlyMap<string, SettlementRead>,
+    snapshot: T3ContractSnapshot,
   ) {
     return Effect.gen(function* () {
-      const support = yield* recoverOperation(
-        Effect.tryPromise(() => t3.inspectStopSupport(runTarget(run))),
-        () => Effect.succeed(null),
-      );
-      // A probe that could not run is not a Stop T3 refused: every worker keeps its Stop
-      // eligibility for a later pass of the same attempt.
-      if (!support) return false;
+      const support = snapshot.support.stop;
       for (const worker of workers) {
         if (!support.supported) {
           yield* store.recordStopOutcome(
@@ -227,7 +236,7 @@ export function openRunnerSettle(
           );
           continue;
         }
-        if ((yield* liveContextId()) !== run.context_id) {
+        if ((yield* freshSnapshot()).contextId !== run.context_id) {
           yield* store.recordStopOutcome(
             run,
             attempt,
@@ -257,32 +266,21 @@ export function openRunnerSettle(
           sent ? null : "T3 did not accept the Stop request.",
         );
       }
-      return true;
     });
   }
 
-  /** Stops `stops` and reads each again, keeping a failed support check visible on the worker. */
+  /** Stops `stops` and reads each again. */
   function stopAndReread(
     run: RunRow,
     attempt: number,
     stops: readonly BoundWorker[],
     reads: Map<string, SettlementRead>,
+    snapshot: T3ContractSnapshot,
   ) {
     return Effect.gen(function* () {
-      const probed = yield* requestStops(run, attempt, stops, reads);
-      for (const worker of stops) {
-        const read = yield* readForSettlement(run, worker.thread_id);
-        reads.set(
-          worker.thread_id,
-          probed || read.finished
-            ? read
-            : {
-                ...read,
-                problem:
-                  "T3 Stop support could not be checked, so Factory retries Stop on a later pass.",
-              },
-        );
-      }
+      yield* requestStops(run, attempt, stops, reads, snapshot);
+      for (const worker of stops)
+        reads.set(worker.thread_id, yield* readForSettlement(run, worker.thread_id));
     });
   }
 
@@ -310,7 +308,7 @@ export function openRunnerSettle(
         yield* lifecycle.fork(
           recoverOperation(
             Effect.flatMap(store.readRun(run.id), (row) =>
-              row ? settleWorkerThreads(row) : Effect.void,
+              row ? settleWorkerThreads(row, freshSnapshot()) : Effect.void,
             ),
             () => Effect.void,
           ),
@@ -337,7 +335,8 @@ export function openRunnerSettle(
           const operation = yield* store.readSettlementAttempt(id);
           if (!operation) return;
           const workers = yield* store.boundWorkers(id);
-          const reads = yield* readWorkers(run, workers);
+          const snapshot = yield* passSnapshot(workers);
+          const reads = yield* readWorkers(run, workers, snapshot);
           const stoppable = workers.filter((worker) => {
             const read = reads.get(worker.thread_id)!;
             return !read.finished && read.stoppable;
@@ -355,7 +354,7 @@ export function openRunnerSettle(
                       ),
                   )
                 : [];
-          if (stops.length) yield* stopAndReread(run, operation.attempt, stops, reads);
+          if (stops.length) yield* stopAndReread(run, operation.attempt, stops, reads, snapshot);
           const launchesResolved = !(yield* store.unresolvedLaunches(id)).length;
           if (
             launchesResolved &&
@@ -405,7 +404,7 @@ export function openRunnerSettle(
         if (!run) return failure("not_found", "This Run does not exist.");
         if (run.archived_at || run.settled_at || !run.gate_open) return yield* currentOutcome(id);
         const workers = yield* store.boundWorkers(id);
-        const reads = yield* readWorkers(run, workers);
+        const reads = yield* readWorkers(run, workers, yield* passSnapshot(workers));
         // After the reads, which recheck the connection: confirming could never settle this Run.
         const replaced = yield* store.replacedAuthorization(id);
         if (replaced) return replaced;

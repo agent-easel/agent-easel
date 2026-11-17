@@ -89,15 +89,15 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     followTitleGeneration,
     images,
   );
-  const ownedThreads = openOwnedThreads(t3, liveContextId);
-  const settlement = openRunnerSettle(store, t3, lifecycle, liveContextId, ownedThreads);
+  const ownedThreads = openOwnedThreads(t3);
+  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads);
   const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
   const actions = openRunActions({
     store,
     t3,
     ownedThreads,
     lifecycle,
-    liveContextId,
+    freshSnapshot,
     cancelWaitTimer: waitTimers.cancel,
     settlement,
     reconcileTitleGeneration: titles.reconcileTitleGeneration,
@@ -127,14 +127,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     phase: "observe" | "dispatch" | "both" = "both",
   ): Effect.Effect<void, unknown> {
     return drives.serial(id, () => driveWork(id, phase));
-  }
-  function liveContextId() {
-    return Effect.gen(function* () {
-      const connection = yield* ops.recheckConnection();
-      return connection.ok && connection.value.state === "ready"
-        ? (connection.value.authorizationContext?.id ?? null)
-        : null;
-    });
   }
   function driveWork(id: string, phase: "observe" | "dispatch" | "both") {
     return Effect.gen(function* () {

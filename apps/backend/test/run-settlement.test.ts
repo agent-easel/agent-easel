@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
-  changeAuthorizationBeforeStop,
-  failNextStopSupportCheck,
+  changeAuthorizationAfterNextRead,
+  failNextInspection,
   nextSettlement,
   pauseWorkerReads,
   reopenDuringSettlement,
@@ -826,13 +826,13 @@ it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (
   });
 });
 
-it("a Stop-support check T3 cannot answer keeps the worker's Stop for a later pass", async (c) => {
+it("T3 unavailable for the first settlement pass keeps the worker's Stop for a later pass", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   stopsEndThreads(f.t3);
   // The Settle attempt holds the Run's lane from its failed check until it records the outcome.
-  const checked = failNextStopSupportCheck(f.t3);
+  const checked = failNextInspection(f.t3);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   await checked;
 
@@ -1192,7 +1192,7 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
-  changeAuthorizationBeforeStop(f.t3);
+  changeAuthorizationAfterNextRead(f.t3);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -1203,7 +1203,16 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
   assert(run.ok);
   expect(run.value).toMatchObject({
     lifecycle: "active",
-    settlement: { state: "unresolved", workers: [{ blockId: "worker", state: "unresolved" }] },
+    settlement: {
+      state: "unresolved",
+      workers: [
+        {
+          blockId: "worker",
+          state: "unresolved",
+          problem: expect.stringContaining("so Factory did not request Stop"),
+        },
+      ],
+    },
   });
   expect(f.t3.threadStops).toStrictEqual([]);
 });
