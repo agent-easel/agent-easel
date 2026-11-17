@@ -262,26 +262,33 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    * refusing state or a later one: the owner already back to the acknowledged one releases the
    * wait, and otherwise only a state later than the one read can. A failed read proves nothing, so
    * the boundary stays unknown and Studio's next delivery reads again; a delivery naming another
-   * owner still asks for acknowledgement meanwhile.
+   * owner still asks for acknowledgement meanwhile. Returns whether a read completed.
    */
-  async function boundRefusal(id: string) {
-    if (boundingRefusal) return;
+  async function boundRefusal(id: string): Promise<boolean> {
+    if (boundingRefusal) return false;
     boundingRefusal = true;
     try {
       const current = await read(id);
-      if (ownerChange.status !== "waiting" || waitingSince !== unknownBoundary) return;
-      noteOwnerState(current.updatedAt);
-      if (current.projectId === acknowledgedOwner) ownerChange = noOwnerChange;
-      else waitingSince = current.updatedAt;
+      if (ownerChange.status === "waiting" && waitingSince === unknownBoundary) {
+        noteOwnerState(current.updatedAt);
+        if (current.projectId === acknowledgedOwner) ownerChange = noOwnerChange;
+        else waitingSince = current.updatedAt;
+      }
+      return true;
     } catch {
       // Unbounded: no state can show the owner moved back until a read succeeds.
+      return false;
     } finally {
       boundingRefusal = false;
     }
   }
-  /** Reads again for a delivery that arrived while a refusal's boundary is still unknown. */
+  /**
+   * Reads again for a delivery that arrived while a refusal's boundary is still unknown. A read
+   * that completed checks what Studio delivered meanwhile against the new boundary; a failed one
+   * waits for the next delivery instead of reading again at once.
+   */
   async function rebound(id: string) {
-    await boundRefusal(id);
+    if (await boundRefusal(id)) apply();
     publish();
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */

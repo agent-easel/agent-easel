@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+import type { AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { savedAgent } from "./support/agent-draft.ts";
@@ -1000,6 +1001,36 @@ it("after a stale-owner refusal whose read failed, the next delivery reads again
 
   // Act
   echoed(setup);
+
+  // Assert
+  expect(await released).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    canSave: true,
+  });
+});
+
+it("a retried read after a stale-owner refusal checks the owner Studio delivered while it ran", async () => {
+  // Arrange
+  const setup = editedAgent();
+  const unread = new Error("Factory could not read the Agent.");
+  setup.factory.getAgent.mockRejectedValueOnce(unread).mockRejectedValueOnce(unread);
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  const refusing = setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+  let answerRead: (agent: AgentDefinition) => void = () => {};
+  setup.factory.getAgent.mockImplementationOnce(
+    () => new Promise<AgentDefinition>((resolve) => (answerRead = resolve)),
+  );
+  deliver(setup, [queued]);
+  setup.factory.moveElsewhere(null);
+  echoed(setup);
+  const released = publishedWhen(setup, (snapshot) => snapshot.ownerChange.status === "none");
+
+  // Act
+  answerRead(refusing);
 
   // Assert
   expect(await released).toMatchObject({
