@@ -90,7 +90,7 @@ const overCapacity: OperationError = {
   message: `At most ${RUN_VIEW_LIMIT} Runs can be followed live in one window.`,
   issues: [],
 };
-/** No holder and no pending release: a Run the view keeps until it next resubscribes. */
+/** No holder and no pending release: a Run the view keeps until it next subscribes again. */
 const kept = (entry: Entry) => entry.refs === 0 && entry.linger === undefined;
 /** Final for one scope: an unknown Run, or a Run refused for capacity. */
 const terminal = (error: OperationError | null) =>
@@ -208,7 +208,6 @@ export class LiveOwner {
       entry.gating += gating;
       if (gates) this.changed();
     } else {
-      if (channelOf(scope.part) === "view") this.forgetKeptRuns();
       entry = {
         scope: scope as unknown as AnyScope,
         refs: 1,
@@ -316,11 +315,12 @@ export class LiveOwner {
   private resubscribe() {
     if (!this.session?.handle) return;
     for (const channel of channels) {
-      const watch = this.wantedWatch(channel);
+      let watch = this.wantedWatch(channel);
       const signature = watch && JSON.stringify(watch);
       const subscription = this.subscriptions[channel];
       if (signature === subscription.signature && (subscription.stop || subscription.retry))
         continue;
+      if (channel === "view" && this.forgetKeptRuns()) watch = this.wantedWatch(channel);
       if (watch) this.start(channel, watch);
       else this.stop(channel);
     }
@@ -412,19 +412,25 @@ export class LiveOwner {
     entry.view = { value, synchronized: current, error: null };
   }
 
-  /** Opening another Run or navigation resubscribes the view anyway, so kept Runs leave it now. */
+  /** A view that subscribes again leaves out the Runs it kept; returns whether any were kept. */
   private forgetKeptRuns() {
-    for (const [key, entry] of this.entries) if (kept(entry)) this.entries.delete(key);
+    const forgotten = [...this.entries].filter(([, entry]) => kept(entry));
+    for (const [key] of forgotten) this.entries.delete(key);
+    return forgotten.length > 0;
   }
 
   private drop(entry: Entry) {
     if (this.entries.get(entry.scope.key) !== entry) return;
     entry.linger = undefined;
     const holding = [...this.entries.values()].some((held) => !kept(held));
-    // A released Run stays in the view, still updated, until the view next resubscribes:
+    // A released Run stays in the view, still updated, until the view next subscribes again:
     // resubscribing now would put the Run opened in its place back to synchronizing just after
-    // it showed live, and reopening the kept Run shows it live at once.
-    if (entry.scope.part.kind === "run" && holding) return;
+    // it showed live, and reopening the kept Run shows it live at once. A held Run refused for
+    // capacity takes the freed slot instead.
+    const refusedHeld = [...this.entries.values()].some(
+      (held) => !kept(held) && held.view.error === overCapacity,
+    );
+    if (entry.scope.part.kind === "run" && holding && !refusedHeld) return;
     this.entries.delete(entry.scope.key);
     if (holding) this.resubscribe();
     else {

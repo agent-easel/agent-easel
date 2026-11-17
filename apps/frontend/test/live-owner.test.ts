@@ -10,7 +10,7 @@ import { reconnectDelay } from "../src/live/owner.ts";
 import { runScope } from "../src/live/run.ts";
 import { appearanceScope, connectionScope } from "../src/live/scopes.ts";
 import { studioScope } from "../src/live/studio.ts";
-import { changed, checked, envelope, liveHarness, snapshot } from "./support/live.ts";
+import { changed, checked, envelope, liveHarness, snapshot, switchedRuns } from "./support/live.ts";
 import { runDetail } from "./support/run.ts";
 
 it("a message from a replaced connection cannot overwrite the fresh snapshot", () => {
@@ -349,30 +349,6 @@ it("Studio's definitions gate mutations only once Studio holds them, not while o
   expect(live.delivery()).toBe("synchronizing");
 });
 
-/** Navigation and Run `from` are held and current; `from` is then left for Run `to`, whose snapshot arrived. */
-function switchedRuns() {
-  const live = liveHarness();
-  const from = { ...runDetail(), id: "from" };
-  const to = { ...runDetail(), id: "to" };
-  const snapshots = (...runs: (typeof from)[]) =>
-    envelope<RunViewLiveMessage>([
-      { _tag: "navigation", message: { _tag: "snapshot", rows: [] } },
-      ...runs.map((run) => ({
-        _tag: "run" as const,
-        runId: run.id,
-        message: { _tag: "snapshot" as const, run },
-      })),
-    ]);
-  live.owner.acquire(navigationScope);
-  const releaseFrom = live.owner.acquire(runScope(from.id));
-  live.sessions[0]?.connected();
-  live.sessions[0]?.subscriptions.at(-1)?.message(snapshots(from));
-  releaseFrom();
-  const releaseTo = live.owner.acquire(runScope(to.id));
-  live.sessions[0]?.subscriptions.at(-1)?.message(snapshots(from, to));
-  return { live, from, to, releaseTo };
-}
-
 it("a Run opened in place of another stays live once the previous Run is released", () => {
   // Arrange
   const { live, to } = switchedRuns();
@@ -401,4 +377,37 @@ it("reopening a Run the view still keeps shows its live value at once", () => {
     synchronized: true,
   });
   expect(live.delivery()).toBe("current");
+});
+
+it("releasing a followed Run gives its slot to a held Run refused for capacity", () => {
+  // Arrange
+  const live = liveHarness();
+  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
+  const [releaseFirst] = runs.map((scope) => live.owner.acquire(scope));
+  live.sessions[0]?.connected();
+  releaseFirst?.();
+
+  // Act
+  live.elapse();
+
+  // Assert
+  const watch = live.sessions[0]?.watches.at(-1);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).toContain(`run-${RUN_VIEW_LIMIT}`);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).not.toContain("run-0");
+  expect(live.owner.view(runs.at(-1)?.key ?? "").error).toBeNull();
+});
+
+it("a window shown again no longer follows the Run it left before hiding", () => {
+  // Arrange
+  const { live, to } = switchedRuns();
+  live.elapse();
+  live.owner.setVisible(false);
+
+  // Act
+  live.owner.setVisible(true);
+
+  // Assert
+  expect(live.sessions[1]?.watches).toStrictEqual([
+    { rpc: "WatchRunView", navigation: true, runIds: [to.id] },
+  ]);
 });

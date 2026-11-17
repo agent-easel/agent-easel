@@ -179,8 +179,9 @@ synchronizing, with no HTTP fallback, and HTTP answers never mark the scope sync
 read transaction, and its changes travel in one delivery that the window applies at once,
 so one commit's lifecycle, attention and report changes appear together in Run detail and
 the sidebar. Opening a Run resubscribes the view with a fresh joint snapshot. A Run left
-for another stays in the view, still updated, until that next resubscribe, so releasing it
+for another stays in the view, still updated, until the view next subscribes again, so releasing it
 never returns the Run opened in its place to synchronizing, and reopening it shows it live at once.
+Releasing a Run while a held Run is refused for capacity resubscribes at once, giving it the slot.
 Each subscription starts with an authoritative snapshot, followed by committed changes. The
 owning modules publish only after a successful durable commit, or an authoritative
 in-memory connection or project-discovery transition. This covers reports, including
