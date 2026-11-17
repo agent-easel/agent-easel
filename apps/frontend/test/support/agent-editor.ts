@@ -23,6 +23,8 @@ function memoryAgents() {
       latest = savedAgent({ ...latest, ...change, revision: latest.revision + 1 });
       return latest;
     },
+    /** Factory's current Agent, as a read after a refusal finds it. */
+    getAgent: vi.fn<AgentDraftOperations["getAgent"]>(async () => latest),
     /** Another client changes the Agent's owner, which appends no revision. */
     moveElsewhere(projectId: string | null) {
       latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };

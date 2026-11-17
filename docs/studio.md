@@ -195,8 +195,10 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   save then expects the new owner. A save refused as `stale_owner` before Studio delivered the move keeps the draft, shows
   the refusal and waits for the new owner, then asks for the same acknowledgement instead of a revision comparison; when Studio
   already shows an owner other than the one the save expected, it asks at once. Moving
-  back to the acknowledged owner needs no acknowledgement; after such a refusal, a state written later that names the
-  acknowledged owner again lets the edits save, while a state read before the move keeps the draft waiting.
+  back to the acknowledged owner needs no acknowledgement. After such a refusal the editor reads the definition once: if
+  it already names the acknowledged owner again, the edits can save at once; otherwise only a state written after the one
+  read can release the wait, so a delivery read before the refusing move, even one queued until then, keeps the draft
+  waiting. If that read fails, the newest state the editor followed before the refusal is the boundary instead.
 
 ## Agent definitions
 

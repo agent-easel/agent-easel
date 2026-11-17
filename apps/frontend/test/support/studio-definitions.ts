@@ -65,6 +65,7 @@ export function studioFactory(): Operations {
       savedAgent({ id: "copy", name: "Reviewer copy" }),
     ),
     removeAgent: vi.fn<StudioDefinitionsOperations["removeAgent"]>(async () => undefined),
+    getAgent: vi.fn<StudioDefinitionsOperations["getAgent"]>(async (id) => savedAgent({ id })),
     changeFlowOwner: vi.fn<StudioDefinitionsOperations["changeFlowOwner"]>(
       async (id, { projectId }) => savedFlow("Moved", { id, projectId }),
     ),

@@ -128,6 +128,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   readonly contentOf: (definition: D) => C;
   /** This definition's kind in Studio's saved definitions. */
   readonly list: () => StudioRead<readonly D[]>;
+  /** Reads the saved definition from Factory now, after a refusal Studio may not have caught up with. */
+  readonly read: (id: string) => Promise<D>;
   readonly view: (state: RevisionedDraftState<D, C>) => S;
   /** While true, a clean draft waits to adopt a newer revision; `reconcile` adopts it later. */
   readonly hold?: () => boolean;
@@ -136,7 +138,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** Runs whenever the owning Project the draft shows changes, including by its own Change owner. */
   readonly onOwnerChange?: () => void;
 }) {
-  const { contentOf, list, view, hold, onAdopt, onOwnerChange } = config;
+  const { contentOf, list, read, view, hold, onAdopt, onOwnerChange } = config;
   let saved = config.saved;
   let content = config.content;
   let baseline = content;
@@ -157,10 +159,12 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    */
   let ownerSeenAt = config.saved?.updatedAt ?? "";
   /**
-   * The newest followed state when a save was refused for a stale owner: only a later state shows
-   * where the owner went, while one read before the move still names the owner the save expected.
+   * After a stale-owner refusal, the latest state Factory may have refused the save against: only a
+   * later state that names the acknowledged owner shows the owner moved back, while one read before
+   * still names the owner the save expected. Unknown (after every state) until Factory is read.
    */
   let waitingSince = "";
+  const unknownBoundary = "\uffff";
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -248,8 +252,25 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     // Reconciling afterwards names the new owner, or the newer revision, once Studio holds it.
     if (isStaleOwner(cause)) {
       ownerChange = { status: "waiting" };
-      waitingSince = ownerSeenAt;
+      waitingSince = unknownBoundary;
     } else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
+  }
+  /**
+   * Reads the definition after a stale-owner refusal. The read follows the refusal, so it holds the
+   * refusing state or a later one: the owner already back to the acknowledged one releases the
+   * wait, and otherwise only a state later than the one read can. Without a read, the newest state
+   * followed before the refusal is the best boundary there is.
+   */
+  async function boundRefusal(definition: D) {
+    try {
+      const current = await read(definition.id);
+      if (ownerChange.status !== "waiting" || waitingSince !== unknownBoundary) return;
+      noteOwnerState(current.updatedAt);
+      if (current.projectId === acknowledgedOwner) ownerChange = noOwnerChange;
+      else waitingSince = current.updatedAt;
+    } catch {
+      if (waitingSince === unknownBoundary) waitingSince = ownerSeenAt;
+    }
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */
   function noteAbsence() {
@@ -412,6 +433,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         if (removed) return undefined;
         if (outcome === "unknown") showError(request.unknownMessage);
         else refused(cause, request.fallback);
+        if (saved && cause instanceof ApiError && isStaleOwner(cause)) await boundRefusal(saved);
         return undefined;
       } finally {
         apply();

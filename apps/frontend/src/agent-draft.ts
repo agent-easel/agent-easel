@@ -25,7 +25,7 @@ import {
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
   typeof api,
-  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent"
+  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent" | "getAgent"
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
@@ -169,6 +169,7 @@ export function createAgentDraft(
         },
     contentOf,
     list: () => source.getSnapshot().agents,
+    read: (id) => source.getAgent(id),
     view(state): AgentDraftSnapshot {
       const { environmentId, providerInstanceId, modelId } = state.content.execution;
       const environments = capabilities?.environments ?? [];

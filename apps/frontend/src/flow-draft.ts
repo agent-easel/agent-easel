@@ -15,7 +15,7 @@ export type FlowDraftSource = Pick<
 >;
 
 /** The Factory operations one Flow draft uses beyond Studio's; the HTTP client in the app. */
-export type FlowDraftOperations = Pick<typeof api, "validateFlow">;
+export type FlowDraftOperations = Pick<typeof api, "validateFlow" | "getFlow">;
 
 export interface FlowDraftSnapshot extends RevisionedDraftState<FlowDraft, FlowContent> {
   readonly status: "loading" | "failed" | "loaded";
@@ -93,6 +93,7 @@ export function createFlowDraft(
     content: opened ? contentOf(opened) : unloaded,
     contentOf,
     list: () => source.getSnapshot().flows,
+    read: (flowId) => operations.getFlow(flowId),
     // Only adoption into a clean draft waits for an interaction; it would replace the graph.
     hold: () => interactions > 0,
     onAdopt() {

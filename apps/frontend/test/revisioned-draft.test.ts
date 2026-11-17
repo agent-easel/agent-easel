@@ -946,6 +946,45 @@ it("after a stale-owner refusal, a delivery of the state read before the move ke
   });
 });
 
+it("after a stale-owner refusal, a queued delivery read before the refusing move keeps waiting", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  deliver(setup, [queued]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal, a read finding the owner already moved back lets the edits save", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  setup.factory.getAgent.mockImplementationOnce(async () => setup.factory.moveElsewhere(null));
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
 it("a dirty editor's own Change owner needs no acknowledgement, also before Studio delivers it", () => {
   // Arrange
   const setup = editedAgent();

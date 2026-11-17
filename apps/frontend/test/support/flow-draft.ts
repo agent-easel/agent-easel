@@ -14,7 +14,7 @@ import { createStudioDefinitions } from "../../src/studio-definitions.ts";
 import { savedAgent } from "./agent-draft.ts";
 import { envelope, liveHarness } from "./live.ts";
 
-type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow">;
+type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow" | "getFlow">;
 
 /** A minute after `time`: an owner change always advances a definition's `updatedAt`. */
 export const laterThan = (time: string) => new Date(Date.parse(time) + 60_000).toISOString();
@@ -107,6 +107,7 @@ export function memoryFactory(): MemoryFactory {
       removed = true;
     }),
     validateFlow: vi.fn<FlowOperations["validateFlow"]>(async () => validated()),
+    getFlow: vi.fn<FlowOperations["getFlow"]>(async () => latest),
   };
 }
 
