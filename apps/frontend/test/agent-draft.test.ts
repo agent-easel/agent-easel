@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
+import { comparedPresentation } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
 import {
@@ -407,4 +408,39 @@ it("a retained Agent stays editable while a superseded save reply is pending", (
     content: { prompt: "Recover while the save reply is pending" },
     canSave: false,
   });
+});
+
+it("a new Agent created for a Project leaves out the Project overrides its draft held", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null, capabilities);
+  draft.edit({ name: "Releaser", prompt: "Release the change." });
+  draft.setOverride({ projectId: "northwind", execution: savedAgent().execution! });
+
+  // Act
+  await draft.save("ledgerly");
+
+  // Assert
+  expect(factory.createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ projectId: "ledgerly", projectOverrides: [] }),
+  );
+  expect(draft.getSnapshot()).toMatchObject({ dirty: false, error: "" });
+});
+
+it("two Agent revisions that differ only in a Project override read differently in the comparison", () => {
+  // Arrange
+  const base = savedAgent();
+  const overridden = savedAgent({
+    projectOverrides: [
+      { projectId: "northwind", execution: { ...base.execution!, modelId: "other-first" } },
+    ],
+  });
+
+  // Act
+  const shown = [comparedPresentation(base, []), comparedPresentation(overridden, [])];
+
+  // Assert
+  expect(shown[0]).not.toBe(shown[1]);
+  expect(shown[1]).toContain(
+    "Unknown Project northwind: local · primary · other-first · effort=low, old=true",
+  );
 });

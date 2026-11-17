@@ -254,7 +254,9 @@ a table with one row per Project, its provider, model and thinking options, and 
 and the same Worker pickers, starting from the Agent's own settings; **Apply** puts the row in the draft and **Save**
 stores it in the next revision like any other edit. Runs in that Project launch with the override; every other Project
 uses the Worker. The button is disabled until the Agent has its own Worker, and a Project Agent's editor has no such
-section. The Agent list row adds **+N Project overrides** to its runtime summary. In the API, `projectOverrides` is a list
+section. A new Agent whose owner choice changes to a Project keeps its overrides in the draft under **Project overrides
+left out**, and **Create Agent** saves it without them; choosing Global again before Create keeps them. The revision
+comparison lists each override's Project and settings on both sides. The Agent list row adds **+N Project overrides** to its runtime summary. In the API, `projectOverrides` is a list
 of `{projectId, execution}` with complete settings; save requires the key (send the saved list unchanged to keep it, `[]`
 for none), while a create may omit it for none. A save is refused when a Project Agent has overrides
 (`override_global_only`), when overrides exist without the Agent's own settings (`override_requires_execution`), when a

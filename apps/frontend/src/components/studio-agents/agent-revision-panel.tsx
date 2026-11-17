@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 import { RefreshCw } from "lucide-react";
-import type { AgentDefinition } from "@t3-factory/contracts";
+import type {
+  AgentDefinition,
+  AgentExecutionSettings,
+  FactoryProject,
+} from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -11,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
+import { studioOwner } from "../../studio-definitions.ts";
 
 const updatedNoticeMs = 4000;
 
@@ -19,9 +24,23 @@ type ComparedContent = Omit<AgentContent, "execution"> & {
   readonly execution: AgentContent["execution"] | null;
 };
 
+const optionList = (execution: AgentExecutionSettings | null) =>
+  (execution?.modelOptions ?? []).map(({ id, value }) => `${id}=${String(value)}`).join(", ") ||
+  "(none)";
+
 /** How one side of the comparison reads: every saved field, read-only, prompt last. */
-function presentation({ name, prompt, execution, exits }: ComparedContent) {
-  const options = (execution?.modelOptions ?? []).map(({ id, value }) => `${id}=${String(value)}`);
+export function comparedPresentation(
+  { name, prompt, execution, exits, projectOverrides }: ComparedContent,
+  projects: readonly FactoryProject[],
+) {
+  const projectName = (projectId: string) =>
+    projects.some((project) => project.id === projectId)
+      ? studioOwner(projectId, projects).title
+      : `Unknown Project ${projectId}`;
+  const overrideLines = projectOverrides.map(
+    ({ projectId, execution: settings }) =>
+      `  ${projectName(projectId)}: ${settings.environmentId} · ${settings.providerInstanceId} · ${settings.modelId} · ${optionList(settings)}`,
+  );
   const exitLines = exits.map(
     (exit) =>
       `  ${exit.name || "(unnamed)"}${exit.messageRequired ? " · message required" : ""}${exit.description ? ` — ${exit.description}` : ""}`,
@@ -31,7 +50,9 @@ function presentation({ name, prompt, execution, exits }: ComparedContent) {
     `Environment: ${execution?.environmentId || "(none)"}`,
     `Provider: ${execution?.providerInstanceId || "(none)"}`,
     `Model: ${execution?.modelId || "(none)"}`,
-    `Options: ${options.join(", ") || "(none)"}`,
+    `Options: ${optionList(execution)}`,
+    `Project overrides:${overrideLines.length ? "" : " (none)"}`,
+    ...overrideLines,
     `Exits:${exitLines.length ? "" : " (none)"}`,
     ...exitLines,
     "Prompt:",
@@ -39,7 +60,15 @@ function presentation({ name, prompt, execution, exits }: ComparedContent) {
   ].join("\n");
 }
 
-function Presentation({ title, content }: { title: string; content: ComparedContent }) {
+function Presentation({
+  title,
+  content,
+  projects,
+}: {
+  title: string;
+  content: ComparedContent;
+  projects: readonly FactoryProject[];
+}) {
   return (
     <div className="min-w-0">
       <h3 className="mb-1.5 text-base font-semibold">{title}</h3>
@@ -47,7 +76,7 @@ function Presentation({ title, content }: { title: string; content: ComparedCont
         aria-label={title}
         className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap break-words"
       >
-        {presentation(content)}
+        {comparedPresentation(content, projects)}
       </pre>
     </div>
   );
@@ -61,9 +90,12 @@ function Presentation({ title, content }: { title: string; content: ComparedCont
 export function AgentRevisionPanel({
   draft,
   state,
+  projects,
 }: {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
+  /** Names each Project override in the comparison. */
+  projects: readonly FactoryProject[];
 }) {
   const { conflict, updatedTo } = state;
   useEffect(() => {
@@ -113,7 +145,7 @@ export function AgentRevisionPanel({
         )}
       </div>
       {conflict.status === "compared" && (
-        <Comparison draft={draft} state={state} latest={conflict.latest} />
+        <Comparison draft={draft} state={state} latest={conflict.latest} projects={projects} />
       )}
     </section>
   );
@@ -123,17 +155,19 @@ function Comparison({
   draft,
   state,
   latest,
+  projects,
 }: {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
   latest: AgentDefinition;
+  projects: readonly FactoryProject[];
 }) {
   const { revision } = latest;
   return (
     <>
       <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-        <Presentation title="Your local draft" content={state.content} />
-        <Presentation title={`Saved revision ${revision}`} content={latest} />
+        <Presentation title="Your local draft" content={state.content} projects={projects} />
+        <Presentation title={`Saved revision ${revision}`} content={latest} projects={projects} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button

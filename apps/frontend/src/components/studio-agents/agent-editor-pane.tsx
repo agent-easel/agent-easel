@@ -107,7 +107,7 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 className="rounded-none border-x-0 border-t-0 px-4 sm:px-6 md:px-8"
               />
             )}
-            <AgentRevisionPanel draft={draft} state={state} />
+            <AgentRevisionPanel draft={draft} state={state} projects={ownership.projects} />
           </>
         )}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
@@ -144,6 +144,19 @@ export function AgentEditorPane(props: AgentEditorProps) {
             />
             {settings.execution.providerInstanceId && (
               <AgentReportingNotice providerId={settings.execution.providerInstanceId} />
+            )}
+            {!global && projectOverrides.length > 0 && (
+              <Alert role="status" variant="attention">
+                <CircleAlert aria-hidden />
+                <AlertTitle>Project overrides left out</AlertTitle>
+                <AlertDescription>
+                  A Project Agent has no Project overrides, so Create leaves out the{" "}
+                  {projectOverrides.length === 1
+                    ? "override"
+                    : `${projectOverrides.length} overrides`}{" "}
+                  in this draft. Choose Global to keep them.
+                </AlertDescription>
+              </Alert>
             )}
             {global && (
               <AgentProjectOverrides

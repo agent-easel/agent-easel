@@ -307,8 +307,11 @@ export function createAgentDraft(
      * (null for a global Agent); a save never changes the owner.
      */
     async save(owner: string | null = null) {
+      if (!draft.getSnapshot().canSave) return undefined;
+      // A Project Agent has no Project overrides; the editor said Create leaves them out.
+      if (!draft.getSnapshot().saved && owner !== null && overrides().length)
+        edit({ projectOverrides: [] });
       const snapshot = draft.getSnapshot();
-      if (!snapshot.canSave) return undefined;
       const { saved, content } = snapshot;
       const request = saveRequest(saved, content, source, saved ? snapshot.owner : owner);
       if (!("error" in request)) return draft.save(request);

@@ -64,11 +64,6 @@ export function AgentProjectOverrides({
         <h2 id="project-overrides-heading" className={fieldLabelClass}>
           Project overrides
         </h2>
-        {overrides.length > 0 && (
-          <span className="rounded-full border bg-muted px-1.5 text-2xs font-medium text-subtle-foreground">
-            {overrides.length}
-          </span>
-        )}
         <span className="flex-1" />
         <Button
           type="button"
