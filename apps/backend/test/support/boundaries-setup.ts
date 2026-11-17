@@ -249,5 +249,5 @@ export async function runtimeReadinessFixture(c: TestContext) {
     exits: [],
   });
   assert(p.ok && a.ok);
-  return { f, t3, selection: { projectId: p.value.id, agentId: a.value.id }, root };
+  return { f, t3, git: h.git, selection: { projectId: p.value.id, agentId: a.value.id }, root };
 }

@@ -95,6 +95,31 @@ it("recheckRuntime never answers a new authorization context with the report sup
   });
 });
 
+it("recheckRuntime never reports reporting evidence read after the authorization context switched past its selection", async (c) => {
+  // Arrange
+  const { f, t3, git, selection } = await runtimeReadinessFixture(c);
+  const resolve = git.resolveRepository.bind(git);
+  git.resolveRepository = async (endpoint, path) => {
+    git.resolveRepository = resolve;
+    const root = await resolve(endpoint, path);
+    t3.approve("replacement-grant");
+    t3.support.reportReads = false;
+    await f.recheckConnection();
+    return root;
+  };
+
+  // Act
+  const result = await f.recheckRuntime(selection);
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.ready).toBe(false);
+  expect(result.value.issues.map(({ code, path }) => ({ code, path }))).toContainEqual({
+    code: "connection_unavailable",
+    path: "connection",
+  });
+});
+
 it("a Cursor provider is not rejected as an unsupported harness", async (c) => {
   // Arrange
   const { t3, f, p, input } = await claudeRuntimeConfig(c);

@@ -46,6 +46,16 @@ function readyConnection(c: Result<T3Connection>) {
     );
   return { connection: c.value, context: c.value.authorizationContext };
 }
+/** Readiness evidence counts only under the snapshot's context: support answers belong to it, and
+ * a switched connection gets a new context id, even when it switches back. */
+function sameContext(contextId: string, snapshot: T3ContractSnapshot) {
+  if (contextId !== snapshot.contextId)
+    blocked(
+      "connection_unavailable",
+      "connection",
+      "The T3 connection changed while readiness was checked. Recheck it.",
+    );
+}
 function availableProject(catalog: Result<ProjectCatalog>, projectId: string) {
   const p = catalog.ok ? catalog.value.projects.find((p) => p.id === projectId) : undefined;
   if (!p || p.availability !== "available")
@@ -189,13 +199,7 @@ const openRuntimeSetup = Effect.fn(function* (
       { concurrency: "unbounded" },
     );
     const { connection, context } = readyConnection(c);
-    // The support answers belong to the snapshot's context; a context switched since then gets none.
-    if (context.id !== snapshot.contextId)
-      blocked(
-        "connection_unavailable",
-        "connection",
-        "The T3 connection changed while readiness was checked. Recheck it.",
-      );
+    sameContext(context.id, snapshot);
     const p = availableProject(ps, i.projectId);
     if (!a.ok) blocked("agent_unavailable", "agent", "Choose an existing Agent.");
     // A captured Agent already carries the settings of its Run's Project.
@@ -210,7 +214,7 @@ const openRuntimeSetup = Effect.fn(function* (
     const driver = validatedHarness(context, agent, readyCapabilities(cap));
     const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: agent, driver, support: snapshot.support };
+    return { c: connection, a: agent, driver, snapshot };
   });
   /**
    * Explicit reporting: the connected contract, an installed Factory MCP and report support.
@@ -234,8 +238,11 @@ const openRuntimeSetup = Effect.fn(function* (
         s.a.execution,
         ops.getReportingInstallations,
       );
+      // Git and the installation lookup awaited after selection, so every piece of evidence held
+      // under the snapshot's context only when the connection still has it now.
+      sameContext(readyConnection(yield* ops.getConnection()).context.id, s.snapshot);
       if (installed.ok) issues.push(...installed.value.issues);
-      const reporting = reportSupport(s.support, s.driver);
+      const reporting = reportSupport(s.snapshot.support, s.driver);
       if (!reporting.supported)
         issues.push({
           code: "reporting_unsupported",
