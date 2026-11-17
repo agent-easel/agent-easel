@@ -477,22 +477,33 @@ it("Agent revisions giving the same settings to two Projects with one title read
   expect(shown[0]).not.toBe(shown[1]);
 });
 
-it("a saved Agent moved to a Project elsewhere keeps the draft's Project overrides and saves only once they are removed", async () => {
+it("acknowledging a move to a Project elsewhere keeps the draft's Project overrides and blocks Save", () => {
   // Arrange
   const setup = agentDraft();
   const override = { projectId: "northwind", execution: savedAgent().execution! };
   setup.draft.setOverride(override);
   ownerChangedElsewhere(setup, "ledgerly");
-  setup.draft.acknowledgeOwner("ledgerly");
-  const stranded = setup.draft.getSnapshot();
 
   // Act
+  setup.draft.acknowledgeOwner("ledgerly");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({ strandedOverrides: true, canSave: false });
+  expect(setup.draft.getSnapshot().content.projectOverrides).toStrictEqual([override]);
+});
+
+it("an Agent moved to a Project elsewhere saves without the Project overrides removed from its draft", async () => {
+  // Arrange
+  const setup = agentDraft();
+  setup.draft.setOverride({ projectId: "northwind", execution: savedAgent().execution! });
+  ownerChangedElsewhere(setup, "ledgerly");
+  setup.draft.acknowledgeOwner("ledgerly");
   setup.draft.removeOverrides();
+
+  // Act
   await setup.draft.save();
 
   // Assert
-  expect(stranded).toMatchObject({ strandedOverrides: true, canSave: false });
-  expect(stranded.content.projectOverrides).toStrictEqual([override]);
   expect(setup.factory.updateAgent).toHaveBeenCalledWith(
     "agent",
     expect.objectContaining({ expectedProjectId: "ledgerly", projectOverrides: [] }),
