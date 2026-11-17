@@ -4,7 +4,12 @@ import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contra
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
-import { largestWirePortOffset, openWorktreeFlowBlock } from "./support/canvas.ts";
+import {
+  largestWirePortOffset,
+  openFittedFlowBlock,
+  releaseApprovalHumanStep,
+  worktreeImplementBlock,
+} from "./support/canvas.ts";
 import {
   chooseFlowAction,
   expectSavedAgentRevision,
@@ -645,7 +650,7 @@ test("authoring wires start and end at their port centres while a block is selec
   browser,
 }) => {
   // Arrange
-  const block = await openWorktreeFlowBlock(app, screen, browser);
+  const block = await openFittedFlowBlock({ app, screen, browser }, worktreeImplementBlock);
 
   // Act
   await block.selectByName();
@@ -661,7 +666,7 @@ test("selecting an authoring block keeps it at the height its geometry reserves"
   browser,
 }) => {
   // Arrange
-  const block = await openWorktreeFlowBlock(app, screen, browser);
+  const block = await openFittedFlowBlock({ app, screen, browser }, worktreeImplementBlock);
   const unselected = await block.height();
 
   // Act
@@ -670,6 +675,25 @@ test("selecting an authoring block keeps it at the height its geometry reserves"
   // Assert
   expect(await block.height()).toBe(unselected);
   await app.screenshot("selected-block-reserved-height");
+});
+
+test("a selected Human step keeps its dashed edge, reserved height and wire ends on its ports", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const step = await openFittedFlowBlock({ app, screen, browser }, releaseApprovalHumanStep);
+  const unselected = await step.height();
+
+  // Act
+  await step.selectByName();
+
+  // Assert
+  expect(await step.outlineStyle()).toBe("dashed");
+  expect(await step.height()).toBe(unselected);
+  await expect.poll(() => largestWirePortOffset(browser)).toBeLessThan(0.5);
+  await app.screenshot("selected-human-step");
 });
 
 test("leaving an edited Flow for another Studio page asks before discarding its edits", async ({

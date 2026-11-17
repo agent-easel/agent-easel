@@ -374,10 +374,12 @@ function authoringBlock({
     className: cn(
       "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
       BLOCK_KINDS[block.kind].dashedFrame && "border-dashed border-border-strong",
-      // The second pixel of the selected frame is an inset ring, so selection keeps the
-      // frame inside the box its geometry reserves.
+      // The selected 2 px edge is an outline drawn over the 1 px border and one pixel inside
+      // it, so selection keeps the frame inside the box its geometry reserves. The border is
+      // transparent so a dashed outline's gaps show the card, as a dashed border's do.
       selected &&
-        "border-primary ring-4 inset-ring-1 inset-ring-primary ring-primary/20 hover:border-primary",
+        "border-transparent outline-2 -outline-offset-2 outline-primary ring-4 ring-primary/20 hover:border-transparent",
+      selected && BLOCK_KINDS[block.kind].dashedFrame && "outline-dashed",
       dragging && "z-10 cursor-grabbing shadow-lift",
       connectTarget && "ring-2 ring-primary/30",
     ),
