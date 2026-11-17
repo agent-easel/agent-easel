@@ -62,6 +62,29 @@ export interface T3Target {
 export type T3Endpoint = Pick<T3Target, "endpoint">;
 export type T3EnvironmentTarget = Pick<T3Target, "endpoint" | "environmentId">;
 export type T3ProjectTarget = Pick<T3Target, "endpoint" | "environmentId" | "workspaceRoot">;
+/**
+ * Why one T3 call failed. `unavailable`: T3 could not be reached or answered with a server error,
+ * a timeout or no reply, so an action's outcome is uncertain. `authorization-required`: T3 rejected
+ * the grant. `refused`: T3 declined the request or does not support it; nothing was accepted.
+ * `invalid-response`: T3 answered outside the contract, so an action's outcome is uncertain.
+ */
+export type T3FailureKind =
+  | "unavailable"
+  | "authorization-required"
+  | "refused"
+  | "invalid-response";
+/** One call's failure, classified by the adapter for that call only. */
+export class T3Failure extends Error {
+  override readonly name = "T3Failure";
+  readonly kind: T3FailureKind;
+  constructor(kind: T3FailureKind, message: string) {
+    super(message);
+    this.kind = kind;
+  }
+}
+export const isT3Refusal = (error: unknown) =>
+  error instanceof T3Failure && error.kind === "refused";
+/** Every call that rejects does so only with a `T3Failure`. */
 export interface T3Adapter {
   /** `t3_thread_wait` for one run with its delegated and background work. Queues, native
    * requests and business completion stay separate. */
@@ -79,6 +102,7 @@ export interface T3Adapter {
   sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference>;
   /** Prepares one pending upload and posts its exact bytes; returns its attachment id. */
   uploadAttachment(target: T3Endpoint, upload: AttachmentUpload, data: Uint8Array): Promise<string>;
+  /** A `refused` launch was not accepted; any other failure leaves its outcome uncertain. */
   launchThread(target: T3Endpoint, payload: LaunchPayload): Promise<LaunchReference>;
   /** Search one project for a launch that may already exist. Incomplete scans withhold candidates. */
   discoverLaunchCandidates(target: T3Target, title: string): Promise<LaunchDiscovery>;
@@ -196,10 +220,6 @@ export interface LaunchReference {
   readonly runId: string;
   readonly link: string | null;
   readonly status: string;
-}
-/** T3 refused the launch before accepting it. The outcome is not uncertain. */
-export class LaunchRejected extends Error {
-  override readonly name = "LaunchRejected";
 }
 export interface LaunchCandidateExecution {
   readonly runId: string;

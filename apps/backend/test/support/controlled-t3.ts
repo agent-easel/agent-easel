@@ -1,5 +1,5 @@
 import type { AgentEnvironment } from "@t3-factory/contracts";
-import { LaunchRejected } from "../../src/adapters/t3.ts";
+import { T3Failure } from "../../src/adapters/t3.ts";
 import { NO_T3_SUPPORT } from "../../src/adapters/t3-contract.ts";
 import { ControlledAppearance } from "./controlled-appearance.ts";
 import type {
@@ -34,12 +34,17 @@ export class ControlledT3 implements T3Adapter {
     stop: true,
     reportReads: true,
   };
+  /** Fails as the live adapter classifies an unreachable T3 or an unapproved grant. */
+  private requireConnection(message = "Unavailable") {
+    if (!this.available) throw new T3Failure("unavailable", message);
+    if (!this.authorized) throw new T3Failure("authorization-required", message);
+  }
   /** Runs at the start of every inspection T3 answers, such as a connection check's. */
   beforeInspection?: () => void | Promise<void>;
   readonly settledThreads = new Set<string>();
   readonly settlements: { threadId: string }[] = [];
   async settleThread(_target: T3Endpoint, payload: { threadId: string }) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     this.settlements.push(payload);
     this.settledThreads.add(payload.threadId);
   }
@@ -63,10 +68,11 @@ export class ControlledT3 implements T3Adapter {
   failUploads = false;
   beforeUpload?: (upload: AttachmentUpload) => Promise<void>;
   async uploadAttachment(_target: T3Endpoint, upload: AttachmentUpload, data: Uint8Array) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeUpload?.(upload);
     this.uploadCalls++;
-    if (this.failUploads) throw Error("T3 answered the upload with HTTP 500.");
+    if (this.failUploads)
+      throw new T3Failure("unavailable", "T3 answered the upload with HTTP 500.");
     const id = `pending-${this.uploads.size + 1}`;
     this.uploads.set(id, { upload, data: Uint8Array.from(data) });
     return id;
@@ -81,14 +87,14 @@ export class ControlledT3 implements T3Adapter {
     return new Promise<LaunchPayload>((resolve) => this.launchWaiters.push(resolve));
   }
   async launchThread(_target: T3Endpoint, payload: LaunchPayload) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeLaunch?.(payload);
     this.launchCalls++;
     if (payload.attachments?.some((attachment) => !this.uploads.has(attachment.id)))
-      throw new LaunchRejected("Attachment not found (removed or expired).");
+      throw new T3Failure("refused", "Attachment not found (removed or expired).");
     let launch = this.launches.get(payload.clientRequestId);
     if (launch && JSON.stringify(launch.payload) !== JSON.stringify(payload))
-      throw Error("Key conflict");
+      throw new T3Failure("refused", "Key conflict");
     if (!launch) {
       const { threadId, runId } = this.launchIds(this.launches.size + 1);
       launch = {
@@ -104,8 +110,9 @@ export class ControlledT3 implements T3Adapter {
       this.launches.set(payload.clientRequestId, launch);
       for (const notify of this.launchWaiters.splice(0)) notify(payload);
     }
-    if (this.rejectLaunch) throw new LaunchRejected("T3 rejected the worker launch");
-    if (this.loseLaunchReply) throw Error("Lost response after remote acceptance");
+    if (this.rejectLaunch) throw new T3Failure("refused", "T3 rejected the worker launch");
+    if (this.loseLaunchReply)
+      throw new T3Failure("unavailable", "Lost response after remote acceptance");
     return launch.reference;
   }
   private launchedThread(threadId: string) {
@@ -148,7 +155,8 @@ export class ControlledT3 implements T3Adapter {
     threadId: string,
   ): ReturnType<T3Adapter["readThreadIdentity"]> {
     const launch = this.launchedThread(threadId);
-    if (!launch || !this.available || !this.authorized) throw Error("Unknown thread");
+    this.requireConnection("Unknown thread");
+    if (!launch) throw new T3Failure("refused", "Unknown thread");
     const observation = await this.readExecution(target, threadId);
     return {
       threadId,
@@ -214,11 +222,11 @@ export class ControlledT3 implements T3Adapter {
     );
   }
   async sendMessage(_target: T3Endpoint, payload: import("../../src/adapters/t3.ts").SendPayload) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeSend?.(payload);
     let accepted = this.sends.get(payload.clientRequestId);
     if (accepted && JSON.stringify(accepted.payload) !== JSON.stringify(payload))
-      throw Error("Key conflict");
+      throw new T3Failure("refused", "Key conflict");
     if (!accepted) {
       accepted = {
         payload,
@@ -234,7 +242,7 @@ export class ControlledT3 implements T3Adapter {
       this.settledThreads.delete(payload.threadId);
       for (const notify of this.sendWaiters.splice(0)) notify(payload);
     }
-    if (this.loseSendReply) throw Error("Lost send acknowledgement");
+    if (this.loseSendReply) throw new T3Failure("unavailable", "Lost send acknowledgement");
     return accepted.reference;
   }
   readonly executionObservations = new Map<
@@ -247,12 +255,12 @@ export class ControlledT3 implements T3Adapter {
     _target: T3Endpoint,
     threadId: string,
   ): ReturnType<T3Adapter["readExecution"]> {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     this.executionReads++;
     const observation = this.executionObservations.get(threadId) ?? this.executionObservation;
     if (observation) return observation;
     const launch = this.launchedThread(threadId);
-    if (!launch) throw Error("Unknown thread");
+    if (!launch) throw new T3Failure("refused", "Unknown thread");
     const { projectId, runId, link } = launch.reference;
     const launchRun = [{ runId, status: this.engineStatus }];
     const sentRuns = [...this.sends.values()]
@@ -287,7 +295,7 @@ export class ControlledT3 implements T3Adapter {
     threadId: string,
     runId: string,
   ): Promise<import("../../src/adapters/delegated-settlement.ts").DelegatedSettlement> {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     return (
       this.delegatedSettlements.get(JSON.stringify([threadId, runId])) ?? {
         threadId,
@@ -301,7 +309,8 @@ export class ControlledT3 implements T3Adapter {
   projects: T3Project[] = [];
   projectCreates = 0;
   async listProjects(_target: T3EnvironmentTarget) {
-    if (!this.available || !this.authorized || !this.compatible) throw new Error("Unavailable");
+    this.requireConnection();
+    if (!this.compatible) throw new T3Failure("refused", "Unavailable");
     return this.projects;
   }
   async createProject(target: T3ProjectTarget) {
@@ -359,7 +368,8 @@ export class ControlledT3 implements T3Adapter {
   ];
   async inspect(_target: T3Endpoint): Promise<T3Inspection> {
     await this.beforeInspection?.();
-    if (!this.available) throw new Error("External failure containing secret material");
+    if (!this.available)
+      throw new T3Failure("unavailable", "External failure containing secret material");
     if (!this.authorized)
       return {
         state: "authorization-required",
@@ -429,21 +439,20 @@ export class ControlledT3 implements T3Adapter {
   }
   async readEnvironment(_target: T3Endpoint): Promise<AgentEnvironment> {
     this.capabilityReads++;
-    if (!this.available || !this.authorized)
-      throw new Error("External failure containing secret material");
+    this.requireConnection("External failure containing secret material");
     return { environmentId: this.environmentId, label: "Controlled machine" };
   }
   async orchestratorCapabilities(_target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {
     this.capabilityReads++;
-    if (!this.available || !this.authorized)
-      throw new Error("External failure containing secret material");
-    if (!this.capabilitiesAvailable) throw new Error("Capabilities are temporarily unavailable");
+    this.requireConnection("External failure containing secret material");
+    if (!this.capabilitiesAvailable)
+      throw new T3Failure("unavailable", "Capabilities are temporarily unavailable");
     return this.controlledProviders;
   }
   /** `t3_theme_read` of the same environment. */
   readonly appearance = new ControlledAppearance();
   async readTheme(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw new Error("Unavailable");
+    this.requireConnection();
     return this.appearance.read(this.environmentId);
   }
   private supportAnswers(): T3Support {

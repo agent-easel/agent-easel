@@ -215,6 +215,11 @@ inspection proves protocol support and environment identity, never readiness to 
 It launches no diagnostic workload. Version strings are informational, not an allowlist or
 proof of replay continuity.
 
+The boundary classifies each T3 call's failure once, for that call only: T3 unavailable (network,
+timeout, server error or lost reply, including during token refresh), authorization required,
+refused by T3, or a response outside the contract. Only a refused launch fails definitively; any
+other launch failure leaves the launch uncertain.
+
 Native thread pointers may be Markdown autolinks. Public links use
 `https://app.t3.codes/threads/<environment>/<thread>` with encoded segments; opening them
 in a native client remains a live compatibility check.

@@ -1,7 +1,7 @@
 import type { RunDefinitions, RunImage } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import {
-  LaunchRejected,
+  isT3Refusal,
   type LaunchAttachment,
   type LaunchPayload,
   type T3Adapter,
@@ -106,7 +106,7 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
         yield* store.bindLaunchedWorker(runRow, launch, reference);
       }),
       (error) =>
-        error instanceof LaunchRejected
+        isT3Refusal(error)
           ? store.failLaunch(runRow, launch, LAUNCH_REJECTED)
           : store.noteLaunchUncertain(launch, LAUNCH_RECOVERY),
     );

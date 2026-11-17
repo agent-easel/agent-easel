@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url";
 import { LiveT3Adapter } from "../src/index.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { oauthT3 } from "./support/oauth-t3.ts";
-import { readConnection, recheckConnection } from "./support/boundaries-setup.ts";
+import {
+  authorizedLiveOAuth,
+  readConnection,
+  recheckConnection,
+} from "./support/boundaries-setup.ts";
 
 function liveAdapter(credentialsDirectory: string, onUrl: (url: string) => void) {
   return new LiveT3Adapter({
@@ -212,6 +216,45 @@ it("revoked OAuth requires explicit reauthorization with a new authorization con
   expect(reauthorized.authorizationContext?.id).not.toBe(oldContext?.id);
   expect(external.registrationCount >= 2).toBeTruthy();
   expect(await factory.getFlow(flow.value.id)).toStrictEqual(flow);
+});
+
+it("a T3 call's transient failure is not reported on a concurrent inspection whose grant is rejected", async (context) => {
+  // Arrange
+  let readReached!: () => void;
+  let failRead!: () => void;
+  let answerRejection!: () => void;
+  const readStarted = new Promise<void>((resolve) => (readReached = resolve));
+  const readFails = new Promise<void>((resolve) => (failRead = resolve));
+  const rejectionAnswered = new Promise<void>((resolve) => (answerRejection = resolve));
+  const { adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+    runtimeActivity: async () => {
+      readReached();
+      await readFails;
+      throw new Error("The connection of this read drops.");
+    },
+  });
+  const read = adapter.readExecution({ endpoint }, "thread-1");
+  await readStarted;
+  external.revoke();
+  const rejectionHeld = external.holdAuthorizationRejections(rejectionAnswered);
+  const inspection = adapter.inspect({ endpoint });
+  await rejectionHeld;
+
+  // Act
+  failRead();
+  const readFailure = await read.then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  answerRejection();
+  const inspected = await inspection;
+
+  // Assert
+  expect(readFailure).toMatchObject({ kind: "unavailable" });
+  expect(inspected).toMatchObject({
+    state: "authorization-required",
+    reason: "approval-required",
+  });
 });
 
 it("denied OAuth leaves authorization required with an actionable explanation", async (context) => {

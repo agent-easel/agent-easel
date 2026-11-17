@@ -17,7 +17,7 @@ import {
 } from "@t3-factory/domain-validation";
 import type { StartPrompt } from "@t3-factory/domain-validation";
 import {
-  LaunchRejected,
+  isT3Refusal,
   type LaunchPayload,
   type T3Adapter,
   type T3ContractSnapshot,
@@ -274,9 +274,7 @@ export const makeRunTitles = (
           catch: (error) => error,
         }).pipe(
           Effect.map((reference) => ({ threadId: reference.threadId, rejected: false })),
-          Effect.catch((error) =>
-            Effect.succeed({ threadId: null, rejected: error instanceof LaunchRejected }),
-          ),
+          Effect.catch((error) => Effect.succeed({ threadId: null, rejected: isT3Refusal(error) })),
         );
         if (launched.threadId) yield* bindThread(generation, launched.threadId);
         else if (launched.rejected) yield* endPending(generation, "failed", LAUNCH_REJECTED);
