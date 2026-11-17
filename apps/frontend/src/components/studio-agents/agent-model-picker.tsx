@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { workerTrigger, type WorkerTrigger } from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
+import { useMenuActions } from "../menu-actions.ts";
 import {
   OverrideDialog,
   ProjectOverridesSection,
@@ -45,11 +46,10 @@ export function AgentModelPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<OverrideEditing | null>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const add = useRef<HTMLButtonElement>(null);
   // The Override dialog opens once the popover has closed and refocused the picker, so the dialog
   // returns focus to the picker when it closes.
-  const pendingEdit = useRef<OverrideEditing | null>(null);
+  const { trigger, queue, onCloseAutoFocus } = useMenuActions();
+  const add = useRef<HTMLButtonElement>(null);
   const shown = workerTrigger(settings.execution, capabilities);
   const button = (
     <PopoverTrigger asChild>
@@ -81,14 +81,7 @@ export function AgentModelPicker({
           collisionPadding={16}
           aria-labelledby="worker-execution-heading"
           className="@container/agent-form flex max-h-(--radix-popover-content-available-height) w-115 max-w-[calc(100vw-2rem)] flex-col gap-2.5 overflow-y-auto rounded-[10px] border-border bg-card p-3.5"
-          onCloseAutoFocus={(event) => {
-            const edit = pendingEdit.current;
-            if (!edit) return;
-            pendingEdit.current = null;
-            event.preventDefault();
-            trigger.current?.focus();
-            setEditing(edit);
-          }}
+          onCloseAutoFocus={onCloseAutoFocus}
         >
           <ExecutionSettingsFields
             role="worker"
@@ -107,7 +100,7 @@ export function AgentModelPicker({
                 disabled={saving}
                 addRef={add}
                 onEdit={(edit) => {
-                  pendingEdit.current = edit;
+                  queue(() => setEditing(edit));
                   setOpen(false);
                 }}
                 onRemove={(projectId) => {

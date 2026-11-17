@@ -3,6 +3,7 @@ import type { Browser } from "@e2e-dev/web";
 import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
 import { copyAgentDefinition } from "./support/agents.ts";
+import { saveFlowCopy } from "./support/flows.ts";
 import { namedAgent, ownedFlow } from "./support/owners.ts";
 
 /** Settles popover and menu transitions before a screenshot. */
@@ -83,6 +84,7 @@ test("capture the Agent editor with its model picker and More actions, global an
   // Arrange: Figma SA01's 1440 × 900 frame, a global Agent with a Northwind override.
   await browser.setViewport({ width: 1440, height: 900 });
   const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
+  assert(northwind);
   const sample = await namedAgent(app.baseUrl, "Sample worker");
   assert(sample.execution);
   const global = await copyAgentDefinition(app.baseUrl, "Sample worker", "Coder", {
@@ -121,4 +123,33 @@ test("capture the Agent editor with its model picker and More actions, global an
   await expect(screen.getByRole("list", "Project overrides")).toHaveCount(0);
   await browser.evaluate(settled);
   await app.screenshot("studio-agent-picker-open-project");
+});
+
+test("capture the Flow editor's library and toolbar at 1280 px", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: the narrowest desktop width the toolbar must fit without overflowing.
+  await browser.setViewport({ width: 1280, height: 800 });
+  const id = await saveFlowCopy(
+    app.baseUrl,
+    "Demo · Grill, spec and tickets",
+    "Screenshot library Flow",
+    { mode: "checkout" },
+  );
+  await app.open(`/studio/flows/${id}`);
+  const library = screen.getByRole("region", "Block library");
+  await expect(library.getByRole("textbox", "Search steps and Agents")).toBeVisible();
+  await app.screenshot("flow-editor-library-toolbar");
+  await library.getByRole("button", "Add Sample worker", { exact: true }).hover();
+  await app.screenshot("flow-editor-library-row-hover");
+
+  // Act
+  await screen.getByRole("button", "More Flow actions", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByRole("menuitem", "Export JSON", { exact: true })).toBeVisible();
+  await browser.evaluate(settled);
+  await app.screenshot("flow-editor-more-flow-actions");
 });
