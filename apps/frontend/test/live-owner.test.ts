@@ -10,7 +10,15 @@ import { reconnectDelay } from "../src/live/owner.ts";
 import { runScope } from "../src/live/run.ts";
 import { appearanceScope, connectionScope } from "../src/live/scopes.ts";
 import { studioScope } from "../src/live/studio.ts";
-import { changed, checked, envelope, liveHarness, snapshot } from "./support/live.ts";
+import {
+  changed,
+  checked,
+  envelope,
+  liveHarness,
+  overCapacityRuns,
+  snapshot,
+  switchedRuns,
+} from "./support/live.ts";
 import { runDetail } from "./support/run.ts";
 
 it("a message from a replaced connection cannot overwrite the fresh snapshot", () => {
@@ -284,10 +292,7 @@ it("a failed view re-read disables mutations until a current envelope arrives", 
 
 it("Runs beyond the view's capacity are refused without breaking the shared view", () => {
   // Arrange
-  const live = liveHarness();
-  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
-  for (const scope of runs) live.owner.acquire(scope);
-  live.sessions[0]?.connected();
+  const { live, runs } = overCapacityRuns();
 
   // Act
   live.sessions[0]?.subscriptions.at(-1)?.message(
@@ -347,4 +352,81 @@ it("Studio's definitions gate mutations only once Studio holds them, not while o
   // Assert
   expect(whileRead).toBe("current");
   expect(live.delivery()).toBe("synchronizing");
+});
+
+it("a Run opened in place of another stays live once the previous Run is released", () => {
+  // Arrange
+  const { live, to } = switchedRuns();
+
+  // Act
+  live.elapse();
+
+  // Assert
+  expect(live.owner.view(runScope(to.id).key)).toMatchObject({ value: to, synchronized: true });
+  expect(live.delivery()).toBe("current");
+  expect(live.sessions[0]?.subscriptions).toHaveLength(3);
+});
+
+it("reopening a Run the view still keeps shows its live value at once", () => {
+  // Arrange
+  const { live, from, releaseTo } = switchedRuns();
+  live.elapse();
+  releaseTo();
+
+  // Act
+  live.owner.acquire(runScope(from.id));
+
+  // Assert
+  expect(live.owner.view(runScope(from.id).key)).toMatchObject({
+    value: from,
+    synchronized: true,
+  });
+  expect(live.delivery()).toBe("current");
+});
+
+it("releasing a followed Run gives its slot to a held Run refused for capacity", () => {
+  // Arrange
+  const { live, runs, releases } = overCapacityRuns();
+  releases[0]?.();
+
+  // Act
+  live.elapse();
+
+  // Assert
+  const watch = live.sessions[0]?.watches.at(-1);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).toContain(`run-${RUN_VIEW_LIMIT}`);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).not.toContain("run-0");
+  expect(live.owner.view(runs.at(-1)?.key ?? "").error).toBeNull();
+});
+
+it("a window shown again no longer follows the Run it left before hiding", () => {
+  // Arrange
+  const { live, to } = switchedRuns();
+  live.elapse();
+  live.owner.setVisible(false);
+
+  // Act
+  live.owner.setVisible(true);
+
+  // Assert
+  expect(live.sessions[1]?.watches).toStrictEqual([
+    { rpc: "WatchRunView", navigation: true, runIds: [to.id] },
+  ]);
+});
+
+it("reopening a Run once refused for capacity follows it when a slot is free", () => {
+  // Arrange
+  const { live, runs, releases } = overCapacityRuns();
+  releases.at(-1)?.();
+  live.elapse();
+  releases[0]?.();
+  live.elapse();
+
+  // Act
+  live.owner.acquire(runs.at(-1)!);
+
+  // Assert
+  const watch = live.sessions[0]?.watches.at(-1);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).toContain(`run-${RUN_VIEW_LIMIT}`);
+  expect(live.owner.view(runs.at(-1)?.key ?? "").error).toBeNull();
 });
