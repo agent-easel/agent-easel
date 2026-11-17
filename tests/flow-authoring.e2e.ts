@@ -4,7 +4,7 @@ import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contra
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
-import { largestWirePortOffset } from "./support/canvas.ts";
+import { largestWirePortOffset, openWorktreeFlowBlock } from "./support/canvas.ts";
 import {
   chooseFlowAction,
   expectSavedAgentRevision,
@@ -645,19 +645,31 @@ test("authoring wires start and end at their port centres while a block is selec
   browser,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1600, height: 1000 });
-  await app.open("/studio/flows");
-  await screen.getByRole("heading", "Demo · Build and review in a worktree", { exact: true }).tap();
-  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
-  const block = screen.getByRole("article", "Block Implement change", { exact: true });
+  const block = await openWorktreeFlowBlock(app, screen, browser);
 
   // Act
-  await block.getByText("Implement change", { exact: true }).first().tap();
+  await block.selectByName();
 
   // Assert
-  await expect(screen.getByLabel("Block name")).toHaveValue("Implement change");
   await expect.poll(() => largestWirePortOffset(browser)).toBeLessThan(0.5);
   await app.screenshot("authoring-wires-meet-port-centres");
+});
+
+test("selecting an authoring block keeps it at the height its geometry reserves", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const block = await openWorktreeFlowBlock(app, screen, browser);
+  const unselected = await block.height();
+
+  // Act
+  await block.selectByName();
+
+  // Assert
+  expect(await block.height()).toBe(unselected);
+  await app.screenshot("selected-block-reserved-height");
 });
 
 test("leaving an edited Flow for another Studio page asks before discarding its edits", async ({

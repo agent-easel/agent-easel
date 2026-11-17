@@ -445,7 +445,6 @@ function executionBlock(
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
   return {
     className: cn(frameColor[state], selected && "border-primary ring-1 ring-primary"),
-    selected,
     press: {
       // Continue now is its own control, so it sits outside the press target.
       covers: continuableArrival(run, block) ? "identity" : "block",

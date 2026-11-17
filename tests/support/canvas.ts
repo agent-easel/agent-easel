@@ -62,6 +62,33 @@ export async function expectFollowingReview(screen: Screen) {
 }
 
 /**
+ * Opens the seeded worktree Flow fitted at 1600×1000 with its Implement change block, which has
+ * one exit and only the Flow input wired into it.
+ */
+export async function openWorktreeFlowBlock(app: App, screen: Screen, browser: Browser) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await app.open("/studio/flows");
+  await screen.getByRole("heading", "Demo · Build and review in a worktree", { exact: true }).tap();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  const label = "Block Implement change";
+  const block = screen.getByRole("article", label, { exact: true });
+  return {
+    height: () => drawnHeight(browser, label),
+    /** Selects the block by its name and waits for its inspector. */
+    async selectByName() {
+      await block.getByText("Implement change", { exact: true }).first().tap();
+      await expect(screen.getByLabel("Block name")).toHaveValue("Implement change");
+    },
+  };
+}
+
+/** The layout height of the canvas node with this accessible name, unaffected by canvas zoom. */
+export async function drawnHeight(browser: Browser, label: string) {
+  const selector = JSON.stringify(`[aria-label="${label}"]`);
+  return Number(await browser.evaluate(`document.querySelector(${selector}).offsetHeight`));
+}
+
+/**
  * The largest distance, in viewport px, between an end of a Flow canvas wire and the centre of
  * the port it starts or ends at.
  */

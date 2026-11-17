@@ -237,9 +237,11 @@ export function FlowInputPrompt({ run }: { run: RunDetail }) {
       <p className="line-clamp-3 text-xs leading-4.5 text-foreground" title={runPromptText(run)}>
         <PromptSegments run={run} />
       </p>
+      {/* Flex items hold the inline-flex thumbnails without a baseline gap below them, so the
+          row matches the height the canvas geometry reserves. */}
       <ul aria-label="Prompt images" className="flex gap-2">
         {shown.map((image, index) => (
-          <li key={image.imageId}>
+          <li key={image.imageId} className="flex">
             <RunImageThumbnail
               image={image}
               index={index}
@@ -250,7 +252,7 @@ export function FlowInputPrompt({ run }: { run: RunDetail }) {
           </li>
         ))}
         {hidden > 0 && (
-          <li>
+          <li className="flex">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

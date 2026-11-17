@@ -6,6 +6,7 @@ import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Locator, type Screen } from "e2e";
 import { sha256Hex, solidPng } from "../apps/backend/test/support/scenarios.ts";
 import { findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
+import { drawnHeight } from "./support/canvas.ts";
 import {
   expectFlowInputImages,
   expectGalleryImage,
@@ -327,6 +328,24 @@ test("Flow input overflow browses every image in manifest order, including unref
   await browser.keyboard.press("ArrowLeft");
   await expectGalleryImage(screen, browser, 1, "screenshot.png", run.images[0]!.sha256);
   await app.screenshot("flow-input-image-gallery");
+});
+
+test("a Flow input with prompt images is drawn at the height the Execution canvas reserves", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+
+  // Act
+  await openImageHistory(app);
+
+  // Assert
+  await expectFlowInputImages(screen);
+  // Borders 2 + header 30 + title 44 + prompt images 108 (EXECUTION_DIMENSIONS.flowInput).
+  expect(await drawnHeight(browser, "Flow input block")).toBe(184);
+  await app.screenshot("flow-input-images-reserved-height");
 });
 
 test("reloading preserves Flow input thumbnails, the image list and ordinal reference bindings", async ({

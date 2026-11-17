@@ -374,11 +374,13 @@ function authoringBlock({
     className: cn(
       "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
       BLOCK_KINDS[block.kind].dashedFrame && "border-dashed border-border-strong",
-      selected && "border-primary ring-4 ring-primary/20 hover:border-primary",
+      // The second pixel of the selected frame is an inset ring, so selection keeps the
+      // frame inside the box its geometry reserves.
+      selected &&
+        "border-primary ring-4 inset-ring-1 inset-ring-primary ring-primary/20 hover:border-primary",
       dragging && "z-10 cursor-grabbing shadow-lift",
       connectTarget && "ring-2 ring-primary/30",
     ),
-    selected,
     press: {
       covers: "identity",
       render: (rows) => (

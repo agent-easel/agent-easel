@@ -70,8 +70,6 @@ export type CanvasFlowInputContent = {
 export type CanvasBlockContent = {
   /** The frame's look: state and selection. */
   readonly className: string;
-  /** A selected block is drawn with the selected border. */
-  readonly selected: boolean;
   /**
    * The block's press target and the rows it wraps: the identity rows when exit rows hold their
    * own controls, otherwise the whole block.
@@ -271,7 +269,7 @@ function SurfaceBlock({
   pendingInput: number | null;
 }) {
   const rows = dimensions.block;
-  const border = content.selected ? rows.selectedBorder : rows.border;
+  const border = rows.border;
   const identity = <IdentityRows rows={rows} header={content.header} title={content.title} />;
   const body = (
     <>
@@ -284,11 +282,9 @@ function SurfaceBlock({
             style={{ height: rows.exitRow }}
           >
             {content.exit(exit)}
-            {/* Each exit anchor is the middle of its row in the unselected frame; a selected
-                border moves the row but not the anchor. */}
             <SurfacePort
               side="right"
-              center={rows.exitRow / 2 - (border - rows.border)}
+              center={rows.exitRow / 2}
               border={border}
               port={dimensions.port}
               look={content.exitPort(exit)}
@@ -296,7 +292,7 @@ function SurfaceBlock({
           </li>
         ))}
       </ul>
-      <span aria-hidden style={{ height: geometry.incomingGrowth(block, border) }} />
+      <span aria-hidden style={{ height: geometry.incomingGrowth(block) }} />
       {content.footers.map((footer, index) => (
         <span key={index} className="flex flex-col" style={{ height: rows.footer }}>
           {footer}
