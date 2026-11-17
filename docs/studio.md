@@ -164,10 +164,14 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
   name their owner; the Agent editor header shows an **Owned by *Project*** badge and the Flow editor's toolbar an owner badge.
   The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
+- **Owner menus.** Like the Run composer's picker, the Owner filter and every owner menu below offer Global and the available
+  Projects only, so they never offer a Project T3 has removed. The catalog keeps references to Projects T3 no longer
+  lists, or that belong to another environment, for history; such a Project appears in a menu only while it is the chosen value,
+  disabled with its reason, and its definitions stay reachable through their **All** group.
 - **Owner filter.** **Owner: All**, **Global** or one Project filters both lists together. It starts at All whenever Studio
   opens and never follows the Run composer's selected Project. A Project shows global definitions and that Project's.
 - **Choosing an owner.** **New Flow** and **+ Add agent** always show the owner choice: **Global** or **Project** with an
-  **Owning Project** menu of every Project, unavailable ones disabled with their reason. The default comes from the filter (All
+  **Owning Project** menu of the available Projects. The default comes from the filter (All
   or Global gives Global, a Project gives that Project); an Agent added through the Flow editor library's **New Agent
   definition** defaults to that Flow's owner, also when the Flow is global. An unavailable default stays chosen, with its reason,
   and blocks Create until another owner is chosen; it is never replaced silently. The owner is part of the create, not of the
@@ -177,7 +181,7 @@ Ownership adds no model or environment restriction: a Project Agent's execution 
   Project is unavailable a banner over the canvas names it and its reason, the Flow stays editable, saveable, exportable and
   removable, **Start Run** is disabled with the reason, and the banner's **Duplicate to…** opens Flow Duplicate to rescue it.
 - **Change owner….** The Agent editor header and the Flow editor's **More Flow actions** menu open **Change owner of
-  “*name*”** with a **New owner** menu of Global and every Project, unavailable ones disabled with their reason; the current
+  “*name*”** with a **New owner** menu of Global and the available Projects; the current
   owner stays chosen until another is picked, and an unavailable chosen owner blocks the change. A refusal turns the dialog
   into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
   Flow), each with its owner and, for a Flow, the blocks placing the Agent; a listed one opens in Studio. Its **Duplicate to

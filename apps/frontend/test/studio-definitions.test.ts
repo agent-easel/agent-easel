@@ -282,13 +282,31 @@ it("an Agent added from a Flow editor defaults to that Flow's owner whatever the
   expect(owner).toBe("ledgerly");
 });
 
-it("owner targets offer Global and every Project, an unavailable one disabled with its reason", () => {
+it("owner targets offer Global and only the available Projects, like the Run composer", () => {
+  // Arrange
+  const northwind = factoryProject("northwind", "Northwind");
+  const removed = factoryProject("removed", "Removed in T3", {
+    availability: "project-unavailable",
+  });
+
+  // Act
+  const picker = ownerPicker(null, [northwind, removed]);
+
+  // Assert
+  expect(picker.targets).toMatchObject([
+    { owner: { projectId: null }, disabled: null },
+    { owner: { projectId: "northwind" }, disabled: null },
+  ]);
+  expect(picker.targets).toHaveLength(2);
+});
+
+it("a chosen unavailable Project stays among the owner targets, disabled with its reason", () => {
   // Arrange
   const northwind = factoryProject("northwind", "Northwind");
   const docs = factoryProject("docs", "Docs site", { availability: "directory-unavailable" });
 
   // Act
-  const picker = ownerPicker(null, [northwind, docs]);
+  const picker = ownerPicker(docs.id, [northwind, docs]);
 
   // Assert
   expect(picker.targets).toMatchObject([

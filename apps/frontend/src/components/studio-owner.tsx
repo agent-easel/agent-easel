@@ -100,7 +100,10 @@ function filterLabel(filter: StudioOwnerFilter, projects: readonly FactoryProjec
   return studioOwner(filter.projectId, projects).title;
 }
 
-/** Figma Studio/OwnerFilter: All, Global or one Project; Studio's lists share it. */
+/**
+ * Figma Studio/OwnerFilter: All, Global or one available Project; Studio's lists share it. A chosen
+ * Project that became unavailable stays listed with its reason.
+ */
 export function OwnerFilter({
   filter,
   projects,
@@ -113,7 +116,7 @@ export function OwnerFilter({
   className?: string;
 }) {
   const label = filterLabel(filter, projects);
-  const { targets } = ownerPicker(null, projects);
+  const { targets } = ownerPicker(filter.kind === "project" ? filter.projectId : null, projects);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -149,10 +152,11 @@ export function OwnerFilter({
             Global
           </DropdownMenuRadioItem>
           {targets.length > 1 && <DropdownMenuSeparator />}
-          {targets.slice(1).map(({ owner }) => (
+          {targets.slice(1).map(({ owner, disabled }) => (
             <DropdownMenuRadioItem
               key={owner.projectId}
               value={owner.projectId!}
+              disabled={disabled !== null}
               indicatorPosition="right"
               aria-label={`${owner.title} · ${owner.detail}${owner.unavailable ? ` · ${owner.unavailable}` : ""}`}
               className="items-start"
@@ -206,8 +210,8 @@ type DefinitionKind = keyof typeof ownerKindText;
 
 /**
  * The always-visible owner choice of New Flow and Add agent: Global, or a Project chosen from
- * the catalog. Unavailable Projects are disabled with their reason; an unavailable chosen owner
- * stays chosen with its reason rather than being replaced.
+ * the available Projects. An unavailable chosen owner stays chosen, disabled with its reason,
+ * rather than being replaced.
  */
 export function OwnerPicker({
   chosen,
@@ -305,7 +309,7 @@ function OwnerPickerStatus({ blocked, note }: { blocked: string | null; note: st
   return <p className="text-2xs tracking-label text-subtle-foreground">{note}</p>;
 }
 
-/** Figma Run/SelectField for the owning Project, with every Project as a menu choice. */
+/** Figma Run/SelectField for the owning Project, with each owner target as a menu choice. */
 function OwningProjectMenu({
   labelId,
   chosen,
@@ -436,8 +440,8 @@ export function ownerHint(
 }
 
 /**
- * Figma Run/SelectField for the owner a copy or move goes to: Global or one Project, unavailable
- * Projects disabled with their reason. An unavailable chosen owner stays shown with its reason, and
+ * Figma Run/SelectField for the owner a copy or move goes to: Global or one available Project. An
+ * unavailable chosen owner stays shown, disabled with its reason, and
  * a choice other than `from` names where it changed from.
  */
 export function OwnerTargetMenu({
