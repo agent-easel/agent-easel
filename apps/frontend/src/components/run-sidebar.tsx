@@ -47,6 +47,7 @@ import { ActivityAge, SidebarRow, SidebarRowsProvider } from "./sidebar-row.tsx"
 import { ProjectIcon } from "./project-icon.tsx";
 import { RunNumber } from "./run-number.tsx";
 import { GeneratingTitle } from "./run-title-generation.tsx";
+import { RunOriginPreview } from "./run-origin.tsx";
 import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
 
@@ -691,6 +692,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
         <Workflow aria-hidden className="mt-0.5 size-3.5 shrink-0" />
         <span className="break-words">{run.flowName}</span>
       </div>
+      {run.origin && <RunOriginPreview origin={run.origin} />}
       <div className="flex flex-wrap items-center gap-2">
         <state.Icon aria-hidden className={cn("size-3.5", state.className)} />
         <span>{state.label}</span>

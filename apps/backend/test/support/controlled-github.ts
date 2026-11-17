@@ -41,6 +41,49 @@ export class ControlledGitHub implements GitHubAdapter {
   /** Runs after a call is received and before it reads GitHub's state; a barrier holds it here. */
   beforeAnswer?: (call: GitHubCall) => Promise<void>;
 
+  /** The Project folder's remote names `nameWithOwner` on GitHub from now on. */
+  nameRepository(
+    workspaceRoot: string,
+    nameWithOwner: string,
+    visibility: GitHubRepository["visibility"] = "private",
+  ) {
+    const repository = {
+      host: "github.com",
+      nameWithOwner,
+      nodeId: `R_${nameWithOwner}`,
+      visibility,
+    };
+    this.repositories.set(workspaceRoot, repository);
+    return repository;
+  }
+
+  /** Someone opens issue `number` in `repository`; each label gets a `labeled` event. */
+  openIssue(
+    repository: GitHubRepository,
+    { number, title, labels = [] }: { number: number; title: string; labels?: string[] },
+  ) {
+    const createdAt = new Date(Date.UTC(2026, 10, 1, 9, number)).toISOString();
+    const labelled = this.issues.flatMap((issue) => issue.labellings).length;
+    const issue: ControlledIssue = {
+      nodeId: `I_${repository.nameWithOwner}#${number}`,
+      repositoryNodeId: repository.nodeId,
+      number,
+      title,
+      url: `https://github.com/${repository.nameWithOwner}/issues/${number}`,
+      createdAt,
+      open: true,
+      matchesQuery: true,
+      labels: [...labels],
+      labellings: labels.map((label, index) => ({
+        label,
+        eventId: `LE_${labelled + index + 1}`,
+        createdAt,
+      })),
+    };
+    this.issues.push(issue);
+    return issue;
+  }
+
   async readiness(_host: string) {
     return this.answer("readiness", () => gitHubAnswer({ login: this.login }));
   }

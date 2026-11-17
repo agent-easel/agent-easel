@@ -1,6 +1,6 @@
 import { UpdateControl } from "./update-control.tsx";
 import { Settings, PencilRuler } from "lucide-react";
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import {
   ConnectionStateDot,
   connectionFooterText,
@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { reportingSummary, useReportingState } from "../reporting-state.tsx";
+import { useLiveStudio } from "../live/studio.ts";
+import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 
 /** Connection failures take precedence; reporting warnings lead straight to their repair surface. */
 function settingsIndicator(
@@ -53,6 +55,10 @@ export function SidebarFooter() {
   const settingsOptions = useSettingsOptions({ tab: indicator.tab });
   const statusLabel = indicator.label;
   const statusText = indicator.text;
+  // Trigger problems mark only the Studio entry, never Runs, notifications or the Dock badge.
+  const failingTriggers =
+    useLiveStudio().value?.triggers.filter((trigger) => trigger.error).length ?? 0;
+  const studioAttentionId = useId();
   return (
     <nav
       aria-label="Sidebar footer"
@@ -73,11 +79,30 @@ export function SidebarFooter() {
           />
         </Link>
       </FooterIcon>
-      <FooterIcon label="Studio" shortcut={hint("studio")} active={!!studio}>
-        <Link {...studioOptions} aria-label="Studio">
+      <FooterIcon
+        label={failingTriggers ? `Studio, ${triggersInError(failingTriggers)}` : "Studio"}
+        shortcut={hint("studio")}
+        active={!!studio}
+      >
+        <Link
+          {...studioOptions}
+          aria-label="Studio"
+          aria-describedby={failingTriggers ? studioAttentionId : undefined}
+        >
           <PencilRuler aria-hidden className="size-4" strokeWidth={1.5} />
+          {failingTriggers > 0 && (
+            <span
+              aria-hidden
+              className="absolute top-0.5 right-0.5 size-2 rounded-full bg-destructive ring-2 ring-sidebar"
+            />
+          )}
         </Link>
       </FooterIcon>
+      {failingTriggers > 0 && (
+        <span id={studioAttentionId} className="sr-only">
+          {triggersInError(failingTriggers)}
+        </span>
+      )}
       {statusText && (
         <span aria-hidden className="min-w-0 truncate pl-1 text-2xs text-muted-foreground">
           {statusText}

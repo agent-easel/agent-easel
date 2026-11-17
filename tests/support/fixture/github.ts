@@ -13,13 +13,6 @@ export function startJourneyGitHub() {
   return new ControlledGitHub();
 }
 
-const repositoryNamed = (nameWithOwner: string, visibility: GitHubRepository["visibility"]) => ({
-  host: "github.com",
-  nameWithOwner,
-  nodeId: `R_${nameWithOwner}`,
-  visibility,
-});
-
 /**
  * GitHub as the seeded Project's repository and the host's `gh` login see it: the host login,
  * the Project's repository, its open issues and labels, and failures of any `gh` read.
@@ -33,12 +26,11 @@ export function githubFixture(github: ControlledGitHub, { factory, world }: Host
     github.signedIn = true;
     github.login = baselineLogin;
     github.repositories.clear();
-    github.repositories.set(projectFolder, repositoryNamed(baselineRepository, "private"));
+    github.nameRepository(projectFolder, baselineRepository);
     github.issues.length = 0;
     github.failures.clear();
   }
   restore();
-  let labellings = 0;
   return {
     actions: {
       /** The host login, the Project's repository and the issues GitHub holds. */
@@ -68,29 +60,11 @@ export function githubFixture(github: ControlledGitHub, { factory, world }: Host
         nameWithOwner: string;
         visibility?: GitHubRepository["visibility"];
       }) {
-        const repository = repositoryNamed(nameWithOwner, visibility);
-        github.repositories.set(projectFolder, repository);
-        return repository;
+        return github.nameRepository(projectFolder, nameWithOwner, visibility);
       },
       /** Someone opens issue `number` in the Project's repository; each label gets a `labeled` event. */
-      issue({ number, title, labels = [] }: { number: number; title: string; labels?: string[] }) {
-        const repository = projectRepository();
-        const createdAt = new Date(Date.UTC(2026, 10, 1, 9, number)).toISOString();
-        github.issues.push({
-          nodeId: `I_${repository.nameWithOwner}#${number}`,
-          repositoryNodeId: repository.nodeId,
-          number,
-          title,
-          url: `https://github.com/${repository.nameWithOwner}/issues/${number}`,
-          createdAt,
-          open: true,
-          matchesQuery: true,
-          labels: [...labels],
-          labellings: labels.map((label) => {
-            labellings += 1;
-            return { label, eventId: `LE_${labellings}`, createdAt };
-          }),
-        });
+      issue(issue: { number: number; title: string; labels?: string[] }) {
+        github.openIssue(projectRepository(), issue);
       },
       /** The named `gh` read fails with `failure` until `recover` clears it. */
       fail({ call, failure }: { call: GitHubCall; failure: GitHubFailure }) {
