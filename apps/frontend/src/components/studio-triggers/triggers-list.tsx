@@ -19,7 +19,52 @@ import type { StudioRead } from "../../studio-definitions.ts";
 import { RemoveTriggerDialog } from "./remove-trigger-dialog.tsx";
 import { TriggerHealth } from "./trigger-health.tsx";
 import type { TriggerActions } from "./trigger-actions.ts";
-import { problemHeadline, scheduleText, triggerRoute, type TriggerNames } from "./trigger-text.ts";
+import { TriggerReviewDialog, type TriggerReview } from "./trigger-review-dialog.tsx";
+import {
+  problemHeadline,
+  reviewSummary,
+  scheduleText,
+  triggerRoute,
+  type TriggerNames,
+} from "./trigger-text.ts";
+
+/** Turning a Trigger on first shows what its first check would start. */
+const enableReview = (
+  trigger: TriggerDefinition,
+  names: TriggerNames,
+  actions: TriggerActions,
+): TriggerReview => ({
+  title: `Enable “${trigger.name}”?`,
+  summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
+  query: trigger.github.query,
+  readyLabel: trigger.github.readyLabel,
+  confirmLabel: "Enable and check",
+  load: () => actions.preview(trigger),
+});
+
+/** The review a Trigger's switch opens; Enable and check commits it. */
+function useEnableReview(names: TriggerNames, actions: TriggerActions) {
+  const [reviewing, setReviewing] = useState<{
+    readonly trigger: TriggerDefinition;
+    readonly review: TriggerReview;
+  } | null>(null);
+  const busy = reviewing !== null && actions.state.pending.get(reviewing.trigger.id) === "enable";
+  return {
+    open: (trigger: TriggerDefinition) =>
+      setReviewing({ trigger, review: enableReview(trigger, names, actions) }),
+    dialog: (
+      <TriggerReviewDialog
+        review={reviewing?.review ?? null}
+        busy={busy}
+        onCancel={() => setReviewing(null)}
+        onConfirm={() => {
+          if (!reviewing) return;
+          void actions.enableAndCheck(reviewing.trigger).then(() => setReviewing(null));
+        }}
+      />
+    ),
+  };
+}
 
 const description =
   "Start a Flow automatically for issues a person marks ready in a Project's tracker.";
@@ -38,6 +83,7 @@ export function TriggersList({
   const create = () => void openStudio({ tab: "triggers", triggerId: "new" });
   const items = triggers.value;
   const [removing, setRemoving] = useState<TriggerDefinition | null>(null);
+  const enabling = useEnableReview(names, actions);
   const menuButton = useRef<HTMLElement | null>(null);
   const { failure, pending } = actions.state;
   return (
@@ -60,38 +106,19 @@ export function TriggersList({
             </AlertDescription>
           </Alert>
         )}
-        {triggers.error ? (
-          <Alert variant="destructive">
-            <AlertDescription>
-              Could not load Triggers. Check that Factory is running.
-            </AlertDescription>
-          </Alert>
-        ) : items === null ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading Triggers…
-          </p>
-        ) : (
-          <SettingsGroup label={items.length ? `Triggers · ${items.length}` : "Triggers"}>
-            {items.length === 0 ? (
-              <EmptyTriggers onCreate={create} />
-            ) : (
-              items.map((trigger) => (
-                <TriggerRow
-                  key={trigger.id}
-                  trigger={trigger}
-                  names={names}
-                  busy={pending.has(trigger.id)}
-                  actions={actions}
-                  onRemove={(opener) => {
-                    menuButton.current = opener;
-                    setRemoving(trigger);
-                  }}
-                />
-              ))
-            )}
-          </SettingsGroup>
-        )}
+        <TriggerItems
+          triggers={triggers}
+          names={names}
+          actions={actions}
+          onCreate={create}
+          onEnable={enabling.open}
+          onRemove={(trigger, opener) => {
+            menuButton.current = opener;
+            setRemoving(trigger);
+          }}
+        />
       </SettingsPage>
+      {enabling.dialog}
       <RemoveTriggerDialog
         trigger={removing}
         removing={removing !== null && pending.get(removing.id) === "remove"}
@@ -104,6 +131,52 @@ export function TriggersList({
         }
       />
     </main>
+  );
+}
+
+/** The loaded Triggers as rows, the empty state, or why they cannot be shown. */
+function TriggerItems({
+  triggers,
+  names,
+  actions,
+  onCreate,
+  onEnable,
+  onRemove,
+}: {
+  triggers: StudioRead<readonly TriggerDefinition[]>;
+  names: TriggerNames;
+  actions: TriggerActions;
+  onCreate: () => void;
+  onEnable: (trigger: TriggerDefinition) => void;
+  onRemove: (trigger: TriggerDefinition, opener: HTMLElement | null) => void;
+}) {
+  const items = triggers.value;
+  return triggers.error ? (
+    <Alert variant="destructive">
+      <AlertDescription>Could not load Triggers. Check that Factory is running.</AlertDescription>
+    </Alert>
+  ) : items === null ? (
+    <p role="status" className="text-sm text-muted-foreground">
+      Loading Triggers…
+    </p>
+  ) : (
+    <SettingsGroup label={items.length ? `Triggers · ${items.length}` : "Triggers"}>
+      {items.length === 0 ? (
+        <EmptyTriggers onCreate={onCreate} />
+      ) : (
+        items.map((trigger) => (
+          <TriggerRow
+            key={trigger.id}
+            trigger={trigger}
+            names={names}
+            busy={actions.state.pending.has(trigger.id)}
+            actions={actions}
+            onEnable={() => onEnable(trigger)}
+            onRemove={(opener) => onRemove(trigger, opener)}
+          />
+        ))
+      )}
+    </SettingsGroup>
   );
 }
 
@@ -136,12 +209,14 @@ function TriggerRow({
   names,
   busy,
   actions,
+  onEnable,
   onRemove,
 }: {
   trigger: TriggerDefinition;
   names: TriggerNames;
   busy: boolean;
   actions: TriggerActions;
+  onEnable: () => void;
   onRemove: (opener: HTMLElement | null) => void;
 }) {
   const openStudio = useStudioNavigation();
@@ -179,7 +254,7 @@ function TriggerRow({
           aria-label={trigger.name}
           checked={trigger.enabled}
           disabled={busy}
-          onCheckedChange={(enabled) => void actions.setEnabled(trigger, enabled)}
+          onCheckedChange={(enabled) => (enabled ? onEnable() : void actions.disable(trigger))}
         />
       </MutationGate>
       <DropdownMenu>

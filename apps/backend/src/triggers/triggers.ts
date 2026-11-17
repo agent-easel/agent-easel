@@ -6,6 +6,7 @@ import type {
   FlowReadiness,
   Result,
   TriggerDefinition,
+  TriggerPreview,
   TriggerReadiness,
   TriggerRepository,
   TriggerSave,
@@ -51,6 +52,8 @@ type TriggerOperations = Pick<
   | "updateTrigger"
   | "setTriggerEnabled"
   | "runTrigger"
+  | "previewNewTrigger"
+  | "previewTrigger"
   | "removeTrigger"
 >;
 
@@ -159,6 +162,21 @@ function savedTrigger(
   };
 }
 
+/** Anyone who can get the ready label onto an issue of a public repository could start Runs. */
+const authorFilterWarnings = (
+  repository: GitHubRepository,
+  authorFilter: boolean,
+): ValidationIssue[] =>
+  repository.visibility === "public" && !authorFilter
+    ? [
+        {
+          code: "trigger_author_filter_removed",
+          path: "github.query",
+          message: `${repository.nameWithOwner} is public and the query has no author: filter, so an issue anyone opens can start a Run once it carries the ready label.`,
+        },
+      ]
+    : [];
+
 const sharedRepositoryWarning = (name: string, trigger: TriggerDefinition): ValidationIssue => ({
   code: "trigger_repository_shared",
   path: "projectId",
@@ -259,22 +277,12 @@ export const makeTriggers = (
           github.openIssues(repository.value, settings.github.query),
         );
         if (!matching.ok) return gitHubRefusal(matching.failure);
-        const unfiltered =
-          repository.value.visibility === "public" && !settings.github.authorFilter;
         return {
           ok: true,
           value: {
             repository: identity(repository.value),
             newRepository,
-            warnings: unfiltered
-              ? [
-                  {
-                    code: "trigger_author_filter_removed",
-                    path: "github.query",
-                    message: `${repository.value.nameWithOwner} is public and the query has no author: filter, so an issue anyone opens can start a Run once it carries the ready label.`,
-                  },
-                ]
-              : [],
+            warnings: authorFilterWarnings(repository.value, settings.github.authorFilter),
           },
         };
       });
@@ -362,7 +370,7 @@ export const makeTriggers = (
         ),
       );
 
-    const { check, forget } = makeTriggerCheck({
+    const triggerCheck = makeTriggerCheck({
       sql,
       github,
       getFlow: deps.getFlow,
@@ -370,6 +378,42 @@ export const makeTriggers = (
       readTrigger,
       startTextRun: deps.startTextRun,
     });
+    const { check, forget } = triggerCheck;
+
+    /**
+     * A check's reads and admission rules for `settings`, on the saved Trigger `target` when given;
+     * nothing starts and nothing is written.
+     */
+    const preview = (
+      settings: TriggerSettings,
+      target: { readonly id: string; readonly expectedRevision: number } | null,
+    ) =>
+      Effect.gen(function* (): Effect.fn.Return<Result<TriggerPreview>, unknown> {
+        const saved = target ? yield* sql.withTransaction(readTrigger(target.id)) : undefined;
+        const refused = storeRefusal(target, saved, false);
+        if (refused) return refused;
+        const { repositoryNodeId, query, readyLabel, authorFilter } = settings.github;
+        const planned = yield* triggerCheck.preview({
+          id: target?.id ?? null,
+          projectId: settings.projectId,
+          flowId: settings.flowId,
+          maxActiveRuns: settings.maxActiveRuns,
+          github: { repository: { nodeId: repositoryNodeId }, query, readyLabel },
+        });
+        const repository = planned.repository;
+        const login = repository
+          ? yield* Effect.promise(() => github.readiness(repository.host))
+          : null;
+        return {
+          ok: true,
+          value: {
+            issues: planned.issues,
+            problem: planned.problem,
+            warnings: repository ? authorFilterWarnings(repository, authorFilter) : [],
+            login: login?.ok ? login.value.login : null,
+          },
+        };
+      });
 
     /**
      * A scheduled check, then the deadline one interval after it completed, in one step. A check
@@ -439,6 +483,16 @@ export const makeTriggers = (
         );
       },
       runTrigger: (id) => published(check(id)),
+      previewNewTrigger(input) {
+        const validated = validateCreateTrigger(input);
+        return validated.ok ? preview(validated.value, null) : Effect.succeed(validated);
+      },
+      previewTrigger(id, input) {
+        const validated = validateUpdateTrigger(input);
+        if (!validated.ok) return Effect.succeed(validated);
+        const { expectedRevision, ...settings } = validated.value;
+        return preview(settings, { id, expectedRevision });
+      },
       // The delete cascades to the guards. A guard only holds an unresolved attempt while its check
       // runs, and that attempt resolves inside Start's acceptance transaction, which refuses once
       // the Trigger and guard are gone; an attempt Start accepted first keeps its Run and origin.

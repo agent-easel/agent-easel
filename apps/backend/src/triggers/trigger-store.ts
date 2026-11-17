@@ -181,11 +181,11 @@ export const activeTriggerRuns = (sql: SqlClient.SqlClient, triggerId: string) =
     Effect.map(([row]) => row!.active),
   );
 
-/** Each guarded issue of `triggerId` and the labelling it was admitted for. */
+/** Each issue of `triggerId` whose Start was accepted, and the labelling it was admitted for. */
 export const readTriggerAdmissions = (sql: SqlClient.SqlClient, triggerId: string) =>
   sql<{ issue_node_id: string; labelling_event_id: string | null }>`
     SELECT issue_node_id, labelling_event_id FROM run_trigger_admissions
-    WHERE trigger_id = ${triggerId}`.pipe(
+    WHERE trigger_id = ${triggerId} AND run_id IS NOT NULL`.pipe(
     Effect.map((rows) =>
       rows.map((row) => ({
         issueNodeId: row.issue_node_id,

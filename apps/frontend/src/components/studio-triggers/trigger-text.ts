@@ -28,10 +28,40 @@ export function triggerRoute(trigger: TriggerDefinition, names: TriggerNames) {
 }
 
 /** What kind of problem stops every check, for the line before its guidance. */
-export function problemHeadline(problem: TriggerProblem) {
+export function problemHeadline(problem: Pick<TriggerProblem, "code">) {
   if (problem.code.startsWith("github_")) return "GitHub can't be read";
   if (problem.code === "trigger_project") return "The Project can't be used";
   if (problem.code === "trigger_flow") return "The Flow can't start";
   if (problem.code === "start_blocked") return "Start refuses this Trigger";
   return "The check failed";
+}
+
+/** The settings a review describes, whether saved or proposed. */
+export interface ReviewedSettings {
+  readonly projectId: string;
+  readonly flowId: string;
+  readonly schedule: TriggerSchedule;
+  readonly maxActiveRuns: number;
+}
+
+/** "Acme Web · acme/web · Flow Implement issue · every 5 min · max 1 active" */
+export function reviewSummary(settings: ReviewedSettings, repository: string, names: TriggerNames) {
+  const project = names.projects?.find((entry) => entry.id === settings.projectId)?.title;
+  const flow = names.flows?.find((entry) => entry.id === settings.flowId)?.name;
+  return [
+    project ?? "Project",
+    repository,
+    `Flow ${flow ?? ""}`.trim(),
+    scheduleText(settings.schedule),
+    `max ${settings.maxActiveRuns} active`,
+  ].join(" · ");
+}
+
+/** "opened 12 d ago", rounded down to minutes, hours or days. */
+export function openedAgo(createdAt: string, now = Date.now()) {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(createdAt)) / 60_000));
+  if (minutes < 60) return `opened ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `opened ${hours} h ago`;
+  return `opened ${Math.floor(hours / 24)} d ago`;
 }

@@ -424,6 +424,14 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
         answer(() => factory.setTriggerEnabled(parameters.id, input)),
     },
     runTrigger: { handle: ({ parameters }) => answer(() => factory.runTrigger(parameters.id)) },
+    previewNewTrigger: {
+      body: standardBody,
+      handle: ({ input }) => answer(() => factory.previewNewTrigger(input)),
+    },
+    previewTrigger: {
+      body: standardBody,
+      handle: ({ parameters, input }) => answer(() => factory.previewTrigger(parameters.id, input)),
+    },
     removeTrigger: {
       handle: ({ parameters }) => answer(() => factory.removeTrigger(parameters.id)),
     },

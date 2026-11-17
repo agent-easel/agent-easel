@@ -142,6 +142,35 @@ export interface TriggerReadiness {
   readonly flow: FlowReadiness | null;
 }
 
+/** Whether a previewed issue would start at once or wait for a free Run slot. */
+export type TriggerPreviewAdmission = "starts_now" | "waits";
+
+/** A matching issue a check would admit, as the preview lists it. */
+export interface TriggerPreviewIssue {
+  /** `owner/name#number`. */
+  readonly issue: string;
+  readonly number: number;
+  readonly title: string;
+  readonly url: string;
+  readonly createdAt: string;
+  readonly admission: TriggerPreviewAdmission;
+}
+
+/**
+ * What a check with these settings would do now, from the same reads and admission rules, without
+ * starting anything or changing the Trigger.
+ */
+export interface TriggerPreview {
+  /** Oldest first. Issues already started for their current ready labelling are left out. */
+  readonly issues: readonly TriggerPreviewIssue[];
+  /** A problem that would stop the check before any issue starts. */
+  readonly problem: { readonly code: string; readonly message: string } | null;
+  /** Such as the author filter missing on a public repository. */
+  readonly warnings: readonly ValidationIssue[];
+  /** The login `@me` resolves to, when GitHub answered. */
+  readonly login: string | null;
+}
+
 /** The Trigger operations the Factory facade implements; any approved client may call them. */
 export const triggerOperations = {
   /** Query parameters may be empty: readiness then covers only what was chosen. */
@@ -177,6 +206,21 @@ export const triggerOperations = {
   runTrigger: operation<never, TriggerDefinition>()({
     method: "POST",
     path: "/api/triggers/:id/run",
+  }),
+  /** Previews the settings a new Trigger would be created with. */
+  previewNewTrigger: operation<CreateTriggerInput, TriggerPreview>()({
+    method: "POST",
+    path: "/api/triggers/preview",
+    body: "json",
+  }),
+  /**
+   * Previews a saved Trigger with the given settings, its current ones or an edit from its
+   * current revision, counting its guards and active Runs.
+   */
+  previewTrigger: operation<UpdateTriggerInput, TriggerPreview>()({
+    method: "POST",
+    path: "/api/triggers/:id/preview",
+    body: "json",
   }),
   /** Deletes the Trigger and everything it keeps; Runs it started are not affected. */
   removeTrigger: operation()({ method: "DELETE", path: "/api/triggers/:id" }),
