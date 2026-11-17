@@ -31,11 +31,13 @@ import type { LiveChanges } from "../live-changes.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { makeTriggerCheck, type TriggerStart } from "./trigger-check.ts";
+import { deadlineAfter, makeTriggerSchedule } from "./trigger-schedule.ts";
 import {
   deleteTrigger,
   readTriggers,
   triggerNameTaken,
   triggersWatching,
+  writeNextCheck,
   writeTriggerEnabled,
   writeTriggerSettings,
 } from "./trigger-store.ts";
@@ -100,7 +102,33 @@ function storeRefusal(
   return undefined;
 }
 
-/** The next saved state: new settings, with enablement, schedule state and health kept. */
+/**
+ * The next check deadline after a save: kept while the schedule runs at the same interval, one new
+ * interval from now when the schedule starts or its interval changes, none when it does not run.
+ */
+function savedDeadline(
+  current: TriggerDefinition | undefined,
+  schedule: TriggerSettings["schedule"],
+  time: string,
+) {
+  if (!current?.enabled || !schedule.enabled) return null;
+  if (current.schedule.enabled && current.schedule.intervalMinutes === schedule.intervalMinutes)
+    return current.nextCheckAt;
+  return deadlineAfter(time, schedule.intervalMinutes);
+}
+
+/**
+ * The deadline after enabling or disabling. Enabling starts the schedule one interval from now; a
+ * first check right away is an explicit Run.
+ */
+const enabledDeadline = (current: TriggerDefinition, enabled: boolean, time: string) => {
+  if (!enabled || !current.schedule.enabled) return null;
+  return current.enabled
+    ? current.nextCheckAt
+    : deadlineAfter(time, current.schedule.intervalMinutes);
+};
+
+/** The next saved state: new settings, with enablement and health kept. */
 function savedTrigger(
   settings: TriggerSettings,
   repository: TriggerRepository,
@@ -118,7 +146,7 @@ function savedTrigger(
     schedule: settings.schedule,
     maxActiveRuns: settings.maxActiveRuns,
     revision: (current?.revision ?? 0) + 1,
-    nextCheckAt: current?.nextCheckAt ?? null,
+    nextCheckAt: savedDeadline(current, settings.schedule, time),
     latestCheck: current?.latestCheck ?? null,
     error: current?.error ?? null,
     github: {
@@ -334,7 +362,7 @@ export const makeTriggers = (
         ),
       );
 
-    const { check } = makeTriggerCheck({
+    const { check, forget } = makeTriggerCheck({
       sql,
       github,
       getFlow: deps.getFlow,
@@ -342,6 +370,28 @@ export const makeTriggers = (
       readTrigger,
       startTextRun: deps.startTextRun,
     });
+
+    /**
+     * A scheduled check, then the deadline one interval after it completed, in one step. A check
+     * that failed still sets the next deadline, so one failure does not end the schedule.
+     */
+    const checkOnSchedule = (id: string) =>
+      Effect.exit(check(id)).pipe(
+        Effect.andThen(
+          sql.withTransaction(
+            Effect.gen(function* () {
+              const trigger = yield* readTrigger(id);
+              if (!trigger?.enabled || !trigger.schedule.enabled) return trigger;
+              const nextCheckAt = deadlineAfter(yield* now, trigger.schedule.intervalMinutes);
+              yield* writeNextCheck(sql, id, nextCheckAt);
+              return { ...trigger, nextCheckAt };
+            }),
+          ),
+        ),
+        Effect.tap(() => Effect.sync(() => changes.triggersChanged())),
+        Effect.uninterruptible,
+      );
+    const schedule = yield* makeTriggerSchedule({ readTrigger, checkOnSchedule });
 
     const operations: TriggerOperations = {
       getTriggerReadiness: readiness,
@@ -363,26 +413,47 @@ export const makeTriggers = (
         const validated = validateUpdateTrigger(input);
         if (!validated.ok) return Effect.succeed(validated);
         const { expectedRevision, ...settings } = validated.value;
-        return published(save(settings, { id, expectedRevision }));
+        return published(save(settings, { id, expectedRevision })).pipe(
+          Effect.tap((result) =>
+            result.ok ? schedule.follow(id, result.value.trigger) : Effect.void,
+          ),
+        );
       },
       setTriggerEnabled(id, input) {
         const validated = validateSetTriggerEnabled(input);
         if (!validated.ok) return Effect.succeed(validated);
+        const { enabled } = validated.value;
         return published(
           sql.withTransaction(
             Effect.gen(function* (): Effect.fn.Return<Result<TriggerDefinition>, unknown> {
-              if (!(yield* readTrigger(id))) return notFound();
-              yield* writeTriggerEnabled(sql, id, validated.value.enabled, yield* now);
+              const current = yield* readTrigger(id);
+              if (!current) return notFound();
+              const time = yield* now;
+              const nextCheckAt = enabledDeadline(current, enabled, time);
+              yield* writeTriggerEnabled(sql, id, enabled, nextCheckAt, time);
               return { ok: true, value: (yield* readTrigger(id))! };
             }),
           ),
+        ).pipe(
+          Effect.tap((result) => (result.ok ? schedule.follow(id, result.value) : Effect.void)),
         );
       },
       runTrigger: (id) => published(check(id)),
+      // The delete cascades to the guards. A guard only holds an unresolved attempt while its check
+      // runs, and that attempt resolves inside Start's acceptance transaction, which refuses once
+      // the Trigger and guard are gone; an attempt Start accepted first keeps its Run and origin.
       removeTrigger: (id) =>
-        published(deleteTrigger(sql, id).pipe(Effect.as({ ok: true as const, value: undefined }))),
+        published(
+          deleteTrigger(sql, id).pipe(
+            Effect.andThen(schedule.follow(id, undefined)),
+            Effect.andThen(forget(id)),
+            Effect.as({ ok: true as const, value: undefined }),
+          ),
+        ),
     };
     /** Studio's Trigger list, read inside the caller's Studio transaction. */
     const readStudioTriggers = () => readTriggers(sql);
-    return { ...operations, readStudioTriggers };
+    /** Starts scheduled checks once Start can accept Runs; they stop before the Runner closes. */
+    const startSchedule = readTriggers(sql).pipe(Effect.flatMap(schedule.start));
+    return { ...operations, readStudioTriggers, startSchedule };
   });

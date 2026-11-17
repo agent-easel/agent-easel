@@ -377,8 +377,11 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       if ("problem" in shared) return { ...nothing, problem: shared.problem };
       const read = yield* readGitHub(trigger, shared.project);
       if (!read.ok) return { ...nothing, problem: read.problem };
-      // Checks of a Trigger are serialized, so a guard Start never accepted belongs to a check
-      // that ended with its process; its attempt was not accepted and the issue is admitted anew.
+      // Reconciles attempts whose outcome a stopped or crashed check never learned, without
+      // calling Start. The guard is Start's idempotency record for its requestId: acceptance sets
+      // its run_id in the transaction that accepts the Run. Checks of a Trigger are serialized, so
+      // no other check holds a guard now; one without a Run was definitively not accepted, and the
+      // issue is admitted anew under a new requestId.
       yield* deleteUnadmitted(sql, trigger.id);
       const candidates = yield* candidatesOf(trigger, read.matching, read.states);
       const free = Math.max(0, trigger.maxActiveRuns - (yield* activeTriggerRuns(sql, trigger.id)));
@@ -410,5 +413,9 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       )
       .pipe(Effect.uninterruptible);
 
-  return { check };
+  return {
+    check,
+    /** Drops a removed Trigger's lane; its ids are never reused, so a later check finds it gone. */
+    forget: (triggerId: string) => Effect.sync(() => lanes.delete(triggerId)),
+  };
 }

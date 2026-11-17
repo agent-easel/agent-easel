@@ -345,6 +345,8 @@ export const makeFactoryService = (
       runTitles,
     );
     yield* runner.initialize();
+    // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
+    yield* triggers.startSchedule;
     // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
     yield* chatActions.recover;
     // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
