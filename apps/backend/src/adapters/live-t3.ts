@@ -42,6 +42,7 @@ import type {
   LaunchDiscovery,
   LaunchPayload,
   LaunchReference,
+  LaunchSupport,
   T3Target,
   ThreadIdentityRead,
   SendPayload,
@@ -237,6 +238,31 @@ const markCallUnavailable = () => {
   const record = currentCall.getStore();
   if (record) record.unavailable = true;
 };
+
+/** The SDK reads a reply's body after the fetch has returned, outside the transport. A body that
+ * breaks off after its headers is a lost reply, so its read error marks the call that sent it. */
+function marksLostBody(response: Response, record: CallRecord): Response {
+  const source = response.body?.getReader();
+  if (!source) return response;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const chunk = await source.read();
+        if (chunk.done) controller.close();
+        else controller.enqueue(chunk.value);
+      } catch {
+        record.unavailable = true;
+        controller.error(new T3Failure("unavailable", "T3 request is temporarily unavailable."));
+      }
+    },
+    cancel: (reason) => source.cancel(reason),
+  });
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
 
 type ThreadExecutionRead = {
   thread: {
@@ -477,7 +503,10 @@ export class LiveT3Adapter implements T3Adapter {
           throw new T3Failure("unavailable", "T3 request is temporarily unavailable.");
         }
         if (response.status >= 500) markCallUnavailable();
-        if (response.ok || response.status === 405) return response;
+        if (response.ok || response.status === 405) {
+          const record = currentCall.getStore();
+          return stream || !record ? response : marksLostBody(response, record);
+        }
         // The SDK logs OAuth error descriptions verbatim. Keep only a fixed OAuth error code.
         const safeCodes = new Set([
           "invalid_grant",
@@ -703,23 +732,44 @@ export class LiveT3Adapter implements T3Adapter {
       return { ...inspection, support: await this.support(target.endpoint, inspection) };
     });
   }
-  /** Replay scopes are asked for only when the answer they would qualify is supported. */
+  /** Replay scopes are asked for only when the answer they would qualify is supported. A proof
+   * that cannot be established leaves only that answer unknown, never the whole inspection. */
   private async support(endpoint: string, inspection: Inspected): Promise<T3Support> {
     const support = contractSupport(inspection.state === "ready", inspection.contract?.tools ?? []);
     const { checkout, worktree } = support.launch;
+    /** undefined: the proof was asked for and could not be established. */
+    const proven = async (proof: LiveT3Options["launchRecoveryScope"]) => {
+      try {
+        return (await proof?.(endpoint)) ?? null;
+      } catch {
+        return undefined;
+      }
+    };
     // A supported worktree launch implies a supported checkout launch.
-    const launchScope = checkout.supported
-      ? ((await this.options.launchRecoveryScope?.(endpoint)) ?? null)
-      : null;
-    const sendScope = support.send.supported
-      ? ((await this.options.sendRecoveryScope?.(endpoint)) ?? null)
-      : null;
-    const scoped = <S extends { supported: boolean }>(answer: S, retryScope: string | null) =>
-      answer.supported ? { ...answer, retryScope } : answer;
+    const launchScope = checkout.supported ? await proven(this.options.launchRecoveryScope) : null;
+    const sendScope = support.send.supported ? await proven(this.options.sendRecoveryScope) : null;
+    const scoped = (
+      answer: LaunchSupport,
+      retryScope: string | null | undefined,
+      unknown: string,
+    ) =>
+      !answer.supported
+        ? answer
+        : retryScope === undefined
+          ? { supported: false, retryScope: null, explanation: unknown }
+          : { ...answer, retryScope };
+    const unknownLaunch = "T3 launch capabilities are unavailable.";
     return {
       ...support,
-      launch: { checkout: scoped(checkout, launchScope), worktree: scoped(worktree, launchScope) },
-      send: scoped(support.send, sendScope),
+      launch: {
+        checkout: scoped(checkout, launchScope, unknownLaunch),
+        worktree: scoped(worktree, launchScope, unknownLaunch),
+      },
+      send: scoped(
+        support.send,
+        sendScope,
+        "T3 send capabilities are unavailable; operation remains unresolved.",
+      ),
     };
   }
   private async inspectEndpoint(endpoint: string, record: CallRecord): Promise<Inspected> {
@@ -956,8 +1006,8 @@ export class LiveT3Adapter implements T3Adapter {
     });
     const { attachmentId, relativeUrl } = (prepared ?? {}) as Record<string, unknown>;
     const origin = new URL(target.endpoint).origin;
-    const url = typeof relativeUrl === "string" ? new URL(relativeUrl, origin) : undefined;
-    if (typeof attachmentId !== "string" || !attachmentId || url?.origin !== origin)
+    const url = typeof relativeUrl === "string" ? URL.parse(relativeUrl, origin) : null;
+    if (typeof attachmentId !== "string" || !attachmentId || !url || url.origin !== origin)
       throw new T3Failure("invalid-response", "T3 returned an invalid upload address.");
     const response = await fetch(url, {
       method: "POST",

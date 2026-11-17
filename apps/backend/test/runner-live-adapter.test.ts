@@ -1,8 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
 import { dirname, join } from "node:path";
 import { LiveT3Adapter } from "../src/index.ts";
+import { T3Failure } from "../src/adapters/t3.ts";
 import { attachmentSupport } from "../src/adapters/t3-contract.ts";
 import type { ControlledT3 } from "./support/controlled-t3.ts";
+import { authorizedLiveOAuth, reportReadSchema } from "./support/boundaries-setup.ts";
 import { launchFixture } from "./support/launch-fixture.ts";
 import { screenshots } from "./support/run-images.ts";
 import { factoryHarness } from "./support/factory.ts";
@@ -169,6 +171,60 @@ it("launch support permits an absent runtime mode without inventing replay proof
   expect(support.retryScope).toBe(null);
 });
 
+it("a launch replay proof that cannot be established leaves only launch support unknown", async (c) => {
+  // Arrange
+  const { adapter, external, failProof } = await launchFixture(c);
+  failProof();
+
+  // Act
+  const inspection = await adapter.inspect({ endpoint: external.endpoint });
+
+  // Assert
+  expect(inspection.state).toBe("ready");
+  expect(inspection.support.launch.checkout).toStrictEqual({
+    supported: false,
+    retryScope: null,
+    explanation: "T3 launch capabilities are unavailable.",
+  });
+  expect(inspection.support.launch.worktree.supported).toBe(false);
+  expect(inspection.support.attachmentLimit).toBe(8);
+});
+
+it("a send replay proof that cannot be established leaves only send support unknown", async (c) => {
+  // Arrange
+  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
+  const sendSchema = {
+    type: "object",
+    properties: {
+      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
+      mode: { type: "string", enum: ["queue"] },
+    },
+  };
+  const { adapter, endpoint } = await authorizedLiveOAuth(
+    c,
+    { sendSchema, send: () => ({}), readSchema: reportReadSchema },
+    {
+      adapter: {
+        sendRecoveryScope: async () => {
+          throw new Error("The replay proof could not be established.");
+        },
+      },
+    },
+  );
+
+  // Act
+  const inspection = await adapter.inspect({ endpoint });
+
+  // Assert
+  expect(inspection.state).toBe("ready");
+  expect(inspection.support.send).toStrictEqual({
+    supported: false,
+    retryScope: null,
+    explanation: "T3 send capabilities are unavailable; operation remains unresolved.",
+  });
+  expect(inspection.support.reportReads).toBe(true);
+});
+
 it("an image upload posts its exact bytes to T3's signed upload address without the OAuth bearer", async (c) => {
   // Arrange
   const { adapter, external } = await launchFixture(c);
@@ -189,6 +245,27 @@ it("an image upload posts its exact bytes to T3's signed upload address without 
   expect(received.upload).toStrictEqual({ type: "image", ...upload, sizeBytes: data.byteLength });
   expect(received.bytes.equals(Buffer.from(data))).toBe(true);
   expect(received.authorization).toBeUndefined();
+});
+
+it("a malformed upload address from T3 is an invalid answer that never reveals the address", async (c) => {
+  // Arrange
+  const { adapter, external } = await launchFixture(c);
+  external.malformUploadAddresses();
+  const data = screenshots.red.data;
+  const upload = {
+    name: "image-1-screenshot.png",
+    mimeType: "image/png",
+    sizeBytes: data.byteLength,
+  };
+
+  // Act
+  const uploaded = adapter.uploadAttachment({ endpoint: external.endpoint }, upload, data);
+
+  // Assert
+  await expect(uploaded).rejects.toStrictEqual(
+    new T3Failure("invalid-response", "T3 returned an invalid upload address."),
+  );
+  expect(external.uploads).toStrictEqual([]);
 });
 
 it("T3 advertising upload preparation and launch attachments supports image launches", async (c) => {

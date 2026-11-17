@@ -1,19 +1,13 @@
-import { expect, it, type TestContext } from "@effect/vitest";
+import { expect, it } from "@effect/vitest";
 import type { LiveT3Adapter } from "../src/index.ts";
-import { authorizedLiveOAuth } from "./support/boundaries-setup.ts";
+import {
+  authorizedLiveOAuth,
+  connectedLiveT3,
+  observedThread,
+  sendReference,
+} from "./support/boundaries-setup.ts";
 import { oauthT3 } from "./support/oauth-t3.ts";
 
-const observedThread = {
-  thread: {
-    threadId: "thread-1",
-    projectId: "project-1",
-    activeRunId: null,
-    link: null,
-    worktreePath: null,
-    pendingRequestCount: 0,
-  },
-  recentRuns: [],
-};
 const queuedSend = {
   environmentId: "fixture-environment",
   threadId: "thread-1",
@@ -21,30 +15,10 @@ const queuedSend = {
   clientRequestId: "a".repeat(64),
   message: "Continue",
 };
-const sendReference = {
-  threadId: "thread-1",
-  messageId: "message-1",
-  runId: "run-2",
-  status: "queued",
-  delivery: "queued",
-};
 
 /** The MCP session that served the latest thread read. */
 const threadReadSession = (requests: readonly { session: string; tool?: string }[]) =>
   requests.findLast((request) => request.tool === "t3_thread_read")?.session;
-
-/** An authorized live adapter whose T3 answers thread reads, sends and Project lists. */
-function connectedT3(
-  context: TestContext,
-  handlers: { readonly send?: (args: Record<string, unknown>) => unknown } = {},
-) {
-  return authorizedLiveOAuth(context, {
-    projects: true,
-    runtimeActivity: () => observedThread,
-    sendSchema: { type: "object" },
-    send: handlers.send ?? (() => sendReference),
-  });
-}
 
 it("inspections and concurrent T3 calls on one endpoint share one MCP connection", async (context) => {
   // Arrange
@@ -84,7 +58,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
 
 it("after T3 forgets its sessions, the next call succeeds on a new connection", async (context) => {
   // Arrange
-  const { adapter, external, endpoint } = await connectedT3(context);
+  const { adapter, external, endpoint } = await connectedLiveT3(context);
   external.dropSessions();
 
   // Act
@@ -98,7 +72,7 @@ it("after T3 forgets its sessions, the next call succeeds on a new connection", 
 it("a send whose request may have reached T3 is not resent and reports T3 unavailable", async (context) => {
   // Arrange
   const sends: unknown[] = [];
-  const { adapter, external, endpoint } = await connectedT3(context, {
+  const { adapter, external, endpoint } = await connectedLiveT3(context, {
     send: (args) => {
       sends.push(args);
       external.dropSessions();
@@ -114,9 +88,21 @@ it("a send whose request may have reached T3 is not resent and reports T3 unavai
   expect(sends).toStrictEqual([queuedSend]);
 });
 
+it("a reply lost after T3's 200 headers reports T3 unavailable, not an invalid answer", async (context) => {
+  // Arrange
+  const { adapter, external, endpoint } = await connectedLiveT3(context);
+  external.cutNextToolReply();
+
+  // Act
+  const sent = adapter.sendMessage({ endpoint }, queuedSend);
+
+  // Assert
+  await expect(sent).rejects.toMatchObject({ kind: "unavailable" });
+});
+
 it("after re-authorization, calls use a new connection and never the previous grant's", async (context) => {
   // Arrange
-  const { factory, adapter, external, endpoint, authorizationUrl } = await connectedT3(context);
+  const { factory, adapter, external, endpoint, authorizationUrl } = await connectedLiveT3(context);
   await adapter.readExecution({ endpoint }, "thread-1");
   const previous = threadReadSession(external.sessionRequests);
   await factory.authorizeConnection();
@@ -147,7 +133,7 @@ it.for([
   ["adapter close", (adapter: LiveT3Adapter) => adapter.close()],
 ] as const)("after %s, the next call opens a new connection", async ([, change], context) => {
   // Arrange
-  const { adapter, external, endpoint } = await connectedT3(context);
+  const { adapter, external, endpoint } = await connectedLiveT3(context);
   const other = await oauthT3();
   context.onTestFinished(() => other.close());
   await adapter.readExecution({ endpoint }, "thread-1");
