@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { runtimeReadinessFixture } from "./support/boundaries-setup.ts";
 import { claudeRuntimeConfig } from "./support/boundaries-setup.ts";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { readdir } from "node:fs/promises";
 
 it("missing user installation blocks readiness without launching setup work", async (c) => {
@@ -31,6 +32,20 @@ it("recheckRuntime reports reporting_unsupported when T3 lacks report support", 
   // Assert
   assert(result.ok);
   expect(result.value.ready).toBe(false);
+  assert(result.value.issues.some((i) => i.code === "reporting_unsupported"));
+});
+
+it("recheckRuntime reports reporting_unsupported from its own connection check, though a later check finds report support", async (c) => {
+  // Arrange
+  const { f, t3, selection } = await runtimeReadinessFixture(c);
+  t3.support.reportReads = false;
+  changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
+
+  // Act
+  const result = await f.recheckRuntime(selection);
+
+  // Assert
+  assert(result.ok);
   assert(result.value.issues.some((i) => i.code === "reporting_unsupported"));
 });
 

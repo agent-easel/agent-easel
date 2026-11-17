@@ -146,14 +146,12 @@ const openRuntimeSetup = Effect.fn(function* (
       FactoryOperations,
       | "getReportingInstallations"
       | "getConnection"
-      | "recheckConnection"
       | "listProjects"
-      | "recheckProjects"
       | "getAgent"
       | "getAgentCapabilities"
     >
   >,
-  latestSnapshot: ContractSnapshots["latest"],
+  freshSnapshot: ContractSnapshots["fresh"],
   refreshProjects: EffectOperations<Pick<FactoryOperations, "recheckProjects">>["recheckProjects"],
   git: GitAdapter,
 ) {
@@ -172,13 +170,13 @@ const openRuntimeSetup = Effect.fn(function* (
   yield* Effect.addFinalizer(() => close);
   const selection = Effect.fn(function* (
     input: unknown,
-    reconcileProjects: Effect.Effect<unknown, unknown>,
+    checked: Effect.Effect<T3Support, unknown>,
     capturedAgent?: CapturedAgent,
   ) {
     const i = object(input);
     if (typeof i.projectId !== "string" || typeof i.agentId !== "string")
       blocked("selection_required", "runtime.selection", "Choose a saved project and Agent.");
-    yield* reconcileProjects;
+    const support = yield* checked;
     const [c, ps, a, cap] = yield* Effect.all(
       [
         ops.getConnection(),
@@ -205,22 +203,21 @@ const openRuntimeSetup = Effect.fn(function* (
     const driver = validatedHarness(context, agent, readyCapabilities(cap));
     const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: agent, driver };
+    return { c: connection, a: agent, driver, support };
   });
   /**
    * Explicit reporting: the connected contract, an installed Factory MCP and report support.
-   * `reconcileProjects` refreshes the Project catalog and decides the connection check it reads;
-   * `support` answers from that same check.
+   * `checked` refreshes the Project catalog and answers with the support of the one connection
+   * check this readiness relies on, so a later check cannot change its answer.
    */
   const readiness = Effect.fn(function* (
     input: unknown,
-    reconcileProjects: Effect.Effect<unknown, unknown>,
-    support: Effect.Effect<T3Support, unknown>,
+    checked: Effect.Effect<T3Support, unknown>,
     capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
     yield* Effect.gen(function* () {
-      const s = yield* selection(input, reconcileProjects, capturedAgent);
+      const s = yield* selection(input, checked, capturedAgent);
       issues.push(...runtimeContractIssues(s.c));
       const installed = yield* explicitReadiness(
         {
@@ -231,7 +228,7 @@ const openRuntimeSetup = Effect.fn(function* (
         ops.getReportingInstallations,
       );
       if (installed.ok) issues.push(...installed.value.issues);
-      const reporting = reportSupport(yield* support, s.driver);
+      const reporting = reportSupport(s.support, s.driver);
       if (!reporting.supported)
         issues.push({
           code: "reporting_unsupported",
@@ -262,20 +259,16 @@ const openRuntimeSetup = Effect.fn(function* (
      * `support` is that snapshot's. */
     recheckAgent: (projectId: string, agent: CapturedAgent, support: T3Support) =>
       serial(() =>
-        readiness(
-          { projectId, agentId: agent.id },
-          refreshProjects(),
-          Effect.succeed(support),
-          agent,
-        ),
+        readiness({ projectId, agentId: agent.id }, Effect.as(refreshProjects(), support), agent),
       ),
+    /** Standalone readiness makes its own one connection check and answers from that check. */
     recheckRuntime: (i: unknown) =>
       serial(() =>
         readiness(
           i,
-          ops.recheckProjects(),
-          // The catalog recheck made this connection check.
-          Effect.map(latestSnapshot(), (snapshot) => snapshot.support),
+          Effect.flatMap(freshSnapshot(), (snapshot) =>
+            Effect.as(refreshProjects(), snapshot.support),
+          ),
         ),
       ),
   };
