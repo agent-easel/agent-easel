@@ -5,6 +5,7 @@ import type {
   AgentExecutionSettings,
   AgentModelOptionValue,
   AgentEnvironment,
+  AgentProjectOverride,
   AgentProviderCapability,
   AgentModelCapability,
 } from "@t3-factory/contracts";
@@ -32,7 +33,10 @@ export type AgentDraftOperations = Pick<
 export type AgentDraftSource = Pick<StudioDefinitions, "getSnapshot" | "subscribe"> &
   AgentDraftOperations;
 /** Draft content. The Worker picker may hold unchosen (empty) ids; saving converts it. */
-export interface AgentContent extends Pick<AgentDefinition, "name" | "prompt" | "exits"> {
+export interface AgentContent extends Pick<
+  AgentDefinition,
+  "name" | "prompt" | "exits" | "projectOverrides"
+> {
   readonly execution: AgentExecutionSettings;
 }
 
@@ -67,6 +71,67 @@ function withOptionValue(
     : [...options, { id, value }];
 }
 
+/** The environments, providers and chosen provider and model T3 offers for `execution`. */
+export function executionChoices(
+  capabilities: AgentCapabilities | null,
+  execution: AgentExecutionSettings,
+) {
+  const environments = capabilities?.environments ?? [];
+  const providers = environments.some((entry) => entry.environmentId === execution.environmentId)
+    ? (capabilities?.providers ?? [])
+    : [];
+  const selectedProvider = providers.find(
+    (entry) => entry.providerInstanceId === execution.providerInstanceId,
+  );
+  const selectedModel = selectedProvider?.models.find((entry) => entry.id === execution.modelId);
+  return { environments, providers, selectedProvider, selectedModel };
+}
+
+/** One Worker picker change applied to `execution`, keeping only the options the model offers. */
+export const executionEdits = {
+  environment: (execution: AgentExecutionSettings, id: string): AgentExecutionSettings => ({
+    ...execution,
+    environmentId: id,
+  }),
+  provider(
+    execution: AgentExecutionSettings,
+    choices: ReturnType<typeof executionChoices>,
+    id: string,
+  ): AgentExecutionSettings {
+    const model = choices.providers.find((entry) => entry.providerInstanceId === id)?.models[0];
+    return {
+      ...execution,
+      providerInstanceId: id,
+      modelId: model?.id ?? "",
+      modelOptions: buildOptions(model?.options, execution.modelOptions),
+    };
+  },
+  model(
+    execution: AgentExecutionSettings,
+    choices: ReturnType<typeof executionChoices>,
+    id: string,
+  ): AgentExecutionSettings {
+    const model = choices.selectedProvider?.models.find((entry) => entry.id === id);
+    return {
+      ...execution,
+      modelId: id,
+      modelOptions: buildOptions(model?.options, execution.modelOptions),
+    };
+  },
+  option: (
+    execution: AgentExecutionSettings,
+    id: string,
+    value: AgentModelOptionValue["value"],
+  ): AgentExecutionSettings => ({
+    ...execution,
+    modelOptions: withOptionValue(execution.modelOptions, id, value),
+  }),
+  removeOption: (execution: AgentExecutionSettings, id: string): AgentExecutionSettings => ({
+    ...execution,
+    modelOptions: execution.modelOptions.filter((option) => option.id !== id),
+  }),
+};
+
 function initialExecution(capabilities: AgentCapabilities | null): AgentExecutionSettings {
   // A provider without Factory reporting cannot run, so it is never preselected.
   const provider = capabilities?.providers.find((entry) => entry.reporting.supported);
@@ -86,6 +151,7 @@ function contentOf(agent: AgentDefinition): AgentContent {
     prompt: agent.prompt,
     execution: agent.execution ?? NO_WORKER,
     exits: agent.exits,
+    projectOverrides: agent.projectOverrides,
   };
 }
 
@@ -98,9 +164,13 @@ function saveRequest(
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
-  const asContent = (input: typeof content): AgentContent => ({
+  const asContent = (
+    input: Omit<typeof content, "projectOverrides"> &
+      Partial<Pick<AgentContent, "projectOverrides">>,
+  ): AgentContent => ({
     ...input,
     execution: input.execution ?? NO_WORKER,
+    projectOverrides: input.projectOverrides ?? [],
   });
   const fallback = "Could not save this Agent. Your edits are still here.";
   if (agent) {
@@ -140,6 +210,11 @@ export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition
   };
   /** Saving now would store no model: the Worker selection is empty or incomplete. */
   readonly needsModel: boolean;
+  /**
+   * The saved Agent is a Project Agent now (moved elsewhere) while the draft holds Project
+   * overrides, which only a global Agent has; Save waits until they are removed or it is global.
+   */
+  readonly strandedOverrides: boolean;
   /** The compared revision **Load latest revision** is waiting to be confirmed for. */
   readonly confirmingLoad: number | null;
 }
@@ -166,26 +241,21 @@ export function createAgentDraft(
           prompt: "",
           execution: initialExecution(capabilities),
           exits: [{ id: randomId(), name: "done", description: "", messageRequired: false }],
+          projectOverrides: [],
         },
     contentOf,
     list: () => source.getSnapshot().agents,
     read: (id) => source.getAgent(id),
     view(state): AgentDraftSnapshot {
-      const { environmentId, providerInstanceId, modelId } = state.content.execution;
-      const environments = capabilities?.environments ?? [];
-      const providers = environments.some((entry) => entry.environmentId === environmentId)
-        ? (capabilities?.providers ?? [])
-        : [];
-      const selectedProvider = providers.find(
-        (entry) => entry.providerInstanceId === providerInstanceId,
-      );
-      const selectedModel = selectedProvider?.models.find((entry) => entry.id === modelId);
       const { conflict } = state;
       const unknownCreate = !state.saved && state.saveOutcome === "unknown";
+      const strandedOverrides =
+        state.saved !== null && state.owner !== null && state.content.projectOverrides.length > 0;
       return {
         ...state,
-        canSave: state.canSave && !unknownCreate,
-        choices: { environments, providers, selectedProvider, selectedModel },
+        canSave: state.canSave && !unknownCreate && !strandedOverrides,
+        strandedOverrides,
+        choices: executionChoices(capabilities, state.content.execution),
         needsModel: savedExecution(state.content.execution) === null,
         confirmingLoad:
           conflict.status === "compared" && conflict.latest.revision === confirmingLoad
@@ -200,6 +270,9 @@ export function createAgentDraft(
     draft.edit(change);
   }
   const execution = () => draft.getSnapshot().content.execution;
+  const editExecution = (change: (current: AgentExecutionSettings) => AgentExecutionSettings) =>
+    edit({ execution: change(execution()) });
+  const overrides = () => draft.getSnapshot().content.projectOverrides;
   return {
     getSnapshot: draft.getSnapshot,
     subscribe: draft.subscribe,
@@ -217,7 +290,23 @@ export function createAgentDraft(
       return source.duplicateAgent(saved.id, { projectId });
     },
     setEnvironmentId(id: string) {
-      edit({ execution: { ...execution(), environmentId: id } });
+      editExecution((current) => executionEdits.environment(current, id));
+    },
+    /** Adds or replaces the override for `override.projectId`, keeping the list order. */
+    setOverride(override: AgentProjectOverride) {
+      const current = overrides();
+      edit({
+        projectOverrides: current.some((entry) => entry.projectId === override.projectId)
+          ? current.map((entry) => (entry.projectId === override.projectId ? override : entry))
+          : [...current, override],
+      });
+    },
+    removeOverride(projectId: string) {
+      edit({ projectOverrides: overrides().filter((entry) => entry.projectId !== projectId) });
+    },
+    /** Removes every Project override from the draft, as a saved Project Agent's editor offers. */
+    removeOverrides() {
+      edit({ projectOverrides: [] });
     },
     clearWorker() {
       edit({ execution: NO_WORKER });
@@ -233,7 +322,10 @@ export function createAgentDraft(
       const snapshot = draft.getSnapshot();
       if (!snapshot.canSave) return undefined;
       const { saved, content } = snapshot;
-      const request = saveRequest(saved, content, source, saved ? snapshot.owner : owner);
+      // A Project Agent has no Project overrides, so the editor says Create leaves them out. Only
+      // the request omits them: the draft keeps them until a Create succeeds.
+      const submitted = !saved && owner !== null ? { ...content, projectOverrides: [] } : content;
+      const request = saveRequest(saved, submitted, source, saved ? snapshot.owner : owner);
       if (!("error" in request)) return draft.save(request);
       draft.report(request.error);
       return undefined;
@@ -265,46 +357,18 @@ export function createAgentDraft(
       draft.acknowledgeUnknownSave();
     },
     setOption(id: string, value: AgentModelOptionValue["value"]) {
-      const current = execution();
-      edit({
-        execution: { ...current, modelOptions: withOptionValue(current.modelOptions, id, value) },
-      });
+      editExecution((current) => executionEdits.option(current, id, value));
     },
     removeOption(id: string) {
-      const current = execution();
-      edit({
-        execution: {
-          ...current,
-          modelOptions: current.modelOptions.filter((option) => option.id !== id),
-        },
-      });
+      editExecution((current) => executionEdits.removeOption(current, id));
     },
     chooseModel(id: string) {
-      const current = execution();
-      const model = draft
-        .getSnapshot()
-        .choices.selectedProvider?.models.find((entry) => entry.id === id);
-      edit({
-        execution: {
-          ...current,
-          modelId: id,
-          modelOptions: buildOptions(model?.options, current.modelOptions),
-        },
-      });
+      const { choices } = draft.getSnapshot();
+      editExecution((current) => executionEdits.model(current, choices, id));
     },
     chooseProvider(id: string) {
-      const current = execution();
-      const model = draft
-        .getSnapshot()
-        .choices.providers.find((entry) => entry.providerInstanceId === id)?.models[0];
-      edit({
-        execution: {
-          ...current,
-          providerInstanceId: id,
-          modelId: model?.id ?? "",
-          modelOptions: buildOptions(model?.options, current.modelOptions),
-        },
-      });
+      const { choices } = draft.getSnapshot();
+      editExecution((current) => executionEdits.provider(current, choices, id));
     },
   };
 }

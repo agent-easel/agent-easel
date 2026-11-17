@@ -82,7 +82,8 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   [settles](#settled-runs) or is [archived](#archive).
 - **Captured definitions.** The Run keeps its immutable input and references the Flow revision it started with, including
   its workspace setting, and the revision of every Agent that Flow references, frozen at Start. Every read and every later activation, also after restart,
-  uses those revisions: the full graph and each Agent's prompt, settings and labels. Captured execution settings are always
+  uses those revisions: the full graph and each Agent's prompt, settings and labels, a global Agent's settings being its
+  [Project override](../GLOSSARY.md#project-override) for the Run's Project when it has one. Captured execution settings are always
   complete: Start rejects a Flow that places an Agent that [Needs a model](../GLOSSARY.md#needs-a-model) through its
   readiness (`agent_model_required`), and a launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
   Start uses the current saved Agents. Later edits and removals affect only future Runs, and so do later owner changes

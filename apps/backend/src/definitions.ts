@@ -10,7 +10,9 @@ import * as SqlClient from "effect/sql/SqlClient";
 import {
   PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_VERSION,
+  type AgentCapabilities,
   type AgentDefinition,
+  type AgentProjectOverride,
   type FactoryOperations,
   type FlowBlock,
   type FlowDraft,
@@ -29,6 +31,7 @@ import {
 import {
   CANVAS_COORD_MESSAGE,
   duplicateTreatment,
+  executionForProject,
   flowAgentRevisions,
   flowReadiness,
   mayPlaceAgent,
@@ -83,6 +86,21 @@ const toDraft = (flow: CurrentFlow, agents: readonly ReadinessAgent[]): FlowDraf
   readiness: flowReadiness(flow.graph, agents, flow.projectId),
 });
 const flowNotFound = () => failure("not_found", "This Flow does not exist.");
+/** A refusal about one Project override, its issues addressed under that override. */
+function underOverride(refusal: Result<never>, index: number): Result<never> {
+  if (refusal.ok) return refusal;
+  return {
+    ok: false,
+    error: {
+      ...refusal.error,
+      issues: refusal.error.issues.map((issue) => ({
+        ...issue,
+        path: `projectOverrides.${index}.${issue.path}`,
+      })),
+    },
+  };
+}
+
 const staleRevision = (kind: "Agent" | "Flow") =>
   failure(
     "conflict",
@@ -316,6 +334,39 @@ export const makeDefinitions = (
         const issue = projectUnavailableIssue(project, "projectId");
         return failure("validation", issue.message, [issue]);
       });
+    /**
+     * Refuses Project overrides on a Project Agent, and a newly added override whose Project is not
+     * available for new Runs; one `kept` from the saved revision stays while its Project is unavailable.
+     */
+    const overridesRefusal = (
+      owner: OwningProject,
+      input: Pick<AgentDefinition, "execution" | "projectOverrides">,
+      capabilities: AgentCapabilities,
+      kept: readonly AgentProjectOverride[] = [],
+    ) =>
+      Effect.gen(function* () {
+        if (!input.projectOverrides.length) return undefined;
+        if (owner !== null)
+          return failure(
+            "validation",
+            "Only a global Agent has Project overrides; a Project Agent's own settings already apply to its Project.",
+            [
+              {
+                code: "override_global_only",
+                path: "projectOverrides",
+                message: "Remove the Project overrides of this Project Agent.",
+              },
+            ],
+          );
+        for (const [index, override] of input.projectOverrides.entries()) {
+          const unsupported = unsupportedReportingFailure(override.execution, capabilities);
+          if (unsupported) return underOverride(unsupported, index);
+          if (kept.some((saved) => saved.projectId === override.projectId)) continue;
+          const refused = yield* ownerRefusal(override.projectId);
+          if (refused) return underOverride(refused, index);
+        }
+        return undefined;
+      });
     /** Refuses a Flow graph that places an Agent its owning Project may not place. */
     const placementRefusal = (graph: FlowGraphInput, flowProject: OwningProject) =>
       Effect.gen(function* () {
@@ -387,7 +438,11 @@ export const makeDefinitions = (
         if (!flow) return flowNotFound();
         return yield* operation(flow);
       });
-    /** Creates a new Agent at revision 1 from `source`'s latest saved revision, owned by `projectId`. */
+    /**
+     * Creates a new Agent at revision 1 from `source`'s latest saved revision, owned by `projectId`.
+     * A copy into a Project takes the settings `source` uses there and no overrides, because only a
+     * global Agent has them.
+     */
     const insertAgentCopy = Effect.fnUntraced(function* (
       source: AgentDefinition,
       projectId: OwningProject,
@@ -396,6 +451,9 @@ export const makeDefinitions = (
     ) {
       const copy: AgentDefinition = {
         ...source,
+        ...(projectId === null
+          ? {}
+          : { execution: executionForProject(source, projectId), projectOverrides: [] }),
         id: yield* newId,
         projectId,
         name,
@@ -698,7 +756,13 @@ export const makeDefinitions = (
               );
               if (unsupported) return unsupported;
               const projectId = validated.value.projectId ?? null;
-              const refused = yield* ownerRefusal(projectId);
+              const agentInput = {
+                execution: validated.value.execution,
+                projectOverrides: validated.value.projectOverrides ?? [],
+              };
+              const refused =
+                (yield* ownerRefusal(projectId)) ??
+                (yield* overridesRefusal(projectId, agentInput, capabilities));
               if (refused) return refused;
               const now = yield* currentTime;
               const agent: AgentDefinition = {
@@ -708,6 +772,7 @@ export const makeDefinitions = (
                 prompt: validated.value.prompt,
                 execution: validated.value.execution,
                 exits: validated.value.exits,
+                projectOverrides: agentInput.projectOverrides,
                 revision: 1,
                 createdAt: now,
                 updatedAt: now,
@@ -736,12 +801,20 @@ export const makeDefinitions = (
                   capabilities,
                 );
                 if (unsupported) return unsupported;
+                const refused = yield* overridesRefusal(
+                  saved.projectId,
+                  validated.value,
+                  capabilities,
+                  saved.projectOverrides,
+                );
+                if (refused) return refused;
                 const agent: AgentDefinition = {
                   ...saved,
                   name: validated.value.name,
                   prompt: validated.value.prompt,
                   execution: validated.value.execution,
                   exits: validated.value.exits,
+                  projectOverrides: validated.value.projectOverrides,
                   revision: saved.revision + 1,
                   updatedAt: yield* currentTime,
                 };
@@ -763,6 +836,18 @@ export const makeDefinitions = (
               if (projectId === agent.projectId) return { ok: true as const, value: agent };
               const refused = yield* ownerRefusal(projectId);
               if (refused) return refused;
+              if (projectId !== null && agent.projectOverrides.length)
+                return failure(
+                  "conflict",
+                  "Only a global Agent has Project overrides. Save it without them first, or Duplicate it into the target instead.",
+                  [
+                    {
+                      code: "owner_change_overrides",
+                      path: "projectId",
+                      message: `This Agent overrides its settings for ${agent.projectOverrides.length === 1 ? "1 Project" : `${agent.projectOverrides.length} Projects`}.`,
+                    },
+                  ],
+                );
               const blockers = (yield* currentFlowsReferencingAgent(sql, id)).filter(
                 (flow) => !mayPlaceAgent(flow.project_id, projectId),
               );
@@ -917,6 +1002,7 @@ export const makeDefinitions = (
                       prompt: entry.prompt,
                       execution: commit.selections[entry.key] ?? null,
                       exits: entry.exits,
+                      projectOverrides: [],
                       revision: 1,
                       updatedAt: now,
                     });

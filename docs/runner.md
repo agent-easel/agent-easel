@@ -50,7 +50,7 @@ Captured definitions carry no execution contract, coordination instruction versi
 reporting protocol.
 
 - Each Flow-input Agent starts independently. The worker uses that Agent's captured
-  provider, model and options, the [Run workspace](#run-workspace), and the runtime mode from T3
+  provider, model and options (its Project override for the Run's Project, when it has one), the [Run workspace](#run-workspace), and the runtime mode from T3
   and project defaults. Nothing is inherited from another thread. Two Blocks that share
   one Agent still get separate workers. Captured execution settings are always complete: Start
   rejects a Flow that places an Agent without them through readiness, and decoding a Run's captured definitions fails rather than

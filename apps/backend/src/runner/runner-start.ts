@@ -16,6 +16,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
+  executionForProject,
   flowReadiness,
   isCanonicalTimestamp,
   isStartTitleProvenance,
@@ -513,9 +514,11 @@ export function openRunnerStart(
             flow.projectId,
           ).issues,
         );
-      for (const agent of read) {
+      for (const saved of read) {
         // A model-less Agent has no settings to check, so it never also reports them unavailable.
-        if (agent.execution === null) continue;
+        // It has no Project overrides either, so its own null settings decide that.
+        if (saved.execution === null) continue;
+        const agent = { ...saved, execution: executionForProject(saved, projectId) };
         const check = yield* checkAgent(projectId, agent);
         const problems = !check.ok
           ? [

@@ -17,6 +17,7 @@ import type {
   T3Connection,
   ValidationIssue,
 } from "@t3-factory/contracts";
+import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
@@ -183,16 +184,19 @@ const openRuntimeSetup = Effect.fn(function* (
     const { connection, context } = readyConnection(c);
     const p = availableProject(ps, i.projectId);
     if (!a.ok) blocked("agent_unavailable", "agent", "Choose an existing Agent.");
-    if (a.value.execution === null)
+    // A captured Agent already carries the settings of its Run's Project.
+    const execution = capturedAgent ? a.value.execution : executionForProject(a.value, p.id);
+    if (execution === null)
       blocked(
         "execution_required",
         "agent.execution",
         `Choose an environment, provider and model for ${a.value.name} in Studio → Agents.`,
       );
-    const driver = validatedHarness(context, a.value, readyCapabilities(cap));
+    const agent = { ...a.value, execution };
+    const driver = validatedHarness(context, agent, readyCapabilities(cap));
     const root = yield* boundary(() => t3.resolveRepository(p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: a.value, driver };
+    return { c: connection, a: agent, driver };
   });
   /** Explicit reporting: the connected contract, an installed Factory MCP and report support. */
   const readiness = Effect.fn(function* (

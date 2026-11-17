@@ -29,6 +29,16 @@ export interface AgentExecutionSettingsStatus {
   readonly options: readonly { readonly id: string; readonly state: AgentSettingAvailability }[];
 }
 
+/**
+ * A global Agent's execution settings for Runs in one Project, replacing its own settings there.
+ * Name, prompt and exits stay shared; a different prompt needs a Project Agent.
+ */
+export interface AgentProjectOverride {
+  /** The Factory Project whose Runs use these settings. */
+  readonly projectId: string;
+  readonly execution: AgentExecutionSettings;
+}
+
 /** Fields every saved Agent revision has; `execution` decides which revision shape applies. */
 interface AgentFields {
   readonly id: string;
@@ -37,6 +47,11 @@ interface AgentFields {
   readonly revision: number;
   /** Inherited live by every Flow block of this Agent; a Run keeps the revision it captured. */
   readonly exits: readonly BlockExit[];
+  /**
+   * Part of the revision, so a Run's captured revision and its Project decide its settings. Only a
+   * global Agent with execution settings has any, at most one per Project.
+   */
+  readonly projectOverrides: readonly AgentProjectOverride[];
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -119,6 +134,8 @@ interface AgentContentInput {
 export interface CreateAgentInput extends AgentContentInput {
   /** The owning Project's Factory id, or null (the default when omitted) for a global Agent. */
   readonly projectId?: string | null;
+  /** Omitted, the new Agent has none. */
+  readonly projectOverrides?: readonly AgentProjectOverride[];
 }
 
 /** A save never changes the owning Project. */
@@ -126,6 +143,8 @@ export interface UpdateAgentInput extends AgentContentInput {
   readonly expectedRevision: number;
   /** The owning Project the client last saw; a save after Change owner moved it is refused. */
   readonly expectedProjectId: string | null;
+  /** Required: the complete list the save stores, empty for none, so an omission never clears one. */
+  readonly projectOverrides: readonly AgentProjectOverride[];
 }
 
 export interface DuplicateAgentInput {

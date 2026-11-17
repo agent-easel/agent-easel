@@ -1,12 +1,15 @@
 import { expect, it } from "vite-plus/test";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
+import { comparedPresentation } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
+import { factoryProject } from "./support/studio-definitions.ts";
 import {
   agentDraft,
   comparedAgent,
   editedAgent,
+  ownerChangedElsewhere,
   pendingSave,
   removedElsewhere,
   savedElsewhere,
@@ -407,4 +410,102 @@ it("a retained Agent stays editable while a superseded save reply is pending", (
     content: { prompt: "Recover while the save reply is pending" },
     canSave: false,
   });
+});
+
+it("a new Agent created for a Project leaves out the Project overrides its draft held", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null, capabilities);
+  draft.edit({ name: "Releaser", prompt: "Release the change." });
+  draft.setOverride({ projectId: "northwind", execution: savedAgent().execution! });
+
+  // Act
+  await draft.save("ledgerly");
+
+  // Assert
+  expect(factory.createAgent).toHaveBeenCalledWith(
+    expect.objectContaining({ projectId: "ledgerly", projectOverrides: [] }),
+  );
+  expect(draft.getSnapshot()).toMatchObject({ dirty: false, error: "" });
+});
+
+it("two Agent revisions that differ only in a Project override read differently in the comparison", () => {
+  // Arrange
+  const base = savedAgent();
+  const overridden = savedAgent({
+    projectOverrides: [
+      { projectId: "northwind", execution: { ...base.execution!, modelId: "other-first" } },
+    ],
+  });
+
+  // Act
+  const shown = [comparedPresentation(base, []), comparedPresentation(overridden, [])];
+
+  // Assert
+  expect(shown[0]).not.toBe(shown[1]);
+  expect(shown[1]).toContain(
+    "Unknown Project (northwind): local · primary · other-first · effort=low, old=true",
+  );
+});
+
+it("a refused Create for a Project keeps the Project overrides in the draft", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null, capabilities);
+  draft.edit({ name: "", prompt: "Release the change." });
+  const override = { projectId: "northwind", execution: savedAgent().execution! };
+  draft.setOverride(override);
+
+  // Act
+  await draft.save("ledgerly");
+
+  // Assert
+  expect(factory.createAgent).not.toHaveBeenCalled();
+  expect(draft.getSnapshot().content.projectOverrides).toStrictEqual([override]);
+  expect(draft.getSnapshot().error).not.toBe("");
+});
+
+it("Agent revisions giving the same settings to two Projects with one title read differently", () => {
+  // Arrange
+  const execution = savedAgent().execution!;
+  const projects = [factoryProject("atlas-1", "Atlas"), factoryProject("atlas-2", "Atlas")];
+  const first = savedAgent({ projectOverrides: [{ projectId: "atlas-1", execution }] });
+  const second = savedAgent({ projectOverrides: [{ projectId: "atlas-2", execution }] });
+
+  // Act
+  const shown = [comparedPresentation(first, projects), comparedPresentation(second, projects)];
+
+  // Assert
+  expect(shown[0]).not.toBe(shown[1]);
+});
+
+it("acknowledging a move to a Project elsewhere keeps the draft's Project overrides and blocks Save", () => {
+  // Arrange
+  const setup = agentDraft();
+  const override = { projectId: "northwind", execution: savedAgent().execution! };
+  setup.draft.setOverride(override);
+  ownerChangedElsewhere(setup, "ledgerly");
+
+  // Act
+  setup.draft.acknowledgeOwner("ledgerly");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({ strandedOverrides: true, canSave: false });
+  expect(setup.draft.getSnapshot().content.projectOverrides).toStrictEqual([override]);
+});
+
+it("an Agent moved to a Project elsewhere saves without the Project overrides removed from its draft", async () => {
+  // Arrange
+  const setup = agentDraft();
+  setup.draft.setOverride({ projectId: "northwind", execution: savedAgent().execution! });
+  ownerChangedElsewhere(setup, "ledgerly");
+  setup.draft.acknowledgeOwner("ledgerly");
+  setup.draft.removeOverrides();
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.factory.updateAgent).toHaveBeenCalledWith(
+    "agent",
+    expect.objectContaining({ expectedProjectId: "ledgerly", projectOverrides: [] }),
+  );
 });

@@ -108,10 +108,12 @@ export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) 
   workspace: { mode: "checkout" as const },
 });
 
-/** A released Agent as current Factory reads it: no exits of its own and no settings status. */
+/** A released Agent as current Factory reads it: no exits of its own, no settings status and no
+ * Project overrides. */
 export const currentAgent = ({ settingsStatus: _settingsStatus, ...agent }: ReleasedAgent) => ({
   ...agent,
   exits: [],
+  projectOverrides: [],
 });
 
 /**

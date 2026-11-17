@@ -25,8 +25,12 @@ A Flow or Agent with no owning Project. A global Flow starts in any available Pr
 _Avoid_: shared (one definition in several Projects is not a supported concept).
 
 **Project Flow** / **Project Agent**:
-A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow.
-_Avoid_: override, overlay, per-project configuration of a shared Flow.
+A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow; only a global Agent's execution settings may differ per Project, through a Project override.
+_Avoid_: override (except Project override), overlay, per-project configuration of a shared Flow.
+
+**Project override**:
+A global Agent's execution settings for Runs in one Project, replacing its own settings there. It belongs to the Agent revision, so a Run's captured revision and its Project decide the settings it uses. Name, prompt and exits stay shared; only a global Agent with its own execution settings has overrides, at most one per Project.
+_Avoid_: per-project Agent, Agent overlay.
 
 **Change owner**:
 The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards. A refusal names the blocking definitions; nothing else is edited or copied.
@@ -55,10 +59,10 @@ A constituent element of a flow: the Flow input block, an agent block, a human s
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
-A reusable worker definition consisting of a prompt, optional execution settings and its exits; it is a global Agent or a Project Agent, and ownership adds no execution restriction. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
+A reusable worker definition consisting of a prompt, optional execution settings, its exits and, for a global Agent, its Project overrides; it is a global Agent or a Project Agent, and ownership adds no execution restriction. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
 
 **Agent revision**:
-One immutable saved version of an Agent's name, prompt, execution settings (complete or none) and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
+One immutable saved version of an Agent's name, prompt, execution settings (complete or none), Project overrides and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
 
 **Needs a model**:
 The state of an Agent saved without execution settings (`execution: null`). It can be edited, placed and duplicated, but it cannot run until a save chooses an environment, provider and model. It describes a missing choice, not the availability of a saved one.

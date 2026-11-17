@@ -104,6 +104,8 @@ export function definitionExport<Document extends PortableDocument>(
       prompt: agent.prompt,
       execution: agent.execution,
       exits: agent.exits,
+      // An import creates Agents without overrides; they name this server's Projects.
+      projectOverrides: [],
     };
     return definitionSaveFits(request)
       ? []

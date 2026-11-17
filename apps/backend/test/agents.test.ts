@@ -9,7 +9,7 @@ import {
   savedAgentWhileCapabilitiesFail,
 } from "./support/domain-setup.ts";
 import { subscribe } from "./support/live.ts";
-import { agentBlock, flowInput } from "./support/scenarios.ts";
+import { agentBlock, controlledExecution, flowInput } from "./support/scenarios.ts";
 
 const reviewExits = [
   { id: "pass", name: "pass", description: "The change is ready.", messageRequired: false },
@@ -44,6 +44,7 @@ it("an Agent saved without a model reads back after restart with no execution se
     execution: null,
     expectedRevision: created.value.revision,
     expectedProjectId: created.value.projectId,
+    projectOverrides: [],
   });
   assert(cleared.ok);
   await factory.close();
@@ -69,6 +70,7 @@ it("renaming an Agent exit appends a revision that keeps the exit's identity", a
     exits: renamed,
     expectedRevision: saved.value.revision,
     expectedProjectId: saved.value.projectId,
+    projectOverrides: [],
   });
 
   // Assert
@@ -197,6 +199,7 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
     ...sampleAgentInput("Coder updated"),
     expectedRevision: saved.value.revision,
     expectedProjectId: saved.value.projectId,
+    projectOverrides: [],
   });
   assert(updated.ok);
 
@@ -205,6 +208,7 @@ it("a stale Agent save conflicts and the accepted save survives restart", async 
     ...sampleAgentInput("Lost edit"),
     expectedRevision: saved.value.revision,
     expectedProjectId: saved.value.projectId,
+    projectOverrides: [],
   });
 
   // Assert
@@ -310,11 +314,59 @@ it("saving a Project Agent keeps its owning Project even when the save names ano
     ...sampleAgentInput("Release manager", second.id),
     expectedRevision: created.revision,
     expectedProjectId: created.projectId,
+    projectOverrides: [],
   });
 
   // Assert
   assert(saved.ok);
   expect(saved.value).toMatchObject({ name: "Release manager", revision: 2, projectId: first.id });
+});
+
+it("duplicating a global Agent into a Project gives the copy that Project's override as its own settings", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const firstSettings = controlledExecution(undefined, {
+    modelOptions: [{ id: "reasoning", value: "low" }],
+  });
+  const global = assertOk(
+    await factory.createAgent({
+      ...sampleAgentInput("Coder"),
+      projectOverrides: [{ projectId: first.id, execution: firstSettings }],
+    }),
+  );
+
+  // Act
+  const copy = await factory.duplicateAgent(global.id, { projectId: first.id });
+
+  // Assert
+  assert(copy.ok);
+  expect(copy.value).toMatchObject({
+    projectId: first.id,
+    execution: firstSettings,
+    projectOverrides: [],
+  });
+});
+
+it("moving a global Agent with Project overrides to a Project is refused and keeps it global", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const global = assertOk(
+    await factory.createAgent({
+      ...sampleAgentInput("Coder"),
+      projectOverrides: [{ projectId: first.id, execution: controlledExecution() }],
+    }),
+  );
+
+  // Act
+  const moved = await factory.changeAgentOwner(global.id, {
+    expectedProjectId: null,
+    projectId: first.id,
+  });
+
+  // Assert
+  assert(!moved.ok);
+  expect(moved.error.issues.map((issue) => issue.code)).toStrictEqual(["owner_change_overrides"]);
+  expect(assertOk(await factory.getAgent(global.id)).projectId).toBeNull();
 });
 
 it("an Agent whose owner is not a Factory Project id or null is rejected without creating a definition", async (context) => {
@@ -484,6 +536,7 @@ it("saving an Agent under an owner it no longer has is refused and appends no re
     ...sampleAgentInput("Release manager"),
     expectedRevision: own.revision,
     expectedProjectId: first.id,
+    projectOverrides: [],
   });
 
   // Assert

@@ -16,6 +16,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
     ...sampleAgentInput("Reviewer"),
     expectedRevision: created.value.revision,
     expectedProjectId: created.value.projectId,
+    projectOverrides: [],
   });
   assert(saved.ok);
 

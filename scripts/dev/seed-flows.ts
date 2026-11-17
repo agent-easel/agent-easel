@@ -355,6 +355,7 @@ async function createExitReadinessScenarios(
       execution: reviewer.execution,
       expectedRevision: reviewer.revision,
       expectedProjectId: reviewer.projectId,
+      projectOverrides: reviewer.projectOverrides,
       exits: [
         blockExit("pass", "pass", "pass"),
         blockExit("github-url-agent", "github-url", "github-url"),

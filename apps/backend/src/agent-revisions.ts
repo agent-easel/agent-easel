@@ -3,6 +3,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import type {
   AgentDefinition,
   AgentExecutionSettings,
+  AgentProjectOverride,
   AgentRevisionContent,
   BlockExit,
 } from "@t3-factory/contracts";
@@ -24,6 +25,14 @@ type RevisionRow = {
   model_options_json: string | null;
   saved_at: string;
   created_at: string;
+};
+type OverrideRow = {
+  agent_revision_id: string;
+  project_id: string;
+  environment_id: string;
+  provider_instance_id: string;
+  model_id: string;
+  model_options_json: string;
 };
 type ExitRow = {
   agent_revision_id: string;
@@ -57,6 +66,19 @@ export const appendAgentRevision = Effect.fnUntraced(function* (
           ${exit.messageRequired ? 1 : 0})`,
     { discard: true },
   );
+  yield* Effect.forEach(
+    agent.projectOverrides,
+    ({ projectId, execution: settings }, ordinal) =>
+      sql`INSERT INTO agent_revision_project_overrides (
+          agent_revision_id, project_id, ordinal, environment_id, provider_instance_id, model_id,
+          model_options_json
+        ) VALUES (
+          ${revisionId}, ${projectId}, ${ordinal}, ${settings.environmentId},
+          ${settings.providerInstanceId}, ${settings.modelId},
+          ${JSON.stringify(settings.modelOptions)}
+        )`,
+    { discard: true },
+  );
 });
 
 /**
@@ -76,7 +98,7 @@ export const readCurrentAgents = Effect.fnUntraced(function* (
       AND r.revision = (SELECT max(revision) FROM agent_revisions WHERE agent_id = a.id)
     WHERE a.removed_at IS NULL ${agentId === undefined ? sql`` : sql`AND a.id = ${agentId}`}
     ORDER BY max(r.saved_at, coalesce(a.owner_changed_at, r.saved_at)) DESC, a.id ASC`;
-  const revisions = yield* withExits(sql, rows);
+  const revisions = yield* withDetails(sql, rows);
   return revisions.map((revision, index): AgentDefinition => {
     const row = rows[index]!;
     return {
@@ -98,7 +120,7 @@ export const readRunAgentRevisions = Effect.fnUntraced(function* (
     WHERE f.run_id = ${run.id}
     ORDER BY (SELECT min(ordinal) FROM flow_revision_blocks
       WHERE flow_revision_id = ${run.flow_revision_id} AND agent_id = f.agent_id)`;
-  return yield* withExits(sql, rows);
+  return yield* withDetails(sql, rows);
 });
 
 /**
@@ -118,17 +140,22 @@ export const readFormerExitNames = Effect.fnUntraced(function* (sql: SqlClient.S
   return names;
 });
 
-const withExits = Effect.fnUntraced(function* (
+/** Each revision with its exits and Project overrides, in their saved order. */
+const withDetails = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   rows: readonly RevisionRow[],
 ) {
   if (!rows.length) return [];
+  const ids = rows.map((row) => row.id);
   const exits = yield* sql<ExitRow>`SELECT * FROM agent_revision_exits
-    WHERE agent_revision_id IN ${sql.in(rows.map((row) => row.id))} ORDER BY ordinal`;
+    WHERE agent_revision_id IN ${sql.in(ids)} ORDER BY ordinal`;
+  const overrides = yield* sql<OverrideRow>`SELECT * FROM agent_revision_project_overrides
+    WHERE agent_revision_id IN ${sql.in(ids)} ORDER BY ordinal`;
   return rows.map((row) =>
     toRevision(
       row,
       exits.filter((exit) => exit.agent_revision_id === row.id),
+      overrides.filter((override) => override.agent_revision_id === row.id),
     ),
   );
 });
@@ -140,13 +167,28 @@ const toExit = (row: ExitRow): BlockExit => ({
   messageRequired: row.message_required === 1,
 });
 
-const toRevision = (row: RevisionRow, exits: readonly ExitRow[]): AgentRevision => ({
+const toOverride = (row: OverrideRow): AgentProjectOverride => ({
+  projectId: row.project_id,
+  execution: {
+    environmentId: row.environment_id,
+    providerInstanceId: row.provider_instance_id,
+    modelId: row.model_id,
+    modelOptions: JSON.parse(row.model_options_json) as AgentExecutionSettings["modelOptions"],
+  },
+});
+
+const toRevision = (
+  row: RevisionRow,
+  exits: readonly ExitRow[],
+  overrides: readonly OverrideRow[],
+): AgentRevision => ({
   id: row.agent_id,
   name: row.name,
   prompt: row.prompt,
   revision: row.revision,
   execution: toExecution(row),
   exits: exits.map(toExit),
+  projectOverrides: overrides.map(toOverride),
   createdAt: row.created_at,
   updatedAt: row.saved_at,
 });

@@ -682,6 +682,7 @@ export async function expectCopiedAgent(state: Awaited<ReturnType<typeof beforeC
     prompt: `Acceptance · ${prefix} · Recovery prompt`,
     execution: savedAgent.execution,
     exits: savedAgent.exits,
+    projectOverrides: savedAgent.projectOverrides,
   });
   expect(
     (await listAgentDefinitions(app.baseUrl)).some(

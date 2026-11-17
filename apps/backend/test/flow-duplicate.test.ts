@@ -157,6 +157,7 @@ it("a Duplicate whose plan predates a save of a placed Agent is refused as stale
       ...sampleAgentInput("Coder v2"),
       expectedRevision: coder.revision,
       expectedProjectId: coder.projectId,
+      projectOverrides: [],
     }),
   );
 

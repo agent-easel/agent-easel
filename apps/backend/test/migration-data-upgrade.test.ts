@@ -140,6 +140,7 @@ it("after upgrading v0.2.0 the released Agent saves without a model while its ca
     exits: upgraded.value.exits,
     expectedRevision: upgraded.value.revision,
     expectedProjectId: upgraded.value.projectId,
+    projectOverrides: [],
   });
 
   // Assert

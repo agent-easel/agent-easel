@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: run_triggers
+-- Newest applied migration: agent_project_overrides
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -23,6 +23,22 @@ CREATE TABLE agent_revision_exits (
 CREATE TRIGGER immutable_agent_revision_exit_delete BEFORE DELETE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
 
 CREATE TRIGGER immutable_agent_revision_exit_update BEFORE UPDATE ON agent_revision_exits BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
+
+CREATE TABLE agent_revision_project_overrides (
+  agent_revision_id TEXT NOT NULL REFERENCES agent_revisions(id),
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  environment_id TEXT NOT NULL CHECK (length(trim(environment_id)) > 0),
+  provider_instance_id TEXT NOT NULL CHECK (length(trim(provider_instance_id)) > 0),
+  model_id TEXT NOT NULL CHECK (length(trim(model_id)) > 0),
+  model_options_json TEXT NOT NULL CHECK (json_valid(model_options_json)),
+  PRIMARY KEY (agent_revision_id, project_id),
+  UNIQUE (agent_revision_id, ordinal)
+);
+
+CREATE TRIGGER immutable_agent_revision_override_delete BEFORE DELETE ON agent_revision_project_overrides BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
+
+CREATE TRIGGER immutable_agent_revision_override_update BEFORE UPDATE ON agent_revision_project_overrides BEGIN SELECT RAISE(ABORT, 'Agent revisions are immutable'); END;
 
 CREATE TABLE "agent_revisions" (
   id TEXT PRIMARY KEY NOT NULL,

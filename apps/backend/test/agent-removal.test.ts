@@ -120,6 +120,7 @@ it("a removed Agent rejects saves, leaves the catalog and removing it again succ
     ...sampleAgentInput("Revived"),
     expectedRevision: saved.value.revision,
     expectedProjectId: saved.value.projectId,
+    projectOverrides: [],
   });
   const duplicated = await f.duplicateAgent(saved.value.id, {});
   const removedAgain = await f.removeAgent(saved.value.id);
