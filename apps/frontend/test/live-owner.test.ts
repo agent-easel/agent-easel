@@ -10,7 +10,15 @@ import { reconnectDelay } from "../src/live/owner.ts";
 import { runScope } from "../src/live/run.ts";
 import { appearanceScope, connectionScope } from "../src/live/scopes.ts";
 import { studioScope } from "../src/live/studio.ts";
-import { changed, checked, envelope, liveHarness, snapshot, switchedRuns } from "./support/live.ts";
+import {
+  changed,
+  checked,
+  envelope,
+  liveHarness,
+  overCapacityRuns,
+  snapshot,
+  switchedRuns,
+} from "./support/live.ts";
 import { runDetail } from "./support/run.ts";
 
 it("a message from a replaced connection cannot overwrite the fresh snapshot", () => {
@@ -284,10 +292,7 @@ it("a failed view re-read disables mutations until a current envelope arrives", 
 
 it("Runs beyond the view's capacity are refused without breaking the shared view", () => {
   // Arrange
-  const live = liveHarness();
-  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
-  for (const scope of runs) live.owner.acquire(scope);
-  live.sessions[0]?.connected();
+  const { live, runs } = overCapacityRuns();
 
   // Act
   live.sessions[0]?.subscriptions.at(-1)?.message(
@@ -381,11 +386,8 @@ it("reopening a Run the view still keeps shows its live value at once", () => {
 
 it("releasing a followed Run gives its slot to a held Run refused for capacity", () => {
   // Arrange
-  const live = liveHarness();
-  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
-  const [releaseFirst] = runs.map((scope) => live.owner.acquire(scope));
-  live.sessions[0]?.connected();
-  releaseFirst?.();
+  const { live, runs, releases } = overCapacityRuns();
+  releases[0]?.();
 
   // Act
   live.elapse();
@@ -414,10 +416,7 @@ it("a window shown again no longer follows the Run it left before hiding", () =>
 
 it("reopening a Run once refused for capacity follows it when a slot is free", () => {
   // Arrange
-  const live = liveHarness();
-  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
-  const releases = runs.map((scope) => live.owner.acquire(scope));
-  live.sessions[0]?.connected();
+  const { live, runs, releases } = overCapacityRuns();
   releases.at(-1)?.();
   live.elapse();
   releases[0]?.();

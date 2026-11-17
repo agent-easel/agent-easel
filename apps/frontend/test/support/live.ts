@@ -1,8 +1,9 @@
-import type {
-  ConnectionLiveMessage,
-  RunDetail,
-  RunViewLiveMessage,
-  T3Connection,
+import {
+  RUN_VIEW_LIMIT,
+  type ConnectionLiveMessage,
+  type RunDetail,
+  type RunViewLiveMessage,
+  type T3Connection,
 } from "@t3-factory/contracts";
 import { navigationScope } from "../../src/live/navigation.ts";
 import { runScope } from "../../src/live/run.ts";
@@ -118,4 +119,13 @@ export function switchedRuns() {
   const releaseTo = live.owner.acquire(runScope(to.id));
   live.sessions[0]?.subscriptions.at(-1)?.message(viewSnapshots(from, to));
   return { live, from, to, releaseTo };
+}
+
+/** One more Run than the view follows, all held over a connected socket; the last is refused for capacity. */
+export function overCapacityRuns() {
+  const live = liveHarness();
+  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
+  const releases = runs.map((scope) => live.owner.acquire(scope));
+  live.sessions[0]?.connected();
+  return { live, runs, releases };
 }
