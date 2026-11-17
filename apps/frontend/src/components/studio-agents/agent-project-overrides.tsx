@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useState, type Ref } from "react";
+import { FolderGit2, Plus, X } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
@@ -17,179 +17,177 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentRuntimeMeta } from "@/lib/agent-display";
+import { cn } from "@/lib/utils";
 import { executionChoices, executionEdits } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { ownerName } from "../studio-owner.tsx";
 
 /** The override the dialog edits: a new one (no Project chosen yet) or a listed one. */
-type Editing = { readonly projectId: string | null; readonly isNew: boolean };
+export type OverrideEditing = { readonly projectId: string | null; readonly isNew: boolean };
+
+/** The available Projects a new override may name: those without one yet. */
+function addableProjects(
+  projects: readonly FactoryProject[],
+  overrides: readonly AgentProjectOverride[],
+): readonly FactoryProject[] {
+  return projects.filter(
+    (project) =>
+      project.availability === "available" &&
+      !overrides.some((override) => override.projectId === project.id),
+  );
+}
+
+const rowClass =
+  "flex h-7.5 min-w-0 items-center gap-2 rounded-sm px-2 text-left text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
 
 /**
- * Figma P08 Project overrides: a global Agent's Worker for Runs in particular Projects. Changes
- * stay in the draft until the Agent is saved, like every other field.
+ * Figma SA01b: a global Agent's Project overrides in its model picker, one row per Project with
+ * its provider · model · effort. A row opens the override's dialog; Remove takes it out of the
+ * draft. Changes stay in the draft until the Agent is saved, like every other field.
  */
-export function AgentProjectOverrides({
+export function ProjectOverridesSection({
   overrides,
-  execution,
   projects,
   capabilities,
   needsModel,
   disabled,
-  onSet,
+  addRef,
+  onEdit,
   onRemove,
 }: {
   overrides: readonly AgentProjectOverride[];
-  /** The Agent's own settings, which a new override starts from. */
-  execution: AgentExecutionSettings;
   projects: readonly FactoryProject[];
   capabilities: AgentCapabilities | null;
   /** The Agent has no settings of its own, so nothing can be overridden yet. */
   needsModel: boolean;
   disabled: boolean;
-  onSet: (override: AgentProjectOverride) => void;
+  /** **Override for a Project…**, which keeps focus in the picker after a row is removed. */
+  addRef: Ref<HTMLButtonElement>;
+  onEdit: (editing: OverrideEditing) => void;
   onRemove: (projectId: string) => void;
 }) {
-  const [editing, setEditing] = useState<Editing | null>(null);
-  const addable = projects.filter(
-    (project) =>
-      project.availability === "available" &&
-      !overrides.some((override) => override.projectId === project.id),
-  );
-  const editingOverride = overrides.find((override) => override.projectId === editing?.projectId);
+  const addable = addableProjects(projects, overrides);
+  const addBlocked = needsModel
+    ? "Choose this Agent's own Worker first."
+    : addable.length
+      ? null
+      : "Every available Project already has an override.";
   return (
-    <section aria-labelledby="project-overrides-heading" className="grid min-w-0 gap-1.5">
-      <div className="flex items-center gap-2">
-        <h2 id="project-overrides-heading" className={fieldLabelClass}>
-          Project overrides
-        </h2>
-        <span className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled || needsModel || !addable.length}
-          title={
-            needsModel
-              ? "Choose this Agent's own Worker first."
-              : addable.length
-                ? undefined
-                : "Every available Project already has an override."
-          }
-          onClick={() => setEditing({ projectId: null, isNew: true })}
-        >
-          <Plus aria-hidden />
-          Override for a Project
-        </Button>
-      </div>
-      {overrides.length > 0 && (
-        <div className="min-w-0 overflow-x-auto rounded-md border bg-muted">
-          <table aria-label="Project overrides" className="w-full min-w-120 text-xs">
-            <thead>
-              <tr className="border-b bg-card text-left text-2xs text-muted-foreground">
-                <th scope="col" className="px-3 py-1.5 font-medium">
-                  Project
-                </th>
-                <th scope="col" className="px-3 py-1.5 font-medium">
-                  Worker
-                </th>
-                <th scope="col" className="w-32">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {overrides.map((override) => {
-                const owner = studioOwner(override.projectId, projects);
-                return (
-                  <tr key={override.projectId} className="border-b last:border-b-0">
-                    <td className="px-3 py-2 font-medium" title={owner.unavailable ?? undefined}>
-                      <span className="flex items-center gap-2">
-                        <span
-                          aria-hidden
-                          className="size-1.5 shrink-0 rounded-full bg-brand-cyan"
-                        />
-                        {ownerName(owner)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {agentRuntimeMeta(override.execution, capabilities)}
-                    </td>
-                    <td className="px-3 py-2 text-right whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={disabled}
-                        aria-label={`Edit override for ${owner.title}`}
-                        onClick={() => setEditing({ projectId: override.projectId, isNew: false })}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={disabled}
-                        aria-label={`Remove override for ${owner.title}`}
-                        onClick={() => onRemove(override.projectId)}
-                      >
-                        Remove
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <p className="text-2xs tracking-label text-subtle-foreground">
-        Runs in any other Project use the Worker above. Name, prompt and exits are shared by every
-        Project; a different prompt needs a Project Agent.
-      </p>
-      {editing && (
-        <OverrideDialog
-          key={`${editing.projectId ?? "new"}`}
-          projectChoices={editing.isNew ? addable : []}
-          projects={projects}
-          initial={
-            editingOverride ?? { projectId: addable[0]?.id ?? "", execution: { ...execution } }
-          }
-          capabilities={capabilities}
-          onClose={() => setEditing(null)}
-          onApply={(override) => {
-            onSet(override);
-            setEditing(null);
-          }}
-        />
-      )}
+    <section aria-labelledby="project-overrides-heading" className="grid min-w-0 gap-2.5">
+      <h3
+        id="project-overrides-heading"
+        className="text-overline font-semibold text-subtle-foreground uppercase"
+      >
+        Project overrides
+      </h3>
+      <ul aria-label="Project overrides" className="grid min-w-0">
+        {overrides.map((override) => {
+          const owner = studioOwner(override.projectId, projects);
+          return (
+            <li key={override.projectId} className="group flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                disabled={disabled}
+                aria-label={`Edit override for ${owner.title}`}
+                title={owner.unavailable ?? undefined}
+                className={cn(rowClass, "flex-1")}
+                onClick={() => onEdit({ projectId: override.projectId, isNew: false })}
+              >
+                <FolderGit2
+                  aria-hidden
+                  strokeWidth={1.5}
+                  className={cn(
+                    "size-4 shrink-0",
+                    owner.unavailable ? "text-attention" : "text-brand-cyan",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "min-w-0 flex-1 truncate",
+                    owner.unavailable ? "text-attention" : "text-brand-cyan",
+                  )}
+                >
+                  {ownerName(owner)}
+                </span>
+                <span className="min-w-0 truncate text-2xs tracking-label text-subtle-foreground">
+                  {agentRuntimeMeta(override.execution, capabilities)}
+                </span>
+              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={disabled}
+                    aria-label={`Remove override for ${owner.title}`}
+                    // Visible on row hover or keyboard focus; never removed, so Tab still reaches it.
+                    className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                    onClick={() => onRemove(override.projectId)}
+                  >
+                    <X aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove override for {owner.title}</TooltipContent>
+              </Tooltip>
+            </li>
+          );
+        })}
+        <li className="flex min-w-0">
+          <button
+            ref={addRef}
+            type="button"
+            disabled={disabled || addBlocked !== null}
+            className={cn(rowClass, "flex-1 text-foreground")}
+            onClick={() => onEdit({ projectId: null, isNew: true })}
+          >
+            <Plus aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-muted-foreground" />
+            <span className="flex-1">Override for a Project…</span>
+            {addBlocked && (
+              <span className="text-2xs tracking-label text-subtle-foreground">{addBlocked}</span>
+            )}
+          </button>
+        </li>
+      </ul>
     </section>
   );
 }
 
-function OverrideDialog({
-  projectChoices,
+/**
+ * Adds or edits one override. It lives outside the model picker's popover, which closes when the
+ * dialog opens.
+ */
+export function OverrideDialog({
+  editing,
+  overrides,
+  execution,
   projects,
-  initial,
   capabilities,
   onClose,
   onApply,
 }: {
-  /** The Projects a new override may name; empty while editing a listed one. */
-  projectChoices: readonly FactoryProject[];
+  editing: OverrideEditing;
+  overrides: readonly AgentProjectOverride[];
+  /** The Agent's own settings, which a new override starts from. */
+  execution: AgentExecutionSettings;
   projects: readonly FactoryProject[];
-  initial: AgentProjectOverride;
   capabilities: AgentCapabilities | null;
   onClose: () => void;
   onApply: (override: AgentProjectOverride) => void;
 }) {
+  const projectChoices = editing.isNew ? addableProjects(projects, overrides) : [];
+  const initial = overrides.find((override) => override.projectId === editing.projectId) ?? {
+    projectId: projectChoices[0]?.id ?? "",
+    execution: { ...execution },
+  };
   const [projectId, setProjectId] = useState(initial.projectId);
-  const [execution, setExecution] = useState(initial.execution);
-  const choices = executionChoices(capabilities, execution);
+  const [settings, setSettings] = useState(initial.execution);
+  const choices = executionChoices(capabilities, settings);
   const complete = Boolean(
-    projectId && execution.environmentId && execution.providerInstanceId && execution.modelId,
+    projectId && settings.environmentId && settings.providerInstanceId && settings.modelId,
   );
   const title = studioOwner(projectId, projects).title;
   return (
@@ -228,13 +226,13 @@ function OverrideDialog({
             saving={false}
             settings={{
               ...choices,
-              execution,
+              execution: settings,
               needsModel: false,
-              setEnvironmentId: (id) => setExecution(executionEdits.environment(execution, id)),
-              chooseProvider: (id) => setExecution(executionEdits.provider(execution, choices, id)),
-              chooseModel: (id) => setExecution(executionEdits.model(execution, choices, id)),
-              setOption: (id, value) => setExecution(executionEdits.option(execution, id, value)),
-              removeOption: (id) => setExecution(executionEdits.removeOption(execution, id)),
+              setEnvironmentId: (id) => setSettings(executionEdits.environment(settings, id)),
+              chooseProvider: (id) => setSettings(executionEdits.provider(settings, choices, id)),
+              chooseModel: (id) => setSettings(executionEdits.model(settings, choices, id)),
+              setOption: (id, value) => setSettings(executionEdits.option(settings, id, value)),
+              removeOption: (id) => setSettings(executionEdits.removeOption(settings, id)),
               clearWorker: () => undefined,
             }}
           />
@@ -246,7 +244,7 @@ function OverrideDialog({
           <Button
             type="button"
             disabled={!complete}
-            onClick={() => onApply({ projectId, execution })}
+            onClick={() => onApply({ projectId, execution: settings })}
           >
             Apply
           </Button>

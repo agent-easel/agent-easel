@@ -12,8 +12,8 @@ const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
 
 /**
- * A new global Agent open in Studio with the Override for a Project dialog choosing Northwind,
- * and the id of the fixture's available Northwind Project.
+ * A new global Agent open in Studio with the Override for a Project dialog, opened from its model
+ * picker, choosing Northwind, and the id of the fixture's available Northwind Project.
  */
 async function overrideDialogForNorthwind(
   { app, screen, browser }: Pick<StudioFixtures, "app" | "screen" | "browser">,
@@ -27,7 +27,8 @@ async function overrideDialogForNorthwind(
     `${label} ${crypto.randomUUID().slice(0, 8)}`,
   );
   await app.open(`/studio/agents/${agent.id}`);
-  await screen.getByRole("button", "Override for a Project").tap();
+  await screen.getByRole("button", /^Worker: /).tap();
+  await screen.getByRole("button", "Override for a Project…", { exact: true }).tap();
   const dialog = screen.getByRole("dialog", "Override for a Project");
   await dialog.getByRole("button", /^Project:/).tap();
   await screen.getByRole("menuitemradio", "Northwind", { exact: true }).tap();
@@ -54,7 +55,9 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  const overrides = screen.getByRole("table", "Project overrides");
+  const picker = screen.getByRole("button", /^Worker: /);
+  const overrides = screen.getByRole("list", "Project overrides");
+  await picker.tap();
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.revision, agent.revision + 1);
@@ -63,6 +66,7 @@ test("a global Agent saved with a Project override keeps it in its editor and li
     [[northwind, "gpt-6-astra"]],
   );
   await app.open(`/studio/agents/${agent.id}`);
+  await picker.tap();
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
   await expect(screen.getByText(/\+1 Project override/).first()).toBeVisible();
   await app.screenshot("override-saved-after-reload");

@@ -227,10 +227,17 @@ are distinct and non-empty. A new Agent starts with one exit, `done`, which need
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
 A persistent 300 px list sits beside the editor with a split **New Agent ▾** button (the button creates an Agent; its menu holds **Import…**, see [Import](#import)), **Search Agents**, the owner filter and owner groups ([Owners in Studio](#owners-in-studio)). Each row shows the Agent's name, its runtime summary and the count of distinct saved Flows using it (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows the owner above the name, a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Leaving an edited Agent asks to **Keep
+drafts); narrow screens stack list and editor. The header shows the owner above the name, the model picker (see **Worker settings** below), a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header the form holds the name, the owner choice for a new Agent, the
+Prompt, which grows to fill the editor, and the exits; draft notices such as the Project override warnings and a reporting
+problem sit above the name. Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**.
 
-**Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
+**Worker settings.** The header's model picker names what the Agent runs on: the provider's initial, the model and its
+reasoning effort (the model's first option, its default included), with an accessible name such as **Worker: GPT 6.1 Sol ·
+High**. A saved selection T3 no longer offers reads **Unavailable**, and one Studio cannot judge while T3 capabilities are
+unavailable reads **Unknown**, each with its reason in a tooltip. The picker opens a popover with focus inside; Escape closes
+only the popover and returns focus to the picker, and every change in it is a draft edit (Unsaved changes, **Save**, the leave
+guard). The popover holds one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
 Availability is separate from verified execution support. A provider without Factory reporting support ([Reporting installation](t3-integration.md#reporting-installation) lists the drivers that have it) stays in the provider menu
 as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
@@ -240,7 +247,7 @@ The Worker is optional. **Clear** empties the selection, and a save whose enviro
 no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
 Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
 inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
-execution state; its Worker section asks for an environment, provider and model, it opens
+execution state; its model picker reads **Needs a model** in the attention color and its Worker settings ask for an environment, provider and model, it opens
 with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
 states of a saved selection. Every Flow that places such an Agent is not ready (`agent_model_required`, one issue per block,
 "{block}: {agent} needs a model."), so a Run never starts with it; choosing a model in the Agent editor makes those Flows
@@ -249,14 +256,16 @@ ready without saving them again. In the API `execution` is
 and a `modelOptions` list) or an explicit `null`, so an omitted key or a partial object, including one without
 `modelOptions`, is a validation error. A `null` execution skips the reporting-support check.
 
-**Project overrides.** A global Agent's editor shows **Project overrides** under the Worker
+**Project overrides.** A global Agent's model picker lists **Project overrides** under the Worker settings
 ([Project override](../GLOSSARY.md#project-override), [ADR](adr/0002-project-overrides-of-global-agent-execution-settings.md)):
-a table with one row per Project, its provider, model and thinking options, and **Edit** and **Remove**.
-**+ Override for a Project** opens a dialog that chooses one of the available Projects without an override
+one row per Project, its name in brand cyan (the attention color, with the reason, while the Project is unavailable) and its
+provider · model · thinking options. A row opens the override in its dialog to edit it, and its remove button, shown on hover
+or keyboard focus, takes it out of the draft. **Override for a Project…** opens a dialog that chooses one of the available Projects without an override
 and the same Worker pickers, starting from the Agent's own settings; **Apply** puts the row in the draft and **Save**
 stores it in the next revision like any other edit. Runs in that Project launch with the override; every other Project
-uses the Worker. The button is disabled until the Agent has its own Worker, and a Project Agent's editor has no such
-section. A new Agent whose owner choice changes to a Project keeps its overrides in the draft under **Project overrides
+uses the Worker. The dialog stays open when the popover closes. **Override for a Project…** is disabled, with its reason,
+until the Agent has its own Worker or while every available Project already has an override, and a Project Agent's picker has
+no such section. A new Agent whose owner choice changes to a Project keeps its overrides in the draft under **Project overrides
 left out**, and **Create Agent** saves it without them; choosing Global again before Create keeps them. The revision
 comparison lists each override's Project and settings on both sides. When another client moves a saved Agent to a
 Project while this draft holds Project overrides, they stay listed under **Project overrides can't be saved** after the

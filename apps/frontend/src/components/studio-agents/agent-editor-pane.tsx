@@ -1,8 +1,7 @@
 import { LaunchSkillStatus } from "../launch-skill-status.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
-import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -53,7 +52,7 @@ import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportDialog, DefinitionExportMenuItem } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
-import { AgentProjectOverrides } from "./agent-project-overrides.tsx";
+import { AgentModelPicker } from "./agent-model-picker.tsx";
 import { OwnerChangeNotice, OwnerPicker, ownerName } from "../studio-owner.tsx";
 import { studioOwner, type StudioOwner } from "../../studio-definitions.ts";
 
@@ -111,7 +110,28 @@ export function AgentEditorPane(props: AgentEditorProps) {
           void props.onSave();
         }}
       >
-        <AgentEditorHeader {...props} name={name} saving={saving} />
+        <AgentEditorHeader
+          {...props}
+          name={name}
+          saving={saving}
+          picker={
+            <AgentModelPicker
+              settings={settings}
+              capabilities={capabilities}
+              saving={saving}
+              overrides={
+                global
+                  ? {
+                      list: projectOverrides,
+                      projects: ownership.projects,
+                      onSet: draft.setOverride,
+                      onRemove: draft.removeOverride,
+                    }
+                  : undefined
+              }
+            />
+          }
+        />
         {state.removed ? (
           <StudioRemovedDraft
             kind="Agent"
@@ -131,38 +151,8 @@ export function AgentEditorPane(props: AgentEditorProps) {
             <AgentRevisionPanel draft={draft} state={state} projects={ownership.projects} />
           </>
         )}
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
-          <div className="@container/agent-form grid min-w-0 gap-3.5">
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-name" className={fieldLabelClass}>
-                Name
-              </Label>
-              <Input
-                id="agent-name"
-                maxLength={200}
-                value={name}
-                onChange={(event) => draft.edit({ name: event.target.value })}
-                disabled={saving}
-                className="bg-muted"
-              />
-            </div>
-            {props.ownership.kind === "new" && (
-              <OwnerPicker
-                kind="Agent"
-                chosen={props.ownership.chosen}
-                projects={props.ownership.projects}
-                onChange={props.ownership.onChange}
-                disabled={saving}
-                initial={props.ownership.initial}
-                hint={props.ownership.hint}
-              />
-            )}
-            <ExecutionSettingsFields
-              role="worker"
-              capabilities={capabilities}
-              settings={settings}
-              saving={saving}
-            />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
+          <div className="flex min-w-0 flex-1 flex-col gap-3.5">
             {settings.execution.providerInstanceId && (
               <AgentReportingNotice providerId={settings.execution.providerInstanceId} />
             )}
@@ -189,19 +179,32 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 </AlertDescription>
               </Alert>
             )}
-            {global && (
-              <AgentProjectOverrides
-                overrides={projectOverrides}
-                execution={execution}
-                projects={ownership.projects}
-                capabilities={capabilities}
-                needsModel={state.needsModel}
+            <div className="grid gap-1.5">
+              <Label htmlFor="agent-name" className={fieldLabelClass}>
+                Name
+              </Label>
+              <Input
+                id="agent-name"
+                maxLength={200}
+                value={name}
+                onChange={(event) => draft.edit({ name: event.target.value })}
                 disabled={saving}
-                onSet={draft.setOverride}
-                onRemove={draft.removeOverride}
+                className="bg-muted"
+              />
+            </div>
+            {props.ownership.kind === "new" && (
+              <OwnerPicker
+                kind="Agent"
+                chosen={props.ownership.chosen}
+                projects={props.ownership.projects}
+                onChange={props.ownership.onChange}
+                disabled={saving}
+                initial={props.ownership.initial}
+                hint={props.ownership.hint}
               />
             )}
-            <div className="grid gap-1.5">
+            {/* The Prompt grows to fill the editor; Exits stay reachable below it. */}
+            <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor="agent-prompt" className={fieldLabelClass}>
                 Prompt
               </Label>
@@ -212,7 +215,7 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 value={prompt}
                 onChange={(event) => draft.edit({ prompt: event.target.value })}
                 disabled={saving}
-                className="min-h-38 bg-muted font-mono text-xs"
+                className="min-h-38 flex-1 bg-muted font-mono text-xs"
               />
               <p id="agent-prompt-help" className="text-2xs tracking-label text-subtle-foreground">
                 Reusable across projects. Mention skills as plain text, for example{" "}
@@ -310,9 +313,11 @@ function AgentReportingNotice({ providerId }: { providerId: string }) {
   );
 }
 
-/** Figma SA01: the owner, the name with More actions and Save, and one status line. */
-function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boolean }) {
-  const { state, flowUsage, name, saving, ownership } = props;
+/** Figma SA01: the owner, the name with the model picker, More actions and Save, and one status line. */
+function AgentEditorHeader(
+  props: AgentEditorProps & { name: string; saving: boolean; picker: ReactNode },
+) {
+  const { state, flowUsage, name, saving, ownership, picker } = props;
   const agent = state.saved;
   const saveLabel = agent ? "Save" : "Create Agent";
   return (
@@ -323,7 +328,8 @@ function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boo
           {agent ? name || agent.name : "New Agent"}
         </h1>
         {/* The actions wrap together, so Save never leaves More actions behind. */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex max-w-full min-w-0 items-center gap-2">
+          {picker}
           {agent && <AgentMoreActions {...props} agent={agent} />}
           <MutationGate>
             <Button

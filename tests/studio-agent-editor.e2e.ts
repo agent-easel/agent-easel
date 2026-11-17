@@ -1,7 +1,8 @@
+import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
-import { saveAgentElsewhere } from "./support/agents.ts";
-import { chooseAgentAction, openStudioAgent } from "./support/studio.ts";
+import { readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
+import { chooseAgentAction, expectSavedAgentRevision, openStudioAgent } from "./support/studio.ts";
 import {
   expectCleanAgentRevision,
   beforeCleanAgentRevision,
@@ -164,4 +165,61 @@ test("closing a More actions dialog returns focus to More actions", async ({
   // Assert
   await expect(confirmation).toHaveCount(0);
   await expect(screen.getByRole("button", "More actions", { exact: true })).toBeFocused();
+});
+
+test("a Worker change made in the model picker marks the draft dirty and Save stores it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const agent = await openStudioAgent(
+    { app, screen, browser },
+    `Model picker ${crypto.randomUUID().slice(0, 8)}`,
+  );
+  const picker = screen.getByRole("button", "Worker: GPT 6.1 Sol · High", { exact: true });
+  await picker.tap();
+  const settings = screen.getByRole("dialog", "Worker");
+  await settings.getByRole("button", "Reasoning effort: High", { exact: true }).tap();
+  await screen.getByRole("menuitemradio", "Low", { exact: true }).tap();
+  await expect(screen.getByText(/^Unsaved changes · rev 1 · /)).toBeVisible();
+  await settings.press("Escape");
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectSavedAgentRevision(screen, 2);
+  await expect(
+    screen.getByRole("button", "Worker: GPT 6.1 Sol · Low", { exact: true }),
+  ).toBeVisible();
+  const saved = await readAgentDefinition(app.baseUrl, agent.id);
+  assert.deepEqual(
+    saved.execution?.modelOptions.find((option) => option.id === "reasoning"),
+    { id: "reasoning", value: "low" },
+  );
+});
+
+test("Escape closes only the model picker and returns focus to it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioAgent(
+    { app, screen, browser },
+    `Picker focus ${crypto.randomUUID().slice(0, 8)}`,
+  );
+  const picker = screen.getByRole("button", /^Worker: /);
+  await picker.tap();
+  const settings = screen.getByRole("dialog", "Worker");
+  await expect(settings.getByRole("button", "Clear worker selection")).toBeFocused();
+
+  // Act
+  await settings.press("Escape");
+
+  // Assert
+  await expect(settings).toHaveCount(0);
+  await expect(screen.getByRole("dialog", "Studio")).toBeVisible();
+  await expect(picker).toBeFocused();
 });
