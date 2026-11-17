@@ -194,8 +194,8 @@ any other refused subscription is retried with backoff and keeps mutations disab
 Delivery replaces changed entities or logical sections by stable identity, sends navigation
 upserts/removals and appends timeline entries by sequence. Studio changes are whole Agent and
 Flow upserts and removals by id: an Agent change also delivers each Flow whose readiness it
-changed, although that Flow's revision is unchanged. Clients order Agents by `updatedAt`
-descending and Flows by `createdAt` descending, each then by ascending id, which reproduces the
+changed, although that Flow's revision is unchanged. Clients order Agents by `updatedAt` (latest
+save or owner change) descending and Flows by `createdAt` descending, each then by ascending id, which reproduces the
 backend's list order. Worker executions use the pair
 of binding id and execution id, including observation metadata, so later turns preserve
 earlier executions. Observation-only timestamps of Runs and projects

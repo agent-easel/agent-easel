@@ -175,6 +175,11 @@ export async function projectsHarness(context: TestContext) {
 }
 
 /** `projectsHarness` with both clones discovered as available Factory Projects. */
+/** Resolves once the wall clock has passed `time`, so the next write is stored strictly later. */
+export async function clockPassed(time: string) {
+  while (Date.now() <= Date.parse(time)) await new Promise((resolve) => setTimeout(resolve, 1));
+}
+
 export async function discoveredClones(context: TestContext) {
   const setup = await projectsHarness(context);
   const [first, second] = assertOk(await setup.factory.recheckProjects()).projects;

@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
   assertOk,
+  clockPassed,
   discoveredClones,
   openFactoryWithApprovedT3,
   readAgentAfterRestart,
@@ -166,6 +167,25 @@ it("an Agent moved to another owner and back no longer reads as it did before th
   expect(read).toStrictEqual(back);
   expect(read).toMatchObject({ projectId: null, revision: agent.revision });
   expect(read.updatedAt > agent.updatedAt).toBe(true);
+});
+
+it("Agents list by their update time, so an owner change moves an Agent first like a save", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const earlier = assertOk(await factory.createAgent(sampleAgentInput("Earlier")));
+  await clockPassed(earlier.updatedAt);
+  const later = assertOk(await factory.createAgent(sampleAgentInput("Later")));
+  await clockPassed(later.updatedAt);
+  assertOk(
+    await factory.changeAgentOwner(earlier.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const listed = assertOk(await factory.listAgents());
+
+  // Assert
+  // Live clients order Agents by `updatedAt` descending, then id; a snapshot must agree.
+  expect(listed.map((agent) => agent.id)).toStrictEqual([earlier.id, later.id]);
 });
 
 it("a stale Agent save conflicts and the accepted save survives restart", async (context) => {

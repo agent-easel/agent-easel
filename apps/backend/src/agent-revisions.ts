@@ -61,7 +61,8 @@ export const appendAgentRevision = Effect.fnUntraced(function* (
 
 /**
  * The latest revision of each non-removed Agent (or only `agentId`) with its owning Project, most
- * recently saved first. Its update time is its latest save or owner change, whichever is later.
+ * recently updated first. Its update time is its latest save or owner change, whichever is later,
+ * the order live Studio clients keep.
  */
 export const readCurrentAgents = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
@@ -74,7 +75,7 @@ export const readCurrentAgents = Effect.fnUntraced(function* (
     JOIN agent_revisions r ON r.agent_id = a.id
       AND r.revision = (SELECT max(revision) FROM agent_revisions WHERE agent_id = a.id)
     WHERE a.removed_at IS NULL ${agentId === undefined ? sql`` : sql`AND a.id = ${agentId}`}
-    ORDER BY r.saved_at DESC, a.id ASC`;
+    ORDER BY max(r.saved_at, coalesce(a.owner_changed_at, r.saved_at)) DESC, a.id ASC`;
   const revisions = yield* withExits(sql, rows);
   return revisions.map((revision, index): AgentDefinition => {
     const row = rows[index]!;
