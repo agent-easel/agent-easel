@@ -7,7 +7,12 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { SettingsGroup, SettingsRow } from "../settings-page.tsx";
-import type { IntervalUnit, TriggerDraftModel, TriggerDraftSnapshot } from "../../trigger-draft.ts";
+import {
+  triggerFlows,
+  type IntervalUnit,
+  type TriggerDraftModel,
+  type TriggerDraftSnapshot,
+} from "../../trigger-draft.ts";
 import type { useTriggerReadiness } from "./use-trigger-readiness.ts";
 
 export type ReadinessRead = ReturnType<typeof useTriggerReadiness>;
@@ -55,7 +60,7 @@ export function TriggerFields({
               value={content.projectId}
               placeholder="Choose a Project"
               options={projects?.map((project) => ({ value: project.id, label: project.title }))}
-              onChange={(projectId) => draft.chooseProject(projectId)}
+              onChange={(projectId) => draft.chooseProject(projectId, flows ?? [])}
             />
           )}
         />
@@ -75,7 +80,14 @@ export function TriggerFields({
               labelledBy={text.title}
               value={content.flowId}
               placeholder="Choose a Flow"
-              options={flows?.map((flow) => ({ value: flow.id, label: flow.name }))}
+              options={
+                flows
+                  ? triggerFlows(flows, content.projectId, content.flowId).map((flow) => ({
+                      value: flow.id,
+                      label: flow.name,
+                    }))
+                  : undefined
+              }
               onChange={(flowId) => draft.edit({ flowId })}
             />
           )}

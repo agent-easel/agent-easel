@@ -471,7 +471,9 @@ kinds, and a Trigger's kind never changes. The create form has:
   scope qualifier (`repo:`, `org:`, `user:`, `is:`, `state:`, `type:`, `project:`); Factory always adds the
   repository, issue type and open state. A query GitHub rejects also blocks saving. Removing the author filter on a
   public repository warns rather than refuses.
-- **Flow**; every Start uses its current saved revision, like New Run.
+- **Flow**, a global Flow or a Flow of the chosen Project, as New Run offers them; save refuses another Project's Flow
+  (`flow_project_mismatch`), and choosing another Project clears a Flow it may not start. Every Start uses the Flow's
+  current saved revision, like New Run.
 - **Run on a schedule**, with a number and minutes or hours (1 minute to 24 hours, default every 5 minutes). When off,
   the Trigger checks only when **Run** is chosen.
 - **Max active Runs**, 1 to 10, default 1.

@@ -3,6 +3,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type {
   FactoryOperations,
   FactoryProject,
+  FlowDraft,
   FlowReadiness,
   Result,
   TriggerDefinition,
@@ -13,6 +14,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
+  mayStartFlow,
   validateCreateTrigger,
   validateSetTriggerEnabled,
   validateUpdateTrigger,
@@ -211,6 +213,20 @@ const missingFlowReadiness: FlowReadiness = {
   issues: [{ code: "trigger_flow", path: "flowId", message: "Choose a saved Flow." }],
 };
 
+const otherProjectFlow =
+  "This Flow belongs to another Project. Choose a global Flow or a Flow of the Trigger's Project.";
+
+/** The Flow's readiness, which a Flow of another Project than the chosen one never has. */
+function flowReadiness(flow: Result<FlowDraft>, projectId: string): FlowReadiness {
+  if (!flow.ok) return missingFlowReadiness;
+  if (projectId && !mayStartFlow(flow.value.projectId, projectId))
+    return {
+      ready: false,
+      issues: [{ code: "flow_project_mismatch", path: "flowId", message: otherProjectFlow }],
+    };
+  return flow.value.readiness;
+}
+
 /** What GitHub settled for a save: the repository to store and the warnings it raises. */
 interface GitHubSettlement {
   readonly repository: TriggerRepository;
@@ -305,6 +321,8 @@ export const makeTriggers = (
         const flow = yield* deps.getFlow(settings.flowId);
         if (!flow.ok)
           return refusal("validation", "trigger_flow", "flowId", "Choose a saved Flow.");
+        if (!mayStartFlow(flow.value.projectId, settings.projectId))
+          return refusal("validation", "flow_project_mismatch", "flowId", otherProjectFlow);
         const settled = yield* settleGitHub(settings, project.value, saved);
         if (!settled.ok) return settled;
         return yield* sql.withTransaction(
@@ -360,7 +378,7 @@ export const makeTriggers = (
               ? { ready: true, login: login.value.login }
               : { ready: false, problem: gitHubRepairGuidance(login.failure) },
             repository: repository && repositoryReadiness(repository),
-            flow: flow && (flow.ok ? flow.value.readiness : missingFlowReadiness),
+            flow: flow && flowReadiness(flow, projectId),
           },
         };
       });

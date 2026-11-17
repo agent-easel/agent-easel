@@ -197,6 +197,24 @@ it("a Project on a remote T3 environment is refused", async (c) => {
   expect(saved.error.issues[0]?.code).toBe("trigger_project_remote");
 });
 
+it("a Flow of another Project is refused and nothing is saved", async (c) => {
+  // Arrange
+  const { f, flow, triggerInput } = await triggerWorld(c);
+  const other = await f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  assert(
+    (await f.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: other.value.id })).ok,
+  );
+
+  // Act
+  const saved = await f.createTrigger(triggerInput);
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues[0]?.code).toBe("flow_project_mismatch");
+  expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [] });
+});
+
 it("a repository other than the Project's current one is refused", async (c) => {
   // Arrange
   const { f, triggerInput } = await triggerWorld(c);

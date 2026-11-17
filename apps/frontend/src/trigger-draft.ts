@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type {
   CreateTriggerInput,
+  FlowDraft,
   TriggerDefinition,
   TriggerRepository,
   TriggerSave,
@@ -8,6 +9,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
+  mayStartFlow,
   parseTriggerQuery,
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
@@ -96,6 +98,15 @@ function settingsOf(content: TriggerContent) {
     maxActiveRuns: whole(content.maxActiveRuns),
     github: { repositoryNodeId: content.repository?.nodeId ?? "", query: content.query },
   };
+}
+
+/**
+ * The Flows a Trigger of `projectId` may start, as New Run offers them: global Flows and the
+ * Project's own. The chosen Flow stays listed, so one moved to another Project is still named
+ * while readiness explains why it cannot start. Without a Project only global Flows are offered.
+ */
+export function triggerFlows(flows: readonly FlowDraft[], projectId: string, flowId: string) {
+  return flows.filter((flow) => flow.id === flowId || mayStartFlow(flow.projectId, projectId));
 }
 
 /** The settings a save would send, validated, or why they cannot be sent. */
@@ -216,11 +227,14 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
       return unsubscribe;
     },
     edit,
-    chooseProject(projectId: string) {
-      const saved = draft.getSnapshot().saved;
+    /** Another Project keeps only a Flow it may start, as New Run does. */
+    chooseProject(projectId: string, flows: readonly FlowDraft[]) {
+      const { saved, content } = draft.getSnapshot();
+      const flow = flows.find((entry) => entry.id === content.flowId);
       edit({
         projectId,
         repository: saved && saved.projectId === projectId ? contentOf(saved).repository : null,
+        ...(flow && !mayStartFlow(flow.projectId, projectId) ? { flowId: "" } : {}),
       });
     },
     /** Factory detected `projectId`'s repository; it fills the form only for that Project. */

@@ -263,6 +263,33 @@ it("a Start blocker sets the Error with Start's guidance and starts nothing", as
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
 
+it("a check whose Flow moved to another Project sets the Error and starts nothing", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "Needs the Flow");
+  const other = await world.f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  assert(
+    (
+      await world.f.changeFlowOwner(world.flow.id, {
+        expectedProjectId: null,
+        projectId: other.value.id,
+      })
+    ).ok,
+  );
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.error).toMatchObject({
+    code: "trigger_flow",
+    message: expect.stringContaining("belongs to another Project"),
+  });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
 it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", async (c) => {
   // Arrange
   const world = await checkingWorld(c);

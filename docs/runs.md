@@ -230,8 +230,8 @@ runtime tools to watch progress. Open the Run in Factory, or read it on the host
 A [Trigger](../GLOSSARY.md#trigger) starts Runs for a Project's GitHub issues without anyone composing them.
 It is set up and managed in [Studio → Triggers](studio.md#triggers); this section describes what a check does.
 
-- **Check.** A check of a GitHub Issues Trigger first confirms that its Project is still host-local, its Flow exists and
-  passes readiness, and nothing Start's preflight checks for every prompt blocks a launch (T3 connected with the
+- **Check.** A check of a GitHub Issues Trigger first confirms that its Project is still host-local, its Flow exists, is
+  global or owned by the Trigger's Project (a Flow moved to another Project is the Trigger's problem) and passes readiness, and nothing Start's preflight checks for every prompt blocks a launch (T3 connected with the
   Project available, launch support, the Agents' readiness and the Flow's workspace). This uses the last checked T3
   connection and starts nothing, so a launch blocker stays the Trigger's problem even when no issue is ready or no
   slot is free. The check then confirms that the Project's repository is still the one the Trigger confirmed (same

@@ -22,6 +22,7 @@ import {
   type GitHubLabelState,
   type GitHubRepository,
 } from "../adapters/github.ts";
+import { mayStartFlow } from "@t3-factory/domain-validation";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
 import { failure } from "../result.ts";
@@ -404,6 +405,13 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             code: "trigger_flow",
             message:
               "The Trigger's Flow no longer exists. Edit the Trigger and choose a saved Flow.",
+          },
+        };
+      if (!mayStartFlow(flow.value.projectId, subject.projectId))
+        return {
+          problem: {
+            code: "trigger_flow",
+            message: `${flow.value.name} belongs to another Project. Edit the Trigger and choose a global Flow or a Flow of ${project.value.title}.`,
           },
         };
       if (!flow.value.readiness.ready)

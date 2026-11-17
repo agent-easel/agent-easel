@@ -560,6 +560,7 @@ export function resolveAgentModel(
 export {
   duplicateTreatment,
   mayPlaceAgent,
+  mayStartFlow,
   type OwningProject,
   validateChangeOwner,
 } from "./placement.ts";
