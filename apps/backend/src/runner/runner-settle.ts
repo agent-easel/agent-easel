@@ -45,7 +45,11 @@ const CONTEXT_UNAVAILABLE: SettlementRead = {
   problem: "The T3 connection is unavailable or its authorization changed.",
 };
 /** The snapshot of a pass with no worker thread to read, which asks T3 nothing. */
-const UNREAD_SNAPSHOT: T3ContractSnapshot = { contextId: null, support: NO_T3_SUPPORT };
+const UNREAD_SNAPSHOT: T3ContractSnapshot = {
+  contextId: null,
+  answered: false,
+  support: NO_T3_SUPPORT,
+};
 
 /** What still keeps an unfinished worker thread from counting as finished. */
 function blocker(worker: WorkerThread) {
@@ -215,7 +219,8 @@ export function openRunnerSettle(
 
   /** One T3 thread Stop per unfinished worker of the attempt, each recorded before it is sent,
    * only when the pass's snapshot supports Stop and under the Run's live authorization context,
-   * rechecked for every Stop. Stop is thread-scoped, covers delegated work and has no run fence. */
+   * rechecked for every Stop. A recheck T3 cannot answer records nothing, so a later pass can
+   * still stop that worker. Stop is thread-scoped, covers delegated work and has no run fence. */
   function requestStops(
     run: RunRow,
     attempt: number,
@@ -236,7 +241,9 @@ export function openRunnerSettle(
           );
           continue;
         }
-        if ((yield* freshSnapshot()).contextId !== run.context_id) {
+        const recheck = yield* freshSnapshot();
+        if (!recheck.answered) continue;
+        if (recheck.contextId !== run.context_id) {
           yield* store.recordStopOutcome(
             run,
             attempt,

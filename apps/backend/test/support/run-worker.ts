@@ -120,6 +120,20 @@ export function changeAuthorizationAfterNextRead(t3: ControlledT3) {
   };
 }
 
+/** T3 cannot answer the first inspection after it answers the next worker thread read, such as a
+ * settlement pass's recheck before its Stop; resolves once that inspection was asked. */
+export function failInspectionAfterNextRead(t3: ControlledT3) {
+  const read = t3.readExecution.bind(t3);
+  return new Promise<void>((resolve) => {
+    t3.readExecution = async (target, threadId) => {
+      t3.readExecution = read;
+      const thread = await read(target, threadId);
+      void failNextInspection(t3).then(resolve);
+      return thread;
+    };
+  });
+}
+
 /** T3 cannot answer the next inspection, such as a settlement pass's snapshot; resolves once it
  * was asked. */
 export function failNextInspection(t3: ControlledT3) {

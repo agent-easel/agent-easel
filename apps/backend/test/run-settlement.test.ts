@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
   changeAuthorizationAfterNextRead,
+  failInspectionAfterNextRead,
   failNextInspection,
   nextSettlement,
   pauseWorkerReads,
@@ -1215,6 +1216,26 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
     },
   });
   expect(f.t3.threadStops).toStrictEqual([]);
+});
+
+it("a Stop whose authorization recheck T3 cannot answer is requested once by a later pass, which settles the Run", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+  stopsEndThreads(f.t3);
+  // The Settle attempt holds the Run's lane from its failed recheck until it records the pass.
+  const rechecked = failInspectionAfterNextRead(f.t3);
+  assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+  await rechecked;
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(f.t3.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
 });
 
 it("a queued run on an otherwise finished worker blocks Settle but is not stopped", async (c) => {

@@ -638,8 +638,8 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   and leaves the worker unresolved. Unsupported Stop, a refused request, an unreadable or
   out-of-scope thread, or a worker still unfinished 30 seconds after its acknowledged Stop is
   unresolved, with the blocker it read. Later passes can stop a worker whose earlier reads were
-  unavailable, also because T3 could not answer the pass's connection check, or which joined the
-  attempt later, such as one a launch search bound. A recorded
+  unavailable, also because T3 could not answer the pass's connection check or the recheck before
+  its Stop, or which joined the attempt later, such as one a launch search bound. A recorded
   Stop request or outcome prevents another request for that worker in the same attempt. A
   restarted backend never sends Stop for an earlier owner's attempt: its workers settle if they
   read finished, otherwise stay unresolved until the user retries.

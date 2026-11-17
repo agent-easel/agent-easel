@@ -47,9 +47,11 @@ export interface T3Support {
   readonly reportReads: boolean;
 }
 /** One connection check's answer: the authorization context, only while T3 is ready, and the
- * support answers of the same inspection. */
+ * support answers of the same inspection. `answered` is false when T3 could not be reached for
+ * it, so a missing context is no evidence that authorization changed. */
 export interface T3ContractSnapshot {
   readonly contextId: string | null;
+  readonly answered: boolean;
   readonly support: T3Support;
 }
 /** Saved T3 connection and project context Factory passes into adapter operations. */

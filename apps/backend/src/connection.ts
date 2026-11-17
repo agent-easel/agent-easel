@@ -95,7 +95,11 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
     /** A snapshot offers support answers only together with a ready authorization context. */
     const snapshot = (): T3ContractSnapshot => {
       const contextId = status.state === "ready" ? (status.authorizationContext?.id ?? null) : null;
-      return { contextId, support: contextId ? support : NO_T3_SUPPORT };
+      return {
+        contextId,
+        answered: status.state !== "unavailable",
+        support: contextId ? support : NO_T3_SUPPORT,
+      };
     };
     // Once a mutation starts, shutdown drains it before closing the adapter and SQL.
     const serial = <A, E>(action: Effect.Effect<A, E>) =>
