@@ -48,6 +48,21 @@ export async function loadMigrationData<Expected>(databasePath: string, fixtureN
   return fixture.expected;
 }
 
+/** The controlled T3's per-probe support flags as captures recorded them; each held the default
+ * of its `support` answer. */
+export const SUPPORT_FLAG_FIELDS = [
+  "launchSupported",
+  "worktreeLaunchSupported",
+  "retryScope",
+  "attachmentsSupported",
+  "attachmentLimit",
+  "sendSupported",
+  "sendRetryScope",
+  "settleSupported",
+  "stopSupported",
+  "reportSupported",
+];
+
 /**
  * The controlled adapter state a capture recorded, with its Maps and Sets restored, and a
  * disposable reporting home for it. `retired` names captured fields current code no longer has.

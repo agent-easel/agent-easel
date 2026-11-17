@@ -228,9 +228,9 @@ it("an issue Start rejected for a T3 blocker starts at the next check once the b
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(1, "Blocked first");
-  world.t3.launchSupported = false;
+  world.t3.support.launch = false;
   await triggerChecked(world.f, world.trigger.id);
-  world.t3.launchSupported = true;
+  world.t3.support.launch = true;
 
   // Act
   const checked = await world.f.runTrigger(world.trigger.id);
@@ -247,7 +247,7 @@ it("a Start blocker sets the Error with Start's guidance and starts nothing", as
   const world = await checkingWorld(c);
   world.readyIssue(1, "Blocked");
   world.readyIssue(2, "Also blocked");
-  world.t3.launchSupported = false;
+  world.t3.support.launch = false;
 
   // Act
   const checked = await world.f.runTrigger(world.trigger.id);
@@ -294,7 +294,7 @@ it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", asyn
   // Arrange
   const world = await checkingWorld(c);
   const issue = world.readyIssue(1, "Blocked, then closed");
-  world.t3.launchSupported = false;
+  world.t3.support.launch = false;
   const blocked = await triggerChecked(world.f, world.trigger.id);
   issue.open = false;
 

@@ -638,8 +638,8 @@ With explicit authorization (`stopWorkers`) it is a durable operation:
   and leaves the worker unresolved. Unsupported Stop, a refused request, an unreadable or
   out-of-scope thread, or a worker still unfinished 30 seconds after its acknowledged Stop is
   unresolved, with the blocker it read. Later passes can stop a worker whose earlier reads were
-  unavailable, whose Stop-support check T3 could not answer, or which joined the attempt later,
-  such as one a launch search bound. A recorded
+  unavailable, also because T3 could not answer the pass's connection check or the recheck before
+  its Stop, or which joined the attempt later, such as one a launch search bound. A recorded
   Stop request or outcome prevents another request for that worker in the same attempt. A
   restarted backend never sends Stop for an earlier owner's attempt: its workers settle if they
   read finished, otherwise stay unresolved until the user retries.
@@ -763,12 +763,14 @@ a no-op. With no native compare-and-set or replay key, direct activity can still
 request; that existing limitation now applies while the Run is still in progress.
 
 Per-Block settlement, Settled-Run settlement, Archive's worker interruption and
-[title thread cleanup](#run-title-generations) follow one owned-thread rule: send the settle
-or Stop only when T3 supports it, recheck the Run's live authorization context for each
-thread, record the claim in the store before sending, and treat the request as best effort.
+[title thread cleanup](#run-title-generations) follow one owned-thread rule: a pass that has a
+thread to settle or stop makes one connection check, sends the settle or Stop only when that
+check found T3 supporting it under the Run's live authorization context, records the claim in
+the store before sending, and treats the request as best effort.
 A request whose claim was already recorded, also before a restart, is never sent again.
 Archive's claim is its own transition, so only the call that archived the Run interrupts.
-[Manual settlement](#manual-settlement) Stops keep their own per-attempt records and outcomes.
+[Manual settlement](#manual-settlement) Stops keep their own per-attempt records and outcomes,
+and their recheck of the authorization context before each Stop.
 
 ## Navigation and presentation
 

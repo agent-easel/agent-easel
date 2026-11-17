@@ -33,10 +33,10 @@ it("a default-base worktree Start asks T3 to fetch origin for its single creator
 
 it("a custom local worktree base asks T3 to preserve the local ref", async (c) => {
   // Arrange
-  const { f, t3, input } = await prepared(c, {
+  const { f, t3, git, input } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "ref", ref: "main" } },
   });
-  t3.refs.add("main");
+  git.refs.add("main");
   assert((await f.startRun(input)).ok);
 
   // Act

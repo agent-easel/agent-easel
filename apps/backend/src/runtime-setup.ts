@@ -19,7 +19,10 @@ import type {
 } from "@t3-factory/contracts";
 import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
-import type { T3Adapter } from "./adapters/t3.ts";
+import type { GitAdapter } from "./adapters/git.ts";
+import { reportSupport } from "./adapters/t3-contract.ts";
+import type { T3ContractSnapshot } from "./adapters/t3.ts";
+import type { ContractSnapshots } from "./connection.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
 class SetupFailure extends Error {
@@ -42,6 +45,16 @@ function readyConnection(c: Result<T3Connection>) {
       "Connect and authorize T3; inspect its live contract.",
     );
   return { connection: c.value, context: c.value.authorizationContext };
+}
+/** Readiness evidence counts only under the snapshot's context: support answers belong to it, and
+ * a switched connection gets a new context id, even when it switches back. */
+function sameContext(contextId: string, snapshot: T3ContractSnapshot) {
+  if (contextId !== snapshot.contextId)
+    blocked(
+      "connection_unavailable",
+      "connection",
+      "The T3 connection changed while readiness was checked. Recheck it.",
+    );
 }
 function availableProject(catalog: Result<ProjectCatalog>, projectId: string) {
   const p = catalog.ok ? catalog.value.projects.find((p) => p.id === projectId) : undefined;
@@ -143,14 +156,14 @@ const openRuntimeSetup = Effect.fn(function* (
       FactoryOperations,
       | "getReportingInstallations"
       | "getConnection"
-      | "recheckConnection"
       | "listProjects"
-      | "recheckProjects"
       | "getAgent"
       | "getAgentCapabilities"
     >
   >,
-  t3: T3Adapter,
+  freshSnapshot: ContractSnapshots["fresh"],
+  refreshProjects: EffectOperations<Pick<FactoryOperations, "recheckProjects">>["recheckProjects"],
+  git: GitAdapter,
 ) {
   const semaphore = yield* Semaphore.make(1);
   let closed = false;
@@ -165,11 +178,15 @@ const openRuntimeSetup = Effect.fn(function* (
     yield* semaphore.withPermits(1)(Effect.void);
   });
   yield* Effect.addFinalizer(() => close);
-  const selection = Effect.fn(function* (input: unknown, capturedAgent?: CapturedAgent) {
+  const selection = Effect.fn(function* (
+    input: unknown,
+    checked: Effect.Effect<T3ContractSnapshot, unknown>,
+    capturedAgent?: CapturedAgent,
+  ) {
     const i = object(input);
     if (typeof i.projectId !== "string" || typeof i.agentId !== "string")
       blocked("selection_required", "runtime.selection", "Choose a saved project and Agent.");
-    yield* ops.recheckProjects();
+    const snapshot = yield* checked;
     const [c, ps, a, cap] = yield* Effect.all(
       [
         ops.getConnection(),
@@ -182,6 +199,7 @@ const openRuntimeSetup = Effect.fn(function* (
       { concurrency: "unbounded" },
     );
     const { connection, context } = readyConnection(c);
+    sameContext(context.id, snapshot);
     const p = availableProject(ps, i.projectId);
     if (!a.ok) blocked("agent_unavailable", "agent", "Choose an existing Agent.");
     // A captured Agent already carries the settings of its Run's Project.
@@ -194,18 +212,23 @@ const openRuntimeSetup = Effect.fn(function* (
       );
     const agent = { ...a.value, execution };
     const driver = validatedHarness(context, agent, readyCapabilities(cap));
-    const root = yield* boundary(() => t3.resolveRepository(p.workspaceRoot));
+    const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: agent, driver };
+    return { c: connection, a: agent, driver, snapshot };
   });
-  /** Explicit reporting: the connected contract, an installed Factory MCP and report support. */
+  /**
+   * Explicit reporting: the connected contract, an installed Factory MCP and report support.
+   * `checked` refreshes the Project catalog and answers with the snapshot of the one connection
+   * check this readiness relies on, so a later check or another context cannot change its answer.
+   */
   const readiness = Effect.fn(function* (
     input: unknown,
+    checked: Effect.Effect<T3ContractSnapshot, unknown>,
     capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
     yield* Effect.gen(function* () {
-      const s = yield* selection(input, capturedAgent);
+      const s = yield* selection(input, checked, capturedAgent);
       issues.push(...runtimeContractIssues(s.c));
       const installed = yield* explicitReadiness(
         {
@@ -215,15 +238,16 @@ const openRuntimeSetup = Effect.fn(function* (
         s.a.execution,
         ops.getReportingInstallations,
       );
+      // Git and the installation lookup awaited after selection, so every piece of evidence held
+      // under the snapshot's context only when the connection still has it now.
+      sameContext(readyConnection(yield* ops.getConnection()).context.id, s.snapshot);
       if (installed.ok) issues.push(...installed.value.issues);
-      const support = yield* boundary(() =>
-        t3.inspectReportSupport({ endpoint: s.c.endpoint! }, s.driver),
-      );
-      if (!support.supported)
+      const reporting = reportSupport(s.snapshot.support, s.driver);
+      if (!reporting.supported)
         issues.push({
           code: "reporting_unsupported",
           path: "connection.contract",
-          message: support.explanation,
+          message: reporting.explanation,
         });
     }).pipe(
       Effect.catchCause((cause) =>
@@ -245,9 +269,19 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   return {
     close: () => close,
-    recheckAgent: (projectId: string, agent: CapturedAgent) =>
-      serial(() => readiness({ projectId, agentId: agent.id }, agent)),
-    recheckRuntime: (i: unknown) => serial(() => readiness(i)),
+    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot. */
+    recheckAgent: (projectId: string, agent: CapturedAgent, snapshot: T3ContractSnapshot) =>
+      serial(() =>
+        readiness({ projectId, agentId: agent.id }, Effect.as(refreshProjects(), snapshot), agent),
+      ),
+    /** Standalone readiness makes its own one connection check and answers from that check. */
+    recheckRuntime: (i: unknown) =>
+      serial(() =>
+        readiness(
+          i,
+          Effect.flatMap(freshSnapshot(), (snapshot) => Effect.as(refreshProjects(), snapshot)),
+        ),
+      ),
   };
 });
 

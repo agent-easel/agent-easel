@@ -1,8 +1,9 @@
 import { dirname, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { openFactory } from "../../src/index.ts";
+import { ControlledGit } from "./controlled-git.ts";
 import { ControlledGitHub } from "./controlled-github.ts";
-import { ControlledT3 } from "./controlled-t3.ts";
+import { ControlledT3, START_INSPECTIONS } from "./controlled-t3.ts";
 
 /**
  * Owns the database, checks the Trigger and dies at `stage`: `preflight` while the check's Start
@@ -15,14 +16,7 @@ const crash = async () => process.exit(86);
 const t3 = new ControlledT3();
 t3.approve();
 t3.projects = fixture.projects;
-// The check's own launch-blocker read inspects T3 once before its Start's preflight does.
-let inspections = 0;
-if (stage === "preflight")
-  t3.beforeLaunchInspection = async () => {
-    inspections += 1;
-    if (inspections === 2) await crash();
-  };
-else t3.beforeLaunch = crash;
+if (stage === "accepted") t3.beforeLaunch = crash;
 const github = new ControlledGitHub();
 for (const [root, repository] of fixture.repositories) github.repositories.set(root, repository);
 github.issues.push(...fixture.issues);
@@ -30,8 +24,17 @@ const f = await openFactory({
   databasePath: databasePath!,
   reportingStateDirectory: join(dirname(databasePath!), "reporting-state"),
   t3,
+  git: new ControlledGit(),
   github,
   connectionRetryMs: 60_000,
 });
+if (stage === "preflight") {
+  // The check's own launch-blocker read inspects T3 as its Start does; the next inspection is that
+  // Start's T3 contract snapshot.
+  let inspections = 0;
+  t3.beforeInspection = async () => {
+    if (++inspections === START_INSPECTIONS + 1) await crash();
+  };
+}
 await f.runTrigger(triggerId!);
 await f.reconcileRuns();

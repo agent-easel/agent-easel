@@ -13,10 +13,12 @@ import {
   type FactoryOptions,
 } from "../../src/index.ts";
 import { unavailableGitHub } from "../../src/adapters/github.ts";
+import { ControlledGit } from "./controlled-git.ts";
 
 /**
  * Real storage and restartable backend lifetime, without leaking persistence internals. GitHub is
- * unavailable unless a test passes its own adapter, so no test runs the host's `gh`.
+ * unavailable and same-host Git is the harness's controlled Git unless a test passes its own
+ * adapter, so no test runs the host's `gh` or `git`.
  */
 export async function factoryHarness(context: TestContext) {
   // Canonical, as a configured data home is, so a server reopening it sees the same paths.
@@ -27,14 +29,17 @@ export async function factoryHarness(context: TestContext) {
     for (const factory of opened) await factory.close();
     await rm(directory, { recursive: true, force: true });
   });
+  const git = new ControlledGit();
   return {
     databasePath,
     processHome: directory,
+    git,
     async open(options: Omit<FactoryOptions, "databasePath"> = {}) {
       const factory = await openFactory({
         databasePath,
         reportingStateDirectory: join(directory, "reporting-state"),
         github: unavailableGitHub,
+        git,
         ...options,
       });
       opened.push(factory);
@@ -47,6 +52,7 @@ export async function factoryHarness(context: TestContext) {
           databasePath,
           reportingStateDirectory: join(directory, "reporting-state"),
           github: unavailableGitHub,
+          git,
           ...options,
         }),
       ).pipe(Effect.map(Context.get(FactoryService)));

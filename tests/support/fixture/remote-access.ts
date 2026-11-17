@@ -13,6 +13,7 @@ import { FACTORY_PROTOCOL } from "../../../packages/domain-validation/src/client
 import { unavailableGitHub } from "../../../apps/backend/src/adapters/github.ts";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
+import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import { proxyFixture, proxyFixtureUpgrade } from "../proxy.ts";
@@ -58,6 +59,7 @@ async function remoteFactory(protocol: { protocol: number; minimumPeerProtocol: 
   // Host-side rechecks land quickly so the waiting screen can observe approval on its own.
   const server = await startServer(config, {
     t3: new ControlledT3(),
+    git: new ControlledGit(),
     github: unavailableGitHub,
     connectionRetryMs: 1000,
     protocol,

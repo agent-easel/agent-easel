@@ -9,11 +9,12 @@ import {
   recordLaunchedThread,
   startQueuedSend,
 } from "../../apps/backend/test/support/controlled-thread.ts";
-import type {
-  LaunchPayload,
-  SendPayload,
-  T3Endpoint,
-  T3ProjectTarget,
+import {
+  T3Failure,
+  type LaunchPayload,
+  type SendPayload,
+  type T3Endpoint,
+  type T3ProjectTarget,
 } from "../../apps/backend/src/adapters/t3.ts";
 
 type Snapshot = ReturnType<PersistentT3["snapshot"]>;
@@ -96,6 +97,16 @@ export class PersistentT3 extends ControlledT3 {
     writeState(this.statePath, this.snapshot());
   }
 
+  /** Saves after T3 accepted an adapter call. A failed save leaves that call's outcome uncertain,
+   * which callers handle as an unavailable T3, never as a raw file error. */
+  private saveAccepted() {
+    try {
+      this.save();
+    } catch {
+      throw new T3Failure("unavailable", "The demo T3 could not save its state.");
+    }
+  }
+
   private delegatedWorkActive(threadId: string): boolean {
     return (this.subagents.get(threadId) ?? []).some(
       (child) =>
@@ -145,7 +156,7 @@ export class PersistentT3 extends ControlledT3 {
   ) {
     await super.stopThread(target, payload);
     if (!this.unendedStops.has(payload.threadId)) this.interrupt(payload.threadId);
-    this.save();
+    this.saveAccepted();
   }
 
   /** T3 acknowledges each later Stop of `threadIds` but keeps their runs going. */
@@ -174,7 +185,7 @@ export class PersistentT3 extends ControlledT3 {
   override async launchThread(target: T3Endpoint, payload: LaunchPayload) {
     const reference = await super.launchThread(target, payload);
     await recordLaunchedThread(this, reference.threadId);
-    this.save();
+    this.saveAccepted();
     return reference;
   }
 
@@ -200,23 +211,23 @@ export class PersistentT3 extends ControlledT3 {
         ],
       });
     }
-    this.save();
+    this.saveAccepted();
     return reference;
   }
 
   override async settleThread(target: T3Endpoint, payload: { threadId: string }) {
     await super.settleThread(target, payload);
-    this.save();
+    this.saveAccepted();
   }
 
   override async createProject(target: T3ProjectTarget) {
     const project = await super.createProject(target);
-    this.save();
+    this.saveAccepted();
     return project;
   }
 
   override async authorize(_target: T3Endpoint) {
     this.authorized = true;
-    this.save();
+    this.saveAccepted();
   }
 }

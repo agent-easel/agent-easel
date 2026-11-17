@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { openFactory } from "../../src/index.ts";
+import { ControlledGit } from "./controlled-git.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 const [databasePath, fixturePath, mode] = process.argv.slice(2);
 const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
@@ -27,6 +28,7 @@ try {
     databasePath: databasePath!,
     reportingStateDirectory: join(dirname(databasePath!), "reporting-state"),
     t3,
+    git: new ControlledGit(),
     connectionRetryMs: 60_000,
   });
   if (mode === "hold") {

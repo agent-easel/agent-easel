@@ -32,6 +32,7 @@ import {
   workerWorking,
   workingReportedIdle,
 } from "./support/scenarios.ts";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { answerDelegatedWait } from "./support/controlled-thread.ts";
 import { prepared } from "./support/prepared-runner.ts";
 
@@ -186,6 +187,33 @@ it("a completed reporting worker releases downstream work without a Run conversa
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).not.toBeNull();
   expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker", "parallel-block"]);
+});
+it("a downstream worker launch whose replay proof T3 cannot establish stays pending for Factory to retry", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  setup.t3.support.launchProofFails = true;
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+
+  // Act
+  const result = await f.f.reconcileRuns();
+
+  // Assert
+  assert(result.ok);
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(
+    run.value.intents
+      .filter((intent) => intent.blockId === "parallel-block")
+      .map((intent) => [intent.kind, intent.state, intent.problem]),
+  ).toStrictEqual([
+    [
+      "launch",
+      "pending",
+      "T3 launch capabilities are unavailable. Factory will retry this launch.",
+    ],
+  ]);
+  expect(f.t3.launches.size).toBe(1);
 });
 it("a worker that fails after reporting cannot release downstream work", async (c) => {
   // Arrange
@@ -486,6 +514,46 @@ it("Request report on a worker idle in working queues an assessment turn on its 
   ]);
   expect(f.t3.launches.size).toBe(1);
 });
+it("Request report sends its assessment turn when T3 drops report support after its dispatch pass's snapshot", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await workingReportedIdle(setup.world, atWork)) };
+  changeReportSupportAtCapabilityRead(f.t3, () => f.f.recheckConnection(), false);
+
+  // Act
+  const result = await f.f.requestReport(f.runId, { blockId: "worker" });
+
+  // Assert
+  assert(result.ok, JSON.stringify(result));
+  expect([...f.t3.sends.values()].map((send) => send.payload.threadId)).toStrictEqual(["thread-1"]);
+});
+it("Request report leaves its assessment turn unsent as uncertain when T3's send replay proof cannot be established", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await workingReportedIdle(setup.world, atWork)) };
+  f.t3.support.sendProofFails = true;
+
+  // Act
+  const result = await f.f.requestReport(f.runId, { blockId: "worker" });
+
+  // Assert
+  assert(result.ok, JSON.stringify(result));
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(
+    run.value.intents
+      .filter((intent) => intent.kind === "send")
+      .map((intent) => [intent.state, intent.problem]),
+  ).toStrictEqual([
+    [
+      "pending",
+      "Operation response is uncertain. Only supported same-key reconciliation may recover it.",
+    ],
+  ]);
+  expect(f.t3.sends.size).toBe(0);
+});
 it("Request report on a later visit asks for an assessment without the Revisit instruction", async (c) => {
   // Arrange
   const setup = await prepared(c, { revisit: true, revisitInstruction: REVISIT_INSTRUCTION });
@@ -535,9 +603,9 @@ it("a prepared revisit is not sent while its worker thread has started another r
   const setup = await prepared(c, { revisit: true });
   const atWork = await workerAtWork(setup.world, setup.input);
   const reported = await resultReported(setup.world, atWork);
-  setup.t3.sendSupported = false;
+  setup.t3.support.send = false;
   const worker = await resultReleasedToSameWorker(setup.world, reported);
-  setup.t3.sendSupported = true;
+  setup.t3.support.send = true;
   const f = { ...setup, ...worker };
   turnBegins(f.world, worker, "reply-execution");
 

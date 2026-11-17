@@ -1,7 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
-  changeAuthorizationBeforeStop,
-  failNextStopSupportCheck,
+  changeAuthorizationAfterNextRead,
+  failInspectionAfterNextRead,
+  failNextInspection,
   nextSettlement,
   pauseWorkerReads,
   reopenDuringSettlement,
@@ -197,7 +198,7 @@ it("per-Block settlement is a no-op when T3 lacks native settle support", async 
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  f.t3.settleSupported = false;
+  f.t3.support.settle = false;
 
   // Act
   await f.f.reconcileRuns();
@@ -426,7 +427,7 @@ it("an unresolved manual settlement refuses Human answers without asking for inp
   const reported = await resultReported(setup.world, atWork);
   const f = { ...setup, ...(await resultReleasedToHumanReview(setup.world, reported)) };
   turnBegins(f.world, f, "review-follow-up");
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   assert((await f.f.reconcileRuns()).ok);
 
@@ -664,7 +665,7 @@ it("a Stop T3 does not support leaves the settlement unresolved and holds the Ru
   const [first] = await twoWorkersStarted(setup.world, setup.input);
   const f = { ...setup, runId: first.runId };
   await resultReported(f.world, first);
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -697,10 +698,10 @@ it("retrying an unresolved settlement requests Stop again and settles the Run", 
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   stopsEndThreads(f.t3);
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   await f.f.reconcileRuns();
-  f.t3.stopSupported = true;
+  f.t3.support.stop = true;
   const settlement = nextSettlement(f.t3);
 
   // Act
@@ -727,7 +728,7 @@ it("a confirmed Settle that cannot stop its worker raises one Run-level Settle c
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -810,7 +811,7 @@ it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (
     ...setup,
     ...(await snoozed(setup.world, await workerAtWork(setup.world, setup.input))),
   };
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -826,13 +827,13 @@ it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (
   });
 });
 
-it("a Stop-support check T3 cannot answer keeps the worker's Stop for a later pass", async (c) => {
+it("T3 unavailable for the first settlement pass keeps the worker's Stop for a later pass", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   stopsEndThreads(f.t3);
   // The Settle attempt holds the Run's lane from its failed check until it records the outcome.
-  const checked = failNextStopSupportCheck(f.t3);
+  const checked = failNextInspection(f.t3);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   await checked;
 
@@ -1192,7 +1193,7 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
-  changeAuthorizationBeforeStop(f.t3);
+  changeAuthorizationAfterNextRead(f.t3);
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -1203,9 +1204,38 @@ it("a Stop is not requested once T3 authorization changes after the reads, and t
   assert(run.ok);
   expect(run.value).toMatchObject({
     lifecycle: "active",
-    settlement: { state: "unresolved", workers: [{ blockId: "worker", state: "unresolved" }] },
+    settlement: {
+      state: "unresolved",
+      workers: [
+        {
+          blockId: "worker",
+          state: "unresolved",
+          problem: expect.stringContaining("so Factory did not request Stop"),
+        },
+      ],
+    },
   });
   expect(f.t3.threadStops).toStrictEqual([]);
+});
+
+it("a Stop whose authorization recheck T3 cannot answer is requested once by a later pass, which settles the Run", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+  stopsEndThreads(f.t3);
+  // The Settle attempt holds the Run's lane from its failed recheck until it records the pass.
+  const rechecked = failInspectionAfterNextRead(f.t3);
+  assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
+  await rechecked;
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(f.t3.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
 });
 
 it("a queued run on an otherwise finished worker blocks Settle but is not stopped", async (c) => {

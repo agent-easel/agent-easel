@@ -12,6 +12,7 @@ import {
   holdTitleThreadLaunch,
   loseTitleThreadLaunchReply,
   reauthorizeDuringTitleDispatch,
+  reauthorizeDuringTitleEligibility,
   resultReported,
   titleGenerationEnded,
   titleEvents,
@@ -635,7 +636,7 @@ it("a title launch recorded under an authorization context that reauthorization 
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
-  const reauthorized = reauthorizeDuringTitleDispatch(fixture.t3, fixture.f);
+  const reauthorized = reauthorizeDuringTitleDispatch(fixture.t3);
   const started = await fixture.f.startRun(fixture.input);
   assert(started.ok);
   await reauthorized;
@@ -650,6 +651,26 @@ it("a title launch recorded under an authorization context that reauthorization 
   assert(run.ok);
   expect(run.value.titleGeneration).toMatchObject({ state: "pending", threadLink: null });
   expect(titleEvents(run.value)).toStrictEqual([]);
+  expect(
+    [...fixture.t3.launches.values()].filter((launch) =>
+      launch.payload.title.startsWith("Factory title · "),
+    ),
+  ).toStrictEqual([]);
+});
+
+it("a title launch is never sent when reauthorization replaces its authorization context while dispatch checks eligibility", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  await enableRunTitles(fixture.f);
+  const reauthorized = reauthorizeDuringTitleEligibility(fixture.t3, fixture.f);
+
+  // Act
+  const started = await fixture.f.startRun(fixture.input);
+  await reauthorized;
+  await fixture.f.close();
+
+  // Assert
+  assert(started.ok);
   expect(
     [...fixture.t3.launches.values()].filter((launch) =>
       launch.payload.title.startsWith("Factory title · "),

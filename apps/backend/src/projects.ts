@@ -14,6 +14,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+import type { GitAdapter } from "./adapters/git.ts";
 import type { T3Adapter, T3Project } from "./adapters/t3.ts";
 import { loadProjectFavicon, projectFaviconUrl } from "./project-favicon.ts";
 import { failure as operationFailure } from "./result.ts";
@@ -69,6 +70,7 @@ const failure = (message: string): Result<never> =>
 
 export const makeProjects = (
   t3: T3Adapter,
+  git: GitAdapter,
   connection: {
     getConnection(): Effect.Effect<Result<T3Connection>, unknown>;
     recheckConnection(): Effect.Effect<Result<T3Connection>, unknown>;
@@ -147,8 +149,10 @@ export const makeProjects = (
       );
       changes.projectsChanged();
     });
-    const reconcile = Effect.fn("Projects.reconcile")(function* () {
-      const status = yield* connection.recheckConnection();
+    /** Lists T3's Projects under `status`, the connection check the caller relies on. */
+    const reconcileUnder = Effect.fn("Projects.reconcile")(function* (
+      status: Result<T3Connection>,
+    ) {
       if (!status.ok || status.value.state !== "ready" || !status.value.authorizationContext) {
         setProblem("Connect and authorize T3 before using projects.");
         return yield* catalog();
@@ -172,6 +176,7 @@ export const makeProjects = (
       );
       return yield* catalog();
     });
+    const reconcile = () => Effect.flatMap(connection.recheckConnection(), reconcileUnder);
     const addRepository = Effect.fn("Projects.addRepository")(function* (
       input: unknown,
     ): Effect.fn.Return<Result<FactoryProject>, unknown> {
@@ -196,7 +201,7 @@ export const makeProjects = (
           "Repository could not be added or its outcome is uncertain. Recheck projects before trying again; manage paths in T3.",
         );
       return yield* Effect.gen(function* () {
-        const root = yield* Effect.tryPromise(() => t3.resolveRepository(path));
+        const root = yield* Effect.tryPromise(() => git.resolveRepository(c.endpoint, path));
         const existing = listing.value.projects.filter(
           (p) =>
             p.endpoint === c.endpoint &&
@@ -248,6 +253,9 @@ export const makeProjects = (
        */
       readCatalog: () => catalog(),
       recheckProjects: () => serial(reconcile()),
+      /** The catalog reconciled under the latest connection check, without checking again: for a
+       * pass that just took its T3 contract snapshot. */
+      refreshProjects: () => serial(Effect.flatMap(connection.getConnection(), reconcileUnder)),
       addRepository: (input: unknown) => serial(addRepository(input)),
       selectProject: (input: unknown) =>
         serial(

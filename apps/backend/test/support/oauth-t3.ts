@@ -29,8 +29,13 @@ interface Rejection {
 }
 const invalidGrant: Rejection = { status: 400, body: { error: "invalid_grant" } };
 
-function json(response: ServerResponse, status: number, value: unknown) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(
+  response: ServerResponse,
+  status: number,
+  value: unknown,
+  headers: Record<string, string> = {},
+) {
+  response.writeHead(status, { ...headers, "content-type": "application/json" });
   response.end(JSON.stringify(value));
 }
 
@@ -40,8 +45,9 @@ async function requestBody(request: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/** A handler may answer later; one that throws drops its own request's connection. */
 const structuredTool = (tool: ToolHandler | undefined) =>
-  tool && ((args: ToolArguments) => ({ content: [], structuredContent: tool(args) }));
+  tool && (async (args: ToolArguments) => ({ content: [], structuredContent: await tool(args) }));
 
 /** Controlled external OAuth/MCP HTTP boundary; synthetic credentials exist only in memory. */
 export async function oauthT3(
@@ -78,13 +84,16 @@ export async function oauthT3(
     string,
     { attachmentId: string; upload: Record<string, unknown> }
   >();
+  let malformedUploadAddress = false;
   function prepareUpload(args: ToolArguments) {
     const attachmentId = `pending-${randomUUID()}`;
     const token = randomUUID();
     signedUploads.set(token, { attachmentId, upload: args.upload as Record<string, unknown> });
     return {
       attachmentId,
-      relativeUrl: `/api/attachments/upload/${token}`,
+      relativeUrl: malformedUploadAddress
+        ? `http://[signed-${token}`
+        : `/api/attachments/upload/${token}`,
       expiresAt: Date.now() + 600_000,
     };
   }
@@ -148,6 +157,13 @@ export async function oauthT3(
   let invalidSchema = false;
   let registrationCount = 0;
   let authorizations = 0;
+  let cutNextToolReply = false;
+  let rejectionGate: { readonly reached: () => void; readonly release: Promise<void> } | undefined;
+  /** Live MCP sessions, one per handshake; forgetting them is what a T3 restart looks like. */
+  const sessions = new Set<string>();
+  let openedSessions = 0;
+  /** The session each authorized MCP request carried, with the tool it called, in arrival order. */
+  const sessionRequests: { readonly session: string; readonly tool?: string }[] = [];
   const authorizationServerMetadata = () => ({
     issuer: base,
     authorization_endpoint: base + "/authorize",
@@ -300,7 +316,7 @@ export async function oauthT3(
       },
     ],
   });
-  function mcpResult(message: McpRequest): unknown {
+  async function mcpResult(message: McpRequest): Promise<unknown> {
     if (message.method === "initialize")
       return {
         protocolVersion: message.params!.protocolVersion,
@@ -310,12 +326,16 @@ export async function oauthT3(
     if (message.method === "tools/list") return toolsPage(message.params?.cursor);
     if (message.method === "tools/call") {
       const call = toolCalls.get(message.params!.name) ?? readEnvironment;
-      return call(message.params!.arguments);
+      return await call(message.params!.arguments);
     }
     return {};
   }
-  function answerMcp(request: IncomingMessage, response: ServerResponse, body: Buffer) {
+  async function answerMcp(request: IncomingMessage, response: ServerResponse, body: Buffer) {
     if (request.headers.authorization !== `Bearer ${accessToken}` || revoked) {
+      if (rejectionGate) {
+        rejectionGate.reached();
+        await rejectionGate.release;
+      }
       response.setHeader(
         "www-authenticate",
         `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`,
@@ -328,11 +348,45 @@ export async function oauthT3(
       return;
     }
     const message = JSON.parse(body.toString()) as McpRequest;
+    const session = request.headers["mcp-session-id"];
+    if (typeof session === "string") {
+      if (!sessions.has(session)) {
+        json(response, 404, {
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Session not found" },
+        });
+        return;
+      }
+      sessionRequests.push({
+        session,
+        ...(message.params?.name ? { tool: message.params.name } : {}),
+      });
+    }
+    if (message.method === "initialize") {
+      const opened = randomUUID();
+      sessions.add(opened);
+      openedSessions++;
+      const result = await mcpResult(message);
+      json(response, 200, { jsonrpc: "2.0", id: message.id, result }, { "mcp-session-id": opened });
+      return;
+    }
     if (message.id === undefined) {
       response.writeHead(202).end();
       return;
     }
-    json(response, 200, { jsonrpc: "2.0", id: message.id, result: mcpResult(message) });
+    const reply = { jsonrpc: "2.0", id: message.id, result: await mcpResult(message) };
+    if (cutNextToolReply && message.method === "tools/call") {
+      cutNextToolReply = false;
+      // The 200 headers and part of the body arrive; then the connection drops.
+      const body = JSON.stringify(reply);
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(Buffer.byteLength(body)),
+      });
+      response.write(body.slice(0, body.length / 2), () => response.destroy());
+      return;
+    }
+    json(response, 200, reply);
   }
   async function handleRequest(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", base);
@@ -346,7 +400,7 @@ export async function oauthT3(
       json(response, 201, { ...JSON.parse(body.toString()), client_id: randomUUID() });
     } else if (url.pathname === "/token")
       exchangeToken(response, new URLSearchParams(body.toString()));
-    else if (url.pathname === "/mcp") answerMcp(request, response, body);
+    else if (url.pathname === "/mcp") await answerMcp(request, response, body);
     else if (options.attachments && url.pathname.startsWith("/api/attachments/upload/"))
       receiveUpload(request, response, url.pathname.slice("/api/attachments/upload/".length), body);
     else response.writeHead(404).end();
@@ -371,6 +425,23 @@ export async function oauthT3(
     get authorizations() {
       return authorizations;
     },
+    /** MCP sessions opened so far: one per authorized connection handshake. */
+    get openedSessions() {
+      return openedSessions;
+    },
+    sessionRequests,
+    /** Prepared uploads carry an address no URL parser accepts. */
+    malformUploadAddresses() {
+      malformedUploadAddress = true;
+    },
+    /** The next tool call's reply breaks off after its 200 headers and part of its body. */
+    cutNextToolReply() {
+      cutNextToolReply = true;
+    },
+    /** Forgets every MCP session, as a restarted T3 would. */
+    dropSessions() {
+      sessions.clear();
+    },
     approvalUrl(authorizationUrl: string) {
       authorizations++;
       const url = new URL(authorizationUrl);
@@ -387,6 +458,12 @@ export async function oauthT3(
     },
     revoke() {
       revoked = true;
+    },
+    /** Holds MCP authorization rejections until `release` settles; resolves once one is held. */
+    holdAuthorizationRejections(release: Promise<void>) {
+      return new Promise<void>((reached) => {
+        rejectionGate = { reached, release };
+      });
     },
     refreshUnavailable(value: boolean) {
       refreshUnavailable = value;

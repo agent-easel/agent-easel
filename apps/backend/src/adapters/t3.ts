@@ -3,7 +3,6 @@ import type {
   AgentProviderCapability,
   ConnectionState,
   FlowWorkspace,
-  FlowWorkspaceBase,
   ProjectIcon,
   RunPullRequest,
   T3Contract,
@@ -27,10 +26,33 @@ export interface T3Inspection {
   /** Opaque grant lineage, never an access/refresh token or client secret. */
   readonly authorizationIdentity?: string;
   readonly contract?: T3Contract;
+  /** Every support answer of this inspection; nothing is supported unless T3 is ready. */
+  readonly support: T3Support;
 }
 export interface ReportSupport {
   readonly supported: boolean;
   readonly explanation: string;
+}
+/** What T3's advertised tools let Factory do, as one inspection found them. */
+export interface T3Support {
+  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
+  readonly launch: Readonly<Record<FlowWorkspace["mode"], LaunchSupport>>;
+  /** The most images one launch may carry through `t3_attachment_prepare_upload`; null when T3
+   * advertises no uploaded attachments with a request key. */
+  readonly attachmentLimit: number | null;
+  readonly send: LaunchSupport;
+  readonly settle: ReportSupport;
+  readonly stop: ReportSupport;
+  /** Whether public thread reads can retrieve reporting activity, before any harness check. */
+  readonly reportReads: boolean;
+}
+/** One connection check's answer: the authorization context, only while T3 is ready, and the
+ * support answers of the same inspection. `answered` is false when T3 could not be reached for
+ * it, so a missing context is no evidence that authorization changed. */
+export interface T3ContractSnapshot {
+  readonly contextId: string | null;
+  readonly answered: boolean;
+  readonly support: T3Support;
 }
 /** Saved T3 connection and project context Factory passes into adapter operations. */
 export interface T3Target {
@@ -42,6 +64,29 @@ export interface T3Target {
 export type T3Endpoint = Pick<T3Target, "endpoint">;
 export type T3EnvironmentTarget = Pick<T3Target, "endpoint" | "environmentId">;
 export type T3ProjectTarget = Pick<T3Target, "endpoint" | "environmentId" | "workspaceRoot">;
+/**
+ * Why one T3 call failed. `unavailable`: T3 could not be reached or answered with a server error,
+ * a timeout or no reply, so an action's outcome is uncertain. `authorization-required`: T3 rejected
+ * the grant. `refused`: T3 declined the request or does not support it; nothing was accepted.
+ * `invalid-response`: T3 answered outside the contract, so an action's outcome is uncertain.
+ */
+export type T3FailureKind =
+  | "unavailable"
+  | "authorization-required"
+  | "refused"
+  | "invalid-response";
+/** One call's failure, classified by the adapter for that call only. */
+export class T3Failure extends Error {
+  override readonly name = "T3Failure";
+  readonly kind: T3FailureKind;
+  constructor(kind: T3FailureKind, message: string) {
+    super(message);
+    this.kind = kind;
+  }
+}
+export const isT3Refusal = (error: unknown) =>
+  error instanceof T3Failure && error.kind === "refused";
+/** Every call that rejects does so only with a `T3Failure`. */
 export interface T3Adapter {
   /** `t3_thread_wait` for one run with its delegated and background work. Queues, native
    * requests and business completion stay separate. */
@@ -50,26 +95,16 @@ export interface T3Adapter {
     threadId: string,
     runId: string,
   ): Promise<import("./delegated-settlement.ts").DelegatedSettlement>;
-  inspectSettleSupport(target: T3Endpoint): Promise<ReportSupport>;
   settleThread(target: T3Endpoint, payload: { threadId: string }): Promise<void>;
-  inspectReportSupport(target: T3Endpoint, driverKind?: string): Promise<ReportSupport>;
-  inspectStopSupport(target: T3Endpoint): Promise<LaunchSupport>;
   /** Thread scope, including delegated work; no run fence. */
   stopThread(
     target: T3Endpoint,
     payload: { threadId: string; clientRequestId: string },
   ): Promise<void>;
-  inspectSendSupport(target: T3Endpoint): Promise<LaunchSupport>;
   sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference>;
-  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
-  inspectLaunchSupport(
-    target: T3Endpoint,
-    workspace: FlowWorkspace["mode"],
-  ): Promise<LaunchSupport>;
-  /** `t3_attachment_prepare_upload` and launch `attachments` that carry `count` images. */
-  inspectAttachmentSupport(target: T3Endpoint, count: number): Promise<ReportSupport>;
   /** Prepares one pending upload and posts its exact bytes; returns its attachment id. */
   uploadAttachment(target: T3Endpoint, upload: AttachmentUpload, data: Uint8Array): Promise<string>;
+  /** A `refused` launch was not accepted; any other failure leaves its outcome uncertain. */
   launchThread(target: T3Endpoint, payload: LaunchPayload): Promise<LaunchReference>;
   /** Search one project for a launch that may already exist. Incomplete scans withhold candidates. */
   discoverLaunchCandidates(target: T3Target, title: string): Promise<LaunchDiscovery>;
@@ -78,9 +113,6 @@ export interface T3Adapter {
   /** One thread read: active/latest run, recent runs and the pending native request count. */
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
   listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]>;
-  resolveRepository(path: string): Promise<string>;
-  /** Same-host Git: the ref a new worktree starts from, or null when the repository lacks it. */
-  resolveBaseRef(workspaceRoot: string, base: FlowWorkspaceBase): Promise<string | null>;
   createProject(target: T3ProjectTarget): Promise<T3Project>;
   inspect(target: T3Endpoint): Promise<T3Inspection>;
   /** Starts backend-host approval; returns without waiting for the human. */
@@ -182,7 +214,9 @@ export interface LaunchSupport {
   /** Non-null only when the adapter can establish continuity AND retained replay keys.
    * Matching version/schema alone is insufficient. Changes invalidate uncertain replay. */
   readonly retryScope: string | null;
-  readonly explanation: string;
+  /** Null when a replay proof could not be established, so whether T3 supports the operation is
+   * unknown; each caller explains what that means for its operation. */
+  readonly explanation: string | null;
 }
 export interface LaunchReference {
   readonly projectId: string;
@@ -190,10 +224,6 @@ export interface LaunchReference {
   readonly runId: string;
   readonly link: string | null;
   readonly status: string;
-}
-/** T3 refused the launch before accepting it. The outcome is not uncertain. */
-export class LaunchRejected extends Error {
-  override readonly name = "LaunchRejected";
 }
 export interface LaunchCandidateExecution {
   readonly runId: string;

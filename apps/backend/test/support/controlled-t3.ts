@@ -1,6 +1,6 @@
-import type { AgentEnvironment, FlowWorkspace, FlowWorkspaceBase } from "@t3-factory/contracts";
-import { LaunchRejected } from "../../src/adapters/t3.ts";
-import { isReportingDriver } from "../../src/reporting-drivers.ts";
+import type { AgentEnvironment } from "@t3-factory/contracts";
+import { T3Failure } from "../../src/adapters/t3.ts";
+import { NO_T3_SUPPORT } from "../../src/adapters/t3-contract.ts";
 import { ControlledAppearance } from "./controlled-appearance.ts";
 import type {
   AttachmentUpload,
@@ -16,30 +16,41 @@ import type {
   T3Project,
   T3ProjectTarget,
   T3ProviderCapability,
+  T3Support,
 } from "../../src/adapters/t3.ts";
 
 /** Independent external-engine lifetime; no SQL or Factory internals. */
 export class ControlledT3 implements T3Adapter {
-  settleSupported = true;
+  /** The support answers each inspection reports while T3 is ready. A worktree launch also needs
+   * `launch`; a null `attachmentLimit` advertises no uploaded attachments. A failing proof leaves
+   * its supported answer unchecked, as the live adapter does when a replay proof cannot be
+   * established. */
+  support = {
+    launch: true,
+    worktreeLaunch: true,
+    launchRetryScope: "controlled-durable-server-1" as string | null,
+    launchProofFails: false,
+    attachmentLimit: 8 as number | null,
+    send: true,
+    sendRetryScope: "controlled-durable-send-1" as string | null,
+    sendProofFails: false,
+    settle: true,
+    stop: true,
+    reportReads: true,
+  };
+  /** Fails as the live adapter classifies an unreachable T3 or an unapproved grant. */
+  private requireConnection(message = "Unavailable") {
+    if (!this.available) throw new T3Failure("unavailable", message);
+    if (!this.authorized) throw new T3Failure("authorization-required", message);
+  }
+  /** Runs at the start of every inspection T3 answers, such as a connection check's. */
+  beforeInspection?: () => void | Promise<void>;
   readonly settledThreads = new Set<string>();
   readonly settlements: { threadId: string }[] = [];
-  async inspectSettleSupport(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return { supported: this.settleSupported, explanation: "Controlled settlement support" };
-  }
   async settleThread(_target: T3Endpoint, payload: { threadId: string }) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     this.settlements.push(payload);
     this.settledThreads.add(payload.threadId);
-  }
-  stopSupported = true;
-  async inspectStopSupport(_target: T3Endpoint): ReturnType<T3Adapter["inspectStopSupport"]> {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return {
-      supported: this.stopSupported,
-      retryScope: null,
-      explanation: "Controlled Stop support",
-    };
   }
   readonly threadStops: { threadId: string; clientRequestId: string }[] = [];
   async stopThread(
@@ -48,8 +59,6 @@ export class ControlledT3 implements T3Adapter {
   ): ReturnType<T3Adapter["stopThread"]> {
     this.threadStops.push(payload);
   }
-  launchSupported = true;
-  retryScope: string | null = "controlled-durable-server-1";
   loseLaunchReply = false;
   beforeLaunch?: (payload: LaunchPayload) => Promise<void>;
   /** Every launch call received, including same-key replays T3 would not deduplicate. */
@@ -57,49 +66,17 @@ export class ControlledT3 implements T3Adapter {
   readonly launches = new Map<string, { payload: LaunchPayload; reference: LaunchReference }>();
   engineStatus = "running";
   pendingRequestCount = 0;
-  worktreeLaunchSupported = true;
-  beforeLaunchInspection?: (target: T3Endpoint) => void | Promise<void>;
-  async inspectLaunchSupport(target: T3Endpoint, workspace: FlowWorkspace["mode"]) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    await this.beforeLaunchInspection?.(target);
-    if (this.launchSupported && workspace === "worktree" && !this.worktreeLaunchSupported)
-      return {
-        supported: false,
-        retryScope: this.retryScope,
-        explanation: "T3 launch schema cannot express worktree launches.",
-      };
-    return {
-      supported: this.launchSupported,
-      retryScope: this.retryScope,
-      explanation: this.launchSupported
-        ? "Controlled durable replay lifetime"
-        : "T3 launch contract is unsupported. Recheck the T3 connection.",
-    };
-  }
-  attachmentsSupported = true;
-  attachmentLimit = 8;
   /** Every pending upload T3 accepted, by attachment id, with the exact bytes received. */
   readonly uploads = new Map<string, { upload: AttachmentUpload; data: Uint8Array }>();
   uploadCalls = 0;
   failUploads = false;
   beforeUpload?: (upload: AttachmentUpload) => Promise<void>;
-  beforeAttachmentInspection?: () => Promise<void>;
-  async inspectAttachmentSupport(_target: T3Endpoint, count: number) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    await this.beforeAttachmentInspection?.();
-    const supported = this.attachmentsSupported && count <= this.attachmentLimit;
-    return {
-      supported,
-      explanation: supported
-        ? "Controlled attachment support"
-        : "T3 does not advertise launch attachments.",
-    };
-  }
   async uploadAttachment(_target: T3Endpoint, upload: AttachmentUpload, data: Uint8Array) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeUpload?.(upload);
     this.uploadCalls++;
-    if (this.failUploads) throw Error("T3 answered the upload with HTTP 500.");
+    if (this.failUploads)
+      throw new T3Failure("unavailable", "T3 answered the upload with HTTP 500.");
     const id = `pending-${this.uploads.size + 1}`;
     this.uploads.set(id, { upload, data: Uint8Array.from(data) });
     return id;
@@ -114,14 +91,14 @@ export class ControlledT3 implements T3Adapter {
     return new Promise<LaunchPayload>((resolve) => this.launchWaiters.push(resolve));
   }
   async launchThread(_target: T3Endpoint, payload: LaunchPayload) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeLaunch?.(payload);
     this.launchCalls++;
     if (payload.attachments?.some((attachment) => !this.uploads.has(attachment.id)))
-      throw new LaunchRejected("Attachment not found (removed or expired).");
+      throw new T3Failure("refused", "Attachment not found (removed or expired).");
     let launch = this.launches.get(payload.clientRequestId);
     if (launch && JSON.stringify(launch.payload) !== JSON.stringify(payload))
-      throw Error("Key conflict");
+      throw new T3Failure("refused", "Key conflict");
     if (!launch) {
       const { threadId, runId } = this.launchIds(this.launches.size + 1);
       launch = {
@@ -137,8 +114,9 @@ export class ControlledT3 implements T3Adapter {
       this.launches.set(payload.clientRequestId, launch);
       for (const notify of this.launchWaiters.splice(0)) notify(payload);
     }
-    if (this.rejectLaunch) throw new LaunchRejected("T3 rejected the worker launch");
-    if (this.loseLaunchReply) throw Error("Lost response after remote acceptance");
+    if (this.rejectLaunch) throw new T3Failure("refused", "T3 rejected the worker launch");
+    if (this.loseLaunchReply)
+      throw new T3Failure("unavailable", "Lost response after remote acceptance");
     return launch.reference;
   }
   private launchedThread(threadId: string) {
@@ -181,7 +159,8 @@ export class ControlledT3 implements T3Adapter {
     threadId: string,
   ): ReturnType<T3Adapter["readThreadIdentity"]> {
     const launch = this.launchedThread(threadId);
-    if (!launch || !this.available || !this.authorized) throw Error("Unknown thread");
+    this.requireConnection("Unknown thread");
+    if (!launch) throw new T3Failure("refused", "Unknown thread");
     const observation = await this.readExecution(target, threadId);
     return {
       threadId,
@@ -228,8 +207,6 @@ export class ControlledT3 implements T3Adapter {
       link: reference.link,
     };
   }
-  sendSupported = true;
-  sendRetryScope: string | null = "controlled-durable-send-1";
   loseSendReply = false;
   beforeSend?: (payload: import("../../src/adapters/t3.ts").SendPayload) => Promise<void>;
   readonly sends = new Map<
@@ -239,14 +216,6 @@ export class ControlledT3 implements T3Adapter {
       reference: import("../../src/adapters/t3.ts").SendReference;
     }
   >();
-  async inspectSendSupport(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return {
-      supported: this.sendSupported,
-      retryScope: this.sendRetryScope,
-      explanation: "Controlled queue replay lifetime",
-    };
-  }
   private readonly sendWaiters: ((
     payload: import("../../src/adapters/t3.ts").SendPayload,
   ) => void)[] = [];
@@ -257,11 +226,11 @@ export class ControlledT3 implements T3Adapter {
     );
   }
   async sendMessage(_target: T3Endpoint, payload: import("../../src/adapters/t3.ts").SendPayload) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     await this.beforeSend?.(payload);
     let accepted = this.sends.get(payload.clientRequestId);
     if (accepted && JSON.stringify(accepted.payload) !== JSON.stringify(payload))
-      throw Error("Key conflict");
+      throw new T3Failure("refused", "Key conflict");
     if (!accepted) {
       accepted = {
         payload,
@@ -277,7 +246,7 @@ export class ControlledT3 implements T3Adapter {
       this.settledThreads.delete(payload.threadId);
       for (const notify of this.sendWaiters.splice(0)) notify(payload);
     }
-    if (this.loseSendReply) throw Error("Lost send acknowledgement");
+    if (this.loseSendReply) throw new T3Failure("unavailable", "Lost send acknowledgement");
     return accepted.reference;
   }
   readonly executionObservations = new Map<
@@ -290,12 +259,12 @@ export class ControlledT3 implements T3Adapter {
     _target: T3Endpoint,
     threadId: string,
   ): ReturnType<T3Adapter["readExecution"]> {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     this.executionReads++;
     const observation = this.executionObservations.get(threadId) ?? this.executionObservation;
     if (observation) return observation;
     const launch = this.launchedThread(threadId);
-    if (!launch) throw Error("Unknown thread");
+    if (!launch) throw new T3Failure("refused", "Unknown thread");
     const { projectId, runId, link } = launch.reference;
     const launchRun = [{ runId, status: this.engineStatus }];
     const sentRuns = [...this.sends.values()]
@@ -330,7 +299,7 @@ export class ControlledT3 implements T3Adapter {
     threadId: string,
     runId: string,
   ): Promise<import("../../src/adapters/delegated-settlement.ts").DelegatedSettlement> {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
+    this.requireConnection();
     return (
       this.delegatedSettlements.get(JSON.stringify([threadId, runId])) ?? {
         threadId,
@@ -341,29 +310,12 @@ export class ControlledT3 implements T3Adapter {
       }
     );
   }
-  reportSupported = true;
-  async inspectReportSupport(_target: T3Endpoint, driverKind?: string) {
-    if (!this.available || !this.authorized) throw Error("Unavailable");
-    return {
-      supported:
-        this.reportSupported && (driverKind === undefined || isReportingDriver(driverKind)),
-      explanation: "Controlled public structured-report support",
-    };
-  }
   projects: T3Project[] = [];
   projectCreates = 0;
   async listProjects(_target: T3EnvironmentTarget) {
-    if (!this.available || !this.authorized || !this.compatible) throw new Error("Unavailable");
+    this.requireConnection();
+    if (!this.compatible) throw new T3Failure("refused", "Unavailable");
     return this.projects;
-  }
-  async resolveRepository(path: string) {
-    return path;
-  }
-  defaultBranch: string | null = "origin/main";
-  readonly refs = new Set(["origin/main"]);
-  async resolveBaseRef(_workspaceRoot: string, base: FlowWorkspaceBase) {
-    if (base.kind === "default") return this.defaultBranch;
-    return this.refs.has(base.ref) ? base.ref : null;
   }
   async createProject(target: T3ProjectTarget) {
     await this.listProjects({
@@ -419,14 +371,18 @@ export class ControlledT3 implements T3Adapter {
     },
   ];
   async inspect(_target: T3Endpoint): Promise<T3Inspection> {
-    if (!this.available) throw new Error("External failure containing secret material");
+    await this.beforeInspection?.();
+    if (!this.available)
+      throw new T3Failure("unavailable", "External failure containing secret material");
     if (!this.authorized)
       return {
         state: "authorization-required",
         reason: this.pendingApproval ? "approval-pending" : "approval-required",
+        support: NO_T3_SUPPORT,
       };
     return {
       state: this.compatible ? "ready" : "incompatible",
+      support: this.compatible ? this.supportAnswers() : NO_T3_SUPPORT,
       reason: this.compatible ? "connected" : "contract-missing",
       authorizationIdentity: this.identity,
       contract: {
@@ -487,22 +443,61 @@ export class ControlledT3 implements T3Adapter {
   }
   async readEnvironment(_target: T3Endpoint): Promise<AgentEnvironment> {
     this.capabilityReads++;
-    if (!this.available || !this.authorized)
-      throw new Error("External failure containing secret material");
+    this.requireConnection("External failure containing secret material");
     return { environmentId: this.environmentId, label: "Controlled machine" };
   }
+  beforeCapabilityRead?: () => Promise<void>;
   async orchestratorCapabilities(_target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {
     this.capabilityReads++;
-    if (!this.available || !this.authorized)
-      throw new Error("External failure containing secret material");
-    if (!this.capabilitiesAvailable) throw new Error("Capabilities are temporarily unavailable");
+    await this.beforeCapabilityRead?.();
+    this.requireConnection("External failure containing secret material");
+    if (!this.capabilitiesAvailable)
+      throw new T3Failure("unavailable", "Capabilities are temporarily unavailable");
     return this.controlledProviders;
   }
   /** `t3_theme_read` of the same environment. */
   readonly appearance = new ControlledAppearance();
   async readTheme(_target: T3Endpoint) {
-    if (!this.available || !this.authorized) throw new Error("Unavailable");
+    this.requireConnection();
     return this.appearance.read(this.environmentId);
+  }
+  private supportAnswers(): T3Support {
+    const { support } = this;
+    const launch =
+      support.launchProofFails && support.launch
+        ? { supported: false, retryScope: null, explanation: null }
+        : {
+            supported: support.launch,
+            retryScope: support.launchRetryScope,
+            explanation: support.launch
+              ? "Controlled durable replay lifetime"
+              : "T3 launch contract is unsupported. Recheck the T3 connection.",
+          };
+    return {
+      launch: {
+        checkout: launch,
+        worktree:
+          support.launch && !support.worktreeLaunch
+            ? {
+                ...launch,
+                supported: false,
+                explanation: "T3 launch schema cannot express worktree launches.",
+              }
+            : launch,
+      },
+      attachmentLimit: support.attachmentLimit,
+      send:
+        support.sendProofFails && support.send
+          ? { supported: false, retryScope: null, explanation: null }
+          : {
+              supported: support.send,
+              retryScope: support.sendRetryScope,
+              explanation: "Controlled queue replay lifetime",
+            },
+      settle: { supported: support.settle, explanation: "Controlled settlement support" },
+      stop: { supported: support.stop, explanation: "Controlled Stop support" },
+      reportReads: support.reportReads,
+    };
   }
   approve(identity = "controlled-grant-2") {
     this.identity = identity;
@@ -512,17 +507,35 @@ export class ControlledT3 implements T3Adapter {
   async close() {}
 }
 
+/** The inspections a Start makes before it accepts: its T3 contract snapshot, which its Project
+ * catalog refresh and every Agent's runtime readiness check reuse. */
+export const START_INSPECTIONS = 1;
+
+/** While T3 answers the next Agent capability read, such as an Agent's readiness check, T3 changes
+ * its report support and a separate connection check publishes that answer. */
+export function changeReportSupportAtCapabilityRead(
+  t3: ControlledT3,
+  recheckConnection: () => Promise<unknown>,
+  reportReads: boolean,
+) {
+  t3.beforeCapabilityRead = async () => {
+    delete t3.beforeCapabilityRead;
+    t3.support.reportReads = reportReads;
+    await recheckConnection();
+  };
+}
+
 /**
- * Holds every launch inspection after the first `passing` at T3, inside Start's preflight, until
- * `release`; `inspecting` resolves once a Start is held there.
+ * Holds every inspection after the first `passing` at T3 until `release`; `inspecting` resolves
+ * once one is held there. A held inspection holds every other connection check behind it.
  */
-export function holdLaunchInspection(t3: ControlledT3, passing = 0) {
+export function holdInspection(t3: ControlledT3, passing = 0) {
   let release = () => {};
   let entered = () => {};
   let inspections = 0;
   const held = new Promise<void>((resolve) => (release = resolve));
   const inspecting = new Promise<void>((resolve) => (entered = resolve));
-  t3.beforeLaunchInspection = async () => {
+  t3.beforeInspection = async () => {
     inspections += 1;
     if (inspections <= passing) return;
     entered();

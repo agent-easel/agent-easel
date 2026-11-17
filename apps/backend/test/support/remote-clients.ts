@@ -343,6 +343,7 @@ export async function remotePrepared(context: TestContext) {
   const server = await remoteServer(context, {
     home: fixture.h.processHome,
     t3: fixture.t3,
+    git: fixture.git,
     github: fixture.github,
     reportingStateDirectory: join(fixture.h.processHome, "reporting-state"),
     connectionRetryMs: 60_000,
@@ -398,8 +399,13 @@ export async function wrongHostnameServer(context: TestContext) {
 /** A server whose host saved a controlled T3 endpoint, with one approved desktop client. */
 export async function remoteConnection(context: TestContext) {
   const { ControlledT3 } = await import("./controlled-t3.ts");
+  const { ControlledGit } = await import("./controlled-git.ts");
   const t3 = new ControlledT3();
-  const server = await remoteServer(context, { t3, connectionRetryMs: 60_000 });
+  const server = await remoteServer(context, {
+    t3,
+    git: new ControlledGit(),
+    connectionRetryMs: 60_000,
+  });
   const configured = await server.factory.configureConnection({
     endpoint: "https://t3.example/mcp",
   });

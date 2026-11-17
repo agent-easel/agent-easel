@@ -8,6 +8,7 @@ import type {
 import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type { T3Adapter } from "../adapters/t3.ts";
+import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { RuntimeReply, RuntimeReport } from "../runtime-types.ts";
 import type { RunStore, WaitForwarding } from "./run-store/run-store.ts";
@@ -52,7 +53,7 @@ export function openRunActions({
   t3,
   ownedThreads,
   lifecycle,
-  liveContextId,
+  freshSnapshot,
   cancelWaitTimer,
   settlement,
   reconcileTitleGeneration,
@@ -61,7 +62,7 @@ export function openRunActions({
   t3: T3Adapter;
   ownedThreads: OwnedThreads;
   lifecycle: RunnerLifecycle;
-  liveContextId: () => Effect.Effect<string | null, unknown>;
+  freshSnapshot: ContractSnapshots["fresh"];
   cancelWaitTimer: (arrivalId: string) => Effect.Effect<void>;
   settlement: RunnerSettlement;
   reconcileTitleGeneration: (runId: string) => Effect.Effect<void, unknown>;
@@ -174,13 +175,13 @@ export function openRunActions({
     return recoverOperation(
       Effect.gen(function* () {
         const run = yield* store.readRun(id);
-        if (!run || (yield* liveContextId()) !== run.context_id) return;
+        if (!run) return;
         const threads = yield* store.boundWorkers(id);
         if (!threads.length) return;
-        const stop = yield* ownedThreads.stopper({
-          target: runTarget(run),
-          contextId: run.context_id,
-        });
+        const stop = ownedThreads.stopper(
+          { target: runTarget(run), contextId: run.context_id },
+          yield* freshSnapshot(),
+        );
         if (!stop) return;
         for (const { thread_id: threadId } of threads)
           yield* stop({
@@ -302,7 +303,7 @@ export function openRunActions({
         const preflight = yield* recoverOperation(
           Effect.gen(function* () {
             if (
-              (yield* liveContextId()) !== current.context_id ||
+              (yield* freshSnapshot()).contextId !== current.context_id ||
               !(yield* recoveryReady(t3, current, threadId, executionId))
             )
               return failure(

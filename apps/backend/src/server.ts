@@ -718,6 +718,7 @@ export interface ServerOptions {
   readonly uiDirectory?: string | null;
   readonly t3?: FactoryOptions["t3"];
   readonly github?: FactoryOptions["github"];
+  readonly git?: FactoryOptions["git"];
   readonly connectionRetryMs?: number;
   readonly reportingStateDirectory?: string;
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
@@ -741,6 +742,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
       : {}),
     ...(options.t3 ? { t3: options.t3 } : {}),
     ...(options.github ? { github: options.github } : {}),
+    ...(options.git ? { git: options.git } : {}),
     ...(options.connectionRetryMs !== undefined
       ? { connectionRetryMs: options.connectionRetryMs }
       : {}),

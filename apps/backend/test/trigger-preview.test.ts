@@ -114,7 +114,7 @@ it("a preview while T3 cannot launch reports the check's problem and starts no i
   // Arrange
   const world = await reviewingWorld(c);
   world.readyIssue(1, "Would start");
-  world.t3.launchSupported = false;
+  world.t3.support.launch = false;
 
   // Act
   const preview = await world.f.previewTrigger(world.trigger.id, triggerEdit(world.trigger, {}));

@@ -7,7 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { GitAdapter } from "../adapters/git.ts";
+import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
 import { openRunStore, queryPageLimit } from "./run-store/run-store.ts";
@@ -28,7 +30,11 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
+  freshSnapshot: ContractSnapshots["fresh"],
+  /** The Project catalog reconciled under the latest connection check, without checking again. */
+  refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   t3: T3Adapter,
+  git: GitAdapter,
   owner: { token: string },
   intervalMs: number,
   checkAgent: RunnerOptions["checkAgent"],
@@ -77,22 +83,24 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   const { start, startText, startBlockers } = openRunnerStart(
     store,
     ops,
-    t3,
+    freshSnapshot,
+    refreshProjects,
+    git,
     lifecycle,
     checkAgent,
     titles.planTitleGeneration,
     followTitleGeneration,
     images,
   );
-  const ownedThreads = openOwnedThreads(t3, liveContextId);
-  const settlement = openRunnerSettle(store, t3, lifecycle, liveContextId, ownedThreads);
+  const ownedThreads = openOwnedThreads(t3);
+  const settlement = openRunnerSettle(store, t3, lifecycle, freshSnapshot, ownedThreads);
   const { settleWhenDone, settleFinishedBlockThreads, advanceSettlement } = settlement;
   const actions = openRunActions({
     store,
     t3,
     ownedThreads,
     lifecycle,
-    liveContextId,
+    freshSnapshot,
     cancelWaitTimer: waitTimers.cancel,
     settlement,
     reconcileTitleGeneration: titles.reconcileTitleGeneration,
@@ -123,42 +131,33 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   ): Effect.Effect<void, unknown> {
     return drives.serial(id, () => driveWork(id, phase));
   }
-  function liveContextId() {
-    return Effect.gen(function* () {
-      const connection = yield* ops.recheckConnection();
-      return connection.ok && connection.value.state === "ready"
-        ? (connection.value.authorizationContext?.id ?? null)
-        : null;
-    });
-  }
   function driveWork(id: string, phase: "observe" | "dispatch" | "both") {
     return Effect.gen(function* () {
       const runRow = yield* row(id);
       if (!runRow || runRow.archived_at) return;
-      const contextId = yield* liveContextId();
-      yield* driveBlockWork(runRow, contextId, phase);
+      yield* driveBlockWork(runRow, yield* freshSnapshot(), phase);
     });
   }
   function driveBlockWork(
     runRow: RunRow,
-    contextId: string | null,
+    snapshot: T3ContractSnapshot,
     phase: "observe" | "dispatch" | "both",
   ) {
     return Effect.gen(function* () {
       const id = runRow.id;
       const blocks = yield* store.blocksWithWorkers(id);
       if (runRow.gate_open && phase !== "dispatch")
-        for (const block of blocks) yield* observe((yield* row(id))!, block, contextId);
+        for (const block of blocks) yield* observe((yield* row(id))!, block, snapshot.contextId);
       yield* settleRecoveries(store, lifecycle, t3, id);
       if (phase === "observe") return;
       yield* forwardDueWaits(id);
       yield* releaseContinuationResults(store, t3, (yield* row(id)) ?? runRow);
       const observed = (yield* row(id)) ?? runRow;
-      yield* dispatchIntents(observed, contextId);
+      yield* dispatchIntents(observed, snapshot);
       // Binding the Run worktree during dispatch records the launches that join it.
       const current = yield* row(id);
       if (preparing(observed) && current && !preparing(current))
-        yield* dispatchIntents(current, contextId);
+        yield* dispatchIntents(current, snapshot);
     });
   }
   /** Forwards every arrival whose deadline passed, before the pass dispatches its Handoffs. */
@@ -168,11 +167,11 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         yield* store.forwardWaitArrival(runId, arrival.id, "timer");
     });
   }
-  function dispatchIntents(runRow: RunRow, contextId: string | null) {
+  function dispatchIntents(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
       for (const work of yield* store.dispatchable(runRow)) {
         if (closed) break;
-        yield* dispatchIntent(runRow, work, contextId);
+        yield* dispatchIntent(runRow, work, snapshot);
       }
     });
   }

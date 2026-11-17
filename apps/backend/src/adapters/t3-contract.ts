@@ -1,0 +1,246 @@
+import type { T3Contract } from "@t3-factory/contracts";
+import { isReportingDriver } from "../reporting-drivers.ts";
+import type { LaunchSupport, ReportSupport, T3Support } from "./t3.ts";
+
+type ToolSchema = T3Contract["tools"][number]["inputSchema"] | undefined;
+type SchemaProperty = {
+  type?: string;
+  enum?: unknown[];
+  const?: unknown;
+  properties?: Record<string, unknown>;
+  required?: unknown;
+};
+const propertiesOf = <P = SchemaProperty>(schema: ToolSchema) =>
+  (schema?.properties ?? {}) as Record<string, P>;
+
+const permitsOmittingRuntimeMode = (schema: ToolSchema) => {
+  if (schema?.type !== "object") return false;
+  // Only the flat launch contract is understood; compositions may impose hidden requirements.
+  const indirectConstraints = [
+    "$ref",
+    "$dynamicRef",
+    "allOf",
+    "anyOf",
+    "oneOf",
+    "not",
+    "if",
+    "then",
+    "else",
+    "dependentSchemas",
+    "dependentRequired",
+    "dependencies",
+  ];
+  if (indirectConstraints.some((key) => key in schema)) return false;
+  const required = schema.required;
+  return required === undefined || (Array.isArray(required) && !required.includes("runtimeMode"));
+};
+
+const LAUNCH_STRING_FIELDS = [
+  "environmentId",
+  "projectId",
+  "title",
+  "message",
+  "clientRequestId",
+  "interactionMode",
+];
+
+/** Saved provider instance, model, options and workspace strategy must all be expressible. */
+const preservesLaunchSettings = (schema: ToolSchema, props: Record<string, SchemaProperty>) =>
+  schema?.type === "object" &&
+  LAUNCH_STRING_FIELDS.every((field) => props[field]?.type === "string") &&
+  props.modelSelection?.type === "object" &&
+  ["instanceId", "model", "options"].every(
+    (field) => field in (props.modelSelection?.properties ?? {}),
+  ) &&
+  props.workspaceStrategy?.type === "object";
+
+/** T3 advertises its strategy union flattened into one object: every field Factory may send for
+ * `worktree` or `existing_worktree` must be named and only `type` may be required. */
+const expressesWorktreeLaunches = (props: Record<string, SchemaProperty>) => {
+  const strategy = props.workspaceStrategy;
+  const fields = (strategy?.properties ?? {}) as Record<string, SchemaProperty>;
+  const strategyRequired = strategy?.required ?? [];
+  return (
+    ["worktree", "existing_worktree"].every((type) => fields.type?.enum?.includes(type)) &&
+    ["baseRef", "branch", "worktreePath"].every((field) => fields[field]?.type === "string") &&
+    fields.startFromOrigin?.type === "boolean" &&
+    Array.isArray(strategyRequired) &&
+    strategyRequired.every((field) => field === "type")
+  );
+};
+
+function launchExplanation(supported: boolean, omissionPermitted: boolean) {
+  if (supported)
+    return "Launch schema supports saved settings and a request key. Replay requires separate continuity/retention proof.";
+  if (!omissionPermitted)
+    return "T3 launch schema does not establish support for omitting runtimeMode. Use a compatible T3 launch schema before starting or replaying this Run.";
+  return "T3 launch schema cannot preserve the selected settings and request key.";
+}
+
+function launchSupport(ready: boolean, schema: ToolSchema): T3Support["launch"] {
+  const props = propertiesOf(schema);
+  const omissionPermitted = permitsOmittingRuntimeMode(schema);
+  const launchable = omissionPermitted && ready && preservesLaunchSettings(schema, props);
+  const checkout: LaunchSupport = {
+    supported: launchable,
+    retryScope: null,
+    explanation: launchExplanation(launchable, omissionPermitted),
+  };
+  const worktree: LaunchSupport =
+    launchable && !expressesWorktreeLaunches(props)
+      ? {
+          supported: false,
+          retryScope: null,
+          explanation:
+            "T3 launch schema cannot express worktree and existing_worktree launches. Update T3 before starting a worktree Run.",
+        }
+      : checkout;
+  return { checkout, worktree };
+}
+
+function attachmentLimit(ready: boolean, tools: T3Contract["tools"], launch: ToolSchema) {
+  const props = propertiesOf<SchemaProperty & { maxItems?: unknown }>(launch);
+  const attachments = props.attachments;
+  return ready &&
+    tools.some((tool) => tool.name === "t3_attachment_prepare_upload") &&
+    props.clientRequestId?.type === "string" &&
+    attachments?.type === "array" &&
+    typeof attachments.maxItems === "number"
+    ? attachments.maxItems
+    : null;
+}
+
+function sendSupport(ready: boolean, schema: ToolSchema): LaunchSupport {
+  const props = propertiesOf(schema);
+  const supported =
+    ready &&
+    ["environmentId", "threadId", "clientRequestId", "message", "mode"].every(
+      (field) => props[field]?.type === "string",
+    ) &&
+    props.mode?.enum?.includes("queue") === true;
+  return {
+    supported,
+    retryScope: null,
+    explanation: supported
+      ? "Queue schema supports independent turns and a request key. Replay requires separate continuity/retention proof."
+      : "T3 send schema cannot preserve queue mode and the request key.",
+  };
+}
+
+function settleSupport(ready: boolean, schema: ToolSchema): ReportSupport {
+  const props = propertiesOf(schema);
+  const required = schema?.required ?? [];
+  const supported =
+    ready &&
+    props.threadId?.type === "string" &&
+    props.action?.type === "string" &&
+    props.action.enum?.includes("settle") === true &&
+    Array.isArray(required) &&
+    required.every((field) => ["threadId", "action"].includes(field));
+  return {
+    supported,
+    explanation: supported
+      ? "Explicit thread settlement is supported. Organization has no execution compare-and-set or replay key."
+      : "T3 organization schema cannot preserve explicit thread settlement.",
+  };
+}
+
+function stopSupport(ready: boolean, schema: ToolSchema): ReportSupport {
+  const props = propertiesOf(schema);
+  const supported =
+    ready &&
+    ["threadId", "clientRequestId"].every((field) => props[field]?.type === "string") &&
+    props.stop?.type === "boolean";
+  return {
+    supported,
+    explanation: supported
+      ? "Thread Stop supported; it is not run-fenced."
+      : "T3 Stop schema unavailable.",
+  };
+}
+
+type ReportSchemaProperty = SchemaProperty & {
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+};
+const REPORT_STRING_FIELDS = ["threadId", "itemId", "view"];
+const REPORT_INTEGER_FIELDS = ["textOffset", "afterPosition", "limit", "maxCharsPerItem"];
+const REPORT_READ_BOUNDS: readonly (readonly [string, number])[] = [
+  ["limit", 100],
+  ["maxCharsPerItem", 50_000],
+  ["textOffset", 0],
+  ["textOffset", 262_144],
+  ["afterPosition", 0],
+  ["afterPosition", 10_000],
+];
+
+function permitsReadNumber(property: ReportSchemaProperty | undefined, value: number) {
+  if (!property) return false;
+  return (
+    (property.minimum === undefined || property.minimum <= value) &&
+    (property.maximum === undefined || property.maximum >= value) &&
+    (property.exclusiveMinimum === undefined || property.exclusiveMinimum < value) &&
+    (property.exclusiveMaximum === undefined || property.exclusiveMaximum > value) &&
+    (property.const === undefined || property.const === value) &&
+    (!property.enum || property.enum.includes(value))
+  );
+}
+
+function supportsReportReads(schema: ToolSchema) {
+  if (schema?.type !== "object") return false;
+  const props = propertiesOf<ReportSchemaProperty>(schema);
+  const required = schema.required;
+  return (
+    REPORT_STRING_FIELDS.every((field) => props[field]?.type === "string") &&
+    REPORT_INTEGER_FIELDS.every((field) => props[field]?.type === "integer") &&
+    REPORT_READ_BOUNDS.every(([field, value]) => permitsReadNumber(props[field], value)) &&
+    (!props.view?.enum || props.view.enum.includes("activity")) &&
+    (props.view?.const === undefined || props.view.const === "activity") &&
+    (!required ||
+      (Array.isArray(required) && required.every((field: unknown) => field === "threadId")))
+  );
+}
+
+/**
+ * Every support answer T3's listed tools give while T3 is `ready`; nothing is supported otherwise.
+ * Replay scopes stay null: only the adapter can prove continuity for a supported answer.
+ */
+export function contractSupport(ready: boolean, tools: T3Contract["tools"]): T3Support {
+  const schema = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
+  const objectReady = (name: string) => ready && schema(name)?.type === "object";
+  return {
+    launch: launchSupport(objectReady("t3_thread_launch"), schema("t3_thread_launch")),
+    attachmentLimit: attachmentLimit(ready, tools, schema("t3_thread_launch")),
+    send: sendSupport(objectReady("t3_thread_send"), schema("t3_thread_send")),
+    settle: settleSupport(objectReady("t3_thread_organize"), schema("t3_thread_organize")),
+    stop: stopSupport(objectReady("t3_thread_interrupt"), schema("t3_thread_interrupt")),
+    reportReads: ready && supportsReportReads(schema("t3_thread_read")),
+  };
+}
+
+/** The answers of a T3 that is not ready: nothing is supported. */
+export const NO_T3_SUPPORT = contractSupport(false, []);
+
+/** Whether one launch can carry `count` uploaded images. */
+export function attachmentSupport(support: T3Support, count: number): ReportSupport {
+  const supported = support.attachmentLimit !== null && support.attachmentLimit >= count;
+  return {
+    supported,
+    explanation: supported
+      ? "T3 accepts uploaded image attachments on launches."
+      : `T3 does not advertise t3_attachment_prepare_upload and launch attachments for ${count} images with a request key.`,
+  };
+}
+
+/** Whether T3's public reads can retrieve reporting activity for this harness. */
+export function reportSupport(support: T3Support, driverKind: string): ReportSupport {
+  const supported = support.reportReads && isReportingDriver(driverKind);
+  return {
+    supported,
+    explanation: supported
+      ? "Public T3 reads support exact-item provenance and complete tool metadata retrieval; each observation validates the returned identity."
+      : "T3 public reads cannot safely retrieve reporting activity for this harness. Reconnect or update T3 and recheck.",
+  };
+}

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
+import { LiveGitAdapter } from "./adapters/live-git.ts";
 import { LiveGitHubAdapter } from "./adapters/live-github.ts";
 import { LiveT3Adapter } from "./adapters/live-t3.ts";
 import { migrate } from "./database.ts";
@@ -33,7 +34,8 @@ export const factoryLayer = (options: FactoryOptions) =>
         () => options.t3 ?? new LiveT3Adapter({ credentialsDirectory }),
       );
       const github = options.github ?? new LiveGitHubAdapter();
-      return yield* makeFactoryService(options, owner, t3, github, credentialsDirectory).pipe(
+      const git = options.git ?? new LiveGitAdapter();
+      return yield* makeFactoryService(options, owner, t3, github, git, credentialsDirectory).pipe(
         Effect.provide(sqlContext),
       );
     }),

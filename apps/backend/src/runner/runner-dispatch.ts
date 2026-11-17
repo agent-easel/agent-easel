@@ -11,7 +11,7 @@ import { recoveryDispatchGeneration } from "./runner-recovery.ts";
 import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
+import type { SendPayload, SendReference, T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
 import { intactPayload } from "../fingerprint.ts";
 import {
@@ -30,6 +30,8 @@ import type { RunImages } from "../run-images.ts";
  * Final result requires the release's generation. */
 const arrivalGeneration = (release: Exclude<Release, { state: "held" }>) =>
   release.state === "durable" ? undefined : release.run.generation;
+const SEND_UNCERTAIN =
+  "Operation response is uncertain. Only supported same-key reconciliation may recover it.";
 /** Uncertain work may be replayed only within the retry scope recorded at reservation. */
 const replayUnproven = (delivery: Delivery, retryScope: string | null) =>
   delivery.state !== "pending" && (!delivery.retry_scope || delivery.retry_scope !== retryScope);
@@ -155,8 +157,10 @@ export function openRunnerDispatch(
       yield* store.acknowledgeSend(runRow, delivery, reference);
     });
   }
-  function dispatchIntent(runRow: RunRow, saved: Handoff | Delivery, contextId: string | null) {
+  /** `snapshot` is the drive pass's: its context gates the work and its support answers decide it. */
+  function dispatchIntent(runRow: RunRow, saved: Handoff | Delivery, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
+      const { contextId, support } = snapshot;
       const launchRecovery = saved.kind === "launch" && saved.state !== "pending";
       if (!runRow.gate_open && !launchRecovery) return;
       if (contextId !== saved.context_id) {
@@ -167,7 +171,7 @@ export function openRunnerDispatch(
         return;
       }
       if (saved.kind === "launch") {
-        yield* dispatchBlockLaunch(store, t3, images, runRow, saved);
+        yield* dispatchBlockLaunch(store, t3, images, runRow, saved, support);
         const block = yield* store.readBlock(runRow.id, saved.block_id);
         if (block?.thread_id && (yield* store.readRun(runRow.id))?.gate_open)
           yield* observe(runRow, block, contextId);
@@ -184,10 +188,10 @@ export function openRunnerDispatch(
             intent = prepared;
           }
           if (intent.kind === "launch") {
-            yield* dispatchBlockLaunch(store, t3, images, runRow, intent);
+            yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
             return;
           }
-          const checked = yield* verifyDispatch(runRow, intent);
+          const checked = yield* verifyDispatch(runRow, intent, snapshot);
           if (!checked.ok) {
             yield* store.noteUnresolved(intent, checked.problem);
             return;
@@ -205,10 +209,7 @@ export function openRunnerDispatch(
         }),
         (_error) =>
           Effect.gen(function* () {
-            yield* store.noteUnresolved(
-              intent,
-              "Operation response is uncertain. Only supported same-key reconciliation may recover it.",
-            );
+            yield* store.noteUnresolved(intent, SEND_UNCERTAIN);
           }),
       );
     });
@@ -228,6 +229,7 @@ export function openRunnerDispatch(
   function verifyDispatch(
     runRow: RunRow,
     intent: Delivery,
+    snapshot: T3ContractSnapshot,
   ): Effect.Effect<
     Checked<{
       payload: SendPayload;
@@ -238,16 +240,13 @@ export function openRunnerDispatch(
     return Effect.gen(function* () {
       const payload = storedPayload(intent);
       if (!payload.ok) return payload;
-      const support = yield* Effect.tryPromise({
-        try: () => t3.inspectSendSupport(runTarget(runRow)),
-        catch: (error) => error,
-      });
-      if (!support.supported) return unverified(support.explanation);
-      if (replayUnproven(intent, support.retryScope))
+      const { send } = snapshot.support;
+      if (!send.supported) return unverified(send.explanation ?? SEND_UNCERTAIN);
+      if (replayUnproven(intent, send.retryScope))
         return unverified(
           "Same-key replay continuity/retention is unproven; operation remains unresolved.",
         );
-      const rebind = yield* rebindOrReadinessProblem(runRow);
+      const rebind = yield* rebindOrReadinessProblem(runRow, snapshot);
       if (rebind) return unverified(rebind);
       const target = storedTarget(runRow, intent, payload.value);
       if (!target.ok) return target;
@@ -258,13 +257,13 @@ export function openRunnerDispatch(
         return unverified(
           "The target thread project or workspace changed; this send remains unresolved.",
         );
-      return verified({ payload: payload.value, retryScope: support.retryScope });
+      return verified({ payload: payload.value, retryScope: send.retryScope });
     });
   }
   /** Even replay may create work if the original request never reached T3. */
-  function rebindOrReadinessProblem(runRow: RunRow) {
+  function rebindOrReadinessProblem(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
-      const ready = yield* agentsReady(runRow);
+      const ready = yield* agentsReady(runRow, snapshot);
       const target = catalogProject(yield* ops.listProjects(), runRow.project_id);
       if (
         !target ||
@@ -277,11 +276,11 @@ export function openRunnerDispatch(
       return null;
     });
   }
-  function agentsReady(runRow: RunRow) {
+  function agentsReady(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
       const { definitions } = runRow;
       for (const agent of definitions.agents) {
-        const readiness = yield* checkAgent(runRow.project_id, agent);
+        const readiness = yield* checkAgent(runRow.project_id, agent, snapshot);
         if (!readiness.ok || !readiness.value.ready) return false;
       }
       return true;

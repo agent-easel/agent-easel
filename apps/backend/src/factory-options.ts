@@ -1,3 +1,4 @@
+import type { GitAdapter } from "./adapters/git.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
 
@@ -9,6 +10,7 @@ export interface FactoryOptions {
   readonly credentialsDirectory?: string;
   readonly t3?: T3Adapter;
   readonly github?: GitHubAdapter;
+  readonly git?: GitAdapter;
   readonly connectionRetryMs?: number;
   /** The release this installation runs; source runs omit it. */
   readonly applicationVersion?: string;

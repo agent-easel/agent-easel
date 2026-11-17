@@ -13,7 +13,7 @@ import type {
   Result,
   RunDetail,
 } from "@t3-factory/contracts";
-import type { ControlledT3 } from "./controlled-t3.ts";
+import { holdInspection, START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 import {
   beginThreadRun,
   busyAgainOnSend,
@@ -123,38 +123,61 @@ export async function enableRunTitlesWithCheapModel(
   };
 }
 /**
- * T3 withdraws the cheap title model while Start's title eligibility check inspects launch
- * support, which it does after finding the model in the catalog; only the check just before the
- * title thread's dispatch sees the model gone.
+ * Runs `action` at the first inspection after a Start's preflight, once Start accepted
+ * the Run: the drive pass's or the title thread dispatch's, both of which answer before that
+ * dispatch reads the catalog.
  */
-export function withdrawTitleModelAfterStartCheck(t3: ControlledT3, withdraw: () => void) {
-  t3.beforeLaunchInspection = (target) => {
-    // The Flow's own launch checks name a project; the title eligibility check names only T3.
-    if ("projectId" in target) return;
-    delete t3.beforeLaunchInspection;
-    withdraw();
+function afterStartPreflight(t3: ControlledT3, action: () => void) {
+  let inspections = 0;
+  t3.beforeInspection = () => {
+    if (++inspections <= START_INSPECTIONS) return;
+    delete t3.beforeInspection;
+    action();
   };
 }
 /**
- * The host reauthorizes T3 with a new grant while the title thread's dispatch rechecks eligibility
- * after Start accepted the Run, so the check passes under the new authorization context. Resolves
- * once that context is live.
+ * T3 withdraws the cheap title model after Start's title eligibility check found it in the
+ * catalog; only the check just before the title thread's dispatch sees the model gone.
  */
-export function reauthorizeDuringTitleDispatch(
+export function withdrawTitleModelAfterStartCheck(t3: ControlledT3, withdraw: () => void) {
+  afterStartPreflight(t3, withdraw);
+}
+/**
+ * The host reauthorizes T3 with a new grant after Start accepted the Run and before the title
+ * thread's dispatch checks eligibility, so the check passes under the new authorization context.
+ * Resolves once the inspection that reports the new grant has started.
+ */
+export function reauthorizeDuringTitleDispatch(t3: ControlledT3) {
+  return new Promise<void>((resolve) =>
+    afterStartPreflight(t3, () => {
+      t3.approve("controlled-grant-3");
+      resolve();
+    }),
+  );
+}
+/**
+ * The host reauthorizes T3 with a new grant while the title thread's dispatch reads the model
+ * catalog, after the inspection that dispatch's eligibility check started from, and Factory
+ * observes the new grant before that check ends. A Flow worker's first launch reads no catalog,
+ * so the first catalog read after Start's preflight is the title dispatch's. Resolves once
+ * Factory observed the new grant.
+ */
+export function reauthorizeDuringTitleEligibility(
   t3: ControlledT3,
   factory: Pick<FactoryOperations, "recheckConnection">,
 ) {
-  return new Promise<void>((resolve) => {
-    let titleChecks = 0;
-    t3.beforeLaunchInspection = async (target) => {
-      // The Flow's own launch checks name a project; the title eligibility checks name only T3.
-      if ("projectId" in target || ++titleChecks < 2) return;
-      delete t3.beforeLaunchInspection;
-      t3.approve("controlled-grant-3");
-      await factory.recheckConnection();
-      resolve();
-    };
-  });
+  return new Promise<void>((resolve) =>
+    afterStartPreflight(t3, () => {
+      const read = t3.orchestratorCapabilities.bind(t3);
+      t3.orchestratorCapabilities = async (target) => {
+        t3.orchestratorCapabilities = read;
+        t3.approve("controlled-grant-3");
+        await factory.recheckConnection();
+        resolve();
+        return read(target);
+      };
+    }),
+  );
 }
 /** T3 holds the title thread's launch request until the returned call releases it. */
 export function holdTitleThreadLaunch(t3: ControlledT3) {
@@ -1370,7 +1393,7 @@ export function snoozed(world: ScenarioWorld, worker: WorkerHandle) {
  * Factory observed the settlement unresolved and raised its Problem. */
 export function settleUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
   return reach("settlement unresolved", async () => {
-    world.t3.stopSupported = false;
+    world.t3.support.stop = false;
     stepResult(
       "confirm Settle",
       await world.factory.settleRun(worker.runId, { stopWorkers: true }),
@@ -1898,17 +1921,12 @@ export function twoWorkersStarted(world: ScenarioWorld, start: unknown) {
   });
 }
 
-/** Factory accepted the Start; T3 holds the Runner's first image dispatch at its attachment
- * check until `release` is called, while Start's own preflight check passes. Factory has not
- * dispatched. */
+/** Factory accepted the Start; T3 holds the Runner's first drive pass at its inspection until
+ * `release` is called, while Start's own preflight inspection passes. Factory has not dispatched;
+ * the pass's support answers are read after the release. */
 export function imageDispatchHeld(world: ScenarioWorld, start: unknown) {
   return reach("image dispatch held", async () => {
-    let release!: () => void;
-    const released = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let inspections = 0;
-    world.t3.beforeAttachmentInspection = () => (++inspections > 1 ? released : Promise.resolve());
+    const { release } = holdInspection(world.t3, START_INSPECTIONS);
     const started = stepResult("start a Run", await world.factory.startRun(start));
     return { runId: started.id, release };
   });

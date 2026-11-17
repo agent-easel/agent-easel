@@ -5,6 +5,7 @@ import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
+import { LiveGitAdapter } from "../../src/adapters/live-git.ts";
 import { LiveT3Adapter } from "../../src/index.ts";
 import type { Factory, FactoryOptions } from "../../src/index.ts";
 import type { T3Connection } from "@t3-factory/contracts";
@@ -41,7 +42,10 @@ export async function authorizedLiveOAuth(
   c: TestContext,
   options: Parameters<typeof oauthT3>[0] = {},
   setup: {
-    readonly adapter?: Pick<ConstructorParameters<typeof LiveT3Adapter>[0], "launchRecoveryScope">;
+    readonly adapter?: Pick<
+      ConstructorParameters<typeof LiveT3Adapter>[0],
+      "launchRecoveryScope" | "sendRecoveryScope"
+    >;
     readonly open?: Omit<FactoryOptions, "databasePath" | "t3">;
   } = {},
 ) {
@@ -65,7 +69,49 @@ export async function authorizedLiveOAuth(
   expect((await fetch(external.approvalUrl(authorizationUrl))).status).toBe(200);
   const ready = await factory.recheckConnection();
   expect(ready.ok).toBe(true);
-  return { harness, factory, adapter, external, endpoint: external.endpoint };
+  return {
+    harness,
+    factory,
+    adapter,
+    external,
+    endpoint: external.endpoint,
+    /** The consent page the latest authorization opened. */
+    authorizationUrl: () => authorizationUrl,
+  };
+}
+
+/** The thread every `connectedLiveT3` read observes. */
+export const observedThread = {
+  thread: {
+    threadId: "thread-1",
+    projectId: "project-1",
+    activeRunId: null,
+    link: null,
+    worktreePath: null,
+    pendingRequestCount: 0,
+  },
+  recentRuns: [],
+};
+/** What `connectedLiveT3`'s T3 answers a queued send with by default. */
+export const sendReference = {
+  threadId: "thread-1",
+  messageId: "message-1",
+  runId: "run-2",
+  status: "queued",
+  delivery: "queued",
+};
+
+/** An authorized live adapter whose T3 answers thread reads, sends and Project lists. */
+export function connectedLiveT3(
+  context: TestContext,
+  handlers: { readonly send?: (args: Record<string, unknown>) => unknown } = {},
+) {
+  return authorizedLiveOAuth(context, {
+    projects: true,
+    runtimeActivity: () => observedThread,
+    sendSchema: { type: "object" },
+    send: handlers.send ?? (() => sendReference),
+  });
 }
 
 const projectValue = <A>(result: { ok: true; value: A } | { ok: false; error: unknown }): A => {
@@ -74,7 +120,11 @@ const projectValue = <A>(result: { ok: true; value: A } | { ok: false; error: un
 };
 
 export async function liveProjectRepositories(context: TestContext) {
-  const { harness, factory, adapter } = await authorizedLiveOAuth(context, { projects: true });
+  const { harness, factory, endpoint } = await authorizedLiveOAuth(
+    context,
+    { projects: true },
+    { open: { git: new LiveGitAdapter() } },
+  );
   const root = await realpath(dirname(harness.databasePath));
   const first = join(root, "first");
   const second = join(root, "second");
@@ -103,7 +153,7 @@ export async function liveProjectRepositories(context: TestContext) {
   const worktree = join(root, "execution");
   await git("git", ["-C", first, "worktree", "add", "-b", "execution", worktree]);
 
-  return { factory, adapter, root, first, second, p, alias, worktree };
+  return { factory, endpoint, root, first, second, p, alias, worktree };
 }
 
 export const reportReadSchema = {
@@ -199,5 +249,5 @@ export async function runtimeReadinessFixture(c: TestContext) {
     exits: [],
   });
   assert(p.ok && a.ok);
-  return { f, t3, selection: { projectId: p.value.id, agentId: a.value.id }, root };
+  return { f, t3, git: h.git, selection: { projectId: p.value.id, agentId: a.value.id }, root };
 }

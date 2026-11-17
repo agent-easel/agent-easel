@@ -4,6 +4,7 @@ import { openFactory } from "../../apps/backend/src/index.ts";
 import { startServer } from "../../apps/backend/src/server.ts";
 import { claimDevelopmentHome, developmentHome, markPrepared } from "./home.ts";
 import { PersistentGitHub } from "./persistent-github.ts";
+import { ControlledGit } from "../../apps/backend/test/support/controlled-git.ts";
 import { PersistentT3 } from "./persistent-t3.ts";
 import { seedDevelopment } from "./seed.ts";
 
@@ -21,6 +22,7 @@ try {
   });
   const t3 = new PersistentT3(home, !owner.fresh);
   const github = new PersistentGitHub(home, !owner.fresh);
+  const git = new ControlledGit();
   if (owner.fresh) {
     const runtimeHost =
       config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? "::1" : config.host;
@@ -28,6 +30,7 @@ try {
       runtimeBackendUrl: `http://${runtimeHost.includes(":") ? `[${runtimeHost}]` : runtimeHost}:${config.port}`,
       databasePath: config.databasePath,
       t3,
+      git,
       github,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       connectionRetryMs: 60_000,
@@ -47,6 +50,7 @@ try {
   } else {
     const server = await startServer(config, {
       t3,
+      git,
       github,
       uiDirectory: null,
       reportingStateDirectory: join(home, "reporting-t3-state"),

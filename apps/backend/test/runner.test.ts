@@ -5,6 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
 import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
@@ -95,7 +96,7 @@ it("changed grant identity leaves an uncertain worker launch unresolved", async 
 it("runtime readiness without report support blocks Start", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
-  t3.reportSupported = false;
+  t3.support.reportReads = false;
 
   // Act
   const blocked = await f.startRun(input);
@@ -213,7 +214,7 @@ it("an unproven retry scope still binds the searched worker and does not launch 
   await f.reconcileRuns();
   await f.close();
   t3.loseLaunchReply = false;
-  t3.retryScope = null;
+  t3.support.launchRetryScope = null;
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -391,6 +392,42 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
+it("Start refuses an Agent whose report support its T3 snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c);
+  t3.support.reportReads = false;
+  changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code }) => code)).toStrictEqual(["reporting_unsupported"]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses with a recheck-and-retry explanation when T3's launch replay proof cannot be established, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c);
+  t3.support.launchProofFails = true;
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "launch_unsupported",
+      path: "connection.contract",
+      message:
+        "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
+    },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
 it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
@@ -431,8 +468,12 @@ it("Start refuses a global Flow whose Agent became a Project Agent through readi
 it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
   // Arrange
   const { h, f, t3, input, agent, project } = await prepared(c);
-  t3.beforeLaunchInspection = async () => {
+  const readCatalog = t3.orchestratorCapabilities.bind(t3);
+  t3.orchestratorCapabilities = async (target) => {
+    // The Agent's readiness check reads the model catalog after Start read the Agent.
+    t3.orchestratorCapabilities = readCatalog;
     ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+    return readCatalog(target);
   };
 
   // Act
