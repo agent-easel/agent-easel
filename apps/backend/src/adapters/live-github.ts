@@ -344,14 +344,15 @@ function searchPage(
 ): GitHubRead<{ readonly issues: readonly GitHubIssue[]; readonly next: string | null }> {
   const nodes = records(search);
   const pageInfo = isRecord(search) ? search.pageInfo : undefined;
-  if (!nodes || !isRecord(pageInfo)) return unexpected();
+  if (!nodes || !isRecord(pageInfo) || typeof pageInfo.hasNextPage !== "boolean")
+    return unexpected();
   const issues = nodes.map(issueOf);
   if (!issues.every((issue) => issue !== undefined)) return unexpected();
-  const next =
-    pageInfo.hasNextPage === true && typeof pageInfo.endCursor === "string"
-      ? pageInfo.endCursor
-      : null;
-  return gitHubAnswer({ issues, next });
+  if (!pageInfo.hasNextPage) return gitHubAnswer({ issues, next: null });
+  // Ending here would pass a partial list off as every matching issue.
+  if (typeof pageInfo.endCursor !== "string" || !pageInfo.endCursor)
+    return failed("GitHub said more issues match but gave no cursor to read them.");
+  return gitHubAnswer({ issues, next: pageInfo.endCursor });
 }
 
 function issueOf(node: Json): GitHubIssue | undefined {

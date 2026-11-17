@@ -29,6 +29,30 @@ export const emptySearchPage = (repositoryId: string = fakeRepository.nodeId) =>
   });
 
 /**
+ * One GraphQL search page holding a valid issue that claims more issues match but gives no cursor
+ * to read them.
+ */
+export const cursorlessSearchPage = () =>
+  JSON.stringify({
+    data: {
+      repository: { id: fakeRepository.nodeId },
+      search: {
+        pageInfo: { hasNextPage: true, endCursor: null },
+        nodes: [
+          {
+            id: "I_1",
+            number: 1,
+            title: "Ready issue",
+            url: "https://github.com/octo/atlas/issues/1",
+            createdAt: "2026-11-10T09:00:00Z",
+            labels: { nodes: [{ name: "factory:ready" }] },
+          },
+        ],
+      },
+    },
+  });
+
+/**
  * Directories holding fake `gh` executables that record their arguments. The adapter runs with an
  * explicit PATH and HOME and no fallback directories unless given, so it never finds a real `gh`.
  */

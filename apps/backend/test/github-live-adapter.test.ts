@@ -1,6 +1,11 @@
 import { assert, expect, it } from "@effect/vitest";
 import { gitHubRepairGuidance } from "../src/adapters/github.ts";
-import { emptySearchPage, fakeGh, fakeRepository } from "./support/fake-gh.ts";
+import {
+  cursorlessSearchPage,
+  emptySearchPage,
+  fakeGh,
+  fakeRepository,
+} from "./support/fake-gh.ts";
 
 it("gh on the inherited PATH is used before the fallback directories", async (context) => {
   // Arrange
@@ -77,6 +82,22 @@ it("a gh answer beyond the output bound fails as truncated, not as an empty list
   // Assert
   assert(!issues.ok);
   expect(issues.failure).toStrictEqual({ reason: "truncated" });
+});
+
+it("a search page that claims more issues without a cursor fails the read, not as a partial list", async (context) => {
+  // Arrange
+  const gh = await fakeGh(context);
+  const adapter = gh.adapter([await gh.directory("path", { stdout: cursorlessSearchPage() })]);
+
+  // Act
+  const issues = await adapter.openIssues(fakeRepository, "label:factory:ready");
+
+  // Assert
+  assert(!issues.ok);
+  expect(issues.failure).toStrictEqual({
+    reason: "failed",
+    message: "GitHub said more issues match but gave no cursor to read them.",
+  });
 });
 
 it("a gh that does not answer in time fails as a timeout", async (context) => {
