@@ -13,7 +13,6 @@ import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Check,
-  CheckCircle2,
   CircleAlert,
   Copy,
   FolderGit2,
@@ -293,29 +292,19 @@ function StrandedOverrides({
   );
 }
 
+/** Reporting stays silent while it is checking or installed; only a problem takes form space. */
 function AgentReportingNotice({ providerId }: { providerId: string }) {
   const status = agentReportingStatus(providerId, useReportingState());
+  if (status.state !== "attention") return null;
   return (
-    <Alert
-      role="status"
-      aria-label="Agent reporting status"
-      variant={status.state === "attention" ? "attention" : "neutral"}
-    >
-      {status.state === "installed" ? (
-        <CheckCircle2 aria-hidden className="text-success" />
-      ) : (
-        <CircleAlert aria-hidden />
-      )}
+    <Alert role="status" aria-label="Agent reporting status" variant="attention">
+      <CircleAlert aria-hidden />
       <AlertTitle>{status.label}</AlertTitle>
       <AlertDescription>
         {status.message && <p>{status.message}</p>}
         <LaunchSkillStatus state={status.launchSkill} />
-        {status.state === "attention" && (
-          <p>This provider cannot start a Run until reporting is configured.</p>
-        )}
-        {status.state !== "checking" && (
-          <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
-        )}
+        <p>This provider cannot start a Run until reporting is configured.</p>
+        <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
       </AlertDescription>
     </Alert>
   );

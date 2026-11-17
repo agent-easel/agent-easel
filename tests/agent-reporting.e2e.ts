@@ -57,13 +57,22 @@ test("reporting problems are visible before Start and clear after repairing the 
   ).toBeVisible();
   await repairCodexReporting(screen);
 
-  // Assert
+  // Assert: healthy reporting says nothing in the Agent list or editor.
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
   await app.screenshot("settings-reporting-repaired");
-  await app.open(`/studio/agents/${worker.id}`);
-  await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
-    "Reporting installed",
+  // Navigating within the app keeps the installed reading, so an absence is not "still checking".
+  await browser.keyboard.press("Escape");
+  await screen.getByRole("link", "Studio", { exact: true }).tap();
+  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
+  await screen.getByRole("link", "Runtime worker", { exact: true }).tap();
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue("Runtime worker");
+  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+    "GPT 6.1 Sol",
   );
+  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).not.toContainText(
+    "Reporting",
+  );
+  await expect(screen.getByRole("status", "Agent reporting status")).not.toBeVisible();
   await app.screenshot("agents-reporting-installed");
 });
 

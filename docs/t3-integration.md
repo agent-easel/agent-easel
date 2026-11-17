@@ -177,8 +177,9 @@ Agent uses another one.
   Conflicts, inaccessible homes, unsupported providers and remote T3 hosts show diagnostics only;
   unknown homes and homes on those hosts get manual-setup guidance.
 - Installation is per effective home and is shared by all Agents, models and Projects using it.
-  Studio's Agent list and editor show the selected provider's reporting installation status, including the actual
-  diagnostic and **Open Agent reporting** for repair. Changing the provider updates the editor's status before saving.
+  Studio's Agent list and editor show the selected provider's reporting installation status only when it needs attention,
+  the editor with the actual diagnostic and **Open Agent reporting** for repair; installed reporting shows nothing there.
+  Changing the provider updates the editor's status before saving.
   Status refreshes on opening Agents or Agent reporting, after saving or removing an Agent and after an installation action;
   visible windows also recheck on focus and periodically. These indicators describe configuration, not verified execution.
   Discovery covers the same-user loopback T3's provider homes as described, with their limits, in

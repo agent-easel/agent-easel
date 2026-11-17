@@ -104,7 +104,7 @@ records why a per-project variant is an independent copy rather than an override
 - **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
   for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
   new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
-  names it). Studio's **New Flow** and **+ Add agent** choose the owner, and Import and Duplicate a target
+  names it). Studio's **New Flow** and **New Agent** choose the owner, and Import and Duplicate a target
   ([Owners in Studio](#owners-in-studio)).
 - **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming a Factory
   Project available for new Runs, or `null` for Global. Flow Duplicate preview and Agent Duplicate default to the source's
@@ -175,7 +175,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   disabled with its reason, and its definitions stay reachable through their **All** group.
 - **Owner filter.** **Owner: All**, **Global** or one Project filters both lists together. It starts at All whenever Studio
   opens and never follows the Run composer's selected Project. A Project shows global definitions and that Project's.
-- **Choosing an owner.** **New Flow** and **+ Add agent** always show the owner choice: **Global** or **Project** with an
+- **Choosing an owner.** **New Flow** and **New Agent** always show the owner choice: **Global** or **Project** with an
   **Owning Project** menu of the available Projects. The default comes from the filter (All
   or Global gives Global, a Project gives that Project); an Agent added through the Flow editor library's **New Agent
   definition** defaults to that Flow's owner, also when the Flow is global. An unavailable default stays chosen, with its reason,
@@ -226,7 +226,7 @@ defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs 
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
+A persistent 300 px list sits beside the editor with a split **New Agent ▾** button (the button creates an Agent; its menu holds **Import…**, see [Import](#import)), **Search Agents**, the owner filter and owner groups ([Owners in Studio](#owners-in-studio)). Each row shows the Agent's name, its runtime summary and the count of distinct saved Flows using it (excluding Runs and unsaved
 drafts); narrow screens stack list and editor. The header shows the owner above the name, a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**.
 
@@ -267,8 +267,10 @@ for none), while a create may omit it for none. A save is refused when a Project
 Project appears twice (`duplicate_project_override`), when an override's provider lacks reporting support, or when a newly
 added override names a Project unavailable for new Runs; an override already saved stays while its Project is unavailable.
 
-The list and editor also show the provider's [reporting installation status](t3-integration.md#agent-reporting).
-The editor follows the current provider choice, explains installation problems and links to **Settings → Agent reporting**.
+The list and editor show the provider's [reporting installation status](t3-integration.md#agent-reporting) only when it needs
+attention: the row's summary line gives way to the status in the attention color, and the editor, following the current provider
+choice, explains the problem and links to **Settings → Agent reporting**. Installed reporting, and reporting still being checked,
+show nothing.
 Installed configuration does not establish full execution readiness or live report visibility; Start still checks those gates.
 
 **Saving.** Each accepted create or save appends one immutable Agent revision holding the name, prompt, settings and exits; a stale or invalid save returns an error,
@@ -693,7 +695,7 @@ without a Condition, and asks to be updated before it can import it. Stored defi
 
 ### Import
 
-**Import** on the Agents list and on the Flows list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
+**Import…** in the Agents list's **New Agent ▾** menu and **Import** on the Flows list open a chooser for a `.json` file; either list accepts either kind of file and the file decides
 what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
 
 - a trust notice: imported instructions (Agent prompts, and for a Flow file Continuation prompts and Revisit instructions) run with the user's T3
