@@ -102,6 +102,10 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   await expect(duplicate.getByRole("button", "Target owner")).toContainText("Northwind");
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused-duplicate");
+  // The Duplicate that replaced the refusal still returns focus to the menu that opened the chain.
+  await duplicate.getByRole("button", "Cancel", { exact: true }).tap();
+  await expect(duplicate).toHaveCount(0);
+  await expect(screen.getByRole("button", "More actions", { exact: true })).toBeFocused();
 });
 
 test("Flow Duplicate into Global keeps or copies global Agents, copies the Project's, and opens the copy", async ({

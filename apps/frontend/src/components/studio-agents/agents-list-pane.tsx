@@ -305,6 +305,7 @@ function AgentOwnerSection({
                 )
               }
               {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
+              overrides={projectOverridesLabel(agent.projectOverrides.length)}
               usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}
               selected={selectedId === agent.id}
             />
@@ -319,6 +320,7 @@ function AgentListItemLink({
   id,
   name,
   meta,
+  overrides,
   usage,
   selected,
   providerId,
@@ -326,6 +328,8 @@ function AgentListItemLink({
   id: string;
   name: string;
   meta: ReactNode;
+  /** "+N Project overrides", kept beside a reporting problem that replaces the summary. */
+  overrides?: string;
   usage?: string;
   selected: boolean;
   providerId?: string;
@@ -351,7 +355,8 @@ function AgentListItemLink({
       </span>
       <span className="grid min-w-0 flex-1 gap-0.5">
         <span className="truncate text-sm font-medium">{name}</span>
-        {/* Figma SA01: reporting that needs attention takes the summary's line; healthy says nothing. */}
+        {/* Figma SA01: reporting that needs attention takes the summary's line, keeping the override
+            count; healthy says nothing. */}
         {attention ? (
           <span
             id={`agent-reporting-${id}`}
@@ -359,6 +364,7 @@ function AgentListItemLink({
           >
             <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />
             <span className="truncate">{attention.label}</span>
+            {overrides && <span className="shrink-0 text-subtle-foreground">· {overrides}</span>}
           </span>
         ) : (
           <span className="truncate text-2xs text-subtle-foreground">{meta}</span>

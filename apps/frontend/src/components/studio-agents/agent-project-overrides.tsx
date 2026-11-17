@@ -40,8 +40,8 @@ function addableProjects(
   );
 }
 
-const rowClass =
-  "flex h-7.5 min-w-0 items-center gap-2 rounded-sm px-2 text-left text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
+/** Override rows are full-width ghost buttons laid out like menu items (Figma SA01b). */
+const rowLayout = "min-w-0 flex-1 justify-start px-2 font-normal";
 
 /**
  * Figma SA01b: a global Agent's Project overrides in its model picker, one row per Project with
@@ -88,12 +88,13 @@ export function ProjectOverridesSection({
           const owner = studioOwner(override.projectId, projects);
           return (
             <li key={override.projectId} className="group flex min-w-0 items-center gap-1">
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 disabled={disabled}
                 aria-label={`Edit override for ${owner.title}`}
                 title={owner.unavailable ?? undefined}
-                className={cn(rowClass, "flex-1")}
+                className={rowLayout}
                 onClick={() => onEdit({ projectId: override.projectId, isNew: false })}
               >
                 <FolderGit2
@@ -115,7 +116,7 @@ export function ProjectOverridesSection({
                 <span className="min-w-0 truncate text-2xs tracking-label text-subtle-foreground">
                   {agentRuntimeMeta(override.execution, capabilities)}
                 </span>
-              </button>
+              </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -137,11 +138,12 @@ export function ProjectOverridesSection({
           );
         })}
         <li className="flex min-w-0">
-          <button
+          <Button
             ref={addRef}
             type="button"
+            variant="ghost"
             disabled={disabled || addBlocked !== null}
-            className={cn(rowClass, "flex-1 text-foreground")}
+            className={rowLayout}
             onClick={() => onEdit({ projectId: null, isNew: true })}
           >
             <Plus aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-muted-foreground" />
@@ -149,7 +151,7 @@ export function ProjectOverridesSection({
             {addBlocked && (
               <span className="text-2xs tracking-label text-subtle-foreground">{addBlocked}</span>
             )}
-          </button>
+          </Button>
         </li>
       </ul>
     </section>

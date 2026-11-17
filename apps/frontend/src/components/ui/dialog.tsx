@@ -31,6 +31,9 @@ function DialogOverlay({
   );
 }
 
+/** The opener of a dialog that unmounted in the render now committing; see DialogContent. */
+let replacedOpener: HTMLElement | null = null;
+
 function DialogContent({
   className,
   children,
@@ -48,6 +51,17 @@ function DialogContent({
   // Return focus to whatever had it when the dialog opened instead; a dialog that stays mounted
   // while closed opens many times.
   const opener = React.useRef<HTMLElement | null>(null);
+  // A dialog replaced by another in one render, such as a refused Change owner opening
+  // Duplicate, hands its opener on: its own focus left the page with it.
+  React.useEffect(
+    () => () => {
+      replacedOpener = opener.current;
+      queueMicrotask(() => {
+        replacedOpener = null;
+      });
+    },
+    [],
+  );
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay blur={presentation !== "workspace"} />
@@ -59,8 +73,9 @@ function DialogContent({
           className,
         )}
         onOpenAutoFocus={(event) => {
+          const active = document.activeElement;
           opener.current =
-            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            active instanceof HTMLElement && active !== document.body ? active : replacedOpener;
           onOpenAutoFocus?.(event);
         }}
         onCloseAutoFocus={(event) => {
