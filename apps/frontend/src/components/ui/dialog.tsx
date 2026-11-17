@@ -31,11 +31,15 @@ function DialogOverlay({
   );
 }
 
+/** The opener of a dialog that unmounted in the render now committing; see DialogContent. */
+let replacedOpener: HTMLElement | null = null;
+
 function DialogContent({
   className,
   children,
   showCloseButton = true,
   presentation = "dialog",
+  onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
@@ -44,9 +48,19 @@ function DialogContent({
   presentation?: "dialog" | "workspace";
 }) {
   // Controlled dialogs here have no DialogTrigger, so Radix would restore focus to nothing.
-  // Return focus to whatever opened the dialog instead.
-  const [opener] = React.useState(() =>
-    document.activeElement instanceof HTMLElement ? document.activeElement : null,
+  // Return focus to whatever had it when the dialog opened instead; a dialog that stays mounted
+  // while closed opens many times.
+  const opener = React.useRef<HTMLElement | null>(null);
+  // A dialog replaced by another in one render, such as a refused Change owner opening
+  // Duplicate, hands its opener on: its own focus left the page with it.
+  React.useEffect(
+    () => () => {
+      replacedOpener = opener.current;
+      queueMicrotask(() => {
+        replacedOpener = null;
+      });
+    },
+    [],
   );
   return (
     <DialogPortal data-slot="dialog-portal">
@@ -58,11 +72,18 @@ function DialogContent({
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-border-strong bg-card p-6 shadow-panel duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
           className,
         )}
+        onOpenAutoFocus={(event) => {
+          const active = document.activeElement;
+          opener.current =
+            active instanceof HTMLElement && active !== document.body ? active : replacedOpener;
+          onOpenAutoFocus?.(event);
+        }}
         onCloseAutoFocus={(event) => {
           onCloseAutoFocus?.(event);
-          if (event.defaultPrevented || !opener?.isConnected) return;
+          const target = opener.current;
+          if (event.defaultPrevented || !target?.isConnected) return;
           event.preventDefault();
-          opener.focus();
+          target.focus();
         }}
         {...props}
       >

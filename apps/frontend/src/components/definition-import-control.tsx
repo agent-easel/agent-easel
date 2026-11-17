@@ -37,24 +37,57 @@ import { OwnerTargetMenu } from "./studio-owner.tsx";
 import { ownerPicker, studioOwner } from "../studio-definitions.ts";
 
 /**
- * **Import** on a Studio list: choose a `.json` file, review what it creates and confirm. Either
+ * **Import** on the Flows list: choose a `.json` file, review what it creates and confirm. Either
  * list accepts either kind of file; the file decides what is created.
  */
 export function DefinitionImportControl({
-  size,
   projects,
   onImported,
 }: {
-  size?: "sm";
   /** The Project catalog offered as import targets. */
   projects: readonly FactoryProject[];
   onImported: (result: ImportResult) => void;
 }) {
+  const importer = useDefinitionImportChooser();
+  return (
+    <>
+      <MutationGate>
+        <Button type="button" variant="outline" onClick={importer.choose}>
+          <Upload aria-hidden strokeWidth={1.5} />
+          Import
+        </Button>
+      </MutationGate>
+      <DefinitionImportDialog importer={importer} projects={projects} onImported={onImported} />
+    </>
+  );
+}
+
+type DefinitionImporter = ReturnType<typeof useDefinitionImportChooser>;
+
+/** An import whose `choose` opens the file chooser that `DefinitionImportDialog` renders. */
+export function useDefinitionImportChooser() {
   const { model, state } = useDefinitionImport();
   const chooser = useRef<HTMLInputElement>(null);
-  async function chosen(files: FileList | null) {
-    const file = files?.[0];
-    if (chooser.current) chooser.current.value = "";
+  return { model, state, chooser, choose: () => chooser.current?.click() };
+}
+
+/**
+ * The file chooser and the review of the chosen file. Render it outside a menu that opens the
+ * chooser, which unmounts its content on select.
+ */
+export function DefinitionImportDialog({
+  importer: { model, state, chooser },
+  projects,
+  onImported,
+}: {
+  importer: DefinitionImporter;
+  /** The Project catalog offered as import targets. */
+  projects: readonly FactoryProject[];
+  onImported: (result: ImportResult) => void;
+}) {
+  async function chosen(input: HTMLInputElement) {
+    const file = input.files?.[0];
+    input.value = "";
     if (file) await model.choose({ name: file.name, text: await file.text() });
   }
   async function confirm() {
@@ -63,24 +96,13 @@ export function DefinitionImportControl({
   }
   return (
     <>
-      <MutationGate>
-        <Button
-          type="button"
-          variant="outline"
-          {...(size ? { size } : {})}
-          onClick={() => chooser.current?.click()}
-        >
-          <Upload aria-hidden strokeWidth={1.5} />
-          Import
-        </Button>
-      </MutationGate>
       <Input
         ref={chooser}
         type="file"
         accept=".json,application/json"
         aria-label="Choose a Factory export file"
         hidden
-        onChange={(event) => void chosen(event.target.files)}
+        onChange={(event) => void chosen(event.currentTarget)}
       />
       <Dialog
         open={state.file !== null}

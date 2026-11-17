@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { GripVertical, PanelLeftClose, PanelLeftOpen, Plus, Search } from "lucide-react";
+import { ChevronLeft, GripVertical, PanelLeftOpen, Plus, Search } from "lucide-react";
 import type { AgentDefinition, FactoryProject, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,13 @@ import { ownerGroups, type StudioOwner } from "../studio-definitions.ts";
 function agentDetail({ execution }: AgentDefinition) {
   return execution ? `${execution.providerInstanceId} · ${execution.modelId}` : <NeedsModel />;
 }
+
+const STEPS = [
+  { kind: "human", name: "Human step", detail: "Asks a person" },
+  { kind: "wait", name: "Wait", detail: "Pauses, then continues" },
+  { kind: "continuation", name: "Continuation", detail: "Same thread, new prompt" },
+  { kind: "condition", name: "Condition", detail: "Routes by arrival number" },
+] as const satisfies readonly { kind: FlowBlock["kind"]; name: string; detail: string }[];
 
 export function BlockLibrary({
   open,
@@ -44,7 +51,9 @@ export function BlockLibrary({
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
-  const shown = agents.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const matches = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
+  const steps = STEPS.filter((step) => matches(step.name));
+  const shown = agents.filter((agent) => matches(agent.name));
   const groups = ownerGroups(shown, projects, { kind: "all" });
   if (!open)
     return (
@@ -71,69 +80,52 @@ export function BlockLibrary({
       id="block-library"
       role="region"
       aria-label="Block library"
-      className="flex w-65 shrink-0 flex-col gap-2.5 overflow-y-auto border-r bg-sidebar px-3 py-3.5"
+      className="flex w-65 shrink-0 flex-col gap-2.5 overflow-y-auto border-r bg-sidebar px-3 pb-3.5"
     >
-      <div className="grid gap-1">
+      {/* Bleeds over the panel's side padding so rows scrolled beneath it stay hidden; the
+          negative bottom margin keeps the panel gap below the search. */}
+      <div className="sticky top-0 z-10 -mx-3 -mb-2.5 grid gap-2.5 bg-sidebar px-3 pt-3.5 pb-2.5">
         <div className="flex items-center justify-between">
           <SectionLabel>Library</SectionLabel>
-          <Button
-            variant="secondary"
-            size="xs"
-            className="text-xs text-muted-foreground"
-            aria-expanded
-            aria-controls="block-library"
-            onClick={() => onOpenChange(false)}
-          >
-            <PanelLeftClose aria-hidden /> Collapse
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Collapse library"
+                aria-expanded
+                aria-controls="block-library"
+                onClick={() => onOpenChange(false)}
+              >
+                <ChevronLeft aria-hidden />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Collapse library</TooltipContent>
+          </Tooltip>
         </div>
-        <p className="text-xs tracking-label text-muted-foreground">
-          {owner.projectId === null ? "Global Agents only" : `Global + ${owner.title} Agents only`}{" "}
-          · drag onto the canvas, or press Add
-        </p>
+        <div className="relative">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            aria-label="Search steps and Agents"
+            placeholder="Search steps and Agents"
+            className="pl-8"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
       </div>
-      <div className="relative">
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+      {steps.length > 0 && <SectionLabel>Steps</SectionLabel>}
+      {steps.map((step) => (
+        <LibraryItem
+          key={step.kind}
+          {...step}
+          dropAt={dropAt}
+          onAdd={(position) => onAdd(step.kind, undefined, position)}
         />
-        <Input
-          aria-label="Search Agents"
-          placeholder="Search Agents"
-          className="pl-8"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </div>
-      <SectionLabel>Steps</SectionLabel>
-      <LibraryItem
-        name="Human step"
-        detail="Asks a person"
-        kind="human"
-        dropAt={dropAt}
-        onAdd={(position) => onAdd("human", undefined, position)}
-      />
-      <LibraryItem
-        name="Wait"
-        detail="Pauses, then continues"
-        kind="wait"
-        dropAt={dropAt}
-        onAdd={(position) => onAdd("wait", undefined, position)}
-      />
-      <LibraryItem
-        name="Continuation"
-        detail="Same thread, new prompt"
-        kind="continuation"
-        dropAt={dropAt}
-        onAdd={(position) => onAdd("continuation", undefined, position)}
-      />
-      <LibraryItem
-        name="Condition"
-        detail="Routes by arrival number"
-        kind="condition"
-        dropAt={dropAt}
-        onAdd={(position) => onAdd("condition", undefined, position)}
-      />
+      ))}
       {agentError && (
         <p role="alert" className="text-xs text-destructive">
           {agentError}
@@ -237,7 +229,10 @@ function LibraryItem({
         onDragCancel={() => setGhost(null)}
         onClick={() => onAdd()}
       >
-        <GripVertical aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-60" />
+        <GripVertical
+          aria-hidden
+          className={cn("size-3.5 shrink-0 text-muted-foreground", ROW_ACTION_VISIBILITY)}
+        />
         <span
           aria-hidden
           className={cn(
@@ -253,7 +248,10 @@ function LibraryItem({
         </span>
         <span
           aria-hidden
-          className="flex h-7 shrink-0 items-center gap-1 rounded-md border bg-muted pr-2.5 pl-2 text-2xs font-medium text-muted-foreground group-hover:text-foreground"
+          className={cn(
+            "flex h-7 shrink-0 items-center gap-1 rounded-md border bg-muted pr-2.5 pl-2 text-2xs font-medium text-muted-foreground group-hover:text-foreground",
+            ROW_ACTION_VISIBILITY,
+          )}
         >
           <Plus className="size-3" /> Add
         </span>
@@ -261,6 +259,9 @@ function LibraryItem({
     </>
   );
 }
+
+/** Hidden at rest but never removed, so the row keeps its layout, name and keyboard action. */
+const ROW_ACTION_VISIBILITY = "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100";
 
 const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   agent: "bg-brand-soft text-link",

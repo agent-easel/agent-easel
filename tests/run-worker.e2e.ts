@@ -48,7 +48,9 @@ test("saved worker settings persist after reload", async ({ app, screen, browser
       revision: agent.revision + 1,
       prompt: "Implement focused changes and report the result directly.",
     });
-  await expect(screen.getByRole("button", "Duplicate", { exact: true })).toBeEnabled();
+  await screen.getByRole("button", "More actions", { exact: true }).tap();
+  await expect(screen.getByRole("menuitem", "Duplicate", { exact: true })).toBeEnabled();
+  await screen.getByRole("menu").press("Escape");
   await browser.reload();
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Implement focused changes and report the result directly.",

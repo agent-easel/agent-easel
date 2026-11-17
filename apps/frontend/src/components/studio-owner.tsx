@@ -29,9 +29,9 @@ export function ownerName(owner: StudioOwner) {
 }
 
 /** Figma Studio/OwnerBadge: Global, an owning Project, or an unavailable owning Project. */
-export function OwnerBadge({ owner, prefix }: { owner: StudioOwner; prefix?: string }) {
+export function OwnerBadge({ owner }: { owner: StudioOwner }) {
   const Icon = owner.projectId === null ? Workflow : FolderGit2;
-  const label = owner.projectId === null ? owner.title : `${prefix ?? ""}${ownerName(owner)}`;
+  const label = owner.projectId === null ? owner.title : ownerName(owner);
   return (
     <Badge
       variant={owner.projectId === null ? "secondary" : owner.unavailable ? "attention" : "project"}
@@ -209,7 +209,7 @@ const ownerKindText = {
 type DefinitionKind = keyof typeof ownerKindText;
 
 /**
- * The always-visible owner choice of New Flow and Add agent: Global, or a Project chosen from
+ * The always-visible owner choice of New Flow and New Agent: Global, or a Project chosen from
  * the available Projects. An unavailable chosen owner stays chosen, disabled with its reason,
  * rather than being replaced.
  */
@@ -424,7 +424,7 @@ export function OwnerPath({ path, className }: { path: string; className?: strin
   );
 }
 
-/** Where New Flow's or Add agent's preselected owner came from. */
+/** Where New Flow's or New Agent's preselected owner came from. */
 export function ownerHint(
   filter: StudioOwnerFilter,
   projects: readonly FactoryProject[],

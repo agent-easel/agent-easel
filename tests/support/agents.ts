@@ -35,7 +35,10 @@ export async function copyAgentDefinition(
   baseUrl: string | undefined,
   source: string,
   name: string,
-  { modelLess = false } = {},
+  {
+    modelLess = false,
+    projectOverrides = [],
+  }: { modelLess?: boolean; projectOverrides?: AgentDefinition["projectOverrides"] } = {},
 ) {
   const template = (await listAgentDefinitions(baseUrl)).find((agent) => agent.name === source);
   assert(template);
@@ -48,6 +51,7 @@ export async function copyAgentDefinition(
         prompt: template.prompt,
         execution: modelLess ? null : template.execution,
         exits: template.exits,
+        projectOverrides,
       }),
     })
   ).json()) as Result<AgentDefinition>;

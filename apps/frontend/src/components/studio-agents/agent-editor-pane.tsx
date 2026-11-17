@@ -1,8 +1,7 @@
 import { LaunchSkillStatus } from "../launch-skill-status.tsx";
-import { MutationGate } from "@/client-gate";
-import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
+import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -11,7 +10,15 @@ import type {
 } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { CircleAlert, CheckCircle2 } from "lucide-react";
+import {
+  Check,
+  CircleAlert,
+  Copy,
+  FolderGit2,
+  MoreHorizontal,
+  Trash2,
+  Workflow,
+} from "lucide-react";
 import { SettingsLink } from "../app-link.tsx";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { Button } from "@/components/ui/button";
@@ -27,18 +34,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import {
   createShapedContent,
   type AgentDraftModel,
   type AgentDraftSnapshot,
 } from "../../agent-draft.ts";
-import { editedLabel } from "../studio-list.tsx";
 import { agentRuntimeMeta, flowUsageLabel } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
-import { DefinitionExportControl } from "../definition-export-control.tsx";
+import { DefinitionExportDialog, DefinitionExportMenuItem } from "../definition-export-control.tsx";
+import { useMenuActions } from "../menu-actions.ts";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
-import { AgentProjectOverrides } from "./agent-project-overrides.tsx";
-import { OwnerBadge, OwnerChangeNotice, OwnerPicker, ownerName } from "../studio-owner.tsx";
+import { AgentModelPicker } from "./agent-model-picker.tsx";
+import { OwnerChangeNotice, OwnerPicker, ownerName } from "../studio-owner.tsx";
 import { studioOwner, type StudioOwner } from "../../studio-definitions.ts";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
@@ -95,7 +111,28 @@ export function AgentEditorPane(props: AgentEditorProps) {
           void props.onSave();
         }}
       >
-        <AgentEditorHeader {...props} name={name} saving={saving} />
+        <AgentEditorHeader
+          {...props}
+          name={name}
+          saving={saving}
+          picker={
+            <AgentModelPicker
+              settings={settings}
+              capabilities={capabilities}
+              saving={saving}
+              overrides={
+                global
+                  ? {
+                      list: projectOverrides,
+                      projects: ownership.projects,
+                      onSet: draft.setOverride,
+                      onRemove: draft.removeOverride,
+                    }
+                  : undefined
+              }
+            />
+          }
+        />
         {state.removed ? (
           <StudioRemovedDraft
             kind="Agent"
@@ -115,38 +152,8 @@ export function AgentEditorPane(props: AgentEditorProps) {
             <AgentRevisionPanel draft={draft} state={state} projects={ownership.projects} />
           </>
         )}
-        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
-          <div className="@container/agent-form grid min-w-0 gap-3.5">
-            <div className="grid gap-1.5">
-              <Label htmlFor="agent-name" className={fieldLabelClass}>
-                Name
-              </Label>
-              <Input
-                id="agent-name"
-                maxLength={200}
-                value={name}
-                onChange={(event) => draft.edit({ name: event.target.value })}
-                disabled={saving}
-                className="bg-muted"
-              />
-            </div>
-            {props.ownership.kind === "new" && (
-              <OwnerPicker
-                kind="Agent"
-                chosen={props.ownership.chosen}
-                projects={props.ownership.projects}
-                onChange={props.ownership.onChange}
-                disabled={saving}
-                initial={props.ownership.initial}
-                hint={props.ownership.hint}
-              />
-            )}
-            <ExecutionSettingsFields
-              role="worker"
-              capabilities={capabilities}
-              settings={settings}
-              saving={saving}
-            />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
+          <div className="flex min-w-0 flex-1 flex-col gap-3.5">
             {settings.execution.providerInstanceId && (
               <AgentReportingNotice providerId={settings.execution.providerInstanceId} />
             )}
@@ -173,19 +180,32 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 </AlertDescription>
               </Alert>
             )}
-            {global && (
-              <AgentProjectOverrides
-                overrides={projectOverrides}
-                execution={execution}
-                projects={ownership.projects}
-                capabilities={capabilities}
-                needsModel={state.needsModel}
+            <div className="grid gap-1.5">
+              <Label htmlFor="agent-name" className={fieldLabelClass}>
+                Name
+              </Label>
+              <Input
+                id="agent-name"
+                maxLength={200}
+                value={name}
+                onChange={(event) => draft.edit({ name: event.target.value })}
                 disabled={saving}
-                onSet={draft.setOverride}
-                onRemove={draft.removeOverride}
+                className="bg-muted"
+              />
+            </div>
+            {props.ownership.kind === "new" && (
+              <OwnerPicker
+                kind="Agent"
+                chosen={props.ownership.chosen}
+                projects={props.ownership.projects}
+                onChange={props.ownership.onChange}
+                disabled={saving}
+                initial={props.ownership.initial}
+                hint={props.ownership.hint}
               />
             )}
-            <div className="grid gap-1.5">
+            {/* The Prompt grows to fill the editor; Exits stay reachable below it. */}
+            <div className="flex flex-1 flex-col gap-1.5">
               <Label htmlFor="agent-prompt" className={fieldLabelClass}>
                 Prompt
               </Label>
@@ -196,7 +216,7 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 value={prompt}
                 onChange={(event) => draft.edit({ prompt: event.target.value })}
                 disabled={saving}
-                className="min-h-38 bg-muted font-mono text-xs"
+                className="min-h-38 flex-1 bg-muted font-mono text-xs"
               />
               <p id="agent-prompt-help" className="text-2xs tracking-label text-subtle-foreground">
                 Reusable across projects. Mention skills as plain text, for example{" "}
@@ -276,55 +296,42 @@ function StrandedOverrides({
   );
 }
 
+/** Reporting stays silent while it is checking or installed; only a problem takes form space. */
 function AgentReportingNotice({ providerId }: { providerId: string }) {
   const status = agentReportingStatus(providerId, useReportingState());
+  if (status.state !== "attention") return null;
   return (
-    <Alert
-      role="status"
-      aria-label="Agent reporting status"
-      variant={status.state === "attention" ? "attention" : "neutral"}
-    >
-      {status.state === "installed" ? (
-        <CheckCircle2 aria-hidden className="text-success" />
-      ) : (
-        <CircleAlert aria-hidden />
-      )}
+    <Alert role="status" aria-label="Agent reporting status" variant="attention">
+      <CircleAlert aria-hidden />
       <AlertTitle>{status.label}</AlertTitle>
       <AlertDescription>
         {status.message && <p>{status.message}</p>}
         <LaunchSkillStatus state={status.launchSkill} />
-        {status.state === "attention" && (
-          <p>This provider cannot start a Run until reporting is configured.</p>
-        )}
-        {status.state !== "checking" && (
-          <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
-        )}
+        <p>This provider cannot start a Run until reporting is configured.</p>
+        <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
       </AlertDescription>
     </Alert>
   );
 }
 
-function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boolean }) {
-  const { state, flowUsage, name, saving, ownership } = props;
+/** Figma SA01: the owner, the name with the model picker, More actions and Save, and one status line. */
+function AgentEditorHeader(
+  props: AgentEditorProps & { name: string; saving: boolean; picker: ReactNode },
+) {
+  const { state, flowUsage, name, saving, ownership, picker } = props;
   const agent = state.saved;
-  const owner = ownership.kind === "saved" ? ownership.owner : null;
-  const statusLine = state.removed
-    ? "Removed elsewhere · retained draft"
-    : `${agentEditorStatus(agent, flowUsage)}${owner?.projectId ? ` Only ${owner.title} Flows can place this Agent.` : ""}`;
   const saveLabel = agent ? "Save" : "Create Agent";
   return (
-    <header className="min-w-0 shrink-0 border-b px-4 pt-5 pb-4 sm:px-6 md:px-8">
+    <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-4 pt-5 pb-4 sm:px-6 md:px-8">
+      {ownership.kind === "saved" && <AgentOwner owner={ownership.owner} />}
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="min-w-0 max-w-full break-words text-xl font-semibold">
           {agent ? name || agent.name : "New Agent"}
         </h1>
-        <span className="rounded-full border bg-muted px-2 py-0.75 text-2xs font-medium text-subtle-foreground">
-          Agent definition · {agent ? `rev ${agent.revision}` : "new"}
-        </span>
-        {owner && <OwnerBadge owner={owner} prefix="Owned by " />}
-        {/* The actions wrap together, so Save never leaves the others behind. */}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {agent && <SavedAgentActions {...props} agent={agent} />}
+        {/* The actions wrap together, so Save never leaves More actions behind. */}
+        <div className="ml-auto flex max-w-full min-w-0 items-center gap-2">
+          {picker}
+          {agent && <AgentMoreActions {...props} agent={agent} />}
           <MutationGate>
             <Button
               type="submit"
@@ -338,13 +345,65 @@ function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boo
           </MutationGate>
         </div>
       </div>
-      <p className="mt-1.5 text-2xs text-subtle-foreground">{statusLine}</p>
+      <AgentStatusLine state={state} flowUsage={flowUsage} />
     </header>
   );
 }
 
-/** Duplicate…, Export and Delete act on the saved revision, so they exist only after the first save. */
-function SavedAgentActions({
+/** The saved Agent's owner in the owner tones; a Project's tooltip names the placement rule. */
+function AgentOwner({ owner }: { owner: StudioOwner }) {
+  const global = owner.projectId === null;
+  const Icon = global ? Workflow : FolderGit2;
+  const text = (
+    <p
+      // Focusable so a keyboard reaches the Project's placement rule.
+      tabIndex={global ? undefined : 0}
+      className={cn(
+        "flex w-fit max-w-full items-center gap-1.25 rounded-xs text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        global
+          ? "text-subtle-foreground"
+          : owner.unavailable
+            ? "text-attention"
+            : "text-brand-cyan",
+      )}
+    >
+      <Icon aria-hidden className="size-3 shrink-0" strokeWidth={1.5} />
+      <span className="truncate">{ownerName(owner)}</span>
+    </p>
+  );
+  if (global) return text;
+  const rule = `Only ${owner.title} Flows can place this Agent.`;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{text}</TooltipTrigger>
+      <TooltipContent>{owner.unavailable ? `${owner.unavailable}. ${rule}` : rule}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function AgentStatusLine({ state, flowUsage }: { state: AgentDraftSnapshot; flowUsage: number }) {
+  const agent = state.saved;
+  const className = "flex items-center gap-1.25 text-xs text-subtle-foreground";
+  if (state.removed) return <p className={className}>Removed elsewhere · retained draft</p>;
+  if (!agent) return <p className={className}>Not saved yet · Create Agent saves rev 1</p>;
+  const usage = flowUsage === 0 ? "Unused" : `Used in ${flowUsageLabel(flowUsage)}`;
+  const facts = `rev ${agent.revision} · ${usage}`;
+  if (state.dirty) return <p className={className}>Unsaved changes · {facts}</p>;
+  return (
+    <p className={className}>
+      <Check aria-hidden className="size-3 shrink-0 text-success" />
+      Saved · {facts}
+    </p>
+  );
+}
+
+const removedReason = "This Agent was removed elsewhere.";
+
+/**
+ * Figma SA01d: Duplicate…, Change owner…, Export JSON and Delete… act on the saved revision, so
+ * they exist only after the first save.
+ */
+function AgentMoreActions({
   agent,
   draft,
   state,
@@ -354,61 +413,127 @@ function SavedAgentActions({
   onChangeOwner,
   exporter,
   onDeleted,
-  duplicating,
 }: AgentEditorProps & { agent: AgentDefinition; saving: boolean }) {
-  const { dirty, removed } = state;
+  const { trigger, queue, onCloseAutoFocus } = useMenuActions();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  if (confirmingDelete && state.removed && !state.removing) setConfirmingDelete(false);
   return (
     <>
-      {onChangeOwner && (
-        <MutationGate>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={removed || saving}
-            title={removed ? "This Agent was removed elsewhere." : undefined}
-            onClick={onChangeOwner}
-          >
-            Change owner…
-          </Button>
-        </MutationGate>
-      )}
-      {onDuplicate && (
-        <MutationGate>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={removed || saving || dirty}
-            title={duplicateBlockedReason(state)}
-            aria-label="Duplicate"
-            onClick={onDuplicate}
-          >
-            {duplicating ? "Duplicating…" : "Duplicate…"}
-          </Button>
-        </MutationGate>
-      )}
-      {exporter && (
-        <DefinitionExportControl {...exporter} dirty={dirty} disabled={removed || saving} compact />
-      )}
-      <DeleteAgentButton
+      <DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <Button
+                ref={trigger}
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label="More actions"
+                disabled={saving}
+              >
+                <MoreHorizontal aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>More actions</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent align="end" className="w-58" onCloseAutoFocus={onCloseAutoFocus}>
+          <AgentMenuItems
+            state={state}
+            onDuplicate={onDuplicate}
+            onChangeOwner={onChangeOwner}
+            exporter={exporter}
+            queue={queue}
+            onDelete={() => {
+              if (draft.getSnapshot().removed) return;
+              draft.clearRemovalError();
+              setConfirmingDelete(true);
+            }}
+          />
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {exporter && <DefinitionExportDialog {...exporter} />}
+      <DeleteAgentDialog
+        open={confirmingDelete}
         agent={agent}
         draft={draft}
         state={state}
         flowUsage={flowUsage}
-        disabled={saving}
+        onClose={() => setConfirmingDelete(false)}
         onDeleted={onDeleted}
       />
     </>
   );
 }
 
+/** More actions' items; a disabled item shows why. */
+function AgentMenuItems({
+  state,
+  onDuplicate,
+  onChangeOwner,
+  exporter,
+  queue,
+  onDelete,
+}: Pick<AgentEditorProps, "state" | "onDuplicate" | "onChangeOwner" | "exporter"> & {
+  queue: (action: () => void) => void;
+  onDelete: () => void;
+}) {
+  const writable = useMutationsAllowed() && !state.removed;
+  const reason = state.removed ? removedReason : undefined;
+  return (
+    <>
+      {onDuplicate && (
+        <DropdownMenuItem
+          aria-label="Duplicate"
+          disabled={!writable || state.dirty}
+          description={duplicateBlockedReason(state)}
+          onSelect={() => queue(onDuplicate)}
+        >
+          <Copy aria-hidden />
+          Duplicate…
+        </DropdownMenuItem>
+      )}
+      {onChangeOwner && (
+        <DropdownMenuItem
+          disabled={!writable}
+          description={reason}
+          onSelect={() => queue(onChangeOwner)}
+        >
+          <FolderGit2 aria-hidden />
+          Change owner…
+        </DropdownMenuItem>
+      )}
+      {exporter && (
+        <DefinitionExportMenuItem
+          state={exporter.state}
+          disabled={state.removed}
+          description={reason}
+          onSelect={() => queue(() => void exporter.model.request(state.dirty))}
+        />
+      )}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        variant="destructive"
+        aria-label="Delete"
+        disabled={!writable}
+        description={reason}
+        onSelect={() => queue(onDelete)}
+      >
+        <Trash2 aria-hidden />
+        Delete…
+      </DropdownMenuItem>
+    </>
+  );
+}
+
 function duplicateBlockedReason(state: AgentDraftSnapshot): string | undefined {
-  if (state.removed) return "This Agent was removed elsewhere.";
+  if (state.removed) return removedReason;
   if (state.dirty) return "Save your changes before duplicating this Agent.";
   return undefined;
 }
 
 function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
-  if (state.removed) return "This Agent was removed elsewhere.";
+  if (state.removed) return removedReason;
   if (state.conflict.status !== "none") return "Compare the latest revision before saving.";
   if (state.ownerChange.status !== "none")
     return "Acknowledge the owner changed elsewhere before saving.";
@@ -419,95 +544,68 @@ function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   return undefined;
 }
 
-function agentEditorStatus(agent: AgentDefinition | null, flowUsage: number): string {
-  if (!agent) return "New Agent · fill in the fields, then Save to create a definition.";
-  const revision = `${editedLabel(agent.updatedAt)} · Used in ${flowUsageLabel(flowUsage)} · Saving creates rev ${agent.revision + 1} — running Runs keep rev ${agent.revision}.`;
-  return `${revision} Save your changes before duplicating this Agent.`;
-}
-
-function DeleteAgentButton({
+/** Delete… confirms, or says which Flows still use the Agent; it closes on a removal elsewhere. */
+function DeleteAgentDialog({
+  open,
   agent,
   draft,
   state,
   flowUsage,
-  disabled,
+  onClose,
   onDeleted,
 }: {
+  open: boolean;
   agent: AgentDefinition;
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
   flowUsage: number;
-  disabled: boolean;
+  onClose: () => void;
   onDeleted: () => void;
 }) {
-  const [open, setOpen] = useState(false);
   const { removing: deleting, removalError: error } = state;
-  if (open && state.removed && !deleting) setOpen(false);
   async function confirmDelete() {
     if (await draft.remove()) {
-      setOpen(false);
+      onClose();
       onDeleted();
     }
   }
   return (
-    <>
-      <MutationGate>
-        <Button
-          type="button"
-          variant="destructive"
-          disabled={disabled || state.removed}
-          title={state.removed ? "This Agent was removed elsewhere." : undefined}
-          onClick={() => {
-            if (draft.getSnapshot().removed) return;
-            draft.clearRemovalError();
-            setOpen(true);
-          }}
-        >
-          Delete
-        </Button>
-      </MutationGate>
-      <Dialog
-        open={open}
-        onOpenChange={(value) => {
-          if (!deleting) setOpen(value);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {agent.name}?</DialogTitle>
-            <DialogDescription>
-              {flowUsage > 0
-                ? `This Agent is used in ${flowUsageLabel(flowUsage)}. Remove it from those Flows before deleting, or Factory will reject the delete.`
-                : "This removes the Agent from Studio with no restore. Its saved revisions are kept, so Runs that used it keep the Agent they started with."}
-            </DialogDescription>
-          </DialogHeader>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <DialogFooter>
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!value && !deleting) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {agent.name}?</DialogTitle>
+          <DialogDescription>
+            {flowUsage > 0
+              ? `This Agent is used in ${flowUsageLabel(flowUsage)}. Remove it from those Flows before deleting, or Factory will reject the delete.`
+              : "This removes the Agent from Studio with no restore. Its saved revisions are kept, so Runs that used it keep the Agent they started with."}
+          </DialogDescription>
+        </DialogHeader>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={deleting} onClick={onClose}>
+            Cancel
+          </Button>
+          <MutationGate>
             <Button
               type="button"
-              variant="outline"
-              disabled={deleting}
-              onClick={() => setOpen(false)}
+              variant="destructive"
+              disabled={deleting || state.removed}
+              onClick={() => void confirmDelete()}
             >
-              Cancel
+              {deleting ? "Deleting…" : "Delete Agent"}
             </Button>
-            <MutationGate>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={deleting || state.removed}
-                onClick={() => void confirmDelete()}
-              >
-                {deleting ? "Deleting…" : "Delete Agent"}
-              </Button>
-            </MutationGate>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+          </MutationGate>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

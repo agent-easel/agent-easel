@@ -1,4 +1,4 @@
-import type { StudioFixtures } from "./studio.ts";
+import { chooseFlowAction, type StudioFixtures } from "./studio.ts";
 import { expect, type Screen } from "e2e";
 import { saveSingleAgentFlow, removeFlowElsewhere, readFlow } from "./flows.ts";
 function retainedFlowGuard(screen: Screen) {
@@ -26,7 +26,7 @@ export async function beforeRetainedCleanFlow(fixtures: StudioFixtures, prefix: 
   });
   await app.open(`/studio/flows/${id}`);
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(name);
-  await screen.getByRole("button", "Remove", { exact: true }).tap();
+  await chooseFlowAction(screen, "Remove");
   await expect(screen.getByRole("dialog", `Remove “${name}”?`, { exact: true })).toBeVisible();
   return {
     app: fixtures.app,
@@ -49,7 +49,12 @@ export async function expectRetainedCleanFlow(
   await expect(browser).toHaveURL(`/studio/flows/${id}`);
   await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeDisabled();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
-  await expect(screen.getByRole("button", "Remove", { exact: true })).toBeDisabled();
+  await screen.getByRole("button", "More Flow actions", { exact: true }).tap();
+  await expect(screen.getByRole("menuitem", "Remove", { exact: true })).toBeDisabled();
+  await screen.getByRole("menu").press("Escape");
+  await expect(screen.getByRole("menu")).toHaveCount(0);
+  // The closed menu refocuses ⋯, whose tooltip would cover Studio's Back to Runs.
+  await screen.getByLabel("Flow name", { exact: true }).focus();
   await app.screenshot("flow-removed-retained");
   return { ...state };
 }

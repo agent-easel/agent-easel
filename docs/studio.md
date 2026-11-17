@@ -104,7 +104,7 @@ records why a per-project variant is an independent copy rather than an override
 - **Create.** Flow and Agent create take an optional `projectId`: a Factory Project id, or `null` (the default when omitted)
   for a global definition. A Project Factory never discovered is refused (`project_not_found`), and so is one unavailable for
   new Runs, with its availability reason (`project_<availability>`, as [project readiness](projects.md#identity-and-api)
-  names it). Studio's **New Flow** and **+ Add agent** choose the owner, and Import and Duplicate a target
+  names it). Studio's **New Flow** and **New Agent** choose the owner, and Import and Duplicate a target
   ([Owners in Studio](#owners-in-studio)).
 - **Duplicate and Import targets.** Flow Duplicate, Agent Duplicate and Import take a target: `projectId` naming a Factory
   Project available for new Runs, or `null` for Global. Flow Duplicate preview and Agent Duplicate default to the source's
@@ -165,7 +165,10 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   ordered by title. Each Project group shows the Project's last-known title and repository path; when two Projects still read
   alike, its environment and endpoint are added, then an id suffix. An unavailable Project's group shows its availability reason
   (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
-  name their owner; the Agent editor header shows an **Owned by *Project*** badge and the Flow editor's toolbar an owner badge.
+  name their owner; the Agent editor header shows the owner as text above the name, in the same tones (Global neutral, a Project
+  in brand cyan, an unavailable Project in the attention color with its reason in the tooltip; a Project's tooltip says only
+  its Flows can place the Agent), and the Flow editor's toolbar shows an owner badge for a Project-owned Flow only (none for a
+  Global Flow).
   The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
 - **Owner menus.** Like the Run composer's picker, the Owner filter and every owner menu below offer Global and the available
   Projects only, so they never offer a Project T3 has removed. The catalog keeps references to Projects T3 no longer
@@ -173,7 +176,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   disabled with its reason, and its definitions stay reachable through their **All** group.
 - **Owner filter.** **Owner: All**, **Global** or one Project filters both lists together. It starts at All whenever Studio
   opens and never follows the Run composer's selected Project. A Project shows global definitions and that Project's.
-- **Choosing an owner.** **New Flow** and **+ Add agent** always show the owner choice: **Global** or **Project** with an
+- **Choosing an owner.** **New Flow** and **New Agent** always show the owner choice: **Global** or **Project** with an
   **Owning Project** menu of the available Projects. The default comes from the filter (All
   or Global gives Global, a Project gives that Project); an Agent added through the Flow editor library's **New Agent
   definition** defaults to that Flow's owner, also when the Flow is global. An unavailable default stays chosen, with its reason,
@@ -183,7 +186,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   Agents** and the owning Project's Agents; blocks already on the canvas keep resolving every saved Agent. While the owning
   Project is unavailable a banner over the canvas names it and its reason, the Flow stays editable, saveable, exportable and
   removable, **Start Run** is disabled with the reason, and the banner's **Duplicate to…** opens Flow Duplicate to rescue it.
-- **Change owner….** The Agent editor header and the Flow editor's **More Flow actions** menu open **Change owner of
+- **Change owner….** The Agent editor's **More actions** menu and the Flow editor's **More Flow actions** menu open **Change owner of
   “*name*”** with a **New owner** menu of Global and the available Projects; the current
   owner stays chosen until another is picked, and an unavailable chosen owner blocks the change. A refusal turns the dialog
   into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
@@ -191,8 +194,8 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   *owner*…** opens Duplicate with that target instead; an Agent with unsaved changes must be saved first. The editor's own move
   needs no acknowledgement, also when Studio delivered it before the reply; a later delivery naming another owner, including the former one, is followed like a move elsewhere,
   because live updates can coalesce a move back.
-- **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor header, saved
-  Agents only) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
+- **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor's **More
+  actions**, saved Agents only, disabled with its reason while the Agent has unsaved changes) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
   its reason and blocks Duplicate until another target is picked. Flow Duplicate also takes the new name (the plan's
   `<name> copy` until edited) and shows **Agents in this Flow** from the preview: each global Agent offers **Keep shared** or
   **Copy**, a Project Agent the target can't place reads **Copied into target**, and an Agent of the target itself reads
@@ -224,11 +227,18 @@ defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs 
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows name, revision, the owner badge, **Change owner…**, **Duplicate…**, **Export** (an icon button, after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
+A persistent 300 px list sits beside the editor with a split **New Agent ▾** button (the button creates an Agent; its menu holds **Import…**, see [Import](#import)), **Search Agents**, the owner filter and owner groups ([Owners in Studio](#owners-in-studio)). Each row shows the Agent's name, its runtime summary and the count of distinct saved Flows using it (excluding Runs and unsaved
+drafts); narrow screens stack list and editor. The header shows the owner above the name, the model picker (see **Worker settings** below), a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header the form holds the name, the owner choice for a new Agent, the
+Prompt, which grows to fill the editor, and the exits; draft notices such as the Project override warnings and a reporting
+problem sit above the name. Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**.
 
-**Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
+**Worker settings.** The header's model picker names what the Agent runs on: the provider's initial, the model and its
+reasoning effort (the model's first option, its default included), with an accessible name such as **Worker: GPT 6.1 Sol ·
+High**. A saved selection T3 no longer offers reads **Unavailable**, and one Studio cannot judge while T3 capabilities are
+unavailable reads **Unknown**, each with its reason in a tooltip. The picker opens a popover with focus inside; Escape closes
+only the popover and returns focus to the picker, and every change in it is a draft edit (Unsaved changes, **Save**, the leave
+guard). The popover holds one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
 Availability is separate from verified execution support. A provider without Factory reporting support ([Reporting installation](t3-integration.md#reporting-installation) lists the drivers that have it) stays in the provider menu
 as a disabled choice marked **No Factory reporting yet**, with the reason under it, so it cannot be chosen; a saved Agent that already uses one keeps it visible with that mark. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
@@ -238,7 +248,7 @@ The Worker is optional. **Clear** empties the selection, and a save whose enviro
 no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
 Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
 inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
-execution state; its Worker section asks for an environment, provider and model, it opens
+execution state; its model picker reads **Needs a model** in the attention color and its Worker settings ask for an environment, provider and model, it opens
 with nothing preselected and Duplicate keeps it model-less. **Needs a model** is distinct from the Unavailable and Unknown
 states of a saved selection. Every Flow that places such an Agent is not ready (`agent_model_required`, one issue per block,
 "{block}: {agent} needs a model."), so a Run never starts with it; choosing a model in the Agent editor makes those Flows
@@ -247,14 +257,16 @@ ready without saving them again. In the API `execution` is
 and a `modelOptions` list) or an explicit `null`, so an omitted key or a partial object, including one without
 `modelOptions`, is a validation error. A `null` execution skips the reporting-support check.
 
-**Project overrides.** A global Agent's editor shows **Project overrides** under the Worker
+**Project overrides.** A global Agent's model picker lists **Project overrides** under the Worker settings
 ([Project override](../GLOSSARY.md#project-override), [ADR](adr/0002-project-overrides-of-global-agent-execution-settings.md)):
-a table with one row per Project, its provider, model and thinking options, and **Edit** and **Remove**.
-**+ Override for a Project** opens a dialog that chooses one of the available Projects without an override
+one row per Project, its name in brand cyan (the attention color, with the reason, while the Project is unavailable) and its
+provider · model · thinking options. A row opens the override in its dialog to edit it, and its remove button, shown on hover
+or keyboard focus, takes it out of the draft. **Override for a Project…** opens a dialog that chooses one of the available Projects without an override
 and the same Worker pickers, starting from the Agent's own settings; **Apply** puts the row in the draft and **Save**
 stores it in the next revision like any other edit. Runs in that Project launch with the override; every other Project
-uses the Worker. The button is disabled until the Agent has its own Worker, and a Project Agent's editor has no such
-section. A new Agent whose owner choice changes to a Project keeps its overrides in the draft under **Project overrides
+uses the Worker. The dialog stays open when the popover closes. **Override for a Project…** is disabled, with its reason,
+until the Agent has its own Worker or while every available Project already has an override, and a Project Agent's picker has
+no such section. A new Agent whose owner choice changes to a Project keeps its overrides in the draft under **Project overrides
 left out**, and **Create Agent** saves it without them; choosing Global again before Create keeps them. The revision
 comparison lists each override's Project and settings on both sides. When another client moves a saved Agent to a
 Project while this draft holds Project overrides, they stay listed under **Project overrides can't be saved** after the
@@ -265,8 +277,10 @@ for none), while a create may omit it for none. A save is refused when a Project
 Project appears twice (`duplicate_project_override`), when an override's provider lacks reporting support, or when a newly
 added override names a Project unavailable for new Runs; an override already saved stays while its Project is unavailable.
 
-The list and editor also show the provider's [reporting installation status](t3-integration.md#agent-reporting).
-The editor follows the current provider choice, explains installation problems and links to **Settings → Agent reporting**.
+The list and editor show the provider's [reporting installation status](t3-integration.md#agent-reporting) only when it needs
+attention: the row's summary line gives way to the status in the attention color, and the editor, following the current provider
+choice, explains the problem and links to **Settings → Agent reporting**. Installed reporting, and reporting still being checked,
+show nothing.
 Installed configuration does not establish full execution readiness or live report visibility; Start still checks those gates.
 
 **Saving.** Each accepted create or save appends one immutable Agent revision holding the name, prompt, settings and exits; a stale or invalid save returns an error,
@@ -285,7 +299,7 @@ A Create or Duplicate answer bridges only the wait for its first appearance in S
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
 a definition removed elsewhere.
 
-**Removing.** **Delete** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
+**Removing.** **Delete…** in **More actions** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
 rejects Agents placed in the latest revision of any current Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
 removal. An unsaved Flow draft may still reference a removed Agent and needs repair before running. Runs keep the Agent revision they started with, and removing an absent or removed Agent succeeds.
 Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
@@ -293,8 +307,8 @@ Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) perfor
 
 **Removed elsewhere.** If an Agent already open in Studio is removed by another client, its URL and
 editable draft stay open, even when the draft was clean. A persistent **This Agent was removed
-elsewhere. Your draft is kept.** notice replaces revision notices. Save, Duplicate and Delete are
-disabled with an explanation, and their handlers refuse further writes. An unsubmitted Delete
+elsewhere. Your draft is kept.** notice replaces revision notices and the status line reads **Removed elsewhere · retained draft**. Save and every **More
+actions** item are disabled, each menu item with the explanation, and their handlers refuse further writes. An unsubmitted Delete
 confirmation closes; an already submitted Delete completes normally through the idempotent removal
 and returns to the list without another discard prompt. Saves that reach a removed Agent are still
 rejected by the backend and never recreate it.
@@ -321,8 +335,10 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 
 ### Canvas and block configuration
 
-The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions; **Search Agents**, **Collapse**/**Expand library**) and the canvas. Add a block with the row's
-**Add** action or drag the row onto the canvas (a ghost shows the drop position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow
+The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
+header (**LIBRARY** with the **Collapse library** icon button; collapsed, **Expand library**) and its **Search steps and Agents** field, which filters both
+steps and Agents by name, stay pinned while the library scrolls. A row's drag handle and **Add** show on hover or keyboard focus; they are hidden, never removed, so
+the row's name and action stay the same. Add a block by activating the row or drag the row onto the canvas (a ghost shows the drop position; dropping elsewhere adds nothing); undropped additions fill a three-column grid right of the Flow
 input and are selected. Drag a block's header or edit its X/Y fields; wires follow live and the draft changes once, on drop. Escape cancels any drag.
 
 Selecting a block (click, or focus + Enter) opens **Block configuration**, a panel floating over the canvas's right edge. It renames the block, chooses its saved Agent, lists its exits
@@ -413,7 +429,9 @@ global Flow runs in any Project; Start resolves it against the selected Project 
 
 ### Saving and readiness
 
-The editor header also offers **Export** (see [Definition export](#definition-export)).
+The toolbar's ⋯ **More Flow actions** menu holds **Duplicate…**, **Change owner…** ([Owners in Studio](#owners-in-studio)), **Export JSON** (see
+[Definition export](#definition-export)) and **Remove…** (see [Removing a Flow](#removing-a-flow)). A disabled item shows its reason under its label, and
+focus returns to ⋯ when an item's dialog closes.
 
 **Save Flow** accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave or undo/redo. **Check readiness**
 validates the draft through the backend without saving and is cleared by any change, by a newer saved revision, by keeping the local draft against one, by a change to an Agent the draft
@@ -433,7 +451,7 @@ lists Factory's validation issues under its error; selecting one that names a bl
 
 ### Removing a Flow
 
-**Remove** in Flow details removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
+**Remove…** in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
 the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
 Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
@@ -442,8 +460,8 @@ Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) p
 **Removed elsewhere.** A Flow already opened in Studio keeps its URL and editable draft when another
 client removes it, even if it was clean or an interaction is in progress. The persistent **This Flow
 was removed elsewhere. Your draft is kept.** notice replaces revision notices and dismisses comparison
-and unsubmitted Remove confirmations. Save Flow, Start Run, Check readiness and further Remove are
-disabled with an explanation; their handlers also refuse these actions. An already submitted Remove
+and unsubmitted Remove confirmations. Save Flow, Start Run, Check readiness and every **More Flow
+actions** item are disabled with an explanation; their handlers also refuse these actions. An already submitted Remove
 completes normally and returns to the list without another discard prompt. Removal wins over a late
 save reply, and the retained draft stays editable while that reply is pending. The backend still
 rejects saves and Starts targeting removed Flows and never recreates them.
@@ -578,7 +596,7 @@ refused. There are no Factory MCP tools for Triggers.
 
 ## Definition export
 
-**Export** in the Agent editor header downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
+**Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export JSON** in the Flow editor's **More Flow actions** menu downloads the
 Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
 example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
 a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."
@@ -691,7 +709,7 @@ without a Condition, and asks to be updated before it can import it. Stored defi
 
 ### Import
 
-**Import** on the Agents list and on the Flows list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
+**Import…** in the Agents list's **New Agent ▾** menu and **Import** on the Flows list open a chooser for a `.json` file; either list accepts either kind of file and the file decides
 what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
 
 - a trust notice: imported instructions (Agent prompts, and for a Flow file Continuation prompts and Revisit instructions) run with the user's T3

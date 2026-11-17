@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
-import { listAgentDefinitions, repairCodexReporting } from "./support/agents.ts";
+import {
+  copyAgentDefinition,
+  listAgentDefinitions,
+  repairCodexReporting,
+} from "./support/agents.ts";
+import { ownedFlow } from "./support/owners.ts";
 
 test("reporting problems are visible before Start and clear after repairing the provider", async ({
   fixture,
@@ -14,7 +19,15 @@ test("reporting problems are visible before Start and clear after repairing the 
   await app.open("/runs/new");
   const agents = await listAgentDefinitions(app.baseUrl);
   const worker = agents.find((agent) => agent.name === "Runtime worker");
-  assert(worker);
+  assert(worker?.execution);
+  const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
+  assert(northwind);
+  const overridden = await copyAgentDefinition(
+    app.baseUrl,
+    "Runtime worker",
+    `Overridden runtime ${Date.now()}`,
+    { projectOverrides: [{ projectId: northwind, execution: worker.execution }] },
+  );
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
   await fixture.reporting.breakRequiredSkill();
 
@@ -39,6 +52,10 @@ test("reporting problems are visible before Start and clear after repairing the 
   await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
     "Reporting needs attention",
   );
+  // The attention line replaces the summary but keeps a global Agent's override count.
+  const overriddenRow = screen.getByRole("link", overridden.name, { exact: true });
+  await expect(overriddenRow).toContainText("Reporting needs attention");
+  await expect(overriddenRow).toContainText("+1 Project override");
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
     "Factory Block skill missing or outdated",
   );
@@ -57,13 +74,22 @@ test("reporting problems are visible before Start and clear after repairing the 
   ).toBeVisible();
   await repairCodexReporting(screen);
 
-  // Assert
+  // Assert: healthy reporting says nothing in the Agent list or editor.
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
   await app.screenshot("settings-reporting-repaired");
-  await app.open(`/studio/agents/${worker.id}`);
-  await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
-    "Reporting installed",
+  // Navigating within the app keeps the installed reading, so an absence is not "still checking".
+  await browser.keyboard.press("Escape");
+  await screen.getByRole("link", "Studio", { exact: true }).tap();
+  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
+  await screen.getByRole("link", "Runtime worker", { exact: true }).tap();
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue("Runtime worker");
+  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+    "GPT 6.1 Sol",
   );
+  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).not.toContainText(
+    "Reporting",
+  );
+  await expect(screen.getByRole("status", "Agent reporting status")).not.toBeVisible();
   await app.screenshot("agents-reporting-installed");
 });
 

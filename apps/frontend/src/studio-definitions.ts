@@ -366,7 +366,7 @@ export function ownerGroups<D extends { readonly projectId: string | null }>(
 }
 
 /**
- * The owner New Flow and Add agent preselect: the Flow's own owner when an Agent is added from
+ * The owner New Flow and New Agent preselect: the Flow's own owner when an Agent is added from
  * that Flow's editor, otherwise the filtered Project, and Global while the filter shows All or
  * Global. An unavailable default is kept for the user to change, never replaced.
  */

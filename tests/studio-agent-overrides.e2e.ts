@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { expect } from "e2e";
 import { test } from "./support/test.ts";
-import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
+import type { ProjectCatalog, Result } from "../packages/contracts/src/index.ts";
+import {
+  copyAgentDefinition,
+  listAgentDefinitions,
+  readAgentDefinition,
+} from "./support/agents.ts";
 import { changeAgentOwnerElsewhere, ownedFlow } from "./support/owners.ts";
+import { expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -11,8 +17,8 @@ const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
 
 /**
- * A new global Agent open in Studio with the Override for a Project dialog choosing Northwind,
- * and the id of the fixture's available Northwind Project.
+ * A new global Agent open in Studio with the Override for a Project dialog, opened from its model
+ * picker, choosing Northwind, and the id of the fixture's available Northwind Project.
  */
 async function overrideDialogForNorthwind(
   { app, screen, browser }: Pick<StudioFixtures, "app" | "screen" | "browser">,
@@ -26,7 +32,8 @@ async function overrideDialogForNorthwind(
     `${label} ${crypto.randomUUID().slice(0, 8)}`,
   );
   await app.open(`/studio/agents/${agent.id}`);
-  await screen.getByRole("button", "Override for a Project").tap();
+  await screen.getByRole("button", /^Worker: /).tap();
+  await screen.getByRole("button", "Override for a Project…", { exact: true }).tap();
   const dialog = screen.getByRole("dialog", "Override for a Project");
   await dialog.getByRole("button", /^Project:/).tap();
   await screen.getByRole("menuitemradio", "Northwind", { exact: true }).tap();
@@ -53,8 +60,14 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  const overrides = screen.getByRole("table", "Project overrides");
+  const picker = screen.getByRole("button", /^Worker: /);
+  const overrides = screen.getByRole("list", "Project overrides");
+  await picker.tap();
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
+  // A screen reader hears the override's Worker on its row, not only the Project.
+  await expect(
+    overrides.getByRole("button", /^Edit override for Northwind: .*GPT 6 Astra/),
+  ).toBeVisible();
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.revision, agent.revision + 1);
   assert.deepEqual(
@@ -62,6 +75,7 @@ test("a global Agent saved with a Project override keeps it in its editor and li
     [[northwind, "gpt-6-astra"]],
   );
   await app.open(`/studio/agents/${agent.id}`);
+  await picker.tap();
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
   await expect(screen.getByText(/\+1 Project override/).first()).toBeVisible();
   await app.screenshot("override-saved-after-reload");
@@ -95,8 +109,47 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
 
   // Assert
   await expect(stranded).toHaveCount(0);
-  await expect(screen.getByText("Agent definition · rev 2", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 2);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.projectId, northwind);
   assert.deepEqual(saved.projectOverrides, []);
+});
+
+test("removing an override while every available Project has one moves focus to Override for a Project…", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: an override for every available Project, so Override for a Project… starts disabled.
+  await browser.setViewport(viewport);
+  const response = await fetch(new URL("/api/projects", app.baseUrl));
+  const catalog = (await response.json()) as Result<ProjectCatalog>;
+  assert(catalog.ok);
+  const available = catalog.value.projects.filter(
+    (project) => project.availability === "available",
+  );
+  const sample = (await listAgentDefinitions(app.baseUrl)).find(
+    (agent) => agent.name === "Sample worker",
+  );
+  assert(sample?.execution);
+  const execution = sample.execution;
+  const agent = await copyAgentDefinition(
+    app.baseUrl,
+    "Sample worker",
+    `Every Project ${crypto.randomUUID().slice(0, 8)}`,
+    { projectOverrides: available.map((project) => ({ projectId: project.id, execution })) },
+  );
+  await app.open(`/studio/agents/${agent.id}`);
+  await screen.getByRole("button", /^Worker: /).tap();
+  await expect(screen.getByRole("button", /^Override for a Project…/)).toBeDisabled();
+  const removed = available[0]!;
+  await screen.getByRole("button", `Remove override for ${removed.title}`, { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  const add = screen.getByRole("button", "Override for a Project…", { exact: true });
+  await expect(add).toBeEnabled();
+  await expect(add).toBeFocused();
 });

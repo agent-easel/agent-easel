@@ -92,7 +92,7 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
   };
 }
 
-/** Add agent's owner: preselected from the asking Flow, else from the owner filter. */
+/** New Agent's owner: preselected from the asking Flow, else from the owner filter. */
 function useNewAgentOwner(
   definitions: StudioDefinitions,
   flows: ShownLists["flows"] | null,
@@ -143,7 +143,10 @@ export function StudioAgentsPage({
         error={library.error}
         loading={library.agents === null || library.flows === null}
       />
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section
+        aria-label="Agent editor"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      >
         {agentId ? (
           <SelectedAgentEditor
             // An editor never outlives its server, so a pending reply from another one is discarded.
