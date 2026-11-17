@@ -4,6 +4,7 @@ import type {
   FlowDraft,
   OperationError,
   StudioDefinitions as SavedDefinitions,
+  TriggerDefinition,
 } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 import type { LiveOwner, LiveScopeView } from "./live/owner.ts";
@@ -19,6 +20,11 @@ export type StudioDefinitionsOperations = Pick<
   | "updateAgent"
   | "duplicateAgent"
   | "removeAgent"
+  | "createTrigger"
+  | "updateTrigger"
+  | "setTriggerEnabled"
+  | "runTrigger"
+  | "removeTrigger"
 >;
 
 /** One saved list, with the live scope's three facts and their meaning. */
@@ -32,9 +38,11 @@ export interface StudioRead<V> {
 export interface StudioDefinitionsSnapshot {
   readonly flows: StudioRead<readonly FlowDraft[]>;
   readonly agents: StudioRead<readonly AgentDefinition[]>;
+  readonly triggers: StudioRead<readonly TriggerDefinition[]>;
 }
 
-type StudioList = "flows" | "agents";
+type StudioList = keyof StudioDefinitionsSnapshot;
+const studioLists = ["flows", "agents", "triggers"] as const satisfies readonly StudioList[];
 
 /** The window's live owner, as Studio holds its scope. */
 type StudioLive = Pick<LiveOwner, "acquire" | "view" | "subscribe">;
@@ -45,7 +53,7 @@ const sameRead = <V>(a: StudioRead<V>, b: StudioRead<V>) =>
   a.value === b.value && a.synchronized === b.synchronized && a.error === b.error;
 
 /**
- * The saved Flows and saved Agents of one Studio session. The server delivers both lists through
+ * The saved Flows, Agents and Triggers of one Studio session. The server delivers the lists through
  * the window's Studio scope; while Studio is open its hold gates mutations like every other
  * gating scope. HTTP answers never mark the live scope synchronized.
  */
@@ -53,23 +61,26 @@ export function createStudioDefinitions(
   live: StudioLive,
   operations: StudioDefinitionsOperations = api,
 ) {
-  let snapshot: StudioDefinitionsSnapshot = { flows: unread, agents: unread };
+  let snapshot: StudioDefinitionsSnapshot = { flows: unread, agents: unread, triggers: unread };
   // A Create reply may bridge only its first delivery, never a later removal or navigation.
-  const observed = { flows: new Set<string>(), agents: new Set<string>() };
+  const observed = {
+    flows: new Set<string>(),
+    agents: new Set<string>(),
+    triggers: new Set<string>(),
+  };
   const listeners = new Set<() => void>();
 
   /** Publishes changed facts; an unchanged list keeps its identity. */
   function update(change: Partial<StudioDefinitionsSnapshot>) {
-    const flows =
-      change.flows && !sameRead(change.flows, snapshot.flows) ? change.flows : snapshot.flows;
-    const agents =
-      change.agents && !sameRead(change.agents, snapshot.agents) ? change.agents : snapshot.agents;
-    if (flows.synchronized && agents.synchronized) {
-      flows.value?.forEach((flow) => observed.flows.add(flow.id));
-      agents.value?.forEach((agent) => observed.agents.add(agent.id));
-    }
-    if (flows === snapshot.flows && agents === snapshot.agents) return;
-    snapshot = { flows, agents };
+    const pick = <K extends StudioList>(list: K): StudioDefinitionsSnapshot[K] => {
+      const read = change[list];
+      return read && !sameRead<unknown>(read, snapshot[list]) ? read : snapshot[list];
+    };
+    const next = { flows: pick("flows"), agents: pick("agents"), triggers: pick("triggers") };
+    if (studioLists.every((list) => next[list].synchronized))
+      for (const list of studioLists) next[list].value?.forEach(({ id }) => observed[list].add(id));
+    if (studioLists.every((list) => next[list] === snapshot[list])) return;
+    snapshot = next;
     listeners.forEach((notify) => notify());
   }
 
@@ -93,6 +104,11 @@ export function createStudioDefinitions(
         },
         agents: {
           value: view.value?.agents ?? snapshot.agents.value,
+          synchronized: view.synchronized,
+          error,
+        },
+        triggers: {
+          value: view.value?.triggers ?? snapshot.triggers.value,
           synchronized: view.synchronized,
           error,
         },
@@ -138,6 +154,11 @@ export function createStudioDefinitions(
     updateAgent: operations.updateAgent,
     duplicateAgent: operations.duplicateAgent,
     removeAgent: operations.removeAgent,
+    createTrigger: operations.createTrigger,
+    updateTrigger: operations.updateTrigger,
+    setTriggerEnabled: operations.setTriggerEnabled,
+    runTrigger: operations.runTrigger,
+    removeTrigger: operations.removeTrigger,
   };
 }
 

@@ -3,14 +3,34 @@ import type { RefObject } from "react";
 import { validateAppSearch, type StudioSelection } from "./settings-navigation.ts";
 import { useNavigationBlock } from "./use-navigation-block.ts";
 
-export type StudioDraft = DraftGuardState & { kind: "flow" | "agent"; id: string };
+export type StudioDraft = DraftGuardState & { kind: "flow" | "agent" | "trigger"; id: string };
 
 export type StudioDraftGuardInput = {
   flow?: StudioDraft | undefined;
   agent?: StudioDraft | undefined;
+  trigger?: StudioDraft | undefined;
   flowRef?: RefObject<StudioDraft | undefined>;
   agentRef?: RefObject<StudioDraft | undefined>;
+  triggerRef?: RefObject<StudioDraft | undefined>;
 };
+
+/** The draft a Trigger page edits: a saved Trigger's id, or `new:<kind>` for a create form. */
+export function triggerDraftId(selection: StudioSelection | undefined) {
+  if (selection?.tab !== "triggers") return undefined;
+  return selection.kind ? `new:${selection.kind}` : selection.triggerId;
+}
+
+const studioPathIds = { flows: "flowId", agents: "agentId", triggers: "triggerId" } as const;
+
+/** The Studio destination a masked `/studio/...` path names. */
+function studioSelectionFromPath(pathname: string): StudioSelection | undefined {
+  if (pathname === "/studio/triggers/new/github-issues")
+    return { tab: "triggers", triggerId: "new", kind: "github_issues" };
+  const [, root, tab, id, ...rest] = pathname.split("/");
+  if (root !== "studio" || !tab || !(tab in studioPathIds) || rest.length) return undefined;
+  const key = studioPathIds[tab as keyof typeof studioPathIds];
+  return validateAppSearch({ studio: { tab, ...(id ? { [key]: id } : {}) } }).studio;
+}
 
 function studioSelectionFromLocation(location: {
   pathname: string;
@@ -20,31 +40,23 @@ function studioSelectionFromLocation(location: {
     typeof location.search === "object" && location.search
       ? (location.search as Record<string, unknown>)
       : {};
-  const studio = validateAppSearch(search).studio;
-  if (studio) return studio;
-  if (location.pathname === "/studio/agents" || location.pathname.startsWith("/studio/agents/")) {
-    const agentId = location.pathname.slice("/studio/agents/".length);
-    return agentId ? { tab: "agents", agentId } : { tab: "agents" };
-  }
-  if (location.pathname === "/studio/flows" || location.pathname.startsWith("/studio/flows/")) {
-    const flowId = location.pathname.slice("/studio/flows/".length);
-    return flowId ? { tab: "flows", flowId } : { tab: "flows" };
-  }
-  return undefined;
+  return validateAppSearch(search).studio ?? studioSelectionFromPath(location.pathname);
 }
 
 function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft) {
   if (!studio) return false;
   if (draft.kind === "flow") {
-    return studio.tab === "agents" || !studio.flowId || studio.flowId === draft.id;
+    return studio.tab !== "flows" || !studio.flowId || studio.flowId === draft.id;
   }
+  if (draft.kind === "trigger") return triggerDraftId(studio) === draft.id;
   return studio.tab === "agents" && studio.agentId === draft.id;
 }
 
 function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
   const flow = input.flowRef ? input.flowRef.current : input.flow;
   const agent = input.agentRef ? input.agentRef.current : input.agent;
-  return [flow, agent].filter(
+  const trigger = input.triggerRef ? input.triggerRef.current : input.trigger;
+  return [flow, agent, trigger].filter(
     (draft): draft is StudioDraft => !!draft && (draft.dirty || draft.removed),
   );
 }

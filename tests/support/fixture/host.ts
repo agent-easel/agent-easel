@@ -48,7 +48,7 @@ function requireCurrentUiBuild() {
  * and the seeded development world. `doubles` are the external services fixture modules control.
  */
 export async function startHost(
-  doubles: Pick<ServerOptions, "discordApiUrl" | "applicationUpdates">,
+  doubles: Pick<ServerOptions, "discordApiUrl" | "applicationUpdates" | "github">,
 ) {
   requireCurrentUiBuild();
   const home = await mkdtemp(join(tmpdir(), "factory-e2e-"));

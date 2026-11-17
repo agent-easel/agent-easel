@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
 import { appearanceFixture } from "./fixture/appearance.ts";
 import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
+import { githubFixture, startJourneyGitHub } from "./fixture/github.ts";
 import { startHost } from "./fixture/host.ts";
 import { liveFixture } from "./fixture/live.ts";
 import { recordedServerUpdates, remoteAccessFixture } from "./fixture/remote-access.ts";
@@ -12,9 +13,11 @@ import { scenariosFixture } from "./fixture/scenarios.ts";
 import { FIXTURE_PREFIX, type FixtureModule } from "./fixture/seam.ts";
 
 const discord = await startJourneyDiscord();
+const github = startJourneyGitHub();
 const serverUpdates = recordedServerUpdates();
 const host = await startHost({
   discordApiUrl: discord.apiUrl,
+  github,
   applicationUpdates: serverUpdates.applicationUpdates,
 });
 const remoteAccess = await remoteAccessFixture(host, serverUpdates, () => live.snapshotDelayMs());
@@ -29,6 +32,7 @@ const modules = {
   remoteAccess,
   live,
   discord: discordFixture(discord, host),
+  github: githubFixture(github, host),
   appearance: appearanceFixture(host),
   reporting: reportingFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),

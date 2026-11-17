@@ -18,10 +18,10 @@ export const FACTORY_PROTOCOL = 17;
  * `settlement-unresolved` kind, whose Block id is null. Protocol 14 theme-color presentations and
  * sources carry no appearance grant. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 16;
-/** The current UI reads and saves Condition blocks, which older servers reject or lack, and reads
- * each navigation attention matter's native pending request count and Block name. It does not yet
- * read Triggers, so protocol 16 servers still serve it. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 16;
+/** The current UI reads and manages Triggers, which protocol 16 servers lack, reads and saves
+ * Condition blocks, and reads each navigation attention matter's native pending request count and
+ * Block name. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 17;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

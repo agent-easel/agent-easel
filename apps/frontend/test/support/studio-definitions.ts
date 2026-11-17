@@ -44,6 +44,11 @@ export function studioFactory(): Operations {
       savedAgent({ id: "copy", name: "Reviewer copy" }),
     ),
     removeAgent: vi.fn<StudioDefinitionsOperations["removeAgent"]>(async () => undefined),
+    createTrigger: vi.fn<StudioDefinitionsOperations["createTrigger"]>(),
+    updateTrigger: vi.fn<StudioDefinitionsOperations["updateTrigger"]>(),
+    setTriggerEnabled: vi.fn<StudioDefinitionsOperations["setTriggerEnabled"]>(),
+    runTrigger: vi.fn<StudioDefinitionsOperations["runTrigger"]>(),
+    removeTrigger: vi.fn<StudioDefinitionsOperations["removeTrigger"]>(async () => undefined),
   };
 }
 
