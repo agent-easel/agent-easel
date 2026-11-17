@@ -257,6 +257,13 @@ For desktop behavior, use a current desktop build. Report the tested UI/build an
 
 ## UI verification
 
+The fixture requires a built UI with a recorded content signature matching the
+current frontend, shared sources and build/dependency configuration. Identical
+inputs remain valid after timestamp changes or cache restoration in another
+worktree. A missing UI entry point, missing signature or changed input contents
+refuses startup; run `pnpm build` to produce a current build, including when upgrading
+from output that predates the signature.
+
 The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI against a real temporary SQLite backend and `ControlledT3`, validating Factory behavior without live OAuth or paid T3 workloads. The
 [verification skill](../.agents/skills/verify-t3-factory/SKILL.md) and its [feature map](../.agents/skills/verify-t3-factory/features/README.md) define paths, charters and evidence standards.
 Live integration is covered by [live verification](installation.md).

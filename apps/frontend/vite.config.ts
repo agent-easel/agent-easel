@@ -5,12 +5,25 @@ import { defaultServerConditions, defineConfig } from "vite-plus";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
+import { uiBuildSignature, uiBuildSignatureFile } from "../../scripts/ui-build.ts";
 
 export default defineConfig(({ command }) => ({
   plugins: [
     react(),
     babel({ presets: [reactCompilerPreset({ panicThreshold: "all_errors" })] }),
     tailwindcss(),
+    {
+      name: "factory-ui-build-inputs",
+      apply: "build",
+      buildStart() {
+        // Record before compilation; an input edited during the build must invalidate it.
+        this.emitFile({
+          type: "asset",
+          fileName: uiBuildSignatureFile,
+          source: uiBuildSignature(fileURLToPath(new URL("../../", import.meta.url))),
+        });
+      },
+    },
   ],
   resolve: {
     ...(command === "serve"
