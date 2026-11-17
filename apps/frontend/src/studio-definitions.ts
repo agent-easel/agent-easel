@@ -378,7 +378,7 @@ export function defaultOwner(
   return filter.kind === "project" ? filter.projectId : null;
 }
 
-/** One owner a new definition may be given; an unavailable Project is offered disabled. */
+/** One owner a new definition may be given; a chosen unavailable Project is offered disabled. */
 interface OwnerTarget {
   readonly owner: StudioOwner;
   /** Why the target cannot own a new definition, or null when it can. */
@@ -386,11 +386,13 @@ interface OwnerTarget {
 }
 
 /**
- * The owner choice of New Flow and Add agent: Global and every Project as targets, and the chosen
- * owner. An unavailable chosen owner stays chosen and blocks creating until the user changes it.
+ * Studio's owner choices: Global and the available Projects as targets, like the Run composer, and
+ * the chosen owner. The catalog keeps references to Projects T3 no longer lists, so an unavailable
+ * Project is offered only while chosen; it stays chosen and blocks until the user changes it.
  */
 export function ownerPicker(chosen: string | null, projects: readonly FactoryProject[]) {
   const owned = projects
+    .filter((project) => project.availability === "available" || project.id === chosen)
     .map((project) => studioOwner(project.id, projects))
     .sort(byLabel)
     .map((owner) => ({ owner, disabled: owner.unavailable }));
