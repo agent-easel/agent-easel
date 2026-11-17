@@ -32,6 +32,7 @@ import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportControl } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
+import { AgentProjectOverrides } from "./agent-project-overrides.tsx";
 import { OwnerBadge, OwnerChangeNotice, OwnerPicker } from "../studio-owner.tsx";
 import type { StudioOwner } from "../../studio-definitions.ts";
 
@@ -72,7 +73,11 @@ type AgentEditorProps = {
 
 export function AgentEditorPane(props: AgentEditorProps) {
   const { capabilities, draft, state } = props;
-  const { name, prompt, exits, execution } = state.content;
+  const { name, prompt, exits, execution, projectOverrides } = state.content;
+  const { ownership } = props;
+  // Only a global Agent has Project overrides; a Project Agent's own Worker applies there.
+  const global =
+    ownership.kind === "saved" ? ownership.owner.projectId === null : ownership.chosen === null;
   const settings = { ...state.choices, ...draft, execution, needsModel: state.needsModel };
   const saving = (state.saving || props.duplicating) && !state.removed;
   const error = state.error;
@@ -139,6 +144,18 @@ export function AgentEditorPane(props: AgentEditorProps) {
             />
             {settings.execution.providerInstanceId && (
               <AgentReportingNotice providerId={settings.execution.providerInstanceId} />
+            )}
+            {global && (
+              <AgentProjectOverrides
+                overrides={projectOverrides}
+                execution={execution}
+                projects={ownership.projects}
+                capabilities={capabilities}
+                needsModel={state.needsModel}
+                disabled={saving}
+                onSet={draft.setOverride}
+                onRemove={draft.removeOverride}
+              />
             )}
             <div className="grid gap-1.5">
               <Label htmlFor="agent-prompt" className={fieldLabelClass}>

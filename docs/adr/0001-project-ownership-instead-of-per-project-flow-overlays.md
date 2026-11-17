@@ -27,6 +27,8 @@ overlay whose base later changes underneath it.
 - Ownership is stored on the Flow and Agent identity, not in revisions. A later owner change or
   Project unavailability never rewrites a Run's captured revisions. Readiness, however, depends on
   each placed Agent's owner as well as its revision.
+- A global Agent's execution settings alone may differ per Project through Project overrides held
+  in its revisions ([ADR 0002](0002-project-overrides-of-global-agent-execution-settings.md)).
 - Existing definitions became global on upgrade. Reverting to a single global catalog would
   discard every Project's separation, and adding overlays later would require a new resolution
   model rather than a field.

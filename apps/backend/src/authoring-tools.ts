@@ -96,6 +96,20 @@ const exit = {
   },
   required: ["id", "name", "description", "messageRequired"],
 };
+const executionProperties = {
+  environmentId: { type: "string" },
+  providerInstanceId: { type: "string" },
+  modelId: { type: "string" },
+  modelOptions: {
+    type: "array",
+    items: {
+      type: "object",
+      properties: { id: { type: "string" }, value: { type: ["string", "boolean"] } },
+      required: ["id", "value"],
+    },
+  },
+};
+const executionRequired = ["environmentId", "providerInstanceId", "modelId", "modelOptions"];
 const agentFields = {
   name: { type: "string" },
   prompt: { type: "string" },
@@ -103,22 +117,27 @@ const agentFields = {
     type: ["object", "null"],
     description:
       "Required. Ids from factory_get_agent_capabilities: environment, provider instance (one with reporting.supported), model and model option values (an empty list when choosing none); or null for an Agent without a model, which saves but cannot run until a save gives it one.",
-    properties: {
-      environmentId: { type: "string" },
-      providerInstanceId: { type: "string" },
-      modelId: { type: "string" },
-      modelOptions: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: { id: { type: "string" }, value: { type: ["string", "boolean"] } },
-          required: ["id", "value"],
-        },
-      },
-    },
-    required: ["environmentId", "providerInstanceId", "modelId", "modelOptions"],
+    properties: executionProperties,
+    required: executionRequired,
   },
   exits: { type: "array", items: exit, description: "The Agent's exits; at least one." },
+  projectOverrides: {
+    type: "array",
+    description:
+      "The complete list of a global Agent's execution settings for Runs in one Project each, replacing its own settings there; name, prompt and exits stay shared. Required by factory_save_agent, an empty list for none: send the saved list unchanged to keep it; omitted on create, the Agent has none. Only a global Agent with execution settings may have overrides, at most one per Project; a newly added one names a Project available for new Runs.",
+    items: {
+      type: "object",
+      properties: {
+        projectId: { type: "string" },
+        execution: {
+          type: "object",
+          properties: executionProperties,
+          required: executionRequired,
+        },
+      },
+      required: ["projectId", "execution"],
+    },
+  },
 };
 const position = {
   type: "object",
@@ -205,7 +224,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_get_agent",
     description:
-      "Read one Agent's current revision, model settings, exits and settings status. An Agent without a model has execution and settingsStatus null.",
+      "Read one Agent's current revision, model settings, Project overrides, exits and settings status. An Agent without a model has execution and settingsStatus null.",
     inputSchema: {
       type: "object",
       properties: { agentId },
@@ -227,7 +246,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_save_agent",
     description:
-      "Save an Agent's name, prompt, model settings and exits as its next immutable revision, exactly as a Studio save.",
+      "Save an Agent's name, prompt, model settings, Project overrides and exits as its next immutable revision, exactly as a Studio save.",
     inputSchema: {
       type: "object",
       properties: { agentId, expectedRevision, expectedProjectId, ...agentFields },
@@ -239,6 +258,7 @@ export const authoringTools: Tool[] = [
         "prompt",
         "execution",
         "exits",
+        "projectOverrides",
       ],
       additionalProperties: false,
     },

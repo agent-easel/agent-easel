@@ -151,6 +151,7 @@ export async function reviewedFlow(context: TestContext) {
       exits,
       expectedRevision: assertOk(await factory.getAgent(reviewer.id)).revision,
       expectedProjectId: reviewer.projectId,
+      projectOverrides: [],
     });
   return { factory, flowId: created.id, reviewer, review, save, editReviewer };
 }

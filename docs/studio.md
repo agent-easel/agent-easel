@@ -155,6 +155,9 @@ records why a per-project variant is an independent copy rather than an override
   existing Agent by name, so an imported Flow can always place its Agents.
 
 Ownership adds no model or environment restriction: a Project Agent's execution settings are checked as any Agent's.
+Only a global Agent has [Project overrides](#agent-definitions). Change owner to a Project is refused while it has any
+(`owner_change_overrides`), and an Agent Duplicate or a Flow Duplicate copy into a Project takes the settings that
+Project's override chose, without overrides; a copy into Global keeps them. Export and Import carry no overrides.
 
 ### Owners in Studio
 
@@ -243,6 +246,20 @@ ready without saving them again. In the API `execution` is
 `null`; create and save require the `execution` key, as complete settings (`environmentId`, `providerInstanceId`, `modelId`
 and a `modelOptions` list) or an explicit `null`, so an omitted key or a partial object, including one without
 `modelOptions`, is a validation error. A `null` execution skips the reporting-support check.
+
+**Project overrides.** A global Agent's editor shows **Project overrides** under the Worker
+([Project override](../GLOSSARY.md#project-override), [ADR](adr/0002-project-overrides-of-global-agent-execution-settings.md)):
+a table with one row per Project, its provider, model and thinking options, and **Edit** and **Remove**.
+**+ Override for a Project** opens a dialog that chooses one of the available Projects without an override
+and the same Worker pickers, starting from the Agent's own settings; **Apply** puts the row in the draft and **Save**
+stores it in the next revision like any other edit. Runs in that Project launch with the override; every other Project
+uses the Worker. The button is disabled until the Agent has its own Worker, and a Project Agent's editor has no such
+section. The Agent list row adds **+N Project overrides** to its runtime summary. In the API, `projectOverrides` is a list
+of `{projectId, execution}` with complete settings; save requires the key (send the saved list unchanged to keep it, `[]`
+for none), while a create may omit it for none. A save is refused when a Project Agent has overrides
+(`override_global_only`), when overrides exist without the Agent's own settings (`override_requires_execution`), when a
+Project appears twice (`duplicate_project_override`), when an override's provider lacks reporting support, or when a newly
+added override names a Project unavailable for new Runs; an override already saved stays while its Project is unavailable.
 
 The list and editor also show the provider's [reporting installation status](t3-integration.md#agent-reporting).
 The editor follows the current provider choice, explains installation problems and links to **Settings → Agent reporting**.

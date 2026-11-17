@@ -16,6 +16,7 @@ it("each Start of the same Flow revision shows the Agent revision, with its exit
     exits: [...agent.exits, blocked],
     expectedRevision: agent.revision,
     expectedProjectId: agent.projectId,
+    projectOverrides: [],
   });
   assert(edited.ok);
 
@@ -51,6 +52,7 @@ it("a block first activated after its Agent was edited and removed and the backe
     execution: { ...f.agent.execution, modelOptions: [{ id: "reasoning", value: "low" }] },
     expectedRevision: f.agent.revision,
     expectedProjectId: f.agent.projectId,
+    projectOverrides: [],
   });
   assert(edited.ok);
   assert((await f.f.removeFlow(f.flow.id)).ok);
@@ -74,6 +76,42 @@ it("a block first activated after its Agent was edited and removed and the backe
   });
   expect(run.value.definitions.agents).toMatchObject([
     { id: f.agent.id, revision: 1, prompt: "Follow repository instructions." },
+  ]);
+});
+
+it("a Run in a Project that overrides its global Agent launches the worker with that Project's settings", async (c) => {
+  // Arrange
+  const { f, t3, input, agent } = await prepared(c);
+  const saved = await f.updateAgent(agent.id, {
+    ...agent,
+    expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
+    projectOverrides: [
+      {
+        projectId: input.projectId,
+        execution: { ...agent.execution, modelOptions: [{ id: "reasoning", value: "low" }] },
+      },
+    ],
+  });
+  assert(saved.ok);
+
+  // Act
+  const started = await f.startRun(input);
+  await f.reconcileRuns();
+
+  // Assert
+  assert(started.ok);
+  const [launch] = [...t3.launches.values()].map((entry) => entry.payload);
+  expect(launch!.modelSelection).toEqual({
+    instanceId: "codex-main",
+    model: "gpt-6.1-sol",
+    options: { reasoning: "low" },
+  });
+  // Later activations and recovery read the captured revision back for the Run's Project.
+  const run = await f.getRun(started.value.id);
+  assert(run.ok);
+  expect(run.value.definitions.agents[0]!.execution.modelOptions).toStrictEqual([
+    { id: "reasoning", value: "low" },
   ]);
 });
 

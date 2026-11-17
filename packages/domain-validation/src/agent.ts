@@ -1,6 +1,8 @@
 import type {
   AgentExecutionSettings,
   AgentModelOptionValue,
+  AgentProjectOverride,
+  AgentRevisionContent,
   CreateAgentInput,
   DuplicateAgentInput,
   Result,
@@ -12,8 +14,11 @@ import type {
 import { parseAgentExits } from "./block-exits.ts";
 import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
 
-/** What a save writes: everything a create does except the owning Project. */
-type UpdateAgentContent = Omit<UpdateAgentInput, "expectedRevision" | "expectedProjectId">;
+/** What every create and save writes besides the owner and the Project overrides. */
+type AgentContent = Omit<
+  UpdateAgentInput,
+  "expectedRevision" | "expectedProjectId" | "projectOverrides"
+>;
 
 function agentNameIssue(): ValidationIssue {
   return {
@@ -153,6 +158,90 @@ export function validateExecutionSettings(execution: unknown): Result<AgentExecu
   };
 }
 
+const OVERRIDES_REQUIRED =
+  "Send the Agent's Project overrides as a list of {projectId, execution}, empty when it has none.";
+
+/** Issues of one override's settings, addressed under that override. */
+function underOverride<A>(result: Result<A>, index: number): Result<A> {
+  if (result.ok) return result;
+  return {
+    ok: false,
+    error: {
+      ...result.error,
+      issues: result.error.issues.map((issue) => ({
+        ...issue,
+        path: `projectOverrides.${index}.${issue.path}`,
+      })),
+    },
+  };
+}
+
+/**
+ * A save requires the key, like `execution`, so omitting it never drops overrides silently; a create
+ * without it has none. Overrides replace the Agent's own settings, so an Agent without a model has none.
+ */
+function parseProjectOverrides(
+  input: unknown,
+  execution: AgentExecutionSettings | null,
+  omitted: "none" | "refused",
+): Result<AgentProjectOverride[]> {
+  const raw =
+    typeof input === "object" && input !== null && "projectOverrides" in input
+      ? input.projectOverrides
+      : undefined;
+  if (raw === undefined && omitted === "none") return { ok: true, value: [] };
+  if (!Array.isArray(raw))
+    return invalid("invalid_overrides", "projectOverrides", OVERRIDES_REQUIRED);
+  if (raw.length && execution === null)
+    return invalid(
+      "override_requires_execution",
+      "projectOverrides",
+      "Choose this Agent's own environment, provider and model before overriding them for a Project.",
+    );
+  const overrides: AgentProjectOverride[] = [];
+  for (const [index, entry] of raw.entries()) {
+    const override = parseProjectOverride(entry, index);
+    if (!override.ok) return override;
+    if (overrides.some((saved) => saved.projectId === override.value.projectId))
+      return invalid(
+        "duplicate_project_override",
+        `projectOverrides.${index}.projectId`,
+        "Override each Project at most once.",
+      );
+    overrides.push(override.value);
+  }
+  return { ok: true, value: overrides };
+}
+
+function parseProjectOverride(entry: unknown, index: number): Result<AgentProjectOverride> {
+  if (typeof entry !== "object" || entry === null)
+    return invalid("invalid_overrides", `projectOverrides.${index}`, OVERRIDES_REQUIRED);
+  const projectId = parseTrimmedString(
+    "projectId" in entry ? entry.projectId : undefined,
+    `projectOverrides.${index}.projectId`,
+    512,
+    "invalid_project",
+    "Each Project override names a Factory Project.",
+  );
+  if (!projectId.ok) return projectId;
+  const settings = underOverride(
+    validateExecutionSettings("execution" in entry ? entry.execution : undefined),
+    index,
+  );
+  if (!settings.ok) return settings;
+  return { ok: true, value: { projectId: projectId.value, execution: settings.value } };
+}
+
+/** The settings a Run of `agent` in Project `projectId` uses: its override there, or its own. */
+export function executionForProject<
+  A extends Pick<AgentRevisionContent, "execution" | "projectOverrides">,
+>(agent: A, projectId: string): A["execution"] {
+  return (
+    agent.projectOverrides.find((override) => override.projectId === projectId)?.execution ??
+    agent.execution
+  );
+}
+
 function validateRunTitleModel(model: unknown): Result<RunTitleModel> {
   if (typeof model !== "object" || model === null)
     return invalid("run_title_model", "model", "Choose a provider instance and model.");
@@ -215,7 +304,7 @@ export function validateUpdateRunTitleSetting(input: unknown): Result<UpdateRunT
  * The revision content every Agent create and save writes. Structural save validation is
  * deliberately separate from T3 capability availability.
  */
-function validateAgentContent(input: unknown): Result<UpdateAgentContent> {
+function validateAgentContent(input: unknown): Result<AgentContent> {
   const name = parseTrimmedString(
     typeof input === "object" && input !== null && "name" in input ? input.name : undefined,
     "name",
@@ -254,7 +343,16 @@ export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
   if (!content.ok) return content;
   const projectId = parseOwningProject(input);
   if (!projectId.ok) return projectId;
-  return { ok: true, value: { ...content.value, projectId: projectId.value } };
+  const projectOverrides = parseProjectOverrides(input, content.value.execution, "none");
+  if (!projectOverrides.ok) return projectOverrides;
+  return {
+    ok: true,
+    value: {
+      ...content.value,
+      projectId: projectId.value,
+      projectOverrides: projectOverrides.value,
+    },
+  };
 }
 
 export function validateUpdateAgent(input: unknown): Result<UpdateAgentInput> {
@@ -282,12 +380,15 @@ export function validateUpdateAgent(input: unknown): Result<UpdateAgentInput> {
   if (!expectedProjectId.ok) return expectedProjectId;
   const content = validateAgentContent(input);
   if (!content.ok) return content;
+  const projectOverrides = parseProjectOverrides(input, content.value.execution, "refused");
+  if (!projectOverrides.ok) return projectOverrides;
   return {
     ok: true,
     value: {
       expectedRevision: revision,
       expectedProjectId: expectedProjectId.value,
       ...content.value,
+      projectOverrides: projectOverrides.value,
     },
   };
 }

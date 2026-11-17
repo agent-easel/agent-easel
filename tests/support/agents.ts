@@ -78,6 +78,7 @@ export async function saveAgentElsewhere(
         prompt: agent.prompt,
         execution: agent.execution,
         exits: agent.exits,
+        projectOverrides: agent.projectOverrides,
         expectedRevision: agent.revision,
         expectedProjectId: agent.projectId,
         ...change,

@@ -11,6 +11,12 @@ export function flowUsageLabel(count: number): string {
   return `${count} Flows`;
 }
 
+/** How many Projects a global Agent's list row says override its Worker; empty for none. */
+export function projectOverridesLabel(count: number): string {
+  if (count === 0) return "";
+  return count === 1 ? "+1 Project override" : `+${count} Project overrides`;
+}
+
 /** The provider, model and thinking options of saved execution settings. */
 export function agentRuntimeMeta(
   execution: AgentExecutionSettings,

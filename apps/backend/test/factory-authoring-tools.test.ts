@@ -108,6 +108,7 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
       prompt: "Studio's edit",
       expectedRevision: opened.revision,
       expectedProjectId: opened.projectId,
+      projectOverrides: [],
     }),
   );
 
@@ -120,6 +121,7 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
       prompt: "The agent's edit",
       expectedRevision: opened.revision,
       expectedProjectId: opened.projectId,
+      projectOverrides: [],
     },
   });
 
@@ -155,6 +157,7 @@ it("an Agent save choosing a provider without Factory reporting support is refus
       agentId: saved.id,
       expectedRevision: saved.revision,
       expectedProjectId: saved.projectId,
+      projectOverrides: [],
       execution: { ...saved.execution, providerInstanceId: "future-main" },
     },
   });
@@ -235,6 +238,7 @@ it("factory_save_agent with execution null saves the next revision without a mod
       agentId: saved.id,
       expectedRevision: saved.revision,
       expectedProjectId: saved.projectId,
+      projectOverrides: [],
       execution: null,
     },
   });
@@ -261,6 +265,7 @@ it("factory_save_agent without the execution key is refused and keeps the model"
       agentId: saved.id,
       expectedRevision: saved.revision,
       expectedProjectId: saved.projectId,
+      projectOverrides: [],
     },
   });
 
@@ -295,6 +300,7 @@ it.for([
         agentId: saved.id,
         expectedRevision: saved.revision,
         expectedProjectId: saved.projectId,
+        projectOverrides: [],
         execution: partial,
       },
     });
@@ -916,6 +922,7 @@ it("a Flow Duplicate commit of a plan that predates a placed Agent's save is ref
       ...sampleAgentInput("Coder v2"),
       expectedRevision: coder.revision,
       expectedProjectId: coder.projectId,
+      projectOverrides: [],
     }),
   );
 

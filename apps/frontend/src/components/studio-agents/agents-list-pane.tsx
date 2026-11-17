@@ -11,7 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { StudioLink } from "../app-link.tsx";
-import { agentRuntimeMeta, flowUsageCount, flowUsageLabel } from "@/lib/agent-display";
+import {
+  agentRuntimeMeta,
+  flowUsageCount,
+  flowUsageLabel,
+  projectOverridesLabel,
+} from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
@@ -243,7 +248,16 @@ function AgentOwnerSection({
               id={agent.id}
               name={agent.name}
               meta={
-                agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
+                agent.execution ? (
+                  [
+                    agentRuntimeMeta(agent.execution, capabilities),
+                    projectOverridesLabel(agent.projectOverrides.length),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                ) : (
+                  <NeedsModel />
+                )
               }
               {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
               usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}

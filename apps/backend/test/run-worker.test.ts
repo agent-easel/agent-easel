@@ -864,6 +864,7 @@ it("after its Agent is saved without a model, a Run's held handoff launches the 
     exits: f.agent.exits,
     expectedRevision: f.agent.revision,
     expectedProjectId: f.agent.projectId,
+    projectOverrides: [],
   });
   assert(cleared.ok);
   await f.f.close();

@@ -32,13 +32,15 @@ export function ExecutionSettingsFields({
   settings,
   saving,
 }: {
-  role: "worker" | "coordinator";
+  /** The Agent's own Worker, or one Project override's settings in its dialog. */
+  role: "worker" | "override";
   capabilities: AgentCapabilities | null;
   settings: ExecutionSettingsState;
   saving: boolean;
 }) {
   const { execution, environments, providers, selectedProvider, selectedModel } = settings;
-  const prefix = role === "coordinator" ? "Coordinator " : "";
+  // An override's fields sit in a dialog over the Worker's, so their ids must differ.
+  const idPrefix = role === "worker" ? "" : `${role}-`;
   const availability = capabilities?.state === "ready" ? "unavailable" : "unknown";
   const capabilityMessage =
     capabilities?.state === "ready"
@@ -51,10 +53,10 @@ export function ExecutionSettingsFields({
     <section aria-labelledby={`${role}-execution-heading`} className="grid gap-3">
       <div className="flex items-center gap-2">
         <h2 id={`${role}-execution-heading`} className="text-sm font-semibold">
-          {role === "worker" ? "Worker" : "Coordinator"}
+          {role === "worker" ? "Worker" : "Settings for this Project"}
         </h2>
         <span className="flex-1" />
-        {execution.environmentId && (
+        {role === "worker" && execution.environmentId && (
           <Button
             type="button"
             variant="outline"
@@ -85,7 +87,7 @@ export function ExecutionSettingsFields({
         <CapabilityField
           id={`${role}-environment`}
           step={1}
-          label={`${prefix}Environment / machine (choose first)`}
+          label="Environment / machine (choose first)"
           hint="from T3"
           value={execution.environmentId}
           onChange={settings.setEnvironmentId}
@@ -97,7 +99,7 @@ export function ExecutionSettingsFields({
         <CapabilityField
           id={`${role}-provider`}
           step={2}
-          label={`${prefix}Provider / harness`}
+          label="Provider / harness"
           hint="options from T3 for this machine"
           value={execution.providerInstanceId}
           onChange={settings.chooseProvider}
@@ -121,7 +123,7 @@ export function ExecutionSettingsFields({
         <CapabilityField
           id={`${role}-model`}
           step={3}
-          label={`${prefix}Model`}
+          label="Model"
           hint="from T3"
           value={execution.modelId}
           onChange={settings.chooseModel}
@@ -136,8 +138,8 @@ export function ExecutionSettingsFields({
         {rowTwo.map((descriptor) => (
           <ModelOptionField
             key={descriptor.id}
-            id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
-            label={`${prefix}${descriptor.label}`}
+            id={`${idPrefix}option-${descriptor.id}`}
+            label={descriptor.label}
             step={4}
             descriptor={descriptor}
             options={execution.modelOptions}
@@ -150,8 +152,8 @@ export function ExecutionSettingsFields({
       {extraOptions.map((descriptor, index) => (
         <ModelOptionField
           key={descriptor.id}
-          id={`${prefix ? "coordinator-" : ""}option-${descriptor.id}`}
-          label={`${prefix}${descriptor.label}`}
+          id={`${idPrefix}option-${descriptor.id}`}
+          label={descriptor.label}
           step={5 + index}
           descriptor={descriptor}
           options={execution.modelOptions}
@@ -173,7 +175,7 @@ export function ExecutionSettingsFields({
               size="sm"
               disabled={saving}
               onClick={() => settings.removeOption(option.id)}
-              aria-label={`${prefix}Remove saved option ${option.id}`}
+              aria-label={`Remove saved option ${option.id}`}
             >
               Remove option
             </Button>
