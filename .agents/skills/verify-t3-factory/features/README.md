@@ -42,6 +42,8 @@ use older/newer peers owned and cleaned up by the same fixture process.
 
 | Flow removal recovery | `tests/studio-flow-removal.e2e.ts` | Retained clean drafts, Remove confirmation dismissal, disabled actions, JSON clipboard and fallback, hidden Flow reopening through Keep editing, discard guard and missing deep links |
 
+| Triggers | `tests/studio-triggers.e2e.ts` | Studio → AUTOMATE → Triggers: a GitHub Issues Trigger created through the type picker and form, reviewed (**No issues ready**) and enabled with **Enable and check**, Healthy in its status strip; ⋯ **Run** starting a Run for a newly labelled issue of the fixture's GitHub stand-in; that Run's **Started from** top bar line and inspector section with the issue link; Remove confirmation emptying the list while the Run keeps its origin; a Trigger whose host `gh` is signed out showing Error with its `gh auth login` guidance in the row and status strip, the red Triggers count and the Studio entry's attention description. Live `gh` and GitHub are not covered |
+
 Use `pnpm exec e2e run <spec> --trace on --video on --output .e2e/proof/<change>`.
 Live MCP sessions use the same fixture, including seeded Run attention and Human answers.
 

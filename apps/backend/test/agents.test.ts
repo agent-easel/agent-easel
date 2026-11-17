@@ -254,7 +254,10 @@ it("the Studio snapshot answers from saved definitions without calling T3", asyn
   );
 
   // Assert
-  expect(snapshot).toStrictEqual({ _tag: "snapshot", studio: { agents: [agent], flows: [] } });
+  expect(snapshot).toStrictEqual({
+    _tag: "snapshot",
+    studio: { agents: [agent], flows: [], triggers: [] },
+  });
   expect(t3.capabilityReads).toBe(capabilityReads);
 });
 

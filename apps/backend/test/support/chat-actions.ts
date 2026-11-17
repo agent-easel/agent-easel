@@ -12,6 +12,7 @@ import {
   type CreatedMessage,
   type InteractionAnswer,
 } from "./controlled-discord.ts";
+import { holdLaunchInspection } from "./controlled-t3.ts";
 import { preparedService } from "./prepared-runner.ts";
 import {
   humanReviewFlow,
@@ -189,14 +190,7 @@ export async function pendingStart(
   customId: string,
   options: Parameters<typeof clicked>[4] = {},
 ) {
-  let release = () => {};
-  let entered = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
-  const inspecting = new Promise<void>((resolve) => (entered = resolve));
-  world.t3.beforeLaunchInspection = async () => {
-    entered();
-    await held;
-  };
+  const { inspecting, release } = holdLaunchInspection(world.t3);
   const answer = clicked(world.discord, customId, "610000000000000090", 1, options);
   await inspecting;
   return { answer, release };

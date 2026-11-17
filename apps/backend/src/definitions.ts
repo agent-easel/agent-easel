@@ -943,7 +943,7 @@ export const makeDefinitions = (
       },
     };
     /** Both lists from one read transaction, so every Flow's readiness matches the Agents read with it. */
-    const readStudio = (): Effect.Effect<Result<StudioDefinitions>, unknown> =>
+    const readStudio = (): Effect.Effect<Result<Omit<StudioDefinitions, "triggers">>, unknown> =>
       transaction(
         Effect.gen(function* () {
           const agents = yield* readCurrentAgents(sql);

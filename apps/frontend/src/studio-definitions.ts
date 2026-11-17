@@ -10,6 +10,7 @@ import type {
   LaunchChoices,
   OperationError,
   StudioDefinitions as SavedDefinitions,
+  TriggerDefinition,
 } from "@t3-factory/contracts";
 import { api, ApiError } from "./api.ts";
 import type { LiveOwner, LiveScopeView } from "./live/owner.ts";
@@ -27,6 +28,14 @@ export type StudioDefinitionsOperations = Pick<
   | "updateAgent"
   | "duplicateAgent"
   | "removeAgent"
+  | "createTrigger"
+  | "getTrigger"
+  | "updateTrigger"
+  | "setTriggerEnabled"
+  | "runTrigger"
+  | "previewNewTrigger"
+  | "previewTrigger"
+  | "removeTrigger"
   | "getAgent"
   | "changeFlowOwner"
   | "changeAgentOwner"
@@ -45,13 +54,15 @@ export interface StudioRead<V> {
 export interface StudioDefinitionsSnapshot {
   readonly flows: StudioRead<readonly FlowDraft[]>;
   readonly agents: StudioRead<readonly AgentDefinition[]>;
+  readonly triggers: StudioRead<readonly TriggerDefinition[]>;
   /** The Project catalog that labels owners and offers owner targets. */
   readonly projects: StudioRead<readonly FactoryProject[]>;
   /** The owner filter both lists share; it starts at All and never follows the Run composer. */
   readonly filter: StudioOwnerFilter;
 }
 
-type StudioList = "flows" | "agents";
+type StudioList = "flows" | "agents" | "triggers";
+const studioLists = ["flows", "agents", "triggers"] as const satisfies readonly StudioList[];
 
 /** The window's live owner, as Studio holds its scope. */
 type StudioLive = Pick<LiveOwner, "acquire" | "view" | "subscribe">;
@@ -62,7 +73,7 @@ const sameRead = <V>(a: StudioRead<V>, b: StudioRead<V>) =>
   a.value === b.value && a.synchronized === b.synchronized && a.error === b.error;
 
 /**
- * The saved Flows and saved Agents of one Studio session. The server delivers both lists through
+ * The saved Flows, Agents and Triggers of one Studio session. The server delivers the lists through
  * the window's Studio scope; while Studio is open its hold gates mutations like every other
  * gating scope. HTTP answers never mark the live scope synchronized.
  */
@@ -73,36 +84,40 @@ export function createStudioDefinitions(
   let snapshot: StudioDefinitionsSnapshot = {
     flows: unread,
     agents: unread,
+    triggers: unread,
     projects: unread,
     filter: { kind: "all" },
   };
   // A Create reply may bridge only its first delivery, never a later removal or navigation.
-  const observed = { flows: new Set<string>(), agents: new Set<string>() };
+  const observed = {
+    flows: new Set<string>(),
+    agents: new Set<string>(),
+    triggers: new Set<string>(),
+  };
   const listeners = new Set<() => void>();
 
   /** Publishes changed facts; an unchanged list keeps its identity. */
   function update(change: Partial<StudioDefinitionsSnapshot>) {
-    const flows =
-      change.flows && !sameRead(change.flows, snapshot.flows) ? change.flows : snapshot.flows;
-    const agents =
-      change.agents && !sameRead(change.agents, snapshot.agents) ? change.agents : snapshot.agents;
-    if (flows.synchronized && agents.synchronized) {
-      flows.value?.forEach((flow) => observed.flows.add(flow.id));
-      agents.value?.forEach((agent) => observed.agents.add(agent.id));
-    }
+    const pick = <K extends StudioList>(list: K): StudioDefinitionsSnapshot[K] => {
+      const read = change[list];
+      return read && !sameRead<unknown>(read, snapshot[list]) ? read : snapshot[list];
+    };
+    const lists = { flows: pick("flows"), agents: pick("agents"), triggers: pick("triggers") };
+    if (studioLists.every((list) => lists[list].synchronized))
+      for (const list of studioLists)
+        lists[list].value?.forEach(({ id }) => observed[list].add(id));
     const projects =
       change.projects && !sameRead(change.projects, snapshot.projects)
         ? change.projects
         : snapshot.projects;
     const filter = change.filter ?? snapshot.filter;
     if (
-      flows === snapshot.flows &&
-      agents === snapshot.agents &&
+      studioLists.every((list) => lists[list] === snapshot[list]) &&
       projects === snapshot.projects &&
       filter === snapshot.filter
     )
       return;
-    snapshot = { flows, agents, projects, filter };
+    snapshot = { ...lists, projects, filter };
     listeners.forEach((notify) => notify());
   }
 
@@ -155,6 +170,11 @@ export function createStudioDefinitions(
           synchronized: view.synchronized,
           error,
         },
+        triggers: {
+          value: view.value?.triggers ?? snapshot.triggers.value,
+          synchronized: view.synchronized,
+          error,
+        },
       });
     }
     const unsubscribe = live.subscribe(apply);
@@ -200,6 +220,14 @@ export function createStudioDefinitions(
     updateAgent: operations.updateAgent,
     duplicateAgent: operations.duplicateAgent,
     removeAgent: operations.removeAgent,
+    createTrigger: operations.createTrigger,
+    getTrigger: operations.getTrigger,
+    updateTrigger: operations.updateTrigger,
+    setTriggerEnabled: operations.setTriggerEnabled,
+    runTrigger: operations.runTrigger,
+    previewNewTrigger: operations.previewNewTrigger,
+    previewTrigger: operations.previewTrigger,
+    removeTrigger: operations.removeTrigger,
     getAgent: operations.getAgent,
     changeFlowOwner: operations.changeFlowOwner,
     changeAgentOwner: operations.changeAgentOwner,

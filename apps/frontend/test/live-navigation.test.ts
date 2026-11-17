@@ -14,6 +14,7 @@ it("navigation changes replace rows, remove archived Runs and retain backend cre
     creationKey: "first",
     lastActivityAt: "2026-11-07T12:00:00.000Z",
     flowName: "Flow",
+    origin: null,
     repositories: [],
     project: {
       id: "project",

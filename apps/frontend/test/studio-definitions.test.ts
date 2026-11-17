@@ -22,17 +22,20 @@ import {
   studioSnapshot,
 } from "./support/studio-definitions.ts";
 
-it("both lists come from one Studio subscription", () => {
+it("every list comes from one Studio subscription", () => {
   // Arrange
   const { definitions, studio, socket } = liveStudio();
 
   // Act
-  studio.message(studioSnapshot({ agents: [savedAgent()], flows: [savedFlow("Live")] }));
+  studio.message(
+    studioSnapshot({ agents: [savedAgent()], flows: [savedFlow("Live")], triggers: [] }),
+  );
 
   // Assert
   expect(definitions.getSnapshot()).toStrictEqual({
     flows: { value: [savedFlow("Live")], synchronized: true, error: null },
     agents: { value: [savedAgent()], synchronized: true, error: null },
+    triggers: { value: [], synchronized: true, error: null },
     projects: { value: null, synchronized: false, error: null },
     filter: { kind: "all" },
   });
@@ -44,7 +47,11 @@ it("a committed change updates both lists in one publication, keeping untouched 
   const untouched = savedAgent({ id: "untouched", updatedAt: "2026-11-09T08:00:00.000Z" });
   const edited = savedAgent({ id: "edited", updatedAt: "2026-11-08T08:00:00.000Z" });
   const flow = savedFlow("Review");
-  const { definitions, studio } = deliveredStudio({ agents: [untouched, edited], flows: [flow] });
+  const { definitions, studio } = deliveredStudio({
+    agents: [untouched, edited],
+    flows: [flow],
+    triggers: [],
+  });
   const notify = vi.fn();
   definitions.subscribe(notify);
   const saved = { ...edited, revision: 4, updatedAt: "2026-11-11T08:00:00.000Z" };
@@ -101,6 +108,7 @@ it("a refused subscription keeps the lists unsynchronized with its error", () =>
   const { definitions, studio, live } = deliveredStudio({
     agents: [savedAgent()],
     flows: [savedFlow("Live")],
+    triggers: [],
   });
 
   // Act

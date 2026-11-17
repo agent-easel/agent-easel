@@ -40,8 +40,11 @@ export async function saveFlow(
 const accessibilityReview = (agentId: string, x: number) =>
   agentBlock("accessibility", "Accessibility review", agentId, { x, y: 320 });
 
+/** The incomplete Flow the seed leaves as a draft; the error Trigger starts in it. */
+export const draftFlowName = "Demo · Release checklist (draft)";
+
 export async function createDemoFlows(factory: Factory, agents: DemoAgents): Promise<DemoFlows> {
-  requireSuccess(await factory.createFlow({ name: "Demo · Release checklist (draft)" }));
+  requireSuccess(await factory.createFlow({ name: draftFlowName }));
   const worker = agentBlock("worker", "Implement change", agents.worker, { x: 320, y: 180 });
   const simple = await saveFlow(factory, "Demo · Focused change", {
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),

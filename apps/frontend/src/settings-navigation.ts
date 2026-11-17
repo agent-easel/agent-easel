@@ -1,4 +1,5 @@
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
+import type { TriggerKind } from "@t3-factory/contracts";
 
 const settingsTabs = [
   "connection",
@@ -20,7 +21,9 @@ function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
 export type StudioSelection =
   | { tab: "flows"; flowId?: string }
   /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
-  | { tab: "agents"; agentId?: string; fromFlow?: string };
+  | { tab: "agents"; agentId?: string; fromFlow?: string }
+  /** `triggerId: "new"` picks the type; adding `kind` opens that type's create form. */
+  | { tab: "triggers"; triggerId?: string; kind?: TriggerKind };
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
 
 function searchRecord(value: unknown): Record<string, unknown> {
@@ -39,6 +42,12 @@ function studioSelection(value: unknown): StudioSelection | undefined {
       ...(typeof selection.agentId === "string" ? { agentId: selection.agentId } : {}),
       ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
     };
+  if (selection.tab === "triggers") {
+    if (typeof selection.triggerId !== "string") return { tab: "triggers" };
+    return selection.triggerId === "new" && selection.kind === "github_issues"
+      ? { tab: "triggers", triggerId: "new", kind: "github_issues" }
+      : { tab: "triggers", triggerId: selection.triggerId };
+  }
   return undefined;
 }
 export function validateAppSearch(search: Record<string, unknown>): AppSearch {
@@ -53,9 +62,14 @@ export function studioMask(selection: StudioSelection) {
     return selection.flowId
       ? { to: "/studio/flows/$flowId" as const, params: { flowId: selection.flowId } }
       : { to: "/studio/flows" as const };
-  return selection.agentId
-    ? { to: "/studio/agents/$agentId" as const, params: { agentId: selection.agentId } }
-    : { to: "/studio/agents" as const };
+  if (selection.tab === "agents")
+    return selection.agentId
+      ? { to: "/studio/agents/$agentId" as const, params: { agentId: selection.agentId } }
+      : { to: "/studio/agents" as const };
+  if (selection.kind) return { to: "/studio/triggers/new/github-issues" as const };
+  return selection.triggerId
+    ? { to: "/studio/triggers/$triggerId" as const, params: { triggerId: selection.triggerId } }
+    : { to: "/studio/triggers" as const };
 }
 export function settingsMask(selection: SettingsSelection) {
   return {
@@ -122,7 +136,12 @@ export function useOpenStudio() {
   const studioOpen = !!useStudio();
   const navigate = useStudioNavigation();
   return (selection: StudioSelection) => {
-    const definition = selection.tab === "flows" ? selection.flowId : selection.agentId;
+    const definition =
+      selection.tab === "flows"
+        ? selection.flowId
+        : selection.tab === "agents"
+          ? selection.agentId
+          : selection.triggerId;
     if (studioOpen && !definition) return;
     void navigate(selection);
   };

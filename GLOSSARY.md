@@ -73,8 +73,8 @@ The durable record of one committed import: the client's request id, a versioned
 _Avoid_: import history, provenance.
 
 **Studio**:
-The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike. It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents or Flows.
-_Avoid_: Settings as the Agent editor; a Flows destination in the Run sidebar.
+The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **AUTHOR** group), and Triggers (its **AUTOMATE** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
+_Avoid_: Settings as the Agent editor or Trigger location; a Flows destination in the Run sidebar.
 
 **Factory server**:
 The installation that owns one Factory data home, Runner and T3 connection. Exactly one backend may own a home; other devices operate it as approved clients.
@@ -357,6 +357,18 @@ connects that new execution to the idle run it assesses and to the missing-repor
 obligation pending for that run, if any. Successful recovery settles the obligation
 without fabricating an earlier report or erasing an engine failure.
 
+**Trigger**:
+A saved rule that starts Runs without someone composing them. A **GitHub Issues** Trigger, the only kind, belongs to one host-local Project and that Project's confirmed GitHub repository, and starts its Flow once for each open issue matching its GitHub issue query, oldest first, up to its **Max active Runs**, on a schedule or when **Run** is chosen. Each check reads GitHub with the host's `gh` login, involves no model and never writes to GitHub; each Run starts through the same Start as New Run with a fixed initial prompt Factory builds. Its kind is fixed at creation. A Trigger keeps only its latest check and current problem, never an issue list or check history; a problem puts it in **Error** without disabling it. See [Starting from a Trigger](docs/runs.md#starting-from-a-trigger).
+_Avoid_: automation, webhook, schedule as the entity's name; treating a Trigger as a tracker claim or as Factory writing to GitHub.
+
+**Ready label**:
+The single positive `label:` qualifier of a GitHub Issues Trigger's query (by default `factory:ready`), which marks an issue as ready to start. The Trigger starts an issue once per labelling: while the issue keeps the label it does not start again, and adding the label again starts it again. The worker's claim removes it, as the Run's start data names it; Factory itself never removes it.
+_Avoid_: trigger label, start label; treating other query labels as the ready label.
+
+**Run origin**:
+The immutable record of what started a Trigger-started Run, written when Start accepts the Run: the Trigger's name and id, the repository, the issue's number, id and URL, and its title as captured at Start. The Run shows it as **Started from**. It survives renaming and removing the Trigger, is not a claim and never reflects live issue state. Runs started any other way have none.
+_Avoid_: Run–issue link or issue association in general; originating thread, which is Chat control's Discord thread.
+
 **Chat control**:
 The host-administered capability that lets explicitly allowed Discord users control Factory by
 mentioning or replying to Factory's bot in allowed channels and their threads. Factory, not the
@@ -372,7 +384,7 @@ accepts the Run. It is where Factory reports on that Run, not ownership: any all
 on any Run in a permitted Project, and an action's receipt goes to the thread it was requested in. Runs
 started any other way have none, and reading or acting on a Run never adds one. See
 [Chat control](docs/chat-control.md#originating-thread).
-_Avoid_: Run owner; assigning an origin to a Run read or acted on from chat.
+_Avoid_: Run owner; assigning an originating thread to a Run read or acted on from chat; Run origin, which records a Trigger Start.
 
 **Status card**:
 The one Discord message Factory maintains in a chat-started Run's originating thread and edits from the

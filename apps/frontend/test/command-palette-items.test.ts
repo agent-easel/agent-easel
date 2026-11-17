@@ -87,7 +87,11 @@ it("a Studio scope that is resynchronizing keeps its cached items and is shown a
   // Arrange
   const agent = { id: "agent", name: "Reviewer" } as AgentDefinition;
   const navigation = { value: [], synchronized: true, error: null };
-  const studio = { value: { agents: [agent], flows: [] }, synchronized: false, error: null };
+  const studio = {
+    value: { agents: [agent], flows: [], triggers: [] },
+    synchronized: false,
+    error: null,
+  };
 
   // Act
   const catalog = paletteCatalog(navigation, studio);

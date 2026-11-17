@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
+import type { ControlledGitHub } from "../../../apps/backend/test/support/controlled-github.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
@@ -47,7 +48,9 @@ function requireCurrentUiBuild() {
  * and the seeded development world. `doubles` are the external services fixture modules control.
  */
 export async function startHost(
-  doubles: Pick<ServerOptions, "discordApiUrl" | "applicationUpdates">,
+  doubles: Pick<ServerOptions, "discordApiUrl" | "applicationUpdates"> & {
+    github: ControlledGitHub;
+  },
 ) {
   requireCurrentUiBuild();
   const home = await mkdtemp(join(tmpdir(), "factory-e2e-"));
@@ -76,7 +79,7 @@ export async function startHost(
   );
   const factory = server.factory;
   factory.setRuntimeBackendUrl(`http://127.0.0.1:${server.address.port}`);
-  const world = await seedDevelopment(factory, t3, home);
+  const world = await seedDevelopment(factory, t3, doubles.github, home);
   t3.approve();
   let advancing: Promise<void> | undefined;
   const timer = setInterval(() => {

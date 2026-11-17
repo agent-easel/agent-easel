@@ -29,7 +29,12 @@ import {
 import * as Effect from "effect/Effect";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
-import type { RunStore, StartPlan, StartWorkspace } from "./run-store/run-store.ts";
+import type {
+  AcceptanceCommit,
+  RunStore,
+  StartPlan,
+  StartWorkspace,
+} from "./run-store/run-store.ts";
 import type { RunnerLifecycle, RunnerOptions } from "./runner-types.ts";
 import { catalogProject } from "./runner-utils.ts";
 import { projectUnavailableIssue } from "../projects.ts";
@@ -41,8 +46,12 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
   readonly check: Effect.Effect<Result<undefined>, unknown>;
-  /** Local state only: this runs inside the Run acceptance transaction. */
-  readonly commit: Effect.Effect<Result<undefined>, unknown>;
+  /**
+   * Local state only: this runs inside the Run acceptance transaction after the accepted Run's
+   * records are written, so its own writes may reference `runId`. A refusal rolls back the whole
+   * acceptance, including those writes.
+   */
+  readonly commit: AcceptanceCommit;
 }
 
 /** Request identity and choices; the prompt itself is validated by `validateStartPrompt`. */
@@ -376,7 +385,7 @@ export function openRunnerStart(
       { concurrency: "unbounded" },
     );
   }
-  /** Before Start: connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
+  /** Before Start: the connection and catalog rechecked, then every launch precondition. */
   function startPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
@@ -384,6 +393,27 @@ export function openRunnerStart(
     return Effect.gen(function* () {
       yield* ops.recheckConnection();
       yield* ops.recheckProjects();
+      return yield* launchPreconditions(input, imageCount);
+    });
+  }
+  /**
+   * What Start's preflight refuses for every prompt to this Project and Flow, without Start's
+   * connection and catalog recheck first. It accepts nothing, so a caller can learn of a launch
+   * blocker without attempting a Start.
+   */
+  function startBlockers(projectId: string, flowId: string) {
+    return launchPreconditions({ projectId, flowId }, 0).pipe(
+      Effect.map((checked): Result<undefined> =>
+        checked.ok ? { ok: true, value: undefined } : checked,
+      ),
+    );
+  }
+  /** Connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
+  function launchPreconditions(
+    input: Pick<StartRunInput, "projectId" | "flowId">,
+    imageCount: number,
+  ) {
+    return Effect.gen(function* () {
       const [connection, projects, savedFlow] = yield* Effect.all(
         [ops.getConnection(), ops.listProjects(), ops.getFlow(input.flowId)],
         { concurrency: "unbounded" },
@@ -507,5 +537,5 @@ export function openRunnerStart(
         : { ok: true, value: agents };
     });
   }
-  return { start, startText };
+  return { start, startText, startBlockers };
 }

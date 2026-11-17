@@ -12,12 +12,14 @@ With development stopped, `pnpm db:reset` restores the seeded baseline, discardi
 after reset. Reset leaves browser-stored state untouched: Run drafts and their images, pending Starts, panel widths and shortcut preferences.
 
 Ordinary restarts retain current-contract demo state. Contract-removal migrations can delete open Runs (most recently when Block ids replaced native call correlation), so reset an upgraded older demo home
-to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's demo reporting target needing **Repair** or a reset.
+to restore the complete baseline. An upgrade that changes the `$factory-block` skill leaves a retained home's demo reporting target needing **Repair** or a reset. A home seeded
+before Triggers has no saved GitHub stand-in, so startup asks for `pnpm db:reset`.
 
 ## Run catalog
 
-The seed gives a compact set of inspectable states, not every failure or race. Besides these Runs it creates the Atlas demo project with saved Agents, ready and incomplete Flows, and approved and revoked
-demo clients. Seeded Run titles start with `Demo · `.
+The seed gives a compact set of inspectable states, not every failure or race. Besides these Runs it creates the Atlas demo project with saved Agents, ready and incomplete Flows, approved and revoked
+demo clients, and four Triggers on the Atlas repository: a healthy one, one in Error (its Flow is the incomplete draft), a disabled one and a manual-only one with its schedule off. Seeded Run
+titles start with `Demo · `, except the Run the healthy Trigger started, which is titled after its GitHub issue and shows its Run origin; it is not a catalog entry.
 
 The list is generated from the seed list in `scripts/dev/seed-scenarios.ts`, in seed order. Do not edit it by hand: run `pnpm scenarios:catalog` after changing that list. `pnpm check:scenarios`, part
 of the [quality gate](quality-gates.md), rejects stale rows and missing or malformed markers.
@@ -64,6 +66,8 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
 - A repository added through **Add repository** gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed.
 - The demo does not simulate connection loss, TLS or revocation; controlled transport and UI fixtures cover those boundaries.
+- Triggers read a GitHub stand-in, never the host's `gh`. Its repository and issues are saved in the demo home, so scheduled checks after a restart keep each Trigger's health. It proves no live
+  GitHub access, search or labelling.
 - Fresh or reset homes install a disposable reporting target for the seeded Agents' simulated provider, pointing at the demo backend's own Factory MCP URL, and the `$factory-block` skill before creating Runs; real harness homes are never
   configured. The simulator also offers a second provider whose reporting is not installed and which no seeded Agent uses.
 

@@ -49,6 +49,7 @@ type ReleasedRun = Omit<
   | "coordinationActions"
   | "lifecycle"
   | "repositories"
+  | "origin"
 > & {
   snapshot: ReleasedSnapshot;
   blocks: readonly Omit<CurrentRun["blocks"][number], "workingMessage">[];
@@ -152,6 +153,8 @@ export function currentRun(
     titleProvenance: "legacy",
     // Migration 080 adds Generate Run titles off and gives released Runs no title generation.
     titleGeneration: null,
+    // No Trigger started a released Run.
+    origin: null,
     lifecycle,
     // Released Runs had text-only prompts.
     segments: [{ type: "text", text: run.input }],

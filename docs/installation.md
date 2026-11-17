@@ -70,7 +70,7 @@ the API only and the frontend gets Fast Refresh. Configuration errors fail start
 ### Reset and seed
 
 Stop the dev command, then `pnpm db:reset` (and `pnpm dev`, or use the same explicit `FACTORY_DEV_HOME` for both; add `--tailscale` as needed). Demo-only files in the home are `demo-owner.json`
-(ownership and seed completion), `demo-engine.json` (simulated external state), `demo-process` with its permanent `.runner.lock`, and `demo-repositories/`. A missing or damaged engine snapshot needs a reset, and a damaged or mismatched ownership marker needs a new empty home.
+(ownership and seed completion), `demo-engine.json` (simulated external state), `demo-github.json` (the GitHub stand-in Triggers read), `demo-process` with its permanent `.runner.lock`, and `demo-repositories/`. A missing or damaged engine or GitHub snapshot needs a reset, and a damaged or mismatched ownership marker needs a new empty home.
 
 Reset recreates the demo database and simulated state and seeds the baseline, preserving `config.json`, credentials, unrelated files, demo repositories and lock files; user edits and Run history are
 discarded and no production data is copied. It refuses an active owner and any home that is inside the checkout or aliases `~/.t3-factory` or `FACTORY_HOME` (including parents, children and resolved
@@ -114,9 +114,12 @@ do not need them and neither runs on its own.
 - `setup-factory` configures a repository's tracker claim, once per repository. It
   explores the repository and its tracker, proposes an "in progress" label (default
   `factory:in-progress`), shows a draft of every change and writes only after you
-  confirm: it adds the label to the claim operation in the repository's tracker
-  document and creates the label in the tracker when it is missing. Factory itself
-  never writes to the tracker; workers perform the claim.
+  confirm. It makes the claim operation in the repository's tracker document remove the
+  [ready label](../GLOSSARY.md#ready-label) named in the Run's start data (`factory:ready`
+  when it names none) and add the "in progress" label, documents the ready label, and
+  creates `factory:ready` and the "in progress" label in the tracker when they are missing.
+  It creates no [Trigger](studio.md#triggers). Factory itself never writes to the tracker;
+  workers perform the claim, which is what stops a Trigger from starting the issue again.
 
 The optional skills share one installation status, shown separately from reporting:
 the least current state among their copies. It never blocks reporting readiness or
@@ -134,6 +137,21 @@ the exact skill text of the running Factory, so an update that changes an option
 as outdated until **Repair** or **Reinstall** replaces them. When an optional skill is
 missing or outdated, use **Reinstall** (or **Repair** when reporting also needs
 attention), then start a fresh harness session so it discovers the skill.
+
+## GitHub CLI for Triggers
+
+[Triggers](studio.md#triggers) read GitHub with the GitHub CLI (`gh`) on the Factory host, signed in as the user Factory
+runs as; Factory stores no GitHub token and never writes to GitHub. Install `gh` on the host and run
+`gh auth login --hostname <host>` there for each GitHub host your Projects use. These are host steps: an approved
+client can see the problem in Studio but cannot repair it.
+
+Factory looks for `gh` on every call, first on the `PATH` it inherited, then in `/opt/homebrew/bin` and
+`/usr/local/bin`, so a Factory opened from Finder, which inherits a minimal `PATH`, still finds a Homebrew install.
+After installing `gh` anywhere else, restart Factory from an environment whose `PATH` includes it. Each call runs `gh`
+directly, without a shell, with fixed arguments, a 30-second limit and an 8 MiB output limit; a failure, timeout or
+oversized answer fails the whole check rather than reading as no issues. A Project's folder must have a remote `gh`
+recognizes as a GitHub repository. Development demo homes and UI journeys use a GitHub stand-in and never run the
+host's `gh` ([Development scenarios](dev-scenarios.md#simulator-support-limits)).
 
 ## UI journeys
 
@@ -212,6 +230,10 @@ races, remote environments and remote-device OAuth remain unverified live, and e
   Title generation is exercised only against the controlled T3: a live title model's launch, its use of
   `factory_set_run_title` and whether it finishes within 30 seconds are unverified.
 - Archive closes Factory handoffs and asks T3 once to interrupt each worker thread without confirming termination; a backend crash right after archiving can leave threads running. It does not undo edits or prohibit later direct T3 chats. Backend exit is not Archive. Archived Runs stay archived.
+- Triggers are exercised against a controlled GitHub adapter and a fake `gh` executable. Live GitHub search syntax,
+  `labeled` event semantics, repository renames and a signed-in `gh` reached by a packaged Factory opened from Finder
+  are not established by those tests and need live qualification. GitHub search ignores most unknown syntax and
+  returns no results instead of an error, so a mistyped qualifier can match nothing without a problem being shown.
 - No conversation archive, automatic failed-work retry, hosted multi-user service or team accounts. Remote Factory clients need approved, revocable credentials over TLS and the plain HTTP listener accepts only
   loopback peers ([client access](desktop-and-clients.md)).
 

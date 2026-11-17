@@ -38,6 +38,29 @@ it("restored demo keeps a worker waiting on its running subagents as normal prog
   expect(runs.value).toHaveLength(count);
 });
 
+it("a restored demo's healthy Trigger checks its saved GitHub again without an Error or a second Run", async (c) => {
+  // Arrange
+  const { f, triggerStartedRun } = await restoredDevelopmentDemo(c);
+  const triggers = await f.listTriggers();
+  assert(triggers.ok);
+  const healthy = triggers.value.find(
+    (trigger) => trigger.name === "Demo · Implement ready issues",
+  )!;
+
+  // Act
+  const checked = await f.runTrigger(healthy.id);
+
+  // Assert
+  assert(checked.ok);
+  const navigation = await f.listRunNavigation();
+  assert(navigation.ok);
+  expect(checked.value.error).toBeNull();
+  expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 0 });
+  expect(navigation.value.filter((run) => run.origin).map((run) => run.id)).toStrictEqual([
+    triggerStartedRun,
+  ]);
+});
+
 it("a Stop the demo simulator holds stays held after the simulator restarts", async (c) => {
   // Arrange
   const { processHome } = await factoryHarness(c);

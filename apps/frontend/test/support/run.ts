@@ -63,6 +63,7 @@ const execution = (bindingId: string): RunDetail["executions"][number] => ({
 export function runDetail(): RunDetail {
   return {
     id: "run",
+    origin: null,
     number: 1,
     title: "Run",
     titleProvenance: "automatic",
@@ -128,6 +129,7 @@ export function runEntry(): RunNavigationEntry {
     creationKey: "run",
     lastActivityAt: "2026-11-08T00:00:00Z",
     flowName: "Flow",
+    origin: null,
     repositories: [],
     project: {
       id: "project",

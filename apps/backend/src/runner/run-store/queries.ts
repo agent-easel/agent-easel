@@ -7,6 +7,7 @@ import { readRunCoordinator } from "./run-coordinator.ts";
 import { threadHref } from "../../thread-link.ts";
 import { currentFlowRevisionNumber } from "../../flow-revisions.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
+import { readRunOrigins } from "./run-origins.ts";
 import { recoveryRows } from "./recovery-read.ts";
 import { waitArrival, type WaitArrivalRow } from "./waits.ts";
 import { workerProvenance } from "./handoffs.ts";
@@ -304,6 +305,7 @@ export function openRunQueries(database: RunnerDatabase) {
           ok: true as const,
           value: {
             id: runRow.id,
+            origin: (yield* readRunOrigins(sql, id)).get(id) ?? null,
             number: runRow.number,
             title: runRow.title,
             titleProvenance: runRow.title_provenance,

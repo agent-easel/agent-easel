@@ -1,0 +1,37 @@
+import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { openFactory } from "../../src/index.ts";
+import { ControlledGitHub } from "./controlled-github.ts";
+import { ControlledT3 } from "./controlled-t3.ts";
+
+/**
+ * Owns the database, checks the Trigger and dies at `stage`: `preflight` while the check's Start
+ * is in T3 preflight, after its guard was written; `accepted` when the accepted Run launches its
+ * worker, before the check records its outcome. Exits 86 at the crash.
+ */
+const [databasePath, fixturePath, stage, triggerId] = process.argv.slice(2);
+const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
+const crash = async () => process.exit(86);
+const t3 = new ControlledT3();
+t3.approve();
+t3.projects = fixture.projects;
+// The check's own launch-blocker read inspects T3 once before its Start's preflight does.
+let inspections = 0;
+if (stage === "preflight")
+  t3.beforeLaunchInspection = async () => {
+    inspections += 1;
+    if (inspections === 2) await crash();
+  };
+else t3.beforeLaunch = crash;
+const github = new ControlledGitHub();
+for (const [root, repository] of fixture.repositories) github.repositories.set(root, repository);
+github.issues.push(...fixture.issues);
+const f = await openFactory({
+  databasePath: databasePath!,
+  reportingStateDirectory: join(dirname(databasePath!), "reporting-state"),
+  t3,
+  github,
+  connectionRetryMs: 60_000,
+});
+await f.runTrigger(triggerId!);
+await f.reconcileRuns();

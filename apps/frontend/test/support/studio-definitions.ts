@@ -65,6 +65,14 @@ export function studioFactory(): Operations {
       savedAgent({ id: "copy", name: "Reviewer copy" }),
     ),
     removeAgent: vi.fn<StudioDefinitionsOperations["removeAgent"]>(async () => undefined),
+    createTrigger: vi.fn<StudioDefinitionsOperations["createTrigger"]>(),
+    getTrigger: vi.fn<StudioDefinitionsOperations["getTrigger"]>(),
+    updateTrigger: vi.fn<StudioDefinitionsOperations["updateTrigger"]>(),
+    setTriggerEnabled: vi.fn<StudioDefinitionsOperations["setTriggerEnabled"]>(),
+    runTrigger: vi.fn<StudioDefinitionsOperations["runTrigger"]>(),
+    previewNewTrigger: vi.fn<StudioDefinitionsOperations["previewNewTrigger"]>(),
+    previewTrigger: vi.fn<StudioDefinitionsOperations["previewTrigger"]>(),
+    removeTrigger: vi.fn<StudioDefinitionsOperations["removeTrigger"]>(async () => undefined),
     getAgent: vi.fn<StudioDefinitionsOperations["getAgent"]>(async (id) => savedAgent({ id })),
     changeFlowOwner: vi.fn<StudioDefinitionsOperations["changeFlowOwner"]>(
       async (id, { projectId }) => savedFlow("Moved", { id, projectId }),
@@ -146,9 +154,12 @@ export const studioChanged = (
 ) => envelope<StudioLiveMessage>([{ _tag: "changed", ...change }]);
 
 /** Studio is open live and its first snapshot of `studio` applied. */
-export function deliveredStudio(studio: SavedDefinitions) {
+export function deliveredStudio({
+  triggers = [],
+  ...lists
+}: Pick<SavedDefinitions, "flows" | "agents"> & Partial<Pick<SavedDefinitions, "triggers">>) {
   const setup = liveStudio();
-  setup.studio.message(studioSnapshot(studio));
+  setup.studio.message(studioSnapshot({ ...lists, triggers }));
   return setup;
 }
 

@@ -93,6 +93,18 @@ and restricted OAuth credentials live outside project repositories.
   button, so its button can be shown disabled once unusable; existing proposals have none and are never edited.
   Migration `100` rebuilds the record of announced attention matters to admit Condition integrity Problems,
   keeping every row unchanged.
+- [Triggers](runs.md#starting-from-a-trigger) are current definitions in SQLite, without revision history: the shared
+  settings with a revision that saves compare, the kind (fixed at creation by the schema) and the GitHub Issues settings
+  (the confirmed repository's host, name and node id, the query and its ready label), plus the persisted next-check
+  deadline, the latest check with the issues that did not start, and the current problem with when it was first and
+  last seen and how often. Each check replaces the latest check. A hidden admission guard per Trigger and issue holds
+  the labelling it started, the Start request id, the frozen Start payload and, once accepted, the Run; it is written
+  before Start is called and gains its Run in the acceptance transaction, which is how recovery tells an accepted Start
+  from one that never was. A Trigger-started Run's origin is written in the same transaction; it copies the Trigger's
+  name and id instead of referencing the Trigger and can be neither updated nor deleted, so it outlives renames and
+  removal. Removing a Trigger deletes its settings, check, problem and guards. The table names carry a `run_` prefix
+  so they do not read as SQL triggers. Migration `106` adds these tables and changes no existing row; existing Runs
+  have no origin.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.
 - A Block reuses its worker conversation across visits. Exact execution identity, report
@@ -157,8 +169,8 @@ commands and other reads remain HTTP operations. A window holds one connection-s
 one theme-color subscription (it never disables mutations or shows synchronizing), one view
 subscription carrying navigation and its open Runs, and, while the composer is shown, one
 launch-choices subscription carrying the Project catalog and Flows with their readiness.
-Servers also serve a Studio subscription carrying every current saved Agent and every
-current Flow with its readiness; Agent usage is derived from those
+Servers also serve a Studio subscription carrying every current saved Agent, every
+current Flow with its readiness and every Trigger with its latest check and problem; Agent usage is derived from those
 Flows. A window holds it for its lifetime, because Agent reporting state and the command palette
 read it outside Studio; those reads never gate mutations or show synchronizing, like theme colors.
 While Studio is open its hold gates the window's mutations like every other gating scope, so Studio
@@ -256,8 +268,9 @@ screen with its draft intact; direct links fall back to `/runs/new` in a fresh s
 Settings sections open at `/settings/<section>`: `connection`, `agent-reporting`, `devices`,
 `run-titles`, `run-images`, `appearance`, `keyboard` and `desktop`. A removed or unknown
 section path opens T3 connection; removed paths have no redirects.
-[Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md) document navigation and
-unsaved-change guards. Direct URLs must also work on reload.
+Studio destinations open at `/studio/flows`, `/studio/agents` and `/studio/triggers` with their nested editor routes.
+[Studio](studio.md#shell) and [Keyboard shortcuts](keyboard-shortcuts.md) document navigation and
+unsaved-change guards. Direct URLs must also work on reload; the server serves the UI for each of these paths.
 
 Browser storage is optional: blocked or malformed storage must leave in-memory preferences
 usable and must not turn a confirmed Start into an unknown outcome. Shortcut schema

@@ -16,6 +16,7 @@ import {
   connectionOperations,
   runOperations,
   chatControlOperations,
+  triggerOperations,
   LIVE_PATH,
   type ProtocolDescriptor,
   type Result,
@@ -125,6 +126,7 @@ function apiRoutes(factory: Factory) {
     ...agentRoutes(factory),
     ...importRoutes(factory),
     ...chatControlRoutes(factory),
+    ...triggerRoutes(factory),
   };
 }
 
@@ -419,6 +421,43 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
   };
 }
 
+/** Every approved client manages Triggers; their bodies carry typed settings only. */
+function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations> {
+  return {
+    getTriggerReadiness: {
+      handle: ({ parameters }) =>
+        answer(() => factory.getTriggerReadiness(parameters.projectId, parameters.flowId)),
+    },
+    listTriggers: { handle: () => answer(() => factory.listTriggers()) },
+    createTrigger: {
+      body: standardBody,
+      handle: ({ input }) => answer(() => factory.createTrigger(input), 201),
+    },
+    getTrigger: { handle: ({ parameters }) => answer(() => factory.getTrigger(parameters.id)) },
+    updateTrigger: {
+      body: standardBody,
+      handle: ({ parameters, input }) => answer(() => factory.updateTrigger(parameters.id, input)),
+    },
+    setTriggerEnabled: {
+      body: standardBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.setTriggerEnabled(parameters.id, input)),
+    },
+    runTrigger: { handle: ({ parameters }) => answer(() => factory.runTrigger(parameters.id)) },
+    previewNewTrigger: {
+      body: standardBody,
+      handle: ({ input }) => answer(() => factory.previewNewTrigger(input)),
+    },
+    previewTrigger: {
+      body: standardBody,
+      handle: ({ parameters, input }) => answer(() => factory.previewTrigger(parameters.id, input)),
+    },
+    removeTrigger: {
+      handle: ({ parameters }) => answer(() => factory.removeTrigger(parameters.id)),
+    },
+  };
+}
+
 function importRoutes(factory: Factory): RouteEntries<typeof definitionImportOperations> {
   return {
     reviewImport: {
@@ -502,7 +541,7 @@ function dispatchApi(
 // Known client routes use the built entry; missing assets must stay 404. Any Settings section
 // path does, so the client opens removed or unknown sections at the default one.
 const clientRoutePattern =
-  /^\/(studio(?:\/(?:flows|agents)(?:\/[^/]+)?)?|flows(?:\/[^/]+)?|runs(?:\/[^/]+)?|settings(?:\/agents(?:\/[^/]+)?|\/chat-control\/(?:model|discord)|\/[^/]+)?)\/?$/;
+  /^\/(studio(?:\/(?:flows|agents)(?:\/[^/]+)?|\/triggers(?:\/new\/github-issues|\/[^/]+)?)?|flows(?:\/[^/]+)?|runs(?:\/[^/]+)?|settings(?:\/agents(?:\/[^/]+)?|\/chat-control\/(?:model|discord)|\/[^/]+)?)\/?$/;
 
 function uiFile(uiDirectory: string, pathname: string): string | undefined {
   const root = resolve(uiDirectory);
@@ -678,6 +717,7 @@ function handleHttpRequestInner(
 export interface ServerOptions {
   readonly uiDirectory?: string | null;
   readonly t3?: FactoryOptions["t3"];
+  readonly github?: FactoryOptions["github"];
   readonly connectionRetryMs?: number;
   readonly reportingStateDirectory?: string;
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
@@ -700,6 +740,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),
     ...(options.t3 ? { t3: options.t3 } : {}),
+    ...(options.github ? { github: options.github } : {}),
     ...(options.connectionRetryMs !== undefined
       ? { connectionRetryMs: options.connectionRetryMs }
       : {}),

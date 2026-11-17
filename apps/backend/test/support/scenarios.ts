@@ -5,6 +5,7 @@ import type {
   AgentExecutionSettings,
   BlockExit,
   CreateAgentInput,
+  CreateTriggerInput,
   FactoryOperations,
   FlowBlock,
   FlowGraph,
@@ -67,6 +68,37 @@ export async function enableRunTitles(
   const enabled = await factory.updateRunTitleSetting({ enabled: true, model });
   if (!enabled.ok) throw new Error(enabled.error.message);
   return enabled.value;
+}
+/** A Trigger the owner saved with `input`. */
+export async function triggerSaved(
+  factory: Pick<FactoryOperations, "createTrigger">,
+  input: CreateTriggerInput,
+) {
+  const saved = await factory.createTrigger(input);
+  if (!saved.ok) throw new Error(saved.error.message);
+  return saved.value.trigger;
+}
+/** A saved Trigger that is enabled, so it checks; it has not checked yet. */
+export async function triggerEnabled(
+  factory: Pick<FactoryOperations, "createTrigger" | "setTriggerEnabled">,
+  input: CreateTriggerInput,
+) {
+  const saved = await triggerSaved(factory, input);
+  const enabled = await factory.setTriggerEnabled(saved.id, {
+    enabled: true,
+    reviewedRevision: saved.revision,
+  });
+  if (!enabled.ok) throw new Error(enabled.error.message);
+  return enabled.value;
+}
+/** The Trigger checked once; it throws unless the check completed. */
+export async function triggerChecked(
+  factory: Pick<FactoryOperations, "runTrigger">,
+  triggerId: string,
+) {
+  const checked = await factory.runTrigger(triggerId);
+  if (!checked.ok) throw new Error(checked.error.message);
+  return checked.value;
 }
 /** A cheap model the controlled catalog offers only beside the Agents' model, so T3 can withdraw
  * it without affecting the Flow. */

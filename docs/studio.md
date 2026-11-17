@@ -1,17 +1,18 @@
 # Studio
 
-Studio is the modal authoring surface for Flows and reusable Agent definitions, each global or owned by one Project ([Ownership](#ownership)). It opens over the current Run or the Run composer and leaves that screen mounted, so closing it returns
-there with its draft intact. Settings holds connection, Agent reporting and keyboard preferences and does not list Agents.
+Studio is the modal authoring surface for Flows and reusable Agent definitions, each global or owned by one Project ([Ownership](#ownership)), and the [Triggers](#triggers) that start Flows automatically. It opens over the current Run or the Run composer and leaves that screen mounted, so closing it returns
+there with its draft intact. Settings holds connection, Agent reporting and keyboard preferences and does not list Agents or Triggers.
 
 ## Shell
 
-Studio is an almost full-window dialog with a Settings-style header (**Studio / Flows** or **Studio / Agents**, an Escape hint and **Back to Runs**) and no logo. The desktop dialog leaves 48 px above
+Studio is an almost full-window dialog with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo. The desktop dialog leaves 48 px above
 it for native window controls and 16 px elsewhere; browsers use 16 px margins (8 px when narrow). The 192 px sidebar (144 px narrow) has an **AUTHOR** group with **Flows** and **Agents**, each with its
-definition count. Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
+definition count, and an **AUTOMATE** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
+in Error while any Trigger is ([Trigger attention](#trigger-attention)). Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
 
-While Studio is open, its Flow and Agent lists, the Agents' runtime summaries and saved-Flow usage
+While Studio is open, its Flow, Agent and Trigger lists, the Agents' runtime summaries and saved-Flow usage
 counts, the sidebar counts and the Flow editor's Agent library follow every committed create, save,
-duplicate, removal and import live, whichever client or Factory MCP made it, with no navigation or
+duplicate, removal and import live, whichever client or Factory MCP made it, and each Trigger's checks, with no navigation or
 retry. A failed subscription shows the list's error until the automatic retry succeeds. Both editors read their definition from these lists and follow its
 saved revisions ([Following saved revisions](#following-saved-revisions)).
 
@@ -24,6 +25,10 @@ rule; reload uses the browser's leave warning). Agent edits are guarded independ
 | Opened Flow | `/studio/flows/:flowId` (`/flows/:flowId`) |
 | Agent list | `/studio/agents` (`/settings/agents`) |
 | Opened or new Agent | `/studio/agents/:agentId` (`new` creates; `/settings/agents/:agentId`) |
+| Trigger list | `/studio/triggers` |
+| New Trigger type picker | `/studio/triggers/new` |
+| New GitHub Issues Trigger | `/studio/triggers/new/github-issues` |
+| Opened Trigger | `/studio/triggers/:triggerId` |
 
 The Flow editor's **Start Run** leaves Studio and opens a fresh composition with that Flow selected; unfinished Run drafts stay saved. Direct Studio links remember the last Run or composer and restore it on close, also when browser storage is
 unavailable; a fresh session opens `/runs/new`. `/settings` and `/settings/connection` open the connection dialog and `/settings/skills` redirects to `/studio/flows`. Routing is described in
@@ -432,6 +437,119 @@ when it is the blocking draft. When both a Flow and an Agent block navigation, t
 and Keep editing preserves the current editor. Ordinary unsaved-change prompts stay unchanged;
 browser close and reload use the standard browser warning. A fresh link to a missing Flow shows
 **Flow not found** with **Back to list**; transport failures instead remain retryable.
+
+## Triggers
+
+**Studio → Triggers** (`/studio/triggers`) manages the [Triggers](../GLOSSARY.md#trigger) that start Flows for a
+Project's GitHub issues. What a check reads, admits and starts, and the decisions behind it, are described in
+[Starting from a Trigger](runs.md#starting-from-a-trigger). Approved clients have the same full management as the
+host; readiness, review and checks always run on the Factory host with its `gh` login.
+
+**List.** Each row shows the Trigger's name, its health (**Healthy** after a completed check without a problem,
+**Error** while a problem stops every check, nothing before the first completed check), **GitHub Issues · Project →
+Flow · schedule** (for example `every 5 min`, `every 2 hours` or `manual`), one line naming the problem while it is in
+Error, an enable switch and a ⋯ menu with **Run** (only while enabled), **Edit** and **Remove**. Clicking the row opens
+Edit. The list shows no prompt, issue list, check history, Off pill or active-Run counts. With no Triggers it explains
+what a Trigger does and suggests running [`setup-factory`](installation.md#optional-skills) in the repository first.
+Turning a switch on opens the [review](#reviewing-what-starts); turning it off saves at once.
+
+**Creating.** **New Trigger** first asks for the type, at `/studio/triggers/new`. GitHub Issues is the only one, and its
+card shows whether `gh` on the Factory host is found and signed in, and as whom; there are no placeholders for other
+kinds, and a Trigger's kind never changes. The create form has:
+
+- **Name**, unique among current Triggers regardless of case, so a removed Trigger's name can be reused.
+- **Project**, which must be local to the Factory host. Factory detects the Project's GitHub repository through `gh`
+  and shows it as **Detected**; saving confirms it. A Trigger never reads another repository. When an opened
+  Trigger's Project folder later names a different repository, its checks stop with a repository mismatch and the
+  form shows that repository as **Detected now** with **Confirm this repository**. Confirming changes the draft's
+  repository, which widens what can start, so saving it goes through the review and **Apply and check**. Factory
+  accepts a changed repository only while it is the one the Project's folder names at save time.
+- **GitHub issue query**, prefilled `label:factory:ready author:@me`. It must contain exactly one positive `label:`
+  qualifier, shown below the field as the [ready label](../GLOSSARY.md#ready-label) that the worker removes when it
+  claims the issue, together with the login `@me` resolves to right now. Save refuses a query without exactly one
+  usable label, with a comma list, negation or `no:label` as the ready label, with OR or parentheses around it, or with a
+  scope qualifier (`repo:`, `org:`, `user:`, `is:`, `state:`, `type:`, `project:`); Factory always adds the
+  repository, issue type and open state. A query GitHub rejects also blocks saving. Removing the author filter on a
+  public repository warns rather than refuses.
+- **Flow**, a global Flow or a Flow of the chosen Project, as New Run offers them; save refuses another Project's Flow
+  (`flow_project_mismatch`), and choosing another Project clears a Flow it may not start. Every Start uses the Flow's
+  current saved revision, like New Run.
+- **Run on a schedule**, with a number and minutes or hours (1 minute to 24 hours, default every 5 minutes). When off,
+  the Trigger checks only when **Run** is chosen.
+- **Max active Runs**, 1 to 10, default 1.
+
+A readiness list, shown only while creating, checks `gh` (found and signed in), the repository (readable and matching
+the Project's remote) and the Flow (passing Start's preflight). **Save disabled** saves the Trigger off; **Review and
+enable** saves it after the review. Saving also warns when another Trigger already watches the same repository. A new
+Trigger is always saved disabled first and enabled only through the review.
+
+**Editing.** An opened Trigger shows the same fields under a **status strip** and has no readiness list. The strip
+shows the health and either the latest check (when it ran, how many Runs it started, how many issues are waiting for a
+free slot, each issue that did not start with its key and reason, and when the next check is due, or that the Trigger
+checks only on **Run** or is off) or the current problem: what cannot be used since when and for how many checks, its
+repair guidance and a **Run** button to check again. Guidance names steps that must happen on the Factory host, such as
+installing `gh`, `gh auth login` or restarting a Factory opened from Finder. A failing Trigger keeps checking and never
+turns itself off. Factory keeps only this latest check and problem; there is no history.
+
+Triggers follow the [saved-revision rules](#following-saved-revisions) of the other editors: **Updated to revision
+N**, **Revision N was saved elsewhere** with **Compare latest revision**, **Load revision N** and **Keep my edits**, and
+**This Trigger was removed elsewhere** with the edits kept but no longer savable. Leaving a Trigger with unsaved changes
+asks to **Keep editing** or **Discard**, like an Agent. Enabling, disabling and checks do not change a Trigger's
+revision.
+
+### Reviewing what starts
+
+Enabling a Trigger, and saving an edit that widens what an enabled Trigger can start, first opens a review: the matching
+issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
+already started left out, the query's author filter (or the warning that a public repository has none), and the problem
+a check would hit instead, if any. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
+its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
+showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
+revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
+edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict.
+Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
+the same way and must be reviewed against the enabled Trigger. While creating, the review also offers **Save
+disabled**. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
+New Run.
+
+An edit widens what can start when it changes the Project or repository, the query or the Flow, or raises **Max active
+Runs**. Renames, schedule changes, a lower limit, disabling and any edit of a disabled Trigger save without review;
+enabling it later reviews the result. The review is enforced by the client, not the server: a server-side "reviewed"
+flag would only repeat a claim every approved client can make, since each has full Trigger management, so the review is
+a guard against mistakes rather than an authorization boundary.
+
+### Removing a Trigger
+
+**Remove** in a row's ⋯ menu asks for confirmation (Cancel has focus, and focus returns to the menu button). Removal
+deletes the Trigger with its schedule, latest check and problem, and no Start is accepted afterwards, even from a check
+already in progress. Runs it already started keep running and keep showing where they came from. A new Trigger, also
+one reusing the name, starts again the issues that still carry its ready label.
+
+### Trigger attention
+
+While any Trigger is in Error, the **Triggers** item in Studio's sidebar shows the number in red, and the Studio entry
+beside Settings in the Run sidebar shows a red dot with **N Triggers in Error** in its tooltip and accessible
+description. A Trigger problem never creates a Run Problem or Needs input, a desktop notification or a Dock badge;
+an issue that failed to start appears only in the status strip and leaves the Trigger Healthy.
+
+### Trigger HTTP API
+
+The Trigger screens use these routes, available to the host and every approved client with the protocol and mutation
+headers described in [Run HTTP API](runs.md#run-http-api). Bodies carry typed Trigger fields only; unknown fields are
+refused. There are no Factory MCP tools for Triggers.
+
+| HTTP | Purpose |
+| --- | --- |
+| `GET /api/triggers/readiness?projectId=&flowId=` | Check `gh`, the Project's repository and the Flow |
+| `GET /api/triggers` | List Triggers |
+| `POST /api/triggers` | Create a Trigger, saved disabled |
+| `GET /api/triggers/:id` | Read one Trigger |
+| `PUT /api/triggers/:id` | Save settings against `expectedRevision` |
+| `PUT /api/triggers/:id/enabled` | Disable, or enable the `reviewedRevision` a preview showed |
+| `POST /api/triggers/:id/run` | Run one check now |
+| `POST /api/triggers/preview` | Review what a new Trigger would start; starts and saves nothing |
+| `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |
+| `DELETE /api/triggers/:id` | Remove a Trigger |
 
 ## Definition export
 

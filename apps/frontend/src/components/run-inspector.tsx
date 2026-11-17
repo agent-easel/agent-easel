@@ -32,6 +32,7 @@ import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
 import { InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
+import { RunOriginSection } from "./run-origin.tsx";
 
 /** Keeps the width users chose for the earlier Run side panels. */
 const inspectorBounds: PanelBounds = {
@@ -334,6 +335,7 @@ function RunOverview({
           <RunRepositories workers={run.repositories} links />
         </InspectorSection>
       )}
+      {run.origin && <RunOriginSection origin={run.origin} />}
       <InitialPrompt run={run} />
       <CoordinatorActivations run={run} />
       <RootWork run={run} />

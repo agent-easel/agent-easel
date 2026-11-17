@@ -23,6 +23,14 @@ export function mayPlaceAgent(flowProject: OwningProject, agentProject: OwningPr
 }
 
 /**
+ * The Start rule New Run and Triggers apply: a global Flow starts in any Project, and a Project
+ * Flow only in its owning Project.
+ */
+export function mayStartFlow(flowProject: OwningProject, projectId: string): boolean {
+  return flowProject === null || flowProject === projectId;
+}
+
+/**
  * How Flow Duplicate treats an Agent owned by `agentProject` in a copy owned by `target`: an Agent
  * the target may not place is always copied, a global Agent is kept unless the user copies it, and
  * an Agent of the target Project itself is always kept.

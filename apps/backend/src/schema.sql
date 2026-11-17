@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: definition_owner_changed_at
+-- Newest applied migration: run_triggers
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -1001,6 +1001,103 @@ CREATE TABLE run_title_settings (
   CHECK ((diagnostic_run_id IS NULL) = (diagnostic_message IS NULL)),
   CHECK ((diagnostic_run_id IS NULL) = (diagnostic_at IS NULL))
 );
+
+CREATE TABLE run_trigger_admissions (
+  trigger_id TEXT NOT NULL REFERENCES run_triggers(id) ON DELETE CASCADE,
+  issue_node_id TEXT NOT NULL CHECK (length(issue_node_id) > 0),
+  -- The latest `labeled` event for the ready label; NULL when GitHub records none.
+  labelling_event_id TEXT,
+  request_id TEXT NOT NULL UNIQUE,
+  start_payload_json TEXT NOT NULL,
+  check_id TEXT NOT NULL,
+  run_id TEXT REFERENCES runs(id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (trigger_id, issue_node_id)
+);
+
+CREATE TABLE run_trigger_check_misses (
+  trigger_id TEXT NOT NULL REFERENCES run_triggers(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL CHECK (position >= 0),
+  issue TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  PRIMARY KEY (trigger_id, position)
+);
+
+CREATE TABLE run_trigger_github_issues (
+  trigger_id TEXT PRIMARY KEY REFERENCES run_triggers(id) ON DELETE CASCADE,
+  repository_host TEXT NOT NULL CHECK (length(repository_host) > 0),
+  repository_name_with_owner TEXT NOT NULL CHECK (length(repository_name_with_owner) > 0),
+  repository_node_id TEXT NOT NULL CHECK (length(repository_node_id) > 0),
+  query TEXT NOT NULL CHECK (length(query) BETWEEN 1 AND 1000),
+  ready_label TEXT NOT NULL CHECK (length(ready_label) > 0)
+);
+
+CREATE INDEX run_trigger_github_issues_repository ON run_trigger_github_issues (repository_node_id)
+;
+
+CREATE TABLE run_trigger_origins (
+  run_id TEXT PRIMARY KEY REFERENCES runs(id),
+  trigger_id TEXT NOT NULL,
+  trigger_name TEXT NOT NULL,
+  repository TEXT NOT NULL,
+  issue_number INTEGER NOT NULL CHECK (issue_number >= 1),
+  issue_node_id TEXT NOT NULL,
+  issue_url TEXT NOT NULL,
+  issue_title TEXT NOT NULL
+);
+
+CREATE INDEX run_trigger_origins_trigger ON run_trigger_origins (trigger_id)
+;
+
+CREATE TRIGGER immutable_run_trigger_origin_delete BEFORE DELETE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END;
+
+CREATE TRIGGER immutable_run_trigger_origin_update BEFORE UPDATE ON run_trigger_origins
+BEGIN SELECT RAISE(ABORT, 'Run origins are immutable'); END;
+
+CREATE TABLE run_triggers (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('github_issues')),
+  name TEXT NOT NULL CHECK (length(trim(name)) BETWEEN 1 AND 200),
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  project_id TEXT NOT NULL REFERENCES projects(id),
+  flow_id TEXT NOT NULL REFERENCES flows(id),
+  schedule_enabled INTEGER NOT NULL CHECK (schedule_enabled IN (0, 1)),
+  interval_minutes INTEGER NOT NULL CHECK (interval_minutes BETWEEN 1 AND 1440),
+  max_active_runs INTEGER NOT NULL CHECK (max_active_runs BETWEEN 1 AND 10),
+  revision INTEGER NOT NULL CHECK (revision >= 1),
+  next_check_at TEXT,
+  latest_check_at TEXT,
+  latest_check_started INTEGER CHECK (latest_check_started >= 0),
+  latest_check_waiting INTEGER CHECK (latest_check_waiting >= 0),
+  error_code TEXT,
+  error_message TEXT,
+  error_first_seen_at TEXT,
+  error_last_seen_at TEXT,
+  error_count INTEGER CHECK (error_count >= 1),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  CHECK (
+    (latest_check_at IS NULL) = (latest_check_started IS NULL)
+    AND (latest_check_at IS NULL) = (latest_check_waiting IS NULL)
+  ),
+  CHECK (
+    (error_code IS NULL) = (error_message IS NULL)
+    AND (error_code IS NULL) = (error_first_seen_at IS NULL)
+    AND (error_code IS NULL) = (error_last_seen_at IS NULL)
+    AND (error_code IS NULL) = (error_count IS NULL)
+  )
+);
+
+CREATE INDEX run_triggers_listing ON run_triggers (created_at DESC, id ASC)
+;
+
+CREATE UNIQUE INDEX run_triggers_name ON run_triggers (name COLLATE NOCASE)
+;
+
+CREATE TRIGGER run_triggers_kind_fixed BEFORE UPDATE OF kind ON run_triggers
+WHEN NEW.kind IS NOT OLD.kind
+BEGIN SELECT RAISE(ABORT, 'A Trigger keeps the kind it was created with'); END;
 
 CREATE TABLE run_workspaces (
   run_id TEXT PRIMARY KEY REFERENCES runs(id),

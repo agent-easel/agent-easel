@@ -301,8 +301,16 @@ function launchChoicesDiff(
 function studioDiff(sent: StudioDefinitions, current: StudioDefinitions): StudioLiveMessage[] {
   const agents = listChanges(sent.agents, current.agents);
   const flows = listChanges(sent.flows, current.flows);
-  return agents || flows
-    ? [{ _tag: "changed", ...(agents ? { agents } : {}), ...(flows ? { flows } : {}) }]
+  const triggers = listChanges(sent.triggers, current.triggers);
+  return agents || flows || triggers
+    ? [
+        {
+          _tag: "changed",
+          ...(agents ? { agents } : {}),
+          ...(flows ? { flows } : {}),
+          ...(triggers ? { triggers } : {}),
+        },
+      ]
     : [];
 }
 
@@ -353,7 +361,7 @@ export function makeLiveStreams(
     readonly getRun: (id: string) => Read<RunDetail>;
     readonly readProjectCatalog: () => Read<ProjectCatalog>;
     readonly listFlows: () => Read<readonly FlowDraft[]>;
-    /** One read transaction of both lists. */
+    /** One read transaction of every list. */
     readonly readStudio: () => Read<StudioDefinitions>;
     readonly getAppearance: () => Effect.Effect<T3Appearance>;
   },

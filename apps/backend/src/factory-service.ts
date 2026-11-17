@@ -15,6 +15,7 @@ import { makeDefinitions } from "./definitions.ts";
 import * as RuntimeSetup from "./runtime-setup.ts";
 import * as ReportingInstaller from "./reporting-installation.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
+import type { GitHubAdapter } from "./adapters/github.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
@@ -39,6 +40,7 @@ import { makeDiscordOperation } from "./chat-control/discord-operation.ts";
 import { failure } from "./result.ts";
 import { makeLiveChanges } from "./live-changes.ts";
 import { makeLiveStreams, type LiveStreams } from "./live-streams.ts";
+import { makeTriggers } from "./triggers/triggers.ts";
 
 /** Public Effect service shared by HTTP, background workers and controlled-clock tests. */
 export class FactoryService extends Context.Service<
@@ -86,6 +88,7 @@ export const makeFactoryService = (
   options: FactoryOptions,
   owner: Awaited<ReturnType<typeof acquireRunnerOwner>>,
   t3: T3Adapter,
+  github: GitHubAdapter,
   credentialsDirectory: string,
 ) =>
   Effect.gen(function* () {
@@ -102,6 +105,17 @@ export const makeFactoryService = (
       projects,
       changes,
       options.applicationVersion ?? "source",
+    );
+    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
+    const triggers = yield* makeTriggers(
+      github,
+      {
+        listProjects: projects.listProjects,
+        getFlow: definitions.getFlow,
+        startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
+        startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
+      },
+      changes,
     );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
@@ -143,7 +157,6 @@ export const makeFactoryService = (
     );
     const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
     const discordGateway = yield* makeDiscordGateway(options.discordApiUrl ?? DISCORD_API_URL);
-    let runner: Effect.Success<ReturnType<typeof makeRunner>>;
     const chatStart = startAction({
       listProjects: projects.listProjects,
       getFlow: definitions.getFlow,
@@ -247,6 +260,16 @@ export const makeFactoryService = (
       updateDiscordAccess: (input) => chatDiscord.updateDiscordAccess(input),
       setChatControlEnabled: (input) => chatDiscord.setChatControlEnabled(input),
       retryChatDelivery: (input) => chatDiscord.retryChatDelivery(input),
+      getTriggerReadiness: (projectId, flowId) => triggers.getTriggerReadiness(projectId, flowId),
+      listTriggers: () => triggers.listTriggers(),
+      createTrigger: (input) => triggers.createTrigger(input),
+      getTrigger: (id) => triggers.getTrigger(id),
+      updateTrigger: (id, input) => triggers.updateTrigger(id, input),
+      setTriggerEnabled: (id, input) => triggers.setTriggerEnabled(id, input),
+      runTrigger: (id) => triggers.runTrigger(id),
+      previewNewTrigger: (input) => triggers.previewNewTrigger(input),
+      previewTrigger: (id, input) => triggers.previewTrigger(id, input),
+      removeTrigger: (id) => triggers.removeTrigger(id),
       startRun: (i) => runner.startRun(i),
       getRunImageInfo: (sha256) => images.getRunImageInfo(sha256),
       stageRunImage: (sha256, input) => images.stageRunImage(sha256, input),
@@ -299,7 +322,17 @@ export const makeFactoryService = (
         {
           ...guarded,
           readProjectCatalog: () => guard(projects.readCatalog()),
-          readStudio: () => guard(definitions.readStudio()),
+          readStudio: () =>
+            guard(
+              sql.withTransaction(
+                Effect.gen(function* () {
+                  const studio = yield* definitions.readStudio();
+                  if (!studio.ok) return studio;
+                  const triggerList = yield* triggers.readStudioTriggers();
+                  return { ok: true as const, value: { ...studio.value, triggers: triggerList } };
+                }),
+              ),
+            ),
           getAppearance: appearance.getAppearance,
         },
         (read) =>
@@ -319,6 +352,8 @@ export const makeFactoryService = (
       runTitles,
     );
     yield* runner.initialize();
+    // Scheduled Trigger checks call Start, so they begin, and stop, inside the Runner's lifetime.
+    yield* triggers.startSchedule;
     // Chat actions interrupted by a stop reconcile their Start identity once the Runner owns Runs.
     yield* chatActions.recover;
     // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.

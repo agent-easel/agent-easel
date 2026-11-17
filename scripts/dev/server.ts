@@ -3,6 +3,7 @@ import { loadConfiguration } from "../../apps/backend/src/config.ts";
 import { openFactory } from "../../apps/backend/src/index.ts";
 import { startServer } from "../../apps/backend/src/server.ts";
 import { claimDevelopmentHome, developmentHome, markPrepared } from "./home.ts";
+import { PersistentGitHub } from "./persistent-github.ts";
 import { PersistentT3 } from "./persistent-t3.ts";
 import { seedDevelopment } from "./seed.ts";
 
@@ -19,6 +20,7 @@ try {
     FACTORY_PORT: process.env.FACTORY_PORT ?? "4311",
   });
   const t3 = new PersistentT3(home, !owner.fresh);
+  const github = new PersistentGitHub(home, !owner.fresh);
   if (owner.fresh) {
     const runtimeHost =
       config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? "::1" : config.host;
@@ -26,12 +28,14 @@ try {
       runtimeBackendUrl: `http://${runtimeHost.includes(":") ? `[${runtimeHost}]` : runtimeHost}:${config.port}`,
       databasePath: config.databasePath,
       t3,
+      github,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       connectionRetryMs: 60_000,
     });
     try {
-      await seedDevelopment(factory, t3, home);
+      await seedDevelopment(factory, t3, github, home);
       t3.save();
+      github.save();
       markPrepared(home, true);
     } finally {
       await factory.close();
@@ -43,6 +47,7 @@ try {
   } else {
     const server = await startServer(config, {
       t3,
+      github,
       uiDirectory: null,
       reportingStateDirectory: join(home, "reporting-t3-state"),
     });

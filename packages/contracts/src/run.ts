@@ -352,6 +352,8 @@ export interface RunNavigationEntry {
   readonly createdAt: string;
   readonly lastActivityAt: string;
   readonly flowName: string;
+  /** Null for a Run that no Trigger started; see `RunDetail.origin`. */
+  readonly origin: RunOrigin | null;
   readonly repositories: readonly RunWorkerRepository[];
   /**
    * Orders entries with equal `createdAt` (ascending): the Start request key, which the
@@ -380,7 +382,23 @@ export interface RunCoordinationActions {
     readonly executionId: string | null;
   }[];
 }
+/**
+ * The Trigger and GitHub issue a Run was started from, copied when Start accepted it. It is a
+ * stored record: it keeps the Trigger's name at Start and never reads live issue state.
+ */
+export interface RunOrigin {
+  readonly trigger: { readonly id: string; readonly name: string };
+  /** `owner/name`. */
+  readonly repository: string;
+  readonly issueNumber: number;
+  readonly issueNodeId: string;
+  readonly url: string;
+  /** The issue's title at Start. */
+  readonly title: string;
+}
 export interface RunDetail extends RunSummary {
+  /** Null for a Run that no Trigger started. */
+  readonly origin: RunOrigin | null;
   readonly repositories: readonly RunWorkerRepository[];
   /** Durable sequence used in worker titles; null when absent from stored history. */
   readonly number: number | null;

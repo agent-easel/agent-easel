@@ -560,6 +560,7 @@ export function resolveAgentModel(
 export {
   duplicateTreatment,
   mayPlaceAgent,
+  mayStartFlow,
   type OwningProject,
   validateChangeOwner,
 } from "./placement.ts";
@@ -639,3 +640,11 @@ export {
   validateSetChatControlEnabled,
   validateRetryChatDelivery,
 } from "./chat-control.ts";
+export {
+  parseTriggerQuery,
+  TRIGGER_DEFAULTS,
+  validateCreateTrigger,
+  validateSetTriggerEnabled,
+  validateUpdateTrigger,
+  type TriggerSettings,
+} from "./trigger.ts";

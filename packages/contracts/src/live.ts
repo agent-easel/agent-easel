@@ -5,6 +5,7 @@ import type { ProjectCatalog } from "./project.ts";
 import { CONDITION_TIMELINE_ARRIVALS, type RunDetail, type RunNavigationEntry } from "./run.ts";
 import type { T3Connection } from "./connection.ts";
 import type { T3Appearance } from "./appearance.ts";
+import type { TriggerDefinition } from "./trigger.ts";
 
 /**
  * Live delivery over the shared window connection. Every scope starts with an authoritative
@@ -242,6 +243,8 @@ export interface StudioDefinitions {
   readonly agents: readonly AgentDefinition[];
   /** Ordered by `createdAt` descending, then ascending `id`. */
   readonly flows: readonly FlowDraft[];
+  /** Protocol 17. Ordered by `createdAt` descending, then ascending `id`. */
+  readonly triggers: readonly TriggerDefinition[];
 }
 
 /** Complete replacement entities and removed ids of one Studio list. */
@@ -254,13 +257,14 @@ export interface StudioListChanges<A> {
 export type StudioLiveMessage =
   | { readonly _tag: "snapshot"; readonly studio: StudioDefinitions }
   /**
-   * One committed change set; clients apply both lists together. A Flow may change only its
+   * One committed change set; clients apply every list together. A Flow may change only its
    * readiness, without a new revision, when an Agent it places changes.
    */
   | {
       readonly _tag: "changed";
       readonly agents?: StudioListChanges<AgentDefinition>;
       readonly flows?: StudioListChanges<FlowDraft>;
+      readonly triggers?: StudioListChanges<TriggerDefinition>;
     };
 
 function applyListChanges<A extends { readonly id: string }>(
@@ -301,6 +305,11 @@ export function applyStudioChange(
       studio.flows,
       message.flows,
       newerFirst((flow) => flow.createdAt),
+    ),
+    triggers: applyListChanges(
+      studio.triggers,
+      message.triggers,
+      newerFirst((trigger) => trigger.createdAt),
     ),
   };
 }
