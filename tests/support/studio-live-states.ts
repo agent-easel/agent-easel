@@ -474,7 +474,12 @@ export async function expectRemovedFlow(state: Awaited<ReturnType<typeof beforeR
   const { screen, studio, flowsBefore, flowPanel } = state;
   await expect(flowPanel).toHaveCount(0);
   await expect(studio.getByRole("link", "Flows")).toContainText(String(flowsBefore.value.length));
-  await expectRetainedDefinition(screen, "Flow", ["Save Flow", "Start Run", "Remove"]);
+  await expectRetainedDefinition(
+    screen,
+    "Flow",
+    ["Save Flow", "Start Run"],
+    ["Duplicate…", "Change owner…", "Export JSON", "Remove"],
+  );
   return { ...state };
 }
 

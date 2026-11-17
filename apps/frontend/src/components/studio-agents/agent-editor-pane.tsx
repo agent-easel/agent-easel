@@ -2,7 +2,7 @@ import { LaunchSkillStatus } from "../launch-skill-status.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -52,6 +52,7 @@ import {
 import { agentRuntimeMeta, flowUsageLabel } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportDialog, DefinitionExportMenuItem } from "../definition-export-control.tsx";
+import { useMenuActions } from "../menu-actions.ts";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
 import { AgentProjectOverrides } from "./agent-project-overrides.tsx";
@@ -402,29 +403,6 @@ function AgentStatusLine({ state, flowUsage }: { state: AgentDraftSnapshot; flow
 }
 
 const removedReason = "This Agent was removed elsewhere.";
-
-/**
- * A menu whose item actions run once it has closed and refocused its trigger, so a dialog an action
- * opens returns focus to the trigger when it closes.
- */
-function useMenuActions() {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const pending = useRef<(() => void) | null>(null);
-  return {
-    trigger,
-    queue(action: () => void) {
-      pending.current = action;
-    },
-    onCloseAutoFocus(event: Event) {
-      const action = pending.current;
-      if (!action) return;
-      pending.current = null;
-      event.preventDefault();
-      trigger.current?.focus();
-      action();
-    },
-  };
-}
 
 /**
  * Figma SA01d: Duplicate…, Change owner…, Export JSON and Delete… act on the saved revision, so

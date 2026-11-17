@@ -23,9 +23,18 @@ export async function openEditedStudioFlow({ app, screen, browser }: StudioFixtu
   return id;
 }
 
+/** Each editor's actions menu: the Agent editor's More actions, the Flow editor's More Flow actions. */
+const actionsMenu = { Agent: "More actions", Flow: "More Flow actions" } as const;
+
 /** Picks `item` from the Agent editor's More actions menu. */
 export async function chooseAgentAction(screen: Screen, item: string) {
-  await screen.getByRole("button", "More actions", { exact: true }).tap();
+  await screen.getByRole("button", actionsMenu.Agent, { exact: true }).tap();
+  await screen.getByRole("menuitem", item, { exact: true }).tap();
+}
+
+/** Picks `item` from the Flow editor's More Flow actions menu. */
+export async function chooseFlowAction(screen: Screen, item: string) {
+  await screen.getByRole("button", actionsMenu.Flow, { exact: true }).tap();
   await screen.getByRole("menuitem", item, { exact: true }).tap();
 }
 
@@ -36,8 +45,8 @@ export async function expectSavedAgentRevision(screen: Screen, revision: number)
 
 /**
  * Known removal leaves recovery available while refusing definition commands: each of `actions`
- * is a disabled button, and each of `menuItems` a disabled item of the Agent editor's More actions
- * menu that says why.
+ * is a disabled button, and each of `menuItems` a disabled item of the editor's actions menu that
+ * says why.
  */
 export async function expectRetainedDefinition(
   screen: Screen,
@@ -51,7 +60,7 @@ export async function expectRetainedDefinition(
   for (const name of actions)
     await expect(screen.getByRole("button", name, { exact: true })).toBeDisabled();
   if (menuItems.length === 0) return;
-  await screen.getByRole("button", "More actions", { exact: true }).tap();
+  await screen.getByRole("button", actionsMenu[kind], { exact: true }).tap();
   for (const name of menuItems) {
     const item = screen.getByRole("menuitem", name, { exact: true });
     await expect(item).toBeDisabled();

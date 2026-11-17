@@ -5,7 +5,11 @@ import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
 import { largestWirePortOffset } from "./support/canvas.ts";
-import { expectSavedAgentRevision, openEditedStudioFlow } from "./support/studio.ts";
+import {
+  chooseFlowAction,
+  expectSavedAgentRevision,
+  openEditedStudioFlow,
+} from "./support/studio.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
@@ -549,7 +553,7 @@ test("removing a Flow with unsaved changes returns to the Flow list without a di
   await app.open(`/studio/flows/${id}`);
   await screen.getByLabel("Flow name").fill(`${name} edited`);
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Unsaved changes");
-  await screen.getByRole("button", "Remove", { exact: true }).tap();
+  await chooseFlowAction(screen, "Remove");
   const confirmation = screen.getByRole("dialog", `Remove “${name} edited”?`);
   await expect(confirmation).toContainText("Removing the Flow discards them.");
 
@@ -579,7 +583,7 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   assert(source.ok);
   await app.open(`/studio/flows/${id}`);
   await screen.getByLabel("Flow name").fill(`${name} edited`);
-  await screen.getByRole("button", "Export", { exact: true }).tap();
+  await chooseFlowAction(screen, "Export JSON");
   const confirmation = screen.getByRole("dialog", "Export the saved revision?");
   await expect(confirmation).toContainText("Unsaved changes won't be included.");
   const download = await browser.waitForDownload(() =>

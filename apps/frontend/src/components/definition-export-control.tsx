@@ -9,42 +9,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../definition-export.ts";
 
 type Exporter = { model: DefinitionExportModel; state: DefinitionExportSnapshot };
-
-/**
- * Icon-only **Export** for a toolbar where a text button would squeeze the editable name, with
- * its confirmation.
- */
-export function DefinitionExportControl({
-  model,
-  state,
-  dirty,
-  disabled,
-}: Exporter & { dirty: boolean; disabled: boolean }) {
-  return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            aria-label="Export"
-            disabled={disabled || state.exporting}
-            onClick={() => void model.request(dirty)}
-          >
-            <Download aria-hidden />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{state.exporting ? "Exporting…" : "Export as a file"}</TooltipContent>
-      </Tooltip>
-      <DefinitionExportDialog model={model} state={state} />
-    </>
-  );
-}
 
 /**
  * **Export JSON** in an editor's actions menu; `onSelect` requests the export. Render
