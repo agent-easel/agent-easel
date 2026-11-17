@@ -260,7 +260,8 @@ it("a check that cannot read GitHub starts nothing, sets the Error with host gui
     latestCheck: { started: 0, waiting: 0 },
     error: {
       code: "github_signed_out",
-      message: "gh is not signed in to github.com. Run gh auth login on the Factory host.",
+      message:
+        "On the Factory host, run gh auth login --hostname github.com as the user Factory runs as.",
       count: 1,
     },
   });

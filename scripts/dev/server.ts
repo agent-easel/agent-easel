@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { loadConfiguration } from "../../apps/backend/src/config.ts";
+import { unavailableGitHub } from "../../apps/backend/src/adapters/github.ts";
 import { openFactory } from "../../apps/backend/src/index.ts";
 import { startServer } from "../../apps/backend/src/server.ts";
 import { claimDevelopmentHome, developmentHome, markPrepared } from "./home.ts";
@@ -26,6 +27,7 @@ try {
       runtimeBackendUrl: `http://${runtimeHost.includes(":") ? `[${runtimeHost}]` : runtimeHost}:${config.port}`,
       databasePath: config.databasePath,
       t3,
+      github: unavailableGitHub,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       connectionRetryMs: 60_000,
     });
@@ -43,6 +45,7 @@ try {
   } else {
     const server = await startServer(config, {
       t3,
+      github: unavailableGitHub,
       uiDirectory: null,
       reportingStateDirectory: join(home, "reporting-t3-state"),
     });

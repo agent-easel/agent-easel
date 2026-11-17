@@ -300,7 +300,10 @@ it("readiness reports gh missing from the Factory host", async (c) => {
   // Assert
   assert(readiness.ok);
   expect(readiness.value).toMatchObject({
-    gitHub: { ready: false, problem: expect.stringContaining("Install gh on the host") },
+    gitHub: {
+      ready: false,
+      problem: expect.stringContaining("Install GitHub CLI (gh) on the Factory host"),
+    },
     repository: null,
     flow: null,
   });
@@ -318,7 +321,8 @@ it("readiness reports gh signed out on the Factory host", async (c) => {
   assert(readiness.ok);
   expect(readiness.value.gitHub).toStrictEqual({
     ready: false,
-    problem: "gh is not signed in to github.com. Run gh auth login on the Factory host.",
+    problem:
+      "On the Factory host, run gh auth login --hostname github.com as the user Factory runs as.",
   });
 });
 

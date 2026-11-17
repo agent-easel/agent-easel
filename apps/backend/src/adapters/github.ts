@@ -66,6 +66,12 @@ export type GitHubRead<A> =
   | { readonly ok: true; readonly value: A }
   | { readonly ok: false; readonly failure: GitHubFailure };
 
+export const gitHubAnswer = <A>(value: A): GitHubRead<A> => ({ ok: true, value });
+export const gitHubRefusal = (failure: GitHubFailure): GitHubRead<never> => ({
+  ok: false,
+  failure,
+});
+
 /** GitHub reads through the Factory host user's own `gh` login; Factory never writes to GitHub. */
 export interface GitHubAdapter {
   /** `gh` is found and signed in to `host`; answers the login `@me` resolves to there. */
@@ -98,9 +104,9 @@ export interface GitHubAdapter {
 export function gitHubRepairGuidance(failure: GitHubFailure): string {
   switch (failure.reason) {
     case "gh_missing":
-      return "GitHub CLI (gh) was not found on the Factory host. Install gh on the host, then restart a Factory opened from Finder.";
+      return "Install GitHub CLI (gh) on the Factory host. Factory looks for it on its PATH, then in /opt/homebrew/bin and /usr/local/bin; restart a Factory opened from Finder after installing.";
     case "signed_out":
-      return `gh is not signed in to ${failure.host}. Run gh auth login on the Factory host.`;
+      return `On the Factory host, run gh auth login --hostname ${failure.host} as the user Factory runs as.`;
     case "no_repository":
       return `This Project's folder has no remote that gh recognizes as a GitHub repository. ${failure.message}`;
     case "unreadable":
@@ -110,7 +116,7 @@ export function gitHubRepairGuidance(failure: GitHubFailure): string {
     case "query_rejected":
       return `GitHub rejected the query. ${failure.message}`;
     case "timeout":
-      return "GitHub did not answer in time. Try again.";
+      return "GitHub did not answer in time. The next check tries again.";
     case "truncated":
       return "GitHub's answer was larger than Factory reads. Narrow the query.";
     case "failed":
@@ -123,7 +129,7 @@ const notAvailable = {
   failure: { reason: "failed", message: "GitHub access is not available in this build." },
 } as const;
 
-/** Production's GitHub adapter until the live `gh` adapter replaces it: every read fails. */
+/** Every read fails; for development and test hosts that must never run the host's `gh`. */
 export const unavailableGitHub: GitHubAdapter = {
   readiness: async () => notAvailable,
   repository: async () => notAvailable,

@@ -1,12 +1,14 @@
-import type {
-  GitHubAdapter,
-  GitHubFailure,
-  GitHubIssue,
-  GitHubLabelling,
-  GitHubLabelState,
-  GitHubRead,
-  GitHubRepository,
-  GitHubRepositoryIdentity,
+import {
+  gitHubAnswer,
+  gitHubRefusal,
+  type GitHubAdapter,
+  type GitHubFailure,
+  type GitHubIssue,
+  type GitHubLabelling,
+  type GitHubLabelState,
+  type GitHubRead,
+  type GitHubRepository,
+  type GitHubRepositoryIdentity,
 } from "../../src/adapters/github.ts";
 
 type GitHubCall = keyof GitHubAdapter;
@@ -20,9 +22,6 @@ export interface ControlledIssue extends GitHubIssue {
   labels: string[];
   readonly labellings: (GitHubLabelling & { readonly label: string })[];
 }
-
-const answer = <A>(value: A): GitHubRead<A> => ({ ok: true, value });
-const refusal = (failure: GitHubFailure): GitHubRead<never> => ({ ok: false, failure });
 
 /** Each positive `label:` qualifier a query names; a matching issue carries all of them. */
 const queryLabels = (query: string) =>
@@ -43,22 +42,22 @@ export class ControlledGitHub implements GitHubAdapter {
   beforeAnswer?: (call: GitHubCall) => Promise<void>;
 
   async readiness(_host: string) {
-    return this.answer("readiness", () => answer({ login: this.login }));
+    return this.answer("readiness", () => gitHubAnswer({ login: this.login }));
   }
 
   async repository(workspaceRoot: string) {
     return this.answer("repository", () => {
       const repository = this.repositories.get(workspaceRoot);
       return repository
-        ? answer(repository)
-        : refusal({ reason: "no_repository", message: "No GitHub remote." });
+        ? gitHubAnswer(repository)
+        : gitHubRefusal({ reason: "no_repository", message: "No GitHub remote." });
     });
   }
 
   async openIssues(repository: GitHubRepositoryIdentity, query: string) {
     return this.answer("openIssues", () => {
       const labels = queryLabels(query);
-      return answer(
+      return gitHubAnswer(
         this.repositoryIssues(repository).filter(
           (issue) =>
             issue.open &&
@@ -86,7 +85,7 @@ export class ControlledGitHub implements GitHubAdapter {
               : null,
           });
         }
-      return answer(states);
+      return gitHubAnswer(states);
     });
   }
 
@@ -97,9 +96,9 @@ export class ControlledGitHub implements GitHubAdapter {
   private async answer<A>(call: GitHubCall, read: () => GitHubRead<A>): Promise<GitHubRead<A>> {
     this.calls.push(call);
     await this.beforeAnswer?.(call);
-    if (!this.found) return refusal({ reason: "gh_missing" });
-    if (!this.signedIn) return refusal({ reason: "signed_out", host: "github.com" });
+    if (!this.found) return gitHubRefusal({ reason: "gh_missing" });
+    if (!this.signedIn) return gitHubRefusal({ reason: "signed_out", host: "github.com" });
     const failure = this.failures.get(call);
-    return failure ? refusal(failure) : read();
+    return failure ? gitHubRefusal(failure) : read();
   }
 }

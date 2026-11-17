@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { unavailableGitHub } from "../../../apps/backend/src/adapters/github.ts";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
@@ -69,6 +70,7 @@ export async function startHost(
     { ...config, port: 0 },
     {
       t3,
+      github: unavailableGitHub,
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       ...doubles,
