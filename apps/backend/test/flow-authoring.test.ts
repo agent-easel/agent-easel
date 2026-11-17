@@ -2,7 +2,14 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 import { factoryHarness } from "./support/factory.ts";
-import { flowWithAgent, readFlowAfterRestart, validationFlow } from "./support/domain-setup.ts";
+import {
+  assertOk,
+  discoveredClones,
+  flowWithAgent,
+  readFlowAfterRestart,
+  sampleAgentInput,
+  validationFlow,
+} from "./support/domain-setup.ts";
 import { agentBlock, flowInput, humanStep } from "./support/scenarios.ts";
 
 it("an incomplete graph draft saves with the Flow input connection outstanding", async (context) => {
@@ -13,6 +20,7 @@ it("an incomplete graph draft saves with the Flow input connection outstanding",
   const draft = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: unconnectedGraph,
   });
@@ -33,6 +41,7 @@ it("connecting the Flow input to an Agent makes a saved graph draft ready", asyn
       await factory.updateFlow(created.value.id, {
         name: created.value.name,
         expectedRevision: 1,
+        expectedProjectId: null,
         workspace: created.value.workspace,
         graph: unconnectedGraph,
       })
@@ -43,6 +52,7 @@ it("connecting the Flow input to an Agent makes a saved graph draft ready", asyn
   const ready = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 2,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: { ...unconnectedGraph, flowInput: flowInput("coder") },
   });
@@ -71,6 +81,7 @@ it("a saved graph draft keeps its blocks, hidden and local exits, connections, F
   const saved = await factory.updateFlow(created.value.id, {
     name: "Ordered draft",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: { mode: "worktree", base: { kind: "ref", ref: "origin/develop" } },
     graph: {
       flowInput: { position: { x: -40.5, y: 12 }, targetBlockIds: ["writer", "coder"] },
@@ -100,6 +111,7 @@ it("updateFlow rejects a stale editor with conflict and leaves the saved revisio
       await factory.updateFlow(created.value.id, {
         name: created.value.name,
         expectedRevision: 1,
+        expectedProjectId: null,
         workspace: created.value.workspace,
         graph: unconnectedGraph,
       })
@@ -108,6 +120,7 @@ it("updateFlow rejects a stale editor with conflict and leaves the saved revisio
   const ready = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 2,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: { ...unconnectedGraph, flowInput: flowInput("coder") },
   });
@@ -117,6 +130,7 @@ it("updateFlow rejects a stale editor with conflict and leaves the saved revisio
   const stale = await factory.updateFlow(created.value.id, {
     name: "Stale",
     expectedRevision: 2,
+    expectedProjectId: null,
     workspace: { mode: "checkout" },
     graph: unconnectedGraph,
   });
@@ -135,6 +149,7 @@ it("choosing the project checkout appends a revision that reads checkout", async
   const saved = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: { mode: "checkout" },
     graph: created.value.graph,
   });
@@ -154,6 +169,7 @@ it("a custom worktree ref read as an option is rejected and appends no revision"
   const result = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: { mode: "worktree", base: { kind: "ref", ref: " --upload-pack=x " } },
     graph: created.value.graph,
   });
@@ -171,9 +187,10 @@ it("validateFlow reports a missing agent reference before save", async (context)
   const graph = { flowInput: flowInput("a"), blocks: [block], connections: [] };
 
   // Act
-  const missing = await factory.validateFlow({
+  const missing = await factory.validateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -183,23 +200,27 @@ it("validateFlow reports a missing agent reference before save", async (context)
   expect(missing.value.issues[0]?.code).toBe("agent_required");
 });
 
-it("validateFlow names the saved revision of each Agent the graph places, null for a missing one", async (context) => {
+it("validateFlow names the saved revision and owning Project of each Agent the graph places, null for a missing one", async (context) => {
   // Arrange
   const { factory, created, agent, unconnectedGraph } = await flowWithAgent(context);
   const missing = agentBlock("missing", "Missing", "missing-agent");
   const graph = { ...unconnectedGraph, blocks: [...unconnectedGraph.blocks, missing] };
 
   // Act
-  const result = await factory.validateFlow({
+  const result = await factory.validateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
 
   // Assert
   assert(result.ok);
-  expect(result.value.agentRevisions).toStrictEqual({ [agent.id]: 1, "missing-agent": null });
+  expect(result.value.agentRevisions).toStrictEqual({
+    [agent.id]: { revision: 1, projectId: null },
+    "missing-agent": null,
+  });
 });
 
 it("updateFlow rejects duplicate block ids", async (context) => {
@@ -211,6 +232,7 @@ it("updateFlow rejects duplicate block ids", async (context) => {
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -233,6 +255,7 @@ it("updateFlow rejects block prompt overrides", async (context) => {
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -255,6 +278,7 @@ it("updateFlow rejects dangling connections", async (context) => {
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -276,6 +300,7 @@ it("updateFlow rejects a Human connection from an exit other than Approve or Req
   const result = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -297,6 +322,7 @@ it("updateFlow rejects a Flow input target that is not in the graph", async (con
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -317,6 +343,7 @@ it("updateFlow rejects a Human step as a Flow input target", async (context) => 
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -339,6 +366,7 @@ it("updateFlow reports a block kind named after an object member as invalid inst
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: graph as never,
   });
@@ -356,6 +384,7 @@ it("concurrent Flow edits allow exactly one successful revision advance", async 
   const input = {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: { flowInput: flowInput("a"), blocks: [block], connections: [] },
   };
@@ -382,6 +411,7 @@ it("readiness identifies unfinished and unreachable blocks without rejecting dra
   const result = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: {
       flowInput: flowInput("entry"),
@@ -434,6 +464,7 @@ it("local exit IDs matching visible or hidden Agent exits allow saving but block
   const saved = await f.updateFlow(flow.id, {
     ...flow,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     graph: {
       ...flow.graph,
       flowInput: { ...flow.graph.flowInput, targetBlockIds: [worker.id, "hidden-worker"] },
@@ -485,6 +516,7 @@ it("an Agent block's Revisit instruction is saved trimmed and read back after re
   const saved = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: {
       ...unconnectedGraph,
@@ -517,6 +549,7 @@ it("a whitespace-only Revisit instruction is saved empty", async (context) => {
   const saved = await factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: { ...unconnectedGraph, blocks: [{ ...coder!, revisitInstruction: " \n\t " }, human!] },
   });
@@ -539,6 +572,7 @@ it("a Revisit instruction on a Human step is refused at its field path and appen
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -564,6 +598,7 @@ it("a Revisit instruction over 120,000 characters is refused at its field path",
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph,
   });
@@ -592,6 +627,7 @@ it("a Revisit instruction that is not text is refused at its field path", async 
   const result = await factory.updateFlow(created.value.id, {
     name: "Validation",
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: created.value.workspace,
     graph: graph as never,
   });
@@ -601,4 +637,434 @@ it("a Revisit instruction that is not text is refused at its field path", async 
   expect(result.error.issues.map((issue) => [issue.code, issue.path])).toStrictEqual([
     ["invalid_revisit_instruction", "graph.blocks.0.revisitInstruction"],
   ]);
+});
+
+/** One Agent block placing `agentId`, wired from the Flow input. */
+const placing = (agentId: string) => ({
+  flowInput: flowInput("worker"),
+  blocks: [agentBlock("worker", "Release check", agentId)],
+  connections: [],
+});
+
+it("a Flow created for a Project is a Project Flow of that Project", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+
+  // Act
+  const created = await factory.createFlow({ name: "Release", projectId: first.id });
+
+  // Assert
+  assert(created.ok);
+  expect(created.value.projectId).toBe(first.id);
+  expect(assertOk(await factory.getFlow(created.value.id)).projectId).toBe(first.id);
+});
+
+it("a Flow created without an owner is a global Flow", async (context) => {
+  // Arrange
+  const { factory } = await discoveredClones(context);
+
+  // Act
+  const created = await factory.createFlow({ name: "Review" });
+
+  // Assert
+  assert(created.ok);
+  expect(created.value.projectId).toBeNull();
+});
+
+it("saving a Project Flow keeps its owning Project even when the save names another", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const created = assertOk(await factory.createFlow({ name: "Release", projectId: first.id }));
+
+  // Act
+  const saved = await factory.updateFlow(created.id, {
+    name: "Release v2",
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph: created.graph,
+    projectId: second.id,
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.revision).toBe(2);
+  expect(saved.value.projectId).toBe(first.id);
+});
+
+it("a Project Flow saves with a global Agent and an Agent of its own Project", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const global = assertOk(await factory.createAgent(sampleAgentInput("Reviewer")));
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const created = assertOk(await factory.createFlow({ name: "Release", projectId: first.id }));
+
+  // Act
+  const saved = await factory.updateFlow(created.id, {
+    name: created.name,
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph: {
+      flowInput: flowInput("review"),
+      blocks: [agentBlock("review", "Review", global.id), agentBlock("release", "Release", own.id)],
+      connections: [],
+    },
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.readiness.issues.map((issue) => issue.code)).not.toContain(
+    "agent_scope_mismatch",
+  );
+});
+
+it("creating a Flow of one clone that places the other clone's Agent is refused and creates no Flow", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const other = assertOk(await factory.createAgent(sampleAgentInput("Releaser", second.id)));
+
+  // Act
+  const created = await factory.createFlow({
+    name: "Release",
+    projectId: first.id,
+    graph: placing(other.id),
+  });
+
+  // Assert
+  assert(!created.ok);
+  expect(created.error.code).toBe("validation");
+  expect(created.error.issues).toStrictEqual([
+    {
+      code: "agent_scope_mismatch",
+      path: "graph.blocks.0.agentId",
+      message: "Release check: Releaser is owned by another Project, so this Flow cannot place it.",
+    },
+  ]);
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("saving a global Flow that places a Project Agent is refused and appends no revision", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const owned = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const created = assertOk(await factory.createFlow({ name: "Review" }));
+
+  // Act
+  const saved = await factory.updateFlow(created.id, {
+    name: created.name,
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph: placing(owned.id),
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues).toStrictEqual([
+    {
+      code: "agent_scope_mismatch",
+      path: "graph.blocks.0.agentId",
+      message: "Release check: Releaser is a Project Agent, so this global Flow cannot place it.",
+    },
+  ]);
+  expect(assertOk(await factory.getFlow(created.id)).revision).toBe(1);
+});
+
+it("validating a Project Flow's unsaved draft reports an out-of-rule placement naming the block and Agent", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const other = assertOk(await factory.createAgent(sampleAgentInput("Releaser", second.id)));
+  const created = assertOk(await factory.createFlow({ name: "Release", projectId: first.id }));
+
+  // Act
+  const checked = await factory.validateFlow(created.id, {
+    name: created.name,
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph: placing(other.id),
+  });
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.ready).toBe(false);
+  expect(checked.value.issues).toContainEqual({
+    code: "agent_scope_mismatch",
+    path: "graph.blocks.0.agentId",
+    message: "Release check: Releaser is owned by another Project, so this Flow cannot place it.",
+  });
+});
+
+it("creating a Flow for a Project Factory never discovered is refused and creates no Flow", async (context) => {
+  // Arrange
+  const { factory } = await discoveredClones(context);
+
+  // Act
+  const created = await factory.createFlow({ name: "Release", projectId: "unknown-project" });
+
+  // Assert
+  assert(!created.ok);
+  expect(created.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_not_found", path: "projectId" },
+  ]);
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("creating a Flow for an unavailable Project is refused with its availability reason", async (context) => {
+  // Arrange
+  const { factory, t3, second } = await discoveredClones(context);
+  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const created = await factory.createFlow({ name: "Release", projectId: second.id });
+
+  // Assert
+  assert(!created.ok);
+  expect(created.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("a Flow of a Project that became unavailable still saves its next revision", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const created = assertOk(await factory.createFlow({ name: "Release", projectId: first.id }));
+  t3.projects = t3.projects.map((project) => ({ ...project, available: false }));
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const saved = await factory.updateFlow(created.id, {
+    name: "Release v2",
+    expectedRevision: created.revision,
+    expectedProjectId: created.projectId,
+    graph: created.graph,
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value).toMatchObject({ name: "Release v2", revision: 2, projectId: first.id });
+});
+
+it("changing a global Flow's owner to a Project appends no revision and changes nothing else", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const shared = assertOk(await factory.createAgent(sampleAgentInput("Reviewer")));
+  const flow = assertOk(await factory.createFlow({ name: "Release", graph: placing(shared.id) }));
+  const agentsBefore = assertOk(await factory.listAgents());
+
+  // Act
+  const changed = await factory.changeFlowOwner(flow.id, {
+    expectedProjectId: null,
+    projectId: first.id,
+  });
+
+  // Assert
+  assert(changed.ok);
+  expect(changed.value).toStrictEqual({
+    ...flow,
+    projectId: first.id,
+    updatedAt: changed.value.updatedAt,
+  });
+  expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [changed.value] });
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: agentsBefore });
+});
+
+it("a Flow of an unavailable Project moves to an available Project when it places only global Agents", async (context) => {
+  // Arrange
+  const { factory, t3, first, second } = await discoveredClones(context);
+  const shared = assertOk(await factory.createAgent(sampleAgentInput("Reviewer")));
+  const flow = assertOk(
+    await factory.createFlow({ name: "Release", projectId: first.id, graph: placing(shared.id) }),
+  );
+  t3.projects = t3.projects.filter((project) => project.projectId !== first.projectId);
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const changed = await factory.changeFlowOwner(flow.id, {
+    expectedProjectId: first.id,
+    projectId: second.id,
+  });
+
+  // Assert
+  assert(changed.ok);
+  expect(changed.value).toMatchObject({ projectId: second.id, revision: flow.revision });
+  expect(assertOk(await factory.getFlow(flow.id)).projectId).toBe(second.id);
+});
+
+it.for([
+  ["global", (): string | null => null],
+  ["the other clone", (second: { id: string }): string | null => second.id],
+] as const)(
+  "moving a Project Flow that places its Project's Agent to %s is refused naming that Agent once",
+  async ([, target], context) => {
+    // Arrange
+    const { factory, first, second } = await discoveredClones(context);
+    const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+    const flow = assertOk(
+      await factory.createFlow({
+        name: "Release",
+        projectId: first.id,
+        graph: {
+          flowInput: flowInput("prepare"),
+          blocks: [agentBlock("prepare", "Prepare", own.id), agentBlock("ship", "Ship", own.id)],
+          connections: [],
+        },
+      }),
+    );
+
+    // Act
+    const changed = await factory.changeFlowOwner(flow.id, {
+      expectedProjectId: first.id,
+      projectId: target(second),
+    });
+
+    // Assert
+    assert(!changed.ok);
+    expect(changed.error.code).toBe("conflict");
+    expect(changed.error.issues).toStrictEqual([
+      {
+        code: "owner_change_blocked",
+        path: "projectId",
+        message: `This Flow places Agent "Releaser" (${own.id}), which the new owner may not place.`,
+      },
+    ]);
+    expect(assertOk(await factory.getFlow(flow.id))).toStrictEqual(flow);
+  },
+);
+
+it("changing a Flow's owner from an owner it no longer has is refused and leaves the owner", async (context) => {
+  // Arrange
+  const { factory, first, second } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const changed = await factory.changeFlowOwner(flow.id, {
+    expectedProjectId: null,
+    projectId: second.id,
+  });
+
+  // Assert
+  assert(!changed.ok);
+  expect(changed.error.code).toBe("conflict");
+  expect(changed.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+  expect(assertOk(await factory.getFlow(flow.id)).projectId).toBe(first.id);
+});
+
+it("moving a Flow into an unavailable Project is refused with its availability reason", async (context) => {
+  // Arrange
+  const { factory, t3, second } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const changed = await factory.changeFlowOwner(flow.id, {
+    expectedProjectId: null,
+    projectId: second.id,
+  });
+
+  // Assert
+  assert(!changed.ok);
+  expect(changed.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(assertOk(await factory.getFlow(flow.id)).projectId).toBeNull();
+});
+
+it("saving a Flow under an owner it no longer has is refused and appends no revision", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const saved = await factory.updateFlow(flow.id, {
+    name: "Release v2",
+    expectedRevision: flow.revision,
+    expectedProjectId: null,
+    graph: flow.graph,
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.code).toBe("conflict");
+  expect(saved.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+  expect(assertOk(await factory.getFlow(flow.id))).toMatchObject({ name: "Release", revision: 1 });
+});
+
+it("a Flow moved to another owner and back no longer reads as it did before the moves", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const back = assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Assert
+  // Live readers send only differences, so a move away and back between two reads must differ.
+  const read = assertOk(await factory.getFlow(flow.id));
+  expect(read).toStrictEqual(back);
+  expect(read).toMatchObject({ projectId: null, revision: flow.revision });
+  expect(read.updatedAt > flow.updatedAt).toBe(true);
+});
+
+it("checking a Flow's readiness under an owner it no longer has is refused", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const checked = await factory.validateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: null,
+    graph: flow.graph,
+  });
+
+  // Assert
+  assert(!checked.ok);
+  expect(checked.error.code).toBe("conflict");
+  expect(checked.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "stale_owner", path: "expectedProjectId" },
+  ]);
+});
+
+it("an Agent owner change gives a Flow placing it a new readiness stamp without a revision", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = assertOk(
+    await factory.createFlow({ name: "Release", projectId: first.id, graph: placing(own.id) }),
+  );
+  const draft = {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: first.id,
+    graph: flow.graph,
+  };
+
+  // Act
+  assertOk(
+    await factory.changeAgentOwner(own.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Assert
+  const checked = assertOk(await factory.validateFlow(flow.id, draft));
+  expect(checked.agentRevisions).toStrictEqual({ [own.id]: { revision: 1, projectId: null } });
 });

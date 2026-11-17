@@ -20,6 +20,7 @@ import {
   type IssueReporter,
 } from "./block-exits.ts";
 import { checkCondition } from "./flow.ts";
+import { mayPlaceAgent, type OwningProject } from "./placement.ts";
 
 export const TASK_TITLE_LIMIT = 500;
 
@@ -152,14 +153,28 @@ export function flowGraphReferencesAgent(graph: FlowGraphInput, agentId: string)
 }
 
 /**
- * A saved Agent as Flow readiness sees it: its name, its current exits, whether it has execution
- * settings (never their live availability) and, for naming a wire whose exit the Agent has since
- * removed, the last name of each exit its earlier revisions had.
+ * A saved Agent as Flow readiness sees it: its name, its current exits, its owning Project,
+ * whether it has execution settings (never their live availability) and, for naming a wire whose
+ * exit the Agent has since removed, the last name of each exit its earlier revisions had.
  */
 export interface ReadinessAgent extends Pick<AgentDefinition, "id" | "name" | "exits"> {
+  readonly projectId: OwningProject;
   readonly hasExecution: boolean;
   readonly formerExitNames: ReadonlyMap<string, string>;
 }
+
+/** A saved Agent as Flow readiness sees it. */
+export const readinessAgent = (
+  agent: AgentDefinition,
+  formerExitNames: ReadonlyMap<string, string>,
+): ReadinessAgent => ({
+  id: agent.id,
+  name: agent.name,
+  exits: agent.exits,
+  projectId: agent.projectId,
+  hasExecution: agent.execution !== null,
+  formerExitNames,
+});
 
 const blockLabel = (block: FlowBlockInput) => block.name || block.id;
 
@@ -270,6 +285,7 @@ function blockReadiness(
   block: FlowBlockInput,
   path: string,
   agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
   add: IssueReporter,
 ) {
   const label = blockLabel(block);
@@ -285,6 +301,14 @@ function blockReadiness(
   if (block.kind !== "agent") return;
   const agent = agents.find((candidate) => candidate.id === block.agentId);
   if (!agent) add("agent_required", `${path}.agentId`, `Choose a saved Agent for ${label}.`);
+  else if (!mayPlaceAgent(flowProject, agent.projectId))
+    add(
+      "agent_scope_mismatch",
+      `${path}.agentId`,
+      flowProject === null
+        ? `${label}: ${agent.name} is a Project Agent, so this global Flow cannot place it.`
+        : `${label}: ${agent.name} is owned by another Project, so this Flow cannot place it.`,
+    );
   else if (!agent.hasExecution)
     add("agent_model_required", `${path}.agentId`, `${label}: ${agent.name} needs a model.`);
   if (!effectiveExits(block, agents).length)
@@ -451,12 +475,14 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 }
 
 /**
- * Graph and saved-Agent readiness against the given saved Agents; live T3 settings availability,
- * project and provisioning gates remain separate. Issues block Start, never a save.
+ * Graph and saved-Agent readiness against the given saved Agents, placed by a Flow owned by
+ * `flowProject`; live T3 settings availability, project and provisioning gates remain separate.
+ * Issues block Start, never a save.
  */
 export function flowReadiness(
   graph: FlowGraphInput,
   agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
 ): FlowReadiness {
   const issues: ValidationIssue[] = [];
   const add = (code: string, path: string, message: string) => issues.push({ code, path, message });
@@ -475,7 +501,9 @@ export function flowReadiness(
         "Connect the Flow input to Agents only; a Wait cannot start a Run.",
       );
   });
-  graph.blocks.forEach((block, i) => blockReadiness(block, `graph.blocks.${i}`, agents, add));
+  graph.blocks.forEach((block, i) =>
+    blockReadiness(block, `graph.blocks.${i}`, agents, flowProject, add),
+  );
   connectionReadiness(graph, agents, add);
   conditionCycleReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
@@ -483,19 +511,37 @@ export function flowReadiness(
 }
 
 /**
+ * The out-of-rule placements of a Flow owned by `flowProject`, as its readiness reports them
+ * (`agent_scope_mismatch`). Saving refuses a graph that has any.
+ */
+export function placementIssues(
+  graph: FlowGraphInput,
+  agents: readonly ReadinessAgent[],
+  flowProject: OwningProject,
+): ValidationIssue[] {
+  return flowReadiness(graph, agents, flowProject).issues.filter(
+    (issue) => issue.code === "agent_scope_mismatch",
+  );
+}
+
+/**
  * The dependency stamp of Flow readiness: readiness depends only on the graph and the saved
- * revisions of the Agents it places, because an Agent's exits and former exit names are fixed
- * per revision. Equal stamps for the same graph mean equal readiness.
+ * revision and owning Project of each Agent it places, because an Agent's exits and former exit
+ * names are fixed per revision while its owner changes without one. Equal stamps for the same
+ * graph mean equal readiness.
  */
 export function flowAgentRevisions(
   graph: FlowGraphInput,
-  agents: readonly Pick<AgentDefinition, "id" | "revision">[],
+  agents: readonly Pick<AgentDefinition, "id" | "revision" | "projectId">[],
 ): FlowAgentRevisions {
-  const revisions: Record<string, number | null> = {};
+  const revisions: Record<string, FlowAgentRevisions[string]> = {};
   for (const block of graph.blocks)
-    if (block.kind === "agent" && block.agentId)
-      revisions[block.agentId] =
-        agents.find((agent) => agent.id === block.agentId)?.revision ?? null;
+    if (block.kind === "agent" && block.agentId) {
+      const agent = agents.find((candidate) => candidate.id === block.agentId);
+      revisions[block.agentId] = agent
+        ? { revision: agent.revision, projectId: agent.projectId }
+        : null;
+    }
   return revisions;
 }
 
@@ -511,6 +557,12 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
+export {
+  duplicateTreatment,
+  mayPlaceAgent,
+  type OwningProject,
+  validateChangeOwner,
+} from "./placement.ts";
 export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
@@ -550,6 +602,8 @@ export {
   CANVAS_COORD_MIN,
   isCanvasPosition,
   validateCreateFlow,
+  validateDuplicateFlow,
+  validatePreviewFlowDuplicate,
   validateUpdateFlow,
 } from "./flow.ts";
 export {
@@ -563,6 +617,7 @@ export {
   DEFINITION_REQUEST_LIMIT_BYTES,
   definitionSaveFits,
   parsePortableFile,
+  saveRequestBound,
   PORTABLE_DOCUMENT_AGENT_LIMIT,
   PORTABLE_DOCUMENT_LIMIT_BYTES,
   portableDocumentText,

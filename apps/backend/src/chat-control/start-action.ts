@@ -6,7 +6,6 @@ import type {
   ProjectCatalog,
   Result,
   RunDetail,
-  RunTitleSetting,
 } from "@t3-factory/contracts";
 import type { StartAuthorization } from "../runner/runner-start.ts";
 import { promptTitle } from "@t3-factory/domain-validation";
@@ -38,7 +37,6 @@ export interface StartOperations {
   readonly listProjects: () => Effect.Effect<Result<ProjectCatalog>, unknown>;
   readonly getFlow: (id: string) => Effect.Effect<Result<FlowDraft>, unknown>;
   readonly listFlows: () => Effect.Effect<Result<readonly FlowDraft[]>, unknown>;
-  readonly getRunTitleSetting: () => Effect.Effect<Result<RunTitleSetting>, unknown>;
   /** Factory MCP's shared text Start; the request ID is the Start's identity. */
   readonly startTextRun: (
     input: unknown,
@@ -62,7 +60,10 @@ const inputSchema: JSONSchema7 = {
   type: "object",
   properties: {
     projectId: { type: "string", description: "The permitted Project's ID from list_projects." },
-    flowId: { type: "string", description: "The saved Flow's ID from list_flows." },
+    flowId: {
+      type: "string",
+      description: "The saved Flow's ID from list_flows: a global Flow or one this Project owns.",
+    },
     prompt: {
       type: "string",
       description:
@@ -107,19 +108,6 @@ function startArguments(input: unknown) {
   };
 }
 
-const workspaceLine = (flow: FlowDraft) =>
-  flow.workspace.mode === "checkout"
-    ? "in the Project's checkout"
-    : flow.workspace.base.kind === "default"
-      ? "new worktree from the default branch"
-      : `new worktree from \`${flow.workspace.base.ref}\``;
-
-/** Shown unless Generate Run titles is known to be off: an unread setting is not "off". */
-const TITLE_REPLACEABLE = " _(may be replaced by a generated title)_";
-
-const DISCLOSURE =
-  "ℹ️ The current saved Flow and Agent definitions, workspace included, apply when you confirm; Factory checks again and may still refuse.";
-
 type AcceptedFacts = {
   runId: string;
   runNumber: number | null;
@@ -133,23 +121,16 @@ type RejectedFacts = { message: string; issues: string[] };
 
 const MAX_ISSUES = 5;
 
-/** The complete review of a Start, as ordered Discord messages. */
+/** The complete review of a Start, as ordered Discord messages: the target and the exact prompt. */
 function startReview(
   { prompt, source }: StartParameters,
   { project, flow }: { readonly project: FactoryProject; readonly flow: FlowDraft },
-  title: string,
-  setting: Result<RunTitleSetting>,
   sameNamedFlow: boolean,
 ) {
-  const titled = setting.ok && !setting.value.enabled ? "" : TITLE_REPLACEABLE;
   return reviewMessages([
-    "📝 **Start a Run?**",
-    `📁 ${inert(project.title)} · \`${project.workspaceRoot}\``,
-    `🔀 ${inert(flow.name)} · ${workspaceLine(flow)}${sameNamedFlow ? ` · \`${flow.id}\`` : ""}`,
-    `🏷️ ${inert(title)}${titled}`,
+    `📝 **Start ${inert(flow.name)}${sameNamedFlow ? ` (\`${flow.id}\`)` : ""} in ${inert(project.title)}?**`,
     ...[sourceLine(source, "Prompt")].filter((line) => line !== undefined),
     ...textBlocks(prompt),
-    DISCLOSURE,
   ]);
 }
 
@@ -214,14 +195,9 @@ export function startAction(operations: StartOperations) {
         return yield* reconcile(actionId);
       }),
     reconcile,
+    // An accepted Start's status card is its only message; a rejection gets a receipt.
     receipt: (outcome) => {
-      if (outcome.kind === "accepted") {
-        const facts = outcome.facts as AcceptedFacts;
-        return [
-          `✅ **Run ${facts.runNumber === null ? "" : `#${facts.runNumber} `}started** — ${inert(clip(facts.title, 500))}`,
-          `📁 ${inert(clip(facts.projectTitle ?? facts.projectId, 200))} · 🔀 ${inert(clip(facts.flowName, 200))}`,
-        ].join("\n");
-      }
+      if (outcome.kind === "accepted") return undefined;
       const facts = outcome.facts as RejectedFacts;
       return [
         `❌ **Start not accepted** — ${clip(facts.message, 300)}`,
@@ -238,7 +214,10 @@ export function startAction(operations: StartOperations) {
     target: (parameters) => (parameters as unknown as StartParameters).projectId,
   };
 
-  /** The permitted, available Project and the ready saved Flow, or why they cannot be used. */
+  /**
+   * The permitted, available Project and a ready saved Flow that is global or owned by that
+   * Project, or why they cannot be used. Acceptance rechecks both through the shared Start.
+   */
   const startTargets = (parameters: StartParameters, scope: ChatToolScope) =>
     Effect.gen(function* (): Effect.fn.Return<
       { readonly project: FactoryProject; readonly flow: FlowDraft } | ChatToolOutcome,
@@ -261,6 +240,11 @@ export function startAction(operations: StartOperations) {
       const flow = yield* operations.getFlow(parameters.flowId);
       if (!flow.ok)
         return refused("flow_not_found", "Factory has no saved Flow with that ID. Use list_flows.");
+      if (flow.value.projectId !== null && flow.value.projectId !== project.id)
+        return refused(
+          "flow_project_mismatch",
+          "That Flow belongs to another Project, so it cannot start in this one. Use a global Flow or a Flow this Project owns from list_flows; do not choose another Project.",
+        );
       if (!flow.value.readiness.ready)
         return refused(
           "flow_not_ready",
@@ -275,7 +259,7 @@ export function startAction(operations: StartOperations) {
   const tool: MutationTool = {
     name: "start_run",
     description:
-      "Propose starting a Factory Run of a saved Flow in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
+      "Propose starting a Factory Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>
@@ -293,8 +277,6 @@ export function startAction(operations: StartOperations) {
         const review = startReview(
           parameters,
           targets,
-          title,
-          yield* operations.getRunTitleSetting(),
           // A Flow is named by its ID only when the name alone cannot tell it apart.
           !flows.ok ||
             flows.value.some((other) => other.id !== flow.id && other.name === flow.name),

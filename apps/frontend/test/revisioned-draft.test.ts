@@ -1,4 +1,5 @@
 import { expect, it, vi } from "vite-plus/test";
+import type { AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../src/api.ts";
 import { OfflineError } from "../src/transport.ts";
 import { savedAgent } from "./support/agent-draft.ts";
@@ -6,6 +7,7 @@ import {
   comparedFlow,
   editedFlow,
   held,
+  laterThan,
   openedFlow,
   rejection,
   savingFlow,
@@ -18,7 +20,9 @@ import {
   echoed,
   editedAgent,
   failedDelete,
+  ownerChangedElsewhere,
   pendingSave,
+  publishedWhen,
   removedElsewhere,
   savedElsewhere,
 } from "./support/agent-editor.ts";
@@ -780,4 +784,385 @@ it("an Agent removed elsewhere refuses another Delete", async () => {
   // Assert
   expect(deleted).toBe(false);
   expect(setup.factory.removeAgent).not.toHaveBeenCalled();
+});
+
+it("a clean editor takes an owner changed elsewhere without asking", () => {
+  // Arrange
+  const setup = agentDraft();
+
+  // Act
+  ownerChangedElsewhere(setup, "northwind");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3, projectId: "northwind" },
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    dirty: false,
+  });
+});
+
+it("a dirty editor keeps its edits and must acknowledge an owner changed elsewhere before saving", () => {
+  // Arrange
+  const setup = editedAgent();
+
+  // Act
+  ownerChangedElsewhere(setup, "northwind");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: "northwind",
+    ownerChange: { status: "changed", from: null, to: "northwind" },
+    conflict: { status: "none" },
+    canSave: false,
+  });
+});
+
+it("an acknowledged owner change keeps the edits and the next save expects the new owner", async () => {
+  // Arrange
+  const setup = editedAgent();
+  ownerChangedElsewhere(setup, "northwind");
+  setup.draft.acknowledgeOwner("northwind");
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.factory.updateAgent).toHaveBeenCalledWith(
+    "agent",
+    expect.objectContaining({ name: "Edited", expectedProjectId: "northwind" }),
+  );
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 4, name: "Edited", projectId: "northwind" },
+    dirty: false,
+    ownerChange: { status: "none" },
+  });
+});
+
+it("acknowledging an owner that is no longer the changed one keeps saving blocked", () => {
+  // Arrange
+  const setup = editedAgent();
+  ownerChangedElsewhere(setup, "northwind");
+  ownerChangedElsewhere(setup, "ledgerly");
+
+  // Act
+  setup.draft.acknowledgeOwner("northwind");
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    ownerChange: { status: "changed", from: null, to: "ledgerly" },
+    canSave: false,
+  });
+});
+
+it("an owner changed back to the acknowledged one needs no acknowledgement", () => {
+  // Arrange
+  const setup = editedAgent();
+  ownerChangedElsewhere(setup, "northwind");
+
+  // Act
+  ownerChangedElsewhere(setup, null);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a save refused for a stale owner keeps the draft and waits for the new owner instead of a newer revision", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3 },
+    content: { name: "Edited" },
+    dirty: true,
+    conflict: { status: "none" },
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal, Studio's delivery of the new owner asks for acknowledgement", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  echoed(setup);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    ownerChange: { status: "changed", from: null, to: "northwind" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal, Studio's delivery of the owner moved back to the acknowledged one lets the edits save", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+  setup.factory.moveElsewhere(null);
+
+  // Act
+  echoed(setup);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("after a stale-owner refusal, a delivery of the state read before the move keeps waiting", async () => {
+  // Arrange
+  const setup = editedAgent();
+  const beforeMove = setup.factory.latest();
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  deliver(setup, [{ ...beforeMove }]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal, a queued delivery read before the refusing move keeps waiting", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  deliver(setup, [queued]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal whose read fails, a queued delivery read before the refusing move keeps waiting", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  deliver(setup, [queued]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal whose read failed, the next delivery reads again and the owner moved back lets the edits save", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+  setup.factory.getAgent.mockImplementation(async () => setup.factory.latest());
+  setup.factory.moveElsewhere(null);
+  const released = publishedWhen(setup, (snapshot) => snapshot.ownerChange.status === "none");
+
+  // Act
+  echoed(setup);
+
+  // Assert
+  expect(await released).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    canSave: true,
+  });
+});
+
+it("a retried read after a stale-owner refusal checks the owner Studio delivered while it ran", async () => {
+  // Arrange
+  const setup = editedAgent();
+  const unread = new Error("Factory could not read the Agent.");
+  setup.factory.getAgent.mockRejectedValueOnce(unread).mockRejectedValueOnce(unread);
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  const refusing = setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+  let answerRead: (agent: AgentDefinition) => void = () => {};
+  setup.factory.getAgent.mockImplementationOnce(
+    () => new Promise<AgentDefinition>((resolve) => (answerRead = resolve)),
+  );
+  deliver(setup, [queued]);
+  setup.factory.moveElsewhere(null);
+  echoed(setup);
+  const released = publishedWhen(setup, (snapshot) => snapshot.ownerChange.status === "none");
+
+  // Act
+  answerRead(refusing);
+
+  // Assert
+  expect(await released).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    canSave: true,
+  });
+});
+
+it("after a stale-owner refusal, a read finding the owner already moved back lets the edits save", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.moveElsewhere("northwind");
+  setup.factory.getAgent.mockImplementationOnce(async () => setup.factory.moveElsewhere(null));
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a dirty editor's own Change owner needs no acknowledgement, also before Studio delivers it", () => {
+  // Arrange
+  const setup = editedAgent();
+  const moved = setup.factory.moveElsewhere("northwind");
+
+  // Act
+  setup.draft.ownerChangedHere(moved);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a dirty editor's own Change owner that Studio delivered before its reply needs no acknowledgement", () => {
+  // Arrange
+  const setup = editedAgent();
+  const moved = ownerChangedElsewhere(setup, "northwind");
+
+  // Act
+  setup.draft.ownerChangedHere(moved);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a Change owner reply older than the owner Studio delivered since leaves the delivered owner", () => {
+  // Arrange
+  const setup = editedAgent();
+  const reply = setup.factory.moveElsewhere("northwind");
+  ownerChangedElsewhere(setup, null);
+
+  // Act
+  setup.draft.ownerChangedHere(reply);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
+it("a Change owner reply older than a newer revision Studio delivered beside the edits leaves the delivered owner", () => {
+  // Arrange
+  const setup = editedAgent();
+  const reply = setup.factory.moveElsewhere("northwind");
+  setup.factory.saveElsewhere({ name: "Saved elsewhere", updatedAt: laterThan(reply.updatedAt) });
+  ownerChangedElsewhere(setup, null);
+
+  // Act
+  setup.draft.ownerChangedHere(reply);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "none" },
+    conflict: { status: "detected", revision: 4 },
+  });
+});
+
+it("an owner moved back elsewhere after the editor's own Change owner asks for acknowledgement", () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind"));
+
+  // Act
+  ownerChangedElsewhere(setup, null);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "changed", from: "northwind", to: null },
+    canSave: false,
+  });
+});
+
+it("a stale-owner refusal after the editor's own Change owner asks to acknowledge the owner Studio shows", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind"));
+  setup.factory.moveElsewhere(null);
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    ownerChange: { status: "changed", from: "northwind", to: null },
+    canSave: false,
+  });
 });

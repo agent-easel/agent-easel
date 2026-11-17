@@ -20,7 +20,8 @@ function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
 }
 export type StudioSelection =
   | { tab: "flows"; flowId?: string }
-  | { tab: "agents"; agentId?: string }
+  /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
+  | { tab: "agents"; agentId?: string; fromFlow?: string }
   /** `triggerId: "new"` picks the type; adding `kind` opens that type's create form. */
   | { tab: "triggers"; triggerId?: string; kind?: TriggerKind };
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
@@ -39,6 +40,7 @@ function studioSelection(value: unknown): StudioSelection | undefined {
     return {
       tab: "agents",
       ...(typeof selection.agentId === "string" ? { agentId: selection.agentId } : {}),
+      ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
     };
   if (selection.tab === "triggers") {
     if (typeof selection.triggerId !== "string") return { tab: "triggers" };

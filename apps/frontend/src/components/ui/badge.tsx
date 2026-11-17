@@ -14,6 +14,8 @@ const badgeVariants = cva(
         attention: "border-attention/50 bg-attention/10 text-attention",
         success: "border-success/50 bg-success/10 text-success",
         info: "border-status-waiting/50 bg-status-waiting/10 text-status-waiting",
+        /** An owning Project, as Studio's owner badge shows it. */
+        project: "border-brand-cyan bg-accent text-brand-cyan",
         outline:
           "border-border text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
         ghost: "[a&]:hover:bg-accent [a&]:hover:text-accent-foreground",

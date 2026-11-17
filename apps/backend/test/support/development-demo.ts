@@ -29,6 +29,7 @@ export async function restoredDevelopmentDemo(c: TestContext) {
     ...flow.value,
     name: "Retained development edit",
     expectedRevision: flow.value.revision,
+    expectedProjectId: flow.value.projectId,
   });
   assert(edited.ok);
   t3.save();

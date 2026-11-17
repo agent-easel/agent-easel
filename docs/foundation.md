@@ -18,6 +18,11 @@ and restricted OAuth credentials live outside project repositories.
   Structural validity permits incomplete drafts, while readiness is a separate launch gate.
   Each Flow save appends an immutable relational revision and each Agent save an immutable
   Agent revision; removing either hides it from Studio and Start but keeps its revisions.
+  The [owning Project](studio.md#ownership) is stored on the Flow and Agent identity, referencing
+  the never-deleted Factory Project row, and is not part of any revision. Migration `103` added it
+  with every existing Flow and Agent global, keeping ids, revisions, references, Runs and import
+  receipts unchanged and needing no user action. Migration `105` records when each identity's owner
+  last changed (empty for existing rows), so a definition's update time is its latest save or owner change.
 - Start atomically records the Run input, references the current Flow revision and freezes
   the current revision of every Agent that Flow references, including blocks it may never
   visit; each Agent activation references that frozen revision. Runs keep no separate copy:
@@ -44,10 +49,12 @@ and restricted OAuth credentials live outside project repositories.
   starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
   recipient deliveries and changes no row.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
-  a SHA-256 fingerprint of the canonical document plus the reviewed selections (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
-  the created Flow id. A commit reads receipts before the T3 catalog, so a retry replays without T3: the same id and fingerprint return the
+  a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
+  the created Flow id. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
   original result, while another fingerprint under that id conflicts. Receipts are immutable and outlive restarts and the definitions they name; a replay returns a removed
-  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data.
+  definition's id and never recreates it. Migration `095` adds the receipt tables and changes no existing data. Migration `104` records each
+  receipt's fingerprint version: receipts written before it keep version 1, which covers only the document and selections of an import
+  that was always global, so they replay as global imports and conflict with a retry naming a Project; new receipts are version 2.
 - Run images are bytes on disk under `FACTORY_HOME/images`, named by their SHA-256 digest, with
   staging metadata in SQLite. Start attaches the ordered manifest to the Run, accepting only digests
   that are staged and still have their file; the prompt segments and manifest are immutable and the
@@ -96,7 +103,7 @@ and restricted OAuth credentials live outside project repositories.
   from one that never was. A Trigger-started Run's origin is written in the same transaction; it copies the Trigger's
   name and id instead of referencing the Trigger and can be neither updated nor deleted, so it outlives renames and
   removal. Removing a Trigger deletes its settings, check, problem and guards. The table names carry a `run_` prefix
-  so they do not read as SQL triggers. Migration `102` adds these tables and changes no existing row; existing Runs
+  so they do not read as SQL triggers. Migration `106` adds these tables and changes no existing row; existing Runs
   have no origin.
 - Each Start creates a new Task, Run and threads. An automatically Settled Run returns to
   Active when one of its Blocks reports; manually settled and Archived Runs are never reopened.
@@ -199,8 +206,8 @@ any other refused subscription is retried with backoff and keeps mutations disab
 Delivery replaces changed entities or logical sections by stable identity, sends navigation
 upserts/removals and appends timeline entries by sequence. Studio changes are whole Agent and
 Flow upserts and removals by id: an Agent change also delivers each Flow whose readiness it
-changed, although that Flow's revision is unchanged. Clients order Agents by `updatedAt`
-descending and Flows by `createdAt` descending, each then by ascending id, which reproduces the
+changed, although that Flow's revision is unchanged. Clients order Agents by `updatedAt` (latest
+save or owner change) descending and Flows by `createdAt` descending, each then by ascending id, which reproduces the
 backend's list order. Worker executions use the pair
 of binding id and execution id, including observation metadata, so later turns preserve
 earlier executions. Observation-only timestamps of Runs and projects

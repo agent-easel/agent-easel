@@ -3,7 +3,6 @@ import type {
   AgentDefinition,
   AgentExecutionSettingsStatus,
   FactoryOperations,
-  OperationError,
   Result,
 } from "@t3-factory/contracts";
 import { CANVAS_COORD_MAX, CANVAS_COORD_MIN } from "@t3-factory/domain-validation";
@@ -18,11 +17,16 @@ export type AuthoringOperations = Pick<
   | "createAgent"
   | "updateAgent"
   | "removeAgent"
+  | "changeAgentOwner"
+  | "duplicateAgent"
   | "listFlows"
   | "getFlow"
   | "createFlow"
   | "updateFlow"
   | "removeFlow"
+  | "changeFlowOwner"
+  | "previewFlowDuplicate"
+  | "duplicateFlow"
 >;
 
 const noArguments: Tool["inputSchema"] = {
@@ -38,6 +42,50 @@ const expectedRevision = {
   description:
     "The revision you last read. A save on an older revision is refused with a conflict.",
 };
+const expectedProjectId = {
+  type: ["string", "null"],
+  description:
+    "The projectId you last read: the owning Project's id, or null for a global definition. A save after the owner changed is refused with a conflict; a save never changes the owner.",
+};
+const projectId = {
+  type: ["string", "null"],
+  description:
+    "The owning Project: a Project id from factory_list_projects, or null (the default) for a global definition. A global Flow places only global Agents; a Project Flow places global Agents and its own Project's Agents.",
+};
+/** The arguments of a Change owner tool for the definition `key` names. */
+const changeOwnerSchema = (key: "agentId" | "flowId"): Tool["inputSchema"] => ({
+  type: "object",
+  properties: {
+    [key]: key === "agentId" ? agentId : flowId,
+    expectedProjectId: {
+      type: ["string", "null"],
+      description:
+        "The projectId you last read: the current owning Project's id, or null for a global definition. A change after the owner changed elsewhere is refused with a conflict.",
+    },
+    projectId: {
+      type: ["string", "null"],
+      description:
+        "The new owning Project: a Project id from factory_list_projects whose availability is available, or null for global.",
+    },
+  },
+  required: [key, "expectedProjectId", "projectId"],
+  additionalProperties: false,
+});
+const duplicateTarget = {
+  type: ["string", "null"],
+  description:
+    "The copy's owning Project: a Project id from factory_list_projects whose availability is available, or null for global. Omit it to keep the source's owning Project, which must then be available.",
+};
+const listFilter = (kind: "Agents" | "Flows"): Tool["inputSchema"] => ({
+  type: "object",
+  properties: {
+    projectId: {
+      type: "string",
+      description: `A Project id from factory_list_projects: list only global ${kind} and the ${kind} that Project owns. Omit it to list every ${kind.slice(0, -1)}.`,
+    },
+  },
+  additionalProperties: false,
+});
 const exit = {
   type: "object",
   properties: {
@@ -150,8 +198,9 @@ export const authoringTools: Tool[] = [
   },
   {
     name: "factory_list_agents",
-    description: "List the current Agents with their revision and settings status.",
-    inputSchema: noArguments,
+    description:
+      "List the current Agents with their owning Project (projectId, null for a global Agent), revision and settings status.",
+    inputSchema: listFilter("Agents"),
   },
   {
     name: "factory_get_agent",
@@ -170,7 +219,7 @@ export const authoringTools: Tool[] = [
       "Create an Agent as revision 1. Model settings are checked for shape and reporting support; availability is reported in settingsStatus.",
     inputSchema: {
       type: "object",
-      properties: agentFields,
+      properties: { ...agentFields, projectId },
       required: ["name", "prompt", "execution", "exits"],
       additionalProperties: false,
     },
@@ -181,8 +230,16 @@ export const authoringTools: Tool[] = [
       "Save an Agent's name, prompt, model settings and exits as its next immutable revision, exactly as a Studio save.",
     inputSchema: {
       type: "object",
-      properties: { agentId, expectedRevision, ...agentFields },
-      required: ["agentId", "expectedRevision", "name", "prompt", "execution", "exits"],
+      properties: { agentId, expectedRevision, expectedProjectId, ...agentFields },
+      required: [
+        "agentId",
+        "expectedRevision",
+        "expectedProjectId",
+        "name",
+        "prompt",
+        "execution",
+        "exits",
+      ],
       additionalProperties: false,
     },
   },
@@ -197,9 +254,34 @@ export const authoringTools: Tool[] = [
     },
   },
   {
+    name: "factory_change_agent_owner",
+    description:
+      "Change owner of an Agent exactly as Studio's Change owner: move it to another Project or make it global. It appends no revision and changes nothing else. Refused when a current Flow could no longer place the Agent afterwards; the issues name those Flows. Ask the user before calling it.",
+    inputSchema: changeOwnerSchema("agentId"),
+  },
+  {
+    name: "factory_duplicate_agent",
+    description:
+      "Duplicate an Agent exactly as Studio's Duplicate: a new Agent at revision 1 from the latest saved revision, owned by projectId. The source is unchanged.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentId,
+        name: {
+          type: "string",
+          description: 'The copy\'s name; omitted, the source name with " copy".',
+        },
+        projectId: duplicateTarget,
+      },
+      required: ["agentId"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "factory_list_flows",
-    description: "List the current Flows with their revision, graph, workspace and readiness.",
-    inputSchema: noArguments,
+    description:
+      "List the current Flows with their owning Project (projectId, null for a global Flow), revision, graph, workspace and readiness. A Project Flow starts only in its owning Project; a global Flow in any Project.",
+    inputSchema: listFilter("Flows"),
   },
   {
     name: "factory_get_flow",
@@ -217,7 +299,7 @@ export const authoringTools: Tool[] = [
       "Create a Flow as revision 1 atomically, optionally with its whole graph and workspace. Omit positions to auto-arrange the whole graph. A name alone creates an empty Flow.",
     inputSchema: {
       type: "object",
-      properties: flowFields,
+      properties: { ...flowFields, projectId },
       required: ["name"],
       additionalProperties: false,
     },
@@ -228,8 +310,64 @@ export const authoringTools: Tool[] = [
       "Save a Flow's name, whole graph and workspace as its next immutable revision, exactly as a Studio save. If any position is omitted the server auto-arranges the whole graph; otherwise positions are kept. The reply includes readiness.",
     inputSchema: {
       type: "object",
-      properties: { flowId, expectedRevision, ...flowFields },
-      required: ["flowId", "expectedRevision", "name", "graph"],
+      properties: { flowId, expectedRevision, expectedProjectId, ...flowFields },
+      required: ["flowId", "expectedRevision", "expectedProjectId", "name", "graph"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_change_flow_owner",
+    description:
+      "Change owner of a Flow exactly as Studio's Change owner: move it to another Project or make it global. It appends no revision and changes nothing else. Refused when the Flow places Agents its new owner may not place; the issues name them. Ask the user before calling it.",
+    inputSchema: changeOwnerSchema("flowId"),
+  },
+  {
+    name: "factory_preview_flow_duplicate",
+    description:
+      "Preview a Flow Duplicate into projectId, writing nothing. The plan lists each distinct Agent the latest revision places with its default choice: keep places the same Agent, copy places a new Agent created in the target. Only Agents with changeable true may switch. Show the plan to the user, then commit it with factory_duplicate_flow.",
+    inputSchema: {
+      type: "object",
+      properties: { flowId, projectId: duplicateTarget },
+      required: ["flowId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "factory_duplicate_flow",
+    description:
+      "Commit a previewed Flow Duplicate atomically: a new Flow at revision 1 owned by the plan's projectId, with each copied Agent created once in the target and the copy retargeted to it. The source Flow and its Agents never change. Refused as stale when the Flow or a planned Agent changed since the preview.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        flowId,
+        name: { type: "string", description: "The new Flow's name; omitted, the plan's name." },
+        projectId: {
+          type: ["string", "null"],
+          description:
+            "The plan's projectId exactly as the preview answered it: the Project id, or null for global.",
+        },
+        expectedRevision: {
+          type: "integer",
+          minimum: 1,
+          description: "The plan's revision.",
+        },
+        agents: {
+          type: "array",
+          description:
+            "Every Agent of the plan with agentId, revision and projectId as listed and the chosen choice (keep or copy).",
+          items: {
+            type: "object",
+            properties: {
+              agentId: { type: "string" },
+              revision: { type: "integer" },
+              projectId: { type: ["string", "null"] },
+              choice: { enum: ["keep", "copy"] },
+            },
+            required: ["agentId", "revision", "projectId", "choice"],
+          },
+        },
+      },
+      required: ["flowId", "projectId", "expectedRevision", "agents"],
       additionalProperties: false,
     },
   },
@@ -256,23 +394,42 @@ export const authoringTools: Tool[] = [
   },
 ];
 
-type Subject = "agent" | "flow" | "agentRemoval" | "flowRemoval";
+type Subject =
+  | "agent"
+  | "flow"
+  | "agentRemoval"
+  | "flowRemoval"
+  | "agentOwner"
+  | "flowOwner"
+  | "duplicate";
 
 const fixIssuesNext = "Fix the listed issue paths and call the tool again.";
+const staleOwnerNext =
+  "Nothing changed. Read the definition again with factory_get_flow or factory_get_agent, confirm its current projectId with the user and call the tool again with it as expectedProjectId.";
+const ownerChangeBlockedNext =
+  "Nothing changed. Ask the user whether to change the definitions the issues name, or to copy into the target with factory_preview_flow_duplicate and factory_duplicate_flow or factory_duplicate_agent instead; never rewrite definitions on your own.";
+const agentNotFoundNext = "Find a current Agent id with factory_list_agents.";
+const flowNotFoundNext = "Find a current Flow id with factory_list_flows.";
+const placementNext =
+  "A Flow places only global Agents and Agents of its own owning Project. Choose Agents from factory_list_agents with the Flow's projectId, then call the tool again.";
 
-/** Static recovery steps; replies never echo the call's arguments. */
-const nextSteps: Record<Subject, Partial<Record<OperationError["code"], string>>> = {
+/**
+ * Static recovery steps, keyed by an issue code, which wins, or by the error code; replies never
+ * echo the call's arguments.
+ */
+const nextSteps: Record<Subject, Partial<Record<string, string>>> = {
   agent: {
     validation: fixIssuesNext,
     conflict:
       "Read the Agent with factory_get_agent, reapply your change and save with its revision.",
-    not_found: "Find a current Agent id with factory_list_agents.",
+    not_found: agentNotFoundNext,
   },
   flow: {
+    agent_scope_mismatch: placementNext,
     validation: fixIssuesNext,
     conflict:
       "Read the Flow with factory_get_flow, reapply your change and save with its revision.",
-    not_found: "Find a current Flow id with factory_list_flows.",
+    not_found: flowNotFoundNext,
   },
   agentRemoval: {
     validation: fixIssuesNext,
@@ -280,6 +437,26 @@ const nextSteps: Record<Subject, Partial<Record<OperationError["code"], string>>
       "Nothing was removed. Ask the user before editing or removing the Flows that place this Agent, unless they already authorized those exact changes; never rewrite Flows on your own.",
   },
   flowRemoval: { validation: fixIssuesNext },
+  agentOwner: {
+    stale_owner: staleOwnerNext,
+    owner_change_blocked: ownerChangeBlockedNext,
+    validation: fixIssuesNext,
+    not_found: agentNotFoundNext,
+  },
+  flowOwner: {
+    stale_owner: staleOwnerNext,
+    owner_change_blocked: ownerChangeBlockedNext,
+    validation: fixIssuesNext,
+    not_found: flowNotFoundNext,
+  },
+  duplicate: {
+    stale_duplicate_plan:
+      "Nothing was created. Preview the Duplicate again with factory_preview_flow_duplicate, review the new plan with the user and commit it.",
+    duplicate_choice_not_allowed:
+      "Nothing was created. Keep the plan's choice for every Agent whose changeable is false, then call the tool again.",
+    validation: fixIssuesNext,
+    not_found: "Find a current id with factory_list_flows or factory_list_agents.",
+  },
 };
 const unavailableNext = "Recheck the Factory backend, then call the tool again.";
 
@@ -302,6 +479,32 @@ const withId =
             issues: [{ code: "invalid_id", path: key, message: `Include ${key}.` }],
           },
         });
+
+/**
+ * Global definitions and those `projectId` owns, or every definition without a filter. A filter
+ * that is not a string is a validation issue.
+ */
+const ownedBy =
+  <A extends { readonly projectId: string | null }>(list: () => Promise<Result<readonly A[]>>) =>
+  async ({ projectId }: Record<string, unknown>): Promise<Result<readonly A[]>> => {
+    if (projectId !== undefined && typeof projectId !== "string")
+      return {
+        ok: false,
+        error: {
+          code: "validation",
+          message: "projectId must be a Project id.",
+          issues: [{ code: "invalid_id", path: "projectId", message: "Send a Project id." }],
+        },
+      };
+    const listed = await list();
+    if (!listed.ok || projectId === undefined) return listed;
+    return {
+      ok: true,
+      value: listed.value.filter(
+        (definition) => definition.projectId === null || definition.projectId === projectId,
+      ),
+    };
+  };
 
 /** A removal reply names only the removed id; removing an absent or removed id succeeds too. */
 const removal = (key: "agentId" | "flowId", remove: (id: string) => Promise<Result<void>>) =>
@@ -339,9 +542,11 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
   factory_get_agent_capabilities: ["agent", () => factory.getAgentCapabilities()],
   factory_list_agents: [
     "agent",
-    async () =>
-      withSettingsStatus(factory, await factory.listAgents(), (agents, report) =>
-        agents.map(report),
+    async (input) =>
+      withSettingsStatus(
+        factory,
+        await ownedBy(() => factory.listAgents())(input),
+        (agents, report) => agents.map(report),
       ),
   ],
   factory_get_agent: [
@@ -366,7 +571,23 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
     ),
   ],
   factory_remove_agent: ["agentRemoval", removal("agentId", (id) => factory.removeAgent(id))],
-  factory_list_flows: ["flow", () => factory.listFlows()],
+  factory_change_agent_owner: [
+    "agentOwner",
+    withId("agentId", async (id, input) =>
+      withSettingsStatus(factory, await factory.changeAgentOwner(id, input), (agent, report) =>
+        report(agent),
+      ),
+    ),
+  ],
+  factory_duplicate_agent: [
+    "duplicate",
+    withId("agentId", async (id, input) =>
+      withSettingsStatus(factory, await factory.duplicateAgent(id, input), (agent, report) =>
+        report(agent),
+      ),
+    ),
+  ],
+  factory_list_flows: ["flow", ownedBy(() => factory.listFlows())],
   factory_get_flow: ["flow", withId("flowId", (id) => factory.getFlow(id))],
   factory_create_flow: ["flow", (input) => factory.createFlow(input)],
   factory_save_flow: ["flow", withId("flowId", (id, input) => factory.updateFlow(id, input))],
@@ -378,6 +599,18 @@ const authoringCalls = (factory: AuthoringOperations): Record<string, [Subject, 
     }),
   ],
   factory_remove_flow: ["flowRemoval", removal("flowId", (id) => factory.removeFlow(id))],
+  factory_change_flow_owner: [
+    "flowOwner",
+    withId("flowId", (id, input) => factory.changeFlowOwner(id, input)),
+  ],
+  factory_preview_flow_duplicate: [
+    "duplicate",
+    withId("flowId", (id, input) => factory.previewFlowDuplicate(id, input)),
+  ],
+  factory_duplicate_flow: [
+    "duplicate",
+    withId("flowId", (id, input) => factory.duplicateFlow(id, input)),
+  ],
 });
 
 /** A Factory tool result: one JSON text item, flagged as an error when the call failed. */
@@ -400,11 +633,13 @@ export async function callAuthoringTool(
     const result = await call(input);
     if (result.ok) return textResult(false, result.value);
     const { code, message, issues } = result.error;
+    const steps = nextSteps[subject];
+    const issueNext = issues.map((issue) => steps[issue.code]).find((next) => next !== undefined);
     return textResult(true, {
       code,
       message,
       issues,
-      next: nextSteps[subject][code] ?? unavailableNext,
+      next: issueNext ?? steps[code] ?? unavailableNext,
     });
   } catch {
     return textResult(true, {

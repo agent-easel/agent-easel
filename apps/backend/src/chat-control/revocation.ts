@@ -63,9 +63,9 @@ export const applyAccessRevocation = (
       ungranted(access.channels, row.parent_channel_id, JSON.stringify([row.project_id])),
     );
     if (revoked.length > 0)
-      yield* sql`INSERT INTO chat_run_reporting (run_id,lifecycle) VALUES ${sql.csv(
-        revoked.map((row) => sql`(${row.run_id},NULL)`),
-      )} ON CONFLICT(run_id) DO UPDATE SET lifecycle=NULL,final=0`;
+      yield* sql`INSERT INTO chat_run_reporting (run_id,baseline) VALUES ${sql.csv(
+        revoked.map((row) => sql`(${row.run_id},1)`),
+      )} ON CONFLICT(run_id) DO UPDATE SET baseline=1,final=0`;
   });
 
 /**

@@ -54,12 +54,6 @@ const OBSERVATIONS: Record<string, string> = {
   stale: " · observation stale",
   unknown: " · not observed yet",
 };
-const HANDOFFS: Record<string, (to: string) => string> = {
-  delivered: (to) => `handed off to ${to}`,
-  cancelled: (to) => `handoff to ${to} cancelled`,
-  "released-unconfirmed": (to) => `released to ${to}, delivery not confirmed yet`,
-  held: (to) => `handoff to ${to} held`,
-};
 const NEEDS_INPUT: Record<string, string> = {
   human: "Human step",
   "native-request": "T3 request (answer it in T3)",
@@ -73,18 +67,6 @@ const PROBLEMS: Record<string, string> = {
   "settlement-unresolved": "Settle could not stop workers",
 };
 
-function resultLine(result: RunReport["latestResults"][number]) {
-  const parts = [
-    `${result.status === "finished" ? "✅" : "⏳"} ${name(result.block)} — ${result.status === "finished" ? "finished" : "reported waiting"}${
-      result.exit ? ` via “${name(result.exit)}”` : ""
-    } ${at(result.acceptedAt)}`,
-  ];
-  if (result.workerCompletion === "confirmed") parts.push("worker finished");
-  if (result.workerCompletion === "held") parts.push("worker not confirmed finished");
-  for (const handoff of result.handoffs) parts.push(HANDOFFS[handoff.state]!(name(handoff.to)));
-  return parts.join(" · ");
-}
-
 /** At most `limit` lines of one kind, summarizing the rest as `what`; nothing when empty. */
 function section(what: string, lines: readonly string[], limit: number) {
   const shown = lines.slice(0, limit);
@@ -93,18 +75,16 @@ function section(what: string, lines: readonly string[], limit: number) {
 }
 
 /**
- * A Run's status card: identity, lifecycle, active Blocks, the latest result of each Block, pending
- * Waits with deadlines, Needs input and Problems, from Factory's own facts. It never carries
- * report bodies or prompts, and always fits one Discord message: long lists are summarized and
- * the card points to Read Run for everything.
+ * A Run's status card: identity, lifecycle and Flow, then only what is happening now: active
+ * Blocks, pending Waits with deadlines, Needs input and Problems, from Factory's own facts. It never
+ * carries results, report bodies or prompts, and always fits one Discord message: long lists are
+ * summarized.
  */
 function statusCardText(report: RunReport, replacedApplication: boolean) {
   const { run } = report;
-  const reference = runReference(run);
   const head = [
     ...(replacedApplication ? [`_${APPLICATION_NOTICE}_`, ""] : []),
-    `${runHeading(reference, run.title)} · ${LIFECYCLE[run.state]}`,
-    `📁 ${name(run.project.name)} · \`${clip(run.project.repositoryPath, TITLE_LIMIT)}\` · 🔀 ${name(run.flow)}`,
+    `${runHeading(runReference(run), run.title)} · ${LIFECYCLE[run.state]} · 🔀 ${name(run.flow)}`,
     ...(report.settlement === null
       ? []
       : [
@@ -119,32 +99,26 @@ function statusCardText(report: RunReport, replacedApplication: boolean) {
       (block) =>
         `${BLOCK_STATES[block.state]!.replace("{block}", name(block.name))}${OBSERVATIONS[block.observation] ?? ""}`,
     );
-  const results = report.latestResults.map(resultLine);
   const waits = report.pendingWaits.map(
     (wait) => `⏰ ${name(wait.block)} — waits until ${at(wait.deadlineAt)}`,
   );
   const needsInput = report.needsInput.map(
     (matter) =>
-      `🙋 ${NEEDS_INPUT[matter.kind]} in ${name(matter.block)} since ${at(matter.appearedAt)}${
-        OBSERVATIONS[matter.observation] ?? ""
-      }`,
+      `🙋 ${NEEDS_INPUT[matter.kind]} in ${name(matter.block)}${OBSERVATIONS[matter.observation] ?? ""}`,
   );
   const problems = report.problems.map(
     (matter) =>
-      `⚠️ ${matter.block === null ? "" : `${name(matter.block)} — `}${PROBLEMS[matter.kind]} since ${at(matter.appearedAt)}${
+      `⚠️ ${matter.block === null ? "" : `${name(matter.block)} — `}${PROBLEMS[matter.kind]}${
         OBSERVATIONS[matter.observation] ?? ""
       }`,
   );
-  const foot = `_Ask Factory to read Run ${reference} for details._`;
   const render = (limit: number) =>
     [
       ...head,
       ...section("active Blocks", blocks, limit),
-      ...section("results", results, limit),
       ...section("Waits", waits, limit),
       ...section("Needs input", needsInput, limit),
       ...section("Problems", problems, limit),
-      foot,
     ].join("\n");
   for (const limit of LIST_LIMITS) {
     const text = render(limit);

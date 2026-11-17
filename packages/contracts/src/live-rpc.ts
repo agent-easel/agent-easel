@@ -49,7 +49,7 @@ export class FactoryLive extends RpcGroup.make(
     error: LiveError,
     stream: true,
   }),
-  /** Studio's Agents and Flows (protocol 12) and Triggers (protocol 17). */
+  /** Studio's Agents and Flows (protocol 12) and Triggers (protocol 18). */
   Rpc.make("WatchStudio", {
     success: trusted<LiveEnvelope<StudioLiveMessage>>(),
     error: LiveError,

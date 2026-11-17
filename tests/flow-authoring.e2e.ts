@@ -468,6 +468,7 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
       body: JSON.stringify({
         name: created.value.name,
         expectedRevision: 1,
+        expectedProjectId: created.value.projectId,
         graph: {
           flowInput: { position: { x: 40, y: 50 }, targetBlockIds: ["worker"] },
           blocks: [

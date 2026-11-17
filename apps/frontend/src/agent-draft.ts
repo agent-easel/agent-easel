@@ -25,7 +25,7 @@ import {
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
   typeof api,
-  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent"
+  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent" | "getAgent"
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
@@ -93,6 +93,8 @@ function saveRequest(
   agent: AgentDefinition | null,
   draft: AgentContent,
   operations: AgentDraftOperations,
+  /** The owning Project a save expects, or the one a create gives the new Agent. */
+  owner: string | null,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
@@ -102,9 +104,13 @@ function saveRequest(
   });
   const fallback = "Could not save this Agent. Your edits are still here.";
   if (agent) {
-    const validation = validateUpdateAgent({ ...content, expectedRevision: agent.revision });
+    const validation = validateUpdateAgent({
+      ...content,
+      expectedRevision: agent.revision,
+      expectedProjectId: owner,
+    });
     if (!validation.ok) return { error: validation.error.message };
-    const { expectedRevision: _, ...submitted } = validation.value;
+    const { expectedRevision: _, expectedProjectId: __, ...submitted } = validation.value;
     return {
       submitted: asContent(submitted),
       send: () => operations.updateAgent(agent.id, validation.value),
@@ -113,12 +119,12 @@ function saveRequest(
       fallback,
     };
   }
-  const validation = validateCreateAgent(content);
+  const validation = validateCreateAgent({ ...content, projectId: owner });
   if (!validation.ok) return { error: validation.error.message };
-  const input = validation.value;
+  const { projectId: _, ...input } = validation.value;
   return {
     submitted: asContent(input),
-    send: () => operations.createAgent(input),
+    send: () => operations.createAgent(validation.value),
     unknownMessage:
       "Save outcome unknown. Factory may have created this Agent; check the Agent list before creating it again.",
     fallback,
@@ -163,6 +169,7 @@ export function createAgentDraft(
         },
     contentOf,
     list: () => source.getSnapshot().agents,
+    read: (id) => source.getAgent(id),
     view(state): AgentDraftSnapshot {
       const { environmentId, providerInstanceId, modelId } = state.content.execution;
       const environments = capabilities?.environments ?? [];
@@ -203,10 +210,11 @@ export function createAgentDraft(
       return unsubscribe;
     },
     edit,
-    async duplicate() {
+    /** Copies the saved revision into target `projectId`: a Project, or null for Global. */
+    async duplicate(projectId: string | null) {
       const { saved, removed, dirty, saving, removing } = draft.getSnapshot();
       if (removed || !saved || dirty || saving || removing) return;
-      return source.duplicateAgent(saved.id, {});
+      return source.duplicateAgent(saved.id, { projectId });
     },
     setEnvironmentId(id: string) {
       edit({ execution: { ...execution(), environmentId: id } });
@@ -217,16 +225,22 @@ export function createAgentDraft(
     dismissUpdate: draft.dismissUpdate,
     clearRemovalError: draft.clearRemovalError,
     remove: () => draft.remove(source.removeAgent, "Factory could not delete this Agent."),
-    /** Validates and sends the draft against its saved revision, or creates it. */
-    async save() {
-      const { saved, content, canSave } = draft.getSnapshot();
-      if (!canSave) return undefined;
-      const request = saveRequest(saved, content, source);
+    /**
+     * Validates and sends the draft against its saved revision, or creates it owned by `owner`
+     * (null for a global Agent); a save never changes the owner.
+     */
+    async save(owner: string | null = null) {
+      const snapshot = draft.getSnapshot();
+      if (!snapshot.canSave) return undefined;
+      const { saved, content } = snapshot;
+      const request = saveRequest(saved, content, source, saved ? snapshot.owner : owner);
       if (!("error" in request)) return draft.save(request);
       draft.report(request.error);
       return undefined;
     },
     compare: draft.compare,
+    acknowledgeOwner: draft.acknowledgeOwner,
+    ownerChangedHere: draft.ownerChangedHere,
     /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */
     requestLoadLatest(revision: number) {
       const { conflict } = draft.getSnapshot();

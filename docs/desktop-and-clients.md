@@ -398,13 +398,25 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **17**. A server accepts clients from protocol **16**; a current client
-requires a protocol **17** server. Protocol 17 adds the [Trigger operations](studio.md#trigger-http-api)
+The current protocol is **18**. A server accepts clients from protocol **17**; a current client
+requires a protocol **18** server. Protocol 18 adds the [Trigger operations](studio.md#trigger-http-api)
 over the product HTTP API, a `triggers` list to the Studio live subscription (snapshots and change
 sets) and the [Run origin](runs.md#starting-from-a-trigger) (`origin`) to Run detail and navigation.
-Protocol 16 clients keep working against a protocol 17 server, since they never call the new routes
-and ignore the added list and field. A current client manages Triggers in Studio, so it refuses a protocol 16 server and
-shows the update gate naming the server. Protocol 16 added
+Protocol 17 clients keep working against a protocol 18 server, since they never call the new routes
+and ignore the added list and field. A current client manages Triggers in Studio, so it refuses a
+protocol 17 server and shows the update gate naming the server.
+Protocol 17 gave every
+Flow and Agent an [owning Project](studio.md#ownership) (`projectId`, null for a global definition) that
+create accepts, validates a Flow's unsaved content by its id (`POST /api/flows/:id/validate`) and names
+each placed Agent's revision and owning Project in the answer. It also added Flow Duplicate (`POST /api/flows/:id/duplicate/preview`
+and `POST /api/flows/:id/duplicate`, whose commit requires the plan's target `projectId`), an optional target `projectId` on
+Agent Duplicate and Import commit, and
+[Change owner](studio.md#ownership) (`PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner`); Flow and Agent saves
+require the `expectedProjectId` they last read. A protocol 16 client neither sends those routes nor the expected owner, nor
+compares those answers, and a protocol 17 or newer client needs a server that sends them, so each side
+refuses the other at the handshake and shows the update gate; credentials and stored data are kept.
+This is an intentional transport break beside migration `103`.
+Protocol 16 added
 [Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
 fixed Otherwise output to Flows and captured Run definitions, with each Condition's
 [routing summary and selection events](runs.md#conditions) in Run detail, and the

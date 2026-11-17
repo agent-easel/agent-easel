@@ -28,6 +28,7 @@ export async function saveFlow(
     await factory.updateFlow(flow.id, {
       name,
       expectedRevision: flow.revision,
+      expectedProjectId: flow.projectId,
       workspace,
       graph,
     }),
@@ -212,6 +213,7 @@ async function createConditionFlows(factory: Factory, agents: DemoAgents) {
     await factory.updateFlow(draft.id, {
       name: draft.name,
       expectedRevision: draft.revision,
+      expectedProjectId: draft.projectId,
       workspace: { mode: "checkout" },
       graph: graph([
         conditionRule("escalate", "Human escalation", null),
@@ -294,6 +296,7 @@ async function createWaitFlows(factory: Factory, agents: DemoAgents) {
     await factory.updateFlow(draft.id, {
       name: draft.name,
       expectedRevision: draft.revision,
+      expectedProjectId: draft.projectId,
       workspace: { mode: "checkout" },
       graph: graph(null),
     }),
@@ -351,6 +354,7 @@ async function createExitReadinessScenarios(
       prompt: reviewer.prompt,
       execution: reviewer.execution,
       expectedRevision: reviewer.revision,
+      expectedProjectId: reviewer.projectId,
       exits: [
         blockExit("pass", "pass", "pass"),
         blockExit("github-url-agent", "github-url", "github-url"),
@@ -371,6 +375,7 @@ async function createExitReadinessScenarios(
     await factory.updateFlow(hiddenFlowId, {
       name: hiddenFlow.name,
       expectedRevision: hiddenFlow.revision,
+      expectedProjectId: hiddenFlow.projectId,
       graph: {
         ...hiddenFlow.graph,
         blocks: hiddenFlow.graph.blocks.map((block) =>

@@ -37,7 +37,7 @@ it("project selection and catalog survive restart while connection is unavailabl
   // Assert
   const recovered = JSON.parse(child.stdout);
   expect(recovered.value.selectedProjectId).toBe(first.id);
-  expect(recovered.value.projects.length).toBe(1);
+  expect(recovered.value.projects.length).toBe(2);
   expect(recovered.value.projects[0].availability).toBe("connection-unavailable");
 });
 

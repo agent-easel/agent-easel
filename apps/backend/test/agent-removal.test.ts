@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
-import { sampleAgentInput } from "./support/domain-setup.ts";
+import { assertOk, discoveredClones, sampleAgentInput } from "./support/domain-setup.ts";
+import { agentBlock, flowInput } from "./support/scenarios.ts";
 import { prepared } from "./support/prepared-runner.ts";
 
 it("removing an unused Agent deletes the definition", async (c) => {
@@ -79,7 +80,11 @@ it("a removed Flow rejects saves without being recreated and removing it again s
   assert((await f.removeFlow(flow.id)).ok);
 
   // Act
-  const saved = await f.updateFlow(flow.id, { ...flow, expectedRevision: flow.revision });
+  const saved = await f.updateFlow(flow.id, {
+    ...flow,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+  });
   const removedAgain = await f.removeFlow(flow.id);
 
   // Assert
@@ -114,6 +119,7 @@ it("a removed Agent rejects saves, leaves the catalog and removing it again succ
   const edited = await f.updateAgent(saved.value.id, {
     ...sampleAgentInput("Revived"),
     expectedRevision: saved.value.revision,
+    expectedProjectId: saved.value.projectId,
   });
   const duplicated = await f.duplicateAgent(saved.value.id, {});
   const removedAgain = await f.removeAgent(saved.value.id);
@@ -127,4 +133,53 @@ it("a removed Agent rejects saves, leaves the catalog and removing it again succ
   const listed = await f.listAgents();
   assert(listed.ok);
   expect(listed.value.some((agent) => agent.id === saved.value.id)).toBe(false);
+});
+
+it("an Agent of a Project that became unavailable can be removed", async (c) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const removed = await factory.removeAgent(agent.id);
+
+  // Assert
+  assert(removed.ok);
+  const missing = await factory.getAgent(agent.id);
+  assert(!missing.ok);
+  expect(missing.error.code).toBe("not_found");
+});
+
+it("an Agent placed by a Flow of an unavailable Project is still refused as in use", async (c) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(c);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = assertOk(
+    await factory.createFlow({
+      name: "Release",
+      projectId: first.id,
+      graph: {
+        flowInput: flowInput("release"),
+        blocks: [agentBlock("release", "Release", agent.id)],
+        connections: [],
+      },
+    }),
+  );
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const removed = await factory.removeAgent(agent.id);
+
+  // Assert
+  assert(!removed.ok);
+  expect(removed.error.issues).toStrictEqual([
+    {
+      code: "agent_in_use",
+      path: "agentId",
+      message: `Flow "Release" (${flow.id}) places this Agent.`,
+    },
+  ]);
 });

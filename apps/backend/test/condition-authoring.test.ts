@@ -299,6 +299,7 @@ it("Start refuses a saved Flow whose Condition loops back to itself and creates 
   const saved = await f.updateFlow(flow.id, {
     name: flow.name,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     workspace: flow.workspace,
     graph: {
       flowInput: flowInput("worker"),
@@ -335,6 +336,7 @@ it("a Flow save after Start leaves the Run on the Condition rules it captured", 
   const first = await f.updateFlow(flow.id, {
     name: flow.name,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     workspace: flow.workspace,
     graph: graph(3),
   });
@@ -346,6 +348,7 @@ it("a Flow save after Start leaves the Run on the Condition rules it captured", 
   const saved = await f.updateFlow(flow.id, {
     name: flow.name,
     expectedRevision: first.value.revision,
+    expectedProjectId: first.value.projectId,
     workspace: flow.workspace,
     graph: graph(4),
   });

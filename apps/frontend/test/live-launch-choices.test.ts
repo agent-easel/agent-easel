@@ -4,6 +4,7 @@ import { launchChoicesScope } from "../src/live/launch-choices.ts";
 
 const flow = (id: string, createdAt: string): FlowDraft => ({
   id,
+  projectId: null,
   name: `Flow ${id}`,
   revision: 1,
   graph: {

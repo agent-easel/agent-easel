@@ -14,7 +14,30 @@ A signed prerelease of `main`, tagged `vX.Y.(Z+1)-beta.N`, built nightly when `m
 A local repository represented by a T3 project, providing the context for Tasks and Runs. Independent local clones are distinct projects even when they share a remote repository.
 
 **Flow**:
-A user-defined graph of work steps and control rules. Its design determines which parts run autonomously and which require human participation.
+A user-defined graph of work steps and control rules. Its design determines which parts run autonomously and which require human participation. Every Flow is either a global Flow or a Project Flow.
+
+**Owning Project**:
+The one Project a Project Flow or Project Agent belongs to, identified by Factory's Project identity rather than a path, name or remote. It belongs to the definition, not to its revisions, and is kept when the Project becomes unavailable. A definition is "owned by" its Project.
+_Avoid_: owner as the property's name, scope, assignment, local, availability (which says whether a Project can take new Runs).
+
+**Global Flow** / **global Agent**:
+A Flow or Agent with no owning Project. A global Flow starts in any available Project and places only global Agents.
+_Avoid_: shared (one definition in several Projects is not a supported concept).
+
+**Project Flow** / **Project Agent**:
+A Flow or Agent owned by one Project. A Project Flow starts only in its owning Project and places global Agents and its own Project's Agents, never another Project's. A different configuration for another Project is an independent copy owned by that Project, never an override of a shared Flow.
+_Avoid_: override, overlay, per-project configuration of a shared Flow.
+
+**Change owner**:
+The action that moves a Flow or Agent to another owning Project or to global without a new revision, only from the owning Project the client last saw and only while the placement rule still holds for every current Flow afterwards. A refusal names the blocking definitions; nothing else is edited or copied.
+_Avoid_: reassign, transfer, move as the action's name.
+
+**Placement rule**:
+Which Agents a Flow may place: any Flow may place a global Agent, and a Project Flow may also place Agents of its own owning Project. Saving refuses a placement outside the rule, readiness reports one and Start rejects one.
+
+**Flow Duplicate**:
+A new, independent Flow copied from another Flow's latest saved revision into a target (Global or one available Project). Its plan lists each Agent the source places as kept (the copy places the same Agent) or copied (a new Agent in the target); an Agent the target may not place is always copied. The source Flow and its Agents never change, and a Flow Duplicate is never synchronized with its source.
+_Avoid_: clone, fork, move (Change owner keeps the identity; Duplicate creates a new one).
 
 **Flow revision**:
 One immutable saved version of a Flow's name, graph and workspace setting. Every successful create or save appends the next revision; Studio shows the latest, and removing a Flow keeps its revisions.
@@ -32,7 +55,7 @@ A constituent element of a flow: the Flow input block, an agent block, a human s
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
-A reusable worker definition consisting of a prompt, optional execution settings and its exits, independent of a particular project. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
+A reusable worker definition consisting of a prompt, optional execution settings and its exits; it is a global Agent or a Project Agent, and ownership adds no execution restriction. Execution settings are complete or absent; an Agent without them Needs a model and cannot run. An agent block uses this definition within a Flow, adding only Flow-local exits, hidden exits and a Revisit instruction; its execution belongs to a Run.
 
 **Agent revision**:
 One immutable saved version of an Agent's name, prompt, execution settings (complete or none) and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
@@ -46,11 +69,11 @@ A JSON file holding the latest saved revision of an Agent, or of a Flow with eac
 _Avoid_: backup, sync.
 
 **Import receipt**:
-The durable record of one committed import: the client's request id, a fingerprint of the document and reviewed model choices, and the definitions it created. A retry with the same content returns the original result instead of a copy.
+The durable record of one committed import: the client's request id, a versioned fingerprint of the document, reviewed model choices and import target, and the definitions it created. A retry with the same content and target returns the original result instead of a copy; a receipt from before imports took a target replays only as a global import.
 _Avoid_: import history, provenance.
 
 **Studio**:
-The modal authoring surface for global Flows, reusable Agent definitions (its **AUTHOR** group) and Triggers (its **AUTOMATE** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
+The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **AUTHOR** group), and Triggers (its **AUTOMATE** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
 _Avoid_: Settings as the Agent editor or Trigger location; a Flows destination in the Run sidebar.
 
 **Factory server**:
@@ -311,8 +334,10 @@ repeatedly wake the same Run.
 Retired. Earlier releases recorded a permanent Finished or Stopped outcome with each worker thread as observed; such Runs are now Settled or Archived and keep that evidence as history. See Settled and Archived.
 
 **Run composer**:
-The full-page launch surface for choosing a Project, global Flow and required
-initial prompt, with optional attached images. It edits one Run draft at a time and opens a fresh composition from
+The full-page launch surface for choosing a Project, a Flow that may start there (a
+global Flow or a Flow owned by that Project) and the required initial prompt, with optional attached images. Its Flow
+picker offers no Flow until a Project is chosen, and a Flow that no longer fits the Project is cleared silently, keeping
+the prompt and images. It edits one Run draft at a time and opens a fresh composition from
 New Run or a Flow's Start Run; opening it does not start execution. Start always uses
 the current saved Flow and Agent definitions.
 
@@ -363,16 +388,16 @@ _Avoid_: Run owner; assigning an originating thread to a Run read or acted on fr
 
 **Status card**:
 The one Discord message Factory maintains in a chat-started Run's originating thread and edits from the
-Run's committed facts: identity, state, active Blocks, latest results, pending Waits, Needs input and
-Problems. Ordinary Block activity edits it rather than posting; it never carries report bodies. See
+Run's committed facts: identity, state, Flow, active Blocks, pending Waits, Needs input and Problems.
+It is an accepted chat Start's only message, and Block activity and lifecycle changes edit it rather than
+posting; it never carries results, report bodies or prompts. See
 [Chat control](docs/chat-control.md#status-cards).
 _Avoid_: Progress feed or per-event notification; treating the card's text as conversation input.
 
 **Run notice**:
-A new Discord message in a chat-started Run's originating thread for a meaningful change: an attention
-notice for new Needs input or Problem matters, a lifecycle notice for becoming Settled or Archived or
-returning to Active, or one catch-up per Run for what accrued while Factory could not post. Resolving a
-matter edits the notice that announced it; notices mention nobody. See
-[Chat control](docs/chat-control.md#attention-and-lifecycle-notices).
-_Avoid_: Replaying Block transitions or matters that opened and resolved while Factory could not post;
-answer buttons on a notice.
+A new Discord message in a chat-started Run's originating thread only when the Run needs someone: an
+attention notice for new Needs input or Problem matters, or one catch-up per Run for such matters that
+accrued while Factory could not post. Resolving a matter edits the notice that announced it; notices
+mention nobody. See [Chat control](docs/chat-control.md#attention-notices).
+_Avoid_: Notices for Block transitions or lifecycle changes; replaying matters that opened and resolved
+while Factory could not post; answer buttons on a notice.

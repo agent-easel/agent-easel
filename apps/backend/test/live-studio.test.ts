@@ -2,7 +2,13 @@ import { isDeepStrictEqual } from "node:util";
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import type { StudioLiveMessage } from "@t3-factory/contracts";
-import { assertOk, reviewedFlow, reviewerExits, sampleAgentInput } from "./support/domain-setup.ts";
+import {
+  assertOk,
+  discoveredClones,
+  reviewedFlow,
+  reviewerExits,
+  sampleAgentInput,
+} from "./support/domain-setup.ts";
 import { appliedStudio, liveClient, liveReads, publicStudio, subscribe } from "./support/live.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { flowFile } from "./support/definition-import.ts";
@@ -114,6 +120,27 @@ it("a saved Flow reaches an existing Studio subscriber as its new revision", asy
   expect(saved.revision).toBe(2);
 });
 
+it("an Agent owner change reaches an existing Studio subscriber as its new owner", async (c) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(c);
+  const planner = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
+  const studio = subscribe(c, factory.live.watchStudio());
+  await studio.until((messages) => messages.length > 0);
+
+  // Act
+  const changed = assertOk(
+    await factory.changeAgentOwner(planner.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Assert
+  const delivered = await studio.until((messages) => messages.length > 1);
+  expect(delivered[1]).toStrictEqual({
+    _tag: "changed",
+    agents: { upserts: [changed], removals: [] },
+  } satisfies StudioLiveMessage);
+  expect(changed).toStrictEqual({ ...planner, projectId: first.id, updatedAt: changed.updatedAt });
+});
+
 it("a removed Flow reaches an existing Studio subscriber as a removal", async (c) => {
   // Arrange
   const { factory, flowId } = await reviewedFlow(c);
@@ -164,6 +191,7 @@ it("a committed Agent is the only Studio change after a rejected stale Flow save
   const stale = await factory.updateFlow(flowId, {
     name: "Stale rename",
     expectedRevision: saved.revision - 1,
+    expectedProjectId: saved.projectId,
     workspace: saved.workspace,
     graph: saved.graph,
   });

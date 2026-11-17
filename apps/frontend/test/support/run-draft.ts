@@ -1,5 +1,12 @@
 import { vi, type Mock, type TestContext } from "vite-plus/test";
-import type { PromptSegment, RunImage, StartRunInput } from "@t3-factory/contracts";
+import type {
+  FactoryProject,
+  FlowDraft,
+  LaunchChoices,
+  PromptSegment,
+  RunImage,
+  StartRunInput,
+} from "@t3-factory/contracts";
 import type { DraftImageStore, ImageUploads } from "../../src/draft-images.ts";
 import { createRunDraft } from "../../src/run-draft.ts";
 
@@ -56,6 +63,49 @@ function memoryImages(): MemoryImages {
       }),
     },
   };
+}
+
+/** A Flow the composer receives: global with a null owner, ready unless stated. */
+export function launchFlow(id: string, projectId: string | null, ready = true): FlowDraft {
+  return {
+    id,
+    projectId,
+    name: `Flow ${id}`,
+    revision: 1,
+    graph: {
+      blocks: [],
+      connections: [],
+      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+    },
+    workspace: { mode: "checkout" },
+    createdAt: "2026-11-07T08:00:00.000Z",
+    updatedAt: "2026-11-07T08:00:00.000Z",
+    readiness: { ready, issues: [] },
+  };
+}
+
+const launchProject = (id: string): FactoryProject => ({
+  id,
+  endpoint: "ws://127.0.0.1:3773",
+  environmentId: "environment",
+  projectId: `t3-${id}`,
+  title: `Project ${id}`,
+  workspaceRoot: `/repositories/${id}`,
+  availability: "available",
+  observedAt: "2026-11-07T08:00:00.000Z",
+});
+
+/** A launch-choice delivery listing these Flows and Projects; current unless stated. */
+export function delivery(
+  flows: readonly FlowDraft[],
+  { synchronized = true, projects = ["project", "other-project"] } = {},
+): { value: LaunchChoices; synchronized: boolean } {
+  const catalog = {
+    projects: projects.map(launchProject),
+    selectedProjectId: null,
+    problem: null,
+  };
+  return { value: { catalog, flows }, synchronized };
 }
 
 /** A prompt typed as plain text. */

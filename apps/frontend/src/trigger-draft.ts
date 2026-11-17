@@ -23,7 +23,7 @@ import {
 /** Studio's saved Triggers as one Trigger draft follows them, and the writes it sends. */
 export type TriggerDraftSource = Pick<
   StudioDefinitions,
-  "getSnapshot" | "subscribe" | "createTrigger" | "updateTrigger"
+  "getSnapshot" | "subscribe" | "createTrigger" | "updateTrigger" | "getTrigger"
 >;
 
 export type IntervalUnit = "minutes" | "hours";
@@ -173,6 +173,7 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     content: trigger ? contentOf(trigger) : newContent,
     contentOf,
     list: () => source.getSnapshot().triggers,
+    read: source.getTrigger,
     view(state): TriggerDraftSnapshot {
       const query = parseTriggerQuery(state.content.query);
       return {
@@ -187,6 +188,14 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     warnings = save.warnings;
     return save.trigger;
   }
+  /**
+   * A Trigger's Project is a saved setting, not an owner: another client's Project change is a new
+   * revision the draft already shows as saved elsewhere, so it never waits for an acknowledgement.
+   */
+  function acceptProject() {
+    const { ownerChange } = draft.getSnapshot();
+    if (ownerChange.status === "changed") draft.acknowledgeOwner(ownerChange.to);
+  }
   function edit(change: Partial<TriggerContent>) {
     const { saving, removed, removing } = draft.getSnapshot();
     if ((saving && !removed) || removing) return;
@@ -198,8 +207,12 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     subscribe: draft.subscribe,
     /** Follows Studio's saved Triggers until the returned function is called. */
     connect() {
-      const unsubscribe = source.subscribe(draft.reconcile);
-      draft.reconcile();
+      const reconcile = () => {
+        draft.reconcile();
+        acceptProject();
+      };
+      const unsubscribe = source.subscribe(reconcile);
+      reconcile();
       return unsubscribe;
     },
     edit,
@@ -247,7 +260,10 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     dismissUpdate: draft.dismissUpdate,
     compare: draft.compare,
     loadLatest: draft.takeLatest,
-    keepEdits: draft.keep,
+    keepEdits(revision: number) {
+      draft.keep(revision);
+      acceptProject();
+    },
     /** The user checked the Trigger list after an unknown Create, so Create may be sent again. */
     allowCreateAgain() {
       if (draft.getSnapshot().saved) return;

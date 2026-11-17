@@ -17,8 +17,8 @@ type World = Awaited<ReturnType<typeof startingWorld>>;
 
 /**
  * Starts a Run through a requester's confirmation in `THREAD` and waits for its status card.
- * `ordinal` numbers Starts in one world (1, 2, …): each adds a review of two messages, a receipt
- * and a card, and uses its own invocation and click IDs. Returns the Run, its launched worker and
+ * `ordinal` numbers Starts in one world (1, 2, …): each adds a review of two messages and a card,
+ * and uses its own invocation and click IDs. Returns the Run, its launched worker and
  * the card message.
  */
 export async function chatStartedRun(world: World, ordinal = 1, prompt = START_PROMPT) {

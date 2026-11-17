@@ -136,7 +136,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         <WorkspaceDialogHeader
           title="Studio"
           section={studioSection(selection, triggers)}
-          description="Author global Flows and reusable Agent definitions, and automate when Runs start."
+          description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
           closeLabel="Back to Runs"
           closeDisabled={creating}
@@ -156,7 +156,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         <DraftDiscardDialog blocker={blocker} onKeepEditing={keepEditing} />
         {creating && (
           <CreateFlow
-            createFlow={definitions.createFlow}
+            definitions={definitions}
             onClose={() => setCreating(false)}
             onCreated={(flow) => {
               finishCreating(flow);
@@ -388,6 +388,7 @@ function StudioPage({
     return (
       <StudioAgentsPage
         agentId={selection.agentId}
+        fromFlow={selection.fromFlow}
         definitions={definitions}
         reportAgentDraft={reportAgentDraft}
       />

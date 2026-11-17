@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FactoryProject, Result, RunDefinitions, StartRunInput } from "@t3-factory/contracts";
-import type { StartPrompt } from "@t3-factory/domain-validation";
+import { mayPlaceAgent, type StartPrompt } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { currentAgentRevisionNumber } from "../../agent-revisions.ts";
@@ -48,6 +48,33 @@ class AcceptanceRefused {
   constructor(refusal: AcceptanceRefused["refusal"]) {
     this.refusal = refusal;
   }
+}
+
+/**
+ * Rechecks ownership inside the acceptance transaction: the Flow is global or owned by the Start's
+ * Project, and the placement rule holds for every captured Agent's current owner.
+ */
+function ownershipConflict(sql: SqlClient.SqlClient, plan: StartPlan) {
+  return Effect.gen(function* () {
+    const { flow, agents } = plan.definitions;
+    const [owner] = yield* sql<{
+      project_id: string | null;
+    }>`SELECT project_id FROM flows WHERE id=${flow.id}`;
+    const flowProject = owner?.project_id ?? null;
+    const placed = agents.length
+      ? yield* sql<{ project_id: string | null }>`SELECT project_id FROM agents
+          WHERE id IN ${sql.in(agents.map((agent) => agent.id))}`
+      : [];
+    if (
+      (flowProject === null || flowProject === plan.project.id) &&
+      placed.every((agent) => mayPlaceAgent(flowProject, agent.project_id))
+    )
+      return undefined;
+    return failure(
+      "conflict",
+      "A Flow or Agent owner changed while validating. Check setup and retry this Start.",
+    );
+  });
 }
 
 /** Rechecks saved revisions, context and project inside the acceptance transaction. */
@@ -122,7 +149,8 @@ function acceptStartRecords(
               message: "This Start request was accepted with other content.",
             },
           ]);
-    const conflict = yield* startConfigurationConflict(sql, plan);
+    const conflict =
+      (yield* startConfigurationConflict(sql, plan)) ?? (yield* ownershipConflict(sql, plan));
     if (conflict) return conflict;
     const unstaged = yield* stagedManifestProblem(sql, plan.prompt.images, hasFile);
     if (unstaged) return unstaged;

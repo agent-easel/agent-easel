@@ -1,5 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
-import { assertOk, openFactoryWithApprovedT3, sampleAgentInput } from "./support/domain-setup.ts";
+import {
+  assertOk,
+  discoveredClones,
+  openFactoryWithApprovedT3,
+  sampleAgentInput,
+} from "./support/domain-setup.ts";
 import { agentBlock, connection, flowInput } from "./support/scenarios.ts";
 
 it("an exported Agent holds its latest saved revision and a model hint without environment, ids, revisions or timestamps", async (context) => {
@@ -10,6 +15,7 @@ it("an exported Agent holds its latest saved revision and a model hint without e
   const saved = await factory.updateAgent(created.value.id, {
     ...sampleAgentInput("Reviewer"),
     expectedRevision: created.value.revision,
+    expectedProjectId: created.value.projectId,
   });
   assert(saved.ok);
 
@@ -98,6 +104,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
       workspace: created.workspace,
       graph,
     }),
@@ -150,4 +157,32 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
       driverKindOmitted: [],
     },
   });
+});
+
+it("a Flow of an unavailable Project exports with its Agent and no Project", async (context) => {
+  // Arrange
+  const { factory, t3, first } = await discoveredClones(context);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
+  const flow = assertOk(
+    await factory.createFlow({
+      name: "Release",
+      projectId: first.id,
+      graph: {
+        flowInput: flowInput("release"),
+        blocks: [agentBlock("release", "Release", agent.id)],
+        connections: [],
+      },
+    }),
+  );
+  t3.projects = [];
+  assertOk(await factory.recheckProjects());
+
+  // Act
+  const exported = await factory.exportFlow(flow.id);
+
+  // Assert
+  assert(exported.ok);
+  expect(exported.value.document.flow.name).toBe("Release");
+  expect(exported.value.document.agents.map((entry) => entry.name)).toStrictEqual(["Releaser"]);
+  expect(JSON.stringify(exported.value)).not.toContain(first.id);
 });

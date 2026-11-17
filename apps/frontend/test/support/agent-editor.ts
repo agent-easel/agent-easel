@@ -3,8 +3,15 @@ import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 import { capabilities, savedAgent } from "./agent-draft.ts";
-import { held } from "./flow-draft.ts";
+import { held, laterThan } from "./flow-draft.ts";
 import { liveStudio, studioChanged, studioFactory, studioSnapshot } from "./studio-definitions.ts";
+
+/** Factory's refusal of a save that expected an owner the Agent no longer has. */
+const staleOwner = new ApiError({
+  code: "conflict",
+  message: "This Agent's owning Project changed elsewhere, so nothing was written.",
+  issues: [{ code: "stale_owner", path: "expectedProjectId", message: "Compare the owner." }],
+});
 
 /** The Agents Factory holds, and the Agent writes Studio sends, in memory. */
 function memoryAgents() {
@@ -16,14 +23,22 @@ function memoryAgents() {
       latest = savedAgent({ ...latest, ...change, revision: latest.revision + 1 });
       return latest;
     },
+    /** Factory's current Agent, as a read after a refusal finds it. */
+    getAgent: vi.fn<AgentDraftOperations["getAgent"]>(async () => latest),
+    /** Another client changes the Agent's owner, which appends no revision. */
+    moveElsewhere(projectId: string | null) {
+      latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };
+      return latest;
+    },
     createAgent: vi.fn<AgentDraftOperations["createAgent"]>(async (content) => {
       latest = savedAgent({ ...content, id: "created", revision: 1 });
       return latest;
     }),
     updateAgent: vi.fn<AgentDraftOperations["updateAgent"]>(
-      async (_id, { expectedRevision, ...content }) => {
+      async (_id, { expectedRevision, expectedProjectId, ...content }) => {
         if (expectedRevision !== latest.revision)
           throw new ApiError({ code: "conflict", message: "Saved elsewhere.", issues: [] });
+        if (expectedProjectId !== latest.projectId) throw staleOwner;
         latest = savedAgent({ ...latest, ...content, revision: expectedRevision + 1 });
         return latest;
       },
@@ -74,6 +89,13 @@ export function savedElsewhere(
   return agent;
 }
 
+/** Another client changes the Agent's owning Project and Studio delivers it. */
+export function ownerChangedElsewhere(setup: AgentEditor, projectId: string | null = "northwind") {
+  const agent = setup.factory.moveElsewhere(projectId);
+  deliver(setup, [agent]);
+  return agent;
+}
+
 /** Another client removes the Agent and Studio delivers the removal. */
 export function removedElsewhere(setup: AgentEditor) {
   deliver(setup, [], [setup.factory.latest().id]);
@@ -82,6 +104,21 @@ export function removedElsewhere(setup: AgentEditor) {
 /** Studio delivers the revision Factory now holds, such as the echo of this editor's save. */
 export function echoed(setup: AgentEditor) {
   deliver(setup, [setup.factory.latest()]);
+}
+
+/** Resolves with the draft's snapshot once a published one satisfies `done`. */
+export function publishedWhen(
+  setup: AgentEditor,
+  done: (snapshot: ReturnType<AgentEditor["draft"]["getSnapshot"]>) => boolean,
+) {
+  return new Promise<ReturnType<AgentEditor["draft"]["getSnapshot"]>>((resolve) => {
+    const stop = setup.draft.subscribe(() => {
+      const snapshot = setup.draft.getSnapshot();
+      if (!done(snapshot)) return;
+      stop();
+      resolve(snapshot);
+    });
+  });
 }
 
 /** An opened Agent with an unsaved name. */

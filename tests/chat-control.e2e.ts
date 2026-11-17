@@ -531,13 +531,14 @@ async function messagesWhen(
   throw new Error("The controlled Discord did not create the expected messages.");
 }
 
-const RECEIPT = /^✅ \*\*Run #(\d+) started\*\*/;
-const receipts = (messages: FixtureMessage[]) =>
-  messages.filter((message) => RECEIPT.test(message.content));
+/** A status card: an accepted Start's only message, edited as its Run changes. */
+const CARD = /^\*\*Run #(\d+) · [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
+const cards = (messages: FixtureMessage[]) =>
+  messages.filter((message) => CARD.test(message.content));
 
 /**
  * A participant's Start of `prompt`, confirmed with its button after Discord was told to meet the
- * next message creates with `faults`. Returns the thread and the number of receipts before it.
+ * next message creates with `faults`. Returns the thread and the number of cards before it.
  */
 async function confirmedStart(baseUrl: string | undefined, prompt: string, faults: MessageFault[]) {
   const project = await firstProject(baseUrl);
@@ -558,20 +559,20 @@ async function confirmedStart(baseUrl: string | undefined, prompt: string, fault
   const { customId } = messages.find(
     (message) => message.channelId === thread && message.customId !== null,
   )!;
-  const before = receipts(messages).length;
+  const before = cards(messages).length;
   await discord(baseUrl).fault({ faults });
   await discord(baseUrl).click({ thread, customId: customId! });
   return { thread, before };
 }
 
-/** The ID of the Run the latest receipt in `thread` names by its number. */
-async function receiptRunId(baseUrl: string | undefined, thread: string) {
+/** The ID of the Run the latest status card in `thread` names by its number. */
+async function cardRunId(baseUrl: string | undefined, thread: string) {
   const messages = await messagesWhen(baseUrl, (created) =>
-    receipts(created).some((message) => message.channelId === thread),
+    cards(created).some((message) => message.channelId === thread),
   );
   const number = Number(
-    RECEIPT.exec(
-      receipts(messages)
+    CARD.exec(
+      cards(messages)
         .filter((message) => message.channelId === thread)
         .at(-1)!.content,
     )![1],
@@ -584,21 +585,21 @@ async function receiptRunId(baseUrl: string | undefined, thread: string) {
 }
 
 /**
- * A participant's Start, confirmed with its button, whose receipt create Discord performed but
- * whose answers were lost, also for both re-attempts under its nonce: Factory owes a receipt it
+ * A participant's Start, confirmed with its button, whose status card create Discord performed but
+ * whose answers were lost, also for both re-attempts under its nonce: Factory owes a card it
  * cannot prove either way. Afterwards Discord's nonce uniqueness window passes.
  */
-async function unknownReceipt(baseUrl: string | undefined) {
+async function unknownCard(baseUrl: string | undefined) {
   const { thread, before } = await confirmedStart(
     baseUrl,
-    "UI receipt journey · Tidy the project picker",
+    "UI card create journey · Tidy the project picker",
     ["lost", "lost", "lost"],
   );
   await settingsWhen<DiscordSettings>(baseUrl, "/api/chat-control/discord", (settings) =>
     settings.delivery.problems.some((problem) => problem.state === "unknown"),
   );
   await discord(baseUrl).nonceWindow();
-  return { before, runId: await receiptRunId(baseUrl, thread) };
+  return { before, runId: await cardRunId(baseUrl, thread) };
 }
 
 /**
@@ -619,22 +620,22 @@ async function deliveryProblem(app: App, screen: Screen, label: string, message:
   return problem;
 }
 
-test("the host retries an owed receipt Discord may already show only after a duplicate warning, and the Start is not repeated", async ({
+test("the host retries a status card Discord may already show only after a duplicate warning, and the Start is not repeated", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const { before, runId } = await unknownReceipt(app.baseUrl);
+  const { before, runId } = await unknownCard(app.baseUrl);
   startedRuns.push(runId);
-  const receipt = await deliveryProblem(
+  const card = await deliveryProblem(
     app,
     screen,
-    "Action receipt, Unknown",
+    "Status card, Unknown",
     "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
   );
   await app.screenshot("chat-discord-delivery-unknown");
-  await receipt.getByRole("button", "Retry").tap();
+  await card.getByRole("button", "Retry").tap();
   const warning = screen.getByRole("alertdialog", "Retry a message Discord may already show?");
   await expect(warning.getByText(/the thread may show it twice/)).toBeVisible();
   // The dialog fades in; the Run sidebar's progress indicators never settle.
@@ -648,29 +649,24 @@ test("the host retries an owed receipt Discord may already show only after a dup
 
   // Assert
   await expect(screen.getByRole("region", "Delivery and actions")).toHaveCount(0);
-  const messages = await messagesWhen(
-    app.baseUrl,
-    (created) => receipts(created).length >= before + 2,
-  );
-  assert.strictEqual(receipts(messages).at(-1)!.content, receipts(messages).at(-2)!.content);
+  await messagesWhen(app.baseUrl, (created) => cards(created).length >= before + 2);
   const navigation = (await (
     await fetch(new URL("/api/run-navigation", app.baseUrl))
   ).json()) as Result<{ id: string; title: string }[]>;
   assert(navigation.ok);
   assert.deepStrictEqual(
     navigation.value
-      .filter((entry) => entry.title === "UI receipt journey · Tidy the project picker")
+      .filter((entry) => entry.title === "UI card create journey · Tidy the project picker")
       .map((entry) => entry.id),
     [runId],
   );
   await app.screenshot("chat-discord-delivery-retried");
 });
 
-const CARD = /^\*\*Run [^\n]+\*\* · (?:🟢|💤|✅|🗄️) /;
 const LOCKED_CORRECTION =
   "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.";
 
-test("the host retries the status card Discord refused in a locked thread once a moderator unlocked it, while the Archived notice waits for its own Retry", async ({
+test("the host retries the status card Discord refused in a locked thread once a moderator unlocked it", async ({
   app,
   screen,
 }) => {
@@ -680,27 +676,17 @@ test("the host retries the status card Discord refused in a locked thread once a
     "UI card journey · Align the Run header",
     [],
   );
-  const runId = await receiptRunId(app.baseUrl, thread);
-  await messagesWhen(app.baseUrl, (created) =>
-    created.some((message) => message.channelId === thread && CARD.test(message.content)),
-  );
+  const runId = await cardRunId(app.baseUrl, thread);
   await discord(app.baseUrl).thread({ thread, state: "locked" });
-  // Archiving the Run changes its card and owes an Archived notice; Discord refuses both in the
-  // locked thread.
+  // Archiving the Run changes its card; Discord refuses the edit in the locked thread.
   const archived = await hostCall(app.baseUrl, "POST", `/api/runs/${runId}/archive`, undefined);
   assert(archived.ok, JSON.stringify(archived));
   await settingsWhen<DiscordSettings>(app.baseUrl, "/api/chat-control/discord", (settings) =>
-    ["status-card", "lifecycle"].every((purpose) =>
-      settings.delivery.problems.some(
-        (problem) => problem.purpose === purpose && problem.state === "failed",
-      ),
+    settings.delivery.problems.some(
+      (problem) => problem.purpose === "status-card" && problem.state === "failed",
     ),
   );
   const card = await deliveryProblem(app, screen, "Status card, Failed", LOCKED_CORRECTION);
-  const notice = screen
-    .getByRole("region", "Delivery and actions")
-    .getByRole("listitem", "Lifecycle notice, Failed");
-  await expect(notice.getByText(LOCKED_CORRECTION)).toBeVisible();
   await app.screenshot("chat-discord-status-card-failed");
   await discord(app.baseUrl).thread({ thread, state: "unlocked" });
 
@@ -709,11 +695,11 @@ test("the host retries the status card Discord refused in a locked thread once a
 
   // Assert
   await expect(card).toHaveCount(0);
-  await expect(notice.getByText(LOCKED_CORRECTION)).toBeVisible();
   const messages = await messagesWhen(app.baseUrl, (created) =>
     created.some(
       (message) =>
-        message.channelId === thread && /^\*\*Run [^\n]+\*\* · 🗄️ Archived\n/.test(message.content),
+        message.channelId === thread &&
+        /^\*\*Run [^\n]+\*\* · 🗄️ Archived · /.test(message.content),
     ),
   );
   assert.strictEqual(

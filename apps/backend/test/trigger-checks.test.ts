@@ -455,6 +455,7 @@ it("a check uses the Flow's latest saved revision", async (c) => {
     name: "Edited Flow",
     graph: world.flow.graph,
     expectedRevision: world.flow.revision,
+    expectedProjectId: world.flow.projectId,
   });
   assert(saved.ok);
 

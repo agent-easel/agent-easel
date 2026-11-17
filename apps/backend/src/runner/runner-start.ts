@@ -21,6 +21,7 @@ import {
   isStartTitleProvenance,
   promptText,
   promptTitle,
+  readinessAgent,
   TASK_TITLE_LIMIT,
   validateStartPrompt,
   type StartPrompt,
@@ -36,6 +37,7 @@ import type {
 } from "./run-store/run-store.ts";
 import type { RunnerLifecycle, RunnerOptions } from "./runner-types.ts";
 import { catalogProject } from "./runner-utils.ts";
+import { projectUnavailableIssue } from "../projects.ts";
 import { fingerprint } from "../fingerprint.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { now } from "../time.ts";
@@ -139,6 +141,29 @@ function startTarget(
   )
     return undefined;
   return { project, context: connection.value.authorizationContext };
+}
+/**
+ * A Project Flow starts only in its owning Project, and only while that Project is available; the
+ * refusal names the owning Project's availability reason. A global Flow starts in any Project.
+ */
+function ownershipRefusal(flow: FlowDraft, catalog: Result<ProjectCatalog>, projectId: string) {
+  if (flow.projectId === null) return undefined;
+  if (flow.projectId !== projectId)
+    return failure(
+      "validation",
+      "This Flow belongs to another Project. Choose its Project, or a global Flow.",
+      [
+        {
+          code: "flow_project_mismatch",
+          path: "flowId",
+          message: "Choose a global Flow or a Flow of the selected Project.",
+        },
+      ],
+    );
+  const owner = catalogProject(catalog, projectId);
+  if (owner?.availability === "available") return undefined;
+  const issue = projectUnavailableIssue(owner, "projectId");
+  return failure("validation", issue.message, [issue]);
 }
 type WorkspaceCheck =
   | { ok: true; workspace: StartWorkspace }
@@ -393,6 +418,10 @@ export function openRunnerStart(
         [ops.getConnection(), ops.listProjects(), ops.getFlow(input.flowId)],
         { concurrency: "unbounded" },
       );
+      const owned = savedFlow.ok
+        ? ownershipRefusal(savedFlow.value, projects, input.projectId)
+        : undefined;
+      if (owned) return owned;
       const target = startTarget(connection, projects, input.projectId);
       if (!target)
         return failure(
@@ -480,11 +509,8 @@ export function openRunnerStart(
         issues.push(
           ...flowReadiness(
             flow.graph,
-            read.map((agent) => ({
-              ...agent,
-              hasExecution: agent.execution !== null,
-              formerExitNames: new Map(),
-            })),
+            read.map((agent) => readinessAgent(agent, new Map())),
+            flow.projectId,
           ).issues,
         );
       for (const agent of read) {

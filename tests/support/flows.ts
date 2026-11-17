@@ -3,6 +3,7 @@ import { expect, type Screen } from "e2e";
 import {
   DEFINITION_REQUEST_LIMIT_BYTES,
   definitionSaveFits,
+  saveRequestBound,
 } from "../../packages/domain-validation/src/index.ts";
 import type {
   AgentDefinition,
@@ -44,6 +45,7 @@ export async function saveFlowCopy(
     body: JSON.stringify({
       name,
       expectedRevision: 1,
+      expectedProjectId: created.projectId,
       workspace,
       graph: {
         ...seeded.graph,
@@ -192,10 +194,9 @@ export async function saveConditionAtSizeLimit(
   return { id: created.id, rules: condition.rules, bytes };
 }
 
-/** A save request's size, measured like `definitionSaveFits` at the largest revision. */
+/** A save request's size, measured like `definitionSaveFits` at the largest revision and owner. */
 const saveBytes = (body: object) =>
-  new TextEncoder().encode(JSON.stringify({ ...body, expectedRevision: Number.MAX_SAFE_INTEGER }))
-    .byteLength;
+  new TextEncoder().encode(JSON.stringify(saveRequestBound(body))).byteLength;
 
 /** A repairable graph issue names its cause and prevents opening the Run composer. */
 export async function expectFlowBlocked(screen: Screen, message: RegExp) {
@@ -241,7 +242,22 @@ export async function saveFlowElsewhere(
       graph: flow.graph,
       workspace: flow.workspace,
       expectedRevision: flow.revision,
+      expectedProjectId: flow.projectId,
       ...change,
     }),
   })) as FlowDraft;
+}
+
+/** Another client places saved Agent `agentId` in Agent block `blockId` of Flow `id`. */
+export async function placeAgentElsewhere(
+  baseUrl: string | undefined,
+  id: string,
+  blockId: string,
+  agentId: string,
+) {
+  const flow = await readFlow(baseUrl, id);
+  const blocks = flow.graph.blocks.map((block) =>
+    block.kind === "agent" && block.id === blockId ? { ...block, agentId } : block,
+  );
+  return saveFlowElsewhere(baseUrl, flow, { graph: { ...flow.graph, blocks } });
 }
