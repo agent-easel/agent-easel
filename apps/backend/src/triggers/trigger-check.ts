@@ -410,16 +410,17 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
 
   /**
    * The read half of a check, shared by checks and previews: everything a check decides before it
-   * writes, from the same reads. It writes nothing.
+   * writes, from the same reads. It writes nothing. The free slots are counted before any external
+   * read, so a Run that ends during the check's reads frees its slot for the next check only.
    */
   const admissionPlan = (subject: AdmissionSubject) =>
     Effect.gen(function* (): Effect.fn.Return<AdmissionPlan, unknown> {
+      const active = subject.id === null ? 0 : yield* activeTriggerRuns(sql, subject.id);
       const shared = yield* sharedBlocker(subject);
       if ("problem" in shared) return { ok: false, problem: shared.problem };
       const guards = subject.id === null ? [] : yield* readTriggerAdmissions(sql, subject.id);
       const read = yield* readGitHub(subject, shared.project, guards);
       if (!read.ok) return read;
-      const active = subject.id === null ? 0 : yield* activeTriggerRuns(sql, subject.id);
       return {
         ok: true,
         repository: read.repository,

@@ -216,6 +216,22 @@ export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorl
   return { checked, release };
 }
 
+/** Holds a check at its first GitHub read, the Project folder's repository, until released. */
+export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
+  let release = () => {};
+  let entered = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const reading = new Promise<void>((resolve) => (entered = resolve));
+  world.github.beforeAnswer = async () => {
+    delete world.github.beforeAnswer;
+    entered();
+    await held;
+  };
+  const checked = world.f.runTrigger(world.trigger.id);
+  await reading;
+  return { checked, release };
+}
+
 /** The saved Trigger's settings as an edit from its current revision, with `changes` applied. */
 export const triggerEdit = (
   trigger: TriggerDefinition,

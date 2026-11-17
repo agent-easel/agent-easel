@@ -12,6 +12,7 @@ import {
   checkingWorld,
   labelIssue,
   pendingCheck,
+  pendingGitHubCheck,
   reopenedAfterCrashedCheck,
   startedIssues,
   triggerEdit,
@@ -260,6 +261,26 @@ it("a Start blocker sets the Error with Start's guidance and starts nothing", as
   });
   expect(checked.value.latestCheck).toMatchObject({ started: 0, notStarted: [] });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a check that began without a free Run slot starts nothing when that slot frees during its GitHub reads", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "Holds the slot");
+  await triggerChecked(world.f, world.trigger.id);
+  const [active] = await runsOf(world.f, world.project.id);
+  world.readyIssue(2, "Waits for the next check");
+  const pending = await pendingGitHubCheck(world);
+  assert((await world.f.archiveRun(active!.id)).ok);
+
+  // Act
+  pending.release();
+  const checked = await pending.checked;
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 1 });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
 });
 
 it("a check that cannot read GitHub starts nothing, sets the Error with host guidance and raises no Run attention", async (c) => {
