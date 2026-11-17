@@ -84,13 +84,16 @@ export async function oauthT3(
     string,
     { attachmentId: string; upload: Record<string, unknown> }
   >();
+  let malformedUploadAddress = false;
   function prepareUpload(args: ToolArguments) {
     const attachmentId = `pending-${randomUUID()}`;
     const token = randomUUID();
     signedUploads.set(token, { attachmentId, upload: args.upload as Record<string, unknown> });
     return {
       attachmentId,
-      relativeUrl: `/api/attachments/upload/${token}`,
+      relativeUrl: malformedUploadAddress
+        ? `http://[signed-${token}`
+        : `/api/attachments/upload/${token}`,
       expiresAt: Date.now() + 600_000,
     };
   }
@@ -154,6 +157,7 @@ export async function oauthT3(
   let invalidSchema = false;
   let registrationCount = 0;
   let authorizations = 0;
+  let cutNextToolReply = false;
   let rejectionGate: { readonly reached: () => void; readonly release: Promise<void> } | undefined;
   /** Live MCP sessions, one per handshake; forgetting them is what a T3 restart looks like. */
   const sessions = new Set<string>();
@@ -370,7 +374,19 @@ export async function oauthT3(
       response.writeHead(202).end();
       return;
     }
-    json(response, 200, { jsonrpc: "2.0", id: message.id, result: await mcpResult(message) });
+    const reply = { jsonrpc: "2.0", id: message.id, result: await mcpResult(message) };
+    if (cutNextToolReply && message.method === "tools/call") {
+      cutNextToolReply = false;
+      // The 200 headers and part of the body arrive; then the connection drops.
+      const body = JSON.stringify(reply);
+      response.writeHead(200, {
+        "content-type": "application/json",
+        "content-length": String(Buffer.byteLength(body)),
+      });
+      response.write(body.slice(0, body.length / 2), () => response.destroy());
+      return;
+    }
+    json(response, 200, reply);
   }
   async function handleRequest(request: IncomingMessage, response: ServerResponse) {
     const url = new URL(request.url ?? "/", base);
@@ -414,6 +430,14 @@ export async function oauthT3(
       return openedSessions;
     },
     sessionRequests,
+    /** Prepared uploads carry an address no URL parser accepts. */
+    malformUploadAddresses() {
+      malformedUploadAddress = true;
+    },
+    /** The next tool call's reply breaks off after its 200 headers and part of its body. */
+    cutNextToolReply() {
+      cutNextToolReply = true;
+    },
     /** Forgets every MCP session, as a restarted T3 would. */
     dropSessions() {
       sessions.clear();

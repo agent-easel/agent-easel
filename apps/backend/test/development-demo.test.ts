@@ -1,6 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
 import { restoredDevelopmentDemo } from "./support/development-demo.ts";
 import { factoryHarness } from "./support/factory.ts";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 
 it("restored demo keeps a worker waiting on its running subagents as normal progress and preserves user edits", async (c) => {
@@ -85,4 +87,30 @@ it("a Stop the demo simulator holds stays held after the simulator restarts", as
 
   // Assert
   expect(restarted.executionObservations.get(threadId)?.activeRunId).toBe(runId);
+});
+
+it("a demo launch T3 accepted but could not save reports T3 unavailable, not a file error", async (c) => {
+  // Arrange
+  const { processHome } = await factoryHarness(c);
+  const t3 = new PersistentT3(processHome, false);
+  // Another save holds the engine's exclusive temporary file.
+  await writeFile(join(processHome, "demo-engine.json.next"), "");
+
+  // Act
+  const launched = t3.launchThread(
+    { endpoint: "" },
+    {
+      environmentId: "demo-environment",
+      projectId: "demo-project",
+      clientRequestId: "launch-key",
+      title: "Demo",
+      message: "Demo input",
+      workspaceStrategy: { type: "root" },
+      interactionMode: "default",
+      modelSelection: { instanceId: "codex-main", model: "gpt-6.1-sol", options: {} },
+    },
+  );
+
+  // Assert
+  await expect(launched).rejects.toMatchObject({ name: "T3Failure", kind: "unavailable" });
 });

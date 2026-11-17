@@ -42,7 +42,10 @@ export async function authorizedLiveOAuth(
   c: TestContext,
   options: Parameters<typeof oauthT3>[0] = {},
   setup: {
-    readonly adapter?: Pick<ConstructorParameters<typeof LiveT3Adapter>[0], "launchRecoveryScope">;
+    readonly adapter?: Pick<
+      ConstructorParameters<typeof LiveT3Adapter>[0],
+      "launchRecoveryScope" | "sendRecoveryScope"
+    >;
     readonly open?: Omit<FactoryOptions, "databasePath" | "t3">;
   } = {},
 ) {
@@ -75,6 +78,40 @@ export async function authorizedLiveOAuth(
     /** The consent page the latest authorization opened. */
     authorizationUrl: () => authorizationUrl,
   };
+}
+
+/** The thread every `connectedLiveT3` read observes. */
+export const observedThread = {
+  thread: {
+    threadId: "thread-1",
+    projectId: "project-1",
+    activeRunId: null,
+    link: null,
+    worktreePath: null,
+    pendingRequestCount: 0,
+  },
+  recentRuns: [],
+};
+/** What `connectedLiveT3`'s T3 answers a queued send with by default. */
+export const sendReference = {
+  threadId: "thread-1",
+  messageId: "message-1",
+  runId: "run-2",
+  status: "queued",
+  delivery: "queued",
+};
+
+/** An authorized live adapter whose T3 answers thread reads, sends and Project lists. */
+export function connectedLiveT3(
+  context: TestContext,
+  handlers: { readonly send?: (args: Record<string, unknown>) => unknown } = {},
+) {
+  return authorizedLiveOAuth(context, {
+    projects: true,
+    runtimeActivity: () => observedThread,
+    sendSchema: { type: "object" },
+    send: handlers.send ?? (() => sendReference),
+  });
 }
 
 const projectValue = <A>(result: { ok: true; value: A } | { ok: false; error: unknown }): A => {

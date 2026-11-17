@@ -33,6 +33,7 @@ export async function launchFixture(c: TestContext) {
   let worktree = false;
   const exactReads: string[] = [];
   let proof: string | null = null;
+  let proofFails = false;
   const { adapter, external } = await authorizedLiveOAuth(
     c,
     {
@@ -90,7 +91,14 @@ export async function launchFixture(c: TestContext) {
         };
       },
     },
-    { adapter: { launchRecoveryScope: async () => proof } },
+    {
+      adapter: {
+        launchRecoveryScope: async () => {
+          if (proofFails) throw new Error("The replay proof could not be established.");
+          return proof;
+        },
+      },
+    },
   );
   const payload: LaunchPayload = {
     environmentId: "fixture-environment",
@@ -115,6 +123,10 @@ export async function launchFixture(c: TestContext) {
     exactReads,
     setProof(value: string) {
       proof = value;
+    },
+    /** The launch replay proof rejects instead of answering. */
+    failProof() {
+      proofFails = true;
     },
     malformed() {
       malformed = true;
