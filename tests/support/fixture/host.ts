@@ -1,4 +1,3 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,39 +8,9 @@ import type { ControlledGitHub } from "../../../apps/backend/test/support/contro
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
+import { requireCurrentUiBuild } from "../../../scripts/ui-build.ts";
 
 type ServerOptions = NonNullable<Parameters<typeof startServer>[1]>;
-
-// The backend runs from source, but the UI is served from apps/frontend/dist. Journeys against a
-// missing or older build test the previous UI, so the fixture refuses to start on one.
-function newestSourceChange(paths: string[]): number {
-  return Math.max(
-    ...paths.flatMap((path) =>
-      statSync(path).isDirectory()
-        ? readdirSync(path, { recursive: true, withFileTypes: true })
-            .filter((entry) => entry.isFile())
-            .map((entry) => statSync(join(entry.parentPath, entry.name)).mtimeMs)
-        : [statSync(path).mtimeMs],
-    ),
-  );
-}
-
-function requireCurrentUiBuild() {
-  const root = new URL("../../../", import.meta.url);
-  const builtUi = fileURLToPath(new URL("apps/frontend/dist/index.html", root));
-  const uiSources = [
-    "apps/frontend/src",
-    "apps/frontend/public",
-    "apps/frontend/index.html",
-    "apps/frontend/vite.config.ts",
-    ...readdirSync(new URL("packages", root)).map((name) => `packages/${name}/src`),
-  ].map((path) => fileURLToPath(new URL(path, root)));
-  if (!existsSync(builtUi) || statSync(builtUi).mtimeMs < newestSourceChange(uiSources)) {
-    throw new Error(
-      "apps/frontend/dist is missing or older than the UI sources; run `pnpm build` before e2e.",
-    );
-  }
-}
 
 /**
  * The Factory host every journey's browser reaches: a disposable home, the controlled T3 engine
@@ -52,7 +21,7 @@ export async function startHost(
     github: ControlledGitHub;
   },
 ) {
-  requireCurrentUiBuild();
+  requireCurrentUiBuild(fileURLToPath(new URL("../../../", import.meta.url)));
   const home = await mkdtemp(join(tmpdir(), "factory-e2e-"));
   // Harness homes and T3 state default to os.homedir() or the developer's T3 state override; keep
   // them inside the disposable home so journeys never read or write real configuration.
