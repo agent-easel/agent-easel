@@ -128,7 +128,7 @@ export const writeTriggerSettings = Effect.fnUntraced(function* (
       flow_id = ${trigger.flowId}, schedule_enabled = ${trigger.schedule.enabled ? 1 : 0},
       interval_minutes = ${trigger.schedule.intervalMinutes},
       max_active_runs = ${trigger.maxActiveRuns}, revision = ${trigger.revision},
-      updated_at = ${trigger.updatedAt}
+      next_check_at = ${trigger.nextCheckAt}, updated_at = ${trigger.updatedAt}
     WHERE id = ${trigger.id}`;
   yield* sql`UPDATE run_trigger_github_issues SET repository_host = ${repository.host},
       repository_name_with_owner = ${repository.nameWithOwner},
@@ -141,12 +141,17 @@ export const writeTriggerEnabled = (
   sql: SqlClient.SqlClient,
   triggerId: string,
   enabled: boolean,
+  nextCheckAt: string | null,
   updatedAt: string,
 ) =>
-  sql`UPDATE run_triggers SET enabled = ${enabled ? 1 : 0}, updated_at = ${updatedAt}
+  sql`UPDATE run_triggers SET enabled = ${enabled ? 1 : 0}, next_check_at = ${nextCheckAt},
+      updated_at = ${updatedAt}
     WHERE id = ${triggerId}`;
 
-/** Deletes the Trigger with its settings and latest check. */
+export const writeNextCheck = (sql: SqlClient.SqlClient, triggerId: string, nextCheckAt: string) =>
+  sql`UPDATE run_triggers SET next_check_at = ${nextCheckAt} WHERE id = ${triggerId}`;
+
+/** Deletes the Trigger with its settings, deadline, latest check, error and admission guards. */
 export const deleteTrigger = (sql: SqlClient.SqlClient, triggerId: string) =>
   sql`DELETE FROM run_triggers WHERE id = ${triggerId}`;
 

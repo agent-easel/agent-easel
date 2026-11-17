@@ -1,14 +1,28 @@
 import { assert, expect, it } from "@effect/vitest";
-import { triggerChecked } from "./support/scenarios.ts";
+import type { Factory } from "../src/index.ts";
+import {
+  launchedWorkers,
+  resultReported,
+  settled,
+  triggerChecked,
+  workingReported,
+} from "./support/scenarios.ts";
 import {
   atlasRepository,
   checkingWorld,
   labelIssue,
   pendingCheck,
+  reopenedAfterCrashedCheck,
   startedIssues,
   triggerEdit,
   unlabelIssue,
 } from "./support/triggers.ts";
+
+async function runsOf(f: Factory, projectId: string) {
+  const runs = await f.listRuns(projectId);
+  assert(runs.ok);
+  return runs.value;
+}
 
 it("a check starts the oldest ready issues, ties by number, up to the free slots and counts the rest as waiting", async (c) => {
   // Arrange
@@ -95,7 +109,7 @@ it("a Run keeps its origin after its Trigger is renamed", async (c) => {
   expect(run.value.origin?.trigger).toStrictEqual({ id: world.trigger.id, name: "Ready issues" });
 });
 
-it("a Run keeps its origin after its Trigger is removed", async (c) => {
+it("a Run keeps running with its origin after its Trigger is removed", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(12, "Fix the login crash");
@@ -111,6 +125,7 @@ it("a Run keeps its origin after its Trigger is removed", async (c) => {
   const run = await world.f.getRun(runs.value[0]!.id);
   assert(run.ok);
   expect(run.value.origin).toMatchObject({ issueNumber: 12, trigger: { name: "Ready issues" } });
+  expect(run.value.lifecycle).toBe("active");
 });
 
 it("a Run started from New Run has no origin", async (c) => {
@@ -477,4 +492,60 @@ it("saving a Trigger while its Start is in preflight accepts no Run under the ol
   assert(checked.ok);
   expect(checked.value.latestCheck).toMatchObject({ started: 0 });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("a Run that returned to Active may exceed Max active Runs, and new issues wait", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "Settled, then active again");
+  await triggerChecked(world.f, world.trigger.id);
+  const [first] = await runsOf(world.f, world.project.id);
+  const { workers } = await launchedWorkers(world.world, first!.id);
+  await resultReported(world.world, workers[0]!);
+  await settled(world.world, workers[0]!);
+  world.readyIssue(2, "Took the free slot");
+  await triggerChecked(world.f, world.trigger.id);
+  await workingReported(world.world, workers[0]!);
+  world.readyIssue(3, "Waits");
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 1 });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1, 2]);
+  const reactivated = await world.f.getRun(first!.id);
+  assert(reactivated.ok);
+  expect(reactivated.value.lifecycle).toBe("active");
+});
+
+it("after a crash during an issue's Start preflight, the next check starts that issue once", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { schedule: { enabled: false, intervalMinutes: 5 } });
+  world.readyIssue(1, "Crashed in preflight");
+  const recovered = await reopenedAfterCrashedCheck(world, "preflight");
+
+  // Act
+  const checked = await recovered.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({ started: 1, waiting: 0 });
+  expect(await startedIssues(recovered, world.project.id)).toStrictEqual([1]);
+});
+
+it("after a crash once Start accepted an issue's Run, the next check starts no second Run for it", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { schedule: { enabled: false, intervalMinutes: 5 } });
+  world.readyIssue(1, "Crashed after acceptance");
+  const recovered = await reopenedAfterCrashedCheck(world, "accepted");
+
+  // Act
+  const checked = await recovered.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 0 });
+  expect(await startedIssues(recovered, world.project.id)).toStrictEqual([1]);
 });
