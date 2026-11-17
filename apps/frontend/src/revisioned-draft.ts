@@ -151,6 +151,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   let owner = config.saved?.projectId ?? null;
   let acknowledgedOwner = owner;
   let ownerChange: OwnerChange = noOwnerChange;
+  /**
+   * When the newest state whose owner the draft follows was written, also a newer revision held
+   * beside unsaved edits: an older Change owner reply names an owner replaced since.
+   */
+  let ownerSeenAt = config.saved?.updatedAt ?? "";
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -205,6 +210,9 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     conflict = noConflict;
     newest = null;
   }
+  function noteOwnerState(updatedAt: string) {
+    if (updatedAt > ownerSeenAt) ownerSeenAt = updatedAt;
+  }
   function showOwner(projectId: string | null) {
     if (projectId === owner) return;
     owner = projectId;
@@ -219,6 +227,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** The saved revision replaces the draft, which is clean and shows no conflict or error. */
   function adopt(next: D) {
     saved = next;
+    noteOwnerState(next.updatedAt);
     acceptOwner(next.projectId);
     content = contentOf(next);
     baseline = content;
@@ -281,6 +290,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    * still shows the owner the draft expected.
    */
   function followOwner(latest: D): boolean {
+    noteOwnerState(latest.updatedAt);
     const shown = owner;
     showOwner(latest.projectId);
     if (owner === acknowledgedOwner) {
@@ -414,10 +424,12 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
      * Studio's later deliveries are followed as usual: they cannot be told apart from a move
      * elsewhere, and a delivery read before the move is followed by the move itself. Studio may
      * also have delivered the move before its reply, which then asks nothing either. A reply older
-     * than the delivery the draft holds names an owner that was replaced since, so it is ignored.
+     * than the newest delivery the draft followed, including a newer revision held beside unsaved
+     * edits, names an owner that was replaced since, so it is ignored.
      */
     ownerChangedHere(moved: OwnerMove) {
-      if (!saved || moved.updatedAt < saved.updatedAt) return;
+      if (!saved || moved.updatedAt < ownerSeenAt) return;
+      noteOwnerState(moved.updatedAt);
       acceptOwner(moved.projectId);
       publish();
     },

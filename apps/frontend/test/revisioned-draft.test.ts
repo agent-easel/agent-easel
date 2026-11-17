@@ -6,6 +6,7 @@ import {
   comparedFlow,
   editedFlow,
   held,
+  laterThan,
   openedFlow,
   rejection,
   savingFlow,
@@ -955,6 +956,25 @@ it("a Change owner reply older than the owner Studio delivered since leaves the 
     owner: null,
     ownerChange: { status: "none" },
     canSave: true,
+  });
+});
+
+it("a Change owner reply older than a newer revision Studio delivered beside the edits leaves the delivered owner", () => {
+  // Arrange
+  const setup = editedAgent();
+  const reply = setup.factory.moveElsewhere("northwind");
+  setup.factory.saveElsewhere({ name: "Saved elsewhere", updatedAt: laterThan(reply.updatedAt) });
+  ownerChangedElsewhere(setup, null);
+
+  // Act
+  setup.draft.ownerChangedHere(reply);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "none" },
+    conflict: { status: "detected", revision: 4 },
   });
 });
 
