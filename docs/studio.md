@@ -16,8 +16,8 @@ duplicate, removal and import live, whichever client or Factory MCP made it, and
 retry. A failed subscription shows the list's error until the automatic retry succeeds. Both editors read their definition from these lists and follow its
 saved revisions ([Following saved revisions](#following-saved-revisions)).
 
-The current Flow draft survives navigation to the lists and Agents and keeps following its saved revisions while hidden; closing Studio or opening another Flow with unsaved changes asks to **Keep editing** or **Discard changes** (browser Back follows the same
-rule; reload uses the browser's leave warning). Agent edits are guarded independently of a retained Flow draft.
+Leaving a Flow with unsaved changes, whether for a list, Agents, Triggers, another Flow or by closing Studio, asks to **Keep editing**, which stays on the Flow, or **Discard changes** (browser Back follows the same
+rule; reload uses the browser's leave warning). Only the shown page keeps a draft, so Agent and Trigger edits are guarded the same way when leaving their page.
 
 | Destination | Browser URL |
 | --- | --- |
@@ -226,7 +226,7 @@ are distinct and non-empty. A new Agent starts with one exit, `done`, which need
 
 A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
 drafts); narrow screens stack list and editor. The header shows name, revision, the owner badge, **Change owner…**, **Duplicate…**, **Export** (an icon button, after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
-editing** or **Discard changes**; a retained Flow draft keeps its own guard.
+editing** or **Discard changes**.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
 (`orchestrator_capabilities`) for that environment, never a Factory allowlist. When T3 is unavailable saved settings stay visible as unknown or unavailable and nothing is substituted.
@@ -303,8 +303,7 @@ rejected by the backend and never recreate it.
 edits, in the create API's shape without identity, revision or status fields. Studio confirms a
 successful clipboard write; if clipboard access fails, a read-only selectable JSON box remains
 available. Leaving or closing Studio asks **This Agent was removed elsewhere. Discard the retained
-draft?** with **Keep editing** and **Discard**, even for a clean draft. A hidden Flow draft keeps its
-independent guard, and a decision discarding both drafts names both. Ordinary unsaved-change prompts
+draft?** with **Keep editing** and **Discard**, even for a clean draft. Ordinary unsaved-change prompts
 stay unchanged; browser close and reload use only the browser's standard warning. A fresh link to
 an absent Agent shows **Agent not found** and **Back to list**; a failed read instead offers Retry.
 
@@ -386,7 +385,7 @@ rule row edits its output name and **From arrival** number and offers **Move rul
 keyboard buttons. Renaming or moving a rule keeps its output and wires; removing it removes its wires in the same edit. An empty
 arrival number stays empty (none) rather than defaulting. An entry that is not a whole number from 1 to 9,007,199,254,740,991 is
 shown as typed and marked invalid, never rounded or saved as another value: **Save Flow** and **Check readiness** stay unavailable
-until it is corrected or cleared. **Otherwise** stays last with its recipients and cannot be renamed, moved or removed. The canvas
+until it is corrected or cleared, and leaving the Flow asks first like any unsaved change. **Otherwise** stays last with its recipients and cannot be renamed, moved or removed. The canvas
 row of each output reads **from arrival *N* onward** with its name, and Otherwise **when no rule matches**. A Condition has no rule
 quota of its own, so within the [2 MB definition limit](#validation) it may hold tens of thousands of rules: the panel renders only
 the rule rows near its visible part as it scrolls, and the canvas draws a port for every wired rule, Otherwise and the first eight
@@ -427,8 +426,7 @@ the Agent adds that exit later), a wire from an exit hidden in this Flow or no l
 inspects its block; a Condition rule issue also scrolls to that rule and focuses its name or arrival number. These issues disable **Start Run**, never a save. **Graph ready** covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
-When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions), also when the draft is hidden while
-Agents are shown. A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
+When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions). A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
 composition, and happens afterwards only if the draft is still clean; a draft with unsaved changes names the newer revision at once. **Compare latest revision** shows both drafts as JSON:
 **Use latest saved Flow** discards local changes, and **Keep local draft against revision N** keeps them for another explicit **Save Flow** after reconciling any differences. A rejected save
 lists Factory's validation issues under its error; selecting one that names a block inspects it.
@@ -455,11 +453,9 @@ and exit IDs, Agent references, connections and positions, without identity, rev
 Clipboard success is confirmed; clipboard failure shows the same bounded, selectable read-only JSON
 fallback as the Agent editor. Its content follows further edits.
 
-A retained removed Flow has a discard guard even when clean or hidden while viewing Agents or the
-Flow list. Closing Studio or opening another Flow asks **This Flow was removed elsewhere. Discard
-the retained draft?** with **Keep editing** and **Discard**. Keep editing returns to the hidden Flow
-when it is the blocking draft. When both a Flow and an Agent block navigation, the dialog names both
-and Keep editing preserves the current editor. Ordinary unsaved-change prompts stay unchanged;
+A retained removed Flow has a discard guard even when clean. Leaving it for any other Studio page
+or closing Studio asks **This Flow was removed elsewhere. Discard the retained draft?** with
+**Keep editing**, which stays on the Flow, and **Discard**. Ordinary unsaved-change prompts stay unchanged;
 browser close and reload use the standard browser warning. A fresh link to a missing Flow shows
 **Flow not found** with **Back to list**; transport failures instead remain retryable.
 

@@ -3,14 +3,12 @@ import { createFlowDraft } from "../src/flow-draft.ts";
 import {
   editedFlow,
   held,
-  hiddenFlow,
   interactingFlow,
   unlistedFlow,
   notReady,
   openedFlow,
   comparedFlow,
   refusedFlow,
-  rejection,
   savingFlow,
   validated,
 } from "./support/flow-draft.ts";
@@ -46,21 +44,6 @@ it("a clean Flow adopts a revision saved elsewhere and says it was updated", () 
     readiness: notReady,
     conflict: { status: "none" },
   });
-});
-
-it("a readiness check failing after the editor was hidden reports nothing", async () => {
-  // Arrange
-  const { draft, factory } = openedFlow();
-  const check = held(factory.validateFlow);
-  const checking = draft.check();
-  draft.hide();
-
-  // Act
-  check.fail(rejection({ message: "Validation failed." }));
-  await checking;
-
-  // Assert
-  expect(draft.getSnapshot().error).toBe("");
 });
 
 it("a changed saved Agent keeps an unresolved revision conflict and its refused save", async () => {
@@ -213,22 +196,6 @@ it("an accepted removal makes a checked Flow's readiness unknown before Studio d
   expect(draft.getSnapshot()).toMatchObject({ dirty: false, readiness: null, canStartRun: false });
 });
 
-it("a clean Flow hidden while Agents are shown adopts a revision saved elsewhere", () => {
-  // Arrange
-  const { draft, factory, published } = hiddenFlow();
-  factory.saveElsewhere("Theirs");
-
-  // Act
-  published();
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    saved: { revision: 2 },
-    content: { name: "Theirs" },
-    updatedTo: 2,
-  });
-});
-
 it("an Agent change that only changes the saved Flow's readiness keeps the draft clean and unannounced", () => {
   // Arrange
   const { draft, factory, published } = openedFlow();
@@ -373,21 +340,6 @@ it("a readiness check answered after the editor's own Change owner is dropped", 
   expect(draft.getSnapshot()).toMatchObject({ owner: "northwind", readiness: null });
 });
 
-it("a readiness check answered after the editor was hidden is dropped", async () => {
-  // Arrange
-  const { draft, factory } = editedFlow();
-  const answer = held(factory.validateFlow);
-  const checking = draft.check();
-  draft.hide();
-
-  // Act
-  answer.answer(validated());
-  await checking;
-
-  // Assert
-  expect(draft.getSnapshot().readiness).toBeNull();
-});
-
 it("a Flow missing from Studio's first current saved Flows is not found", () => {
   // Arrange
   const { definitions, factory } = unlistedFlow();
@@ -489,9 +441,9 @@ it("a retained Flow stays editable while a superseded save reply is pending", as
   });
 });
 
-it("a hidden clean Flow retains its content when removed elsewhere", async () => {
+it("a clean Flow retains its content when removed elsewhere", async () => {
   // Arrange
-  const { draft, removedElsewhere } = hiddenFlow();
+  const { draft, removedElsewhere } = openedFlow();
   const content = draft.getSnapshot().content;
 
   // Act

@@ -391,9 +391,6 @@ export async function beforeUnusedAgent(fixtures: StudioFixtures, prefix: string
     return expectReloadedFlow({ ...previous });
   })();
   const { screen, renamed, revision5 } = state;
-  await screen
-    .getByLabel("Flow name", { exact: true })
-    .fill(`Acceptance · ${prefix} · Retained Flow`);
   await screen.getByRole("link", "Agents", { exact: true }).tap();
   await expect(screen.getByRole("link", renamed.name, { exact: true })).toContainText("1 Flow");
   const empty = {
@@ -426,7 +423,7 @@ export async function expectRemovedDependency(
   return { ...state };
 }
 
-export async function beforeReopenedMissingDependency(fixtures: StudioFixtures, prefix: string) {
+export async function beforeReopenedLatestFlow(fixtures: StudioFixtures, prefix: string) {
   const state = await (async () => {
     const previous = await beforeRemovedDependency(fixtures, prefix);
     const { app, agent } = previous;
@@ -438,27 +435,33 @@ export async function beforeReopenedMissingDependency(fixtures: StudioFixtures, 
   return { ...state };
 }
 
-export async function expectReopenedMissingDependency(
-  state: Awaited<ReturnType<typeof beforeReopenedMissingDependency>>,
+export async function expectReopenedLatestFlow(
+  state: Awaited<ReturnType<typeof beforeReopenedLatestFlow>>,
 ) {
-  const { screen, prefix, library, canvas, renamed } = state;
-  await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(
-    `Acceptance · ${prefix} · Retained Flow`,
+  const { app, screen, id, canvas } = state;
+  const latestFlow = await readFlow(app.baseUrl, id);
+  await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(latestFlow.name);
+  await expect(canvas.getByRole("article", /^Block /)).toHaveCount(0);
+  await expect(screen.getByRole("status", "Flow save status")).toContainText(
+    `Saved · Revision ${latestFlow.revision}`,
   );
-  await expect(canvas.getByText("Unavailable Agent", { exact: true })).toBeVisible();
-  await expect(library.getByRole("button", `Add ${renamed.name}`, { exact: true })).toHaveCount(0);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
-  return { ...state };
+  return { ...state, latestFlow };
 }
 
 export async function beforeRemovedFlow(fixtures: StudioFixtures, prefix: string) {
   const state = await (async () => {
-    const previous = await beforeReopenedMissingDependency(fixtures, prefix);
+    const previous = await beforeReopenedLatestFlow(fixtures, prefix);
     const { screen } = previous;
     await screen.getByRole("link", new RegExp(`Acceptance · ${prefix} · Local Flow`)).tap();
-    return expectReopenedMissingDependency({ ...previous });
+    return expectReopenedLatestFlow({ ...previous });
   })();
-  const { flowPanel } = state;
+  const { app, screen, latestFlow, flowPanel } = state;
+  await screen
+    .getByLabel("Flow name", { exact: true })
+    .fill(`Acceptance · ${prefix} · Retained Flow`);
+  await saveFlowElsewhere(app.baseUrl, latestFlow, {
+    name: `Acceptance · ${prefix} · Flow saved elsewhere`,
+  });
   await flowPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
   return { ...state };
 }
@@ -479,12 +482,12 @@ export async function beforeCopiedFlow(fixtures: StudioFixtures, prefix: string)
 }
 
 export async function expectCopiedFlow(state: Awaited<ReturnType<typeof beforeCopiedFlow>>) {
-  const { app, screen, browser, prefix, ownFlow } = state;
+  const { app, screen, browser, prefix, latestFlow } = state;
   await expect(screen.getByText("Copied to clipboard.", { exact: true })).toBeVisible();
   expect(await browser.evaluate("navigator.clipboard.readText().then(JSON.parse)")).toEqual({
     name: `Acceptance · ${prefix} · Retained Flow`,
-    graph: ownFlow.graph,
-    workspace: ownFlow.workspace,
+    graph: latestFlow.graph,
+    workspace: latestFlow.workspace,
   });
   await app.screenshot("acceptance-removed-flow-recovery");
   return { ...state };
@@ -499,7 +502,6 @@ export async function beforeKeptFlow(fixtures: StudioFixtures, prefix: string) {
   })();
   const { screen } = state;
   await screen.getByRole("link", "Agents", { exact: true }).tap();
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
   const flowGuard = screen.getByRole(
     "dialog",
     "This Flow was removed elsewhere. Discard the retained draft?",
@@ -524,10 +526,8 @@ export async function beforeCleanAgent(fixtures: StudioFixtures, prefix: string)
     return expectKeptFlow({ ...previous });
   })();
   const { app, screen, marker, flowGuard } = state;
-  await screen.getByRole("link", "All Flows", { exact: true }).tap();
-  await screen.getByRole("link", /^Demo · Focused change /).tap();
-  await flowGuard.getByRole("button", "Discard", { exact: true }).tap();
   await screen.getByRole("link", "Agents", { exact: true }).tap();
+  await flowGuard.getByRole("button", "Discard", { exact: true }).tap();
   await screen
     .getByRole("link", `Acceptance · ${prefix} · Gesture delivered`, { exact: true })
     .tap();

@@ -40,8 +40,8 @@ import {
   beforeUnusedAgent,
   expectRemovedDependency,
   beforeRemovedDependency,
-  expectReopenedMissingDependency,
-  beforeReopenedMissingDependency,
+  expectReopenedLatestFlow,
+  beforeReopenedLatestFlow,
   expectRemovedFlow,
   beforeRemovedFlow,
   expectCopiedFlow,
@@ -346,23 +346,20 @@ test("an external Agent removal removes its open Studio list entry", async ({
   await expectRemovedDependency({ ...state });
 });
 
-test("reopening the hidden dirty Flow preserves its draft and shows its missing Agent", async ({
+test("reopening a Flow left clean shows its newest saved revision", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeReopenedMissingDependency(
-    { app, screen, browser },
-    "reopenedMissingDependency",
-  );
+  const state = await beforeReopenedLatestFlow({ app, screen, browser }, "reopenedLatestFlow");
   const { prefix } = state;
 
   // Act
   await screen.getByRole("link", new RegExp(`Acceptance · ${prefix} · Local Flow`)).tap();
 
   // Assert
-  await expectReopenedMissingDependency({ ...state });
+  await expectReopenedLatestFlow({ ...state });
 });
 
 test("an external Flow removal closes comparison and retains recovery with disabled writes", async ({
@@ -396,11 +393,7 @@ test("a retained Flow copies its actual create-shape JSON to the granted clipboa
   await expectCopiedFlow({ ...state });
 });
 
-test("Keep editing reopens a hidden retained Flow without discarding it", async ({
-  app,
-  screen,
-  browser,
-}) => {
+test("Keep editing stays on a removed Flow's retained draft", async ({ app, screen, browser }) => {
   // Arrange
   const state = await beforeKeptFlow({ app, screen, browser }, "keptFlow");
   const { flowGuard } = state;

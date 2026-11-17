@@ -45,9 +45,7 @@ function studioSelectionFromLocation(location: {
 
 function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft) {
   if (!studio) return false;
-  if (draft.kind === "flow") {
-    return studio.tab !== "flows" || !studio.flowId || studio.flowId === draft.id;
-  }
+  if (draft.kind === "flow") return studio.tab === "flows" && studio.flowId === draft.id;
   if (draft.kind === "trigger") return triggerDraftId(studio) === draft.id;
   return studio.tab === "agents" && studio.agentId === draft.id;
 }
@@ -61,11 +59,11 @@ function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
   );
 }
 
+/** Only the shown page's editor has a draft, so a navigation leaves at most one. */
 export function useStudioDraftGuard(input: StudioDraftGuardInput) {
   const guarded = liveDrafts(input).length > 0;
   return useNavigationBlock(guarded, (location) => {
     const studio = studioSelectionFromLocation(location);
-    const drafts = liveDrafts(input).filter((draft) => !staysWithDraft(studio, draft));
-    return drafts.length ? drafts : undefined;
+    return liveDrafts(input).find((draft) => !staysWithDraft(studio, draft));
   });
 }
