@@ -1,5 +1,6 @@
 import type { GitHubFailure, GitHubRepository } from "../../../apps/backend/src/adapters/github.ts";
 import { ControlledGitHub } from "../../../apps/backend/test/support/controlled-github.ts";
+import { triggerEnabled } from "../../../apps/backend/test/support/scenarios.ts";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 
@@ -65,6 +66,21 @@ export function githubFixture(github: ControlledGitHub, { factory, world }: Host
       /** Someone opens issue `number` in the Project's repository; each label gets a `labeled` event. */
       issue(issue: { number: number; title: string; labels?: string[] }) {
         github.openIssue(projectRepository(), issue);
+      },
+      /**
+       * An enabled Trigger named `name`, with its schedule off, that starts the seed's focused-change
+       * Flow for the Project's issues labelled `factory:ready`; it has not checked yet.
+       */
+      async trigger({ name }: { name: string }) {
+        const trigger = await triggerEnabled(factory, {
+          kind: "github_issues",
+          name,
+          projectId: world.project.id,
+          flowId: world.flows.simple,
+          schedule: { enabled: false, intervalMinutes: 5 },
+          github: { repositoryNodeId: projectRepository().nodeId, query: "label:factory:ready" },
+        });
+        return { id: trigger.id };
       },
       /** The named `gh` read fails with `failure` until `recover` clears it. */
       fail({ call, failure }: { call: GitHubCall; failure: GitHubFailure }) {
