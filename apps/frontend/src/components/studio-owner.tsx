@@ -152,10 +152,11 @@ export function OwnerFilter({
             Global
           </DropdownMenuRadioItem>
           {targets.length > 1 && <DropdownMenuSeparator />}
-          {targets.slice(1).map(({ owner }) => (
+          {targets.slice(1).map(({ owner, disabled }) => (
             <DropdownMenuRadioItem
               key={owner.projectId}
               value={owner.projectId!}
+              disabled={disabled !== null}
               indicatorPosition="right"
               aria-label={`${owner.title} · ${owner.detail}${owner.unavailable ? ` · ${owner.unavailable}` : ""}`}
               className="items-start"
