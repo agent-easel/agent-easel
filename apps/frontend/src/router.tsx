@@ -62,6 +62,26 @@ const studioAgentRoute = createRoute({
   path: "studio/agents/$agentId",
   beforeLoad: ({ params }) => openStudio({ tab: "agents", agentId: params.agentId }),
 });
+const studioTriggersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "studio/triggers",
+  beforeLoad: () => openStudio({ tab: "triggers" }),
+});
+const studioNewTriggerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "studio/triggers/new",
+  beforeLoad: () => openStudio({ tab: "triggers", triggerId: "new" }),
+});
+const studioNewGitHubIssuesTriggerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "studio/triggers/new/github-issues",
+  beforeLoad: () => openStudio({ tab: "triggers", triggerId: "new", kind: "github_issues" }),
+});
+const studioTriggerRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "studio/triggers/$triggerId",
+  beforeLoad: ({ params }) => openStudio({ tab: "triggers", triggerId: params.triggerId }),
+});
 const flowsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "flows",
@@ -144,6 +164,10 @@ const routeTree = rootRoute.addChildren([
   studioFlowRoute,
   studioAgentsRoute,
   studioAgentRoute,
+  studioTriggersRoute,
+  studioNewTriggerRoute,
+  studioNewGitHubIssuesTriggerRoute,
+  studioTriggerRoute,
   flowsRoute,
   flowRoute,
   runsRoute,

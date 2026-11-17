@@ -13,7 +13,8 @@ const TRIGGER_QUERY_LIMIT = 1000;
 const TRIGGER_INTERVAL_MIN_MINUTES = 1;
 const TRIGGER_INTERVAL_MAX_MINUTES = 24 * 60;
 const TRIGGER_MAX_ACTIVE_RUNS_LIMIT = 10;
-const TRIGGER_DEFAULTS = {
+/** What a new Trigger starts with; the create form shows the same values. */
+export const TRIGGER_DEFAULTS = {
   query: "label:factory:ready author:@me",
   schedule: { enabled: true, intervalMinutes: 5 },
   maxActiveRuns: 1,

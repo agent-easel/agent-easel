@@ -396,12 +396,12 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **17**, and both sides require at least **16**. Protocol 17 adds the
-Trigger operations over the product HTTP API and a `triggers` list to the Studio live subscription
-(snapshots and change sets). Protocol 16 clients keep working against a protocol 17 server, since
-they never call the new routes and ignore the added list. A current client still accepts a protocol
-16 server while its screens do not read Triggers; the minimum server protocol rises to 17 when they
-do. Protocol 16 added
+The current protocol is **17**. A server accepts clients from protocol **16**; a current client
+requires a protocol **17** server. Protocol 17 adds the Trigger operations over the product HTTP API
+and a `triggers` list to the Studio live subscription (snapshots and change sets). Protocol 16
+clients keep working against a protocol 17 server, since they never call the new routes and ignore
+the added list. A current client manages Triggers in Studio, so it refuses a protocol 16 server and
+shows the update gate naming the server. Protocol 16 added
 [Condition](studio.md#canvas-and-block-configuration) blocks with their ordered rules, outputs and
 fixed Otherwise output to Flows and captured Run definitions, with each Condition's
 [routing summary and selection events](runs.md#conditions) in Run detail, and the

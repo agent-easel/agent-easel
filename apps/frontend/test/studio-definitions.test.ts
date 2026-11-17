@@ -10,7 +10,7 @@ import {
   studioSnapshot,
 } from "./support/studio-definitions.ts";
 
-it("both lists come from one Studio subscription", () => {
+it("every list comes from one Studio subscription", () => {
   // Arrange
   const { definitions, studio, socket } = liveStudio();
 
@@ -23,6 +23,7 @@ it("both lists come from one Studio subscription", () => {
   expect(definitions.getSnapshot()).toStrictEqual({
     flows: { value: [savedFlow("Live")], synchronized: true, error: null },
     agents: { value: [savedAgent()], synchronized: true, error: null },
+    triggers: { value: [], synchronized: true, error: null },
   });
   expect(socket.watches).toStrictEqual([{ rpc: "WatchStudio" }]);
 });
