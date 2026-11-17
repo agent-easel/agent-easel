@@ -266,7 +266,8 @@ export const makeRunTitles = (
         );
         if (problem !== undefined)
           return yield* skipBeforeLaunch(generation.run_id, generation.id, problem);
-        if (snapshot.contextId !== generation.context_id) return;
+        // Eligibility reads awaited T3, so the launch is fenced on the context current after them.
+        if (!(yield* contextLive(generation))) return;
         if (!(yield* store.markTitleLaunchSent(sql, generation))) return;
         changes.runChanged(generation.run_id);
         const launched = yield* Effect.tryPromise({

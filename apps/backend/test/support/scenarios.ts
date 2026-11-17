@@ -155,6 +155,30 @@ export function reauthorizeDuringTitleDispatch(t3: ControlledT3) {
     }),
   );
 }
+/**
+ * The host reauthorizes T3 with a new grant while the title thread's dispatch reads the model
+ * catalog, after the inspection that dispatch's eligibility check started from, and Factory
+ * observes the new grant before that check ends. A Flow worker's first launch reads no catalog,
+ * so the first catalog read after Start's preflight is the title dispatch's. Resolves once
+ * Factory observed the new grant.
+ */
+export function reauthorizeDuringTitleEligibility(
+  t3: ControlledT3,
+  factory: Pick<FactoryOperations, "recheckConnection">,
+) {
+  return new Promise<void>((resolve) =>
+    afterStartPreflight(t3, () => {
+      const read = t3.orchestratorCapabilities.bind(t3);
+      t3.orchestratorCapabilities = async (target) => {
+        t3.orchestratorCapabilities = read;
+        t3.approve("controlled-grant-3");
+        await factory.recheckConnection();
+        resolve();
+        return read(target);
+      };
+    }),
+  );
+}
 /** T3 holds the title thread's launch request until the returned call releases it. */
 export function holdTitleThreadLaunch(t3: ControlledT3) {
   let release = () => {};
