@@ -119,7 +119,7 @@ it("an Agent owner change reaches an existing Studio subscriber as its new owner
     _tag: "changed",
     agents: { upserts: [changed], removals: [] },
   } satisfies StudioLiveMessage);
-  expect(changed).toStrictEqual({ ...planner, projectId: first.id });
+  expect(changed).toStrictEqual({ ...planner, projectId: first.id, updatedAt: changed.updatedAt });
 });
 
 it("a removed Flow reaches an existing Studio subscriber as a removal", async (c) => {

@@ -21,7 +21,8 @@ and restricted OAuth credentials live outside project repositories.
   The [owning Project](studio.md#ownership) is stored on the Flow and Agent identity, referencing
   the never-deleted Factory Project row, and is not part of any revision. Migration `103` added it
   with every existing Flow and Agent global, keeping ids, revisions, references, Runs and import
-  receipts unchanged and needing no user action.
+  receipts unchanged and needing no user action. Migration `105` records when each identity's owner
+  last changed (empty for existing rows), so a definition's update time is its latest save or owner change.
 - Start atomically records the Run input, references the current Flow revision and freezes
   the current revision of every Agent that Flow references, including blocks it may never
   visit; each Agent activation references that frozen revision. Runs keep no separate copy:

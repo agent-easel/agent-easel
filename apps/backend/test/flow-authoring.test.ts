@@ -859,7 +859,11 @@ it("changing a global Flow's owner to a Project appends no revision and changes 
 
   // Assert
   assert(changed.ok);
-  expect(changed.value).toStrictEqual({ ...flow, projectId: first.id });
+  expect(changed.value).toStrictEqual({
+    ...flow,
+    projectId: first.id,
+    updatedAt: changed.value.updatedAt,
+  });
   expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [changed.value] });
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: agentsBefore });
 });
@@ -994,6 +998,27 @@ it("saving a Flow under an owner it no longer has is refused and appends no revi
     { code: "stale_owner", path: "expectedProjectId" },
   ]);
   expect(assertOk(await factory.getFlow(flow.id))).toMatchObject({ name: "Release", revision: 1 });
+});
+
+it("a Flow moved to another owner and back no longer reads as it did before the moves", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const flow = assertOk(await factory.createFlow({ name: "Release" }));
+  assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const back = assertOk(
+    await factory.changeFlowOwner(flow.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Assert
+  // Live readers send only differences, so a move away and back between two reads must differ.
+  const read = assertOk(await factory.getFlow(flow.id));
+  expect(read).toStrictEqual(back);
+  expect(read).toMatchObject({ projectId: null, revision: flow.revision });
+  expect(read.updatedAt > flow.updatedAt).toBe(true);
 });
 
 it("checking a Flow's readiness under an owner it no longer has is refused", async (context) => {

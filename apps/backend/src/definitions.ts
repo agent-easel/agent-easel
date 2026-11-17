@@ -53,7 +53,7 @@ import type { EffectOperations } from "./effect-operations.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { failure } from "./result.ts";
 import { projectUnavailableIssue } from "./projects.ts";
-import { now as currentTime } from "./time.ts";
+import { now as currentTime, nowAfter } from "./time.ts";
 import { newId } from "./ids.ts";
 import {
   appendFlowRevision,
@@ -562,8 +562,10 @@ export const makeDefinitions = (
                   message: `This Flow places Agent "${agent.name}" (${agent.id}), which the new owner may not place.`,
                 })),
               );
-            yield* sql`UPDATE flows SET project_id=${projectId} WHERE id=${id}`;
-            return { ok: true as const, value: toDraft({ ...flow, projectId }, agents) };
+            // Strictly later, so a move away and back between two live reads still differs.
+            const updatedAt = yield* nowAfter(flow.updatedAt);
+            yield* sql`UPDATE flows SET project_id=${projectId}, owner_changed_at=${updatedAt} WHERE id=${id}`;
+            return { ok: true as const, value: toDraft({ ...flow, projectId, updatedAt }, agents) };
           }),
         );
       },
@@ -774,8 +776,10 @@ export const makeDefinitions = (
                     message: `Flow "${flow.name}" (${flow.id}) places this Agent and may not place it under the new owner.`,
                   })),
                 );
-              yield* sql`UPDATE agents SET project_id=${projectId} WHERE id=${id}`;
-              return { ok: true as const, value: { ...agent, projectId } };
+              // Strictly later, so a move away and back between two live reads still differs.
+              const updatedAt = yield* nowAfter(agent.updatedAt);
+              yield* sql`UPDATE agents SET project_id=${projectId}, owner_changed_at=${updatedAt} WHERE id=${id}`;
+              return { ok: true as const, value: { ...agent, projectId, updatedAt } };
             }),
           ),
         );

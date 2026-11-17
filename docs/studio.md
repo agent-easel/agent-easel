@@ -126,6 +126,8 @@ records why a per-project variant is an independent copy rather than an override
 - **Change owner.** `PUT /api/flows/:id/owner` and `PUT /api/agents/:id/owner` take `{expectedProjectId, projectId}`: the
   owning Project the client last saw and the new one, each a Factory Project id or `null` for global. The move appends no
   revision and changes nothing else: no other definition is edited, copied or made global, and Runs keep what they captured.
+  It does advance the definition's `updatedAt`, always strictly, because live updates send only differences: a move away and
+  back between two reads still reaches every open Studio, whose editors then follow the owner it shows.
   It is refused when the definition's owner is no longer `expectedProjectId` (conflict, `stale_owner` at
   `expectedProjectId`), when the new owning Project is unknown or unavailable (`project_not_found` or
   `project_<availability>` at `projectId`, checked in the committing transaction), and when the placement rule would no longer

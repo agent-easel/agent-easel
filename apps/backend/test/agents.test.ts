@@ -147,6 +147,27 @@ it("duplicating an Agent of an unavailable Project into its default target is re
   expect(assertOk(await factory.listAgents())).toStrictEqual([source]);
 });
 
+it("an Agent moved to another owner and back no longer reads as it did before the moves", async (context) => {
+  // Arrange
+  const { factory, first } = await discoveredClones(context);
+  const agent = assertOk(await factory.createAgent(sampleAgentInput("Planner")));
+  assertOk(
+    await factory.changeAgentOwner(agent.id, { expectedProjectId: null, projectId: first.id }),
+  );
+
+  // Act
+  const back = assertOk(
+    await factory.changeAgentOwner(agent.id, { expectedProjectId: first.id, projectId: null }),
+  );
+
+  // Assert
+  // Live readers send only differences, so a move away and back between two reads must differ.
+  const read = assertOk(await factory.getAgent(agent.id));
+  expect(read).toStrictEqual(back);
+  expect(read).toMatchObject({ projectId: null, revision: agent.revision });
+  expect(read.updatedAt > agent.updatedAt).toBe(true);
+});
+
 it("a stale Agent save conflicts and the accepted save survives restart", async (context) => {
   // Arrange
   const { harness, factory } = await openFactoryWithApprovedT3(context);
@@ -323,7 +344,11 @@ it("a Project Agent of an unavailable Project moves to global without a revision
 
   // Assert
   assert(changed.ok);
-  expect(changed.value).toStrictEqual({ ...own, projectId: null });
+  expect(changed.value).toStrictEqual({
+    ...own,
+    projectId: null,
+    updatedAt: changed.value.updatedAt,
+  });
   expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [changed.value] });
   expect(await factory.listFlows()).toStrictEqual({ ok: true, value: [flow] });
 });

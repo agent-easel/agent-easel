@@ -7,6 +7,7 @@ import type {
   BlockExit,
 } from "@t3-factory/contracts";
 import { newId } from "./ids.ts";
+import { laterTime } from "./time.ts";
 
 /** One saved Agent revision as a Run captures it; settings availability is derived separately. */
 export type AgentRevision = AgentRevisionContent;
@@ -60,23 +61,29 @@ export const appendAgentRevision = Effect.fnUntraced(function* (
 
 /**
  * The latest revision of each non-removed Agent (or only `agentId`) with its owning Project, most
- * recently saved first.
+ * recently saved first. Its update time is its latest save or owner change, whichever is later.
  */
 export const readCurrentAgents = Effect.fnUntraced(function* (
   sql: SqlClient.SqlClient,
   agentId?: string,
 ) {
-  const rows = yield* sql<RevisionRow & { project_id: string | null }>`
-    SELECT r.*, a.created_at, a.project_id FROM agents a
+  const rows = yield* sql<
+    RevisionRow & { project_id: string | null; owner_changed_at: string | null }
+  >`
+    SELECT r.*, a.created_at, a.project_id, a.owner_changed_at FROM agents a
     JOIN agent_revisions r ON r.agent_id = a.id
       AND r.revision = (SELECT max(revision) FROM agent_revisions WHERE agent_id = a.id)
     WHERE a.removed_at IS NULL ${agentId === undefined ? sql`` : sql`AND a.id = ${agentId}`}
     ORDER BY r.saved_at DESC, a.id ASC`;
   const revisions = yield* withExits(sql, rows);
-  return revisions.map((revision, index): AgentDefinition => ({
-    ...revision,
-    projectId: rows[index]!.project_id,
-  }));
+  return revisions.map((revision, index): AgentDefinition => {
+    const row = rows[index]!;
+    return {
+      ...revision,
+      projectId: row.project_id,
+      updatedAt: laterTime(revision.updatedAt, row.owner_changed_at),
+    };
+  });
 });
 
 /** The Agent revisions a Run froze at Start, in the order its Flow first places them. */
