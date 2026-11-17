@@ -3,7 +3,7 @@ import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
 import { ApiError } from "../../src/api.ts";
 import { createAgentDraft, type AgentDraftOperations } from "../../src/agent-draft.ts";
 import { capabilities, savedAgent } from "./agent-draft.ts";
-import { held } from "./flow-draft.ts";
+import { held, laterThan } from "./flow-draft.ts";
 import { liveStudio, studioChanged, studioFactory, studioSnapshot } from "./studio-definitions.ts";
 
 /** Factory's refusal of a save that expected an owner the Agent no longer has. */
@@ -25,7 +25,7 @@ function memoryAgents() {
     },
     /** Another client changes the Agent's owner, which appends no revision. */
     moveElsewhere(projectId: string | null) {
-      latest = { ...latest, projectId };
+      latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };
       return latest;
     },
     createAgent: vi.fn<AgentDraftOperations["createAgent"]>(async (content) => {

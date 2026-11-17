@@ -912,7 +912,7 @@ it("a dirty editor's own Change owner needs no acknowledgement, also before Stud
   const moved = setup.factory.moveElsewhere("northwind");
 
   // Act
-  setup.draft.ownerChangedHere(moved.projectId);
+  setup.draft.ownerChangedHere(moved);
 
   // Assert
   expect(setup.draft.getSnapshot()).toMatchObject({
@@ -926,10 +926,10 @@ it("a dirty editor's own Change owner needs no acknowledgement, also before Stud
 it("a dirty editor's own Change owner that Studio delivered before its reply needs no acknowledgement", () => {
   // Arrange
   const setup = editedAgent();
-  ownerChangedElsewhere(setup, "northwind");
+  const moved = ownerChangedElsewhere(setup, "northwind");
 
   // Act
-  setup.draft.ownerChangedHere("northwind");
+  setup.draft.ownerChangedHere(moved);
 
   // Assert
   expect(setup.draft.getSnapshot()).toMatchObject({
@@ -940,10 +940,28 @@ it("a dirty editor's own Change owner that Studio delivered before its reply nee
   });
 });
 
+it("a Change owner reply older than the owner Studio delivered since leaves the delivered owner", () => {
+  // Arrange
+  const setup = editedAgent();
+  const reply = setup.factory.moveElsewhere("northwind");
+  ownerChangedElsewhere(setup, null);
+
+  // Act
+  setup.draft.ownerChangedHere(reply);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "none" },
+    canSave: true,
+  });
+});
+
 it("an owner moved back elsewhere after the editor's own Change owner asks for acknowledgement", () => {
   // Arrange
   const setup = editedAgent();
-  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind").projectId);
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind"));
 
   // Act
   ownerChangedElsewhere(setup, null);
@@ -960,7 +978,7 @@ it("an owner moved back elsewhere after the editor's own Change owner asks for a
 it("a stale-owner refusal after the editor's own Change owner asks to acknowledge the owner Studio shows", async () => {
   // Arrange
   const setup = editedAgent();
-  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind").projectId);
+  setup.draft.ownerChangedHere(setup.factory.moveElsewhere("northwind"));
   setup.factory.moveElsewhere(null);
 
   // Act

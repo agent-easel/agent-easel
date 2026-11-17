@@ -15,6 +15,9 @@ import { savedAgent } from "./agent-draft.ts";
 import { envelope, liveHarness } from "./live.ts";
 
 type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow">;
+
+/** A minute after `time`: an owner change always advances a definition's `updatedAt`. */
+export const laterThan = (time: string) => new Date(Date.parse(time) + 60_000).toISOString();
 type Operations = { [K in keyof FlowOperations]: Mock<FlowOperations[K]> };
 
 /** The Flow Factory holds, and its Flow operations over it in memory. */
@@ -82,7 +85,7 @@ export function memoryFactory(): MemoryFactory {
     latest: () => latest,
     saveElsewhere: (name, readiness = ready) => append({ name, readiness }),
     moveElsewhere(projectId) {
-      latest = { ...latest, projectId };
+      latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };
       return latest;
     },
     updateFlow: vi.fn<FlowOperations["updateFlow"]>(

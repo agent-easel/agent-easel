@@ -363,7 +363,7 @@ it("a readiness check answered after the editor's own Change owner is dropped", 
   const { draft, factory } = editedFlow();
   const answer = held(factory.validateFlow);
   const checking = draft.check();
-  draft.ownerChangedHere(factory.moveElsewhere("northwind").projectId);
+  draft.ownerChangedHere(factory.moveElsewhere("northwind"));
 
   // Act
   answer.answer(validated());

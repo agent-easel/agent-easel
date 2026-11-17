@@ -8,7 +8,12 @@ interface Revisioned {
   readonly id: string;
   readonly revision: number;
   readonly projectId: string | null;
+  /** Advances with every save and owner change, so a later state never reads as an earlier one. */
+  readonly updatedAt: string;
 }
+
+/** The owner a Change owner reply names, and when that state was written. */
+export type OwnerMove = Pick<Revisioned, "projectId" | "updatedAt">;
 
 /** JSON with sorted object keys, so equal content compares equal whatever its key order. */
 export function canonical(value: unknown): string {
@@ -408,11 +413,12 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
      * This editor's own Change owner moved the definition to `projectId`; nothing to acknowledge.
      * Studio's later deliveries are followed as usual: they cannot be told apart from a move
      * elsewhere, and a delivery read before the move is followed by the move itself. Studio may
-     * also have delivered the move before its reply, which then asks nothing either.
+     * also have delivered the move before its reply, which then asks nothing either. A reply older
+     * than the delivery the draft holds names an owner that was replaced since, so it is ignored.
      */
-    ownerChangedHere(projectId: string | null) {
-      if (!saved) return;
-      acceptOwner(projectId);
+    ownerChangedHere(moved: OwnerMove) {
+      if (!saved || moved.updatedAt < saved.updatedAt) return;
+      acceptOwner(moved.projectId);
       publish();
     },
     /** The user checked an unknown save's outcome themselves, so the draft may send again. */

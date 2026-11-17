@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { OwnerMove } from "../revisioned-draft.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
 import {
   createChangeOwner,
@@ -115,7 +116,7 @@ export function ChangeOwnerDialog({
   definitions: StudioDefinitions;
   onClose: () => void;
   /** The definition now has owning Project `projectId`. */
-  onChanged: (projectId: string | null) => void;
+  onChanged: (moved: OwnerMove) => void;
   /** Opens Duplicate with `target` preselected, the alternative to a refused move. */
   onDuplicateInstead: (target: string | null) => void;
   /** Why Duplicate is not offered now, such as unsaved Agent changes. */
@@ -134,7 +135,7 @@ export function ChangeOwnerDialog({
     event.preventDefault();
     const moved = await model.confirm();
     if (!moved) return;
-    onChanged(moved.projectId);
+    onChanged(moved);
     onClose();
   }
   if (state.blockers.length > 0)

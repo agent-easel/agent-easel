@@ -3,6 +3,7 @@ import { MutationGate } from "@/client-gate";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { useComposerNavigation } from "../run-draft.ts";
+import type { OwnerMove } from "../revisioned-draft.ts";
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type RefObject } from "react";
 import type {
   AgentDefinition,
@@ -541,7 +542,7 @@ function FlowOwnerDialogs({
   revision: number;
   dirty: boolean;
   definitions: StudioDefinitions;
-  onChanged: (projectId: string | null) => void;
+  onChanged: (moved: OwnerMove) => void;
 }) {
   const { dialog } = dialogs;
   if (dialog?.kind === "change-owner")
