@@ -9,7 +9,7 @@ import type {
   RunTitleProvenance,
   RuntimeReadiness,
 } from "@t3-factory/contracts";
-import type { T3Support, T3Target } from "../adapters/t3.ts";
+import type { T3ContractSnapshot, T3Target } from "../adapters/t3.ts";
 import type { RunWorkspace } from "./run-workspace.ts";
 
 /** A Run's row with the definitions it captured at Start. */
@@ -147,10 +147,10 @@ export interface RunnerLifecycle {
   getRun(id: string): Effect.Effect<Result<RunDetail>, unknown>;
 }
 export interface RunnerOptions {
-  /** `support` is the T3 contract snapshot answer of the pass that checks. */
+  /** `snapshot` is the T3 contract snapshot of the pass that checks. */
   checkAgent: (
     projectId: string,
     agent: CapturedAgent,
-    support: T3Support,
+    snapshot: T3ContractSnapshot,
   ) => Effect.Effect<Result<RuntimeReadiness>, unknown>;
 }

@@ -11,13 +11,7 @@ import { recoveryDispatchGeneration } from "./runner-recovery.ts";
 import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import type {
-  SendPayload,
-  SendReference,
-  T3Adapter,
-  T3ContractSnapshot,
-  T3Support,
-} from "../adapters/t3.ts";
+import type { SendPayload, SendReference, T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
 import { intactPayload } from "../fingerprint.ts";
 import {
@@ -197,7 +191,7 @@ export function openRunnerDispatch(
             yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
             return;
           }
-          const checked = yield* verifyDispatch(runRow, intent, support);
+          const checked = yield* verifyDispatch(runRow, intent, snapshot);
           if (!checked.ok) {
             yield* store.noteUnresolved(intent, checked.problem);
             return;
@@ -235,7 +229,7 @@ export function openRunnerDispatch(
   function verifyDispatch(
     runRow: RunRow,
     intent: Delivery,
-    support: T3Support,
+    snapshot: T3ContractSnapshot,
   ): Effect.Effect<
     Checked<{
       payload: SendPayload;
@@ -246,13 +240,13 @@ export function openRunnerDispatch(
     return Effect.gen(function* () {
       const payload = storedPayload(intent);
       if (!payload.ok) return payload;
-      const { send } = support;
+      const { send } = snapshot.support;
       if (!send.supported) return unverified(send.explanation ?? SEND_UNCERTAIN);
       if (replayUnproven(intent, send.retryScope))
         return unverified(
           "Same-key replay continuity/retention is unproven; operation remains unresolved.",
         );
-      const rebind = yield* rebindOrReadinessProblem(runRow, support);
+      const rebind = yield* rebindOrReadinessProblem(runRow, snapshot);
       if (rebind) return unverified(rebind);
       const target = storedTarget(runRow, intent, payload.value);
       if (!target.ok) return target;
@@ -267,9 +261,9 @@ export function openRunnerDispatch(
     });
   }
   /** Even replay may create work if the original request never reached T3. */
-  function rebindOrReadinessProblem(runRow: RunRow, support: T3Support) {
+  function rebindOrReadinessProblem(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
-      const ready = yield* agentsReady(runRow, support);
+      const ready = yield* agentsReady(runRow, snapshot);
       const target = catalogProject(yield* ops.listProjects(), runRow.project_id);
       if (
         !target ||
@@ -282,11 +276,11 @@ export function openRunnerDispatch(
       return null;
     });
   }
-  function agentsReady(runRow: RunRow, support: T3Support) {
+  function agentsReady(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
       const { definitions } = runRow;
       for (const agent of definitions.agents) {
-        const readiness = yield* checkAgent(runRow.project_id, agent, support);
+        const readiness = yield* checkAgent(runRow.project_id, agent, snapshot);
         if (!readiness.ok || !readiness.value.ready) return false;
       }
       return true;

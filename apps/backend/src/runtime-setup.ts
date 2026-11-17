@@ -21,7 +21,7 @@ import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 import type { GitAdapter } from "./adapters/git.ts";
 import { reportSupport } from "./adapters/t3-contract.ts";
-import type { T3Support } from "./adapters/t3.ts";
+import type { T3ContractSnapshot } from "./adapters/t3.ts";
 import type { ContractSnapshots } from "./connection.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
@@ -170,13 +170,13 @@ const openRuntimeSetup = Effect.fn(function* (
   yield* Effect.addFinalizer(() => close);
   const selection = Effect.fn(function* (
     input: unknown,
-    checked: Effect.Effect<T3Support, unknown>,
+    checked: Effect.Effect<T3ContractSnapshot, unknown>,
     capturedAgent?: CapturedAgent,
   ) {
     const i = object(input);
     if (typeof i.projectId !== "string" || typeof i.agentId !== "string")
       blocked("selection_required", "runtime.selection", "Choose a saved project and Agent.");
-    const support = yield* checked;
+    const snapshot = yield* checked;
     const [c, ps, a, cap] = yield* Effect.all(
       [
         ops.getConnection(),
@@ -189,6 +189,13 @@ const openRuntimeSetup = Effect.fn(function* (
       { concurrency: "unbounded" },
     );
     const { connection, context } = readyConnection(c);
+    // The support answers belong to the snapshot's context; a context switched since then gets none.
+    if (context.id !== snapshot.contextId)
+      blocked(
+        "connection_unavailable",
+        "connection",
+        "The T3 connection changed while readiness was checked. Recheck it.",
+      );
     const p = availableProject(ps, i.projectId);
     if (!a.ok) blocked("agent_unavailable", "agent", "Choose an existing Agent.");
     // A captured Agent already carries the settings of its Run's Project.
@@ -203,16 +210,16 @@ const openRuntimeSetup = Effect.fn(function* (
     const driver = validatedHarness(context, agent, readyCapabilities(cap));
     const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: agent, driver, support };
+    return { c: connection, a: agent, driver, support: snapshot.support };
   });
   /**
    * Explicit reporting: the connected contract, an installed Factory MCP and report support.
-   * `checked` refreshes the Project catalog and answers with the support of the one connection
-   * check this readiness relies on, so a later check cannot change its answer.
+   * `checked` refreshes the Project catalog and answers with the snapshot of the one connection
+   * check this readiness relies on, so a later check or another context cannot change its answer.
    */
   const readiness = Effect.fn(function* (
     input: unknown,
-    checked: Effect.Effect<T3Support, unknown>,
+    checked: Effect.Effect<T3ContractSnapshot, unknown>,
     capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
@@ -255,20 +262,17 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   return {
     close: () => close,
-    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot;
-     * `support` is that snapshot's. */
-    recheckAgent: (projectId: string, agent: CapturedAgent, support: T3Support) =>
+    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot. */
+    recheckAgent: (projectId: string, agent: CapturedAgent, snapshot: T3ContractSnapshot) =>
       serial(() =>
-        readiness({ projectId, agentId: agent.id }, Effect.as(refreshProjects(), support), agent),
+        readiness({ projectId, agentId: agent.id }, Effect.as(refreshProjects(), snapshot), agent),
       ),
     /** Standalone readiness makes its own one connection check and answers from that check. */
     recheckRuntime: (i: unknown) =>
       serial(() =>
         readiness(
           i,
-          Effect.flatMap(freshSnapshot(), (snapshot) =>
-            Effect.as(refreshProjects(), snapshot.support),
-          ),
+          Effect.flatMap(freshSnapshot(), (snapshot) => Effect.as(refreshProjects(), snapshot)),
         ),
       ),
   };
