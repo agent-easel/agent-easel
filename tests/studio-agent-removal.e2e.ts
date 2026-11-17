@@ -19,10 +19,6 @@ import {
   beforeAgentJsonFallback,
   expectSelectedAgentJson,
   beforeSelectedAgentJson,
-  expectCombinedAgentGuard,
-  beforeCombinedAgentGuard,
-  expectKeptCombinedAgent,
-  beforeKeptCombinedAgent,
   expectDeletedOwnAgent,
   beforeDeletedOwnAgent,
 } from "./support/studio-agent-removal-states.ts";
@@ -145,37 +141,6 @@ test("focusing fallback Agent JSON selects the complete draft", async ({
 
   // Assert
   await expectSelectedAgentJson({ ...state });
-});
-
-test("a removed Agent and hidden dirty Flow share the discard guard", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeCombinedAgentGuard({ app, screen, browser }, "combinedAgentGuard");
-
-  // Act
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-
-  // Assert
-  await expectCombinedAgentGuard({ ...state });
-});
-
-test("Keep editing preserves the removed Agent beside a hidden dirty Flow", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeKeptCombinedAgent({ app, screen, browser }, "keptCombinedAgent");
-  const { guard } = state;
-
-  // Act
-  await guard.getByRole("button", "Keep editing", { exact: true }).tap();
-
-  // Assert
-  await expectKeptCombinedAgent({ ...state });
 });
 
 test("an accepted Agent Delete discards its edits and navigates without another prompt", async ({

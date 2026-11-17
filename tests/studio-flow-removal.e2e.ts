@@ -5,20 +5,14 @@ import {
   beforeRetainedCleanFlow,
   expectKeptCleanFlow,
   beforeKeptCleanFlow,
-  expectHiddenFlowGuard,
-  beforeHiddenFlowGuard,
-  expectDiscardedHiddenFlow,
-  beforeDiscardedHiddenFlow,
+  expectLeftRetainedFlow,
+  beforeLeftRetainedFlow,
+  expectDiscardedRetainedFlow,
+  beforeDiscardedRetainedFlow,
   expectMissingRemovedFlow,
   beforeMissingRemovedFlow,
   expectRemovedFlowBackList,
   beforeRemovedFlowBackList,
-  expectReopenedRetainedFlow,
-  beforeReopenedRetainedFlow,
-  expectCombinedFlowGuard,
-  beforeCombinedFlowGuard,
-  expectKeptCombinedFlow,
-  beforeKeptCombinedFlow,
   expectCopiedEditedFlow,
   beforeCopiedEditedFlow,
   expectFlowJsonFallback,
@@ -60,31 +54,34 @@ test("Keep editing preserves the clean retained Flow", async ({ app, screen, bro
   await expectKeptCleanFlow({ ...state, guard });
 });
 
-test("leaving a hidden retained Flow asks for discard", async ({ app, screen, browser }) => {
+test("leaving a retained Flow for its list asks for discard", async ({ app, screen, browser }) => {
   // Arrange
-  const state = await beforeHiddenFlowGuard({ app, screen, browser }, "hiddenFlowGuard");
+  const state = await beforeLeftRetainedFlow({ app, screen, browser }, "leftRetainedFlow");
 
   // Act
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
+  await screen.getByRole("link", "All Flows", { exact: true }).tap();
 
   // Assert
-  await expectHiddenFlowGuard({ ...state });
+  await expectLeftRetainedFlow({ ...state });
 });
 
-test("Discard leaves a hidden retained Flow without another prompt", async ({
+test("Discard leaves a retained Flow for its list without another prompt", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeDiscardedHiddenFlow({ app, screen, browser }, "discardedHiddenFlow");
+  const state = await beforeDiscardedRetainedFlow(
+    { app, screen, browser },
+    "discardedRetainedFlow",
+  );
   const { guard } = state;
 
   // Act
   await guard.getByRole("button", "Discard", { exact: true }).tap();
 
   // Assert
-  await expectDiscardedHiddenFlow({ ...state });
+  await expectDiscardedRetainedFlow({ ...state });
 });
 
 test("a removed Flow deep link shows not found", async ({ app, screen, browser }) => {
@@ -108,52 +105,6 @@ test("Back to list leaves a missing Flow for its list", async ({ app, screen, br
 
   // Assert
   await expectRemovedFlowBackList({ ...state });
-});
-
-test("Keep editing reopens the hidden removed Flow when another Flow was requested", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeReopenedRetainedFlow({ app, screen, browser }, "reopenedRetainedFlow");
-
-  // Act
-  await keepRetainedFlow(screen);
-
-  // Assert
-  await expectReopenedRetainedFlow({ ...state });
-});
-
-test("a hidden removed Flow and dirty Agent share the discard guard", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeCombinedFlowGuard({ app, screen, browser }, "combinedFlowGuard");
-
-  // Act
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-
-  // Assert
-  await expectCombinedFlowGuard({ ...state });
-});
-
-test("Keep editing preserves the dirty Agent beside a hidden removed Flow", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeKeptCombinedFlow({ app, screen, browser }, "keptCombinedFlow");
-  const { both } = state;
-
-  // Act
-  await both.getByRole("button", "Keep editing", { exact: true }).tap();
-
-  // Assert
-  await expectKeptCombinedFlow({ ...state });
 });
 
 test("a retained Flow copies current unfinished JSON", async ({ app, screen, browser }) => {

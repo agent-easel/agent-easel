@@ -5,6 +5,7 @@ import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
 import { largestWirePortOffset } from "./support/canvas.ts";
+import { openEditedStudioFlow } from "./support/studio.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
@@ -562,7 +563,7 @@ test("removing a Flow with unsaved changes returns to the Flow list without a di
   await expect(screen.getByRole("link", new RegExp(name))).toHaveCount(0);
 });
 
-test("an exported Flow imported through the review arrives as a new Flow with a new Agent and opens past an unrelated draft's discard guard", async ({
+test("an exported Flow imported through the review arrives as a new Flow with a new Agent", async ({
   app,
   screen,
   browser,
@@ -588,8 +589,9 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
     await readFile(download.absolutePath, "utf8"),
   ) as PortableFlowDocument;
   await screen.getByRole("link", "All Flows").tap();
+  await screen.getByRole("button", "Discard changes", { exact: true }).tap();
 
-  // Act: import the file through the review, confirm, and discard the unrelated draft.
+  // Act: import the file through the review and confirm.
   await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
   const review = screen.getByRole("dialog", "Review the import");
   await expect(review).toContainText("New worktree · release/2.0");
@@ -604,8 +606,6 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await app.screenshot("flow-import-review-narrow");
   await browser.setViewport({ width: 1600, height: 1000 });
   await review.getByRole("button", "Confirm import", { exact: true }).tap();
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
-  await screen.getByRole("button", "Discard changes", { exact: true }).tap();
 
   // Assert: the file holds the saved revision; the imported Flow opens with its own new Agent.
   assert.equal(download.suggestedFilename, `${name.toLowerCase().replaceAll(" ", "-")}.flow.json`);
@@ -654,4 +654,40 @@ test("authoring wires start and end at their port centres while a block is selec
   await expect(screen.getByLabel("Block name")).toHaveValue("Implement change");
   await expect.poll(() => largestWirePortOffset(browser)).toBeLessThan(0.5);
   await app.screenshot("authoring-wires-meet-port-centres");
+});
+
+test("leaving an edited Flow for another Studio page asks before discarding its edits", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Leave guard ${crypto.randomUUID().slice(0, 8)}`;
+  const id = await openEditedStudioFlow({ app, screen, browser }, name);
+
+  // Act
+  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await expect(browser).toHaveURL(`/studio/flows/${id}`);
+});
+
+test("a Flow reopened after discarding its edits on leaving shows its saved revision", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Leave discard ${crypto.randomUUID().slice(0, 8)}`;
+  await openEditedStudioFlow({ app, screen, browser }, name);
+  const studio = screen.getByRole("navigation", "Studio navigation");
+  await studio.getByRole("link", "Flows").tap();
+  await screen.getByRole("button", "Discard changes", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("link", new RegExp(`^${name} `)).tap();
+
+  // Assert
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
 });

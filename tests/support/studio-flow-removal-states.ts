@@ -76,48 +76,43 @@ export async function expectKeptCleanFlow(
   return { ...state };
 }
 
-export async function beforeHiddenFlowGuard(fixtures: StudioFixtures, prefix: string) {
-  const state = await (async () => {
-    const previous = await beforeKeptCleanFlow(fixtures, prefix);
-    const { screen } = previous;
-    const guard = await keepRetainedFlow(screen);
-    return expectKeptCleanFlow({ ...previous, guard });
-  })();
-  const { screen } = state;
-  await screen.getByRole("link", "All Flows", { exact: true }).tap();
-  await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
-  return { ...state };
+export async function beforeLeftRetainedFlow(fixtures: StudioFixtures, prefix: string) {
+  const previous = await beforeKeptCleanFlow(fixtures, prefix);
+  const { screen } = previous;
+  const guard = await keepRetainedFlow(screen);
+  return expectKeptCleanFlow({ ...previous, guard });
 }
 
-export async function expectHiddenFlowGuard(
-  state: Awaited<ReturnType<typeof beforeHiddenFlowGuard>>,
+export async function expectLeftRetainedFlow(
+  state: Awaited<ReturnType<typeof beforeLeftRetainedFlow>>,
 ) {
   const { app, guard } = state;
   await expect(guard).toBeVisible();
-  await app.screenshot("flow-hidden-discard-confirmation");
+  await app.screenshot("flow-retained-discard-confirmation");
   return { ...state };
 }
 
-export async function beforeDiscardedHiddenFlow(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeHiddenFlowGuard(fixtures, prefix);
+export async function beforeDiscardedRetainedFlow(fixtures: StudioFixtures, prefix: string) {
+  const previous = await beforeLeftRetainedFlow(fixtures, prefix);
   const { screen } = previous;
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-  return expectHiddenFlowGuard({ ...previous });
+  await screen.getByRole("link", "All Flows", { exact: true }).tap();
+  return expectLeftRetainedFlow({ ...previous });
 }
 
-export async function expectDiscardedHiddenFlow(
-  state: Awaited<ReturnType<typeof beforeDiscardedHiddenFlow>>,
+export async function expectDiscardedRetainedFlow(
+  state: Awaited<ReturnType<typeof beforeDiscardedRetainedFlow>>,
 ) {
-  const { screen } = state;
-  await expect(screen.getByRole("button", "Back to Runs", { exact: true })).toHaveCount(0);
+  const { screen, guard } = state;
+  await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
+  await expect(guard).toHaveCount(0);
   return { ...state };
 }
 
 export async function beforeMissingRemovedFlow(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeDiscardedHiddenFlow(fixtures, prefix);
+  const previous = await beforeDiscardedRetainedFlow(fixtures, prefix);
   const { guard } = previous;
   await guard.getByRole("button", "Discard", { exact: true }).tap();
-  return expectDiscardedHiddenFlow({ ...previous });
+  return expectDiscardedRetainedFlow({ ...previous });
 }
 
 export async function expectMissingRemovedFlow(
@@ -140,93 +135,6 @@ export async function expectRemovedFlowBackList(
 ) {
   const { browser } = state;
   await expect(browser).toHaveURL("/studio/flows");
-  return { ...state };
-}
-
-export async function beforeReopenedRetainedFlow(fixtures: StudioFixtures, prefix: string) {
-  const { app, screen } = fixtures;
-  const name = `Removal · ${prefix} · Hidden retained Flow`;
-  const id = await saveSingleAgentFlow(app.baseUrl, name, "Sample worker", {
-    id: "hidden-worker",
-    name: "Worker",
-    x: 320,
-    y: 180,
-  });
-  const otherName = `Removal · ${prefix} · Other Flow`;
-  await saveSingleAgentFlow(app.baseUrl, otherName, "Sample worker", {
-    id: "other-worker",
-    name: "Worker",
-    x: 320,
-    y: 180,
-  });
-  await app.open(`/studio/flows/${id}`);
-  await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(name);
-  await screen.getByRole("link", "Agents", { exact: true }).tap();
-  await removeFlowElsewhere(app.baseUrl, id);
-  await screen.getByRole("link", "Flows", { exact: true }).tap();
-  await screen.getByRole("link", new RegExp(`^Removal · ${prefix} · Other Flow `)).tap();
-  return {
-    app: fixtures.app,
-    screen: fixtures.screen,
-    browser: fixtures.browser,
-    prefix,
-    name,
-    id,
-    otherName,
-  };
-}
-
-export async function expectReopenedRetainedFlow(
-  state: Awaited<ReturnType<typeof beforeReopenedRetainedFlow>>,
-) {
-  const { app, screen, browser, id } = state;
-  await expect(browser).toHaveURL(`/studio/flows/${id}`);
-  await expect(
-    screen.getByText("This Flow was removed elsewhere. Your draft is kept.", { exact: true }),
-  ).toBeVisible();
-  await app.screenshot("hidden-flow-reopened");
-  return { ...state };
-}
-
-export async function beforeCombinedFlowGuard(fixtures: StudioFixtures, prefix: string) {
-  const state = await (async () => {
-    const previous = await beforeReopenedRetainedFlow(fixtures, prefix);
-    const { screen } = previous;
-    await keepRetainedFlow(screen);
-    return expectReopenedRetainedFlow({ ...previous });
-  })();
-  const { screen } = state;
-  await screen.getByRole("link", "Agents", { exact: true }).tap();
-  await screen.getByRole("link", "Sample worker", { exact: true }).tap();
-  await screen.getByLabel("Prompt", { exact: true }).fill("Unsaved Agent beside retained Flow");
-  return { ...state };
-}
-
-export async function expectCombinedFlowGuard(
-  state: Awaited<ReturnType<typeof beforeCombinedFlowGuard>>,
-) {
-  const { app, screen } = state;
-  const both = screen.getByRole("dialog", "Discard the Flow and Agent drafts?", { exact: true });
-  await expect(both).toContainText("This Flow was removed elsewhere");
-  await expect(both).toContainText("Your Agent has unsaved changes");
-  await app.screenshot("hidden-removed-flow-with-agent-draft");
-  return { ...state, both };
-}
-
-export async function beforeKeptCombinedFlow(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeCombinedFlowGuard(fixtures, prefix);
-  const { screen } = previous;
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-  return expectCombinedFlowGuard({ ...previous });
-}
-
-export async function expectKeptCombinedFlow(
-  state: Awaited<ReturnType<typeof beforeKeptCombinedFlow>>,
-) {
-  const { screen } = state;
-  await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
-    "Unsaved Agent beside retained Flow",
-  );
   return { ...state };
 }
 

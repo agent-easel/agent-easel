@@ -20,7 +20,7 @@ export function SettingsDraftDialog({
   decision: ReturnType<typeof useSettingsDraftGuard>;
 }) {
   if (decision.status !== "blocked") return null;
-  const names = decision.drafts.join(" and ");
+  const names = decision.unsaved.join(" and ");
   return (
     <Dialog
       open
