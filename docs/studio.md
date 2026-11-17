@@ -449,6 +449,10 @@ Project's GitHub issues. What a check reads, admits and starts, and the decision
 [Starting from a Trigger](runs.md#starting-from-a-trigger). Approved clients have the same full management as the
 host; readiness, review and checks always run on the Factory host with its `gh` login.
 
+Trigger pages fill the content width. Below the list, the header breadcrumb links each parent page
+(**Studio / Triggers / *name***, **Studio / Triggers / New / GitHub Issues**), and each page starts with a back link:
+**All Triggers** on an opened Trigger and the type picker, **Trigger types** on the create form.
+
 **List.** Each row shows the Trigger's name, its health (**Healthy** after a completed check without a problem,
 **Error** while a problem stops every check, nothing before the first completed check), **GitHub Issues · Project →
 Flow · schedule** (for example `every 5 min`, `every 2 hours` or `manual`), one line naming the problem while it is in

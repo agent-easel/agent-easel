@@ -101,6 +101,25 @@ test("a GitHub Issues Trigger made in Studio starts a Run for a ready issue, and
   await expect(screen.getByRole("region", "Started from")).toContainText(name);
 });
 
+test("an opened Trigger returns to the Trigger list from its back link", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Back to the list";
+  await fixture.github.trigger({ name });
+  await app.open("/studio/triggers");
+  await screen.getByRole("link", name, { exact: true }).tap();
+  await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
+
+  // Act
+  await screen.getByRole("link", "All Triggers", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByRole("button", `${name} actions`, { exact: true })).toBeVisible();
+});
+
 test("a Trigger whose host gh is signed out shows Error with the host step that repairs it", async ({
   app,
   screen,

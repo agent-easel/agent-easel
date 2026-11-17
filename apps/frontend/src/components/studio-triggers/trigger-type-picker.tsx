@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { StudioLink } from "../app-link.tsx";
+import { StudioBackLink, StudioLink } from "../app-link.tsx";
 import { SettingsPage } from "../settings-page.tsx";
 import { GitHubMark } from "./github-mark.tsx";
 import { useTriggerReadiness } from "./use-trigger-readiness.ts";
@@ -8,7 +8,8 @@ import { useTriggerReadiness } from "./use-trigger-readiness.ts";
 /** Figma T03a: New Trigger asks for the type; GitHub Issues is the only one. */
 export function TriggerTypePicker() {
   return (
-    <main className="grid max-w-206 content-start px-8 pt-6 pb-8 max-sm:px-4">
+    <main className="grid content-start gap-4 px-8 pt-6 pb-8 max-sm:px-4">
+      <StudioBackLink selection={{ tab: "triggers" }}>All Triggers</StudioBackLink>
       <SettingsPage
         title="New Trigger"
         description="Choose what starts the Flow. More trigger types can come later."
