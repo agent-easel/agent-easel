@@ -123,7 +123,7 @@ export async function enableRunTitlesWithCheapModel(
   };
 }
 /**
- * Runs `action` at the first inspection after a one-Agent Start's preflight, once Start accepted
+ * Runs `action` at the first inspection after a Start's preflight, once Start accepted
  * the Run: the drive pass's or the title thread dispatch's, both of which answer before that
  * dispatch reads the catalog.
  */
@@ -1922,7 +1922,7 @@ export function twoWorkersStarted(world: ScenarioWorld, start: unknown) {
 }
 
 /** Factory accepted the Start; T3 holds the Runner's first drive pass at its inspection until
- * `release` is called, while Start's own preflight inspections pass. Factory has not dispatched;
+ * `release` is called, while Start's own preflight inspection passes. Factory has not dispatched;
  * the pass's support answers are read after the release. */
 export function imageDispatchHeld(world: ScenarioWorld, start: unknown) {
   return reach("image dispatch held", async () => {

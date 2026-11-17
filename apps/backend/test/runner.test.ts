@@ -5,7 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
-import { START_INSPECTIONS } from "./support/controlled-t3.ts";
+import { failInspectionsAfter } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
 import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
@@ -392,6 +392,18 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
+it("Start checks its Project catalog and its Agent's readiness against its one T3 inspection", async (c) => {
+  // Arrange
+  const { f, t3, input } = await prepared(c);
+  failInspectionsAfter(t3, 1);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  expect(result).toMatchObject({ ok: true });
+});
+
 it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
@@ -432,11 +444,12 @@ it("Start refuses a global Flow whose Agent became a Project Agent through readi
 it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
   // Arrange
   const { h, f, t3, input, agent, project } = await prepared(c);
-  let inspections = 0;
-  t3.beforeInspection = () => {
-    // The third inspection is the Agent's readiness check, after Start read the Agent.
-    if (++inspections === START_INSPECTIONS)
-      ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+  const readCatalog = t3.orchestratorCapabilities.bind(t3);
+  t3.orchestratorCapabilities = async (target) => {
+    // The Agent's readiness check reads the model catalog after Start read the Agent.
+    t3.orchestratorCapabilities = readCatalog;
+    ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+    return readCatalog(target);
   };
 
   // Act

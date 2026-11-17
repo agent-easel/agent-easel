@@ -31,6 +31,8 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
   freshSnapshot: ContractSnapshots["fresh"],
+  /** The Project catalog reconciled under the latest connection check, without checking again. */
+  refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   t3: T3Adapter,
   git: GitAdapter,
   owner: { token: string },
@@ -82,6 +84,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     store,
     ops,
     freshSnapshot,
+    refreshProjects,
     git,
     lifecycle,
     checkAgent,

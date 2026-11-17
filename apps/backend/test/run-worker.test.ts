@@ -32,6 +32,7 @@ import {
   workerWorking,
   workingReportedIdle,
 } from "./support/scenarios.ts";
+import { failInspectionsAfter } from "./support/controlled-t3.ts";
 import { answerDelegatedWait } from "./support/controlled-thread.ts";
 import { prepared } from "./support/prepared-runner.ts";
 
@@ -485,6 +486,21 @@ it("Request report on a worker idle in working queues an assessment turn on its 
     { blockId: "worker", attentionId: null, sourceExecutionId: "execution-1" },
   ]);
   expect(f.t3.launches.size).toBe(1);
+});
+it("Request report sends its assessment turn with the Agent's readiness checked against the pass's T3 inspection", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await workingReportedIdle(setup.world, atWork)) };
+  // Request report's own authorization check, then its dispatch pass's snapshot.
+  failInspectionsAfter(f.t3, 2);
+
+  // Act
+  const result = await f.f.requestReport(f.runId, { blockId: "worker" });
+
+  // Assert
+  assert(result.ok, JSON.stringify(result));
+  expect([...f.t3.sends.values()].map((send) => send.payload.threadId)).toStrictEqual(["thread-1"]);
 });
 it("Request report on a later visit asks for an assessment without the Revisit instruction", async (c) => {
   // Arrange

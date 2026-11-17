@@ -29,11 +29,11 @@ const f = await openFactory({
   connectionRetryMs: 60_000,
 });
 if (stage === "preflight") {
-  // The check's own launch-blocker read inspects T3 as its Start does, except for the catalogue
-  // recheck; the next inspection is that Start's T3 contract snapshot.
+  // The check's own launch-blocker read inspects T3 as its Start does; the next inspection is that
+  // Start's T3 contract snapshot.
   let inspections = 0;
   t3.beforeInspection = async () => {
-    if (++inspections === START_INSPECTIONS) await crash();
+    if (++inspections === START_INSPECTIONS + 1) await crash();
   };
 }
 await f.runTrigger(triggerId!);

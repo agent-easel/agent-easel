@@ -495,9 +495,17 @@ export class ControlledT3 implements T3Adapter {
   async close() {}
 }
 
-/** The inspections a Start of a one-Agent Flow makes before it accepts: its T3 contract snapshot,
- * its Project catalogue recheck and the Agent's runtime readiness check. */
-export const START_INSPECTIONS = 3;
+/** The inspections a Start makes before it accepts: its T3 contract snapshot, which its Project
+ * catalog refresh and every Agent's runtime readiness check reuse. */
+export const START_INSPECTIONS = 1;
+
+/** Every inspection after the first `passing` finds T3 unavailable; T3's other calls still answer. */
+export function failInspectionsAfter(t3: ControlledT3, passing: number) {
+  let inspections = 0;
+  t3.beforeInspection = () => {
+    if (++inspections > passing) throw new T3Failure("unavailable", "Unavailable");
+  };
+}
 
 /**
  * Holds every inspection after the first `passing` at T3 until `release`; `inspecting` resolves

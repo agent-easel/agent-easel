@@ -153,6 +153,7 @@ const openRuntimeSetup = Effect.fn(function* (
     >
   >,
   latestSnapshot: ContractSnapshots["latest"],
+  refreshProjects: EffectOperations<Pick<FactoryOperations, "recheckProjects">>["recheckProjects"],
   git: GitAdapter,
 ) {
   const semaphore = yield* Semaphore.make(1);
@@ -168,11 +169,15 @@ const openRuntimeSetup = Effect.fn(function* (
     yield* semaphore.withPermits(1)(Effect.void);
   });
   yield* Effect.addFinalizer(() => close);
-  const selection = Effect.fn(function* (input: unknown, capturedAgent?: CapturedAgent) {
+  const selection = Effect.fn(function* (
+    input: unknown,
+    reconcileProjects: Effect.Effect<unknown, unknown>,
+    capturedAgent?: CapturedAgent,
+  ) {
     const i = object(input);
     if (typeof i.projectId !== "string" || typeof i.agentId !== "string")
       blocked("selection_required", "runtime.selection", "Choose a saved project and Agent.");
-    yield* ops.recheckProjects();
+    yield* reconcileProjects;
     const [c, ps, a, cap] = yield* Effect.all(
       [
         ops.getConnection(),
@@ -201,14 +206,18 @@ const openRuntimeSetup = Effect.fn(function* (
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
     return { c: connection, a: agent, driver };
   });
-  /** Explicit reporting: the connected contract, an installed Factory MCP and report support. */
+  /**
+   * Explicit reporting: the connected contract, an installed Factory MCP and report support.
+   * `reconcileProjects` refreshes the Project catalog and decides the connection check it reads.
+   */
   const readiness = Effect.fn(function* (
     input: unknown,
+    reconcileProjects: Effect.Effect<unknown, unknown>,
     capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
     yield* Effect.gen(function* () {
-      const s = yield* selection(input, capturedAgent);
+      const s = yield* selection(input, reconcileProjects, capturedAgent);
       issues.push(...runtimeContractIssues(s.c));
       const installed = yield* explicitReadiness(
         {
@@ -219,7 +228,7 @@ const openRuntimeSetup = Effect.fn(function* (
         ops.getReportingInstallations,
       );
       if (installed.ok) issues.push(...installed.value.issues);
-      // The catalogue recheck in `selection` checked the connection; its answer is current.
+      // The catalog reconciled in `selection` read this connection check's answer.
       const support = reportSupport((yield* latestSnapshot()).support, s.driver);
       if (!support.supported)
         issues.push({
@@ -247,9 +256,10 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   return {
     close: () => close,
+    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot. */
     recheckAgent: (projectId: string, agent: CapturedAgent) =>
-      serial(() => readiness({ projectId, agentId: agent.id }, agent)),
-    recheckRuntime: (i: unknown) => serial(() => readiness(i)),
+      serial(() => readiness({ projectId, agentId: agent.id }, refreshProjects(), agent)),
+    recheckRuntime: (i: unknown) => serial(() => readiness(i, ops.recheckProjects())),
   };
 });
 

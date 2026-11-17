@@ -241,6 +241,7 @@ export function openRunnerStart(
   store: RunStore,
   ops: EffectOperations<FactoryOperations>,
   freshSnapshot: ContractSnapshots["fresh"],
+  refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   git: GitAdapter,
   lifecycle: RunnerLifecycle,
   checkAgent: RunnerOptions["checkAgent"],
@@ -381,20 +382,20 @@ export function openRunnerStart(
       );
     });
   }
-  /** Before Start: the catalog rechecked, then every launch precondition. */
+  /** Before Start: the catalog reconciled under Start's snapshot, then every launch precondition. */
   function startPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
     snapshot: T3ContractSnapshot,
   ) {
     return Effect.gen(function* () {
-      yield* ops.recheckProjects();
+      yield* refreshProjects();
       return yield* launchPreconditions(input, imageCount, snapshot);
     });
   }
   /**
    * What Start's preflight refuses for every prompt to this Project and Flow, without Start's
-   * catalog recheck first. It accepts nothing, so a caller can learn of a launch blocker without
+   * catalog refresh first. It accepts nothing, so a caller can learn of a launch blocker without
    * attempting a Start.
    */
   function startBlockers(projectId: string, flowId: string) {

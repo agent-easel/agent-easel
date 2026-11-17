@@ -145,6 +145,7 @@ export const makeFactoryService = (
           getAgentCapabilities: definitions.getAgentCapabilities,
         },
         connection.snapshots.latest,
+        projects.refreshProjects,
         git,
       ),
     );
@@ -347,6 +348,7 @@ export const makeFactoryService = (
     runner = yield* makeRunner(
       factory,
       connection.snapshots.fresh,
+      projects.refreshProjects,
       t3,
       git,
       owner,

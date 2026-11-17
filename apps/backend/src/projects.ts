@@ -149,8 +149,10 @@ export const makeProjects = (
       );
       changes.projectsChanged();
     });
-    const reconcile = Effect.fn("Projects.reconcile")(function* () {
-      const status = yield* connection.recheckConnection();
+    /** Lists T3's Projects under `status`, the connection check the caller relies on. */
+    const reconcileUnder = Effect.fn("Projects.reconcile")(function* (
+      status: Result<T3Connection>,
+    ) {
       if (!status.ok || status.value.state !== "ready" || !status.value.authorizationContext) {
         setProblem("Connect and authorize T3 before using projects.");
         return yield* catalog();
@@ -174,6 +176,7 @@ export const makeProjects = (
       );
       return yield* catalog();
     });
+    const reconcile = () => Effect.flatMap(connection.recheckConnection(), reconcileUnder);
     const addRepository = Effect.fn("Projects.addRepository")(function* (
       input: unknown,
     ): Effect.fn.Return<Result<FactoryProject>, unknown> {
@@ -250,6 +253,9 @@ export const makeProjects = (
        */
       readCatalog: () => catalog(),
       recheckProjects: () => serial(reconcile()),
+      /** The catalog reconciled under the latest connection check, without checking again: for a
+       * pass that just took its T3 contract snapshot. */
+      refreshProjects: () => serial(Effect.flatMap(connection.getConnection(), reconcileUnder)),
       addRepository: (input: unknown) => serial(addRepository(input)),
       selectProject: (input: unknown) =>
         serial(
