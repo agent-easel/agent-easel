@@ -112,6 +112,7 @@ export const makeFactoryService = (
         listProjects: projects.listProjects,
         getFlow: definitions.getFlow,
         startTextRun: (input, authorization) => guard(runner.startTextRun(input, authorization)),
+        startBlockers: (projectId, flowId) => guard(runner.startBlockers(projectId, flowId)),
       },
       changes,
     );

@@ -360,7 +360,7 @@ export function openRunnerStart(
       { concurrency: "unbounded" },
     );
   }
-  /** Before Start: connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
+  /** Before Start: the connection and catalog rechecked, then every launch precondition. */
   function startPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
@@ -368,6 +368,27 @@ export function openRunnerStart(
     return Effect.gen(function* () {
       yield* ops.recheckConnection();
       yield* ops.recheckProjects();
+      return yield* launchPreconditions(input, imageCount);
+    });
+  }
+  /**
+   * What Start's preflight refuses for every prompt to this Project and Flow, without Start's
+   * connection and catalog recheck first. It accepts nothing, so a caller can learn of a launch
+   * blocker without attempting a Start.
+   */
+  function startBlockers(projectId: string, flowId: string) {
+    return launchPreconditions({ projectId, flowId }, 0).pipe(
+      Effect.map((checked): Result<undefined> =>
+        checked.ok ? { ok: true, value: undefined } : checked,
+      ),
+    );
+  }
+  /** Connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
+  function launchPreconditions(
+    input: Pick<StartRunInput, "projectId" | "flowId">,
+    imageCount: number,
+  ) {
+    return Effect.gen(function* () {
       const [connection, projects, savedFlow] = yield* Effect.all(
         [ops.getConnection(), ops.listProjects(), ops.getFlow(input.flowId)],
         { concurrency: "unbounded" },
@@ -490,5 +511,5 @@ export function openRunnerStart(
         : { ok: true, value: agents };
     });
   }
-  return { start, startText };
+  return { start, startText, startBlockers };
 }

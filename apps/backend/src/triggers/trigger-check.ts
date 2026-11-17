@@ -42,7 +42,7 @@ import {
 type Problem = NonNullable<CheckOutcome["problem"]>;
 
 /** Start's Text Run, as the Triggers module calls it with its acceptance re-check. */
-export type TriggerStart = (
+type TriggerStart = (
   input: unknown,
   authorization: StartAuthorization,
 ) => Effect.Effect<Result<RunDetail>, unknown>;
@@ -54,6 +54,11 @@ export interface TriggerCheckDeps {
   readonly hostLocalProject: (projectId: string) => Effect.Effect<Result<FactoryProject>, unknown>;
   readonly readTrigger: (id: string) => Effect.Effect<TriggerDefinition | undefined, unknown>;
   readonly startTextRun: TriggerStart;
+  /** What Start's preflight would refuse for every issue, read without attempting a Start. */
+  readonly startBlockers: (
+    projectId: string,
+    flowId: string,
+  ) => Effect.Effect<Result<undefined>, unknown>;
 }
 
 /**
@@ -380,7 +385,10 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return { ok: true, repository, matching: matching.value, states: states.value };
     });
 
-  /** The Project and Flow every Start needs; a problem here would refuse every issue. */
+  /**
+   * The Project and Flow every Start needs, then Start's own launch preconditions such as T3's
+   * launch support; a problem here would refuse every issue, so it holds even with none ready.
+   */
   const sharedBlocker = (subject: AdmissionSubject) =>
     Effect.gen(function* (): Effect.fn.Return<
       { readonly project: FactoryProject } | { readonly problem: Problem },
@@ -405,6 +413,9 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             message: `Fix ${flow.value.name}'s readiness before it can start: ${flow.value.readiness.issues.map((issue) => issue.message).join(" ")}`,
           },
         };
+      const launch = yield* deps.startBlockers(subject.projectId, subject.flowId);
+      if (!launch.ok)
+        return { problem: { code: "start_blocked", message: startReason(launch.error) } };
       return { project: project.value };
     });
 

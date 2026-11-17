@@ -263,6 +263,28 @@ it("a Start blocker sets the Error with Start's guidance and starts nothing", as
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
 
+it("a T3 launch blocker keeps the Trigger's Error while no issue is ready", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  const issue = world.readyIssue(1, "Blocked, then closed");
+  world.t3.launchSupported = false;
+  const blocked = await triggerChecked(world.f, world.trigger.id);
+  issue.open = false;
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.error).toMatchObject({
+    code: "start_blocked",
+    message: expect.stringContaining("T3 launch contract is unsupported."),
+    firstSeenAt: blocked.error!.firstSeenAt,
+    count: 2,
+  });
+  expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 0 });
+});
+
 it("a check that began without a free Run slot starts nothing when that slot frees during its GitHub reads", async (c) => {
   // Arrange
   const world = await checkingWorld(c);

@@ -74,7 +74,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     images,
     waitTimers.schedule,
   );
-  const { start, startText } = openRunnerStart(
+  const { start, startText, startBlockers } = openRunnerStart(
     store,
     ops,
     t3,
@@ -252,6 +252,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     startRun: (input: unknown) => starts.withPermit(start(input)).pipe(Effect.uninterruptible),
     startTextRun: (input: unknown, authorization?: StartAuthorization) =>
       starts.withPermit(startText(input, authorization)).pipe(Effect.uninterruptible),
+    startBlockers,
     /** The Run a Start request ID was accepted as; undefined when it was never accepted. */
     acceptedStart: (requestId: string) =>
       Effect.gen(function* () {

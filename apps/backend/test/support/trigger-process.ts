@@ -15,7 +15,13 @@ const crash = async () => process.exit(86);
 const t3 = new ControlledT3();
 t3.approve();
 t3.projects = fixture.projects;
-if (stage === "preflight") t3.beforeLaunchInspection = crash;
+// The check's own launch-blocker read inspects T3 once before its Start's preflight does.
+let inspections = 0;
+if (stage === "preflight")
+  t3.beforeLaunchInspection = async () => {
+    inspections += 1;
+    if (inspections === 2) await crash();
+  };
 else t3.beforeLaunch = crash;
 const github = new ControlledGitHub();
 for (const [root, repository] of fixture.repositories) github.repositories.set(root, repository);

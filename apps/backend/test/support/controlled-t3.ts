@@ -513,15 +513,18 @@ export class ControlledT3 implements T3Adapter {
 }
 
 /**
- * Holds every Start at T3's launch inspection, inside preflight, until `release`; `inspecting`
- * resolves once a Start is held there.
+ * Holds every launch inspection after the first `passing` at T3, inside Start's preflight, until
+ * `release`; `inspecting` resolves once a Start is held there.
  */
-export function holdLaunchInspection(t3: ControlledT3) {
+export function holdLaunchInspection(t3: ControlledT3, passing = 0) {
   let release = () => {};
   let entered = () => {};
+  let inspections = 0;
   const held = new Promise<void>((resolve) => (release = resolve));
   const inspecting = new Promise<void>((resolve) => (entered = resolve));
   t3.beforeLaunchInspection = async () => {
+    inspections += 1;
+    if (inspections <= passing) return;
     entered();
     await held;
   };

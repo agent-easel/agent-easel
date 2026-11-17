@@ -104,6 +104,26 @@ it("previewing a new Trigger on a public repository without an author filter car
   expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [] });
 });
 
+it("a preview while T3 cannot launch reports the check's problem and starts no issue now", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.readyIssue(1, "Would start");
+  world.t3.launchSupported = false;
+
+  // Act
+  const preview = await world.f.previewTrigger(world.trigger.id, triggerEdit(world.trigger, {}));
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value).toMatchObject({
+    issues: [],
+    problem: {
+      code: "start_blocked",
+      message: expect.stringContaining("T3 launch contract is unsupported."),
+    },
+  });
+});
+
 it("a preview that cannot read GitHub reports the check's problem and leaves the Trigger without an Error", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);

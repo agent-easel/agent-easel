@@ -209,10 +209,14 @@ A [Trigger](../GLOSSARY.md#trigger) starts Runs for a Project's GitHub issues wi
 It is set up and managed in [Studio → Triggers](studio.md#triggers); this section describes what a check does.
 
 - **Check.** A check of a GitHub Issues Trigger first confirms that its Project is still host-local, its Flow exists and
-  passes readiness, and the Project's repository is still the one the Trigger confirmed (same GitHub node id). It then
-  reads the open issues of that repository matching the query, and the ready label's current state and latest
-  `labeled` event for those issues and every issue it is still guarding. Factory always adds the repository, issue type
-  and open state to the query. Matching issues still labelled start oldest first (creation time, then number).
+  passes readiness, and nothing Start's preflight checks for every prompt blocks a launch (T3 connected with the
+  Project available, launch support, the Agents' readiness and the Flow's workspace). This uses the last checked T3
+  connection and starts nothing, so a launch blocker stays the Trigger's problem even when no issue is ready or no
+  slot is free. The check then confirms that the Project's repository is still the one the Trigger confirmed (same
+  GitHub node id), reads the open issues of that repository matching the query, and reads the ready label's current
+  state and latest `labeled` event for those issues and every issue it is still guarding. Factory always adds the
+  repository, issue type and open state to the query. Matching issues still labelled start oldest first (creation time,
+  then number).
 - **Shared Start.** Each admitted issue starts through the same Start as New Run and
   [`factory_start_run`](#starting-from-a-conversation): the same preflight and readiness gates, the Flow's and Agents'
   current saved revisions at acceptance, the Flow's workspace setting and idempotency. It has no draft or images.

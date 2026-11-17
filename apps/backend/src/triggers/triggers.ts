@@ -31,7 +31,7 @@ import { newId } from "../ids.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
-import { makeTriggerCheck, type TriggerStart } from "./trigger-check.ts";
+import { makeTriggerCheck, type TriggerCheckDeps } from "./trigger-check.ts";
 import { deadlineAfter, makeTriggerSchedule } from "./trigger-schedule.ts";
 import {
   deleteTrigger,
@@ -210,9 +210,8 @@ interface GitHubSettlement {
 
 export const makeTriggers = (
   github: GitHubAdapter,
-  deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow"> & {
-    readonly startTextRun: TriggerStart;
-  },
+  deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow"> &
+    Pick<TriggerCheckDeps, "startTextRun" | "startBlockers">,
   changes: LiveChanges,
 ) =>
   Effect.gen(function* () {
@@ -377,6 +376,7 @@ export const makeTriggers = (
       hostLocalProject,
       readTrigger,
       startTextRun: deps.startTextRun,
+      startBlockers: deps.startBlockers,
     });
     const { check, forget } = triggerCheck;
 

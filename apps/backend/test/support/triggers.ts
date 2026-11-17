@@ -208,9 +208,12 @@ export async function startedIssues(f: Factory, projectId: string) {
     .sort((left, right) => left - right);
 }
 
-/** Holds a check's first Start at external preflight until the test releases it. */
+/**
+ * Holds a check's first Start at external preflight until the test releases it. The check's own
+ * launch-blocker read inspects T3 once before that Start does.
+ */
 export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
-  const { inspecting, release } = holdLaunchInspection(world.t3);
+  const { inspecting, release } = holdLaunchInspection(world.t3, 1);
   const checked = world.f.runTrigger(world.trigger.id);
   await inspecting;
   return { checked, release };
