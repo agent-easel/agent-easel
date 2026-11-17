@@ -102,7 +102,6 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
     triggerRef: trigger.ref,
   });
   const triggers = useStudioRead(definitions, "triggers").value;
-  const keepEditing = useRetainedFlowReopen(blocker);
   const { escapeHandler, registerEscape } = useEscapeHandler();
   const close = () => void navigate(undefined);
   return (
@@ -153,7 +152,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
             creation={{ start: () => setCreating(true), created }}
           />
         </div>
-        <DraftDiscardDialog blocker={blocker} onKeepEditing={keepEditing} />
+        <DraftDiscardDialog blocker={blocker} />
         {creating && (
           <CreateFlow
             definitions={definitions}
@@ -169,71 +168,26 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
   );
 }
 
-/** Reopen a retained Flow only after the blocked navigation has finished cancelling. */
-function useRetainedFlowReopen(blocker: ReturnType<typeof useStudioDraftGuard>) {
-  const navigate = useStudioNavigation();
-  const reopenFlow = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    if (!reopenFlow.current || blocker.status !== "idle") return;
-    const flowId = reopenFlow.current;
-    reopenFlow.current = undefined;
-    void navigate({ tab: "flows", flowId });
-  }, [blocker.status, navigate]);
-  return () => {
-    if (blocker.status !== "blocked") return;
-    const flow = blocker.drafts.find((draft) => draft.kind === "flow" && draft.removed);
-    if (flow && blocker.drafts.length === 1) reopenFlow.current = flow.id;
-    blocker.reset();
-  };
-}
-
 const draftKinds = { flow: "Flow", agent: "Agent", trigger: "Trigger" } as const;
 
-function discardMessage(drafts: readonly StudioDraft[]) {
-  const kinds = drafts.map((draft) => draftKinds[draft.kind]);
-  const both = drafts.length > 1;
-  const removed = drafts.some((draft) => draft.removed);
-  const named = kinds.join(" and ");
-  if (removed)
+function discardMessage(draft: StudioDraft) {
+  const kind = draftKinds[draft.kind];
+  if (draft.removed)
     return {
-      removed,
-      title: both
-        ? `Discard the ${named} drafts?`
-        : `This ${named} was removed elsewhere. Discard the retained draft?`,
-      description: drafts
-        .map((draft) => {
-          const kind = draftKinds[draft.kind];
-          return draft.removed
-            ? `This ${kind} was removed elsewhere. Its retained draft will be discarded.`
-            : `Your ${kind} has unsaved changes that will be discarded.`;
-        })
-        .join(" "),
-    };
-  if (both)
-    return {
-      removed,
-      title: `Discard unsaved ${named} changes?`,
-      description: `Your ${named} have unsaved changes. Keep editing to save them, or discard both to continue.`,
+      title: `This ${kind} was removed elsewhere. Discard the retained draft?`,
+      description: `This ${kind} was removed elsewhere. Its retained draft will be discarded.`,
+      discard: "Discard",
     };
   return {
-    removed,
-    title: `Discard unsaved ${named} changes?`,
-    description:
-      drafts[0]?.kind === "flow"
-        ? "Your Flow has unsaved changes. Keep editing to save them, or discard them to continue."
-        : `This ${named} has unsaved changes. Keep editing to save them, or discard them to continue.`,
+    title: `Discard unsaved ${kind} changes?`,
+    description: `${draft.kind === "flow" ? "Your" : "This"} ${kind} has unsaved changes. Keep editing to save them, or discard them to continue.`,
+    discard: "Discard changes",
   };
 }
 
-function DraftDiscardDialog({
-  blocker,
-  onKeepEditing,
-}: {
-  blocker: ReturnType<typeof useStudioDraftGuard>;
-  onKeepEditing: () => void;
-}) {
+function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioDraftGuard> }) {
   if (blocker.status !== "blocked") return null;
-  const message = discardMessage(blocker.drafts);
+  const message = discardMessage(blocker.unsaved);
   return (
     <Dialog
       open
@@ -257,11 +211,11 @@ function DraftDiscardDialog({
         <DialogTitle>{message.title}</DialogTitle>
         <DialogDescription>{message.description}</DialogDescription>
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={onKeepEditing}>
+          <Button variant="outline" onClick={blocker.reset}>
             Keep editing
           </Button>
           <Button variant="destructive" onClick={blocker.proceed}>
-            {message.removed ? "Discard" : "Discard changes"}
+            {message.discard}
           </Button>
         </div>
       </DialogContent>
@@ -370,7 +324,7 @@ function StudioSidebar({
   );
 }
 
-/** The destination's page; an opened Flow's editor is kept separately so it survives navigation. */
+/** The destination's page; an opened Flow's editor is rendered beside it by `StudioContent`. */
 function StudioPage({
   selection,
   definitions,
@@ -438,10 +392,6 @@ function StudioContent({
     }
   }, [selection]);
   const flowId = selection.tab === "flows" ? selection.flowId : undefined;
-  // Keep the current Flow mounted across library and Agent navigation, including its local draft.
-  const [openedFlowId, setOpenedFlowId] = useState(flowId);
-  if (flowId && openedFlowId !== flowId) setOpenedFlowId(flowId);
-  const flowHidden = selection.tab !== "flows" || flowId !== openedFlowId;
   return (
     <div
       ref={content}
@@ -455,16 +405,11 @@ function StudioContent({
         reportTriggerDraft={reportTriggerDraft}
         onCreateFlow={creation.start}
       />
-      {openedFlowId && (
-        <div
-          key={openedFlowId}
-          className={flowHidden ? "hidden" : "min-h-0 flex-1 overflow-auto"}
-          inert={flowHidden}
-        >
+      {flowId && (
+        <div key={flowId} className="min-h-0 flex-1 overflow-auto">
           <FlowDetail
-            id={openedFlowId}
+            id={flowId}
             definitions={definitions}
-            active={!flowHidden}
             registerEscape={registerEscape}
             reportDraft={reportFlowDraft}
             created={creation.created}

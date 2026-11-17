@@ -90,15 +90,13 @@ import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
 import { ChangeOwnerDialog, DuplicateFlowDialog } from "../components/studio-owner-dialogs.tsx";
 
 /**
- * This editor's Flow draft, following the Flow through Studio's saved definitions and told when
- * the editor is hidden. Studio's guard learns of
- * changes to unsaved changes from the draft's notification itself, before any render, and only
- * when that fact changes.
+ * This editor's Flow draft, following the Flow through Studio's saved definitions. Studio's guard
+ * learns of changes to unsaved changes from the draft's notification itself, before any render,
+ * and only when that fact changes.
  */
 function useOpenedFlowDraft(
   id: string,
   definitions: StudioDefinitions,
-  active: boolean,
   reportDraft: ReportDraft,
   created: FlowDraft | undefined,
 ) {
@@ -106,10 +104,8 @@ function useOpenedFlowDraft(
     createFlowDraft(id, definitions, api, created?.id === id ? created : undefined),
   );
   useEffect(() => draft.open(), [draft]);
-  // Hiding or unmounting a shown editor ends it, so a late readiness answer is not shown.
-  useEffect(() => (active ? () => draft.hide() : undefined), [draft, active]);
   useDraftGuard(draft, id, reportDraft);
-  const interactions = useInteractionReports(draft, active);
+  const interactions = useInteractionReports(draft);
   return { draft, state: useFlowDraftSnapshot(draft), interactions };
 }
 
@@ -131,9 +127,9 @@ type Interaction = "pointer" | "text" | "composition" | "arrange";
  * Tells the draft about the interactions a newer saved revision waits for: a pointer gesture
  * on the library or canvas (block, library and wire drags), focus in a draft field, text
  * composition and an Auto-arrange run. The pointer gesture ends after the release has reached
- * its drop handler, so a drop's edit counts. Hiding the editor ends every interaction.
+ * its drop handler, so a drop's edit counts. Closing the editor ends every interaction.
  */
-function useInteractionReports(draft: FlowDraftModel, active: boolean) {
+function useInteractionReports(draft: FlowDraftModel) {
   const ends = useRef(new Map<Interaction, () => void>());
   const begin = useCallback(
     (kind: Interaction) => {
@@ -146,7 +142,6 @@ function useInteractionReports(draft: FlowDraftModel, active: boolean) {
     ends.current.delete(kind);
   }, []);
   useEffect(() => {
-    if (!active) return;
     const open = ends.current;
     const release = () => end("pointer");
     // Bubbling to the window runs after React's handlers at the root, including drops.
@@ -158,7 +153,7 @@ function useInteractionReports(draft: FlowDraftModel, active: boolean) {
       for (const finish of open.values()) finish();
       open.clear();
     };
-  }, [active, end]);
+  }, [end]);
   const reportArranging = useCallback(
     (arranging: boolean) => (arranging ? begin("arrange") : end("arrange")),
     [begin, end],
@@ -249,13 +244,12 @@ function useDeleteKey(
 
 /**
  * The canvas selection: one block (its panel open) or one wire, never both. A selected wire
- * that is no longer in the graph counts as unselected. While this editor is active, Escape
- * clears the selection, and Delete or Backspace removes the selected wire.
+ * that is no longer in the graph counts as unselected. Escape clears the selection, and Delete or
+ * Backspace removes the selected wire.
  */
 function useCanvasSelection(
   canvas: RefObject<HTMLElement | null>,
   draft: { graph: FlowGraph; busy: boolean; change: (next: FlowGraph) => void },
-  active: boolean,
   registerEscape: (handler: () => void) => () => void,
 ) {
   const { graph } = draft;
@@ -276,16 +270,16 @@ function useCanvasSelection(
   }, []);
   const hasSelection = selected !== null || wire !== null;
   useEffect(() => {
-    if (!active || !hasSelection) return;
+    if (!hasSelection) return;
     return registerEscape(() => select(null));
-  }, [active, hasSelection, registerEscape, select]);
+  }, [hasSelection, registerEscape, select]);
   function deleteWire(removed: FlowWire) {
     draft.change(removeWire(graph, removed));
     setSelectedWire(null);
     // The focused wire or delete button unmounts; keep keyboard focus on the canvas.
     canvas.current?.focus({ preventScroll: true });
   }
-  useDeleteKey(canvas, active && !draft.busy && wire !== null, () => {
+  useDeleteKey(canvas, !draft.busy && wire !== null, () => {
     if (wire) deleteWire(wire);
   });
   return { selected, wire, select, selectWire, deleteWire };
@@ -379,14 +373,12 @@ const PANEL_CLOSE_MS = 140;
 export function FlowDetail({
   id,
   definitions,
-  active,
   registerEscape,
   reportDraft,
   created,
 }: {
   id: string;
   definitions: StudioDefinitions;
-  active: boolean;
   registerEscape: (handler: () => void) => () => void;
   reportDraft: ReportDraft;
   /** This Studio's latest create answer, which can arrive before Studio receives that Flow. */
@@ -394,13 +386,7 @@ export function FlowDetail({
 }) {
   const canvas = useRef<HTMLElement>(null);
   const placement = useRef<DropAt | null>(null);
-  const { draft, state, interactions } = useOpenedFlowDraft(
-    id,
-    definitions,
-    active,
-    reportDraft,
-    created,
-  );
+  const { draft, state, interactions } = useOpenedFlowDraft(id, definitions, reportDraft, created);
   const exporter = useDefinitionExport(() => api.exportFlow(id));
   const { saved, error, readiness } = state;
   const { agents, agentError, owner, projects, library } = useLibraryAgents(
@@ -415,7 +401,6 @@ export function FlowDetail({
   const { selected, select, wire, selectWire, deleteWire } = useCanvasSelection(
     canvas,
     { graph, busy: state.busy, change },
-    active,
     registerEscape,
   );
   const thresholds = useThresholdEntries(graph);

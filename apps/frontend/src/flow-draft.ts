@@ -263,11 +263,6 @@ export function createFlowDraft(
         draft.publish();
       }
     },
-    /** The editor was hidden: a readiness check shown or still in flight no longer applies. */
-    hide() {
-      forgetCheck();
-      draft.publish();
-    },
     /** Shows the latest saved Flow beside the local draft, which stays as it is. */
     compareLatest() {
       if (!checking) draft.compare();

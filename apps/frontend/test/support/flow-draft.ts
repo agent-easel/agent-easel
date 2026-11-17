@@ -199,13 +199,6 @@ export function unlistedFlow() {
 /** The Flow editor shows a loaded, clean Flow. */
 export const openedFlow = () => flowDraft();
 
-/** The opened Flow is hidden while the user visits another Studio page. */
-export function hiddenFlow() {
-  const setup = openedFlow();
-  setup.draft.hide();
-  return setup;
-}
-
 /** The opened Flow has an unsaved rename. */
 export function editedFlow(name = "Edited") {
   const setup = openedFlow();

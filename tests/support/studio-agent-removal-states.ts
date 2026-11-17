@@ -151,14 +151,7 @@ export async function beforeAgentJsonFallback(fixtures: StudioFixtures, prefix: 
     "Sample worker",
     `Removal · ${prefix} · Fallback Agent`,
   );
-  await app.open("/studio/flows");
-  await screen.getByRole("button", "New Flow", { exact: true }).tap();
-  await screen.getByLabel("Flow name", { exact: true }).fill(`Removal · ${prefix} · Hidden Flow`);
-  await screen.getByRole("button", "Create Flow", { exact: true }).tap();
-  await screen
-    .getByLabel("Flow name", { exact: true })
-    .fill(`Removal · ${prefix} · Unsaved hidden Flow`);
-  await screen.getByRole("link", "Agents", { exact: true }).tap();
+  await app.open("/studio/agents");
   await screen.getByRole("link", agent.name, { exact: true }).tap();
   await screen.getByLabel("Prompt", { exact: true }).fill("Keep my recovery edits");
   await removeAgentElsewhere(app.baseUrl, agent.id);
@@ -208,42 +201,6 @@ export async function expectSelectedAgentJson(
     ),
   ).toBe(true);
   await app.screenshot("agent-removed-json-fallback");
-  return { ...state };
-}
-
-export async function beforeCombinedAgentGuard(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeSelectedAgentJson(fixtures, prefix);
-  const { json } = previous;
-  await json.focus();
-  return expectSelectedAgentJson({ ...previous });
-}
-
-export async function expectCombinedAgentGuard(
-  state: Awaited<ReturnType<typeof beforeCombinedAgentGuard>>,
-) {
-  const { app, screen, browser } = state;
-  const guard = screen.getByRole("dialog", "Discard the Flow and Agent drafts?", { exact: true });
-  await expect(guard).toContainText("Your Flow has unsaved changes");
-  await expect(guard).toContainText("This Agent was removed elsewhere");
-  await browser.evaluate(
-    "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
-  );
-  await app.screenshot("agent-removed-with-hidden-flow-guard");
-  return { ...state, guard };
-}
-
-export async function beforeKeptCombinedAgent(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeCombinedAgentGuard(fixtures, prefix);
-  const { screen } = previous;
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-  return expectCombinedAgentGuard({ ...previous });
-}
-
-export async function expectKeptCombinedAgent(
-  state: Awaited<ReturnType<typeof beforeKeptCombinedAgent>>,
-) {
-  const { screen } = state;
-  await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue("Keep my recovery edits");
   return { ...state };
 }
 
