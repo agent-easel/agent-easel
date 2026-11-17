@@ -357,7 +357,8 @@ The Run screen and sidebar update live, including reports, attention, timeline a
 navigation membership. Shared T3 connection status and the composer's Project and Flow
 choices also update live. The selected Run
 and the sidebar share one view subscription; switching Runs refreshes that view with the
-new Run, keeping the previous one only until another Run opens. Live updates preserve the canvas viewport and
+new Run, keeping the previous one until the view next subscribes again, as [live delivery](foundation.md#live-delivery)
+describes. Live updates preserve the canvas viewport and
 selected Block.
 
 Project descriptions and the comparison with the current saved Flow load on screen entry.
