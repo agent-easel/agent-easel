@@ -66,6 +66,6 @@ test("Back to a created Agent removed after its first live appearance shows not 
   await expect(browser).toHaveURL(path);
   await expect(screen.getByText("Agent not found", { exact: true })).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toHaveCount(0);
-  await expect(screen.getByRole("button", "Duplicate…", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "More actions", { exact: true })).toHaveCount(0);
   await app.screenshot("created-agent-removed-before-back");
 });

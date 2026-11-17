@@ -143,7 +143,10 @@ export function StudioAgentsPage({
         error={library.error}
         loading={library.agents === null || library.flows === null}
       />
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section
+        aria-label="Agent editor"
+        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
+      >
         {agentId ? (
           <SelectedAgentEditor
             // An editor never outlives its server, so a pending reply from another one is discarded.

@@ -165,7 +165,9 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   ordered by title. Each Project group shows the Project's last-known title and repository path; when two Projects still read
   alike, its environment and endpoint are added, then an id suffix. An unavailable Project's group shows its availability reason
   (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
-  name their owner; the Agent editor header shows an **Owned by *Project*** badge and the Flow editor's toolbar an owner badge.
+  name their owner; the Agent editor header shows the owner as text above the name, in the same tones (Global neutral, a Project
+  in brand cyan, an unavailable Project in the attention color with its reason in the tooltip; a Project's tooltip says only
+  its Flows can place the Agent), and the Flow editor's toolbar an owner badge.
   The Project catalog comes from the same live delivery the Run composer uses, so availability changes appear without reload.
 - **Owner menus.** Like the Run composer's picker, the Owner filter and every owner menu below offer Global and the available
   Projects only, so they never offer a Project T3 has removed. The catalog keeps references to Projects T3 no longer
@@ -183,7 +185,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   Agents** and the owning Project's Agents; blocks already on the canvas keep resolving every saved Agent. While the owning
   Project is unavailable a banner over the canvas names it and its reason, the Flow stays editable, saveable, exportable and
   removable, **Start Run** is disabled with the reason, and the banner's **Duplicate to…** opens Flow Duplicate to rescue it.
-- **Change owner….** The Agent editor header and the Flow editor's **More Flow actions** menu open **Change owner of
+- **Change owner….** The Agent editor's **More actions** menu and the Flow editor's **More Flow actions** menu open **Change owner of
   “*name*”** with a **New owner** menu of Global and the available Projects; the current
   owner stays chosen until another is picked, and an unavailable chosen owner blocks the change. A refusal turns the dialog
   into **Can’t make “*name*” *owner* *kind*** with the placement reason and the blocking Flows (for an Agent) or Agents (for a
@@ -191,8 +193,8 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   *owner*…** opens Duplicate with that target instead; an Agent with unsaved changes must be saved first. The editor's own move
   needs no acknowledgement, also when Studio delivered it before the reply; a later delivery naming another owner, including the former one, is followed like a move elsewhere,
   because live updates can coalesce a move back.
-- **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor header, saved
-  Agents only) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
+- **Duplicate….** Flow Duplicate (the Flow editor's **More Flow actions**) and Agent Duplicate (the Agent editor's **More
+  actions**, saved Agents only, disabled with its reason while the Agent has unsaved changes) ask for a **Target owner**, defaulting to the source's owning Project; an unavailable default stays chosen with
   its reason and blocks Duplicate until another target is picked. Flow Duplicate also takes the new name (the plan's
   `<name> copy` until edited) and shows **Agents in this Flow** from the preview: each global Agent offers **Keep shared** or
   **Copy**, a Project Agent the target can't place reads **Copied into target**, and an Agent of the target itself reads
@@ -225,7 +227,7 @@ are distinct and non-empty. A new Agent starts with one exit, `done`, which need
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
 A persistent 300 px list sits beside the editor with **Search Agents**, the owner filter, owner groups ([Owners in Studio](#owners-in-studio)), **Import** (see [Import](#import)), **+ Add agent**, runtime summaries and counts of distinct saved Flows using each Agent (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows name, revision, the owner badge, **Change owner…**, **Duplicate…**, **Export** (an icon button, after the first save; see [Definition export](#definition-export)), **Delete** and **Save** (**Create Agent** for a new one). Leaving an edited Agent asks to **Keep
+drafts); narrow screens stack list and editor. The header shows the owner above the name, a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**.
 
 **Worker settings.** Studio exposes one **Worker** execution selection: choose the environment first, then provider, model and thinking options from live T3 capabilities
@@ -285,7 +287,7 @@ A Create or Duplicate answer bridges only the wait for its first appearance in S
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
 a definition removed elsewhere.
 
-**Removing.** **Delete** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
+**Removing.** **Delete…** in **More actions** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
 rejects Agents placed in the latest revision of any current Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
 removal. An unsaved Flow draft may still reference a removed Agent and needs repair before running. Runs keep the Agent revision they started with, and removing an absent or removed Agent succeeds.
 Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
@@ -293,8 +295,8 @@ Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) perfor
 
 **Removed elsewhere.** If an Agent already open in Studio is removed by another client, its URL and
 editable draft stay open, even when the draft was clean. A persistent **This Agent was removed
-elsewhere. Your draft is kept.** notice replaces revision notices. Save, Duplicate and Delete are
-disabled with an explanation, and their handlers refuse further writes. An unsubmitted Delete
+elsewhere. Your draft is kept.** notice replaces revision notices and the status line reads **Removed elsewhere · retained draft**. Save and every **More
+actions** item are disabled, each menu item with the explanation, and their handlers refuse further writes. An unsubmitted Delete
 confirmation closes; an already submitted Delete completes normally through the idempotent removal
 and returns to the list without another discard prompt. Saves that reach a removed Agent are still
 rejected by the backend and never recreate it.
@@ -578,7 +580,7 @@ refused. There are no Factory MCP tools for Triggers.
 
 ## Definition export
 
-**Export** in the Agent editor header downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
+**Export JSON** in the Agent editor's **More actions** menu downloads the Agent's latest saved revision, and **Export** in the Flow editor header downloads the
 Flow's latest saved revision with the latest saved revision of every Agent its blocks use. The JSON file is named after the definition (for
 example `code-reviewer.agent.json` or `reviewed-change.flow.json`); the desktop app saves the same file. A never-saved Agent cannot be exported;
 a Flow is saved when it is created. With unsaved changes Studio first asks "Export the saved revision? Unsaved changes won't be included."

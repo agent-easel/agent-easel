@@ -755,7 +755,6 @@ function EditorToolbar({
         {...exporter}
         dirty={state.dirty}
         disabled={state.busy || state.removed}
-        compact
       />
       <RemoveFlowAction draft={draft} state={state} />
       <FlowOwnerActions state={state} onOpen={onOwnerDialog} />

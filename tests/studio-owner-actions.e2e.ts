@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { expect } from "e2e";
+import { expect, type Screen } from "e2e";
 import { test } from "./support/test.ts";
 import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
+import { chooseAgentAction, expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
@@ -18,6 +19,8 @@ const unique = () => crypto.randomUUID().slice(0, 8);
 /** Settles dialog and menu transitions before a screenshot. */
 const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
+
+const agentEditor = (screen: Screen) => screen.getByRole("region", "Agent editor");
 
 /** A new global Agent open in Studio, and the id of the fixture's available Northwind Project. */
 async function openGlobalAgent(
@@ -38,7 +41,7 @@ test("Change owner moves an Agent into a Project without a new revision, also af
 }) => {
   // Arrange
   const { northwind, agent } = await openGlobalAgent({ app, browser }, "Owner move");
-  await screen.getByRole("button", "Change owner…", { exact: true }).tap();
+  await chooseAgentAction(screen, "Change owner…");
   const dialog = screen.getByRole("dialog", `Change owner of “${agent.name}”`);
   await dialog.getByRole("button", "New owner").tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
@@ -50,13 +53,13 @@ test("Change owner moves an Agent into a Project without a new revision, also af
 
   // Assert
   await expect(dialog).toHaveCount(0);
-  await expect(screen.getByText("Owned by Northwind", { exact: true })).toBeVisible();
+  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
   const moved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(moved.projectId, northwind);
   assert.equal(moved.revision, agent.revision);
   await app.screenshot("change-owner-success");
   await app.open(`/studio/agents/${agent.id}`);
-  await expect(screen.getByText("Owned by Northwind", { exact: true })).toBeVisible();
+  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
   await app.screenshot("change-owner-reload");
 });
 
@@ -76,7 +79,7 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
     y: 120,
   });
   await app.open(`/studio/agents/${agent.id}`);
-  await screen.getByRole("button", "Change owner…", { exact: true }).tap();
+  await chooseAgentAction(screen, "Change owner…");
   await screen.getByRole("button", "New owner").tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
 
@@ -235,7 +238,7 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
 
   // Assert
   await expect(notice).toHaveCount(0);
-  await expect(screen.getByText("Agent definition · rev 2", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 2);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.prompt, "Edited while the owner moves.");
   assert.equal(saved.projectId, northwind);
@@ -243,6 +246,6 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Edited while the owner moves.",
   );
-  await expect(screen.getByText("Owned by Northwind", { exact: true })).toBeVisible();
+  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
   await app.screenshot("dirty-owner-reload");
 });

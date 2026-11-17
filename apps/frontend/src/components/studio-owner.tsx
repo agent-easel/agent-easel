@@ -29,9 +29,9 @@ export function ownerName(owner: StudioOwner) {
 }
 
 /** Figma Studio/OwnerBadge: Global, an owning Project, or an unavailable owning Project. */
-export function OwnerBadge({ owner, prefix }: { owner: StudioOwner; prefix?: string }) {
+export function OwnerBadge({ owner }: { owner: StudioOwner }) {
   const Icon = owner.projectId === null ? Workflow : FolderGit2;
-  const label = owner.projectId === null ? owner.title : `${prefix ?? ""}${ownerName(owner)}`;
+  const label = owner.projectId === null ? owner.title : ownerName(owner);
   return (
     <Badge
       variant={owner.projectId === null ? "secondary" : owner.unavailable ? "attention" : "project"}

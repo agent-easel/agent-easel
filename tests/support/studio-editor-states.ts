@@ -1,4 +1,4 @@
-import { openStudioAgent } from "./studio.ts";
+import { expectSavedAgentRevision, openStudioAgent } from "./studio.ts";
 import type { StudioFixtures } from "./studio.ts";
 import { expect } from "e2e";
 import { readAgentDefinition, saveAgentElsewhere } from "./agents.ts";
@@ -17,7 +17,7 @@ export async function expectCleanAgentRevision(
     `Live · ${prefix} · Clean Agent renamed`,
   );
   await expect(screen.getByText("Updated to revision 2", { exact: true })).toBeVisible();
-  await expect(screen.getByText("Agent definition · rev 2", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 2);
   await app.screenshot("agent-editor-updated-to-revision");
   return { ...state };
 }
@@ -88,7 +88,7 @@ export async function expectSavedAgentEdits(
   state: Awaited<ReturnType<typeof beforeSavedAgentEdits>>,
 ) {
   const { app, screen, prefix, agent } = state;
-  await expect(screen.getByText("Agent definition · rev 3", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 3);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   expect([saved.revision, saved.name, saved.prompt]).toEqual([
     3,

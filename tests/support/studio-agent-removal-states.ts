@@ -1,4 +1,4 @@
-import { openStudioAgent } from "./studio.ts";
+import { chooseAgentAction, expectRetainedDefinition, openStudioAgent } from "./studio.ts";
 import type { StudioFixtures } from "./studio.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, removeAgentElsewhere } from "./agents.ts";
@@ -6,7 +6,7 @@ import { copyAgentDefinition, removeAgentElsewhere } from "./agents.ts";
 export async function beforeRetainedCleanAgent(fixtures: StudioFixtures, prefix: string) {
   const { screen } = fixtures;
   const agent = await openStudioAgent(fixtures, `Removal · ${prefix} · Retained Agent`);
-  await screen.getByRole("button", "Delete", { exact: true }).tap();
+  await chooseAgentAction(screen, "Delete");
   await expect(screen.getByRole("dialog", `Delete ${agent.name}?`, { exact: true })).toBeVisible();
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }
@@ -16,13 +16,13 @@ export async function expectRetainedCleanAgent(
 ) {
   const { app, screen, browser, agent } = state;
   await expect(screen.getByRole("dialog", `Delete ${agent.name}?`, { exact: true })).toHaveCount(0);
-  await expect(
-    screen.getByText("This Agent was removed elsewhere. Your draft is kept.", { exact: true }),
-  ).toBeVisible();
   await expect(browser).toHaveURL(`/studio/agents/${agent.id}`);
-  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
-  await expect(screen.getByRole("button", "Duplicate", { exact: true })).toBeDisabled();
-  await expect(screen.getByRole("button", "Delete", { exact: true })).toBeDisabled();
+  await expectRetainedDefinition(
+    screen,
+    "Agent",
+    ["Save"],
+    ["Duplicate", "Change owner…", "Export JSON", "Delete"],
+  );
   await app.screenshot("agent-removed-retained");
   return { ...state };
 }
@@ -210,7 +210,7 @@ export async function beforeDeletedOwnAgent(fixtures: StudioFixtures, prefix: st
   const { screen } = fixtures;
   const agent = await openStudioAgent(fixtures, `Removal · ${prefix} · Own Delete Agent`);
   await screen.getByLabel("Prompt", { exact: true }).fill("Unsaved edits to delete");
-  await screen.getByRole("button", "Delete", { exact: true }).tap();
+  await chooseAgentAction(screen, "Delete");
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }
 

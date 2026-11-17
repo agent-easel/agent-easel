@@ -3,6 +3,7 @@ import { expect } from "e2e";
 import { test } from "./support/test.ts";
 import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
 import { changeAgentOwnerElsewhere, ownedFlow } from "./support/owners.ts";
+import { expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -95,7 +96,7 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
 
   // Assert
   await expect(stranded).toHaveCount(0);
-  await expect(screen.getByText("Agent definition · rev 2", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 2);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.projectId, northwind);
   assert.deepEqual(saved.projectOverrides, []);

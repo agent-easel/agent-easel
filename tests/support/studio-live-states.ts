@@ -11,7 +11,11 @@ import {
 } from "./agents.ts";
 import { saveSingleAgentFlow, readFlow, saveFlowElsewhere, removeFlowElsewhere } from "./flows.ts";
 import { browserRequests, resetBrowserRequests, delayLiveSnapshots } from "./live.ts";
-import { expectRetainedDefinition, expectBrokenAgentWire } from "./studio.ts";
+import {
+  expectRetainedDefinition,
+  expectBrokenAgentWire,
+  expectSavedAgentRevision,
+} from "./studio.ts";
 import { fixtureHandles } from "./fixture/handle.ts";
 import { openApproved, openRemoteBrowser } from "./remote-access.ts";
 const block = { id: "worker", name: "Worker", x: 320, y: 120 };
@@ -622,7 +626,7 @@ export async function beforeSavedAgent(fixtures: StudioFixtures, prefix: string)
 
 export async function expectSavedAgent(state: Awaited<ReturnType<typeof beforeSavedAgent>>) {
   const { app, screen, prefix, marker } = state;
-  await expect(screen.getByText("Agent definition · rev 6", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 6);
   const savedAgent = await readAgentDefinition(app.baseUrl, marker.id);
   expect(savedAgent.prompt).toBe(`Acceptance · ${prefix} · My retained prompt`);
   return { ...state, savedAgent };
@@ -663,7 +667,12 @@ export async function expectRemovedAgent(state: Awaited<ReturnType<typeof before
   const { screen, studio, agentsBefore, agentPanel } = state;
   await expect(agentPanel).toHaveCount(0);
   await expect(studio.getByRole("link", "Agents")).toContainText(String(agentsBefore.length));
-  await expectRetainedDefinition(screen, "Agent", ["Save", "Duplicate", "Delete"]);
+  await expectRetainedDefinition(
+    screen,
+    "Agent",
+    ["Save"],
+    ["Duplicate", "Change owner…", "Export JSON", "Delete"],
+  );
   return { ...state };
 }
 

@@ -39,22 +39,51 @@ function DropdownMenuItem({
   className,
   inset,
   variant = "default",
+  description,
+  children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Item> & {
   inset?: boolean;
   variant?: "default" | "destructive";
+  /**
+   * A line under the label, such as why the item is disabled: a disabled item gets no pointer
+   * events, so a tooltip could not explain it. It describes the item without joining its name.
+   */
+  description?: React.ReactNode;
 }) {
+  const descriptionId = React.useId();
   return (
     <DropdownMenuPrimitive.Item
       data-slot="dropdown-menu-item"
       data-inset={inset}
       data-variant={variant}
+      aria-describedby={description ? descriptionId : undefined}
       className={cn(
         "relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!",
+        // The description stays readable while the disabled label dims.
+        description && "flex-wrap gap-y-0.5 data-[disabled]:opacity-100",
         className,
       )}
       {...props}
-    />
+    >
+      {description ? (
+        <>
+          <span className="flex min-w-0 flex-1 items-center gap-2 in-data-[disabled]:opacity-50">
+            {children}
+          </span>
+          {/* Hidden from the item's name; aria-describedby still reads it. */}
+          <span
+            id={descriptionId}
+            aria-hidden
+            className="basis-full pl-6 text-2xs text-subtle-foreground"
+          >
+            {description}
+          </span>
+        </>
+      ) : (
+        children
+      )}
+    </DropdownMenuPrimitive.Item>
   );
 }
 

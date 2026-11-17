@@ -1,5 +1,7 @@
 import { beforeEach, test } from "./support/test.ts";
+import { expect } from "e2e";
 import { saveAgentElsewhere } from "./support/agents.ts";
+import { chooseAgentAction, openStudioAgent } from "./support/studio.ts";
 import {
   expectCleanAgentRevision,
   beforeCleanAgentRevision,
@@ -142,4 +144,24 @@ test("confirming Load latest revision replaces Agent edits with the saved revisi
 
   // Assert
   await expectLoadedAgentRevision({ ...state });
+});
+
+test("closing a More actions dialog returns focus to More actions", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioAgent({ app, screen, browser }, `Menu focus ${crypto.randomUUID().slice(0, 8)}`);
+  await screen.getByLabel("Prompt", { exact: true }).fill("Unsaved prompt");
+  await chooseAgentAction(screen, "Export JSON");
+  const confirmation = screen.getByRole("dialog", "Export the saved revision?");
+  await expect(confirmation).toBeVisible();
+
+  // Act
+  await confirmation.getByRole("button", "Keep editing", { exact: true }).tap();
+
+  // Assert
+  await expect(confirmation).toHaveCount(0);
+  await expect(screen.getByRole("button", "More actions", { exact: true })).toBeFocused();
 });

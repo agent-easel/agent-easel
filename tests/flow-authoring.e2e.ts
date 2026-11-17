@@ -5,7 +5,7 @@ import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
 import { largestWirePortOffset } from "./support/canvas.ts";
-import { openEditedStudioFlow } from "./support/studio.ts";
+import { expectSavedAgentRevision, openEditedStudioFlow } from "./support/studio.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
@@ -499,7 +499,7 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
     .getByLabel("Exit 1 description", { exact: true })
     .fill("The implementation is ready for a human review.");
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByText("Agent definition · rev 2", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 2);
   await browser.reload();
 
   // Assert: the saved revision keeps the wire; removing that exit exposes its readiness blocker.
@@ -521,7 +521,7 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await screen.getByRole("link", /Exit journey worker/).tap();
   await screen.getByRole("button", "Remove exit 1", { exact: true }).tap();
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByText("Agent definition · rev 3", { exact: true })).toBeVisible();
+  await expectSavedAgentRevision(screen, 3);
   await expect(screen.getByLabel("Exit 1 name", { exact: true })).toHaveValue("changes-needed");
   await expect(
     screen.getByRole("checkbox", "Exit 1 message required", { exact: true }),
