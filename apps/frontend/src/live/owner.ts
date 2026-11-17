@@ -419,20 +419,24 @@ export class LiveOwner {
     return forgotten.length > 0;
   }
 
+  /**
+   * A released Run stays in the view, still updated, until the view next subscribes again:
+   * resubscribing now would put the Run opened in its place back to synchronizing just after it
+   * showed live, and reopening the kept Run shows it live at once. A Run refused for capacity had
+   * no slot to keep, and a held Run refused for capacity takes the freed slot instead.
+   */
+  private keepsReleased(entry: Entry) {
+    if (entry.scope.part.kind !== "run" || entry.view.error === overCapacity) return false;
+    const held = [...this.entries.values()].filter((other) => !kept(other));
+    return held.length > 0 && !held.some((other) => other.view.error === overCapacity);
+  }
+
   private drop(entry: Entry) {
     if (this.entries.get(entry.scope.key) !== entry) return;
     entry.linger = undefined;
-    const holding = [...this.entries.values()].some((held) => !kept(held));
-    // A released Run stays in the view, still updated, until the view next subscribes again:
-    // resubscribing now would put the Run opened in its place back to synchronizing just after
-    // it showed live, and reopening the kept Run shows it live at once. A held Run refused for
-    // capacity takes the freed slot instead.
-    const refusedHeld = [...this.entries.values()].some(
-      (held) => !kept(held) && held.view.error === overCapacity,
-    );
-    if (entry.scope.part.kind === "run" && holding && !refusedHeld) return;
+    if (this.keepsReleased(entry)) return;
     this.entries.delete(entry.scope.key);
-    if (holding) this.resubscribe();
+    if ([...this.entries.values()].some((other) => !kept(other))) this.resubscribe();
     else {
       this.entries.clear();
       this.detach();

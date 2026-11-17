@@ -411,3 +411,23 @@ it("a window shown again no longer follows the Run it left before hiding", () =>
     { rpc: "WatchRunView", navigation: true, runIds: [to.id] },
   ]);
 });
+
+it("reopening a Run once refused for capacity follows it when a slot is free", () => {
+  // Arrange
+  const live = liveHarness();
+  const runs = Array.from({ length: RUN_VIEW_LIMIT + 1 }, (_, index) => runScope(`run-${index}`));
+  const releases = runs.map((scope) => live.owner.acquire(scope));
+  live.sessions[0]?.connected();
+  releases.at(-1)?.();
+  live.elapse();
+  releases[0]?.();
+  live.elapse();
+
+  // Act
+  live.owner.acquire(runs.at(-1)!);
+
+  // Assert
+  const watch = live.sessions[0]?.watches.at(-1);
+  expect(watch?.rpc === "WatchRunView" && watch.runIds).toContain(`run-${RUN_VIEW_LIMIT}`);
+  expect(live.owner.view(runs.at(-1)?.key ?? "").error).toBeNull();
+});
