@@ -28,6 +28,8 @@ export interface TriggerReview {
   readonly load: () => Promise<TriggerPreview>;
   /** Create offers saving without enabling instead. */
   readonly saveDisabled?: () => void;
+  /** Why the review opened again, such as settings saved elsewhere after the last one. */
+  readonly notice?: string;
 }
 
 type PreviewRead =
@@ -50,7 +52,8 @@ export function TriggerReviewDialog({
 }: {
   review: TriggerReview | null;
   busy: boolean;
-  onConfirm: () => void;
+  /** Commits the review; `preview` is what it showed. */
+  onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
 }) {
   return (
@@ -77,7 +80,7 @@ function ReviewBody({
 }: {
   review: TriggerReview;
   busy: boolean;
-  onConfirm: () => void;
+  onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
 }) {
   const read = usePreview(review.load);
@@ -87,6 +90,12 @@ function ReviewBody({
       <DialogDescription className="leading-tight text-subtle-foreground">
         {review.summary}
       </DialogDescription>
+      {review.notice && (
+        <Alert variant="attention" role="status">
+          <TriangleAlert aria-hidden />
+          <AlertDescription className="text-foreground">{review.notice}</AlertDescription>
+        </Alert>
+      )}
       {read.status === "loading" && (
         <p role="status" className="text-sm text-muted-foreground">
           Checking which issues would start…
@@ -113,7 +122,10 @@ function ReviewBody({
               Save disabled
             </Button>
           )}
-          <Button disabled={busy || read.status !== "answered"} onClick={onConfirm}>
+          <Button
+            disabled={busy || read.status !== "answered"}
+            onClick={() => read.status === "answered" && onConfirm(read.preview)}
+          >
             {busy ? "Checking…" : review.confirmLabel}
           </Button>
         </MutationGate>
@@ -122,25 +134,29 @@ function ReviewBody({
   );
 }
 
-function usePreview(load: () => Promise<TriggerPreview>) {
-  const [read, setRead] = useState<PreviewRead>({ status: "loading" });
+/** The answer to `load`; a review opened again with another `load` shows loading until it answers. */
+function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
+  const [read, setRead] = useState<{ load: typeof load; read: PreviewRead } | null>(null);
   useEffect(() => {
     let current = true;
     load().then(
-      (preview) => current && setRead({ status: "answered", preview }),
+      (preview) => current && setRead({ load, read: { status: "answered", preview } }),
       (cause: unknown) =>
         current &&
         setRead({
-          status: "failed",
-          message:
-            cause instanceof Error ? cause.message : "Factory could not preview this Trigger.",
+          load,
+          read: {
+            status: "failed",
+            message:
+              cause instanceof Error ? cause.message : "Factory could not preview this Trigger.",
+          },
         }),
     );
     return () => {
       current = false;
     };
   }, [load]);
-  return read;
+  return read?.load === load ? read.read : { status: "loading" };
 }
 
 function PreviewResult({ review, preview }: { review: TriggerReview; preview: TriggerPreview }) {

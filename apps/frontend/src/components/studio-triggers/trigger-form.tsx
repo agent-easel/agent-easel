@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
 import type { FactoryProject, FlowDraft, TriggerReadiness } from "@t3-factory/contracts";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
@@ -61,7 +62,7 @@ export function TriggerFields({
         <SettingsRow
           title="Repository"
           description="Detected from the Project. Confirm it is the repository whose issues should start Runs."
-          control={<RepositoryValue state={state} readiness={readiness} />}
+          control={<RepositoryValue draft={draft} state={state} readiness={readiness} />}
         />
         <QueryRow draft={draft} state={state} readiness={readiness} />
       </SettingsGroup>
@@ -169,15 +170,27 @@ function repositoryProblem(state: TriggerDraftSnapshot, readiness: ReadinessRead
   return repository && !repository.ready ? repository.problem : null;
 }
 
+/** The repository the Project's folder names now, when it is not the one the form holds. */
+function movedRepository(state: TriggerDraftSnapshot, readiness: ReadinessRead) {
+  if (readiness.status !== "answered" || !state.content.repository) return null;
+  const answer = readiness.readiness.repository;
+  return answer?.ready && answer.repository.nodeId !== state.content.repository.nodeId
+    ? answer.repository
+    : null;
+}
+
 function RepositoryValue({
+  draft,
   state,
   readiness,
 }: {
+  draft: TriggerDraftModel;
   state: TriggerDraftSnapshot;
   readiness: ReadinessRead;
 }) {
   const { repository, projectId } = state.content;
   const problem = repositoryProblem(state, readiness);
+  const moved = movedRepository(state, readiness);
   if (!repository)
     return (
       <p
@@ -185,6 +198,25 @@ function RepositoryValue({
       >
         {problem ?? (projectId ? "Detecting…" : "Choose a Project first")}
       </p>
+    );
+  if (moved)
+    return (
+      <div className="grid max-w-80 justify-items-end gap-1.5">
+        <div className="flex items-center gap-2">
+          <Badge variant="attention" className="gap-1.25 py-0.5 pr-2 pl-1.75">
+            <span aria-hidden className="size-1.5 rounded-full bg-current" />
+            Detected now
+          </Badge>
+          <span className="text-sm font-medium text-foreground">{moved.nameWithOwner}</span>
+        </div>
+        <p className="text-right text-2xs leading-tight tracking-label text-attention">
+          This Trigger confirmed {repository.nameWithOwner}, so its checks stop. Confirm{" "}
+          {moved.nameWithOwner} only if its issues should start Runs.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => draft.confirmRepository(moved)}>
+          Confirm this repository
+        </Button>
+      </div>
     );
   return (
     <div className="grid justify-items-end gap-0.75">

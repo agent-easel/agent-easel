@@ -131,6 +131,17 @@ const enabledDeadline = (current: TriggerDefinition, enabled: boolean, time: str
     : deadlineAfter(time, current.schedule.intervalMinutes);
 };
 
+/** Whether `settings` are exactly `saved`'s, so a preview of them reviewed that revision. */
+const previewsSaved = (saved: TriggerDefinition, settings: TriggerSettings) =>
+  settings.name === saved.name &&
+  settings.projectId === saved.projectId &&
+  settings.flowId === saved.flowId &&
+  settings.schedule.enabled === saved.schedule.enabled &&
+  settings.schedule.intervalMinutes === saved.schedule.intervalMinutes &&
+  settings.maxActiveRuns === saved.maxActiveRuns &&
+  settings.github.repositoryNodeId === saved.github.repository.nodeId &&
+  settings.github.query === saved.github.query;
+
 /** The next saved state: new settings, with enablement and health kept. */
 function savedTrigger(
   settings: TriggerSettings,
@@ -239,8 +250,10 @@ export const makeTriggers = (
       });
 
     /**
-     * Reads the Project's repository and checks the query against it when either changes; other
-     * edits keep the repository the Trigger already reads without calling GitHub.
+     * Reads the Project's repository and checks the query against it when the Project, query or
+     * confirmed repository changes; other edits keep the repository the Trigger already reads
+     * without calling GitHub. A confirmed repository is accepted only while it is the one the
+     * Project's folder names now, which is how a Trigger is pointed at a Project's moved remote.
      */
     const settleGitHub = (
       settings: TriggerSettings,
@@ -249,20 +262,13 @@ export const makeTriggers = (
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<GitHubSettlement>, unknown> {
         const confirmed = settings.github.repositoryNodeId;
-        const newRepository = saved?.projectId !== settings.projectId;
-        if (!newRepository && saved.github.query === settings.github.query) {
-          if (confirmed !== saved.github.repository.nodeId)
-            return refusal(
-              "conflict",
-              "trigger_repository_mismatch",
-              "github.repositoryNodeId",
-              `This Trigger reads ${saved.github.repository.nameWithOwner}. Confirm that repository before saving.`,
-            );
+        const newRepository =
+          saved?.projectId !== settings.projectId || saved.github.repository.nodeId !== confirmed;
+        if (!newRepository && saved.github.query === settings.github.query)
           return {
             ok: true,
             value: { repository: saved.github.repository, warnings: [], newRepository },
           };
-        }
         const repository = yield* Effect.promise(() => github.repository(project.workspaceRoot));
         if (!repository.ok) return gitHubRefusal(repository.failure);
         if (repository.value.nodeId !== confirmed)
@@ -411,6 +417,7 @@ export const makeTriggers = (
             problem: planned.problem,
             warnings: repository ? authorFilterWarnings(repository, authorFilter) : [],
             login: login?.ok ? login.value.login : null,
+            revision: saved && previewsSaved(saved, settings) ? saved.revision : null,
           },
         };
       });
@@ -472,6 +479,13 @@ export const makeTriggers = (
             Effect.gen(function* (): Effect.fn.Return<Result<TriggerDefinition>, unknown> {
               const current = yield* readTrigger(id);
               if (!current) return notFound();
+              if (validated.value.enabled && current.revision !== validated.value.reviewedRevision)
+                return refusal(
+                  "conflict",
+                  "trigger_changed",
+                  "reviewedRevision",
+                  `Revision ${current.revision} of this Trigger was saved after the reviewed one, so it was not enabled. Review its current settings before enabling it.`,
+                );
               const time = yield* now;
               const nextCheckAt = enabledDeadline(current, enabled, time);
               yield* writeTriggerEnabled(sql, id, enabled, nextCheckAt, time);

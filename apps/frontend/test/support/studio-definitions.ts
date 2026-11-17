@@ -45,6 +45,7 @@ export function studioFactory(): Operations {
     ),
     removeAgent: vi.fn<StudioDefinitionsOperations["removeAgent"]>(async () => undefined),
     createTrigger: vi.fn<StudioDefinitionsOperations["createTrigger"]>(),
+    getTrigger: vi.fn<StudioDefinitionsOperations["getTrigger"]>(),
     updateTrigger: vi.fn<StudioDefinitionsOperations["updateTrigger"]>(),
     setTriggerEnabled: vi.fn<StudioDefinitionsOperations["setTriggerEnabled"]>(),
     runTrigger: vi.fn<StudioDefinitionsOperations["runTrigger"]>(),

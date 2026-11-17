@@ -28,6 +28,13 @@ export const atlasRepository: GitHubRepository = {
   visibility: "private",
 };
 
+/** The repository the prepared Project's folder names after its remote moved to another one. */
+export const movedRepository: GitHubRepository = {
+  ...atlasRepository,
+  nameWithOwner: "someone-else/atlas",
+  nodeId: "R_other",
+};
+
 /**
  * The prepared Project and ready Flow, with the Project's folder naming `repository` on GitHub,
  * and the least a client sends to create a GitHub Issues Trigger for them.
@@ -238,7 +245,7 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
 /** The saved Trigger's settings as an edit from its current revision, with `changes` applied. */
 export const triggerEdit = (
   trigger: TriggerDefinition,
-  changes: Partial<Pick<UpdateTriggerInput, "name" | "maxActiveRuns" | "schedule">>,
+  changes: Partial<Pick<UpdateTriggerInput, "name" | "maxActiveRuns" | "schedule" | "github">>,
 ): UpdateTriggerInput => ({
   expectedRevision: trigger.revision,
   kind: trigger.kind,

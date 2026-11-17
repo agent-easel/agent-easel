@@ -8,9 +8,9 @@ import {
   workingReported,
 } from "./support/scenarios.ts";
 import {
-  atlasRepository,
   checkingWorld,
   labelIssue,
+  movedRepository,
   pendingCheck,
   pendingGitHubCheck,
   reopenedAfterCrashedCheck,
@@ -349,11 +349,7 @@ it("a Project folder that now names another repository stops the check with a re
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(1, "Elsewhere");
-  world.github.repositories.set(world.project.workspaceRoot, {
-    ...atlasRepository,
-    nameWithOwner: "someone-else/atlas",
-    nodeId: "R_other",
-  });
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
 
   // Act
   const checked = await world.f.runTrigger(world.trigger.id);
@@ -362,9 +358,31 @@ it("a Project folder that now names another repository stops the check with a re
   assert(checked.ok);
   expect(checked.value.error).toMatchObject({
     code: "github_repository_mismatch",
-    message: expect.stringContaining("someone-else/atlas is not the repository"),
+    message: expect.stringContaining("now names someone-else/atlas"),
   });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("after its author reconfirms the Project's new repository, the next check clears the repository mismatch", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  const failed = await triggerChecked(world.f, world.trigger.id);
+  const reconfirmed = await world.f.updateTrigger(
+    world.trigger.id,
+    triggerEdit(failed, {
+      github: { repositoryNodeId: movedRepository.nodeId, query: failed.github.query },
+    }),
+  );
+  assert(reconfirmed.ok);
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.error).toBeNull();
+  expect(checked.value.github.repository.nodeId).toBe("R_other");
 });
 
 it("a query GitHub rejects at check time becomes the Error", async (c) => {

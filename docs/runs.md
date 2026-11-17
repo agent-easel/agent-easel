@@ -251,7 +251,8 @@ It is set up and managed in [Studio → Triggers](studio.md#triggers); this sect
   a Project remote that now names another repository, a query GitHub rejects, a timeout or an answer larger than Factory reads (more than 1000
   search results, or a label history Factory cannot see to its latest labelling) never reads as "no issues". These and
   Project, Flow or Start blockers become the Trigger's current problem, shown in Studio with repair guidance. They
-  raise no Run attention, and the Trigger keeps checking.
+  raise no Run attention, and the Trigger keeps checking. A repository mismatch is repaired by confirming the
+  repository the Project's folder now names in the Trigger's edit form, or by pointing the folder back.
 - **Schedule.** Each Trigger has a persisted next-check deadline: enabling it, switching its schedule on or changing the
   interval sets it one interval ahead, and each scheduled check sets the next one to its completion plus the interval
   (1 minute to 24 hours, default 5 minutes). Factory runs exactly one overdue check after a restart or sleep and never

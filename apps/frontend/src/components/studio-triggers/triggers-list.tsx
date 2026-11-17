@@ -33,6 +33,7 @@ const enableReview = (
   trigger: TriggerDefinition,
   names: TriggerNames,
   actions: TriggerActions,
+  changed: boolean,
 ): TriggerReview => ({
   title: `Enable “${trigger.name}”?`,
   summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
@@ -40,26 +41,42 @@ const enableReview = (
   readyLabel: trigger.github.readyLabel,
   confirmLabel: "Enable and check",
   load: () => actions.preview(trigger),
+  ...(changed && {
+    notice: `Revision ${trigger.revision} was saved after your review, so nothing was enabled. Review these settings before enabling.`,
+  }),
 });
 
-/** The review a Trigger's switch opens; Enable and check commits it. */
-function useEnableReview(names: TriggerNames, actions: TriggerActions) {
+/**
+ * The review before enabling a saved Trigger; Enable and check confirms the revision it showed.
+ * When another revision was saved after that, the review opens again on the current settings.
+ */
+export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   const [reviewing, setReviewing] = useState<{
     readonly trigger: TriggerDefinition;
     readonly review: TriggerReview;
   } | null>(null);
   const busy = reviewing !== null && actions.state.pending.get(reviewing.trigger.id) === "enable";
+  /** Opens the review of `trigger`; `changed` says another revision replaced the reviewed one. */
+  const open = (trigger: TriggerDefinition, changed = false) =>
+    setReviewing({ trigger, review: enableReview(trigger, names, actions, changed) });
+  /** Enable and check `trigger` at the reviewed `revision`, or review it again if it changed. */
+  const enable = (trigger: TriggerDefinition, revision: number) =>
+    actions
+      .enableAndCheck(trigger, revision)
+      .then((latest) => (latest ? open(latest, true) : setReviewing(null)));
   return {
-    open: (trigger: TriggerDefinition) =>
-      setReviewing({ trigger, review: enableReview(trigger, names, actions) }),
+    open,
+    enable,
     dialog: (
       <TriggerReviewDialog
         review={reviewing?.review ?? null}
         busy={busy}
         onCancel={() => setReviewing(null)}
-        onConfirm={() => {
+        onConfirm={(preview) => {
           if (!reviewing) return;
-          void actions.enableAndCheck(reviewing.trigger).then(() => setReviewing(null));
+          // A preview that did not show a saved revision cannot confirm one: review again.
+          if (preview.revision === null) return open(reviewing.trigger, true);
+          void enable(reviewing.trigger, preview.revision);
         }}
       />
     ),
@@ -74,16 +91,18 @@ export function TriggersList({
   triggers,
   names,
   actions,
+  onEnable,
 }: {
   triggers: StudioRead<readonly TriggerDefinition[]>;
   names: TriggerNames;
   actions: TriggerActions;
+  /** Opens the review before enabling `trigger`. */
+  onEnable: (trigger: TriggerDefinition) => void;
 }) {
   const openStudio = useStudioNavigation();
   const create = () => void openStudio({ tab: "triggers", triggerId: "new" });
   const items = triggers.value;
   const [removing, setRemoving] = useState<TriggerDefinition | null>(null);
-  const enabling = useEnableReview(names, actions);
   const menuButton = useRef<HTMLElement | null>(null);
   const { failure, pending } = actions.state;
   return (
@@ -111,14 +130,13 @@ export function TriggersList({
           names={names}
           actions={actions}
           onCreate={create}
-          onEnable={enabling.open}
+          onEnable={onEnable}
           onRemove={(trigger, opener) => {
             menuButton.current = opener;
             setRemoving(trigger);
           }}
         />
       </SettingsPage>
-      {enabling.dialog}
       <RemoveTriggerDialog
         trigger={removing}
         removing={removing !== null && pending.get(removing.id) === "remove"}

@@ -339,9 +339,17 @@ export function validateUpdateTrigger(
 
 export function validateSetTriggerEnabled(input: unknown): Result<SetTriggerEnabledInput> {
   const fields = record(input) ?? {};
-  const extra = unknownField(fields, ["enabled"]);
+  if (fields.enabled === false)
+    return unknownField(fields, ["enabled"]) ?? { ok: true, value: { enabled: false } };
+  if (fields.enabled !== true)
+    return invalid("trigger_enabled", "enabled", "Say whether the Trigger is enabled.");
+  const extra = unknownField(fields, ["enabled", "reviewedRevision"]);
   if (extra) return extra;
-  return typeof fields.enabled === "boolean"
-    ? { ok: true, value: { enabled: fields.enabled } }
-    : invalid("trigger_enabled", "enabled", "Say whether the Trigger is enabled.");
+  if (!isIntegerIn(fields.reviewedRevision, 1, Number.MAX_SAFE_INTEGER))
+    return invalid(
+      "trigger_revision",
+      "reviewedRevision",
+      "Name the saved revision whose preview was reviewed before enabling.",
+    );
+  return { ok: true, value: { enabled: true, reviewedRevision: fields.reviewedRevision } };
 }

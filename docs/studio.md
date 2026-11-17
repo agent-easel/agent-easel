@@ -344,7 +344,11 @@ kinds, and a Trigger's kind never changes. The create form has:
 
 - **Name**, unique among current Triggers regardless of case, so a removed Trigger's name can be reused.
 - **Project**, which must be local to the Factory host. Factory detects the Project's GitHub repository through `gh`
-  and shows it as **Detected**; saving confirms it. A Trigger never reads another repository.
+  and shows it as **Detected**; saving confirms it. A Trigger never reads another repository. When an opened
+  Trigger's Project folder later names a different repository, its checks stop with a repository mismatch and the
+  form shows that repository as **Detected now** with **Confirm this repository**. Confirming changes the draft's
+  repository, which widens what can start, so saving it goes through the review and **Apply and check**. Factory
+  accepts a changed repository only while it is the one the Project's folder names at save time.
 - **GitHub issue query**, prefilled `label:factory:ready author:@me`. It must contain exactly one positive `label:`
   qualifier, shown below the field as the [ready label](../GLOSSARY.md#ready-label) that the worker removes when it
   claims the issue, together with the login `@me` resolves to right now. Save refuses a query without exactly one
@@ -382,7 +386,10 @@ Enabling a Trigger, and saving an edit that widens what an enabled Trigger can s
 issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
 already started left out, the query's author filter (or the warning that a public repository has none), and the problem
 a check would hit instead, if any. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
-its first check at once; **Apply and check** saves the edit and checks. While creating, the review also offers **Save
+its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
+showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
+revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
+edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict. While creating, the review also offers **Save
 disabled**. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 
@@ -419,7 +426,7 @@ refused. There are no Factory MCP tools for Triggers.
 | `POST /api/triggers` | Create a Trigger, saved disabled |
 | `GET /api/triggers/:id` | Read one Trigger |
 | `PUT /api/triggers/:id` | Save settings against `expectedRevision` |
-| `PUT /api/triggers/:id/enabled` | Enable or disable |
+| `PUT /api/triggers/:id/enabled` | Disable, or enable the `reviewedRevision` a preview showed |
 | `POST /api/triggers/:id/run` | Run one check now |
 | `POST /api/triggers/preview` | Review what a new Trigger would start; starts and saves nothing |
 | `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |

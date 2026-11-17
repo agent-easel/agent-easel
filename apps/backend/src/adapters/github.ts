@@ -112,7 +112,7 @@ export function gitHubRepairGuidance(failure: GitHubFailure): string {
     case "unreadable":
       return `The host's GitHub login cannot read this repository. ${failure.message}`;
     case "repository_mismatch":
-      return `${failure.nameWithOwner} is not the repository this Trigger confirmed. Edit the Trigger and confirm the Project's repository again.`;
+      return `The Project's folder now names ${failure.nameWithOwner}, not the repository this Trigger confirmed. If ${failure.nameWithOwner} is right, open the Trigger, choose Confirm this repository under Repository, then review and Apply and check; otherwise point the Project's folder back at the confirmed repository.`;
     case "query_rejected":
       return `GitHub rejected the query. ${failure.message}`;
     case "timeout":
