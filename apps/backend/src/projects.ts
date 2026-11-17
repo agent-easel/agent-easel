@@ -11,6 +11,7 @@ import type {
   ProjectIcon,
   Result,
   T3Connection,
+  ValidationIssue,
 } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import type { T3Adapter, T3Project } from "./adapters/t3.ts";
@@ -47,6 +48,19 @@ const project = (r: Row): FactoryProject => ({
   observedAt: r.observed_at,
   projectIcon: storedProjectIcon(r.project_icon_json),
   faviconUrl: projectFaviconUrl(r.id, r.favicon_path),
+});
+/**
+ * Why a Project cannot take new Runs: its availability reason, or `project_not_found` for an id
+ * Factory never discovered.
+ */
+export const projectUnavailableIssue = (
+  project: FactoryProject | undefined,
+  path: string,
+): ValidationIssue => ({
+  code: project ? `project_${project.availability}` : "project_not_found",
+  path,
+  message:
+    "Project is unavailable for new Runs. Recheck T3 and restore its repository directory; saved history is retained.",
 });
 const failure = (message: string): Result<never> =>
   operationFailure("validation", message, [
@@ -281,16 +295,7 @@ export const makeProjects = (
               ok: true,
               value: {
                 ready: !!ready,
-                issues: ready
-                  ? []
-                  : [
-                      {
-                        code: p ? `project_${p.availability}` : "project_not_found",
-                        path: "project",
-                        message:
-                          "Project is unavailable for new Runs. Recheck T3 and restore its repository directory; saved history is retained.",
-                      },
-                    ],
+                issues: ready ? [] : [projectUnavailableIssue(p, "project")],
               },
             };
           }),

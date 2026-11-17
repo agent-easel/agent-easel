@@ -3,7 +3,7 @@ import { MutationGate } from "@/client-gate";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
 import { useState } from "react";
-import type { AgentCapabilities, AgentDefinition } from "@t3-factory/contracts";
+import type { AgentCapabilities, AgentDefinition, FactoryProject } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, CheckCircle2 } from "lucide-react";
@@ -32,15 +32,39 @@ import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportControl } from "../definition-export-control.tsx";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../definition-export.ts";
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
+import { OwnerBadge, OwnerChangeNotice, OwnerPicker } from "../studio-owner.tsx";
+import type { StudioOwner } from "../../studio-definitions.ts";
+
+/** A saved Agent's owner, or the owner choice of a new one. */
+type AgentOwnership =
+  | {
+      readonly kind: "saved";
+      readonly owner: StudioOwner;
+      readonly projects: readonly FactoryProject[];
+    }
+  | {
+      readonly kind: "new";
+      readonly chosen: string | null;
+      readonly initial: string | null;
+      readonly projects: readonly FactoryProject[];
+      readonly hint: string;
+      /** Why the chosen owner cannot own a new Agent; Create waits for another choice. */
+      readonly blocked: string | null;
+      readonly onChange: (owner: string | null) => void;
+    };
 
 type AgentEditorProps = {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
   capabilities: AgentCapabilities | null;
+  ownership: AgentOwnership;
   flowUsage: number;
   duplicating: boolean;
   onSave: () => Promise<void>;
+  /** Opens Duplicate…; absent before the first save. */
   onDuplicate?: (() => void) | undefined;
+  /** Opens Change owner…; absent before the first save. */
+  onChangeOwner?: (() => void) | undefined;
   /** Absent until the Agent's first save. */
   exporter?: { model: DefinitionExportModel; state: DefinitionExportSnapshot } | undefined;
   onDeleted: () => void;
@@ -68,7 +92,18 @@ export function AgentEditorPane(props: AgentEditorProps) {
             json={JSON.stringify(createShapedContent(state.content), null, 2)}
           />
         ) : (
-          <AgentRevisionPanel draft={draft} state={state} />
+          <>
+            {props.ownership.kind === "saved" && (
+              <OwnerChangeNotice
+                kind="Agent"
+                change={state.ownerChange}
+                projects={props.ownership.projects}
+                onAcknowledge={draft.acknowledgeOwner}
+                className="rounded-none border-x-0 border-t-0 px-4 sm:px-6 md:px-8"
+              />
+            )}
+            <AgentRevisionPanel draft={draft} state={state} />
+          </>
         )}
         <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6 md:px-8">
           <div className="@container/agent-form grid min-w-0 gap-3.5">
@@ -85,6 +120,17 @@ export function AgentEditorPane(props: AgentEditorProps) {
                 className="bg-muted"
               />
             </div>
+            {props.ownership.kind === "new" && (
+              <OwnerPicker
+                kind="Agent"
+                chosen={props.ownership.chosen}
+                projects={props.ownership.projects}
+                onChange={props.ownership.onChange}
+                disabled={saving}
+                initial={props.ownership.initial}
+                hint={props.ownership.hint}
+              />
+            )}
             <ExecutionSettingsFields
               role="worker"
               capabilities={capabilities}
@@ -170,11 +216,12 @@ function AgentReportingNotice({ providerId }: { providerId: string }) {
 }
 
 function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boolean }) {
-  const { state, flowUsage, name, saving } = props;
+  const { state, flowUsage, name, saving, ownership } = props;
   const agent = state.saved;
+  const owner = ownership.kind === "saved" ? ownership.owner : null;
   const statusLine = state.removed
     ? "Removed elsewhere · retained draft"
-    : agentEditorStatus(agent, flowUsage);
+    : `${agentEditorStatus(agent, flowUsage)}${owner?.projectId ? ` Only ${owner.title} Flows can place this Agent.` : ""}`;
   const saveLabel = agent ? "Save" : "Create Agent";
   return (
     <header className="min-w-0 shrink-0 border-b px-4 pt-5 pb-4 sm:px-6 md:px-8">
@@ -185,17 +232,22 @@ function AgentEditorHeader(props: AgentEditorProps & { name: string; saving: boo
         <span className="rounded-full border bg-muted px-2 py-0.75 text-2xs font-medium text-subtle-foreground">
           Agent definition · {agent ? `rev ${agent.revision}` : "new"}
         </span>
-        <span className="flex-1" />
-        {agent && <SavedAgentActions {...props} agent={agent} />}
-        <MutationGate>
-          <Button
-            type="submit"
-            disabled={saving || !state.canSave}
-            title={saveBlockedReason(state)}
-          >
-            {saving ? "Saving…" : saveLabel}
-          </Button>
-        </MutationGate>
+        {owner && <OwnerBadge owner={owner} prefix="Owned by " />}
+        {/* The actions wrap together, so Save never leaves the others behind. */}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {agent && <SavedAgentActions {...props} agent={agent} />}
+          <MutationGate>
+            <Button
+              type="submit"
+              disabled={
+                saving || !state.canSave || (ownership.kind === "new" && Boolean(ownership.blocked))
+              }
+              title={saveBlockedReason(state)}
+            >
+              {saving ? "Saving…" : saveLabel}
+            </Button>
+          </MutationGate>
+        </div>
       </div>
       <p className="mt-1.5 text-2xs text-subtle-foreground">{statusLine}</p>
     </header>
@@ -210,6 +262,7 @@ function SavedAgentActions({
   flowUsage,
   saving,
   onDuplicate,
+  onChangeOwner,
   exporter,
   onDeleted,
   duplicating,
@@ -217,6 +270,19 @@ function SavedAgentActions({
   const { dirty, removed } = state;
   return (
     <>
+      {onChangeOwner && (
+        <MutationGate>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={removed || saving}
+            title={removed ? "This Agent was removed elsewhere." : undefined}
+            onClick={onChangeOwner}
+          >
+            Change owner…
+          </Button>
+        </MutationGate>
+      )}
       {onDuplicate && (
         <MutationGate>
           <Button
@@ -232,7 +298,7 @@ function SavedAgentActions({
         </MutationGate>
       )}
       {exporter && (
-        <DefinitionExportControl {...exporter} dirty={dirty} disabled={removed || saving} />
+        <DefinitionExportControl {...exporter} dirty={dirty} disabled={removed || saving} compact />
       )}
       <DeleteAgentButton
         agent={agent}
@@ -255,6 +321,8 @@ function duplicateBlockedReason(state: AgentDraftSnapshot): string | undefined {
 function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   if (state.removed) return "This Agent was removed elsewhere.";
   if (state.conflict.status !== "none") return "Compare the latest revision before saving.";
+  if (state.ownerChange.status !== "none")
+    return "Acknowledge the owner changed elsewhere before saving.";
   if (!state.saved && state.saveOutcome === "unknown")
     return "Check the Agent list before creating this Agent again.";
   return undefined;

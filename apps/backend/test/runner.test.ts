@@ -6,7 +6,8 @@ import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
 import { prepared } from "./support/prepared-runner.ts";
-import { blockedLaterFlow, modelLessLaterFlow } from "./support/scenarios.ts";
+import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
+import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
 
 it("Start atomically deduplicates concurrent requests for the same Run", async (c) => {
   // Arrange
@@ -33,6 +34,7 @@ it("editing an Agent preserves the dispatched Run definitions", async (c) => {
     name: "Changed",
     prompt: "Changed prompt",
     expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
   });
 
   // Assert
@@ -189,6 +191,7 @@ it("runtime readiness rejects a saved model option outside the permitted domain"
   await f.updateAgent(agent.id, {
     ...agent,
     expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
     execution: { ...agent.execution, modelOptions: [{ id: "reasoning", value: true }] },
   });
 
@@ -296,6 +299,146 @@ it("Start refuses a Flow whose later-branch Agent Needs a model through readines
       message: "Review: Reviewer needs a model.",
     },
   ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
+it("a Project Flow starts in its owning Project and its Run shows no owner", async (c) => {
+  // Arrange
+  const { f, input, project } = await prepared(c, projectWorkerFlow);
+
+  // Act
+  const started = await f.startRun(input);
+
+  // Assert
+  assert(started.ok);
+  expect(started.value.definitions.flow).not.toHaveProperty("projectId");
+  expect(started.value.definitions.agents[0]).not.toHaveProperty("projectId");
+  expect(assertOk(await f.listRuns(project.id)).map((run) => run.id)).toStrictEqual([
+    started.value.id,
+  ]);
+});
+
+it("Start refuses a Project Flow in another Project and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
+  const other = assertOk(await f.addRepository({ path: "/repos/other" }));
+
+  // Act
+  const result = await f.startRun({ ...input, projectId: other.id });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "flow_project_mismatch",
+      path: "flowId",
+      message: "Choose a global Flow or a Flow of the selected Project.",
+    },
+  ]);
+  expect(await f.listRuns(other.id)).toStrictEqual({ ok: true, value: [] });
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
+it("Start refuses a Project Flow whose Project T3 no longer lists, with that reason, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
+  t3.projects = [];
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_project-unavailable", path: "projectId" },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses a Project Flow whose repository directory is missing, with that reason, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
+  t3.projects = t3.projects.map((entry) => ({ ...entry, available: false }));
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_directory-unavailable", path: "projectId" },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses a Project Flow while T3 is unreachable, with that reason, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
+  t3.available = false;
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_connection-unavailable", path: "projectId" },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
+  t3.environmentId = "other-environment";
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "project_different-environment", path: "projectId" },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses a global Flow whose Agent became a Project Agent through readiness and creates no Run", async (c) => {
+  // Arrange
+  const { h, f, t3, input, agent, project } = await prepared(c);
+  ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "agent_scope_mismatch",
+      path: "graph.blocks.0.agentId",
+      message: "Entry worker: Worker is a Project Agent, so this global Flow cannot place it.",
+    },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
+it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
+  // Arrange
+  const { h, f, t3, input, agent, project } = await prepared(c);
+  t3.beforeLaunchInspection = async () => {
+    ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+  };
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.code).toBe("conflict");
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
   expect(t3.launches.size).toBe(0);
 });

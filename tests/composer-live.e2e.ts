@@ -1,10 +1,13 @@
-import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { browserRequests, resetBrowserRequests } from "./support/live.ts";
 import { elapse } from "./support/remote-access.ts";
-import { removeFlowElsewhere } from "./support/flows.ts";
-import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
+import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
+import {
+  projectSelection,
+  restoreProjectSelection,
+  selectComposerProject,
+} from "./support/composer.ts";
 
 /** Updater checks have their own schedule and are reported separately. */
 const launchChoiceRequests = async (app: { baseUrl: string | undefined }) =>
@@ -29,7 +32,7 @@ test("an idle Run composer sends no periodic launch-choice requests", async ({ a
   expect(await launchChoiceRequests(app)).toEqual([]);
 });
 
-test("a Flow created in another window appears in an open Run composer", async ({
+test("a ready Flow saved in another window appears in an open Run composer", async ({
   app,
   screen,
 }) => {
@@ -39,18 +42,47 @@ test("a Flow created in another window appears in an open Run composer", async (
   await expect(screen.getByRole("group", "Flows")).toBeVisible();
 
   // Act
-  const created = await fetch(new URL("/api/flows", app.baseUrl), {
-    method: "POST",
-    headers: { "content-type": "application/json", "X-Factory-Request": "1" },
-    body: JSON.stringify({ name: "Live composer Flow" }),
+  const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Live composer Flow", {
+    mode: "checkout",
   });
 
   // Assert
-  expect(created.status).toBe(201);
   await expect(
-    screen.getByRole("menuitemradio", "Live composer Flow · Not ready", { exact: true }),
+    screen.getByRole("menuitemradio", "Live composer Flow", { exact: true }),
   ).toBeVisible();
-  const flow = (await created.json()) as Result<FlowDraft>;
-  assert(flow.ok);
-  await removeFlowElsewhere(app.baseUrl, flow.value.id);
+  await removeFlowElsewhere(app.baseUrl, flow);
+});
+
+test("switching Project silently clears another Project's Flow and no Project disables the Flow picker", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const selection = await projectSelection(app.baseUrl);
+  const flowPicker = screen.getByRole("button", /^Select Flow: /);
+  const prompt = screen.getByLabel("Initial prompt", { exact: false });
+  await app.open("/runs/new");
+  await selectComposerProject(screen, "Northwind");
+  await flowPicker.tap();
+  const projectFlow = screen.getByRole("menuitemradio", "Northwind release", { exact: true });
+  await expect(projectFlow).toBeVisible();
+  await app.screenshot("composer-project-flow-picker");
+  await projectFlow.tap();
+  await prompt.fill("UI Project switch");
+
+  // Act
+  await selectComposerProject(screen, "Atlas demo");
+
+  // Assert
+  await expect(flowPicker).toHaveAccessibleName("Select Flow: Choose a Flow");
+  await expect(prompt).toHaveText("UI Project switch");
+  await app.screenshot("composer-flow-cleared-after-project-switch");
+  await browser.reload();
+  await expect(flowPicker).toHaveAccessibleName("Select Flow: Choose a Flow");
+  await expect(prompt).toHaveText("UI Project switch");
+  await selectComposerProject(screen, null);
+  await expect(flowPicker).toBeDisabled();
+  await app.screenshot("composer-flow-picker-without-project");
+  await restoreProjectSelection(app.baseUrl, selection);
 });

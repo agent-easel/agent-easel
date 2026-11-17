@@ -99,6 +99,7 @@ export const makeFactoryService = (
     const definitions = yield* makeDefinitions(
       t3,
       connection,
+      projects,
       changes,
       options.applicationVersion ?? "source",
     );
@@ -206,7 +207,10 @@ export const makeFactoryService = (
       createFlow: definitions.createFlow,
       validateFlow: definitions.validateFlow,
       updateFlow: definitions.updateFlow,
+      changeFlowOwner: definitions.changeFlowOwner,
       removeFlow: definitions.removeFlow,
+      previewFlowDuplicate: definitions.previewFlowDuplicate,
+      duplicateFlow: definitions.duplicateFlow,
       listFlows: definitions.listFlows,
       getFlow: definitions.getFlow,
       getAgentCapabilities: definitions.getAgentCapabilities,
@@ -214,6 +218,7 @@ export const makeFactoryService = (
       getAgent: definitions.getAgent,
       createAgent: definitions.createAgent,
       updateAgent: definitions.updateAgent,
+      changeAgentOwner: definitions.changeAgentOwner,
       duplicateAgent: definitions.duplicateAgent,
       removeAgent: definitions.removeAgent,
       exportAgent: definitions.exportAgent,

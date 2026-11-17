@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: no_lifecycle_notices
+-- Newest applied migration: definition_owner_changed_at
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -53,7 +53,7 @@ CREATE TRIGGER immutable_agent_revision_update BEFORE UPDATE ON agent_revisions 
 
 CREATE TABLE agents (
   id TEXT PRIMARY KEY NOT NULL,
-  created_at TEXT NOT NULL, removed_at TEXT);
+  created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id), owner_changed_at TEXT);
 
 CREATE TRIGGER retained_agent_delete BEFORE DELETE ON agents BEGIN SELECT RAISE(ABORT, 'Agents are removed, not deleted'); END;
 
@@ -448,7 +448,7 @@ CREATE TABLE definition_import_receipts (
   fingerprint TEXT NOT NULL CHECK (length(fingerprint) = 64),
   flow_id TEXT UNIQUE REFERENCES flows(id),
   created_at TEXT NOT NULL
-);
+, fingerprint_version INTEGER NOT NULL DEFAULT 1 CHECK (fingerprint_version IN (1, 2)));
 
 CREATE TRIGGER immutable_definition_import_receipt_delete BEFORE DELETE ON definition_import_receipts BEGIN SELECT RAISE(ABORT, 'Import receipts are immutable'); END;
 
@@ -592,7 +592,7 @@ CREATE TRIGGER immutable_flow_revision_update BEFORE UPDATE ON flow_revisions BE
 
 CREATE TABLE flows (
   id TEXT PRIMARY KEY NOT NULL,
-  created_at TEXT NOT NULL, removed_at TEXT);
+  created_at TEXT NOT NULL, removed_at TEXT, project_id TEXT REFERENCES projects(id), owner_changed_at TEXT);
 
 CREATE INDEX flows_listing ON flows (created_at DESC, id ASC);
 

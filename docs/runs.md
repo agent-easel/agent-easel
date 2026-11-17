@@ -3,7 +3,8 @@
 ## Starting
 
 Open **New Run (+)** (`/runs/new`; the Flow editor's **Start Run** opens a fresh composition with its saved Flow selected). Choose an
-available project, a global ready Flow and a required initial prompt. Factory checks the project and connection, the Flow's
+available project, a ready Flow that may start there (a global Flow, or a Flow
+[owned by](studio.md#ownership) that Project) and a required initial prompt. Factory checks the project and connection, the Flow's
 [readiness](studio.md#saving-and-readiness) against the current saved Agents, every referenced Agent's settings, reporting
 installation and explicit-call API compatibility before accepting Start.
 Failures explain recovery and keep the draft. Start collects setup problems for every referenced Agent,
@@ -15,6 +16,14 @@ custom ref verified as a commit, read through bounded `git` calls without a shel
 a T3 endpoint that is not on this computer rejects Start with a `workspace.*` issue and the **Open Studio → Flows** repair
 action; no Run, Task or worker is created. Correct configuration, accepted Start and accepted Block result are separate
 levels of evidence. A configuration check alone proves neither execution nor report acceptance.
+
+- **Ownership.** Start refuses a Project Flow in any Project but its owner (`flow_project_mismatch` at `flowId`) and,
+  in its owner, while that Project is unavailable for any reason, with the Project's availability reason
+  (`project_<availability>` at `projectId`, such as `project_directory-unavailable`). A placement the
+  [placement rule](studio.md#ownership) forbids is a readiness issue (`agent_scope_mismatch`), so Start refuses it too.
+  Factory checks the Flow's and every placed Agent's owner again inside the acceptance transaction: an owner change
+  while Start was validating refuses it with a conflict. No refusal creates a Task, Run or worker. Ownership adds no
+  model or environment check; every other Start gate applies unchanged.
 
 Worktree Runs require T3 to advertise the boolean `workspaceStrategy.startFromOrigin` option.
 Update T3 before using worktree Flows with this Factory version. If its launch schema lacks
@@ -76,7 +85,9 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   uses those revisions: the full graph and each Agent's prompt, settings and labels. Captured execution settings are always
   complete: Start rejects a Flow that places an Agent that [Needs a model](../GLOSSARY.md#needs-a-model) through its
   readiness (`agent_model_required`), and a launch or recovery never reads a model-less revision. Agent edits need no Flow save: the next
-  Start uses the current saved Agents. Later edits and removals affect only future Runs.
+  Start uses the current saved Agents. Later edits and removals affect only future Runs, and so do later owner changes
+  and the owning Project becoming unavailable. Captured definitions carry no owner, so Run detail and the Run list
+  show none.
 - **Launch.** Factory launches one top-level worker per Agent block visit, using that Agent's saved provider, model and
   options. Agents connected to the Flow input start in parallel and independently (no Agent is told about the others). There
   is no Run conversation. A lost launch is searched for by its saved title and verified thread evidence; Factory does not
@@ -88,6 +99,14 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
 - **Composer.** Project and Flow choices are remembered locally per selected Factory server, like drafts. Each blocking condition is a notice with a recovery action, and
   fields that cause it are marked. The Project picker keeps searchable paths, **Recheck projects** and **Add repository**;
   unavailable references stay visible in history but cannot be selected for a new Run.
+- **Flow picker.** The Flow picker is disabled until a Project is chosen. With a Project it lists ready global Flows
+  under **Global**, then ready Flows owned by that Project under its title; a chosen Flow that stops being ready stays
+  listed and marked **Not ready**. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
+  owned by another Project. Clearing the Project clears the Flow, and neither New Run nor choosing a Project again
+  restores it. These clears are silent: the composer shows no notice or label, and the prompt and images always stay.
+  The Flow editor's **Start Run** on a Project Flow selects its owning Project; on a global Flow it uses the remembered
+  Project, or with none shows the Flow in the disabled picker until a Project is chosen. Start stays disabled for a Flow
+  the selected Project may not start.
 - **Drafts.** Typing a prompt with a non-whitespace character or attaching an image creates a Run draft; removing all
   text and images removes it. A draft with images but no text is listed as **Untitled draft** and cannot Start. Image
   bytes are kept in the browser's IndexedDB per selected Factory server and draft, saved before the draft refers to them;
@@ -101,8 +120,11 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   Flow editor's **Start Run** does the same with its Flow. Project and Flow choices update live; while they are
   synchronizing or offline the last choices stay visible, the draft is kept and Start is disabled. A Start issued while
   current still sends its image uploads and request if a catch-up begins meanwhile; going offline stops it. A selected Project or Flow
-  is cleared only when a current live delivery no longer lists it; a non-current or failed delivery changes nothing, and
-  choosing a just-created Project or Flow waits for the delivery that lists it. Confirmed Start removes the draft and opens its Run; a confirmed
+  is cleared only when a current live delivery no longer lists it, and a Flow when current choices show that another
+  Project owns it, including in a restored draft, which keeps its Project, prompt and images; a non-current or failed
+  delivery changes nothing, and choosing a just-created Project or Flow waits for the delivery that lists it. A draft
+  awaiting a Start outcome is never cleared: **Check same request** sends the submitted request unchanged, and Factory
+  resolves it by request key and content before any ownership, availability or readiness check. Confirmed Start removes the draft and opens its Run; a confirmed
   rejection keeps it editable. A draft's title follows its first non-empty prompt line until it is renamed; a manual title
   survives prompt edits, reload and other tabs' saves, and a title or selection alone never creates a draft.
 

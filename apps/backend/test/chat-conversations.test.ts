@@ -57,7 +57,7 @@ it("List Projects gives the model only the Projects the thread permits, with ID,
   ]);
 });
 
-it("List Flows gives the model saved Flows with ID, name, workspace setting and readiness", async (c) => {
+it("List Flows gives the model saved Flows with ID, owning Project, name, workspace setting and readiness", async (c) => {
   // Arrange
   const { discord, model, factory } = await conversing(c);
   const flow = await factory.createFlow({ name: "Review" });
@@ -76,6 +76,7 @@ it("List Flows gives the model saved Flows with ID, name, workspace setting and 
       entries: [
         {
           id: flow.value.id,
+          owningProjectId: null,
           name: "Review",
           workspace: flow.value.workspace,
           ready: false,
@@ -84,6 +85,34 @@ it("List Flows gives the model saved Flows with ID, name, workspace setting and 
         },
       ],
     },
+  ]);
+});
+
+it("List Flows gives the model global Flows and the permitted Project's Flows, never another Project's", async (c) => {
+  // Arrange
+  const { discord, model, factory, harness, project } = await conversing(c);
+  const otherRoot = join(harness.processHome, "other");
+  await mkdir(otherRoot);
+  const other = await factory.addRepository({ path: otherRoot });
+  assert(other.ok);
+  assert((await factory.createFlow({ name: "Review", projectId: null })).ok);
+  assert((await factory.createFlow({ name: "Release", projectId: project.id })).ok);
+  assert((await factory.createFlow({ name: "Port", projectId: other.value.id })).ok);
+  model.script({ toolCalls: [{ name: "list_flows", input: {} }] }, { text: "Two Flows." });
+
+  // Act
+  await answered(discord, "300000000000000101", 1);
+
+  // Assert
+  const [page] = toolResults(model, 1);
+  expect(page).toMatchObject({ total: 2 });
+  expect(
+    (page!.entries as { name: string; owningProjectId: string | null }[])
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(({ name, owningProjectId }) => [name, owningProjectId]),
+  ).toStrictEqual([
+    ["Release", project.id],
+    ["Review", null],
   ]);
 });
 

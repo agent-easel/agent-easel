@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import type { FactoryProject } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 
+/** How Studio and the Project picker name each Project availability. */
+export const projectAvailabilityLabels: Record<FactoryProject["availability"], string> = {
+  available: "Available",
+  "directory-unavailable": "Repository unavailable",
+  "project-unavailable": "Project unavailable",
+  "connection-unavailable": "T3 connection unavailable",
+  "different-environment": "Different environment",
+};
+
 /** The project catalog, read again when `key` changes; undefined until a read succeeds. */
 export function useProjects(key?: string) {
   const [catalog, setCatalog] = useState<{

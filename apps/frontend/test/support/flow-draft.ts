@@ -14,7 +14,10 @@ import { createStudioDefinitions } from "../../src/studio-definitions.ts";
 import { savedAgent } from "./agent-draft.ts";
 import { envelope, liveHarness } from "./live.ts";
 
-type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow">;
+type FlowOperations = Pick<typeof api, "updateFlow" | "removeFlow" | "validateFlow" | "getFlow">;
+
+/** A minute after `time`: an owner change always advances a definition's `updatedAt`. */
+export const laterThan = (time: string) => new Date(Date.parse(time) + 60_000).toISOString();
 type Operations = { [K in keyof FlowOperations]: Mock<FlowOperations[K]> };
 
 /** The Flow Factory holds, and its Flow operations over it in memory. */
@@ -22,14 +25,20 @@ interface MemoryFactory extends Operations {
   latest(): FlowDraft;
   /** Another client saves the Flow, appending the next revision. */
   saveElsewhere(name: string, readiness?: FlowReadiness): FlowDraft;
+  /** Another client changes the Flow's owner, which appends no revision. */
+  moveElsewhere(projectId: string | null): FlowDraft;
 }
 
 const ready: FlowReadiness = { ready: true, issues: [] };
 
-/** Readiness Factory validated against the saved Agent at revision 3. */
-export const validated = (readiness: FlowReadiness = ready, revision = 3): FlowValidation => ({
+/** Readiness Factory validated against the global saved Agent at revision 3. */
+export const validated = (
+  readiness: FlowReadiness = ready,
+  revision = 3,
+  projectId: string | null = null,
+): FlowValidation => ({
   ...readiness,
-  agentRevisions: { agent: revision },
+  agentRevisions: { agent: { revision, projectId } },
 });
 
 export const notReady: FlowReadiness = {
@@ -44,6 +53,7 @@ export function memoryFactory(): MemoryFactory {
   let removed = false;
   let latest: FlowDraft = {
     id: "flow",
+    projectId: null,
     name: "Review",
     revision: 1,
     graph: {
@@ -74,11 +84,21 @@ export function memoryFactory(): MemoryFactory {
   return {
     latest: () => latest,
     saveElsewhere: (name, readiness = ready) => append({ name, readiness }),
+    moveElsewhere(projectId) {
+      latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };
+      return latest;
+    },
     updateFlow: vi.fn<FlowOperations["updateFlow"]>(
-      async (_id, { expectedRevision, name, graph, workspace }) => {
+      async (_id, { expectedRevision, expectedProjectId, name, graph, workspace }) => {
         if (removed) throw rejection({ code: "not_found", message: "Flow was removed." });
         if (expectedRevision !== latest.revision)
           throw rejection({ code: "conflict", message: "Flow changed in another window." });
+        if (expectedProjectId !== latest.projectId)
+          throw rejection({
+            code: "conflict",
+            message: "This Flow's owning Project changed elsewhere.",
+            issues: [{ code: "stale_owner", path: "expectedProjectId", message: "Compare." }],
+          });
         // Studio always sends a fully positioned graph, so no server layout is simulated.
         return append({ name, graph: graph as FlowGraph, ...(workspace && { workspace }) });
       },
@@ -87,6 +107,7 @@ export function memoryFactory(): MemoryFactory {
       removed = true;
     }),
     validateFlow: vi.fn<FlowOperations["validateFlow"]>(async () => validated()),
+    getFlow: vi.fn<FlowOperations["getFlow"]>(async () => latest),
   };
 }
 

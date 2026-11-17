@@ -50,6 +50,7 @@ it("saving a different workspace after Start leaves the Run's captured project c
   const saved = await f.updateFlow(flow.id, {
     ...flow,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
 

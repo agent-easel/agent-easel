@@ -27,5 +27,6 @@ New here? Start with the [project overview and demo](../README.md),
 - [Quality gates](quality-gates.md)
 - [Release](release.md)
 - [Issue tracker](agents/issue-tracker.md), [triage labels](agents/triage-labels.md) and [domain documentation](agents/domain.md)
+- Architecture decision records: [Project ownership instead of per-project Flow overlays](adr/0001-project-ownership-instead-of-per-project-flow-overlays.md)
 
 Read the relevant topic before changing behavior and update it in the same change. [AGENTS.md](../AGENTS.md) records documentation maintenance and contribution instructions.

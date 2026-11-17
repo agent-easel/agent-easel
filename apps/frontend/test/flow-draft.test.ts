@@ -326,6 +326,53 @@ it("a readiness check answered after a saved Agent changed is dropped", async ()
   expect(draft.getSnapshot().readiness).toBeNull();
 });
 
+it("a readiness check answered after a saved Agent changed owner without a new revision is dropped", async () => {
+  // Arrange
+  const { draft, factory, agentChanged } = editedFlow();
+  const answer = held(factory.validateFlow);
+  const checking = draft.check();
+  agentChanged(savedAgent({ projectId: "project-one" }));
+
+  // Act
+  answer.answer(validated());
+  await checking;
+
+  // Assert
+  expect(draft.getSnapshot().readiness).toBeNull();
+});
+
+it("an owner changed elsewhere clears an unsaved draft's readiness check", async () => {
+  // Arrange
+  const { draft, factory, published } = editedFlow();
+  await draft.check();
+
+  // Act
+  published(factory.moveElsewhere("northwind"));
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: "northwind",
+    readiness: null,
+    canStartRun: false,
+  });
+});
+
+it("a readiness check answered after the editor's own Change owner is dropped", async () => {
+  // Arrange
+  const { draft, factory } = editedFlow();
+  const answer = held(factory.validateFlow);
+  const checking = draft.check();
+  draft.ownerChangedHere(factory.moveElsewhere("northwind"));
+
+  // Act
+  answer.answer(validated());
+  await checking;
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({ owner: "northwind", readiness: null });
+});
+
 it("a readiness check answered after the editor was hidden is dropped", async () => {
   // Arrange
   const { draft, factory } = editedFlow();
@@ -466,4 +513,24 @@ it("a retained Flow refuses a readiness request", async () => {
   // Assert
   expect(factory.validateFlow).not.toHaveBeenCalled();
   expect(draft.getSnapshot().readiness).toBe(null);
+});
+
+it("a dirty Flow editor saves expecting the owner it acknowledged after a change elsewhere", async () => {
+  // Arrange
+  const setup = editedFlow("Mine");
+  setup.published(setup.factory.moveElsewhere("northwind"));
+  setup.draft.acknowledgeOwner("northwind");
+
+  // Act
+  await setup.draft.save();
+
+  // Assert
+  expect(setup.factory.updateFlow).toHaveBeenCalledWith(
+    "flow",
+    expect.objectContaining({ name: "Mine", expectedRevision: 1, expectedProjectId: "northwind" }),
+  );
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { revision: 2, name: "Mine", projectId: "northwind" },
+    dirty: false,
+  });
 });

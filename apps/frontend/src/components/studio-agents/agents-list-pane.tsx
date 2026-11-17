@@ -17,11 +17,20 @@ import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { NeedsModel } from "../needs-model.tsx";
 import { DefinitionImportControl } from "../definition-import-control.tsx";
+import { OwnerFilter, OwnerPath, ownerName } from "../studio-owner.tsx";
+import { sectionLabelClass } from "../page.tsx";
+import {
+  ownerGroups,
+  type OwnerGroup,
+  type StudioOwnerFilter,
+  type useStudioOwners,
+} from "../../studio-definitions.ts";
 
 export function AgentsListPane({
   agents,
   flows,
   capabilities,
+  owners,
   selectedId,
   query,
   onQueryChange,
@@ -34,6 +43,7 @@ export function AgentsListPane({
   agents: readonly AgentDefinition[] | null;
   flows: readonly FlowDraft[] | null;
   capabilities: AgentCapabilities | null;
+  owners: ReturnType<typeof useStudioOwners>;
   selectedId: string | undefined;
   creatingNew: boolean;
   query: string;
@@ -43,10 +53,6 @@ export function AgentsListPane({
   error: string;
   loading: boolean;
 }) {
-  const filtered =
-    agents?.filter((agent) =>
-      agent.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
-    ) ?? null;
   const count = agents?.length ?? 0;
   return (
     <aside className="flex max-md:max-h-[42%] max-md:shrink-0 md:h-full min-h-0 min-w-0 w-full max-w-full shrink-0 flex-col border-r bg-background md:w-[300px]">
@@ -58,29 +64,14 @@ export function AgentsListPane({
           </span>
         )}
         <span className="flex-1" />
-        <DefinitionImportControl size="sm" onImported={onImported} />
+        <DefinitionImportControl size="sm" projects={owners.projects} onImported={onImported} />
         <MutationGate>
           <Button size="sm" aria-label="New Agent" onClick={onCreate}>
             + Add agent
           </Button>
         </MutationGate>
       </div>
-      <div className="shrink-0 px-3 pb-2">
-        <div className="relative">
-          <Search
-            aria-hidden
-            className="pointer-events-none absolute top-2 left-2.5 size-3.5 text-subtle-foreground"
-            strokeWidth={1.5}
-          />
-          <Input
-            aria-label="Search Agents"
-            placeholder="Search Agents"
-            value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
-            className="h-8 bg-muted pl-9 text-sm"
-          />
-        </div>
-      </div>
+      <AgentListTools query={query} onQueryChange={onQueryChange} owners={owners} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pt-1">
         {creatingNew && (
           <ul className="grid gap-1 pb-2">
@@ -95,13 +86,14 @@ export function AgentsListPane({
           </ul>
         )}
         <AgentListRows
-          agents={filtered}
+          agents={agents}
+          query={query}
+          owners={owners}
           flows={flows}
           capabilities={capabilities}
           selectedId={selectedId}
           error={error}
           loading={loading}
-          count={count}
         />
       </div>
       {agents && (
@@ -114,23 +106,83 @@ export function AgentsListPane({
   );
 }
 
+/** Search Agents and the owner filter Studio's lists share. */
+function AgentListTools({
+  query,
+  onQueryChange,
+  owners,
+}: {
+  query: string;
+  onQueryChange: (query: string) => void;
+  owners: ReturnType<typeof useStudioOwners>;
+}) {
+  return (
+    <div className="flex shrink-0 gap-2 px-3 pb-2">
+      <div className="relative min-w-0 flex-1">
+        <Search
+          aria-hidden
+          className="pointer-events-none absolute top-2 left-2.5 size-3.5 text-subtle-foreground"
+          strokeWidth={1.5}
+        />
+        <Input
+          aria-label="Search Agents"
+          placeholder="Search Agents"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          className="h-8 bg-muted pl-9 text-sm"
+        />
+      </div>
+      <OwnerFilter
+        filter={owners.filter}
+        projects={owners.projects}
+        onChange={owners.setFilter}
+        className="w-28"
+      />
+    </div>
+  );
+}
+
+/** What an empty Agent list says: nothing saved yet, or nothing the search and filter show. */
+function emptyAgentsMessage(count: number, searching: boolean, filter: StudioOwnerFilter) {
+  if (count === 0) return "No Agent definitions yet. Add an Agent to reuse it in your Flows.";
+  if (filter.kind !== "all") return "No Agents match your search or owner filter.";
+  return searching ? "No Agents match your search." : "No Agents for this owner.";
+}
+
+/** The Agents the search and owner filter show, grouped by owner. */
+function shownAgentGroups(
+  agents: readonly AgentDefinition[] | null,
+  query: string,
+  { projects, filter }: ReturnType<typeof useStudioOwners>,
+) {
+  const needle = query.trim().toLocaleLowerCase();
+  const matching = agents?.filter((agent) => agent.name.toLocaleLowerCase().includes(needle));
+  return {
+    groups: matching ? ownerGroups(matching, projects, filter) : null,
+    empty: emptyAgentsMessage(agents?.length ?? 0, Boolean(needle), filter),
+  };
+}
+
 function AgentListRows({
-  agents: filtered,
+  agents,
+  query,
+  owners,
   flows,
   capabilities,
   selectedId,
   error,
   loading,
-  count,
 }: {
   agents: readonly AgentDefinition[] | null;
+  query: string;
+  owners: ReturnType<typeof useStudioOwners>;
   flows: readonly FlowDraft[] | null;
   capabilities: AgentCapabilities | null;
   selectedId: string | undefined;
   error: string;
   loading: boolean;
-  count: number;
 }) {
+  const { groups, empty } = shownAgentGroups(agents, query, owners);
   return error ? (
     <Alert variant="destructive" className="mb-2">
       <AlertDescription>{error}</AlertDescription>
@@ -139,29 +191,68 @@ function AgentListRows({
     <p role="status" className="px-1 py-4 text-sm text-muted-foreground">
       Loading Agents…
     </p>
-  ) : filtered && filtered.length === 0 ? (
-    <p className="px-1 py-4 text-sm text-muted-foreground">
-      {count === 0
-        ? "No Agent definitions yet. Add an Agent to reuse it in your Flows."
-        : "No Agents match your search."}
-    </p>
+  ) : groups && groups.length === 0 ? (
+    <p className="px-1 py-4 text-sm text-muted-foreground">{empty}</p>
   ) : (
-    <ul className="grid gap-1 pb-2">
-      {filtered?.map((agent) => (
-        <li key={agent.id}>
-          <AgentListItemLink
-            id={agent.id}
-            name={agent.name}
-            meta={
-              agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
-            }
-            {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
-            usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}
-            selected={selectedId === agent.id}
+    groups?.map((group) => (
+      <AgentOwnerSection
+        key={group.owner.projectId ?? "global"}
+        group={group}
+        flows={flows}
+        capabilities={capabilities}
+        selectedId={selectedId}
+      />
+    ))
+  );
+}
+
+/** One owner's Agents under its section label, as Figma P03 groups them. */
+function AgentOwnerSection({
+  group: { owner, items },
+  flows,
+  capabilities,
+  selectedId,
+}: {
+  group: OwnerGroup<AgentDefinition>;
+  flows: readonly FlowDraft[] | null;
+  capabilities: AgentCapabilities | null;
+  selectedId: string | undefined;
+}) {
+  return (
+    <section aria-label={ownerName(owner)}>
+      <h3
+        className={cn(
+          sectionLabelClass,
+          "flex min-w-0 items-baseline gap-2 px-2 pt-1.5 pb-1",
+          owner.unavailable && "text-attention",
+        )}
+        title={owner.unavailable ?? owner.detail ?? undefined}
+      >
+        <span className="shrink-0">{ownerName(owner)}</span>
+        {owner.detail && (
+          <OwnerPath
+            path={owner.detail}
+            className="font-normal tracking-label text-subtle-foreground normal-case"
           />
-        </li>
-      ))}
-    </ul>
+        )}
+      </h3>
+      <ul className="grid gap-1 pb-2">
+        {items.map((agent) => (
+          <li key={agent.id}>
+            <AgentListItemLink
+              id={agent.id}
+              name={agent.name}
+              meta={
+                agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
+              }
+              {...(agent.execution ? { providerId: agent.execution.providerInstanceId } : {})}
+              usage={flowUsageLabel(flowUsageCount(flows ?? [], agent.id))}
+              selected={selectedId === agent.id}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

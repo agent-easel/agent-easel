@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { workerMessage } from "./support/run-worker.ts";
 import { handoffFlow, resultReported, workerAtWork } from "./support/scenarios.ts";
+import { assertOk } from "./support/domain-setup.ts";
 
 it("each Start of the same Flow revision shows the Agent revision, with its exits, current when it started", async (c) => {
   // Arrange
@@ -14,6 +15,7 @@ it("each Start of the same Flow revision shows the Agent revision, with its exit
     prompt: "Follow repository instructions and update the changelog.",
     exits: [...agent.exits, blocked],
     expectedRevision: agent.revision,
+    expectedProjectId: agent.projectId,
   });
   assert(edited.ok);
 
@@ -48,6 +50,7 @@ it("a block first activated after its Agent was edited and removed and the backe
     prompt: "Rewrite everything.",
     execution: { ...f.agent.execution, modelOptions: [{ id: "reasoning", value: "low" }] },
     expectedRevision: f.agent.revision,
+    expectedProjectId: f.agent.projectId,
   });
   assert(edited.ok);
   assert((await f.f.removeFlow(f.flow.id)).ok);
@@ -83,6 +86,7 @@ it("a Run read after its Flow was saved again shows the Flow's current revision 
     name: `${flow.name} (edited)`,
     graph: flow.graph,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
   });
   assert(saved.ok);
 
@@ -122,6 +126,7 @@ it("a Flow save after Start leaves the Run on the Revisit instruction it capture
   const saved = await f.updateFlow(flow.id, {
     name: flow.name,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     graph: {
       ...flow.graph,
       blocks: [{ ...worker, revisitInstruction: "Review everything again." }],
@@ -139,4 +144,22 @@ it("a Flow save after Start leaves the Run on the Revisit instruction it capture
   expect(saved.value.graph.blocks[0]).toMatchObject({
     revisitInstruction: "Review everything again.",
   });
+});
+
+it("a Run keeps its captured revisions, list entry and detail after its Flow and Agent change owner", async (c) => {
+  // Arrange
+  const { f, input, flow, agent, project } = await prepared(c);
+  const started = await f.startRun(input);
+  assert(started.ok);
+  await f.reconcileRuns();
+  const detail = assertOk(await f.getRun(started.value.id));
+  const listed = assertOk(await f.listRuns(project.id));
+
+  // Act
+  assertOk(await f.changeFlowOwner(flow.id, { expectedProjectId: null, projectId: project.id }));
+  assertOk(await f.changeAgentOwner(agent.id, { expectedProjectId: null, projectId: project.id }));
+
+  // Assert
+  expect(await f.getRun(started.value.id)).toStrictEqual({ ok: true, value: detail });
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: listed });
 });

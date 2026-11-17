@@ -2,7 +2,8 @@
 
 The Run composer discovers T3 projects, selects one, and adds an existing local Git
 repository. Selection is saved across browser/backend restarts. Global Flows stay
-available across all selections without assignment. Selecting an unavailable
+available across all selections without assignment; a Project Flow starts only in its
+[owning Project](studio.md#ownership). Selecting an unavailable
 project preserves its reference and explains why new Runs are blocked.
 
 The composer's **Select project** dropdown shows the selected project's name and
@@ -83,6 +84,14 @@ current project availability and authorization, retain Host/origin checks and us
 | `PUT /api/projects/selection` | Select a saved project ID or clear with null |
 | `GET /api/projects/:id/readiness` | Check project readiness |
 | `GET` / `HEAD /api/projects/:id/favicon` | Read an authorized repository image |
+
+Flows and Agents reference their owning Project by this Factory id, never by path, title or
+remote, so ownership survives a rename or move in T3 and each clone owns its own definitions.
+An unavailable owning Project keeps its definitions editable; Start of its Flows reports the
+same `project_<availability>` reason as project readiness.
+[Change owner](studio.md#ownership) moves a definition to another Project or to global without a
+revision: it refuses a target that is unknown or unavailable with that same reason, and moves
+definitions out of an unavailable Project whenever the placement rule allows.
 
 Discovery refreshes at startup, periodically and on explicit checks. Incomplete pagination,
 invalid results or changed authorization fail the refresh, rather than reporting an empty

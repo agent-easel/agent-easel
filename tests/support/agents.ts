@@ -79,6 +79,7 @@ export async function saveAgentElsewhere(
         execution: agent.execution,
         exits: agent.exits,
         expectedRevision: agent.revision,
+        expectedProjectId: agent.projectId,
         ...change,
       }),
     })

@@ -10,6 +10,10 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import { parseAgentExits } from "./block-exits.ts";
+import { parseExpectedOwner, parseOwningProject, parseTargetOwner } from "./placement.ts";
+
+/** What a save writes: everything a create does except the owning Project. */
+type UpdateAgentContent = Omit<UpdateAgentInput, "expectedRevision" | "expectedProjectId">;
 
 function agentNameIssue(): ValidationIssue {
   return {
@@ -206,8 +210,11 @@ export function validateUpdateRunTitleSetting(input: unknown): Result<UpdateRunT
   return { ok: true, value: { enabled: fields.enabled, model: model.value } };
 }
 
-/** Structural save validation is deliberately separate from T3 capability availability. */
-export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
+/**
+ * The revision content every Agent create and save writes. Structural save validation is
+ * deliberately separate from T3 capability availability.
+ */
+function validateAgentContent(input: unknown): Result<UpdateAgentContent> {
   const name = parseTrimmedString(
     typeof input === "object" && input !== null && "name" in input ? input.name : undefined,
     "name",
@@ -241,6 +248,14 @@ export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
   };
 }
 
+export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
+  const content = validateAgentContent(input);
+  if (!content.ok) return content;
+  const projectId = parseOwningProject(input);
+  if (!projectId.ok) return projectId;
+  return { ok: true, value: { ...content.value, projectId: projectId.value } };
+}
+
 export function validateUpdateAgent(input: unknown): Result<UpdateAgentInput> {
   const revision =
     typeof input === "object" && input !== null && "expectedRevision" in input
@@ -262,9 +277,18 @@ export function validateUpdateAgent(input: unknown): Result<UpdateAgentInput> {
       },
     };
   }
-  const base = validateCreateAgent(input);
-  if (!base.ok) return base;
-  return { ok: true, value: { expectedRevision: revision, ...base.value } };
+  const expectedProjectId = parseExpectedOwner(input);
+  if (!expectedProjectId.ok) return expectedProjectId;
+  const content = validateAgentContent(input);
+  if (!content.ok) return content;
+  return {
+    ok: true,
+    value: {
+      expectedRevision: revision,
+      expectedProjectId: expectedProjectId.value,
+      ...content.value,
+    },
+  };
 }
 
 export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInput> {
@@ -285,7 +309,10 @@ export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInp
       },
     };
   }
-  if (!("name" in input) || input.name === undefined) return { ok: true, value: {} };
+  const projectId = parseTargetOwner(input);
+  if (!projectId.ok) return projectId;
+  const target = projectId.value === undefined ? {} : { projectId: projectId.value };
+  if (!("name" in input) || input.name === undefined) return { ok: true, value: target };
   const name = parseTrimmedString(
     input.name,
     "name",
@@ -294,5 +321,5 @@ export function validateDuplicateAgent(input: unknown): Result<DuplicateAgentInp
     agentNameIssue().message,
   );
   if (!name.ok) return name;
-  return { ok: true, value: { name: name.value } };
+  return { ok: true, value: { name: name.value, ...target } };
 }

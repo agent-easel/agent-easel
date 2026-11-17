@@ -38,6 +38,7 @@ it("a Continuation without a prompt is a readiness issue", async (c) => {
   const saved = await f.f.updateFlow(draft.value.id, {
     name: draft.value.name,
     expectedRevision: draft.value.revision,
+    expectedProjectId: draft.value.projectId,
     graph: {
       flowInput: flowInput("worker"),
       blocks: [agentBlock("worker", "Worker", f.agent.id), continuationStep("spec", "Spec", "  ")],
@@ -63,6 +64,7 @@ it("a Continuation cannot receive the Flow input", async (c) => {
   const saved = await f.f.updateFlow(draft.value.id, {
     name: draft.value.name,
     expectedRevision: draft.value.revision,
+    expectedProjectId: draft.value.projectId,
     graph: {
       flowInput: flowInput("spec"),
       blocks: [continuationStep("spec", "Spec", "Write the spec.")],

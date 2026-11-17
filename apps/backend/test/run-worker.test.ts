@@ -49,6 +49,7 @@ it("a Flow with two entry Agents launches an independent top-level worker for ea
   const updated = await f.f.updateFlow(f.flow.id, {
     name: f.flow.name,
     expectedRevision: f.flow.revision,
+    expectedProjectId: f.flow.projectId,
     workspace: f.flow.workspace,
     graph: {
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["worker", "editor"] },
@@ -112,6 +113,7 @@ it("two Blocks that share one Agent still launch separate workers", async (c) =>
   const updated = await f.f.updateFlow(f.flow.id, {
     name: f.flow.name,
     expectedRevision: f.flow.revision,
+    expectedProjectId: f.flow.projectId,
     workspace: f.flow.workspace,
     graph: {
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["worker", "second"] },
@@ -861,6 +863,7 @@ it("after its Agent is saved without a model, a Run's held handoff launches the 
     execution: null,
     exits: f.agent.exits,
     expectedRevision: f.agent.revision,
+    expectedProjectId: f.agent.projectId,
   });
   assert(cleared.ok);
   await f.f.close();

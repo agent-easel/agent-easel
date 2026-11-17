@@ -36,6 +36,7 @@ import {
   until,
 } from "./support/chat-conversation.ts";
 import { addedProject } from "./support/chat-runs.ts";
+import { assertOk } from "./support/domain-setup.ts";
 import { PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
 
 /** Clicks that decided the review answer with its disabled button; others privately. */
@@ -364,6 +365,63 @@ it("completing Start preflight after revocation and regrant starts nothing", asy
   expect(await pending.answer).toBe(ANSWERS.rejected);
   expect(await runsOf(world.factory)).toStrictEqual([]);
   expect(world.t3.launchCalls).toBe(0);
+});
+
+it("a Start of a Flow that another permitted Project owns gets no review, and the model is told to use a Flow of this Project", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const other = await addedProject(world, "other-clone");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assertOk(
+    await world.factory.changeFlowOwner(world.flow.id, {
+      expectedProjectId: null,
+      projectId: other.id,
+    }),
+  );
+  world.model.script(startCall(world, START_PROMPT), {
+    text: "That Flow is not for this Project.",
+  });
+
+  // Act
+  world.discord.deliver(
+    invocation("600000000000000001", { content: `start this:\n${START_PROMPT}` }),
+  );
+
+  // Assert
+  await world.discord.createdMessages(1);
+  expect(confirmations(world.discord)).toStrictEqual([]);
+  expect(toolResults(world.model, 1)).toStrictEqual([
+    {
+      error: "flow_project_mismatch",
+      message:
+        "That Flow belongs to another Project, so it cannot start in this one. Use a global Flow or a Flow this Project owns from list_flows; do not choose another Project.",
+    },
+  ]);
+  expect(await runsOf(world.factory)).toStrictEqual([]);
+});
+
+it("confirming a Start whose Flow moved to another Project after the review starts no Run and posts a not-accepted receipt", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const other = await addedProject(world, "other-clone");
+  const button = await proposedStart(world, "600000000000000001", 2);
+  assertOk(
+    await world.factory.changeFlowOwner(world.flow.id, {
+      expectedProjectId: null,
+      projectId: other.id,
+    }),
+  );
+
+  // Act
+  const answer = await clicked(world.discord, button, "610000000000000001", 1);
+
+  // Assert
+  expect(answer).toBe(ANSWERS.rejected);
+  await createdBesidesReports(world.discord, 3);
+  expect(besidesReports(world.discord)[2]!.content).toContain(
+    "Choose a global Flow or a Flow of the selected Project.",
+  );
+  expect(await runsOf(world.factory)).toStrictEqual([]);
 });
 
 it("a prompt that is not exact text from the requester's message gets no review, and the model is told to copy it exactly", async (c) => {
@@ -699,6 +757,7 @@ it("confirming a Start whose Agent lost its model after the review starts no Run
     execution: null,
     exits: agent.value.exits,
     expectedRevision: agent.value.revision,
+    expectedProjectId: agent.value.projectId,
   });
   assert(cleared.ok, JSON.stringify(cleared));
 

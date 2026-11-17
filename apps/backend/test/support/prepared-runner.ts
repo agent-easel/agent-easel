@@ -40,7 +40,7 @@ async function readyFlow(
   assert((await f.installReporting({ targetId: targets.value[0]!.id })).ok);
   const p = await f.addRepository({ path: root });
   assert(p.ok);
-  const world = { factory: f, t3 };
+  const world = { factory: f, t3, projectId: p.value.id };
   const { agent, flow } =
     typeof shape === "function" ? await shape(world) : await singleWorkerFlow(world, shape);
   return {

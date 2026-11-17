@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GripVertical, PanelLeftClose, PanelLeftOpen, Plus, Search } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import type { AgentDefinition, FactoryProject, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -14,6 +14,7 @@ import { DragButton } from "./drag-button.tsx";
 import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
 import { SectionLabel } from "./page.tsx";
 import { NeedsModel } from "./needs-model.tsx";
+import { ownerGroups, type StudioOwner } from "../studio-definitions.ts";
 
 function agentDetail({ execution }: AgentDefinition) {
   return execution ? `${execution.providerInstanceId} · ${execution.modelId}` : <NeedsModel />;
@@ -22,20 +23,29 @@ function agentDetail({ execution }: AgentDefinition) {
 export function BlockLibrary({
   open,
   onOpenChange,
+  flowId,
+  owner,
   agents,
+  projects,
   agentError,
   onAdd,
   dropAt,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  flowId: string;
+  /** The Flow's owner, which decides the Agents it may place. */
+  owner: StudioOwner;
+  /** Only the Agents this Flow may place. */
   agents: readonly AgentDefinition[];
+  projects: readonly FactoryProject[];
   agentError: string;
   onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
   const shown = agents.filter((a) => a.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const groups = ownerGroups(shown, projects, { kind: "all" });
   if (!open)
     return (
       <div className="flex w-11 shrink-0 flex-col items-center border-r bg-sidebar py-3">
@@ -78,7 +88,8 @@ export function BlockLibrary({
           </Button>
         </div>
         <p className="text-xs tracking-label text-muted-foreground">
-          Drag onto the canvas, or press Add
+          {owner.projectId === null ? "Global Agents only" : `Global + ${owner.title} Agents only`}{" "}
+          · drag onto the canvas, or press Add
         </p>
       </div>
       <div className="relative">
@@ -123,10 +134,6 @@ export function BlockLibrary({
         dropAt={dropAt}
         onAdd={(position) => onAdd("condition", undefined, position)}
       />
-      <div className="flex items-center">
-        <SectionLabel>Saved Agents</SectionLabel>
-        <span className="ml-auto text-2xs text-muted-foreground">{agents.length}</span>
-      </div>
       {agentError && (
         <p role="alert" className="text-xs text-destructive">
           {agentError}
@@ -135,27 +142,43 @@ export function BlockLibrary({
       {!agents.length && (
         <p className="text-xs text-muted-foreground">
           Create an{" "}
-          <StudioLink selection={{ tab: "agents", agentId: "new" }}>Agent definition</StudioLink>,
-          then return here.
+          <StudioLink selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}>
+            Agent definition
+          </StudioLink>
+          {owner.projectId === null ? "" : ` (Global or ${owner.title})`}, then return here.
         </p>
       )}
       {agents.length > 0 && !shown.length && (
         <p className="text-xs text-muted-foreground">No saved Agents match “{query.trim()}”.</p>
       )}
-      {shown.map((agent) => (
-        <LibraryItem
-          key={agent.id}
-          name={agent.name}
-          detail={agentDetail(agent)}
-          kind="agent"
-          agent={agent}
-          dropAt={dropAt}
-          onAdd={(position) => onAdd("agent", agent, position)}
-        />
+      {groups.map((group) => (
+        <section
+          key={group.owner.projectId ?? "global"}
+          aria-label={`${group.owner.title} Agents`}
+          className="flex min-w-0 flex-col gap-2.5"
+        >
+          <div className="flex items-center gap-2">
+            <SectionLabel className="min-w-0 truncate">{group.owner.title} Agents</SectionLabel>
+            <span className="ml-auto text-2xs tracking-label text-subtle-foreground">
+              {group.items.length}
+            </span>
+          </div>
+          {group.items.map((agent) => (
+            <LibraryItem
+              key={agent.id}
+              name={agent.name}
+              detail={agentDetail(agent)}
+              kind="agent"
+              agent={agent}
+              dropAt={dropAt}
+              onAdd={(position) => onAdd("agent", agent, position)}
+            />
+          ))}
+        </section>
       ))}
       <span className="flex-1" />
       <StudioLink
-        selection={{ tab: "agents", agentId: "new" }}
+        selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}
         className="flex items-center gap-1.5 text-2xs font-medium no-underline hover:underline"
       >
         <Plus aria-hidden className="size-3" /> New Agent definition

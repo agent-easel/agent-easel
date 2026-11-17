@@ -1,5 +1,5 @@
 /** Agents: reusable definitions of how an Agent block's work runs, and their operations. */
-import type { BlockExit } from "./flow.ts";
+import type { BlockExit, ChangeOwnerInput } from "./flow.ts";
 import { operation } from "./operation.ts";
 import type { DefinitionExport, PortableAgentDocument } from "./portable-document.ts";
 
@@ -47,10 +47,17 @@ export interface CapturedAgent extends AgentFields {
 }
 
 /**
- * One saved Agent revision. `execution` is complete or null, never partial: an Agent without
- * execution settings Needs a model and cannot run.
+ * The content of one saved Agent revision. `execution` is complete or null, never partial: an
+ * Agent without execution settings Needs a model and cannot run.
  */
-export type AgentDefinition = CapturedAgent | (AgentFields & { readonly execution: null });
+export type AgentRevisionContent = CapturedAgent | (AgentFields & { readonly execution: null });
+
+/**
+ * A saved Agent: its latest revision and its owning Project, the Factory Project id it belongs to
+ * or null for a global Agent. Ownership belongs to the Agent identity, not to its revisions, so a
+ * Run's captured revisions carry none.
+ */
+export type AgentDefinition = AgentRevisionContent & { readonly projectId: string | null };
 
 export interface AgentEnvironment {
   readonly environmentId: string;
@@ -100,7 +107,8 @@ export interface AgentCapabilities {
   readonly providers: readonly AgentProviderCapability[];
 }
 
-export interface CreateAgentInput {
+/** What every Agent create and save writes as the next revision. */
+interface AgentContentInput {
   readonly name: string;
   readonly prompt: string;
   /** Required: complete settings, or null for an Agent that Needs a model. */
@@ -108,12 +116,25 @@ export interface CreateAgentInput {
   readonly exits: readonly BlockExit[];
 }
 
-export interface UpdateAgentInput extends CreateAgentInput {
+export interface CreateAgentInput extends AgentContentInput {
+  /** The owning Project's Factory id, or null (the default when omitted) for a global Agent. */
+  readonly projectId?: string | null;
+}
+
+/** A save never changes the owning Project. */
+export interface UpdateAgentInput extends AgentContentInput {
   readonly expectedRevision: number;
+  /** The owning Project the client last saw; a save after Change owner moved it is refused. */
+  readonly expectedProjectId: string | null;
 }
 
 export interface DuplicateAgentInput {
   readonly name?: string;
+  /**
+   * The copy's owning Project: a Factory Project id available for new Runs, or null for Global.
+   * Omitted, the copy keeps the source's owning Project, which must then be available.
+   */
+  readonly projectId?: string | null;
 }
 
 /** The Agent operations the Factory facade implements. */
@@ -140,6 +161,12 @@ export const agentOperations = {
   updateAgent: operation<UpdateAgentInput, AgentDefinition>()({
     method: "PUT",
     path: "/api/agents/:id",
+    body: "json",
+  }),
+  /** Change owner; refused while a current Flow could no longer place the Agent afterwards. */
+  changeAgentOwner: operation<ChangeOwnerInput, AgentDefinition>()({
+    method: "PUT",
+    path: "/api/agents/:id/owner",
     body: "json",
   }),
   removeAgent: operation()({ method: "DELETE", path: "/api/agents/:id" }),

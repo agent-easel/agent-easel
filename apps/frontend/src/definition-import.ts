@@ -41,6 +41,8 @@ export interface DefinitionImportSnapshot {
   readonly error: string;
   /** Field-addressed reasons of the last rejection. */
   readonly issues: readonly string[];
+  /** The owning Project every imported definition gets, or null for Global, the default. */
+  readonly target: string | null;
 }
 
 /** A model the review's picker offers: a reporting-capable provider's model in the connected environment. */
@@ -88,6 +90,7 @@ const idle: DefinitionImportSnapshot = {
   committing: false,
   error: "",
   issues: [],
+  target: null,
 };
 
 const UNCERTAIN =
@@ -205,6 +208,10 @@ export function createDefinitionImport(
         },
       }));
     },
+    /** Chooses the import target: a Project available for new Runs, or null for Global. */
+    setTarget(target: string | null) {
+      if (snapshot.review && !snapshot.committing) set({ target });
+    },
     /** Commits every row as reviewed; the result on success, undefined when refused or uncertain. */
     async confirm(): Promise<ImportResult | undefined> {
       const { file, review: reviewed } = snapshot;
@@ -215,6 +222,7 @@ export function createDefinitionImport(
           requestId,
           document: JSON.parse(file.text) as CommitImportInput["document"],
           selections: Object.fromEntries(reviewed.rows.map((row) => [row.key, row.selection])),
+          projectId: snapshot.target,
         };
         const result = await operations.commitImport(input);
         set(idle);

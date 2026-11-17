@@ -19,7 +19,8 @@ function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
 }
 export type StudioSelection =
   | { tab: "flows"; flowId?: string }
-  | { tab: "agents"; agentId?: string };
+  /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
+  | { tab: "agents"; agentId?: string; fromFlow?: string };
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
 
 function searchRecord(value: unknown): Record<string, unknown> {
@@ -36,6 +37,7 @@ function studioSelection(value: unknown): StudioSelection | undefined {
     return {
       tab: "agents",
       ...(typeof selection.agentId === "string" ? { agentId: selection.agentId } : {}),
+      ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
     };
   return undefined;
 }

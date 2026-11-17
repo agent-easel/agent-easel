@@ -2,7 +2,8 @@ import { MutationGate } from "@/client-gate";
 import { Plus, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
-import type { ImportResult } from "@t3-factory/contracts";
+import type { ReactNode } from "react";
+import type { FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { DefinitionImportControl } from "./definition-import-control.tsx";
 
 export const studioRowClass =
@@ -16,6 +17,8 @@ export function StudioListHeader({
   onCreate,
   createLabel,
   onImported,
+  projects,
+  filter,
 }: {
   title: string;
   description: string;
@@ -24,6 +27,10 @@ export function StudioListHeader({
   onCreate: () => void;
   createLabel: string;
   onImported: (result: ImportResult) => void;
+  /** The Project catalog Import offers as targets. */
+  projects: readonly FactoryProject[];
+  /** The owner filter, placed before the search. */
+  filter: ReactNode;
 }) {
   return (
     <header className="flex flex-wrap items-center gap-4">
@@ -31,6 +38,7 @@ export function StudioListHeader({
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
+      {filter}
       <div className="relative w-60">
         <Search
           aria-hidden
@@ -45,7 +53,7 @@ export function StudioListHeader({
           className="bg-muted pl-9"
         />
       </div>
-      <DefinitionImportControl onImported={onImported} />
+      <DefinitionImportControl projects={projects} onImported={onImported} />
       <MutationGate>
         <Button onClick={onCreate}>
           <Plus aria-hidden strokeWidth={1.5} />

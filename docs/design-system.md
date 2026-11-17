@@ -52,7 +52,9 @@ first paint use the baseline until a client receives the presentation.
   links; a selected Run row uses a neutral fill rather than the brand color.
 - Keep status meaning consistent in both modes: cyan for working, indigo for waiting, green for success,
   amber for attention, red for problems and muted neutral for stopped work. Pair color
-  with a label or icon; project icon colors identify projects, not availability. The dot
+  with a label or icon; project icon colors identify projects, not availability. Studio's
+  owner badge and group icon mark an owning Project in brand cyan beside its name and an
+  unavailable one in the attention color with its reason; Global stays neutral. The dot
   on **Follow active** marking unseen Run progress uses the working color.
 - Use Inter for interface text and Geist Mono for keys, exit names and zoom levels.
   Fonts are bundled; rendering must not require network font services.

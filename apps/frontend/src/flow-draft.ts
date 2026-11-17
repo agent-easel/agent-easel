@@ -15,7 +15,7 @@ export type FlowDraftSource = Pick<
 >;
 
 /** The Factory operations one Flow draft uses beyond Studio's; the HTTP client in the app. */
-export type FlowDraftOperations = Pick<typeof api, "validateFlow">;
+export type FlowDraftOperations = Pick<typeof api, "validateFlow" | "getFlow">;
 
 export interface FlowDraftSnapshot extends RevisionedDraftState<FlowDraft, FlowContent> {
   readonly status: "loading" | "failed" | "loaded";
@@ -46,8 +46,8 @@ const contentOf = (flow: FlowDraft): FlowContent => ({
 });
 
 /**
- * The saved revisions of the Agents `graph` places, comparable with a validation answer's; null
- * while Studio holds no Agents.
+ * The saved revisions and owning Projects of the Agents `graph` places, comparable with a
+ * validation answer's; null while Studio holds no Agents.
  */
 const agentStamp = (graph: FlowGraph, agents: readonly AgentDefinition[] | null) =>
   agents ? canonical(flowAgentRevisions(graph, agents)) : null;
@@ -93,12 +93,15 @@ export function createFlowDraft(
     content: opened ? contentOf(opened) : unloaded,
     contentOf,
     list: () => source.getSnapshot().flows,
+    read: (flowId) => operations.getFlow(flowId),
     // Only adoption into a clean draft waits for an interaction; it would replace the graph.
     hold: () => interactions > 0,
     onAdopt() {
       agentsChanged = false;
       forgetCheck();
     },
+    // Readiness judges the draft under the Flow's owner, which the validation answer does not name.
+    onOwnerChange: forgetCheck,
     view(state): FlowDraftSnapshot {
       const loaded = status === "loaded";
       const busy = state.saving || checking;
@@ -133,8 +136,9 @@ export function createFlowDraft(
   /**
    * A shown readiness result stops applying as soon as the Flow's saved revision changes, the
    * Flow is removed, Studio loses synchronization or an Agent the draft places changes, also
-   * while adoption waits for an interaction. A clean draft then shows the saved Flow's
-   * readiness, delivered with those Agents; an unsaved draft waits for another check.
+   * while adoption waits for an interaction (an owner change clears it through `onOwnerChange`).
+   * A clean draft then shows the saved Flow's readiness, delivered with those Agents; an unsaved
+   * draft waits for another check.
    */
   function observe() {
     const next = observed();
@@ -204,11 +208,16 @@ export function createFlowDraft(
     },
     /** Saves the content against the saved revision; a stale revision enters the conflict. */
     async save() {
-      const { saved, content, canSave } = draft.getSnapshot();
+      const { saved, content, canSave, owner } = draft.getSnapshot();
       if (!saved || !canSave) return;
       await draft.save({
         submitted: content,
-        send: () => source.updateFlow(id, { ...content, expectedRevision: saved.revision }),
+        send: () =>
+          source.updateFlow(id, {
+            ...content,
+            expectedRevision: saved.revision,
+            expectedProjectId: owner,
+          }),
         unknownMessage: unknownOutcome,
         fallback: "Could not save Flow.",
       });
@@ -227,15 +236,16 @@ export function createFlowDraft(
     clearRemovalError: draft.clearRemovalError,
     /** Validates the content without saving it. */
     async check() {
-      const { saved, content, removed, busy } = draft.getSnapshot();
+      const { saved, content, removed, busy, owner } = draft.getSnapshot();
       if (!saved || removed || busy) return;
       checking = true;
       const asked = ++readinessRequest;
       draft.report("");
       try {
-        const { agentRevisions, ...answer } = await operations.validateFlow({
+        const { agentRevisions, ...answer } = await operations.validateFlow(id, {
           ...content,
           expectedRevision: saved.revision,
+          expectedProjectId: owner,
         });
         // An Agent change Studio has not delivered yet also makes the answer stale.
         const shown = agentStamp(content.graph, source.getSnapshot().agents.value);
@@ -264,6 +274,8 @@ export function createFlowDraft(
     },
     /** Replaces the local draft with compared `revision` while it is still the one compared. */
     takeLatest: draft.takeLatest,
+    acknowledgeOwner: draft.acknowledgeOwner,
+    ownerChangedHere: draft.ownerChangedHere,
     /**
      * Keeps the local content, unsaved, against compared `revision` for another explicit save,
      * only while that revision is still the one compared; its readiness check no longer applies.

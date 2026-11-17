@@ -3,6 +3,7 @@ import { ShieldAlert, Upload } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentModelOptionValue,
+  FactoryProject,
   ImportResult,
   ImportReviewFlow,
   PortableModelHint,
@@ -32,6 +33,8 @@ import {
 import { ModelOptionField } from "./execution-settings-fields.tsx";
 import { workspaceSummary } from "./flow-workspace-control.tsx";
 import { NeedsModel } from "./needs-model.tsx";
+import { OwnerTargetMenu } from "./studio-owner.tsx";
+import { ownerPicker, studioOwner } from "../studio-definitions.ts";
 
 /**
  * **Import** on a Studio list: choose a `.json` file, review what it creates and confirm. Either
@@ -39,9 +42,12 @@ import { NeedsModel } from "./needs-model.tsx";
  */
 export function DefinitionImportControl({
   size,
+  projects,
   onImported,
 }: {
   size?: "sm";
+  /** The Project catalog offered as import targets. */
+  projects: readonly FactoryProject[];
   onImported: (result: ImportResult) => void;
 }) {
   const { model, state } = useDefinitionImport();
@@ -88,6 +94,7 @@ export function DefinitionImportControl({
               model={model}
               state={state}
               review={state.review}
+              projects={projects}
               onConfirm={() => void confirm()}
             />
           ) : (
@@ -148,14 +155,17 @@ function ImportReviewContent({
   model,
   state,
   review,
+  projects,
   onConfirm,
 }: {
   model: DefinitionImportModel;
   state: DefinitionImportSnapshot;
   review: NonNullable<DefinitionImportSnapshot["review"]>;
+  projects: readonly FactoryProject[];
   onConfirm: () => void;
 }) {
   const { rows, capabilities, flow } = review;
+  const blocked = ownerPicker(state.target, projects).blocked;
   const agentCount = rows.length === 1 ? "one new Agent" : `${rows.length} new Agents`;
   return (
     <>
@@ -169,6 +179,22 @@ function ImportReviewContent({
         </DialogDescription>
       </DialogHeader>
       <div className="grid min-h-0 content-start gap-4 overflow-y-auto">
+        <div className="grid gap-1.5">
+          <OwnerTargetMenu
+            label="Target owner"
+            chosen={state.target}
+            from={null}
+            projects={projects}
+            disabled={state.committing}
+            onChange={model.setTarget}
+            unavailableReason=" — can’t own imported definitions"
+          />
+          <p className="text-2xs tracking-label text-subtle-foreground">
+            {state.target === null
+              ? "Every imported Flow and Agent is created as a global definition."
+              : `Every imported Flow and Agent is created owned by ${studioOwner(state.target, projects).title}.`}
+          </p>
+        </div>
         <Alert variant="attention">
           <ShieldAlert aria-hidden />
           <AlertTitle>Imported instructions run with your T3 capabilities</AlertTitle>
@@ -242,7 +268,7 @@ function ImportReviewContent({
           >
             Cancel
           </Button>
-          <Button type="button" onClick={onConfirm}>
+          <Button type="button" disabled={Boolean(blocked)} onClick={onConfirm}>
             {state.committing ? "Importing…" : "Confirm import"}
           </Button>
         </DialogFooter>

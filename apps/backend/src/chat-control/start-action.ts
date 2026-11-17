@@ -60,7 +60,10 @@ const inputSchema: JSONSchema7 = {
   type: "object",
   properties: {
     projectId: { type: "string", description: "The permitted Project's ID from list_projects." },
-    flowId: { type: "string", description: "The saved Flow's ID from list_flows." },
+    flowId: {
+      type: "string",
+      description: "The saved Flow's ID from list_flows: a global Flow or one this Project owns.",
+    },
     prompt: {
       type: "string",
       description:
@@ -211,7 +214,10 @@ export function startAction(operations: StartOperations) {
     target: (parameters) => (parameters as unknown as StartParameters).projectId,
   };
 
-  /** The permitted, available Project and the ready saved Flow, or why they cannot be used. */
+  /**
+   * The permitted, available Project and a ready saved Flow that is global or owned by that
+   * Project, or why they cannot be used. Acceptance rechecks both through the shared Start.
+   */
   const startTargets = (parameters: StartParameters, scope: ChatToolScope) =>
     Effect.gen(function* (): Effect.fn.Return<
       { readonly project: FactoryProject; readonly flow: FlowDraft } | ChatToolOutcome,
@@ -234,6 +240,11 @@ export function startAction(operations: StartOperations) {
       const flow = yield* operations.getFlow(parameters.flowId);
       if (!flow.ok)
         return refused("flow_not_found", "Factory has no saved Flow with that ID. Use list_flows.");
+      if (flow.value.projectId !== null && flow.value.projectId !== project.id)
+        return refused(
+          "flow_project_mismatch",
+          "That Flow belongs to another Project, so it cannot start in this one. Use a global Flow or a Flow this Project owns from list_flows; do not choose another Project.",
+        );
       if (!flow.value.readiness.ready)
         return refused(
           "flow_not_ready",
@@ -248,7 +259,7 @@ export function startAction(operations: StartOperations) {
   const tool: MutationTool = {
     name: "start_run",
     description:
-      "Propose starting a Factory Run of a saved Flow in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
+      "Propose starting a Factory Run of a saved Flow (global, or owned by that Project) in a permitted Project with the requester's exact task text. Nothing starts now: Factory posts a complete review with a confirmation button only the requester can use, and ends this reply. Resolve the Project and Flow first; ask when text is missing or a target is ambiguous.",
     inputSchema,
     approval: "requester-confirmation",
     propose: (input, scope) =>

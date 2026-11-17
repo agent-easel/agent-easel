@@ -191,6 +191,7 @@ it("Start is refused while a local exit shares a name with an Agent exit, and no
   const conflicting = await f.updateFlow(flow.id, {
     ...flow,
     expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
     graph: { ...flow.graph, blocks: [{ ...worker, localExits: [{ ...escalate, name: "Done" }] }] },
   });
   assert(conflicting.ok);

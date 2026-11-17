@@ -156,17 +156,21 @@ const listProjects = (operations: DiscoveryOperations): ReadTool => ({
 const listFlows = (operations: DiscoveryOperations): ReadTool => ({
   name: "list_flows",
   description:
-    "List Factory's saved global Flows with stable ID, name, workspace setting and readiness. A Flow that is not ready lists the reasons; Flows can share a name, so tell them apart by ID and workspace setting.",
+    "List the saved Flows this thread can start: global Flows (owningProjectId null), which start in any permitted Project, and Flows a permitted Project owns, which start only in that Project. Each has stable ID, owning Project ID from list_projects, name, workspace setting and readiness. A Flow that is not ready lists the reasons; Flows can share a name, so tell them apart by ID, owning Project and workspace setting.",
   inputSchema: pageSchema,
-  execute: (input) =>
+  execute: (input, scope) =>
     Effect.gen(function* () {
       const page = requestedPage(input);
       if (typeof page === "string") return invalid(page);
       const flows = yield* operations.listFlows();
       if (!flows.ok) return unavailable("Flows");
-      const result = paged(flows.value, page);
+      const startable = flows.value.filter(
+        (flow) => flow.projectId === null || scope.projectIds.includes(flow.projectId),
+      );
+      const result = paged(startable, page);
       const entries = result.entries.map((flow: FlowDraft) => ({
         id: flow.id,
+        owningProjectId: flow.projectId,
         name: flow.name,
         workspace: flow.workspace,
         ready: flow.readiness.ready,
@@ -180,7 +184,7 @@ const listFlows = (operations: DiscoveryOperations): ReadTool => ({
           pageCount: result.pageCount,
           flows: entries
             .slice(0, MAX_FACT_HANDLES)
-            .map(({ id, name, ready }) => ({ id, name, ready })),
+            .map(({ id, owningProjectId, name, ready }) => ({ id, owningProjectId, name, ready })),
         },
       };
     }),

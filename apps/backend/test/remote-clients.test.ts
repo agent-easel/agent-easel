@@ -24,7 +24,12 @@ it("concurrent edits from two approved clients keep revision conflicts", async (
   const browser = await server.approved("Browser profile", "browser");
   const created = await server.factory.createFlow({ name: "Shared plan" });
   assert(created.ok);
-  const edit = (name: string) => ({ name, expectedRevision: 1, graph: created.value.graph });
+  const edit = (name: string) => ({
+    name,
+    expectedRevision: 1,
+    expectedProjectId: null,
+    graph: created.value.graph,
+  });
   assert((await laptop.send("PUT", `/api/flows/${created.value.id}`, edit("Laptop edit"))).body.ok);
 
   // Act
@@ -46,6 +51,7 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   const checkout = await server.factory.updateFlow(created.value.id, {
     name: created.value.name,
     expectedRevision: 1,
+    expectedProjectId: null,
     workspace: { mode: "checkout" },
     graph: created.value.graph,
   });
@@ -55,6 +61,7 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   const reply = await laptop.send("PUT", `/api/flows/${created.value.id}`, {
     name: "Laptop edit",
     expectedRevision: 2,
+    expectedProjectId: null,
     graph: created.value.graph,
   });
 
@@ -66,12 +73,12 @@ it("a client saving a Flow without a workspace keeps the saved workspace", async
   });
 });
 
-it("a protocol 15 client, which cannot read Condition blocks, is told to update itself while the current client is served", async (c) => {
+it("a protocol 16 client, which cannot validate a Flow under its owning Project, is told to update itself while the current client is served", async (c) => {
   // Arrange
   const server = await remoteServer(c);
   const current = await server.approved("Laptop");
   assert((await current.send("GET", "/api/flows")).body.ok);
-  const old = server.client("desktop", { protocol: 15, minimum: 15 });
+  const old = server.client("desktop", { protocol: 16, minimum: 16 });
 
   // Act
   const reply = await old.send("GET", "/api/flows");
@@ -88,11 +95,11 @@ const serverUpdate = {
 } as const;
 
 it.for([
-  [14, serverUpdate],
   [15, serverUpdate],
-  [16, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [16, serverUpdate],
+  [17, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which reads and saves Condition blocks, refuses a protocol %i server only when it predates 16",
+  "the current client, which compares each placed Agent's owning Project, refuses a protocol %i server only when it predates 17",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
