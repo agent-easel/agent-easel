@@ -67,6 +67,10 @@ export async function remoteFavicon(
 ): Promise<{ server: Awaited<ReturnType<typeof remoteServer>>; path: string }> {
   const fixture = await faviconProject(context);
   await fixture.factory.close();
-  const server = await remoteServer(context, { home: fixture.harness.processHome, t3: fixture.t3 });
+  const server = await remoteServer(context, {
+    home: fixture.harness.processHome,
+    t3: fixture.t3,
+    git: fixture.harness.git,
+  });
   return { server, path: `/api/projects/${fixture.project.id}/favicon?v=fixture` };
 }

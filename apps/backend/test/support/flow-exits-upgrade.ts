@@ -30,6 +30,9 @@ interface Capture {
   tasks: Value<"listTasks">;
 }
 
+/** Captured same-host Git fields, now on the harness's controlled Git; they held its defaults. */
+const MOVED_ADAPTER_FIELDS = new Set(["defaultBranch", "refs"]);
+
 /**
  * The capture of the last outcome-exit build (source commit cd0d25d), restored with its adapter
  * state. Its Flow has Entry worker -> Review (a Human step with two exits of each feedback flag)
@@ -41,7 +44,7 @@ export async function flowExitsUpgradeData(c: TestContext) {
     h.databasePath,
     "flow-exits-upgrade-data.json",
   );
-  const t3 = await restoreCapturedAdapter(observations, h.processHome);
+  const t3 = await restoreCapturedAdapter(observations, h.processHome, MOVED_ADAPTER_FIELDS);
   return { h, t3, ...expected };
 }
 

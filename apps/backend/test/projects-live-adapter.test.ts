@@ -1,5 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { LiveGitAdapter } from "../src/adapters/live-git.ts";
 import { liveProjectRepositories } from "./support/boundaries-setup.ts";
 
 it("a repository symlink resolves to the existing project", async (context) => {
@@ -54,10 +56,10 @@ it("a deleted repository clone loses project readiness", async (context) => {
 
 it("a worktree default base resolves to the clone's origin default branch", async (context) => {
   // Arrange
-  const { adapter, second } = await liveProjectRepositories(context);
+  const { endpoint, second } = await liveProjectRepositories(context);
 
   // Act
-  const ref = await adapter.resolveBaseRef(second, { kind: "default" });
+  const ref = await new LiveGitAdapter().resolveBaseRef(endpoint, second, { kind: "default" });
 
   // Assert
   expect(ref).toBe("origin/main");
@@ -65,10 +67,10 @@ it("a worktree default base resolves to the clone's origin default branch", asyn
 
 it("a repository without an origin default branch has no worktree default base", async (context) => {
   // Arrange
-  const { adapter, first } = await liveProjectRepositories(context);
+  const { endpoint, first } = await liveProjectRepositories(context);
 
   // Act
-  const ref = await adapter.resolveBaseRef(first, { kind: "default" });
+  const ref = await new LiveGitAdapter().resolveBaseRef(endpoint, first, { kind: "default" });
 
   // Assert
   expect(ref).toBeNull();
@@ -76,13 +78,27 @@ it("a repository without an origin default branch has no worktree default base",
 
 it("a custom worktree ref that names no commit does not resolve", async (context) => {
   // Arrange
-  const { adapter, second } = await liveProjectRepositories(context);
+  const { endpoint, second } = await liveProjectRepositories(context);
 
   // Act
-  const ref = await adapter.resolveBaseRef(second, { kind: "ref", ref: "release/missing" });
+  const ref = await new LiveGitAdapter().resolveBaseRef(endpoint, second, {
+    kind: "ref",
+    ref: "release/missing",
+  });
 
   // Assert
   expect(ref).toBeNull();
+});
+
+it("same-host Git refuses a repository when T3 is not on this computer", async () => {
+  // Arrange
+  const git = new LiveGitAdapter();
+
+  // Act
+  const resolved = git.resolveRepository("https://t3.example.invalid/mcp", tmpdir());
+
+  // Assert
+  await expect(resolved).rejects.toThrow("Existing local repository required.");
 });
 
 it("project recheck preserves distinct projects across live SDK pages", async (context) => {

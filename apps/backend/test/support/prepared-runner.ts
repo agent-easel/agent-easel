@@ -11,6 +11,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
+import { ControlledGit } from "./controlled-git.ts";
 import { ControlledGitHub } from "./controlled-github.ts";
 
 /** Disposable T3 state and harness home for a controlled, approved T3 and a controlled GitHub. */
@@ -78,7 +79,7 @@ export async function prepared(
     ...(discordApiUrl ? { discordApiUrl } : {}),
   });
   c.onTestFinished(() => f.close());
-  return { h, f, t3, github, ...(await readyFlow(f, t3, root, shape)) };
+  return { h, f, t3, git: h.git, github, ...(await readyFlow(f, t3, root, shape)) };
 }
 
 /**
@@ -156,7 +157,13 @@ export async function preparedServer(c: TestContext) {
   const { root, t3, reportingStateDirectory } = await preparedHomes(h.processHome);
   const server = await startServer(
     await loadConfiguration({ FACTORY_HOME: h.processHome, FACTORY_PORT: "0" }),
-    { t3, reportingStateDirectory, uiDirectory: null, connectionRetryMs: 60_000 },
+    {
+      t3,
+      git: new ControlledGit(),
+      reportingStateDirectory,
+      uiDirectory: null,
+      connectionRetryMs: 60_000,
+    },
   );
   c.onTestFinished(() => server.close());
   const mcp = new URL(`http://127.0.0.1:${server.address.port}/mcp`);

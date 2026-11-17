@@ -28,6 +28,7 @@ import {
   type StartPrompt,
 } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
+import type { GitAdapter } from "../adapters/git.ts";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
 import type {
@@ -175,7 +176,7 @@ const workspaceIssue = (code: string, path: string, message: string): WorkspaceC
 });
 /** Resolves a worktree Flow's base against the selected Project's repository on this host. */
 function resolveStartWorkspace(
-  t3: T3Adapter,
+  git: GitAdapter,
   flow: FlowDraft,
   project: FactoryProject,
 ): Effect.Effect<WorkspaceCheck> {
@@ -189,7 +190,7 @@ function resolveStartWorkspace(
         "A new worktree needs T3 on this computer. Choose the project checkout for this Flow.",
       );
     const resolved = yield* Effect.tryPromise({
-      try: () => t3.resolveBaseRef(project.workspaceRoot, workspace.base),
+      try: () => git.resolveBaseRef(project.endpoint, project.workspaceRoot, workspace.base),
       catch: (error) => error,
     }).pipe(Effect.orElseSucceed(() => undefined));
     if (resolved === undefined)
@@ -250,6 +251,7 @@ export function openRunnerStart(
   store: RunStore,
   ops: EffectOperations<FactoryOperations>,
   t3: T3Adapter,
+  git: GitAdapter,
   lifecycle: RunnerLifecycle,
   checkAgent: RunnerOptions["checkAgent"],
   planTitleGeneration: RunnerTitleGeneration["planTitleGeneration"],
@@ -445,7 +447,7 @@ export function openRunnerStart(
         try: () => t3.inspectLaunchSupport(target.project, flow.workspace.mode).catch(() => null),
         catch: (error) => error,
       });
-      const workspace = yield* resolveStartWorkspace(t3, flow, target.project);
+      const workspace = yield* resolveStartWorkspace(git, flow, target.project);
       const attachments = yield* attachmentIssues(t3, target.project, imageCount);
       const issues: ValidationIssue[] = [
         ...attachments,

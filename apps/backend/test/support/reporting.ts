@@ -83,7 +83,7 @@ export async function installedReportingServer(context: TestContext) {
   const { harness, state, home, t3 } = await reportingHomes(context, "claudeAgent");
   const server = await startServer(
     await loadConfiguration({ FACTORY_HOME: harness.processHome, FACTORY_PORT: "0" }),
-    { t3, reportingStateDirectory: state, uiDirectory: null },
+    { t3, git: harness.git, reportingStateDirectory: state, uiDirectory: null },
   );
   context.onTestFinished(() => server.close());
   assert((await server.factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);

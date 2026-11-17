@@ -22,10 +22,10 @@ it("a worktree Start from a missing custom ref is rejected with a Flow workspace
 
 it("a worktree Start without a resolvable default branch is rejected with a Flow workspace issue and launches nothing", async (c) => {
   // Arrange
-  const { f, t3, input, project } = await prepared(c, {
+  const { f, t3, git, input, project } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
-  t3.defaultBranch = null;
+  git.defaultBranch = null;
 
   // Act
   const result = await f.startRun(input);

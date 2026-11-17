@@ -1,6 +1,7 @@
 import { dirname, join } from "node:path";
 import { readFile } from "node:fs/promises";
 import { openFactory } from "../../src/index.ts";
+import { ControlledGit } from "./controlled-git.ts";
 import { ControlledGitHub } from "./controlled-github.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 
@@ -30,6 +31,7 @@ const f = await openFactory({
   databasePath: databasePath!,
   reportingStateDirectory: join(dirname(databasePath!), "reporting-state"),
   t3,
+  git: new ControlledGit(),
   github,
   connectionRetryMs: 60_000,
 });

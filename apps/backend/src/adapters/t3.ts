@@ -3,7 +3,6 @@ import type {
   AgentProviderCapability,
   ConnectionState,
   FlowWorkspace,
-  FlowWorkspaceBase,
   ProjectIcon,
   RunPullRequest,
   T3Contract,
@@ -78,9 +77,6 @@ export interface T3Adapter {
   /** One thread read: active/latest run, recent runs and the pending native request count. */
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
   listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]>;
-  resolveRepository(path: string): Promise<string>;
-  /** Same-host Git: the ref a new worktree starts from, or null when the repository lacks it. */
-  resolveBaseRef(workspaceRoot: string, base: FlowWorkspaceBase): Promise<string | null>;
   createProject(target: T3ProjectTarget): Promise<T3Project>;
   inspect(target: T3Endpoint): Promise<T3Inspection>;
   /** Starts backend-host approval; returns without waiting for the human. */

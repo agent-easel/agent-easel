@@ -1,6 +1,6 @@
 import { chmodSync, mkdirSync, readdirSync } from "node:fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { stat, realpath } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { isAbsolute, basename, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -51,12 +51,7 @@ import type {
 import { isReportingDriver } from "../reporting-drivers.ts";
 import { discoverLaunches, threadIdentityRead } from "../launch-discovery.ts";
 import { LaunchRejected } from "./t3.ts";
-import type {
-  AgentEnvironment,
-  FlowWorkspace,
-  FlowWorkspaceBase,
-  T3Contract,
-} from "@t3-factory/contracts";
+import type { AgentEnvironment, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
@@ -1313,51 +1308,6 @@ export class LiveT3Adapter implements T3Adapter {
     )
       throw new Error("Invalid project page");
     return { projects: body.projects, nextCursor: body.nextCursor as number | null };
-  }
-  async resolveRepository(path: string): Promise<string> {
-    if (!this.endpoint || !isLocalEndpoint(this.endpoint) || !isAbsolute(path))
-      throw new Error("Existing local repository required.");
-    const canonical = await realpath(path);
-    const git = promisify(execFile);
-    const bare = await git("git", ["-C", canonical, "rev-parse", "--is-bare-repository"], {
-      timeout: 10_000,
-    });
-    if (bare.stdout.trim() !== "false") throw new Error("Existing checkout required.");
-    const result = await git(
-      "git",
-      ["-c", "core.quotePath=false", "-C", canonical, "worktree", "list", "--porcelain"],
-      { timeout: 10_000, maxBuffer: 1_048_576 },
-    );
-    const root = result.stdout.split("\n")[0];
-    if (!root?.startsWith("worktree ")) throw new Error("Existing worktree required.");
-    // An execution worktree belongs to its source project, rather than becoming another project.
-    return realpath(root.slice(9));
-  }
-  async resolveBaseRef(workspaceRoot: string, base: FlowWorkspaceBase): Promise<string | null> {
-    if (!this.endpoint || !isLocalEndpoint(this.endpoint) || !isAbsolute(workspaceRoot))
-      throw new Error("Existing local repository required.");
-    // Exit status 1 is Git's answer for an absent ref; any other failure is not an answer.
-    const git = (args: string[]) =>
-      promisify(execFile)("git", ["-C", workspaceRoot, ...args], { timeout: 10_000 }).then(
-        (result) => result.stdout.trim(),
-        (error: { code?: unknown }) => {
-          if (error.code === 1) return null;
-          throw error;
-        },
-      );
-    const ref =
-      base.kind === "ref"
-        ? base.ref
-        : await git(["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
-    if (!ref) return null;
-    const commit = await git([
-      "rev-parse",
-      "--verify",
-      "--quiet",
-      "--end-of-options",
-      `${ref}^{commit}`,
-    ]);
-    return commit ? ref : null;
   }
   async createProject(target: T3ProjectTarget): Promise<T3Project> {
     return this.projectSession(target.endpoint, async (client) => {

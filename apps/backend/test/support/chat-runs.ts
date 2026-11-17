@@ -67,6 +67,7 @@ export async function remoteRunConversation(c: TestContext) {
   const server = await remoteServer(c, {
     home: fixture.h.processHome,
     t3: fixture.t3,
+    git: fixture.git,
     reportingStateDirectory: join(fixture.h.processHome, "reporting-state"),
     discordApiUrl: worlds.discord.apiUrl,
     connectionRetryMs: 60_000,

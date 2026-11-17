@@ -16,6 +16,7 @@ import * as RuntimeSetup from "./runtime-setup.ts";
 import * as ReportingInstaller from "./reporting-installation.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
+import type { GitAdapter } from "./adapters/git.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
 import type { acquireRunnerOwner } from "./runner-owner.ts";
 import { makeRunner } from "./runner/runner.ts";
@@ -89,6 +90,7 @@ export const makeFactoryService = (
   owner: Awaited<ReturnType<typeof acquireRunnerOwner>>,
   t3: T3Adapter,
   github: GitHubAdapter,
+  git: GitAdapter,
   credentialsDirectory: string,
 ) =>
   Effect.gen(function* () {
@@ -97,7 +99,7 @@ export const makeFactoryService = (
     const sql = yield* SqlClient.SqlClient;
     const connection = yield* makeConnection(t3, intervalMs, changes);
     const appearance = yield* makeAppearance(t3, connection.getConnection, intervalMs, changes);
-    const projects = yield* makeProjects(t3, connection, intervalMs, changes);
+    const projects = yield* makeProjects(t3, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
     const definitions = yield* makeDefinitions(
       t3,
@@ -143,6 +145,7 @@ export const makeFactoryService = (
           getAgentCapabilities: definitions.getAgentCapabilities,
         },
         t3,
+        git,
       ),
     );
     const setup = Context.get(setupContext, RuntimeSetup.RuntimeSetup);
@@ -344,6 +347,7 @@ export const makeFactoryService = (
     runner = yield* makeRunner(
       factory,
       t3,
+      git,
       owner,
       intervalMs,
       (projectId, agent) => setup.recheckAgent(projectId, agent),

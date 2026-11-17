@@ -19,6 +19,7 @@ import type {
 } from "@t3-factory/contracts";
 import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
+import type { GitAdapter } from "./adapters/git.ts";
 import type { T3Adapter } from "./adapters/t3.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
@@ -151,6 +152,7 @@ const openRuntimeSetup = Effect.fn(function* (
     >
   >,
   t3: T3Adapter,
+  git: GitAdapter,
 ) {
   const semaphore = yield* Semaphore.make(1);
   let closed = false;
@@ -194,7 +196,7 @@ const openRuntimeSetup = Effect.fn(function* (
       );
     const agent = { ...a.value, execution };
     const driver = validatedHarness(context, agent, readyCapabilities(cap));
-    const root = yield* boundary(() => t3.resolveRepository(p.workspaceRoot));
+    const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
     return { c: connection, a: agent, driver };
   });

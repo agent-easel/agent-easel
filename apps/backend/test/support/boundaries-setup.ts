@@ -5,6 +5,7 @@ import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
+import { LiveGitAdapter } from "../../src/adapters/live-git.ts";
 import { LiveT3Adapter } from "../../src/index.ts";
 import type { Factory, FactoryOptions } from "../../src/index.ts";
 import type { T3Connection } from "@t3-factory/contracts";
@@ -74,7 +75,11 @@ const projectValue = <A>(result: { ok: true; value: A } | { ok: false; error: un
 };
 
 export async function liveProjectRepositories(context: TestContext) {
-  const { harness, factory, adapter } = await authorizedLiveOAuth(context, { projects: true });
+  const { harness, factory, endpoint } = await authorizedLiveOAuth(
+    context,
+    { projects: true },
+    { open: { git: new LiveGitAdapter() } },
+  );
   const root = await realpath(dirname(harness.databasePath));
   const first = join(root, "first");
   const second = join(root, "second");
@@ -103,7 +108,7 @@ export async function liveProjectRepositories(context: TestContext) {
   const worktree = join(root, "execution");
   await git("git", ["-C", first, "worktree", "add", "-b", "execution", worktree]);
 
-  return { factory, adapter, root, first, second, p, alias, worktree };
+  return { factory, endpoint, root, first, second, p, alias, worktree };
 }
 
 export const reportReadSchema = {

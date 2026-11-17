@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
+import type { GitAdapter } from "../adapters/git.ts";
 import type { T3Adapter } from "../adapters/t3.ts";
 import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
@@ -29,6 +30,7 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
   t3: T3Adapter,
+  git: GitAdapter,
   owner: { token: string },
   intervalMs: number,
   checkAgent: RunnerOptions["checkAgent"],
@@ -78,6 +80,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     store,
     ops,
     t3,
+    git,
     lifecycle,
     checkAgent,
     titles.planTitleGeneration,

@@ -14,6 +14,7 @@ import type {
   ValidationIssue,
 } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
+import type { GitAdapter } from "./adapters/git.ts";
 import type { T3Adapter, T3Project } from "./adapters/t3.ts";
 import { loadProjectFavicon, projectFaviconUrl } from "./project-favicon.ts";
 import { failure as operationFailure } from "./result.ts";
@@ -69,6 +70,7 @@ const failure = (message: string): Result<never> =>
 
 export const makeProjects = (
   t3: T3Adapter,
+  git: GitAdapter,
   connection: {
     getConnection(): Effect.Effect<Result<T3Connection>, unknown>;
     recheckConnection(): Effect.Effect<Result<T3Connection>, unknown>;
@@ -196,7 +198,7 @@ export const makeProjects = (
           "Repository could not be added or its outcome is uncertain. Recheck projects before trying again; manage paths in T3.",
         );
       return yield* Effect.gen(function* () {
-        const root = yield* Effect.tryPromise(() => t3.resolveRepository(path));
+        const root = yield* Effect.tryPromise(() => git.resolveRepository(c.endpoint, path));
         const existing = listing.value.projects.filter(
           (p) =>
             p.endpoint === c.endpoint &&

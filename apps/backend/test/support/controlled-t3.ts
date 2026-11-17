@@ -1,4 +1,4 @@
-import type { AgentEnvironment, FlowWorkspace, FlowWorkspaceBase } from "@t3-factory/contracts";
+import type { AgentEnvironment, FlowWorkspace } from "@t3-factory/contracts";
 import { LaunchRejected } from "../../src/adapters/t3.ts";
 import { isReportingDriver } from "../../src/reporting-drivers.ts";
 import { ControlledAppearance } from "./controlled-appearance.ts";
@@ -355,15 +355,6 @@ export class ControlledT3 implements T3Adapter {
   async listProjects(_target: T3EnvironmentTarget) {
     if (!this.available || !this.authorized || !this.compatible) throw new Error("Unavailable");
     return this.projects;
-  }
-  async resolveRepository(path: string) {
-    return path;
-  }
-  defaultBranch: string | null = "origin/main";
-  readonly refs = new Set(["origin/main"]);
-  async resolveBaseRef(_workspaceRoot: string, base: FlowWorkspaceBase) {
-    if (base.kind === "default") return this.defaultBranch;
-    return this.refs.has(base.ref) ? base.ref : null;
   }
   async createProject(target: T3ProjectTarget) {
     await this.listProjects({

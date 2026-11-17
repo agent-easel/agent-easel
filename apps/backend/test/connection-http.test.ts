@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { loadConfiguration } from "../src/config.ts";
 import { startServer } from "../src/server.ts";
 import { hostStatus } from "./support/boundaries-setup.ts";
+import { ControlledGit } from "./support/controlled-git.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
 
 async function startConnectionServer(c: TestContext, t3: ControlledT3) {
@@ -12,7 +13,7 @@ async function startConnectionServer(c: TestContext, t3: ControlledT3) {
   c.onTestFinished(() => rm(directory, { recursive: true, force: true }));
   const server = await startServer(
     await loadConfiguration({ FACTORY_HOME: directory, FACTORY_PORT: "0" }),
-    { t3, uiDirectory: null },
+    { t3, git: new ControlledGit(), uiDirectory: null },
   );
   c.onTestFinished(() => server.close());
   return { server, base: `http://127.0.0.1:${server.address.port}` };
@@ -140,7 +141,7 @@ it("non-loopback binding accepts a configured tailnet DNS host", async (c) => {
       FACTORY_PORT: "0",
       FACTORY_ALLOWED_HOSTS: "factory.tail.example, factory.lan",
     }),
-    { t3: new ControlledT3(), uiDirectory: null },
+    { t3: new ControlledT3(), git: new ControlledGit(), uiDirectory: null },
   );
   c.onTestFinished(() => server.close());
   const base = `http://127.0.0.1:${server.address.port}/api/connection`;
@@ -163,7 +164,7 @@ it("non-loopback binding rejects unconfigured DNS hosts", async (c) => {
       FACTORY_PORT: "0",
       FACTORY_ALLOWED_HOSTS: "factory.tail.example, factory.lan",
     }),
-    { t3: new ControlledT3(), uiDirectory: null },
+    { t3: new ControlledT3(), git: new ControlledGit(), uiDirectory: null },
   );
   c.onTestFinished(() => server.close());
   const base = `http://127.0.0.1:${server.address.port}/api/connection`;

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import type { ControlledGitHub } from "../../../apps/backend/test/support/controlled-github.ts";
+import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
 import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
@@ -41,6 +42,7 @@ export async function startHost(
     { ...config, port: 0 },
     {
       t3,
+      git: new ControlledGit(),
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       ...doubles,
