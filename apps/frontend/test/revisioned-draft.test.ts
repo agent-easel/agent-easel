@@ -21,6 +21,7 @@ import {
   failedDelete,
   ownerChangedElsewhere,
   pendingSave,
+  publishedWhen,
   removedElsewhere,
   savedElsewhere,
 } from "./support/agent-editor.ts";
@@ -963,6 +964,49 @@ it("after a stale-owner refusal, a queued delivery read before the refusing move
     owner: null,
     ownerChange: { status: "waiting" },
     canSave: false,
+  });
+});
+
+it("after a stale-owner refusal whose read fails, a queued delivery read before the refusing move keeps waiting", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.moveElsewhere("northwind");
+  const queued = setup.factory.moveElsewhere(null);
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+
+  // Act
+  deliver(setup, [queued]);
+
+  // Assert
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    content: { name: "Edited" },
+    owner: null,
+    ownerChange: { status: "waiting" },
+    canSave: false,
+  });
+});
+
+it("after a stale-owner refusal whose read failed, the next delivery reads again and the owner moved back lets the edits save", async () => {
+  // Arrange
+  const setup = editedAgent();
+  setup.factory.getAgent.mockRejectedValue(new Error("Factory could not read the Agent."));
+  setup.factory.moveElsewhere("northwind");
+  await setup.draft.save();
+  setup.factory.getAgent.mockImplementation(async () => setup.factory.latest());
+  setup.factory.moveElsewhere(null);
+  const released = publishedWhen(setup, (snapshot) => snapshot.ownerChange.status === "none");
+
+  // Act
+  echoed(setup);
+
+  // Assert
+  expect(await released).toMatchObject({
+    content: { name: "Edited" },
+    dirty: true,
+    owner: null,
+    canSave: true,
   });
 });
 

@@ -106,6 +106,21 @@ export function echoed(setup: AgentEditor) {
   deliver(setup, [setup.factory.latest()]);
 }
 
+/** Resolves with the draft's snapshot once a published one satisfies `done`. */
+export function publishedWhen(
+  setup: AgentEditor,
+  done: (snapshot: ReturnType<AgentEditor["draft"]["getSnapshot"]>) => boolean,
+) {
+  return new Promise<ReturnType<AgentEditor["draft"]["getSnapshot"]>>((resolve) => {
+    const stop = setup.draft.subscribe(() => {
+      const snapshot = setup.draft.getSnapshot();
+      if (!done(snapshot)) return;
+      stop();
+      resolve(snapshot);
+    });
+  });
+}
+
 /** An opened Agent with an unsaved name. */
 export function editedAgent() {
   const setup = agentDraft();

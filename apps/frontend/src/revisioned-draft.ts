@@ -255,22 +255,34 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       waitingSince = unknownBoundary;
     } else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
   }
+  /** A read bounding a stale-owner refusal is in flight. */
+  let boundingRefusal = false;
   /**
    * Reads the definition after a stale-owner refusal. The read follows the refusal, so it holds the
    * refusing state or a later one: the owner already back to the acknowledged one releases the
-   * wait, and otherwise only a state later than the one read can. Without a read, the newest state
-   * followed before the refusal is the best boundary there is.
+   * wait, and otherwise only a state later than the one read can. A failed read proves nothing, so
+   * the boundary stays unknown and Studio's next delivery reads again; a delivery naming another
+   * owner still asks for acknowledgement meanwhile.
    */
-  async function boundRefusal(definition: D) {
+  async function boundRefusal(id: string) {
+    if (boundingRefusal) return;
+    boundingRefusal = true;
     try {
-      const current = await read(definition.id);
+      const current = await read(id);
       if (ownerChange.status !== "waiting" || waitingSince !== unknownBoundary) return;
       noteOwnerState(current.updatedAt);
       if (current.projectId === acknowledgedOwner) ownerChange = noOwnerChange;
       else waitingSince = current.updatedAt;
     } catch {
-      if (waitingSince === unknownBoundary) waitingSince = ownerSeenAt;
+      // Unbounded: no state can show the owner moved back until a read succeeds.
+    } finally {
+      boundingRefusal = false;
     }
+  }
+  /** Reads again for a delivery that arrived while a refusal's boundary is still unknown. */
+  async function rebound(id: string) {
+    await boundRefusal(id);
+    publish();
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */
   function noteAbsence() {
@@ -323,7 +335,9 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     showOwner(latest.projectId);
     if (owner === acknowledgedOwner) {
       // A state written after a stale-owner refusal shows the owner moved back, so saving resumes.
-      const movedBack = ownerChange.status === "waiting" && latest.updatedAt > waitingSince;
+      const waiting = ownerChange.status === "waiting";
+      if (waiting && waitingSince === unknownBoundary) void rebound(latest.id);
+      const movedBack = waiting && latest.updatedAt > waitingSince;
       if (ownerChange.status !== "changed" && !movedBack) return owner !== shown;
       ownerChange = noOwnerChange;
       return true;
@@ -433,7 +447,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         if (removed) return undefined;
         if (outcome === "unknown") showError(request.unknownMessage);
         else refused(cause, request.fallback);
-        if (saved && cause instanceof ApiError && isStaleOwner(cause)) await boundRefusal(saved);
+        if (saved && cause instanceof ApiError && isStaleOwner(cause)) await boundRefusal(saved.id);
         return undefined;
       } finally {
         apply();
