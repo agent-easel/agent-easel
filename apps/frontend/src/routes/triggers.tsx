@@ -31,10 +31,16 @@ import {
 } from "../components/studio-triggers/trigger-actions.ts";
 import { useTriggerReadiness } from "../components/studio-triggers/use-trigger-readiness.ts";
 import {
+  TriggerReviewDialog,
+  type TriggerReview,
+} from "../components/studio-triggers/trigger-review-dialog.tsx";
+import {
+  reviewSummary,
   scheduleText,
   triggerRoute,
   type TriggerNames,
 } from "../components/studio-triggers/trigger-text.ts";
+import { widensAdmission } from "../trigger-review.ts";
 
 type TriggersSelection = Extract<StudioSelection, { tab: "triggers" }>;
 
@@ -206,12 +212,48 @@ function OpenedTriggerEditor({
     reportDraft,
   );
   const shown = live ?? state.saved;
+  const [review, setReview] = useState<TriggerReview | null>(null);
+  const pending = shown ? actions.state.pending.get(shown.id) : undefined;
   async function create(enable: boolean) {
     const saved = await draft.save();
+    setReview(null);
     if (!saved || !active.current) return;
     onCreated(saved);
-    if (enable) await actions.setEnabled(saved, true);
+    if (enable) await actions.enableAndCheck(saved);
     void openStudio({ tab: "triggers", triggerId: saved.id });
+  }
+  async function applyAndCheck() {
+    const saved = await draft.save();
+    setReview(null);
+    if (saved) await actions.run(saved);
+  }
+  /** Opens the review of what the draft's settings would start, as `confirmLabel` commits them. */
+  function reviewDraft(confirmLabel: TriggerReview["confirmLabel"]) {
+    const proposal = draft.proposal();
+    if (!proposal || "error" in state.query) return undefined;
+    const saved = state.saved;
+    const { input } = proposal;
+    const reviewed = {
+      summary: reviewSummary(input, state.content.repository?.nameWithOwner ?? "", names),
+      query: input.github.query ?? "",
+      readyLabel: state.query.readyLabel,
+      confirmLabel,
+    };
+    if (proposal.kind === "create")
+      return setReview({
+        ...reviewed,
+        title: `Enable “${input.name}”?`,
+        load: () => definitions.previewNewTrigger(proposal.input),
+        saveDisabled: () => void create(false),
+      });
+    // Harmless edits, and any edit of a Trigger that is off, save without a review.
+    if (!saved || !shown?.enabled || !widensAdmission(saved, proposal.input))
+      return void draft.save();
+    setReview({
+      ...reviewed,
+      title: `Apply changes to “${input.name}”?`,
+      load: () => definitions.previewTrigger(proposal.id, proposal.input),
+    });
   }
   return (
     <main className="grid max-w-206 content-start px-8 pt-6 pb-8 max-sm:px-4">
@@ -245,11 +287,17 @@ function OpenedTriggerEditor({
           creating={!trigger}
           state={state}
           readiness={readiness}
-          onCreate={(enable) => void create(enable)}
-          onSave={() => void draft.save()}
+          onSaveDisabled={() => void create(false)}
+          onReview={() => reviewDraft(trigger ? "Apply and check" : "Enable and check")}
           onCancel={() => void openStudio({ tab: "triggers" })}
         />
       </SettingsPage>
+      <TriggerReviewDialog
+        review={review}
+        busy={state.saving || pending === "enable" || pending === "run"}
+        onCancel={() => setReview(null)}
+        onConfirm={() => void (trigger ? applyAndCheck() : create(true))}
+      />
     </main>
   );
 }
@@ -366,15 +414,16 @@ function EditorFooter({
   creating,
   state,
   readiness,
-  onCreate,
-  onSave,
+  onSaveDisabled,
+  onReview,
   onCancel,
 }: {
   creating: boolean;
   state: TriggerDraftSnapshot;
   readiness: ReadinessRead;
-  onCreate: (enable: boolean) => void;
-  onSave: () => void;
+  onSaveDisabled: () => void;
+  /** Saves, or first reviews what the settings would start when they can widen it. */
+  onReview: () => void;
   onCancel: () => void;
 }) {
   const busy = !state.canSave;
@@ -383,26 +432,30 @@ function EditorFooter({
     return (
       <footer className="flex flex-wrap items-center gap-2">
         <p className="min-w-48 flex-1 text-2xs leading-tight tracking-label text-subtle-foreground">
-          Nothing starts until the Trigger is turned on.
+          Nothing starts until you review the issues that would start.
         </p>
         <MutationGate>
-          <Button variant="outline" disabled={busy} onClick={() => onCreate(false)}>
+          <Button variant="outline" disabled={busy} onClick={onSaveDisabled}>
             {state.saving ? "Saving…" : "Save disabled"}
           </Button>
-          <Button disabled={busy || blocked} onClick={() => onCreate(true)}>
-            Save and enable
+          <Button disabled={busy || blocked} onClick={onReview}>
+            Review and enable
           </Button>
         </MutationGate>
       </footer>
     );
   }
   return (
-    <footer className="flex items-center justify-end gap-2">
+    <footer className="flex flex-wrap items-center gap-2">
+      <p className="min-w-48 flex-1 text-2xs leading-tight tracking-label text-subtle-foreground">
+        Changes that widen what starts (repository, label, filter, Flow, higher limit) are reviewed
+        before saving.
+      </p>
       <Button variant="outline" onClick={onCancel}>
         Cancel
       </Button>
       <MutationGate>
-        <Button disabled={busy || !state.dirty} onClick={onSave}>
+        <Button disabled={busy || !state.dirty} onClick={onReview}>
           {state.saving ? "Saving…" : "Save"}
         </Button>
       </MutationGate>

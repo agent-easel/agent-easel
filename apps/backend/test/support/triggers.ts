@@ -18,7 +18,7 @@ import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
 import { prepared, preparedService } from "./prepared-runner.ts";
-import { triggerEnabled } from "./scenarios.ts";
+import { triggerEnabled, triggerSaved } from "./scenarios.ts";
 
 /** The repository the prepared Project's folder names on GitHub. */
 export const atlasRepository: GitHubRepository = {
@@ -118,6 +118,16 @@ type TriggerSettings = Partial<Pick<CreateTriggerInput, "maxActiveRuns" | "sched
 export async function checkingWorld(c: TestContext, settings: TriggerSettings = {}) {
   const world = await triggerWorld(c);
   const trigger = await triggerEnabled(world.f, { ...world.triggerInput, ...settings });
+  return { ...world, trigger, readyIssue: readyIssues(world.github) };
+}
+
+/**
+ * A saved GitHub Issues Trigger that is still disabled, as its author reviews it before enabling.
+ * `readyIssue` opens an issue in its repository carrying the ready label.
+ */
+export async function reviewingWorld(c: TestContext, settings: TriggerSettings = {}) {
+  const world = await triggerWorld(c);
+  const trigger = await triggerSaved(world.f, { ...world.triggerInput, ...settings });
   return { ...world, trigger, readyIssue: readyIssues(world.github) };
 }
 

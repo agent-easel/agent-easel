@@ -48,6 +48,8 @@ export function studioFactory(): Operations {
     updateTrigger: vi.fn<StudioDefinitionsOperations["updateTrigger"]>(),
     setTriggerEnabled: vi.fn<StudioDefinitionsOperations["setTriggerEnabled"]>(),
     runTrigger: vi.fn<StudioDefinitionsOperations["runTrigger"]>(),
+    previewNewTrigger: vi.fn<StudioDefinitionsOperations["previewNewTrigger"]>(),
+    previewTrigger: vi.fn<StudioDefinitionsOperations["previewTrigger"]>(),
     removeTrigger: vi.fn<StudioDefinitionsOperations["removeTrigger"]>(async () => undefined),
   };
 }

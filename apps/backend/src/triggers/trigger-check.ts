@@ -4,12 +4,15 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import type {
   FactoryOperations,
   FactoryProject,
+  GitHubIssuesSettings,
   OperationError,
   Result,
   RunDetail,
   RunOrigin,
   TriggerDefinition,
   TriggerMissedIssue,
+  TriggerPreviewIssue,
+  TriggerRepository,
 } from "@t3-factory/contracts";
 import {
   gitHubRepairGuidance,
@@ -17,7 +20,7 @@ import {
   type GitHubFailure,
   type GitHubIssue,
   type GitHubLabelState,
-  type GitHubRepositoryIdentity,
+  type GitHubRepository,
 } from "../adapters/github.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
@@ -53,11 +56,46 @@ export interface TriggerCheckDeps {
   readonly startTextRun: TriggerStart;
 }
 
+/**
+ * What a check reads its settings from: a saved Trigger, or proposed settings to preview. Without
+ * an id nothing is guarded yet and no Run counts against the limit.
+ */
+export interface AdmissionSubject {
+  readonly id: string | null;
+  readonly projectId: string;
+  readonly flowId: string;
+  readonly maxActiveRuns: number;
+  readonly github: Pick<GitHubIssuesSettings, "query" | "readyLabel"> & {
+    readonly repository: Pick<TriggerRepository, "nodeId">;
+  };
+}
+
+/** A preview's issues, or the shared problem, and the repository GitHub answered with. */
+interface TriggerPlanPreview {
+  readonly repository: GitHubRepository | null;
+  readonly issues: readonly TriggerPreviewIssue[];
+  readonly problem: Problem | null;
+}
+
+type AdmissionGuard = { readonly issueNodeId: string; readonly labellingEventId: string | null };
+
 /** A matching issue the check may start, with the labelling its guard will record. */
 interface Candidate {
   readonly issue: GitHubIssue;
   readonly labellingEventId: string | null;
 }
+
+/** Everything a check decides before it writes, or the shared problem that stops it. */
+type AdmissionPlan =
+  | {
+      readonly ok: true;
+      readonly repository: GitHubRepository;
+      readonly candidates: readonly Candidate[];
+      /** Guards whose ready label is confirmed gone. */
+      readonly released: readonly string[];
+      readonly free: number;
+    }
+  | { readonly ok: false; readonly problem: Problem };
 
 /**
  * How one admission ended: `full` when no Run slot was free after all, `stopped` when the Trigger
@@ -272,41 +310,39 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
     });
 
   /**
-   * Settles guards against the ready label's state and returns the issues to admit: matching,
-   * still labelled, and never admitted for their latest labelling. A guard is released only when
-   * the label is confirmed gone; an issue that merely left the query keeps it.
+   * The issues a check would admit: matching, still labelled, and never admitted for their latest
+   * labelling, oldest first. Also names the guards to release because their label is confirmed
+   * gone; an issue that merely left the query keeps its guard.
    */
   const candidatesOf = (
-    trigger: TriggerDefinition,
+    guards: readonly AdmissionGuard[],
     matching: readonly GitHubIssue[],
     states: ReadonlyMap<string, GitHubLabelState>,
-  ) =>
-    Effect.gen(function* () {
-      const guards = yield* readTriggerAdmissions(sql, trigger.id);
-      yield* deleteAdmissions(
-        sql,
-        trigger.id,
-        guards
-          .filter((guard) => !states.get(guard.issueNodeId)?.labelled)
-          .map((guard) => guard.issueNodeId),
-      );
-      const admitted = new Map(guards.map((guard) => [guard.issueNodeId, guard.labellingEventId]));
-      return [...matching].sort(byAge).flatMap((issue): Candidate[] => {
-        const state = states.get(issue.nodeId);
-        if (!state?.labelled) return [];
-        const labellingEventId = state.latestLabelling?.eventId ?? null;
-        const guarded =
-          admitted.has(issue.nodeId) && admitted.get(issue.nodeId) === labellingEventId;
-        return guarded ? [] : [{ issue, labellingEventId }];
-      });
+  ) => {
+    const admitted = new Map(guards.map((guard) => [guard.issueNodeId, guard.labellingEventId]));
+    const candidates = [...matching].sort(byAge).flatMap((issue): Candidate[] => {
+      const state = states.get(issue.nodeId);
+      if (!state?.labelled) return [];
+      const labellingEventId = state.latestLabelling?.eventId ?? null;
+      const guarded = admitted.has(issue.nodeId) && admitted.get(issue.nodeId) === labellingEventId;
+      return guarded ? [] : [{ issue, labellingEventId }];
     });
+    const released = guards
+      .filter((guard) => !states.get(guard.issueNodeId)?.labelled)
+      .map((guard) => guard.issueNodeId);
+    return { candidates, released };
+  };
 
-  /** What GitHub answers for the Trigger's repository, or the shared problem that stops the check. */
-  const readGitHub = (trigger: TriggerDefinition, project: FactoryProject) =>
+  /** What GitHub answers for the subject's repository, or the shared problem that stops the check. */
+  const readGitHub = (
+    subject: AdmissionSubject,
+    project: FactoryProject,
+    guards: readonly AdmissionGuard[],
+  ) =>
     Effect.gen(function* (): Effect.fn.Return<
       | {
           readonly ok: true;
-          readonly repository: GitHubRepositoryIdentity;
+          readonly repository: GitHubRepository;
           readonly matching: readonly GitHubIssue[];
           readonly states: ReadonlyMap<string, GitHubLabelState>;
         }
@@ -315,7 +351,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
     > {
       const read = yield* Effect.promise(() => github.repository(project.workspaceRoot));
       if (!read.ok) return { ok: false, problem: gitHubFailed(read.failure) };
-      if (read.value.nodeId !== trigger.github.repository.nodeId)
+      if (read.value.nodeId !== subject.github.repository.nodeId)
         return {
           ok: false,
           problem: gitHubFailed({
@@ -325,33 +361,35 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
         };
       const repository = read.value;
       const matching = yield* Effect.promise(() =>
-        github.openIssues(repository, trigger.github.query),
+        github.openIssues(repository, subject.github.query),
       );
       if (!matching.ok) return { ok: false, problem: gitHubFailed(matching.failure) };
-      const guarded = (yield* readTriggerAdmissions(sql, trigger.id)).map(
-        (guard) => guard.issueNodeId,
-      );
-      const ids = [...new Set([...matching.value.map((issue) => issue.nodeId), ...guarded])];
+      const ids = [
+        ...new Set([
+          ...matching.value.map((issue) => issue.nodeId),
+          ...guards.map((guard) => guard.issueNodeId),
+        ]),
+      ];
       const states =
         ids.length === 0
           ? { ok: true as const, value: new Map<string, GitHubLabelState>() }
           : yield* Effect.promise(() =>
-              github.labelStates(repository, ids, trigger.github.readyLabel),
+              github.labelStates(repository, ids, subject.github.readyLabel),
             );
       if (!states.ok) return { ok: false, problem: gitHubFailed(states.failure) };
       return { ok: true, repository, matching: matching.value, states: states.value };
     });
 
   /** The Project and Flow every Start needs; a problem here would refuse every issue. */
-  const sharedBlocker = (trigger: TriggerDefinition) =>
+  const sharedBlocker = (subject: AdmissionSubject) =>
     Effect.gen(function* (): Effect.fn.Return<
       { readonly project: FactoryProject } | { readonly problem: Problem },
       unknown
     > {
-      const project = yield* deps.hostLocalProject(trigger.projectId);
+      const project = yield* deps.hostLocalProject(subject.projectId);
       if (!project.ok)
         return { problem: { code: "trigger_project", message: project.error.message } };
-      const flow = yield* deps.getFlow(trigger.flowId);
+      const flow = yield* deps.getFlow(subject.flowId);
       if (!flow.ok)
         return {
           problem: {
@@ -370,23 +408,59 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return { project: project.value };
     });
 
+  /**
+   * The read half of a check, shared by checks and previews: everything a check decides before it
+   * writes, from the same reads. It writes nothing.
+   */
+  const admissionPlan = (subject: AdmissionSubject) =>
+    Effect.gen(function* (): Effect.fn.Return<AdmissionPlan, unknown> {
+      const shared = yield* sharedBlocker(subject);
+      if ("problem" in shared) return { ok: false, problem: shared.problem };
+      const guards = subject.id === null ? [] : yield* readTriggerAdmissions(sql, subject.id);
+      const read = yield* readGitHub(subject, shared.project, guards);
+      if (!read.ok) return read;
+      const active = subject.id === null ? 0 : yield* activeTriggerRuns(sql, subject.id);
+      return {
+        ok: true,
+        repository: read.repository,
+        ...candidatesOf(guards, read.matching, read.states),
+        free: Math.max(0, subject.maxActiveRuns - active),
+      };
+    });
+
   const inspect = (trigger: TriggerDefinition) =>
     Effect.gen(function* (): Effect.fn.Return<CheckOutcome, unknown> {
-      const nothing = { started: 0, waiting: 0, notStarted: [] };
-      const shared = yield* sharedBlocker(trigger);
-      if ("problem" in shared) return { ...nothing, problem: shared.problem };
-      const read = yield* readGitHub(trigger, shared.project);
-      if (!read.ok) return { ...nothing, problem: read.problem };
+      const plan = yield* admissionPlan(trigger);
+      if (!plan.ok) return { started: 0, waiting: 0, notStarted: [], problem: plan.problem };
       // Reconciles attempts whose outcome a stopped or crashed check never learned, without
       // calling Start. The guard is Start's idempotency record for its requestId: acceptance sets
       // its run_id in the transaction that accepts the Run. Checks of a Trigger are serialized, so
       // no other check holds a guard now; one without a Run was definitively not accepted, and the
       // issue is admitted anew under a new requestId.
       yield* deleteUnadmitted(sql, trigger.id);
-      const candidates = yield* candidatesOf(trigger, read.matching, read.states);
-      const free = Math.max(0, trigger.maxActiveRuns - (yield* activeTriggerRuns(sql, trigger.id)));
-      return yield* admitAll(trigger, read.repository.nameWithOwner, candidates, free);
+      yield* deleteAdmissions(sql, trigger.id, plan.released);
+      return yield* admitAll(trigger, plan.repository.nameWithOwner, plan.candidates, plan.free);
     });
+
+  /** What a check of `subject` would start now and what would wait, without starting or writing. */
+  const preview = (subject: AdmissionSubject) =>
+    admissionPlan(subject).pipe(
+      Effect.map((plan): TriggerPlanPreview => {
+        if (!plan.ok) return { repository: null, issues: [], problem: plan.problem };
+        return {
+          repository: plan.repository,
+          problem: null,
+          issues: plan.candidates.map(({ issue }, index) => ({
+            issue: `${plan.repository.nameWithOwner}#${issue.number}`,
+            number: issue.number,
+            title: issue.title,
+            url: issue.url,
+            createdAt: issue.createdAt,
+            admission: index < plan.free ? "starts_now" : "waits",
+          })),
+        };
+      }),
+    );
 
   /** Checks an enabled Trigger once and records what the check did. */
   const check = (triggerId: string) =>
@@ -415,6 +489,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
 
   return {
     check,
+    preview,
     /** Drops a removed Trigger's lane; its ids are never reused, so a later check finds it gone. */
     forget: (triggerId: string) => Effect.sync(() => lanes.delete(triggerId)),
   };

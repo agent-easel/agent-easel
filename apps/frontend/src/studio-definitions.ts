@@ -24,6 +24,8 @@ export type StudioDefinitionsOperations = Pick<
   | "updateTrigger"
   | "setTriggerEnabled"
   | "runTrigger"
+  | "previewNewTrigger"
+  | "previewTrigger"
   | "removeTrigger"
 >;
 
@@ -158,6 +160,8 @@ export function createStudioDefinitions(
     updateTrigger: operations.updateTrigger,
     setTriggerEnabled: operations.setTriggerEnabled,
     runTrigger: operations.runTrigger,
+    previewNewTrigger: operations.previewNewTrigger,
+    previewTrigger: operations.previewTrigger,
     removeTrigger: operations.removeTrigger,
   };
 }

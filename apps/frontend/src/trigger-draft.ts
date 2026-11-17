@@ -1,8 +1,10 @@
 import { useSyncExternalStore } from "react";
 import type {
+  CreateTriggerInput,
   TriggerDefinition,
   TriggerRepository,
   TriggerSave,
+  UpdateTriggerInput,
   ValidationIssue,
 } from "@t3-factory/contracts";
 import {
@@ -91,33 +93,50 @@ function settingsOf(content: TriggerContent) {
   };
 }
 
+/** The settings a save would send, validated, or why they cannot be sent. */
+type TriggerProposal =
+  | { readonly error: string }
+  | { readonly kind: "update"; readonly id: string; readonly input: UpdateTriggerInput }
+  | { readonly kind: "create"; readonly input: CreateTriggerInput & TriggerReviewedFields };
+
+/** The fields a create sends in full, so a review can describe them. */
+type TriggerReviewedFields = Required<Pick<CreateTriggerInput, "schedule" | "maxActiveRuns">>;
+
+function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent): TriggerProposal {
+  if (content.projectId && !content.repository)
+    return { error: "Wait until Factory detects the Project's GitHub repository." };
+  const settings = settingsOf(content);
+  if (trigger) {
+    const input = { ...settings, expectedRevision: trigger.revision };
+    const validation = validateUpdateTrigger(input);
+    if (!validation.ok) return { error: validation.error.message };
+    return { kind: "update", id: trigger.id, input };
+  }
+  const validation = validateCreateTrigger(settings);
+  if (!validation.ok) return { error: validation.error.message };
+  return { kind: "create", input: settings };
+}
+
 function saveRequest(
   trigger: TriggerDefinition | null,
   content: TriggerContent,
   source: TriggerDraftSource,
   received: (save: TriggerSave) => TriggerDefinition,
 ): { error: string } | SaveRequest<TriggerDefinition, TriggerContent> {
-  if (content.projectId && !content.repository)
-    return { error: "Wait until Factory detects the Project's GitHub repository." };
-  const settings = settingsOf(content);
+  const proposal = proposalOf(trigger, content);
+  if ("error" in proposal) return proposal;
   const fallback = "Could not save this Trigger. Your edits are still here.";
-  if (trigger) {
-    const input = { ...settings, expectedRevision: trigger.revision };
-    const validation = validateUpdateTrigger(input);
-    if (!validation.ok) return { error: validation.error.message };
+  if (proposal.kind === "update")
     return {
       submitted: content,
-      send: () => source.updateTrigger(trigger.id, input).then(received),
+      send: () => source.updateTrigger(proposal.id, proposal.input).then(received),
       unknownMessage:
         "Save outcome unknown. Factory may have saved this Trigger; your edits are kept and nothing is retried.",
       fallback,
     };
-  }
-  const validation = validateCreateTrigger(settings);
-  if (!validation.ok) return { error: validation.error.message };
   return {
     submitted: content,
-    send: () => source.createTrigger(settings).then(received),
+    send: () => source.createTrigger(proposal.input).then(received),
     unknownMessage:
       "Save outcome unknown. Factory may have created this Trigger; check the Trigger list before creating it again.",
     fallback,
@@ -192,6 +211,18 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
       if (content.projectId !== projectId || content.repository) return;
       const { host, nameWithOwner, nodeId } = repository;
       draft.edit({ repository: { host, nameWithOwner, nodeId } });
+    },
+    /**
+     * The validated settings a save would send now, for a review before saving; a reason they
+     * cannot be sent is reported like a refused save.
+     */
+    proposal() {
+      const { saved, content, canSave } = draft.getSnapshot();
+      if (!canSave) return undefined;
+      const proposal = proposalOf(saved, content);
+      if (!("error" in proposal)) return proposal;
+      draft.report(proposal.error);
+      return undefined;
     },
     /** Validates and sends the draft against its saved revision, or creates it. */
     async save() {
