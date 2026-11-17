@@ -35,7 +35,12 @@ it("previewing a Trigger before enabling it lists its ready issues oldest first,
     title: "Same time, lower number",
     url: "https://github.com/factory-maintainer/atlas/issues/4",
   });
-  expect(preview.value).toMatchObject({ problem: null, warnings: [], login: "factory-maintainer" });
+  expect(preview.value).toMatchObject({
+    problem: null,
+    warnings: [],
+    login: "factory-maintainer",
+    revision: 1,
+  });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
   expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
     ok: true,
@@ -81,6 +86,7 @@ it("a preview of a raised limit admits as the edit would, while the saved limit 
     [1, "starts_now"],
     [2, "starts_now"],
   ]);
+  expect(preview.value.revision).toBeNull();
   const saved = await world.f.getTrigger(world.trigger.id);
   assert(saved.ok);
   expect(saved.value.maxActiveRuns).toBe(1);

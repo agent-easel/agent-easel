@@ -21,6 +21,7 @@ export type StudioDefinitionsOperations = Pick<
   | "duplicateAgent"
   | "removeAgent"
   | "createTrigger"
+  | "getTrigger"
   | "updateTrigger"
   | "setTriggerEnabled"
   | "runTrigger"
@@ -157,6 +158,7 @@ export function createStudioDefinitions(
     duplicateAgent: operations.duplicateAgent,
     removeAgent: operations.removeAgent,
     createTrigger: operations.createTrigger,
+    getTrigger: operations.getTrigger,
     updateTrigger: operations.updateTrigger,
     setTriggerEnabled: operations.setTriggerEnabled,
     runTrigger: operations.runTrigger,

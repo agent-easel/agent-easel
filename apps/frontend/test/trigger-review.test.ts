@@ -40,6 +40,17 @@ it("changing the Project and its repository needs a review", () => {
   expect(widens).toBe(true);
 });
 
+it("reconfirming the Project's moved repository needs a review", () => {
+  // Arrange
+  const reconfirmed = { ...edit, github: { ...edit.github, repositoryNodeId: "R_moved" } };
+
+  // Act
+  const widens = widensAdmission(saved, reconfirmed);
+
+  // Assert
+  expect(widens).toBe(true);
+});
+
 it("changing the query needs a review", () => {
   // Arrange
   const query = { ...edit, github: { ...edit.github, query: "label:factory:ready" } };

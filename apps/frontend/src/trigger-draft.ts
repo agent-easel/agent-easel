@@ -49,13 +49,18 @@ function intervalParts(minutes: number): { interval: string; unit: IntervalUnit 
     : { interval: String(minutes), unit: "minutes" };
 }
 
+const identityOf = ({ host, nameWithOwner, nodeId }: TriggerRepository): TriggerRepository => ({
+  host,
+  nameWithOwner,
+  nodeId,
+});
+
 function contentOf(trigger: TriggerDefinition): TriggerContent {
-  const { host, nameWithOwner, nodeId } = trigger.github.repository;
   return {
     name: trigger.name,
     projectId: trigger.projectId,
     flowId: trigger.flowId,
-    repository: { host, nameWithOwner, nodeId },
+    repository: identityOf(trigger.github.repository),
     query: trigger.github.query,
     scheduleEnabled: trigger.schedule.enabled,
     ...intervalParts(trigger.schedule.intervalMinutes),
@@ -209,8 +214,14 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     detectRepository(projectId: string, repository: TriggerRepository) {
       const { content } = draft.getSnapshot();
       if (content.projectId !== projectId || content.repository) return;
-      const { host, nameWithOwner, nodeId } = repository;
-      draft.edit({ repository: { host, nameWithOwner, nodeId } });
+      draft.edit({ repository: identityOf(repository) });
+    },
+    /**
+     * The author confirmed the repository the Project's folder names now in place of the one the
+     * Trigger confirmed before, such as after the Project's remote moved; saving it reviews.
+     */
+    confirmRepository(repository: TriggerRepository) {
+      edit({ repository: identityOf(repository) });
     },
     /**
      * The validated settings a save would send now, for a review before saving; a reason they

@@ -22,6 +22,14 @@ async function runFromMenu(screen: Screen, trigger: string) {
   await screen.getByRole("menuitem", "Run", { exact: true }).tap();
 }
 
+/** Opens the named Trigger from the list; answers its status strip once it shows Error. */
+async function openedInError(screen: Screen, trigger: string) {
+  await screen.getByRole("link", trigger, { exact: true }).tap();
+  const status = screen.getByRole("region", "Trigger status");
+  await expect(status.getByText("Error", { exact: true })).toBeVisible();
+  return status;
+}
+
 /** The Run the named Trigger started, as Run navigation lists it. */
 async function runStartedBy(baseUrl: string | undefined, trigger: string) {
   const response = await fetch(new URL("/api/run-navigation", baseUrl));
@@ -113,13 +121,43 @@ test("a Trigger whose host gh is signed out shows Error with the host step that 
     screen.getByText(`GitHub can't be read: ${guidance} Factory runs as.`),
   ).toBeVisible();
   await expect(studioNavigation(screen).getByText("1 Trigger in Error")).toBeAttached();
-  await screen.getByRole("link", name, { exact: true }).tap();
-  const status = screen.getByRole("region", "Trigger status");
-  await expect(status.getByText("Error", { exact: true })).toBeVisible();
+  const status = await openedInError(screen, name);
   await expect(status).toContainText(`${guidance} Factory runs as. Nothing starts until`);
   await app.screenshot("trigger-error-strip");
   await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
   await expect(
     screen.getByRole("navigation", "Sidebar footer").getByText("1 Trigger in Error"),
   ).toBeAttached();
+});
+
+test("a Trigger whose Project now names another repository is repaired by confirming that repository and applying the reviewed edit", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Moved repository";
+  await fixture.github.trigger({ name });
+  await fixture.github.repository({ nameWithOwner: "factory-demo/atlas-next" });
+  await app.open("/studio/triggers");
+  await runFromMenu(screen, name);
+  const status = await openedInError(screen, name);
+  await expect(status).toContainText("choose Confirm this repository under Repository");
+  await expect(screen.getByText("Detected now", { exact: true })).toBeVisible();
+  await expect(screen.getByText("factory-demo/atlas-next", { exact: true })).toBeVisible();
+  await app.screenshot("trigger-repository-reconfirm");
+  await screen.getByRole("button", "Confirm this repository", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  const review = screen.getByRole("dialog");
+  await expect(review.getByText(/factory-demo\/atlas-next/)).toBeVisible();
+  await expect(review.getByRole("heading", "No issues ready", { exact: true })).toBeVisible();
+  await app.screenshot("trigger-repository-review");
+
+  // Act
+  await review.getByRole("button", "Apply and check", { exact: true }).tap();
+
+  // Assert
+  await expect(status.getByText("Healthy", { exact: true })).toBeVisible();
+  await expect(screen.getByText(/ · factory-demo\/atlas-next · /, { exact: false })).toBeVisible();
+  await expect(studioNavigation(screen).getByText("1 Trigger in Error")).not.toBeAttached();
 });

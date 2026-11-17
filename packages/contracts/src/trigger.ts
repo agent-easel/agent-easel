@@ -110,9 +110,13 @@ export interface UpdateTriggerInput {
   readonly github: Required<GitHubIssuesInput>;
 }
 
-export interface SetTriggerEnabledInput {
-  readonly enabled: boolean;
-}
+/**
+ * Disabling is unconditional. Enabling confirms the saved revision whose settings a preview
+ * showed, and is refused once another revision was saved.
+ */
+export type SetTriggerEnabledInput =
+  | { readonly enabled: true; readonly reviewedRevision: number }
+  | { readonly enabled: false };
 
 /** A saved Trigger and what the save should make its author aware of without refusing it. */
 export interface TriggerSave {
@@ -169,6 +173,11 @@ export interface TriggerPreview {
   readonly warnings: readonly ValidationIssue[];
   /** The login `@me` resolves to, when GitHub answered. */
   readonly login: string | null;
+  /**
+   * The saved revision whose settings were previewed, which enabling confirms; null for a new
+   * Trigger or an unsaved edit.
+   */
+  readonly revision: number | null;
 }
 
 /** The Trigger operations the Factory facade implements; any approved client may call them. */

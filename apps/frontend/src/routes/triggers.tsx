@@ -17,7 +17,7 @@ import {
   type TriggerDraftSnapshot,
 } from "../trigger-draft.ts";
 import { SettingsPage } from "../components/settings-page.tsx";
-import { TriggersList } from "../components/studio-triggers/triggers-list.tsx";
+import { TriggersList, useEnableReview } from "../components/studio-triggers/triggers-list.tsx";
 import { TriggerTypePicker } from "../components/studio-triggers/trigger-type-picker.tsx";
 import {
   TriggerFields,
@@ -43,6 +43,8 @@ import {
 import { widensAdmission } from "../trigger-review.ts";
 
 type TriggersSelection = Extract<StudioSelection, { tab: "triggers" }>;
+/** This window's Create was accepted; `enable` asks to enable it as the review showed. */
+type OnCreated = (trigger: TriggerDefinition, enable: boolean) => Promise<void> | undefined;
 
 /** Studio → AUTOMATE → Triggers: the list, the type picker, and the create and edit forms. */
 export function StudioTriggersPage({
@@ -60,24 +62,42 @@ export function StudioTriggersPage({
     flows: useStudioRead(definitions, "flows").value,
   };
   const actions = useTriggerActions(definitions);
+  // Shared by the list's switches and Create, and kept open when Create opens the new Trigger.
+  const enabling = useEnableReview(names, actions);
   const serverId = useServerId();
   // This window's own Create, answered before Studio may have delivered it.
   const [created, setCreated] = useState<TriggerDefinition | null>(null);
   const draftId = triggerDraftId(selection);
-  if (!draftId) return <TriggersList triggers={triggers} names={names} actions={actions} />;
-  if (draftId === "new") return <TriggerTypePicker />;
   return (
-    <TriggerEditor
-      // An editor never outlives its server, so a pending reply from another one is discarded.
-      key={`${serverId ?? ""}:${draftId}`}
-      draftId={draftId}
-      definitions={definitions}
-      names={names}
-      actions={actions}
-      created={created?.id === draftId ? created : null}
-      onCreated={setCreated}
-      reportDraft={reportTriggerDraft}
-    />
+    <>
+      {!draftId ? (
+        <TriggersList
+          triggers={triggers}
+          names={names}
+          actions={actions}
+          onEnable={enabling.open}
+        />
+      ) : draftId === "new" ? (
+        <TriggerTypePicker />
+      ) : (
+        <TriggerEditor
+          // An editor never outlives its server, so a pending reply from another one is discarded.
+          key={`${serverId ?? ""}:${draftId}`}
+          draftId={draftId}
+          definitions={definitions}
+          names={names}
+          actions={actions}
+          created={created?.id === draftId ? created : null}
+          onCreated={(trigger, enable) => {
+            setCreated(trigger);
+            // The created revision holds exactly the settings the review showed.
+            return enable ? enabling.enable(trigger, trigger.revision) : undefined;
+          }}
+          reportDraft={reportTriggerDraft}
+        />
+      )}
+      {enabling.dialog}
+    </>
   );
 }
 
@@ -119,7 +139,7 @@ function TriggerEditor({
   names: TriggerNames;
   actions: TriggerActions;
   created: TriggerDefinition | null;
-  onCreated: (trigger: TriggerDefinition) => void;
+  onCreated: OnCreated;
   reportDraft: ReportDraft;
 }) {
   const openStudio = useStudioNavigation();
@@ -200,7 +220,7 @@ function OpenedTriggerEditor({
   definitions: StudioDefinitions;
   names: TriggerNames;
   actions: TriggerActions;
-  onCreated: (trigger: TriggerDefinition) => void;
+  onCreated: OnCreated;
   reportDraft: ReportDraft;
 }) {
   const openStudio = useStudioNavigation();
@@ -218,8 +238,7 @@ function OpenedTriggerEditor({
     const saved = await draft.save();
     setReview(null);
     if (!saved || !active.current) return;
-    onCreated(saved);
-    if (enable) await actions.enableAndCheck(saved);
+    await onCreated(saved, enable);
     void openStudio({ tab: "triggers", triggerId: saved.id });
   }
   async function applyAndCheck() {

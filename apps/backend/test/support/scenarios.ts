@@ -83,7 +83,10 @@ export async function triggerEnabled(
   input: CreateTriggerInput,
 ) {
   const saved = await triggerSaved(factory, input);
-  const enabled = await factory.setTriggerEnabled(saved.id, { enabled: true });
+  const enabled = await factory.setTriggerEnabled(saved.id, {
+    enabled: true,
+    reviewedRevision: saved.revision,
+  });
   if (!enabled.ok) throw new Error(enabled.error.message);
   return enabled.value;
 }

@@ -2,7 +2,15 @@ import { assert, expect, it } from "@effect/vitest";
 import type { TriggerSave } from "@t3-factory/contracts";
 import { remotePrepared } from "./support/remote-clients.ts";
 import { triggerSaved } from "./support/scenarios.ts";
-import { atlasRepository, remoteProject, triggerWorld } from "./support/triggers.ts";
+import {
+  atlasRepository,
+  movedRepository,
+  remoteProject,
+  reviewingWorld,
+  startedIssues,
+  triggerEdit,
+  triggerWorld,
+} from "./support/triggers.ts";
 
 it("a new Trigger takes the default query, schedule and limit, derives its ready label and starts disabled", async (c) => {
   // Arrange
@@ -258,13 +266,87 @@ it("an edit saved from an older revision is refused and the newer settings stay"
   expect(current.value).toMatchObject({ name: "Laptop edit", revision: 2 });
 });
 
+it("reconfirming the Project's new repository with the same Project and query saves that repository", async (c) => {
+  // Arrange
+  const { f, github, project, triggerInput } = await triggerWorld(c);
+  const trigger = await triggerSaved(f, triggerInput);
+  github.repositories.set(project.workspaceRoot, movedRepository);
+
+  // Act
+  const saved = await f.updateTrigger(
+    trigger.id,
+    triggerEdit(trigger, {
+      github: { repositoryNodeId: movedRepository.nodeId, query: trigger.github.query },
+    }),
+  );
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.trigger.github.repository).toStrictEqual({
+    host: "github.com",
+    nameWithOwner: "someone-else/atlas",
+    nodeId: "R_other",
+  });
+});
+
+it("reconfirming a repository the Project does not name is refused and the saved repository stays", async (c) => {
+  // Arrange
+  const { f, github, project, triggerInput } = await triggerWorld(c);
+  const trigger = await triggerSaved(f, triggerInput);
+  github.repositories.set(project.workspaceRoot, movedRepository);
+
+  // Act
+  const saved = await f.updateTrigger(
+    trigger.id,
+    triggerEdit(trigger, { github: { repositoryNodeId: "R_fork", query: trigger.github.query } }),
+  );
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues[0]?.code).toBe("trigger_repository_mismatch");
+  expect(await f.getTrigger(trigger.id)).toStrictEqual({ ok: true, value: trigger });
+});
+
+it("enabling with the revision a review showed is refused once a newer revision was saved, and the Trigger stays off", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.readyIssue(1, "Ready");
+  const reviewed = world.trigger.revision;
+  assert(
+    (
+      await world.f.updateTrigger(
+        world.trigger.id,
+        triggerEdit(world.trigger, { maxActiveRuns: 5 }),
+      )
+    ).ok,
+  );
+
+  // Act
+  const enabled = await world.f.setTriggerEnabled(world.trigger.id, {
+    enabled: true,
+    reviewedRevision: reviewed,
+  });
+
+  // Assert
+  assert(!enabled.ok);
+  expect(enabled.error.code).toBe("conflict");
+  expect(enabled.error.issues[0]?.code).toBe("trigger_changed");
+  const current = await world.f.getTrigger(world.trigger.id);
+  assert(current.ok);
+  expect(current.value).toMatchObject({ enabled: false, revision: 2, nextCheckAt: null });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
 it("enabling a Trigger keeps its saved revision", async (c) => {
   // Arrange
   const { f, triggerInput } = await triggerWorld(c);
   const trigger = await triggerSaved(f, triggerInput);
 
   // Act
-  const enabled = await f.setTriggerEnabled(trigger.id, { enabled: true });
+  const enabled = await f.setTriggerEnabled(trigger.id, {
+    enabled: true,
+    reviewedRevision: trigger.revision,
+  });
 
   // Assert
   assert(enabled.ok);
