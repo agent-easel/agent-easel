@@ -90,6 +90,8 @@ const overCapacity: OperationError = {
   message: `At most ${RUN_VIEW_LIMIT} Runs can be followed live in one window.`,
   issues: [],
 };
+/** No holder and no pending release: a Run the view keeps until it next resubscribes. */
+const kept = (entry: Entry) => entry.refs === 0 && entry.linger === undefined;
 /** Final for one scope: an unknown Run, or a Run refused for capacity. */
 const terminal = (error: OperationError | null) =>
   error?.code === "not_found" || error === overCapacity;
@@ -206,6 +208,7 @@ export class LiveOwner {
       entry.gating += gating;
       if (gates) this.changed();
     } else {
+      if (channelOf(scope.part) === "view") this.forgetKeptRuns();
       entry = {
         scope: scope as unknown as AnyScope,
         refs: 1,
@@ -409,11 +412,25 @@ export class LiveOwner {
     entry.view = { value, synchronized: current, error: null };
   }
 
+  /** Opening another Run or navigation resubscribes the view anyway, so kept Runs leave it now. */
+  private forgetKeptRuns() {
+    for (const [key, entry] of this.entries) if (kept(entry)) this.entries.delete(key);
+  }
+
   private drop(entry: Entry) {
     if (this.entries.get(entry.scope.key) !== entry) return;
+    entry.linger = undefined;
+    const holding = [...this.entries.values()].some((held) => !kept(held));
+    // A released Run stays in the view, still updated, until the view next resubscribes:
+    // resubscribing now would put the Run opened in its place back to synchronizing just after
+    // it showed live, and reopening the kept Run shows it live at once.
+    if (entry.scope.part.kind === "run" && holding) return;
     this.entries.delete(entry.scope.key);
-    if (this.entries.size === 0) this.detach();
-    else this.resubscribe();
+    if (holding) this.resubscribe();
+    else {
+      this.entries.clear();
+      this.detach();
+    }
     this.changed();
   }
 

@@ -348,3 +348,57 @@ it("Studio's definitions gate mutations only once Studio holds them, not while o
   expect(whileRead).toBe("current");
   expect(live.delivery()).toBe("synchronizing");
 });
+
+/** Navigation and Run `from` are held and current; `from` is then left for Run `to`, whose snapshot arrived. */
+function switchedRuns() {
+  const live = liveHarness();
+  const from = { ...runDetail(), id: "from" };
+  const to = { ...runDetail(), id: "to" };
+  const snapshots = (...runs: (typeof from)[]) =>
+    envelope<RunViewLiveMessage>([
+      { _tag: "navigation", message: { _tag: "snapshot", rows: [] } },
+      ...runs.map((run) => ({
+        _tag: "run" as const,
+        runId: run.id,
+        message: { _tag: "snapshot" as const, run },
+      })),
+    ]);
+  live.owner.acquire(navigationScope);
+  const releaseFrom = live.owner.acquire(runScope(from.id));
+  live.sessions[0]?.connected();
+  live.sessions[0]?.subscriptions.at(-1)?.message(snapshots(from));
+  releaseFrom();
+  const releaseTo = live.owner.acquire(runScope(to.id));
+  live.sessions[0]?.subscriptions.at(-1)?.message(snapshots(from, to));
+  return { live, from, to, releaseTo };
+}
+
+it("a Run opened in place of another stays live once the previous Run is released", () => {
+  // Arrange
+  const { live, to } = switchedRuns();
+
+  // Act
+  live.elapse();
+
+  // Assert
+  expect(live.owner.view(runScope(to.id).key)).toMatchObject({ value: to, synchronized: true });
+  expect(live.delivery()).toBe("current");
+  expect(live.sessions[0]?.subscriptions).toHaveLength(3);
+});
+
+it("reopening a Run the view still keeps shows its live value at once", () => {
+  // Arrange
+  const { live, from, releaseTo } = switchedRuns();
+  live.elapse();
+  releaseTo();
+
+  // Act
+  live.owner.acquire(runScope(from.id));
+
+  // Assert
+  expect(live.owner.view(runScope(from.id).key)).toMatchObject({
+    value: from,
+    synchronized: true,
+  });
+  expect(live.delivery()).toBe("current");
+});
