@@ -16,6 +16,7 @@ import {
   type TriggerDraftModel,
   type TriggerDraftSnapshot,
 } from "../trigger-draft.ts";
+import { StudioBackLink } from "../components/app-link.tsx";
 import { SettingsPage } from "../components/settings-page.tsx";
 import { TriggersList, useEnableReview } from "../components/studio-triggers/triggers-list.tsx";
 import { TriggerTypePicker } from "../components/studio-triggers/trigger-type-picker.tsx";
@@ -275,7 +276,8 @@ function OpenedTriggerEditor({
     });
   }
   return (
-    <main className="grid max-w-206 content-start px-8 pt-6 pb-8 max-sm:px-4">
+    <main className="grid content-start gap-4 px-8 pt-6 pb-8 max-sm:px-4">
+      <EditorBackLink creating={!trigger} />
       <SettingsPage
         title={shown ? shown.name : "New Trigger · GitHub Issues"}
         description={
@@ -318,6 +320,15 @@ function OpenedTriggerEditor({
         onConfirm={() => void (trigger ? applyAndCheck() : create(true))}
       />
     </main>
+  );
+}
+
+/** An opened Trigger goes back to the list; the create form goes back to the type picker. */
+function EditorBackLink({ creating }: { creating: boolean }) {
+  return creating ? (
+    <StudioBackLink selection={{ tab: "triggers", triggerId: "new" }}>Trigger types</StudioBackLink>
+  ) : (
+    <StudioBackLink selection={{ tab: "triggers" }}>All Triggers</StudioBackLink>
   );
 }
 

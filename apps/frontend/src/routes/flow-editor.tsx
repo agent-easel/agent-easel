@@ -13,7 +13,6 @@ import type {
   FlowGraph,
 } from "@t3-factory/contracts";
 import {
-  ArrowLeft,
   Check,
   CircleDot,
   ListChecks,
@@ -47,7 +46,7 @@ import {
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { BLOCK_KINDS } from "../block-kind.ts";
-import { StudioLink } from "../components/app-link.tsx";
+import { StudioBackLink } from "../components/app-link.tsx";
 import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration } from "../components/block-inspector.tsx";
 import { BlockLibrary } from "../components/block-library.tsx";
@@ -694,12 +693,7 @@ function EditorToolbar({
     : undefined;
   return (
     <div className="flex h-12 shrink-0 items-center gap-2.5 border-b px-4" {...fields}>
-      <StudioLink
-        selection={{ tab: "flows" }}
-        className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground"
-      >
-        <ArrowLeft aria-hidden className="size-3.5" /> All Flows
-      </StudioLink>
+      <StudioBackLink selection={{ tab: "flows" }}>All Flows</StudioBackLink>
       <span aria-hidden className="text-subtle-foreground">
         /
       </span>

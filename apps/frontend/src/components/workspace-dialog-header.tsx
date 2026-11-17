@@ -1,3 +1,4 @@
+import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./ui/button";
 import { DialogDescription, DialogTitle } from "./ui/dialog";
@@ -6,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 /** Shared navigation and dismissal for the Settings and Studio workspaces. */
 export function WorkspaceDialogHeader({
   title,
+  parents = [],
   section,
   description,
   onClose,
@@ -13,6 +15,8 @@ export function WorkspaceDialogHeader({
   closeDisabled = false,
 }: {
   title: string;
+  /** Links to the pages above `section`, outermost first. */
+  parents?: readonly { label: string; link: ReactNode }[];
   section: string;
   description: string;
   onClose: () => void;
@@ -24,9 +28,13 @@ export function WorkspaceDialogHeader({
       <DialogTitle className="text-sm leading-none font-normal text-muted-foreground">
         {title}
       </DialogTitle>
-      <span aria-hidden className="text-subtle-foreground">
-        /
-      </span>
+      <Separator />
+      {parents.map((parent) => (
+        <Fragment key={parent.label}>
+          {parent.link}
+          <Separator />
+        </Fragment>
+      ))}
       <span className="truncate font-medium text-foreground">{section}</span>
       <DialogDescription className="sr-only">{description}</DialogDescription>
       <kbd
@@ -51,5 +59,13 @@ export function WorkspaceDialogHeader({
         <TooltipContent>{closeLabel} (Esc)</TooltipContent>
       </Tooltip>
     </header>
+  );
+}
+
+function Separator() {
+  return (
+    <span aria-hidden className="text-subtle-foreground">
+      /
+    </span>
   );
 }

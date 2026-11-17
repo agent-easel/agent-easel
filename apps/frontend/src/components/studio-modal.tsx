@@ -11,6 +11,7 @@ import { FlowList } from "../routes/flows.tsx";
 import { FlowDetail } from "../routes/flow-editor.tsx";
 import { StudioAgentsPage } from "../routes/agents.tsx";
 import { StudioTriggersPage } from "../routes/triggers.tsx";
+import { StudioLink } from "./app-link.tsx";
 import { CreateFlow } from "./create-flow.tsx";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
@@ -75,14 +76,31 @@ function useReportedDraft(kind: StudioDraft["kind"]) {
   return { draft, ref, report };
 }
 
-/** The header's section: the destination, and for Triggers the opened page within it. */
+const headerParentClass =
+  "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
+
+/** The header's breadcrumb: the destination, and for Triggers the opened page within it. */
 function studioSection(selection: StudioSelection, triggers: readonly TriggerDefinition[] | null) {
-  if (selection.tab === "flows") return "Flows";
-  if (selection.tab === "agents") return "Agents";
-  if (selection.kind) return "Triggers / New · GitHub Issues";
-  if (selection.triggerId === "new") return "Triggers / New";
+  if (selection.tab === "flows") return { section: "Flows" };
+  if (selection.tab === "agents") return { section: "Agents" };
   const opened = triggers?.find((trigger) => trigger.id === selection.triggerId);
-  return opened ? `Triggers / ${opened.name}` : "Triggers";
+  const section = selection.kind
+    ? "GitHub Issues"
+    : selection.triggerId === "new"
+      ? "New"
+      : opened?.name;
+  if (!section) return { section: "Triggers" };
+  const parent = (label: string, link: StudioSelection) => ({
+    label,
+    link: (
+      <StudioLink selection={link} className={headerParentClass}>
+        {label}
+      </StudioLink>
+    ),
+  });
+  const parents = [parent("Triggers", { tab: "triggers" })];
+  if (selection.kind) parents.push(parent("New", { tab: "triggers", triggerId: "new" }));
+  return { parents, section };
 }
 
 export function StudioModal({ selection }: { selection: StudioSelection }) {
@@ -135,7 +153,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
       >
         <WorkspaceDialogHeader
           title="Studio"
-          section={studioSection(selection, triggers)}
+          {...studioSection(selection, triggers)}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
           closeLabel="Back to Runs"
