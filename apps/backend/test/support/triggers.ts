@@ -242,6 +242,26 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
   return { checked, release };
 }
 
+/** Starts saving `edit` and holds it at GitHub's answer to its query, before anything is written. */
+export async function pendingTriggerUpdate(
+  world: Awaited<ReturnType<typeof reviewingWorld>>,
+  edit: UpdateTriggerInput,
+) {
+  let release = () => {};
+  let entered = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const validating = new Promise<void>((resolve) => (entered = resolve));
+  world.github.beforeAnswer = async (call) => {
+    if (call !== "openIssues") return;
+    delete world.github.beforeAnswer;
+    entered();
+    await held;
+  };
+  const saved = world.f.updateTrigger(world.trigger.id, edit);
+  await validating;
+  return { saved, release };
+}
+
 /** The saved Trigger's settings as an edit from its current revision, with `changes` applied. */
 export const triggerEdit = (
   trigger: TriggerDefinition,

@@ -5,6 +5,7 @@ import { triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,
   movedRepository,
+  pendingTriggerUpdate,
   remoteProject,
   reviewingWorld,
   startedIssues,
@@ -341,30 +342,19 @@ it("an edit begun while the Trigger was off is refused once the reviewed revisio
   // Arrange
   const world = await reviewingWorld(c);
   const reviewed = world.trigger;
-  let release = () => {};
-  let entered = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
-  const validating = new Promise<void>((resolve) => (entered = resolve));
-  world.github.beforeAnswer = async (call) => {
-    if (call !== "openIssues") return;
-    delete world.github.beforeAnswer;
-    entered();
-    await held;
-  };
-  const widening = world.f.updateTrigger(
-    reviewed.id,
+  const widening = await pendingTriggerUpdate(
+    world,
     triggerEdit(reviewed, {
       github: { repositoryNodeId: reviewed.github.repository.nodeId, query: "label:factory:ready" },
     }),
   );
-  await validating;
 
   // Act
   const [enabled, saved] = await Promise.all([
     world.f
       .setTriggerEnabled(reviewed.id, { enabled: true, reviewedRevision: reviewed.revision })
-      .finally(release),
-    widening,
+      .finally(widening.release),
+    widening.saved,
   ]);
 
   // Assert
