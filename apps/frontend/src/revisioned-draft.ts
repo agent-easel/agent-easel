@@ -156,6 +156,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
    * beside unsaved edits: an older Change owner reply names an owner replaced since.
    */
   let ownerSeenAt = config.saved?.updatedAt ?? "";
+  /**
+   * The newest followed state when a save was refused for a stale owner: only a later state shows
+   * where the owner went, while one read before the move still names the owner the save expected.
+   */
+  let waitingSince = "";
   /** A synchronized read held the definition, so its later absence is a removal. */
   let seen = false;
   let removed = false;
@@ -241,8 +246,10 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       return showError(cause instanceof Error ? cause.message : fallback);
     showError(cause.message, cause.detail.issues);
     // Reconciling afterwards names the new owner, or the newer revision, once Studio holds it.
-    if (isStaleOwner(cause)) ownerChange = { status: "waiting" };
-    else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
+    if (isStaleOwner(cause)) {
+      ownerChange = { status: "waiting" };
+      waitingSince = ownerSeenAt;
+    } else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
   }
   /** A removal is shown at once, even while a save is pending, and beats its late success. */
   function noteAbsence() {
@@ -294,7 +301,9 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     const shown = owner;
     showOwner(latest.projectId);
     if (owner === acknowledgedOwner) {
-      if (ownerChange.status !== "changed") return owner !== shown;
+      // A state written after a stale-owner refusal shows the owner moved back, so saving resumes.
+      const movedBack = ownerChange.status === "waiting" && latest.updatedAt > waitingSince;
+      if (ownerChange.status !== "changed" && !movedBack) return owner !== shown;
       ownerChange = noOwnerChange;
       return true;
     }
