@@ -4,6 +4,7 @@ import type {
   AgentExecutionSettings,
   BlockExit,
   CreateAgentInput,
+  CreateTriggerInput,
   FactoryOperations,
   FlowBlock,
   FlowGraph,
@@ -66,6 +67,15 @@ export async function enableRunTitles(
   const enabled = await factory.updateRunTitleSetting({ enabled: true, model });
   if (!enabled.ok) throw new Error(enabled.error.message);
   return enabled.value;
+}
+/** A Trigger the owner saved with `input`. */
+export async function triggerSaved(
+  factory: Pick<FactoryOperations, "createTrigger">,
+  input: CreateTriggerInput,
+) {
+  const saved = await factory.createTrigger(input);
+  if (!saved.ok) throw new Error(saved.error.message);
+  return saved.value.trigger;
 }
 /** A cheap model the controlled catalog offers only beside the Agents' model, so T3 can withdraw
  * it without affecting the Flow. */

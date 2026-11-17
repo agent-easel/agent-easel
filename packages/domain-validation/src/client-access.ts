@@ -11,14 +11,16 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 16;
-/** Protocol 16 Flows and Runs may contain Condition blocks with their rules and outputs, which
+export const FACTORY_PROTOCOL = 17;
+/** Protocol 17 adds the Trigger operations and Studio's Trigger list, which protocol 16 clients
+ * ignore. Protocol 16 Flows and Runs may contain Condition blocks with their rules and outputs, which
  * older clients can neither read nor save. Protocol 15 adds attention fields and the Run-level
  * `settlement-unresolved` kind, whose Block id is null. Protocol 14 theme-color presentations and
  * sources carry no appearance grant. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 16;
 /** The current UI reads and saves Condition blocks, which older servers reject or lack, and reads
- * each navigation attention matter's native pending request count and Block name. */
+ * each navigation attention matter's native pending request count and Block name. It does not yet
+ * read Triggers, so protocol 16 servers still serve it. */
 export const FACTORY_MINIMUM_SERVER_PROTOCOL = 16;
 
 export const CLIENT_LABEL_LIMIT = 80;

@@ -7,6 +7,7 @@ import { appliedStudio, liveClient, liveReads, publicStudio, subscribe } from ".
 import { remoteServer } from "./support/remote-clients.ts";
 import { flowFile } from "./support/definition-import.ts";
 import { controlledExecution } from "./support/scenarios.ts";
+import { triggerWorld } from "./support/triggers.ts";
 import { makeLiveChanges } from "../src/live-changes.ts";
 import { makeLiveStreams } from "../src/live-streams.ts";
 
@@ -50,6 +51,24 @@ it("a created Agent reaches an existing Studio subscriber without another read",
     agents: { upserts: [created], removals: [] },
   } satisfies StudioLiveMessage);
   expect(appliedStudio(delivered)).toStrictEqual(await publicStudio(factory));
+});
+
+it("a created Trigger reaches an existing Studio subscriber without another read", async (c) => {
+  // Arrange
+  const { f, triggerInput } = await triggerWorld(c);
+  const studio = subscribe(c, f.live.watchStudio());
+  await studio.until((messages) => messages.length > 0);
+
+  // Act
+  const created = assertOk(await f.createTrigger(triggerInput));
+
+  // Assert
+  const delivered = await studio.until((messages) => messages.length > 1);
+  expect(delivered[1]).toStrictEqual({
+    _tag: "changed",
+    triggers: { upserts: [created.trigger], removals: [] },
+  } satisfies StudioLiveMessage);
+  expect(appliedStudio(delivered)).toStrictEqual(await publicStudio(f));
 });
 
 it("an imported Flow reaches an existing Studio subscriber with its new Agent in one change", async (c) => {
@@ -297,7 +316,7 @@ it("an approved client receives Studio changes over the approved-client listener
   // Assert
   const delivered = await studio.until((messages) => messages.length > 1);
   expect(delivered).toStrictEqual([
-    { _tag: "snapshot", studio: { agents: [], flows: [] } },
+    { _tag: "snapshot", studio: { agents: [], flows: [], triggers: [] } },
     { _tag: "changed", agents: { upserts: [created], removals: [] } },
   ] satisfies StudioLiveMessage[]);
 });

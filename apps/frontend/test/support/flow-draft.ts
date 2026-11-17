@@ -121,7 +121,9 @@ function liveFlowStudio(factory: MemoryFactory, flows: readonly FlowDraft[]) {
   socket.connected();
   const subscription = socket.subscriptions[0]!;
   subscription.message(
-    envelope<StudioLiveMessage>([{ _tag: "snapshot", studio: { agents: [savedAgent()], flows } }]),
+    envelope<StudioLiveMessage>([
+      { _tag: "snapshot", studio: { agents: [savedAgent()], flows, triggers: [] } },
+    ]),
   );
   return {
     definitions,

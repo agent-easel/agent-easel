@@ -16,6 +16,7 @@ import {
   connectionOperations,
   runOperations,
   chatControlOperations,
+  triggerOperations,
   LIVE_PATH,
   type ProtocolDescriptor,
   type Result,
@@ -125,6 +126,7 @@ function apiRoutes(factory: Factory) {
     ...agentRoutes(factory),
     ...importRoutes(factory),
     ...chatControlRoutes(factory),
+    ...triggerRoutes(factory),
   };
 }
 
@@ -396,6 +398,34 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
     },
     removeAgent: { handle: ({ parameters }) => answer(() => factory.removeAgent(parameters.id)) },
     exportAgent: { handle: ({ parameters }) => answer(() => factory.exportAgent(parameters.id)) },
+  };
+}
+
+/** Every approved client manages Triggers; their bodies carry typed settings only. */
+function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations> {
+  return {
+    getTriggerReadiness: {
+      handle: ({ parameters }) =>
+        answer(() => factory.getTriggerReadiness(parameters.projectId, parameters.flowId)),
+    },
+    listTriggers: { handle: () => answer(() => factory.listTriggers()) },
+    createTrigger: {
+      body: standardBody,
+      handle: ({ input }) => answer(() => factory.createTrigger(input), 201),
+    },
+    getTrigger: { handle: ({ parameters }) => answer(() => factory.getTrigger(parameters.id)) },
+    updateTrigger: {
+      body: standardBody,
+      handle: ({ parameters, input }) => answer(() => factory.updateTrigger(parameters.id, input)),
+    },
+    setTriggerEnabled: {
+      body: standardBody,
+      handle: ({ parameters, input }) =>
+        answer(() => factory.setTriggerEnabled(parameters.id, input)),
+    },
+    removeTrigger: {
+      handle: ({ parameters }) => answer(() => factory.removeTrigger(parameters.id)),
+    },
   };
 }
 

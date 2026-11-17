@@ -40,6 +40,7 @@ import { makeDiscordOperation } from "./chat-control/discord-operation.ts";
 import { failure } from "./result.ts";
 import { makeLiveChanges } from "./live-changes.ts";
 import { makeLiveStreams, type LiveStreams } from "./live-streams.ts";
+import { makeTriggers } from "./triggers/triggers.ts";
 
 /** Public Effect service shared by HTTP, background workers and controlled-clock tests. */
 export class FactoryService extends Context.Service<
@@ -103,6 +104,11 @@ export const makeFactoryService = (
       connection,
       changes,
       options.applicationVersion ?? "source",
+    );
+    const triggers = yield* makeTriggers(
+      github,
+      { listProjects: projects.listProjects, getFlow: definitions.getFlow },
+      changes,
     );
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
@@ -245,6 +251,13 @@ export const makeFactoryService = (
       updateDiscordAccess: (input) => chatDiscord.updateDiscordAccess(input),
       setChatControlEnabled: (input) => chatDiscord.setChatControlEnabled(input),
       retryChatDelivery: (input) => chatDiscord.retryChatDelivery(input),
+      getTriggerReadiness: (projectId, flowId) => triggers.getTriggerReadiness(projectId, flowId),
+      listTriggers: () => triggers.listTriggers(),
+      createTrigger: (input) => triggers.createTrigger(input),
+      getTrigger: (id) => triggers.getTrigger(id),
+      updateTrigger: (id, input) => triggers.updateTrigger(id, input),
+      setTriggerEnabled: (id, input) => triggers.setTriggerEnabled(id, input),
+      removeTrigger: (id) => triggers.removeTrigger(id),
       startRun: (i) => runner.startRun(i),
       getRunImageInfo: (sha256) => images.getRunImageInfo(sha256),
       stageRunImage: (sha256, input) => images.stageRunImage(sha256, input),
@@ -297,7 +310,17 @@ export const makeFactoryService = (
         {
           ...guarded,
           readProjectCatalog: () => guard(projects.readCatalog()),
-          readStudio: () => guard(definitions.readStudio()),
+          readStudio: () =>
+            guard(
+              sql.withTransaction(
+                Effect.gen(function* () {
+                  const studio = yield* definitions.readStudio();
+                  if (!studio.ok) return studio;
+                  const triggerList = yield* triggers.readStudioTriggers();
+                  return { ok: true as const, value: { ...studio.value, triggers: triggerList } };
+                }),
+              ),
+            ),
           getAppearance: appearance.getAppearance,
         },
         (read) =>

@@ -45,7 +45,7 @@ export function agentDraft(
 ) {
   const factory = memoryAgents();
   const { definitions, studio, socket, close } = liveStudio({ ...studioFactory(), ...factory });
-  studio.message(studioSnapshot({ agents: [savedAgent()], flows: [] }));
+  studio.message(studioSnapshot({ agents: [savedAgent()], flows: [], triggers: [] }));
   const draft = createAgentDraft(agent, offered, definitions);
   const disconnect = draft.connect();
   return { draft, factory, studio, socket, definitions, disconnect, close };

@@ -116,10 +116,11 @@ export function appliedStudio(
   return studio;
 }
 
-/** Studio's definitions as the public Agent and Flow list reads return them. */
+/** Studio's definitions as the public Agent, Flow and Trigger list reads return them. */
 export const publicStudio = async (factory: Factory): Promise<StudioDefinitions> => ({
   agents: assertOk(await factory.listAgents()),
   flows: assertOk(await factory.listFlows()),
+  triggers: assertOk(await factory.listTriggers()),
 });
 
 /** Live delivery never sends the internal concurrency generation after the snapshot. */

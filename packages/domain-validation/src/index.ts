@@ -584,3 +584,10 @@ export {
   validateSetChatControlEnabled,
   validateRetryChatDelivery,
 } from "./chat-control.ts";
+export {
+  parseTriggerQuery,
+  validateCreateTrigger,
+  validateSetTriggerEnabled,
+  validateUpdateTrigger,
+  type TriggerSettings,
+} from "./trigger.ts";

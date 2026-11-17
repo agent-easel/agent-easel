@@ -7,7 +7,7 @@ export type LiveScope =
   | { readonly kind: "view"; readonly navigation: boolean; readonly runIds: ReadonlySet<string> }
   /** The Run composer's Project catalog and Flows. */
   | { readonly kind: "launchChoices" }
-  /** Studio's saved Agents and Flows. */
+  /** Studio's saved Agents, Flows and Triggers. */
   | { readonly kind: "studio" }
   | { readonly kind: "appearance" };
 
@@ -52,6 +52,10 @@ export function makeLiveChanges() {
           scope.kind === "launchChoices" ||
           (scope.kind === "view" && scope.runIds.size > 0),
       );
+    },
+    /** Triggers are Studio content only. */
+    triggersChanged() {
+      mark((scope) => scope.kind === "studio");
     },
     /** The catalog derives project availability from the current connection. */
     connectionChanged() {

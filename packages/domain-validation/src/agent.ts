@@ -35,7 +35,8 @@ function parseTrimmedString(
   return { ok: true, value: value.trim() };
 }
 
-function invalid(code: string, path: string, message: string): Result<never> {
+/** A validation refusal with one field-addressed issue. */
+export function invalid(code: string, path: string, message: string): Result<never> {
   return { ok: false, error: { code: "validation", message, issues: [{ code, path, message }] } };
 }
 
