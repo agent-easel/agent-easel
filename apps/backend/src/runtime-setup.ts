@@ -21,6 +21,7 @@ import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 import type { GitAdapter } from "./adapters/git.ts";
 import { reportSupport } from "./adapters/t3-contract.ts";
+import type { T3Support } from "./adapters/t3.ts";
 import type { ContractSnapshots } from "./connection.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
@@ -208,11 +209,13 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   /**
    * Explicit reporting: the connected contract, an installed Factory MCP and report support.
-   * `reconcileProjects` refreshes the Project catalog and decides the connection check it reads.
+   * `reconcileProjects` refreshes the Project catalog and decides the connection check it reads;
+   * `support` answers from that same check.
    */
   const readiness = Effect.fn(function* (
     input: unknown,
     reconcileProjects: Effect.Effect<unknown, unknown>,
+    support: Effect.Effect<T3Support, unknown>,
     capturedAgent?: CapturedAgent,
   ): Generator<Effect.Effect<unknown, unknown>, Result<RuntimeReadiness>, never> {
     const issues: ValidationIssue[] = [];
@@ -228,13 +231,12 @@ const openRuntimeSetup = Effect.fn(function* (
         ops.getReportingInstallations,
       );
       if (installed.ok) issues.push(...installed.value.issues);
-      // The catalog reconciled in `selection` read this connection check's answer.
-      const support = reportSupport((yield* latestSnapshot()).support, s.driver);
-      if (!support.supported)
+      const reporting = reportSupport(yield* support, s.driver);
+      if (!reporting.supported)
         issues.push({
           code: "reporting_unsupported",
           path: "connection.contract",
-          message: support.explanation,
+          message: reporting.explanation,
         });
     }).pipe(
       Effect.catchCause((cause) =>
@@ -256,10 +258,26 @@ const openRuntimeSetup = Effect.fn(function* (
   });
   return {
     close: () => close,
-    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot. */
-    recheckAgent: (projectId: string, agent: CapturedAgent) =>
-      serial(() => readiness({ projectId, agentId: agent.id }, refreshProjects(), agent)),
-    recheckRuntime: (i: unknown) => serial(() => readiness(i, ops.recheckProjects())),
+    /** A captured Agent's readiness within a pass that already took its T3 contract snapshot;
+     * `support` is that snapshot's. */
+    recheckAgent: (projectId: string, agent: CapturedAgent, support: T3Support) =>
+      serial(() =>
+        readiness(
+          { projectId, agentId: agent.id },
+          refreshProjects(),
+          Effect.succeed(support),
+          agent,
+        ),
+      ),
+    recheckRuntime: (i: unknown) =>
+      serial(() =>
+        readiness(
+          i,
+          ops.recheckProjects(),
+          // The catalog recheck made this connection check.
+          Effect.map(latestSnapshot(), (snapshot) => snapshot.support),
+        ),
+      ),
   };
 });
 

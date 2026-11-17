@@ -160,7 +160,8 @@ export const makeRunTitles = (
         const unavailable = catalogProblem(model, capabilities.value);
         if (unavailable) return unavailable.message;
         const launch = snapshot.support.launch.checkout;
-        if (!launch.supported) return launch.explanation;
+        if (!launch.supported)
+          return launch.explanation ?? "T3 launch capabilities are unavailable.";
         return reportingInstallationProblem(
           model.providerInstanceId,
           yield* ops.getReportingInstallations(),

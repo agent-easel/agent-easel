@@ -184,7 +184,7 @@ it("a launch replay proof that cannot be established leaves only launch support 
   expect(inspection.support.launch.checkout).toStrictEqual({
     supported: false,
     retryScope: null,
-    explanation: "T3 launch capabilities are unavailable.",
+    explanation: null,
   });
   expect(inspection.support.launch.worktree.supported).toBe(false);
   expect(inspection.support.attachmentLimit).toBe(8);
@@ -220,7 +220,7 @@ it("a send replay proof that cannot be established leaves only send support unkn
   expect(inspection.support.send).toStrictEqual({
     supported: false,
     retryScope: null,
-    explanation: "T3 send capabilities are unavailable; operation remains unresolved.",
+    explanation: null,
   });
   expect(inspection.support.reportReads).toBe(true);
 });

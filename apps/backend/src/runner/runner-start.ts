@@ -29,7 +29,7 @@ import {
 } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type { GitAdapter } from "../adapters/git.ts";
-import type { T3ContractSnapshot } from "../adapters/t3.ts";
+import type { T3ContractSnapshot, T3Support } from "../adapters/t3.ts";
 import { attachmentSupport } from "../adapters/t3-contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
@@ -436,7 +436,7 @@ export function openRunnerStart(
       const flow = savedFlow.value;
       if (!flow.readiness.ready)
         return failure("validation", "Fix Flow readiness before starting.", flow.readiness.issues);
-      const agents = yield* readyAgents(flow, target.project.id);
+      const agents = yield* readyAgents(flow, target.project.id, snapshot.support);
       const support = snapshot.support.launch[flow.workspace.mode];
       const workspace = yield* resolveStartWorkspace(git, flow, target.project);
       const attachments = attachmentIssues(snapshot, imageCount);
@@ -449,7 +449,9 @@ export function openRunnerStart(
               {
                 code: "launch_unsupported",
                 path: "connection.contract",
-                message: support.explanation,
+                message:
+                  support.explanation ??
+                  "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
               },
             ]
           : []),
@@ -475,6 +477,7 @@ export function openRunnerStart(
   function readyAgents(
     flow: FlowDraft,
     projectId: string,
+    support: T3Support,
   ): Effect.Effect<Result<CapturedAgent[]>, unknown> {
     return Effect.gen(function* () {
       const read: AgentDefinition[] = [];
@@ -510,7 +513,7 @@ export function openRunnerStart(
         // It has no Project overrides either, so its own null settings decide that.
         if (saved.execution === null) continue;
         const agent = { ...saved, execution: executionForProject(saved, projectId) };
-        const check = yield* checkAgent(projectId, agent);
+        const check = yield* checkAgent(projectId, agent, support);
         const problems = !check.ok
           ? [
               { code: "agent_readiness", path: "runtime", message: check.error.message },

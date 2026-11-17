@@ -5,7 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
-import { failInspectionsAfter } from "./support/controlled-t3.ts";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
 import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
@@ -392,16 +392,40 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
-it("Start checks its Project catalog and its Agent's readiness against its one T3 inspection", async (c) => {
+it("Start refuses an Agent whose report support its T3 snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
   // Arrange
-  const { f, t3, input } = await prepared(c);
-  failInspectionsAfter(t3, 1);
+  const { f, t3, input, project } = await prepared(c);
+  t3.support.reportReads = false;
+  changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
 
   // Act
   const result = await f.startRun(input);
 
   // Assert
-  expect(result).toMatchObject({ ok: true });
+  assert(!result.ok);
+  expect(result.error.issues.map(({ code }) => code)).toStrictEqual(["reporting_unsupported"]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+});
+
+it("Start refuses with a recheck-and-retry explanation when T3's launch replay proof cannot be established, and creates no Run", async (c) => {
+  // Arrange
+  const { f, t3, input, project } = await prepared(c);
+  t3.support.launchProofFails = true;
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "launch_unsupported",
+      path: "connection.contract",
+      message:
+        "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
+    },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
 it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {

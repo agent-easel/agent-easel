@@ -22,14 +22,18 @@ import type {
 /** Independent external-engine lifetime; no SQL or Factory internals. */
 export class ControlledT3 implements T3Adapter {
   /** The support answers each inspection reports while T3 is ready. A worktree launch also needs
-   * `launch`; a null `attachmentLimit` advertises no uploaded attachments. */
+   * `launch`; a null `attachmentLimit` advertises no uploaded attachments. A failing proof leaves
+   * its supported answer unchecked, as the live adapter does when a replay proof cannot be
+   * established. */
   support = {
     launch: true,
     worktreeLaunch: true,
     launchRetryScope: "controlled-durable-server-1" as string | null,
+    launchProofFails: false,
     attachmentLimit: 8 as number | null,
     send: true,
     sendRetryScope: "controlled-durable-send-1" as string | null,
+    sendProofFails: false,
     settle: true,
     stop: true,
     reportReads: true,
@@ -442,8 +446,10 @@ export class ControlledT3 implements T3Adapter {
     this.requireConnection("External failure containing secret material");
     return { environmentId: this.environmentId, label: "Controlled machine" };
   }
+  beforeCapabilityRead?: () => Promise<void>;
   async orchestratorCapabilities(_target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {
     this.capabilityReads++;
+    await this.beforeCapabilityRead?.();
     this.requireConnection("External failure containing secret material");
     if (!this.capabilitiesAvailable)
       throw new T3Failure("unavailable", "Capabilities are temporarily unavailable");
@@ -457,13 +463,16 @@ export class ControlledT3 implements T3Adapter {
   }
   private supportAnswers(): T3Support {
     const { support } = this;
-    const launch = {
-      supported: support.launch,
-      retryScope: support.launchRetryScope,
-      explanation: support.launch
-        ? "Controlled durable replay lifetime"
-        : "T3 launch contract is unsupported. Recheck the T3 connection.",
-    };
+    const launch =
+      support.launchProofFails && support.launch
+        ? { supported: false, retryScope: null, explanation: null }
+        : {
+            supported: support.launch,
+            retryScope: support.launchRetryScope,
+            explanation: support.launch
+              ? "Controlled durable replay lifetime"
+              : "T3 launch contract is unsupported. Recheck the T3 connection.",
+          };
     return {
       launch: {
         checkout: launch,
@@ -477,11 +486,14 @@ export class ControlledT3 implements T3Adapter {
             : launch,
       },
       attachmentLimit: support.attachmentLimit,
-      send: {
-        supported: support.send,
-        retryScope: support.sendRetryScope,
-        explanation: "Controlled queue replay lifetime",
-      },
+      send:
+        support.sendProofFails && support.send
+          ? { supported: false, retryScope: null, explanation: null }
+          : {
+              supported: support.send,
+              retryScope: support.sendRetryScope,
+              explanation: "Controlled queue replay lifetime",
+            },
       settle: { supported: support.settle, explanation: "Controlled settlement support" },
       stop: { supported: support.stop, explanation: "Controlled Stop support" },
       reportReads: support.reportReads,
@@ -499,11 +511,17 @@ export class ControlledT3 implements T3Adapter {
  * catalog refresh and every Agent's runtime readiness check reuse. */
 export const START_INSPECTIONS = 1;
 
-/** Every inspection after the first `passing` finds T3 unavailable; T3's other calls still answer. */
-export function failInspectionsAfter(t3: ControlledT3, passing: number) {
-  let inspections = 0;
-  t3.beforeInspection = () => {
-    if (++inspections > passing) throw new T3Failure("unavailable", "Unavailable");
+/** While T3 answers the next Agent capability read, such as an Agent's readiness check, T3 changes
+ * its report support and a separate connection check publishes that answer. */
+export function changeReportSupportAtCapabilityRead(
+  t3: ControlledT3,
+  recheckConnection: () => Promise<unknown>,
+  reportReads: boolean,
+) {
+  t3.beforeCapabilityRead = async () => {
+    delete t3.beforeCapabilityRead;
+    t3.support.reportReads = reportReads;
+    await recheckConnection();
   };
 }
 

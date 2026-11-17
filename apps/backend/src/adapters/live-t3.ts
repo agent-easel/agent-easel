@@ -748,28 +748,16 @@ export class LiveT3Adapter implements T3Adapter {
     // A supported worktree launch implies a supported checkout launch.
     const launchScope = checkout.supported ? await proven(this.options.launchRecoveryScope) : null;
     const sendScope = support.send.supported ? await proven(this.options.sendRecoveryScope) : null;
-    const scoped = (
-      answer: LaunchSupport,
-      retryScope: string | null | undefined,
-      unknown: string,
-    ) =>
+    const scoped = (answer: LaunchSupport, retryScope: string | null | undefined) =>
       !answer.supported
         ? answer
         : retryScope === undefined
-          ? { supported: false, retryScope: null, explanation: unknown }
+          ? { supported: false, retryScope: null, explanation: null }
           : { ...answer, retryScope };
-    const unknownLaunch = "T3 launch capabilities are unavailable.";
     return {
       ...support,
-      launch: {
-        checkout: scoped(checkout, launchScope, unknownLaunch),
-        worktree: scoped(worktree, launchScope, unknownLaunch),
-      },
-      send: scoped(
-        support.send,
-        sendScope,
-        "T3 send capabilities are unavailable; operation remains unresolved.",
-      ),
+      launch: { checkout: scoped(checkout, launchScope), worktree: scoped(worktree, launchScope) },
+      send: scoped(support.send, sendScope),
     };
   }
   private async inspectEndpoint(endpoint: string, record: CallRecord): Promise<Inspected> {

@@ -214,7 +214,9 @@ export interface LaunchSupport {
   /** Non-null only when the adapter can establish continuity AND retained replay keys.
    * Matching version/schema alone is insufficient. Changes invalidate uncertain replay. */
   readonly retryScope: string | null;
-  readonly explanation: string;
+  /** Null when a replay proof could not be established, so whether T3 supports the operation is
+   * unknown; each caller explains what that means for its operation. */
+  readonly explanation: string | null;
 }
 export interface LaunchReference {
   readonly projectId: string;

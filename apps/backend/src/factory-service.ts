@@ -353,7 +353,7 @@ export const makeFactoryService = (
       git,
       owner,
       intervalMs,
-      (projectId, agent) => setup.recheckAgent(projectId, agent),
+      (projectId, agent, support) => setup.recheckAgent(projectId, agent, support),
       changes,
       images,
       runTitles,

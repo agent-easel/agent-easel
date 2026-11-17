@@ -36,6 +36,8 @@ import type { RunImages } from "../run-images.ts";
  * Final result requires the release's generation. */
 const arrivalGeneration = (release: Exclude<Release, { state: "held" }>) =>
   release.state === "durable" ? undefined : release.run.generation;
+const SEND_UNCERTAIN =
+  "Operation response is uncertain. Only supported same-key reconciliation may recover it.";
 /** Uncertain work may be replayed only within the retry scope recorded at reservation. */
 const replayUnproven = (delivery: Delivery, retryScope: string | null) =>
   delivery.state !== "pending" && (!delivery.retry_scope || delivery.retry_scope !== retryScope);
@@ -195,7 +197,7 @@ export function openRunnerDispatch(
             yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
             return;
           }
-          const checked = yield* verifyDispatch(runRow, intent, support.send);
+          const checked = yield* verifyDispatch(runRow, intent, support);
           if (!checked.ok) {
             yield* store.noteUnresolved(intent, checked.problem);
             return;
@@ -213,10 +215,7 @@ export function openRunnerDispatch(
         }),
         (_error) =>
           Effect.gen(function* () {
-            yield* store.noteUnresolved(
-              intent,
-              "Operation response is uncertain. Only supported same-key reconciliation may recover it.",
-            );
+            yield* store.noteUnresolved(intent, SEND_UNCERTAIN);
           }),
       );
     });
@@ -236,7 +235,7 @@ export function openRunnerDispatch(
   function verifyDispatch(
     runRow: RunRow,
     intent: Delivery,
-    support: T3Support["send"],
+    support: T3Support,
   ): Effect.Effect<
     Checked<{
       payload: SendPayload;
@@ -247,12 +246,13 @@ export function openRunnerDispatch(
     return Effect.gen(function* () {
       const payload = storedPayload(intent);
       if (!payload.ok) return payload;
-      if (!support.supported) return unverified(support.explanation);
-      if (replayUnproven(intent, support.retryScope))
+      const { send } = support;
+      if (!send.supported) return unverified(send.explanation ?? SEND_UNCERTAIN);
+      if (replayUnproven(intent, send.retryScope))
         return unverified(
           "Same-key replay continuity/retention is unproven; operation remains unresolved.",
         );
-      const rebind = yield* rebindOrReadinessProblem(runRow);
+      const rebind = yield* rebindOrReadinessProblem(runRow, support);
       if (rebind) return unverified(rebind);
       const target = storedTarget(runRow, intent, payload.value);
       if (!target.ok) return target;
@@ -263,13 +263,13 @@ export function openRunnerDispatch(
         return unverified(
           "The target thread project or workspace changed; this send remains unresolved.",
         );
-      return verified({ payload: payload.value, retryScope: support.retryScope });
+      return verified({ payload: payload.value, retryScope: send.retryScope });
     });
   }
   /** Even replay may create work if the original request never reached T3. */
-  function rebindOrReadinessProblem(runRow: RunRow) {
+  function rebindOrReadinessProblem(runRow: RunRow, support: T3Support) {
     return Effect.gen(function* () {
-      const ready = yield* agentsReady(runRow);
+      const ready = yield* agentsReady(runRow, support);
       const target = catalogProject(yield* ops.listProjects(), runRow.project_id);
       if (
         !target ||
@@ -282,11 +282,11 @@ export function openRunnerDispatch(
       return null;
     });
   }
-  function agentsReady(runRow: RunRow) {
+  function agentsReady(runRow: RunRow, support: T3Support) {
     return Effect.gen(function* () {
       const { definitions } = runRow;
       for (const agent of definitions.agents) {
-        const readiness = yield* checkAgent(runRow.project_id, agent);
+        const readiness = yield* checkAgent(runRow.project_id, agent, support);
         if (!readiness.ok || !readiness.value.ready) return false;
       }
       return true;

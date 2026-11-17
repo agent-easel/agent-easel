@@ -75,7 +75,11 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
     const target = runTarget(runRow);
     const support = context.support.launch[runRow.workspace.mode];
     if (!support.supported) {
-      yield* store.noteUnresolved(launch, support.explanation);
+      yield* store.noteUnresolved(
+        launch,
+        support.explanation ??
+          "T3 launch capabilities are unavailable. Factory will retry this launch.",
+      );
       return;
     }
     const { images: launchImages = [], ...payload } = stored;
