@@ -66,7 +66,15 @@ export async function authorizedLiveOAuth(
   expect((await fetch(external.approvalUrl(authorizationUrl))).status).toBe(200);
   const ready = await factory.recheckConnection();
   expect(ready.ok).toBe(true);
-  return { harness, factory, adapter, external, endpoint: external.endpoint };
+  return {
+    harness,
+    factory,
+    adapter,
+    external,
+    endpoint: external.endpoint,
+    /** The consent page the latest authorization opened. */
+    authorizationUrl: () => authorizationUrl,
+  };
 }
 
 const projectValue = <A>(result: { ok: true; value: A } | { ok: false; error: unknown }): A => {

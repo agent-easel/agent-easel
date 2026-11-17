@@ -136,8 +136,8 @@ async function listAllTools(client: Client, invalidPagination: () => Error): Pro
   return tools;
 }
 
-const serverIdentity = (client: Client) => {
-  const server = client.getServerVersion();
+const serverIdentity = (client: Client | undefined) => {
+  const server = client?.getServerVersion();
   return { serverName: server?.name ?? "Unknown", serverVersion: server?.version ?? "Unknown" };
 };
 
@@ -184,6 +184,13 @@ interface CallRecord {
 }
 const currentCall = new AsyncLocalStorage<CallRecord>();
 
+/** An answer outside the MCP connection contract, which an inspection reports as incompatible. */
+class ContractFailure extends T3Failure {
+  constructor(message: string) {
+    super("invalid-response", message);
+  }
+}
+
 /** Classifies a call's failure once: other SDK failures mean T3 did not answer, and Factory's own
  * checks of T3's answers mean it answered outside the contract. */
 function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
@@ -191,8 +198,8 @@ function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
   const message = error instanceof Error && error.message ? error.message : "T3 call failed.";
   if (record.unavailable) return new T3Failure("unavailable", message);
   if (isAuthorizationRejection(error)) return new T3Failure("authorization-required", message);
-  if (isContractFailure(error) || !(error instanceof SdkError))
-    return new T3Failure("invalid-response", message);
+  if (isContractFailure(error)) return new ContractFailure(message);
+  if (!(error instanceof SdkError)) return new T3Failure("invalid-response", message);
   return new T3Failure("unavailable", message);
 }
 
@@ -205,6 +212,26 @@ async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Prom
     throw classifiedFailure(record, error);
   }
 }
+
+/** T3 rejected the request without running it: its MCP session is gone (for example after a T3
+ * restart) or the client closed before sending. Only then may the request be sent again. */
+const isDeadConnection = (error: unknown) =>
+  (error instanceof SdkHttpError && error.status === 404) ||
+  (error instanceof SdkError && error.code === SdkErrorCode.NotConnected);
+
+/** The one authorized MCP connection kept for an endpoint while its grant is unchanged. */
+interface Connection {
+  readonly client: Promise<Client>;
+  /** Calls running on it now. */
+  active: number;
+  /** No longer handed out; it closes once `active` reaches zero. */
+  retired: boolean;
+}
+const closeConnection = (connection: Connection) =>
+  connection.client.then(
+    (client) => client.close().catch(() => {}),
+    () => {},
+  );
 
 const markCallUnavailable = () => {
   const record = currentCall.getStore();
@@ -320,6 +347,7 @@ export class LiveT3Adapter implements T3Adapter {
   private endpoint: string | undefined;
   private completing = false;
   private completion: Promise<void> | undefined;
+  private readonly connections = new Map<string, Connection>();
   constructor(options: LiveT3Options) {
     this.options = options;
     mkdirSync(options.credentialsDirectory, { recursive: true, mode: 0o700 });
@@ -429,13 +457,18 @@ export class LiveT3Adapter implements T3Adapter {
     return new StreamableHTTPClientTransport(new URL(endpoint), {
       ...(provider ? { authProvider: provider } : {}),
       fetch: async (input, init) => {
+        // The standalone event stream lives as long as the reused connection; a timeout would only
+        // make the SDK reopen it again and again. Requests and OAuth discovery keep the timeout.
+        const stream =
+          init?.method === "GET" &&
+          new Headers(init.headers).get("accept")?.includes("text/event-stream");
         let response: Response;
         try {
           response = await fetch(input, {
             ...init,
             signal: AbortSignal.any([
               ...(init?.signal ? [init.signal] : []),
-              AbortSignal.timeout(10_000),
+              ...(stream ? [] : [AbortSignal.timeout(10_000)]),
             ]),
           });
         } catch {
@@ -496,6 +529,7 @@ export class LiveT3Adapter implements T3Adapter {
     delete data.tokens;
     data.reason = reason;
     this.save(data);
+    void this.dropConnection(endpoint);
     this.stopCallback();
   }
   private async listen(endpoint: string, port: number): Promise<string> {
@@ -559,6 +593,8 @@ export class LiveT3Adapter implements T3Adapter {
       delete complete.verifier;
       delete complete.reason;
       this.save(complete);
+      // Calls continue with the new grant, never on the previous grant's connection.
+      await this.dropConnection(endpoint);
       return {
         status: 200,
         body: "T3 authorization complete. Return to Factory; it will recheck automatically.",
@@ -588,7 +624,7 @@ export class LiveT3Adapter implements T3Adapter {
   private async startAuthorization(endpoint: string) {
     await this.completion;
     this.stopCallback();
-    this.endpoint = endpoint;
+    this.changeEndpoint(endpoint);
     const data = this.read(endpoint);
     delete data.tokens;
     delete data.state;
@@ -603,6 +639,7 @@ export class LiveT3Adapter implements T3Adapter {
       redirectUrl: `http://127.0.0.1:${this.options.callbackPort ?? 43827}/callback`,
     };
     this.save(data);
+    await this.dropConnection(endpoint);
     try {
       data.pending.redirectUrl = await this.listen(endpoint, this.options.callbackPort ?? 43827);
       this.save(data);
@@ -632,10 +669,10 @@ export class LiveT3Adapter implements T3Adapter {
   }
   private async reopenAuthorization(endpoint: string): Promise<AuthorizationResumption> {
     await this.completion;
-    if (this.endpoint !== endpoint) {
-      this.stopCallback();
-      this.endpoint = endpoint;
-    }
+    if (this.endpoint !== endpoint) this.stopCallback();
+    this.changeEndpoint(endpoint);
+    // A resumed authorization ends with a different grant; no call keeps the current connection.
+    await this.dropConnection(endpoint);
     // Consent may finish after the caller inspected pending status. Preserve that grant.
     if (this.read(endpoint).tokens) return "completing";
     const pending = await this.resumePendingApproval(endpoint);
@@ -689,20 +726,45 @@ export class LiveT3Adapter implements T3Adapter {
     if (this.endpoint !== endpoint) {
       await this.completion;
       this.stopCallback();
-      this.endpoint = endpoint;
+      this.changeEndpoint(endpoint);
     }
     const pending = await this.resumePendingApproval(endpoint);
     if (pending) return pending;
     const latest = this.read(endpoint);
+    if (!latest.tokens) return this.inspectWithoutGrant(endpoint, latest.reason, record);
+    let client: Client | undefined;
+    try {
+      return await this.onConnection(endpoint, (connected) => {
+        client = connected;
+        return this.inspectContract(endpoint, connected);
+      });
+    } catch (error) {
+      return this.inspectionFailure(
+        endpoint,
+        latest.reason,
+        serverIdentity(client),
+        classifiedFailure(record, error),
+      );
+    }
+  }
+  /** Without a grant there is nothing to reuse: the probe's own connection never becomes the
+   * authorized one. */
+  private async inspectWithoutGrant(
+    endpoint: string,
+    previousReason: T3ConnectionReason | undefined,
+    record: CallRecord,
+  ): Promise<Inspected> {
     const client = new Client({ name: "t3-factory", version: "0.0.0" });
     try {
-      await client.connect(
-        this.transport(endpoint, latest.tokens ? this.provider(endpoint, false) : undefined),
-        { timeout: 10_000 },
-      );
+      await client.connect(this.transport(endpoint), { timeout: 10_000 });
       return await this.inspectContract(endpoint, client);
     } catch (error) {
-      return this.inspectionFailure(endpoint, latest.reason, client, record, error);
+      return this.inspectionFailure(
+        endpoint,
+        previousReason,
+        serverIdentity(client),
+        classifiedFailure(record, error),
+      );
     } finally {
       await client.close().catch(() => {});
     }
@@ -759,12 +821,12 @@ export class LiveT3Adapter implements T3Adapter {
   private inspectionFailure(
     endpoint: string,
     previousReason: T3ConnectionReason | undefined,
-    client: Client,
-    record: CallRecord,
-    error: unknown,
+    server: ReturnType<typeof serverIdentity>,
+    failure: T3Failure,
   ): Inspected {
-    if (record.unavailable) throw new T3Failure("unavailable", "T3 is temporarily unavailable.");
-    if (isAuthorizationRejection(error)) {
+    if (failure.kind === "unavailable")
+      throw new T3Failure("unavailable", "T3 is temporarily unavailable.");
+    if (failure.kind === "authorization-required") {
       const revoked = this.read(endpoint);
       delete revoked.tokens;
       delete revoked.discovery;
@@ -772,14 +834,15 @@ export class LiveT3Adapter implements T3Adapter {
       delete revoked.verifier;
       revoked.reason = previousReason ?? "approval-required";
       this.save(revoked);
+      void this.dropConnection(endpoint);
       return { state: "authorization-required", reason: previousReason ?? "approval-required" };
     }
-    if (!isContractFailure(error)) throw error;
+    if (!(failure instanceof ContractFailure)) throw failure;
     return {
       state: "incompatible",
       reason: "contract-missing",
       contract: {
-        ...serverIdentity(client),
+        ...server,
         environmentId: null,
         tools: [],
         problems: ["T3 returned an unsupported MCP protocol or invalid connection contract."],
@@ -793,16 +856,70 @@ export class LiveT3Adapter implements T3Adapter {
     if (content === undefined) throw new Error("T3 tool returned no structured JSON");
     return content;
   }
-  /** One MCP connection with the saved OAuth grant, closed after the action. */
-  private async session<A>(endpoint: string, action: (client: Client) => Promise<A>): Promise<A> {
+  /** The endpoint's connection with the saved grant, opened once and shared by concurrent callers.
+   * The handshake runs as its own call, so every waiter receives the same classified failure. */
+  private connection(endpoint: string): Connection {
+    const existing = this.connections.get(endpoint);
+    if (existing) return existing;
     const client = new Client({ name: "t3-factory", version: "0.0.0" });
+    const connection: Connection = {
+      client: classifiedCall(async () => {
+        await client.connect(this.transport(endpoint, this.provider(endpoint, false)), {
+          timeout: 10_000,
+        });
+        return client;
+      }),
+      active: 0,
+      retired: false,
+    };
+    this.connections.set(endpoint, connection);
+    connection.client.catch(() => this.retire(endpoint, connection));
+    return connection;
+  }
+  /** Closes the endpoint's connection now; its in-flight requests fail and nothing reuses it. */
+  private dropConnection(endpoint: string): Promise<void> {
+    const connection = this.connections.get(endpoint);
+    if (!connection) return Promise.resolve();
+    this.connections.delete(endpoint);
+    connection.retired = true;
+    return closeConnection(connection);
+  }
+  /** Stops handing out a connection T3 no longer knows. Requests already on it keep their own
+   * answers, so it closes once they finish. */
+  private retire(endpoint: string, connection: Connection) {
+    if (this.connections.get(endpoint) === connection) this.connections.delete(endpoint);
+    connection.retired = true;
+    if (connection.active === 0) void closeConnection(connection);
+  }
+  private changeEndpoint(endpoint: string) {
+    if (this.endpoint !== endpoint)
+      for (const previous of this.connections.keys()) void this.dropConnection(previous);
+    this.endpoint = endpoint;
+  }
+  /** Runs `action` on the reused connection. A connection T3 no longer knows is replaced once and
+   * the action sent again: T3 ran none of it. Any other failure is reported as it is, so an
+   * action T3 may have executed is never repeated. */
+  private async onConnection<A>(
+    endpoint: string,
+    action: (client: Client) => Promise<A>,
+  ): Promise<A> {
+    const connection = this.connection(endpoint);
     try {
-      await client.connect(this.transport(endpoint, this.provider(endpoint, false)), {
-        timeout: 10_000,
-      });
+      return await this.use(connection, action);
+    } catch (error) {
+      if (!isDeadConnection(error)) throw error;
+      this.retire(endpoint, connection);
+      return this.use(this.connection(endpoint), action);
+    }
+  }
+  private async use<A>(connection: Connection, action: (client: Client) => Promise<A>): Promise<A> {
+    const client = await connection.client;
+    connection.active++;
+    try {
       return await action(client);
     } finally {
-      await client.close().catch(() => {});
+      connection.active--;
+      if (connection.retired && connection.active === 0) void closeConnection(connection);
     }
   }
   private withAuthorizedClient<A>(
@@ -814,7 +931,7 @@ export class LiveT3Adapter implements T3Adapter {
       const latest = this.read(target.endpoint);
       if (!latest.tokens)
         throw new T3Failure("authorization-required", "T3 authorization is required.");
-      return this.session(target.endpoint, action);
+      return this.onConnection(target.endpoint, action);
     });
   }
   /** The upload URL is a signed capability on the MCP origin: it is sent without the OAuth bearer
@@ -1033,19 +1150,17 @@ export class LiveT3Adapter implements T3Adapter {
       ),
     );
   }
-  /** Private SDK plumbing, never exposed as a second engine boundary. */
-  private projectSession<A>(endpoint: string, action: (client: Client) => Promise<A>): Promise<A> {
-    return classifiedCall(async () => {
-      const data = this.read(endpoint);
-      if (!data.tokens || !data.identity)
-        throw new T3Failure("authorization-required", "T3 authorization required.");
-      return this.session(endpoint, async (client) => {
-        const tools = await listAllTools(client, () => new Error("Invalid pagination"));
-        for (const [name, fields] of PROJECT_TOOL_FIELDS)
-          if (!supportsProjectTool(tools, name, fields))
-            throw new T3Failure("refused", "Unsupported project contract");
-        return action(client);
-      });
+  /** Every Project call first checks that T3 still lists both Project tools as Factory uses them. */
+  private withProjectContract<A>(
+    target: T3Endpoint,
+    action: (client: Client) => Promise<A>,
+  ): Promise<A> {
+    return this.withAuthorizedClient(target, async (client) => {
+      const tools = await listAllTools(client, () => new Error("Invalid pagination"));
+      for (const [name, fields] of PROJECT_TOOL_FIELDS)
+        if (!supportsProjectTool(tools, name, fields))
+          throw new T3Failure("refused", "Unsupported project contract");
+      return action(client);
     });
   }
   private async projectCall(
@@ -1059,7 +1174,7 @@ export class LiveT3Adapter implements T3Adapter {
     if (content === undefined) throw new Error("Invalid project result.");
     return content;
   }
-  private async projectValue(value: unknown): Promise<T3Project | null> {
+  private async projectValue(endpoint: string, value: unknown): Promise<T3Project | null> {
     if (!value || typeof value !== "object") throw new Error("Invalid project");
     const project = value as Record<string, unknown>;
     if (
@@ -1073,7 +1188,7 @@ export class LiveT3Adapter implements T3Adapter {
     if (project.deletedAt || project.archivedAt) return null;
     let available = false;
     // Only local T3 paths can be checked on this backend host. Remote execution is unverified.
-    if (this.endpoint && isLocalEndpoint(this.endpoint)) {
+    if (isLocalEndpoint(endpoint)) {
       available = await stat(project.workspaceRoot).then(
         (stats) => stats.isDirectory(),
         () => false,
@@ -1089,7 +1204,7 @@ export class LiveT3Adapter implements T3Adapter {
     };
   }
   async listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]> {
-    return this.projectSession(target.endpoint, async (client) => {
+    return this.withProjectContract(target, async (client) => {
       const projects: T3Project[] = [];
       const ids = new Set<string>();
       const add = (project: T3Project | null) => {
@@ -1102,7 +1217,7 @@ export class LiveT3Adapter implements T3Adapter {
       const seen = new Set<number>();
       do {
         const page = await this.projectPage(client, target.environmentId, cursor);
-        for (const raw of page.projects) add(await this.projectValue(raw));
+        for (const raw of page.projects) add(await this.projectValue(target.endpoint, raw));
         cursor = page.nextCursor ?? undefined;
         if (cursor !== undefined && (seen.has(cursor) || seen.size >= 100))
           throw new Error("Invalid project pagination");
@@ -1133,14 +1248,14 @@ export class LiveT3Adapter implements T3Adapter {
     return { projects: body.projects, nextCursor: body.nextCursor as number | null };
   }
   async createProject(target: T3ProjectTarget): Promise<T3Project> {
-    return this.projectSession(target.endpoint, async (client) => {
+    return this.withProjectContract(target, async (client) => {
       const value = await this.projectCall(client, "t3_project_create", {
         environmentId: target.environmentId,
         title: basename(target.workspaceRoot),
         workspaceRoot: target.workspaceRoot,
         createWorkspaceRootIfMissing: false,
       });
-      const project = await this.projectValue(value);
+      const project = await this.projectValue(target.endpoint, value);
       if (!project) throw new Error("Project unavailable");
       return project;
     });
@@ -1160,6 +1275,9 @@ export class LiveT3Adapter implements T3Adapter {
   async close() {
     await this.completion;
     this.stopCallback();
+    await Promise.all(
+      [...this.connections.keys()].map((endpoint) => this.dropConnection(endpoint)),
+    );
     await this.released;
   }
 }

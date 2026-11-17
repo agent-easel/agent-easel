@@ -215,6 +215,15 @@ inspection proves protocol support and environment identity, never readiness to 
 It launches no diagnostic workload. Version strings are informational, not an allowlist or
 proof of replay continuity.
 
+The boundary keeps one authorized MCP connection per T3 endpoint, opened on first use and shared
+by inspections and every T3 call, including concurrent ones. When T3 no longer knows the
+connection's session, for example after a T3 restart, the boundary opens a new connection and sends
+that request again, because T3 did not run it. Any other transport failure is reported as T3
+unavailable without resending, so an action T3 may already have executed is never replayed.
+Authorizing, resuming authorization, a rejected grant, an endpoint change and shutdown close the
+connection, so no call uses a previous grant's connection. An inspection without a saved grant uses
+a separate connection that is closed afterwards.
+
 The boundary classifies each T3 call's failure once, for that call only: T3 unavailable (network,
 timeout, server error or lost reply, including during token refresh), authorization required,
 refused by T3, or a response outside the contract. Only a refused launch fails definitively; any

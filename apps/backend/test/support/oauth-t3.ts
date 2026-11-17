@@ -29,8 +29,13 @@ interface Rejection {
 }
 const invalidGrant: Rejection = { status: 400, body: { error: "invalid_grant" } };
 
-function json(response: ServerResponse, status: number, value: unknown) {
-  response.writeHead(status, { "content-type": "application/json" });
+function json(
+  response: ServerResponse,
+  status: number,
+  value: unknown,
+  headers: Record<string, string> = {},
+) {
+  response.writeHead(status, { ...headers, "content-type": "application/json" });
   response.end(JSON.stringify(value));
 }
 
@@ -150,6 +155,11 @@ export async function oauthT3(
   let registrationCount = 0;
   let authorizations = 0;
   let rejectionGate: { readonly reached: () => void; readonly release: Promise<void> } | undefined;
+  /** Live MCP sessions, one per handshake; forgetting them is what a T3 restart looks like. */
+  const sessions = new Set<string>();
+  let openedSessions = 0;
+  /** The session each authorized MCP request carried, with the tool it called, in arrival order. */
+  const sessionRequests: { readonly session: string; readonly tool?: string }[] = [];
   const authorizationServerMetadata = () => ({
     issuer: base,
     authorization_endpoint: base + "/authorize",
@@ -334,6 +344,28 @@ export async function oauthT3(
       return;
     }
     const message = JSON.parse(body.toString()) as McpRequest;
+    const session = request.headers["mcp-session-id"];
+    if (typeof session === "string") {
+      if (!sessions.has(session)) {
+        json(response, 404, {
+          jsonrpc: "2.0",
+          error: { code: -32001, message: "Session not found" },
+        });
+        return;
+      }
+      sessionRequests.push({
+        session,
+        ...(message.params?.name ? { tool: message.params.name } : {}),
+      });
+    }
+    if (message.method === "initialize") {
+      const opened = randomUUID();
+      sessions.add(opened);
+      openedSessions++;
+      const result = await mcpResult(message);
+      json(response, 200, { jsonrpc: "2.0", id: message.id, result }, { "mcp-session-id": opened });
+      return;
+    }
     if (message.id === undefined) {
       response.writeHead(202).end();
       return;
@@ -376,6 +408,15 @@ export async function oauthT3(
     },
     get authorizations() {
       return authorizations;
+    },
+    /** MCP sessions opened so far: one per authorized connection handshake. */
+    get openedSessions() {
+      return openedSessions;
+    },
+    sessionRequests,
+    /** Forgets every MCP session, as a restarted T3 would. */
+    dropSessions() {
+      sessions.clear();
     },
     approvalUrl(authorizationUrl: string) {
       authorizations++;
