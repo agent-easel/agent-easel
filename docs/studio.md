@@ -297,7 +297,7 @@ confirmation closes; an already submitted Delete completes normally through the 
 and returns to the list without another discard prompt. Saves that reach a removed Agent are still
 rejected by the backend and never recreate it.
 
-**Copy as JSON** recovers the current name, prompt, execution settings and exits, including unfinished
+**Copy as JSON** recovers the current name, prompt, execution settings, exits and Project overrides, including unfinished
 edits, in the create API's shape without identity, revision or status fields. Studio confirms a
 successful clipboard write; if clipboard access fails, a read-only selectable JSON box remains
 available. Leaving or closing Studio asks **This Agent was removed elsewhere. Discard the retained

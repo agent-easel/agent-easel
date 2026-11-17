@@ -139,6 +139,7 @@ export async function expectCopiedEditedAgent(
     prompt: "Recover these unfinished edits.",
     execution: agent.execution,
     exits: agent.exits,
+    projectOverrides: agent.projectOverrides,
   });
   await app.screenshot("agent-removed-json-copied");
   return { ...state, copied };
@@ -183,6 +184,7 @@ export async function expectAgentJsonFallback(
         prompt: "Keep my recovery edits",
         execution: agent.execution,
         exits: agent.exits,
+        projectOverrides: agent.projectOverrides,
       },
       null,
       2,
