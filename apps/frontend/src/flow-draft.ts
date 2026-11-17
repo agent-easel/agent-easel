@@ -26,6 +26,8 @@ export interface FlowDraftSnapshot extends RevisionedDraftState<FlowDraft, FlowC
   /** An Agent this unsaved draft places changed since readiness was last known; check again. */
   readonly agentsChanged: boolean;
   readonly canStartRun: boolean;
+  /** This editor's removal was accepted, so nothing it shows can still be saved. */
+  readonly removedHere: boolean;
 }
 
 /** Shown until the Flow loads. */
@@ -125,6 +127,7 @@ export function createFlowDraft(
         agentsChanged,
         canSave: loaded && state.canSave && !checking,
         canStartRun: loaded && !state.removed && !busy && !state.dirty && !!readiness?.ready,
+        removedHere,
       };
     },
   });

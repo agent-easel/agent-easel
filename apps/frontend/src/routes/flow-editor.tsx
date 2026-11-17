@@ -318,7 +318,8 @@ const noEntries: ReadonlyMap<string, string> = new Map();
 /**
  * Tells Studio's guard about this editor's unsaved work: the draft's own changes, learnt from its
  * notification before any render, and an invalid Condition arrival entry, which lives only in this
- * editor and is lost when it closes.
+ * editor and is lost when it closes. An accepted removal here leaves nothing to keep, so the
+ * guard is clear before Remove navigates away.
  */
 function useFlowDraftGuard(
   draft: FlowDraftModel,
@@ -330,8 +331,8 @@ function useFlowDraftGuard(
     () => ({
       subscribe: draft.subscribe,
       getSnapshot: () => {
-        const { dirty, removed } = draft.getSnapshot();
-        return { dirty: dirty || invalidEntry, removed };
+        const { dirty, removed, removedHere } = draft.getSnapshot();
+        return { dirty: dirty || (invalidEntry && !removedHere), removed };
       },
     }),
     [draft, invalidEntry],

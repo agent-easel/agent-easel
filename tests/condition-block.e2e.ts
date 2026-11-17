@@ -1,75 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
-import {
-  readFlow,
-  saveConditionAtSizeLimit,
-  saveFlowElsewhere,
-  saveSingleAgentFlow,
-} from "./support/flows.ts";
+import { readFlow, saveConditionAtSizeLimit, saveSingleAgentFlow } from "./support/flows.ts";
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
-import type { StudioFixtures } from "./support/studio.ts";
-
-/**
- * Saves a Flow whose Coder (block `worker`, a Runtime worker with one exit, `done`) reaches
- * Condition Escalate with `rules`; each listed wire leaves an Escalate output for Coder or for
- * Human step Review.
- */
-async function saveConditionFlow(
-  baseUrl: string | undefined,
-  name: string,
-  rules: readonly { id: string; name: string; fromArrival: number | null }[],
-  wired: readonly (readonly [exitId: string, targetBlockId: "worker" | "review"])[],
-) {
-  const id = await saveSingleAgentFlow(baseUrl, name, "Runtime worker", {
-    id: "worker",
-    name: "Coder",
-    x: 320,
-    y: 60,
-  });
-  const flow = await readFlow(baseUrl, id);
-  await saveFlowElsewhere(baseUrl, flow, {
-    graph: {
-      ...flow.graph,
-      blocks: [
-        ...flow.graph.blocks,
-        {
-          id: "escalate",
-          kind: "condition",
-          name: "Escalate",
-          position: { x: 680, y: 60 },
-          rules,
-          otherwise: { id: "otherwise" },
-        },
-        { id: "review", kind: "human", name: "Review", position: { x: 1040, y: 60 } },
-      ],
-      connections: [
-        { sourceBlockId: "worker", exitId: "done", targetBlockId: "escalate" },
-        ...wired.map(([exitId, targetBlockId]) => ({
-          sourceBlockId: "escalate",
-          exitId,
-          targetBlockId,
-        })),
-      ],
-    },
-  });
-  return id;
-}
-
-/** A saved Flow whose Condition Escalate has one rule, from arrival 3, is open with Escalate selected. */
-async function openOneRuleCondition({ app, screen, browser }: StudioFixtures, name: string) {
-  await browser.setViewport({ width: 1920, height: 1000 });
-  const flowId = await saveConditionFlow(
-    app.baseUrl,
-    name,
-    [{ id: "human", name: "Human", fromArrival: 3 }],
-    [["human", "review"]],
-  );
-  await app.open(`/studio/flows/${flowId}`);
-  await screen.getByRole("button", "Condition Escalate").tap();
-  return flowId;
-}
+import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
 
 /** Adds a block from the library row `row` and names and places it in its configuration. */
 async function addBlock(screen: Screen, row: string, name: string, x: string, y: string) {
@@ -235,6 +170,29 @@ test("leaving a Flow with only an invalid arrival number asks first, and Keep ed
   // Assert
   await expect(browser).toHaveURL(`/studio/flows/${flowId}`);
   await expect(screen.getByLabel("Rule 1 from arrival")).toHaveValue("2.5");
+});
+
+test("removing a Flow with only an invalid arrival number opens the Flow list without a discard prompt", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await openOneRuleCondition({ app, screen, browser }, "Invalid threshold removed");
+  await screen.getByLabel("Rule 1 from arrival").fill("2.5");
+  await screen.getByRole("button", "Remove", { exact: true }).tap();
+
+  // Act
+  await screen
+    .getByRole("dialog", "Remove “Invalid threshold removed”?")
+    .getByRole("button", "Remove Flow", { exact: true })
+    .tap();
+
+  // Assert
+  await expect(browser).toHaveURL("/studio/flows");
+  await expect(screen.getByRole("dialog", /Discard/)).toHaveCount(0);
+  await expect(screen.getByRole("link", /^Invalid threshold removed /)).toHaveCount(0);
+  expect((await fetch(new URL(`/api/flows/${flowId}`, app.baseUrl))).ok).toBe(false);
 });
 
 test("a Condition authored and wired in Studio routes a started Run's arrivals by number to Otherwise, a rule and an unwired output, shown on the canvas, inspector and Timeline", async ({
