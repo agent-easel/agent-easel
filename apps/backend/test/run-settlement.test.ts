@@ -197,7 +197,7 @@ it("per-Block settlement is a no-op when T3 lacks native settle support", async 
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  f.t3.settleSupported = false;
+  f.t3.support.settle = false;
 
   // Act
   await f.f.reconcileRuns();
@@ -426,7 +426,7 @@ it("an unresolved manual settlement refuses Human answers without asking for inp
   const reported = await resultReported(setup.world, atWork);
   const f = { ...setup, ...(await resultReleasedToHumanReview(setup.world, reported)) };
   turnBegins(f.world, f, "review-follow-up");
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   assert((await f.f.reconcileRuns()).ok);
 
@@ -664,7 +664,7 @@ it("a Stop T3 does not support leaves the settlement unresolved and holds the Ru
   const [first] = await twoWorkersStarted(setup.world, setup.input);
   const f = { ...setup, runId: first.runId };
   await resultReported(f.world, first);
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -697,10 +697,10 @@ it("retrying an unresolved settlement requests Stop again and settles the Run", 
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   stopsEndThreads(f.t3);
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
   await f.f.reconcileRuns();
-  f.t3.stopSupported = true;
+  f.t3.support.stop = true;
   const settlement = nextSettlement(f.t3);
 
   // Act
@@ -727,7 +727,7 @@ it("a confirmed Settle that cannot stop its worker raises one Run-level Settle c
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act
@@ -810,7 +810,7 @@ it("a Settle that could not stop workers wakes its Snoozed Run as Woke", async (
     ...setup,
     ...(await snoozed(setup.world, await workerAtWork(setup.world, setup.input))),
   };
-  f.t3.stopSupported = false;
+  f.t3.support.stop = false;
   assert((await f.f.settleRun(f.runId, { stopWorkers: true })).ok);
 
   // Act

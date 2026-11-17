@@ -75,11 +75,11 @@ it("a pending image launch uploads its images again after restart once T3 accept
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const f = { ...setup, ...(await imageDispatchHeld(setup.world, await imageRequest(setup))) };
-  f.t3.attachmentsSupported = false;
+  f.t3.support.attachmentLimit = null;
   f.release();
   assert((await f.f.reconcileRuns()).ok);
   await f.f.close();
-  f.t3.attachmentsSupported = true;
+  f.t3.support.attachmentLimit = 8;
   const reopened = await f.h.open({ t3: f.t3, connectionRetryMs: 60_000 });
 
   // Act

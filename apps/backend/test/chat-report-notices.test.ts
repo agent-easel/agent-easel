@@ -196,7 +196,7 @@ it("settling the Run after Settle could not stop its workers edits the Problem n
   const { runId, worker } = await chatStartedRun(world);
   await settleUnresolved(world.world, worker);
   const notice = await noticeCreated(world.discord);
-  world.world.t3.stopSupported = true;
+  world.world.t3.support.stop = true;
   stopsEndThreads(world.world.t3);
 
   // Act

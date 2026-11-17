@@ -13,7 +13,7 @@ import type {
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
 import type { ControlledGitHub, ControlledIssue } from "./controlled-github.ts";
-import { holdLaunchInspection } from "./controlled-t3.ts";
+import { holdInspection, START_INSPECTIONS } from "./controlled-t3.ts";
 import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
@@ -216,11 +216,11 @@ export async function startedIssues(f: Factory, projectId: string) {
 }
 
 /**
- * Holds a check's first Start at external preflight until the test releases it. The check's own
- * launch-blocker read inspects T3 once before that Start does.
+ * Holds a check's first Start at its T3 contract snapshot until the test releases it. The check's
+ * own launch-blocker read inspects T3 as that Start does, except for the catalogue recheck.
  */
 export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
-  const { inspecting, release } = holdLaunchInspection(world.t3, 1);
+  const { inspecting, release } = holdInspection(world.t3, START_INSPECTIONS - 1);
   const checked = world.f.runTrigger(world.trigger.id);
   await inspecting;
   return { checked, release };

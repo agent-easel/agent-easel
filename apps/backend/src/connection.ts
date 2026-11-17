@@ -7,7 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
-import type { T3Adapter, T3ConnectionReason } from "./adapters/t3.ts";
+import type {
+  T3Adapter,
+  T3ConnectionReason,
+  T3ContractSnapshot,
+  T3Support,
+} from "./adapters/t3.ts";
+import { NO_T3_SUPPORT } from "./adapters/t3-contract.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
@@ -49,6 +55,13 @@ const missingEndpoint = (message: string) => ({
   error: { code: "validation" as const, message, issues: [] },
 });
 
+/** Internal access to the T3 contract snapshot: `fresh` performs one connection check, `latest`
+ * reads the last completed check. Neither is a public operation. */
+export interface ContractSnapshots {
+  readonly fresh: () => Effect.Effect<T3ContractSnapshot, unknown>;
+  readonly latest: () => Effect.Effect<T3ContractSnapshot>;
+}
+
 /** Every status transition is published to live subscribers; `status` is the authority. */
 export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveChanges) =>
   Effect.gen(function* () {
@@ -73,10 +86,17 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
       authorizationPending: false,
       contract: null,
     };
+    /** The support answers of the check that set `status`. */
+    let support: T3Support = NO_T3_SUPPORT;
     let closed = false;
     /** When `openConnectionAuthorization` last asked the host browser; bounds repeated opens. */
     let lastOpenedAt: number | undefined;
     const value = (): Result<T3Connection> => ({ ok: true, value: status });
+    /** A snapshot offers support answers only together with a ready authorization context. */
+    const snapshot = (): T3ContractSnapshot => {
+      const contextId = status.state === "ready" ? (status.authorizationContext?.id ?? null) : null;
+      return { contextId, support: contextId ? support : NO_T3_SUPPORT };
+    };
     // Once a mutation starts, shutdown drains it before closing the adapter and SQL.
     const serial = <A, E>(action: Effect.Effect<A, E>) =>
       mutex.withPermits(1)(Effect.uninterruptible(action));
@@ -121,6 +141,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
             saved!.context_id = row.id;
           }
         }
+        support = observation.support;
         status = {
           endpoint,
           state: observation.state,
@@ -144,6 +165,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
       }).pipe(
         Effect.catch(() =>
           Effect.gen(function* () {
+            support = NO_T3_SUPPORT;
             status = {
               ...status,
               state: "unavailable",
@@ -203,6 +225,10 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
     return {
       getConnection: () => Effect.sync(value),
       recheckConnection: () => serial(check()),
+      snapshots: {
+        fresh: () => serial(Effect.map(check(), snapshot)),
+        latest: () => Effect.sync(snapshot),
+      } satisfies ContractSnapshots,
       configureConnection: (input: unknown) =>
         serial(
           Effect.gen(function* () {

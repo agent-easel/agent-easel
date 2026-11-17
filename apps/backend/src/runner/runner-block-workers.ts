@@ -5,8 +5,10 @@ import {
   type LaunchAttachment,
   type LaunchPayload,
   type T3Adapter,
+  type T3Support,
   type T3Target,
 } from "../adapters/t3.ts";
+import { attachmentSupport } from "../adapters/t3-contract.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { verifiedLaunchedThread } from "./launched-thread.ts";
 import type { Delivery, RunStore } from "./run-store/run-store.ts";
@@ -48,6 +50,7 @@ export function dispatchBlockLaunch(
   images: RunImages,
   runRow: RunRow,
   launch: Delivery,
+  support: T3Support,
 ) {
   return Effect.gen(function* () {
     const checked = verifiedStoredLaunch(runRow, launch);
@@ -56,7 +59,7 @@ export function dispatchBlockLaunch(
       return;
     }
     if (launch.state === "pending") {
-      yield* sendPendingLaunch({ store, t3, images, runRow, launch }, checked.value);
+      yield* sendPendingLaunch({ store, t3, images, runRow, launch, support }, checked.value);
       return;
     }
     yield* searchLaunchedWorker(store, t3, runRow, launch, checked.value);
@@ -70,15 +73,9 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
     if (!runRow.gate_open) return;
     if (launch.recovery_not_before && launch.recovery_not_before > (yield* now)) return;
     const target = runTarget(runRow);
-    const support = yield* Effect.promise(() =>
-      t3.inspectLaunchSupport(target, runRow.workspace.mode).catch(() => null),
-    );
-    if (!support?.supported) {
-      yield* store.noteUnresolved(
-        launch,
-        support?.explanation ??
-          "T3 launch capabilities are unavailable. Factory will retry this launch.",
-      );
+    const support = context.support.launch[runRow.workspace.mode];
+    if (!support.supported) {
+      yield* store.noteUnresolved(launch, support.explanation);
       return;
     }
     const { images: launchImages = [], ...payload } = stored;
@@ -175,6 +172,8 @@ type LaunchContext = {
   images: RunImages;
   runRow: RunRow;
   launch: Delivery;
+  /** The drive pass's support answers. */
+  support: T3Support;
 };
 
 /**
@@ -187,13 +186,11 @@ function uploadLaunchImages(context: LaunchContext, launchImages: readonly Launc
     if (!launchImages.length) return [];
     const { store, t3, images, runRow, launch } = context;
     const target = runTarget(runRow);
-    const support = yield* Effect.promise(() =>
-      t3.inspectAttachmentSupport(target, launchImages.length).catch(() => null),
-    );
-    if (!support?.supported) {
+    const support = attachmentSupport(context.support, launchImages.length);
+    if (!support.supported) {
       yield* store.noteUnresolved(
         launch,
-        `T3 no longer accepts image attachments. Factory will retry this launch. ${support?.explanation ?? ""}`.trim(),
+        `T3 no longer accepts image attachments. Factory will retry this launch. ${support.explanation}`,
       );
       return undefined;
     }

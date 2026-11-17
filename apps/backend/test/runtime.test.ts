@@ -23,7 +23,7 @@ it("missing user installation blocks readiness without launching setup work", as
 it("recheckRuntime reports reporting_unsupported when T3 lacks report support", async (c) => {
   // Arrange
   const { f, t3, selection } = await runtimeReadinessFixture(c);
-  t3.reportSupported = false;
+  t3.support.reportReads = false;
 
   // Act
   const result = await f.recheckRuntime(selection);

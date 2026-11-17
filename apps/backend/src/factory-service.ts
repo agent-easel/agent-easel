@@ -144,7 +144,7 @@ export const makeFactoryService = (
           getAgent: definitions.getAgent,
           getAgentCapabilities: definitions.getAgentCapabilities,
         },
-        t3,
+        connection.snapshots.latest,
         git,
       ),
     );
@@ -152,10 +152,10 @@ export const makeFactoryService = (
     const runTitles = yield* makeRunTitles(
       t3,
       {
-        getConnection: connection.getConnection,
         getAgentCapabilities: definitions.getAgentCapabilities,
         getReportingInstallations: reporting.getReportingInstallations,
       },
+      connection.snapshots,
       changes,
     );
     const chatCredentials = yield* makeChatCredentials(credentialsDirectory);
@@ -346,6 +346,7 @@ export const makeFactoryService = (
     };
     runner = yield* makeRunner(
       factory,
+      connection.snapshots.fresh,
       t3,
       git,
       owner,

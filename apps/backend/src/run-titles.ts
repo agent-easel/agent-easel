@@ -16,7 +16,13 @@ import {
   validateUpdateRunTitleSetting,
 } from "@t3-factory/domain-validation";
 import type { StartPrompt } from "@t3-factory/domain-validation";
-import { LaunchRejected, type LaunchPayload, type T3Adapter } from "./adapters/t3.ts";
+import {
+  LaunchRejected,
+  type LaunchPayload,
+  type T3Adapter,
+  type T3ContractSnapshot,
+} from "./adapters/t3.ts";
+import type { ContractSnapshots } from "./connection.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import { reportingInstallationProblem } from "./explicit-readiness.ts";
 import type { LiveChanges } from "./live-changes.ts";
@@ -94,19 +100,19 @@ const hasMeaningfulText = (prompt: StartPrompt) =>
   /[\p{L}\p{N}]/u.test(labelledPromptText(prompt.segments, prompt.images));
 
 type EligibilityOperations = EffectOperations<
-  Pick<FactoryOperations, "getConnection" | "getAgentCapabilities" | "getReportingInstallations">
+  Pick<FactoryOperations, "getAgentCapabilities" | "getReportingInstallations">
 >;
 
-export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes: LiveChanges) =>
+export const makeRunTitles = (
+  t3: T3Adapter,
+  ops: EligibilityOperations,
+  snapshots: ContractSnapshots,
+  changes: LiveChanges,
+) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     /** The authorization context T3 effects on a title thread require: the Run's, still live. */
-    const liveContextId = () =>
-      Effect.map(ops.getConnection(), (connection) =>
-        connection.ok && connection.value.state === "ready"
-          ? (connection.value.authorizationContext?.id ?? null)
-          : null,
-      );
+    const liveContextId = () => Effect.map(snapshots.latest(), (snapshot) => snapshot.contextId);
     const ownedThreads = openOwnedThreads(t3, liveContextId);
 
     const getRunTitleSetting = () =>
@@ -145,25 +151,18 @@ export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes
       });
 
     /** The first failed eligibility check for launching this model in the Project checkout. */
-    const eligibilityProblem = (model: RunTitleModel, capabilities: Result<AgentCapabilities>) =>
+    const eligibilityProblem = (
+      model: RunTitleModel,
+      capabilities: Result<AgentCapabilities>,
+      snapshot: T3ContractSnapshot,
+    ) =>
       Effect.gen(function* (): Effect.fn.Return<string | undefined, unknown> {
-        const connection = yield* ops.getConnection();
-        if (
-          !connection.ok ||
-          connection.value.state !== "ready" ||
-          !connection.value.authorizationContext ||
-          !connection.value.endpoint
-        )
-          return "T3 is not connected and authorized.";
-        const endpoint = connection.value.endpoint;
+        if (!snapshot.contextId) return "T3 is not connected and authorized.";
         if (!capabilities.ok) return capabilities.error.message;
         const unavailable = catalogProblem(model, capabilities.value);
         if (unavailable) return unavailable.message;
-        const support = yield* Effect.promise(() =>
-          t3.inspectLaunchSupport({ endpoint }, "checkout").catch(() => null),
-        );
-        if (!support?.supported)
-          return support?.explanation ?? "T3 launch capabilities are unavailable.";
+        const launch = snapshot.support.launch.checkout;
+        if (!launch.supported) return launch.explanation;
         return reportingInstallationProblem(
           model.providerInstanceId,
           yield* ops.getReportingInstallations(),
@@ -175,10 +174,13 @@ export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes
      * Start's title generation decision for an automatic Run, made before its acceptance
      * transaction; manual and legacy Runs get none. A failed check never refuses the Start.
      */
-    const planTitleGeneration = (request: {
-      readonly titleProvenance: StartTitleProvenance;
-      readonly prompt: StartPrompt;
-    }) =>
+    const planTitleGeneration = (
+      request: {
+        readonly titleProvenance: StartTitleProvenance;
+        readonly prompt: StartPrompt;
+      },
+      snapshot: T3ContractSnapshot,
+    ) =>
       Effect.gen(function* (): Effect.fn.Return<TitleGenerationPlan | undefined, unknown> {
         if (request.titleProvenance !== "automatic") return undefined;
         const { stored: setting } = yield* store.readTitleSetting(sql);
@@ -192,7 +194,7 @@ export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes
         const model = setting.model;
         const capabilities = yield* ops.getAgentCapabilities();
         const problem = hasMeaningfulText(request.prompt)
-          ? yield* eligibilityProblem(model, capabilities)
+          ? yield* eligibilityProblem(model, capabilities, snapshot)
           : null;
         return {
           ...plan,
@@ -252,6 +254,7 @@ export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes
      */
     const dispatch = (generation: LaunchedTitleGeneration) =>
       Effect.gen(function* () {
+        const snapshot = yield* snapshots.fresh();
         const problem = yield* eligibilityProblem(
           {
             providerInstanceId: generation.provider_instance_id,
@@ -261,10 +264,11 @@ export const makeRunTitles = (t3: T3Adapter, ops: EligibilityOperations, changes
             ) as RunTitleModel["modelOptions"],
           },
           yield* ops.getAgentCapabilities(),
+          snapshot,
         );
         if (problem !== undefined)
           return yield* skipBeforeLaunch(generation.run_id, generation.id, problem);
-        if (!(yield* contextLive(generation))) return;
+        if (snapshot.contextId !== generation.context_id) return;
         if (!(yield* store.markTitleLaunchSent(sql, generation))) return;
         changes.runChanged(generation.run_id);
         const launched = yield* Effect.tryPromise({

@@ -2,7 +2,11 @@ import type { TestContext } from "@effect/vitest";
 import type { Factory } from "../../src/index.ts";
 import type { BlockExit, FlowGraph } from "@t3-factory/contracts";
 import { factoryHarness } from "./factory.ts";
-import { loadMigrationData, restoreCapturedAdapter } from "./migration-data.ts";
+import {
+  loadMigrationData,
+  restoreCapturedAdapter,
+  SUPPORT_FLAG_FIELDS,
+} from "./migration-data.ts";
 
 type Success<T> = T extends { ok: true; value: infer V } ? V : never;
 type Value<K extends keyof Factory> = Factory[K] extends (...args: never[]) => infer R
@@ -30,8 +34,9 @@ interface Capture {
   tasks: Value<"listTasks">;
 }
 
-/** Captured same-host Git fields, now on the harness's controlled Git; they held its defaults. */
-const MOVED_ADAPTER_FIELDS = new Set(["defaultBranch", "refs"]);
+/** Captured same-host Git fields, now on the harness's controlled Git, and per-probe support
+ * flags, now the controlled T3's `support` answers; they all held the defaults. */
+const MOVED_ADAPTER_FIELDS = new Set(["defaultBranch", "refs", ...SUPPORT_FLAG_FIELDS]);
 
 /**
  * The capture of the last outcome-exit build (source commit cd0d25d), restored with its adapter

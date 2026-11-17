@@ -8,7 +8,8 @@ import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
 import type { GitAdapter } from "../adapters/git.ts";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
 import { openRunStore, queryPageLimit } from "./run-store/run-store.ts";
@@ -29,6 +30,7 @@ import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** One scoped Runner owner. Accepted work drains before SQL and ownership are released. */
 export const makeRunner = Effect.fn("Runner.make")(function* (
   ops: EffectOperations<FactoryOperations>,
+  freshSnapshot: ContractSnapshots["fresh"],
   t3: T3Adapter,
   git: GitAdapter,
   owner: { token: string },
@@ -79,7 +81,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   const { start, startText, startBlockers } = openRunnerStart(
     store,
     ops,
-    t3,
+    freshSnapshot,
     git,
     lifecycle,
     checkAgent,
@@ -138,30 +140,29 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     return Effect.gen(function* () {
       const runRow = yield* row(id);
       if (!runRow || runRow.archived_at) return;
-      const contextId = yield* liveContextId();
-      yield* driveBlockWork(runRow, contextId, phase);
+      yield* driveBlockWork(runRow, yield* freshSnapshot(), phase);
     });
   }
   function driveBlockWork(
     runRow: RunRow,
-    contextId: string | null,
+    snapshot: T3ContractSnapshot,
     phase: "observe" | "dispatch" | "both",
   ) {
     return Effect.gen(function* () {
       const id = runRow.id;
       const blocks = yield* store.blocksWithWorkers(id);
       if (runRow.gate_open && phase !== "dispatch")
-        for (const block of blocks) yield* observe((yield* row(id))!, block, contextId);
+        for (const block of blocks) yield* observe((yield* row(id))!, block, snapshot.contextId);
       yield* settleRecoveries(store, lifecycle, t3, id);
       if (phase === "observe") return;
       yield* forwardDueWaits(id);
       yield* releaseContinuationResults(store, t3, (yield* row(id)) ?? runRow);
       const observed = (yield* row(id)) ?? runRow;
-      yield* dispatchIntents(observed, contextId);
+      yield* dispatchIntents(observed, snapshot);
       // Binding the Run worktree during dispatch records the launches that join it.
       const current = yield* row(id);
       if (preparing(observed) && current && !preparing(current))
-        yield* dispatchIntents(current, contextId);
+        yield* dispatchIntents(current, snapshot);
     });
   }
   /** Forwards every arrival whose deadline passed, before the pass dispatches its Handoffs. */
@@ -171,11 +172,11 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         yield* store.forwardWaitArrival(runId, arrival.id, "timer");
     });
   }
-  function dispatchIntents(runRow: RunRow, contextId: string | null) {
+  function dispatchIntents(runRow: RunRow, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
       for (const work of yield* store.dispatchable(runRow)) {
         if (closed) break;
-        yield* dispatchIntent(runRow, work, contextId);
+        yield* dispatchIntent(runRow, work, snapshot);
       }
     });
   }

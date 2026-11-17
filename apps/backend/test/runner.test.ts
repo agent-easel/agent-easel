@@ -5,6 +5,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
+import { START_INSPECTIONS } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
 import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
@@ -95,7 +96,7 @@ it("changed grant identity leaves an uncertain worker launch unresolved", async 
 it("runtime readiness without report support blocks Start", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
-  t3.reportSupported = false;
+  t3.support.reportReads = false;
 
   // Act
   const blocked = await f.startRun(input);
@@ -213,7 +214,7 @@ it("an unproven retry scope still binds the searched worker and does not launch 
   await f.reconcileRuns();
   await f.close();
   t3.loseLaunchReply = false;
-  t3.retryScope = null;
+  t3.support.launchRetryScope = null;
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -431,8 +432,11 @@ it("Start refuses a global Flow whose Agent became a Project Agent through readi
 it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
   // Arrange
   const { h, f, t3, input, agent, project } = await prepared(c);
-  t3.beforeLaunchInspection = async () => {
-    ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
+  let inspections = 0;
+  t3.beforeInspection = () => {
+    // The third inspection is the Agent's readiness check, after Start read the Agent.
+    if (++inspections === START_INSPECTIONS)
+      ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
   };
 
   // Act

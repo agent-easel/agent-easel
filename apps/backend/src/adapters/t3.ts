@@ -26,10 +26,31 @@ export interface T3Inspection {
   /** Opaque grant lineage, never an access/refresh token or client secret. */
   readonly authorizationIdentity?: string;
   readonly contract?: T3Contract;
+  /** Every support answer of this inspection; nothing is supported unless T3 is ready. */
+  readonly support: T3Support;
 }
 export interface ReportSupport {
   readonly supported: boolean;
   readonly explanation: string;
+}
+/** What T3's advertised tools let Factory do, as one inspection found them. */
+export interface T3Support {
+  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
+  readonly launch: Readonly<Record<FlowWorkspace["mode"], LaunchSupport>>;
+  /** The most images one launch may carry through `t3_attachment_prepare_upload`; null when T3
+   * advertises no uploaded attachments with a request key. */
+  readonly attachmentLimit: number | null;
+  readonly send: LaunchSupport;
+  readonly settle: ReportSupport;
+  readonly stop: ReportSupport;
+  /** Whether public thread reads can retrieve reporting activity, before any harness check. */
+  readonly reportReads: boolean;
+}
+/** One connection check's answer: the authorization context, only while T3 is ready, and the
+ * support answers of the same inspection. */
+export interface T3ContractSnapshot {
+  readonly contextId: string | null;
+  readonly support: T3Support;
 }
 /** Saved T3 connection and project context Factory passes into adapter operations. */
 export interface T3Target {
@@ -51,22 +72,13 @@ export interface T3Adapter {
   ): Promise<import("./delegated-settlement.ts").DelegatedSettlement>;
   inspectSettleSupport(target: T3Endpoint): Promise<ReportSupport>;
   settleThread(target: T3Endpoint, payload: { threadId: string }): Promise<void>;
-  inspectReportSupport(target: T3Endpoint, driverKind?: string): Promise<ReportSupport>;
-  inspectStopSupport(target: T3Endpoint): Promise<LaunchSupport>;
+  inspectStopSupport(target: T3Endpoint): Promise<ReportSupport>;
   /** Thread scope, including delegated work; no run fence. */
   stopThread(
     target: T3Endpoint,
     payload: { threadId: string; clientRequestId: string },
   ): Promise<void>;
-  inspectSendSupport(target: T3Endpoint): Promise<LaunchSupport>;
   sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference>;
-  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
-  inspectLaunchSupport(
-    target: T3Endpoint,
-    workspace: FlowWorkspace["mode"],
-  ): Promise<LaunchSupport>;
-  /** `t3_attachment_prepare_upload` and launch `attachments` that carry `count` images. */
-  inspectAttachmentSupport(target: T3Endpoint, count: number): Promise<ReportSupport>;
   /** Prepares one pending upload and posts its exact bytes; returns its attachment id. */
   uploadAttachment(target: T3Endpoint, upload: AttachmentUpload, data: Uint8Array): Promise<string>;
   launchThread(target: T3Endpoint, payload: LaunchPayload): Promise<LaunchReference>;

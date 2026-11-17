@@ -635,7 +635,7 @@ it("a title launch recorded under an authorization context that reauthorization 
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
-  const reauthorized = reauthorizeDuringTitleDispatch(fixture.t3, fixture.f);
+  const reauthorized = reauthorizeDuringTitleDispatch(fixture.t3);
   const started = await fixture.f.startRun(fixture.input);
   assert(started.ok);
   await reauthorized;

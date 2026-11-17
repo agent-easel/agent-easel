@@ -223,7 +223,7 @@ it("an image Start is rejected when T3 cannot receive attachments and creates no
   // Arrange
   const f = await prepared(c);
   await stageImages(f.f, allScreenshots);
-  f.t3.attachmentsSupported = false;
+  f.t3.support.attachmentLimit = null;
 
   // Act
   const started = await f.f.startRun(imageStart(f.input));
@@ -258,7 +258,7 @@ it("replaying an accepted image Start returns its Run although T3 no longer acce
   const request = imageStart(f.input);
   const accepted = await f.f.startRun(request);
   assert(accepted.ok);
-  f.t3.attachmentsSupported = false;
+  f.t3.support.attachmentLimit = null;
 
   // Act
   const replayed = await f.f.startRun(request);

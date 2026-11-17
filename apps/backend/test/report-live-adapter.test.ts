@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import { reportSupport } from "../src/adapters/t3-contract.ts";
 import {
   reportReadSchema as readSchema,
   reportPage as page,
@@ -13,7 +14,7 @@ it("report support rejects a public schema whose read bounds cannot cover the re
   });
 
   // Act
-  const support = await t3.inspectReportSupport({ endpoint }, "codex");
+  const support = reportSupport((await t3.inspect({ endpoint })).support, "codex");
 
   // Assert
   expect(support.supported).toBe(false);

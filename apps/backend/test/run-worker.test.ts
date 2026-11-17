@@ -535,9 +535,9 @@ it("a prepared revisit is not sent while its worker thread has started another r
   const setup = await prepared(c, { revisit: true });
   const atWork = await workerAtWork(setup.world, setup.input);
   const reported = await resultReported(setup.world, atWork);
-  setup.t3.sendSupported = false;
+  setup.t3.support.send = false;
   const worker = await resultReleasedToSameWorker(setup.world, reported);
-  setup.t3.sendSupported = true;
+  setup.t3.support.send = true;
   const f = { ...setup, ...worker };
   turnBegins(f.world, worker, "reply-execution");
 

@@ -11,7 +11,13 @@ import { recoveryDispatchGeneration } from "./runner-recovery.ts";
 import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
+import type {
+  SendPayload,
+  SendReference,
+  T3Adapter,
+  T3ContractSnapshot,
+  T3Support,
+} from "../adapters/t3.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
 import { intactPayload } from "../fingerprint.ts";
 import {
@@ -155,8 +161,10 @@ export function openRunnerDispatch(
       yield* store.acknowledgeSend(runRow, delivery, reference);
     });
   }
-  function dispatchIntent(runRow: RunRow, saved: Handoff | Delivery, contextId: string | null) {
+  /** `snapshot` is the drive pass's: its context gates the work and its support answers decide it. */
+  function dispatchIntent(runRow: RunRow, saved: Handoff | Delivery, snapshot: T3ContractSnapshot) {
     return Effect.gen(function* () {
+      const { contextId, support } = snapshot;
       const launchRecovery = saved.kind === "launch" && saved.state !== "pending";
       if (!runRow.gate_open && !launchRecovery) return;
       if (contextId !== saved.context_id) {
@@ -167,7 +175,7 @@ export function openRunnerDispatch(
         return;
       }
       if (saved.kind === "launch") {
-        yield* dispatchBlockLaunch(store, t3, images, runRow, saved);
+        yield* dispatchBlockLaunch(store, t3, images, runRow, saved, support);
         const block = yield* store.readBlock(runRow.id, saved.block_id);
         if (block?.thread_id && (yield* store.readRun(runRow.id))?.gate_open)
           yield* observe(runRow, block, contextId);
@@ -184,10 +192,10 @@ export function openRunnerDispatch(
             intent = prepared;
           }
           if (intent.kind === "launch") {
-            yield* dispatchBlockLaunch(store, t3, images, runRow, intent);
+            yield* dispatchBlockLaunch(store, t3, images, runRow, intent, support);
             return;
           }
-          const checked = yield* verifyDispatch(runRow, intent);
+          const checked = yield* verifyDispatch(runRow, intent, support.send);
           if (!checked.ok) {
             yield* store.noteUnresolved(intent, checked.problem);
             return;
@@ -228,6 +236,7 @@ export function openRunnerDispatch(
   function verifyDispatch(
     runRow: RunRow,
     intent: Delivery,
+    support: T3Support["send"],
   ): Effect.Effect<
     Checked<{
       payload: SendPayload;
@@ -238,10 +247,6 @@ export function openRunnerDispatch(
     return Effect.gen(function* () {
       const payload = storedPayload(intent);
       if (!payload.ok) return payload;
-      const support = yield* Effect.tryPromise({
-        try: () => t3.inspectSendSupport(runTarget(runRow)),
-        catch: (error) => error,
-      });
       if (!support.supported) return unverified(support.explanation);
       if (replayUnproven(intent, support.retryScope))
         return unverified(

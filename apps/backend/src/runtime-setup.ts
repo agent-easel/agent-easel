@@ -20,7 +20,8 @@ import type {
 import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 import type { GitAdapter } from "./adapters/git.ts";
-import type { T3Adapter } from "./adapters/t3.ts";
+import { reportSupport } from "./adapters/t3-contract.ts";
+import type { ContractSnapshots } from "./connection.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
 class SetupFailure extends Error {
@@ -151,7 +152,7 @@ const openRuntimeSetup = Effect.fn(function* (
       | "getAgentCapabilities"
     >
   >,
-  t3: T3Adapter,
+  latestSnapshot: ContractSnapshots["latest"],
   git: GitAdapter,
 ) {
   const semaphore = yield* Semaphore.make(1);
@@ -218,9 +219,8 @@ const openRuntimeSetup = Effect.fn(function* (
         ops.getReportingInstallations,
       );
       if (installed.ok) issues.push(...installed.value.issues);
-      const support = yield* boundary(() =>
-        t3.inspectReportSupport({ endpoint: s.c.endpoint! }, s.driver),
-      );
+      // The catalogue recheck in `selection` checked the connection; its answer is current.
+      const support = reportSupport((yield* latestSnapshot()).support, s.driver);
       if (!support.supported)
         issues.push({
           code: "reporting_unsupported",

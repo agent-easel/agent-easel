@@ -29,11 +29,11 @@ import {
 import type {
   AttachmentUpload,
   AuthorizationResumption,
-  ReportSupport,
   T3Adapter,
   T3Endpoint,
   T3EnvironmentTarget,
   T3Inspection,
+  T3Support,
   T3ConnectionReason,
   T3Project,
   T3ProjectTarget,
@@ -41,17 +41,16 @@ import type {
   LaunchDiscovery,
   LaunchPayload,
   LaunchReference,
-  LaunchSupport,
   T3Target,
   ThreadIdentityRead,
   SendPayload,
   SendReference,
   T3ProviderCapability,
 } from "./t3.ts";
-import { isReportingDriver } from "../reporting-drivers.ts";
+import { contractSupport } from "./t3-contract.ts";
 import { discoverLaunches, threadIdentityRead } from "../launch-discovery.ts";
 import { LaunchRejected } from "./t3.ts";
-import type { AgentEnvironment, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
+import type { AgentEnvironment } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
@@ -104,13 +103,8 @@ type ListedTool = Pick<
   Awaited<ReturnType<Client["listTools"]>>["tools"][number],
   "name" | "inputSchema"
 >;
-type SchemaProperty = {
-  type?: string;
-  enum?: unknown[];
-  const?: unknown;
-  properties?: Record<string, unknown>;
-  required?: unknown;
-};
+/** An inspection before its support answers are derived from the listed tools. */
+type Inspected = Omit<T3Inspection, "support">;
 
 /** Structured content, else the first text item that parses as JSON; undefined when neither exists. */
 function toolContent(result: ToolResult): unknown {
@@ -181,75 +175,6 @@ const isContractFailure = (error: unknown) =>
       SdkErrorCode.UnsupportedResultType,
       SdkErrorCode.CapabilityNotSupported,
     ].includes(error.code));
-
-const permitsOmittingRuntimeMode = (
-  schema: T3Contract["tools"][number]["inputSchema"] | undefined,
-) => {
-  if (schema?.type !== "object") return false;
-  // Only the flat launch contract is understood; compositions may impose hidden requirements.
-  const indirectConstraints = [
-    "$ref",
-    "$dynamicRef",
-    "allOf",
-    "anyOf",
-    "oneOf",
-    "not",
-    "if",
-    "then",
-    "else",
-    "dependentSchemas",
-    "dependentRequired",
-    "dependencies",
-  ];
-  if (indirectConstraints.some((key) => key in schema)) return false;
-  const required = schema.required;
-  return required === undefined || (Array.isArray(required) && !required.includes("runtimeMode"));
-};
-
-const LAUNCH_STRING_FIELDS = [
-  "environmentId",
-  "projectId",
-  "title",
-  "message",
-  "clientRequestId",
-  "interactionMode",
-];
-
-/** Saved provider instance, model, options and workspace strategy must all be expressible. */
-const preservesLaunchSettings = (
-  schema: T3Contract["tools"][number]["inputSchema"] | undefined,
-  props: Record<string, SchemaProperty>,
-) =>
-  schema?.type === "object" &&
-  LAUNCH_STRING_FIELDS.every((field) => props[field]?.type === "string") &&
-  props.modelSelection?.type === "object" &&
-  ["instanceId", "model", "options"].every(
-    (field) => field in (props.modelSelection?.properties ?? {}),
-  ) &&
-  props.workspaceStrategy?.type === "object";
-
-/** T3 advertises its strategy union flattened into one object: every field Factory may send for
- * `worktree` or `existing_worktree` must be named and only `type` may be required. */
-const expressesWorktreeLaunches = (props: Record<string, SchemaProperty>) => {
-  const strategy = props.workspaceStrategy;
-  const fields = (strategy?.properties ?? {}) as Record<string, SchemaProperty>;
-  const strategyRequired = strategy?.required ?? [];
-  return (
-    ["worktree", "existing_worktree"].every((type) => fields.type?.enum?.includes(type)) &&
-    ["baseRef", "branch", "worktreePath"].every((field) => fields[field]?.type === "string") &&
-    fields.startFromOrigin?.type === "boolean" &&
-    Array.isArray(strategyRequired) &&
-    strategyRequired.every((field) => field === "type")
-  );
-};
-
-function launchExplanation(supported: boolean, omissionPermitted: boolean) {
-  if (supported)
-    return "Launch schema supports saved settings and a request key. Replay requires separate continuity/retention proof.";
-  if (!omissionPermitted)
-    return "T3 launch schema does not establish support for omitting runtimeMode. Use a compatible T3 launch schema before starting or replaying this Run.";
-  return "T3 launch schema cannot preserve the selected settings and request key.";
-}
 
 type ThreadExecutionRead = {
   thread: {
@@ -348,51 +273,6 @@ function supportsProjectTool(
   return (
     fields.every((field) => properties[field]?.type === projectFieldType(field)) &&
     (schema.required ?? []).every((field) => fields.includes(field))
-  );
-}
-
-type ReportReadSchema = T3Contract["tools"][number]["inputSchema"] | undefined;
-type ReportSchemaProperty = SchemaProperty & {
-  minimum?: number;
-  maximum?: number;
-  exclusiveMinimum?: number;
-  exclusiveMaximum?: number;
-};
-const REPORT_STRING_FIELDS = ["threadId", "itemId", "view"];
-const REPORT_INTEGER_FIELDS = ["textOffset", "afterPosition", "limit", "maxCharsPerItem"];
-const REPORT_READ_BOUNDS: readonly (readonly [string, number])[] = [
-  ["limit", 100],
-  ["maxCharsPerItem", 50_000],
-  ["textOffset", 0],
-  ["textOffset", 262_144],
-  ["afterPosition", 0],
-  ["afterPosition", 10_000],
-];
-
-function permitsReadNumber(property: ReportSchemaProperty | undefined, value: number) {
-  if (!property) return false;
-  return (
-    (property.minimum === undefined || property.minimum <= value) &&
-    (property.maximum === undefined || property.maximum >= value) &&
-    (property.exclusiveMinimum === undefined || property.exclusiveMinimum < value) &&
-    (property.exclusiveMaximum === undefined || property.exclusiveMaximum > value) &&
-    (property.const === undefined || property.const === value) &&
-    (!property.enum || property.enum.includes(value))
-  );
-}
-
-function supportsReportReads(schema: ReportReadSchema) {
-  if (schema?.type !== "object") return false;
-  const props = (schema.properties ?? {}) as Record<string, ReportSchemaProperty>;
-  const required = schema.required;
-  return (
-    REPORT_STRING_FIELDS.every((field) => props[field]?.type === "string") &&
-    REPORT_INTEGER_FIELDS.every((field) => props[field]?.type === "integer") &&
-    REPORT_READ_BOUNDS.every(([field, value]) => permitsReadNumber(props[field], value)) &&
-    (!props.view?.enum || props.view.enum.includes("activity")) &&
-    (props.view?.const === undefined || props.view.const === "activity") &&
-    (!required ||
-      (Array.isArray(required) && required.every((field: unknown) => field === "threadId")))
   );
 }
 
@@ -744,7 +624,29 @@ export class LiveT3Adapter implements T3Adapter {
     return "reopened";
   }
   async inspect(target: T3Endpoint): Promise<T3Inspection> {
-    const endpoint = target.endpoint;
+    const inspection = await this.inspectEndpoint(target.endpoint);
+    return { ...inspection, support: await this.support(target.endpoint, inspection) };
+  }
+  /** Replay scopes are asked for only when the answer they would qualify is supported. */
+  private async support(endpoint: string, inspection: Inspected): Promise<T3Support> {
+    const support = contractSupport(inspection.state === "ready", inspection.contract?.tools ?? []);
+    const { checkout, worktree } = support.launch;
+    // A supported worktree launch implies a supported checkout launch.
+    const launchScope = checkout.supported
+      ? ((await this.options.launchRecoveryScope?.(endpoint)) ?? null)
+      : null;
+    const sendScope = support.send.supported
+      ? ((await this.options.sendRecoveryScope?.(endpoint)) ?? null)
+      : null;
+    const scoped = <S extends { supported: boolean }>(answer: S, retryScope: string | null) =>
+      answer.supported ? { ...answer, retryScope } : answer;
+    return {
+      ...support,
+      launch: { checkout: scoped(checkout, launchScope), worktree: scoped(worktree, launchScope) },
+      send: scoped(support.send, sendScope),
+    };
+  }
+  private async inspectEndpoint(endpoint: string): Promise<Inspected> {
     this.transientFailure = false;
     if (this.endpoint !== endpoint) {
       await this.completion;
@@ -768,7 +670,7 @@ export class LiveT3Adapter implements T3Adapter {
     }
   }
   /** Keeps a pending approval's callback listening; an expired approval falls through to inspection. */
-  private async resumePendingApproval(endpoint: string): Promise<T3Inspection | undefined> {
+  private async resumePendingApproval(endpoint: string): Promise<Inspected | undefined> {
     const pending = this.read(endpoint).pending;
     if (!pending) return undefined;
     if (pending.expiresAt <= Date.now()) {
@@ -783,7 +685,7 @@ export class LiveT3Adapter implements T3Adapter {
     }
     return { state: "authorization-required", reason: "approval-pending" };
   }
-  private async inspectContract(endpoint: string, client: Client): Promise<T3Inspection> {
+  private async inspectContract(endpoint: string, client: Client): Promise<Inspected> {
     const tools = await listAllTools(
       client,
       () => new SdkError(SdkErrorCode.InvalidResult, "Invalid tool pagination"),
@@ -819,7 +721,7 @@ export class LiveT3Adapter implements T3Adapter {
     previousReason: T3ConnectionReason | undefined,
     client: Client,
     error: unknown,
-  ): T3Inspection {
+  ): Inspected {
     if (this.transientFailure) throw new Error("T3 is temporarily unavailable.");
     if (isAuthorizationRejection(error)) {
       const revoked = this.read(endpoint);
@@ -870,75 +772,6 @@ export class LiveT3Adapter implements T3Adapter {
     const latest = this.read(target.endpoint);
     if (!latest.tokens) throw new Error("T3 authorization is required.");
     return this.session(target.endpoint, action);
-  }
-  private async inspectContractSupport(
-    target: T3Endpoint,
-    config: {
-      toolName: string;
-      evaluate: (ctx: {
-        ready: boolean;
-        schema: T3Contract["tools"][number]["inputSchema"] | undefined;
-        props: Record<string, SchemaProperty>;
-      }) => { supported: boolean; explanation: string };
-      retryScope?: () => Promise<string | null | undefined>;
-    },
-  ): Promise<LaunchSupport> {
-    const inspection = await this.inspect(target);
-    const schema = inspection.contract?.tools.find(
-      (tool) => tool.name === config.toolName,
-    )?.inputSchema;
-    const props = (schema?.properties ?? {}) as Record<string, SchemaProperty>;
-    const ready = inspection.state === "ready" && schema?.type === "object";
-    const { supported, explanation } = config.evaluate({ ready, schema, props });
-    let retryScope: string | null = null;
-    if (supported && config.retryScope) retryScope = (await config.retryScope()) ?? null;
-    return { supported, retryScope, explanation };
-  }
-  async inspectLaunchSupport(
-    target: T3Endpoint,
-    workspace: FlowWorkspace["mode"],
-  ): Promise<LaunchSupport> {
-    return this.inspectContractSupport(target, {
-      toolName: "t3_thread_launch",
-      evaluate: ({ ready, schema, props }) => {
-        const omissionPermitted = permitsOmittingRuntimeMode(schema);
-        const launchable = omissionPermitted && ready && preservesLaunchSettings(schema, props);
-        if (launchable && workspace === "worktree" && !expressesWorktreeLaunches(props))
-          return {
-            supported: false,
-            explanation:
-              "T3 launch schema cannot express worktree and existing_worktree launches. Update T3 before starting a worktree Run.",
-          };
-        return {
-          supported: launchable,
-          explanation: launchExplanation(launchable, omissionPermitted),
-        };
-      },
-      retryScope: async () => this.options.launchRecoveryScope?.(target.endpoint),
-    });
-  }
-  async inspectAttachmentSupport(target: T3Endpoint, count: number): Promise<ReportSupport> {
-    const inspection = await this.inspect(target);
-    const tools = inspection.contract?.tools ?? [];
-    const launch = tools.find((tool) => tool.name === "t3_thread_launch")?.inputSchema;
-    const props = (launch?.properties ?? {}) as Record<
-      string,
-      SchemaProperty & { maxItems?: unknown }
-    >;
-    const attachments = props.attachments;
-    const supported =
-      inspection.state === "ready" &&
-      tools.some((tool) => tool.name === "t3_attachment_prepare_upload") &&
-      props.clientRequestId?.type === "string" &&
-      attachments?.type === "array" &&
-      typeof attachments.maxItems === "number" &&
-      attachments.maxItems >= count;
-    return {
-      supported,
-      explanation: supported
-        ? "T3 accepts uploaded image attachments on launches."
-        : `T3 does not advertise t3_attachment_prepare_upload and launch attachments for ${count} images with a request key.`,
-    };
   }
   /** The upload URL is a signed capability on the MCP origin: it is sent without the OAuth bearer
    * and never logged or included in errors. */
@@ -1035,25 +868,7 @@ export class LiveT3Adapter implements T3Adapter {
     );
   }
   async inspectSettleSupport(target: T3Endpoint) {
-    return this.inspectContractSupport(target, {
-      toolName: "t3_thread_organize",
-      evaluate: ({ ready, schema, props }) => {
-        const required = schema?.required ?? [];
-        const supported =
-          ready &&
-          props.threadId?.type === "string" &&
-          props.action?.type === "string" &&
-          props.action.enum?.includes("settle") === true &&
-          Array.isArray(required) &&
-          required.every((field) => ["threadId", "action"].includes(field));
-        return {
-          supported,
-          explanation: supported
-            ? "Explicit thread settlement is supported. Organization has no execution compare-and-set or replay key."
-            : "T3 organization schema cannot preserve explicit thread settlement.",
-        };
-      },
-    });
+    return (await this.inspect(target)).support.settle;
   }
   async settleThread(target: T3Endpoint, payload: { threadId: string }) {
     await this.withAuthorizedClient(target, async (client) => {
@@ -1062,26 +877,6 @@ export class LiveT3Adapter implements T3Adapter {
         { timeout: 10_000 },
       );
       if (result.isError) throw Error("Thread settlement outcome unresolved");
-    });
-  }
-  async inspectSendSupport(target: T3Endpoint): Promise<LaunchSupport> {
-    return this.inspectContractSupport(target, {
-      toolName: "t3_thread_send",
-      evaluate: ({ ready, props }) => {
-        const supported =
-          ready &&
-          ["environmentId", "threadId", "clientRequestId", "message", "mode"].every(
-            (field) => props[field]?.type === "string",
-          ) &&
-          props.mode?.enum?.includes("queue") === true;
-        return {
-          supported,
-          explanation: supported
-            ? "Queue schema supports independent turns and a request key. Replay requires separate continuity/retention proof."
-            : "T3 send schema cannot preserve queue mode and the request key.",
-        };
-      },
-      retryScope: async () => this.options.sendRecoveryScope?.(target.endpoint),
     });
   }
   async sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference> {
@@ -1118,22 +913,8 @@ export class LiveT3Adapter implements T3Adapter {
       };
     });
   }
-  async inspectStopSupport(target: T3Endpoint): Promise<LaunchSupport> {
-    return this.inspectContractSupport(target, {
-      toolName: "t3_thread_interrupt",
-      evaluate: ({ ready, props }) => {
-        const supported =
-          ready &&
-          ["threadId", "clientRequestId"].every((field) => props[field]?.type === "string") &&
-          props.stop?.type === "boolean";
-        return {
-          supported,
-          explanation: supported
-            ? "Thread Stop supported; it is not run-fenced."
-            : "T3 Stop schema unavailable.",
-        };
-      },
-    });
+  async inspectStopSupport(target: T3Endpoint) {
+    return (await this.inspect(target)).support.stop;
   }
   async stopThread(target: T3Endpoint, payload: { threadId: string; clientRequestId: string }) {
     await this.withAuthorizedClient(target, async (client) => {
@@ -1321,22 +1102,6 @@ export class LiveT3Adapter implements T3Adapter {
       if (!project) throw new Error("Project unavailable");
       return project;
     });
-  }
-  async inspectReportSupport(target: T3Endpoint, driverKind?: string) {
-    const inspection = await this.inspect(target);
-    const schema = inspection.contract?.tools.find(
-      (tool) => tool.name === "t3_thread_read",
-    )?.inputSchema;
-    const supported =
-      inspection.state === "ready" &&
-      (driverKind === undefined || isReportingDriver(driverKind)) &&
-      supportsReportReads(schema);
-    return {
-      supported,
-      explanation: supported
-        ? "Public T3 reads support exact-item provenance and complete tool metadata retrieval; each observation validates the returned identity."
-        : "T3 public reads cannot safely retrieve reporting activity for this harness. Reconnect or update T3 and recheck.",
-    };
   }
   readDelegatedSettlement(target: T3Endpoint, threadId: string, runId: string) {
     return readDelegatedSettlement(

@@ -7,7 +7,11 @@ import type {
   FlowGraph,
 } from "@t3-factory/contracts";
 import { factoryHarness } from "./factory.ts";
-import { loadMigrationData, restoreCapturedAdapter } from "./migration-data.ts";
+import {
+  loadMigrationData,
+  restoreCapturedAdapter,
+  SUPPORT_FLAG_FIELDS,
+} from "./migration-data.ts";
 
 type Success<T> = T extends { ok: true; value: infer V } ? V : never;
 type Value<K extends keyof Factory> = Factory[K] extends (...args: never[]) => infer R
@@ -188,8 +192,10 @@ export function currentRun(
 }
 
 /** Captured simulator fields for retired per-turn report correlation and Factory's own
- * descendant, queue, peer and remote completion model. */
+ * descendant, queue, peer and remote completion model, and per-probe support flags that held the
+ * controlled T3's default `support` answers. */
 const RETIRED_ADAPTER_FIELDS = new Set([
+  ...SUPPORT_FLAG_FIELDS,
   "runtimeActivity",
   "peers",
   "cancellations",

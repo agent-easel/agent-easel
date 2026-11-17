@@ -264,7 +264,7 @@ async function generatedTitleRun(
 
 /** The user confirmed Settle while T3 cannot stop the worker, so the settlement stays unresolved. */
 export async function settlementUnresolved(context: SeedContext, worker: Worker) {
-  context.t3.stopSupported = false;
+  context.t3.support.stop = false;
   try {
     requireSuccess(await context.factory.settleRun(worker.runId, { stopWorkers: true }));
     await observeFor(
@@ -274,7 +274,7 @@ export async function settlementUnresolved(context: SeedContext, worker: Worker)
       (run) => run.settlement?.state === "unresolved",
     );
   } finally {
-    context.t3.stopSupported = true;
+    context.t3.support.stop = true;
   }
 }
 

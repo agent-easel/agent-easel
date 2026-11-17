@@ -29,7 +29,9 @@ import {
 } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type { GitAdapter } from "../adapters/git.ts";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3ContractSnapshot } from "../adapters/t3.ts";
+import { attachmentSupport } from "../adapters/t3-contract.ts";
+import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type {
   AcceptanceCommit,
@@ -125,8 +127,9 @@ function startPresentationIssues(
         ]),
   ];
 }
-/** The connected T3 context and an available project on the same endpoint and environment. */
+/** The snapshot's T3 context and an available project on the same endpoint and environment. */
 function startTarget(
+  snapshot: T3ContractSnapshot,
   connection: Result<T3Connection>,
   catalog: Result<ProjectCatalog>,
   projectId: string,
@@ -135,7 +138,8 @@ function startTarget(
   if (
     !connection.ok ||
     connection.value.state !== "ready" ||
-    !connection.value.authorizationContext ||
+    !snapshot.contextId ||
+    connection.value.authorizationContext?.id !== snapshot.contextId ||
     !project ||
     project.availability !== "available" ||
     project.endpoint !== connection.value.endpoint ||
@@ -215,31 +219,17 @@ function resolveStartWorkspace(
   });
 }
 /** An image-bearing Start needs T3 to accept uploads and launch attachments for every image. */
-function attachmentIssues(
-  t3: T3Adapter,
-  project: FactoryProject,
-  count: number,
-): Effect.Effect<ValidationIssue[]> {
-  if (!count) return Effect.succeed([]);
-  return Effect.promise(() => t3.inspectAttachmentSupport(project, count).catch(() => null)).pipe(
-    Effect.map((support) => {
-      if (support?.supported) return [];
-      return [
-        support
-          ? {
-              code: "attachments_unsupported",
-              path: "images",
-              message: `This T3 cannot receive image attachments: update T3 or remove the images. ${support.explanation}`,
-            }
-          : {
-              code: "launch_unsupported",
-              path: "connection.contract",
-              message:
-                "T3 attachment capabilities are unavailable. Recheck the connection and retry this Start.",
-            },
-      ];
-    }),
-  );
+function attachmentIssues(snapshot: T3ContractSnapshot, count: number): ValidationIssue[] {
+  if (!count) return [];
+  const support = attachmentSupport(snapshot.support, count);
+  if (support.supported) return [];
+  return [
+    {
+      code: "attachments_unsupported",
+      path: "images",
+      message: `This T3 cannot receive image attachments: update T3 or remove the images. ${support.explanation}`,
+    },
+  ];
 }
 /** The first worker message is checked before the acceptance transaction commits. */
 function prepareStartWork(definitions: RunDefinitions, prompt: StartPrompt) {
@@ -250,7 +240,7 @@ function prepareStartWork(definitions: RunDefinitions, prompt: StartPrompt) {
 export function openRunnerStart(
   store: RunStore,
   ops: EffectOperations<FactoryOperations>,
-  t3: T3Adapter,
+  freshSnapshot: ContractSnapshots["fresh"],
   git: GitAdapter,
   lifecycle: RunnerLifecycle,
   checkAgent: RunnerOptions["checkAgent"],
@@ -373,48 +363,51 @@ export function openRunnerStart(
     });
   }
   /**
-   * Start preconditions and, alongside them so it adds no wait of its own, the title generation
-   * decision. The decision is used only if Start accepts.
+   * One T3 contract snapshot, then Start preconditions and, alongside them so it adds no wait of
+   * its own, the title generation decision. The decision is used only if Start accepts.
    */
   function startChecks(
     input: Pick<StartRunInput, "projectId" | "flowId" | "titleProvenance">,
     prompt: StartPrompt,
   ) {
-    return Effect.all(
-      [
-        startPreconditions(input, prompt.images.length),
-        planTitleGeneration({ titleProvenance: input.titleProvenance, prompt }),
-      ],
-      { concurrency: "unbounded" },
-    );
+    return Effect.gen(function* () {
+      const snapshot = yield* freshSnapshot();
+      return yield* Effect.all(
+        [
+          startPreconditions(input, prompt.images.length, snapshot),
+          planTitleGeneration({ titleProvenance: input.titleProvenance, prompt }, snapshot),
+        ],
+        { concurrency: "unbounded" },
+      );
+    });
   }
-  /** Before Start: the connection and catalog rechecked, then every launch precondition. */
+  /** Before Start: the catalog rechecked, then every launch precondition. */
   function startPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
+    snapshot: T3ContractSnapshot,
   ) {
     return Effect.gen(function* () {
-      yield* ops.recheckConnection();
       yield* ops.recheckProjects();
-      return yield* launchPreconditions(input, imageCount);
+      return yield* launchPreconditions(input, imageCount, snapshot);
     });
   }
   /**
    * What Start's preflight refuses for every prompt to this Project and Flow, without Start's
-   * connection and catalog recheck first. It accepts nothing, so a caller can learn of a launch
-   * blocker without attempting a Start.
+   * catalog recheck first. It accepts nothing, so a caller can learn of a launch blocker without
+   * attempting a Start.
    */
   function startBlockers(projectId: string, flowId: string) {
-    return launchPreconditions({ projectId, flowId }, 0).pipe(
-      Effect.map((checked): Result<undefined> =>
-        checked.ok ? { ok: true, value: undefined } : checked,
-      ),
-    );
+    return Effect.gen(function* () {
+      const checked = yield* launchPreconditions({ projectId, flowId }, 0, yield* freshSnapshot());
+      return checked.ok ? { ok: true as const, value: undefined } : checked;
+    });
   }
   /** Connection/project, Flow readiness, every referenced Agent's runtime and launch schema. */
   function launchPreconditions(
     input: Pick<StartRunInput, "projectId" | "flowId">,
     imageCount: number,
+    snapshot: T3ContractSnapshot,
   ) {
     return Effect.gen(function* () {
       const [connection, projects, savedFlow] = yield* Effect.all(
@@ -425,7 +418,7 @@ export function openRunnerStart(
         ? ownershipRefusal(savedFlow.value, projects, input.projectId)
         : undefined;
       if (owned) return owned;
-      const target = startTarget(connection, projects, input.projectId);
+      const target = startTarget(snapshot, connection, projects, input.projectId);
       if (!target)
         return failure(
           "validation",
@@ -443,29 +436,24 @@ export function openRunnerStart(
       if (!flow.readiness.ready)
         return failure("validation", "Fix Flow readiness before starting.", flow.readiness.issues);
       const agents = yield* readyAgents(flow, target.project.id);
-      const support = yield* Effect.tryPromise({
-        try: () => t3.inspectLaunchSupport(target.project, flow.workspace.mode).catch(() => null),
-        catch: (error) => error,
-      });
+      const support = snapshot.support.launch[flow.workspace.mode];
       const workspace = yield* resolveStartWorkspace(git, flow, target.project);
-      const attachments = yield* attachmentIssues(t3, target.project, imageCount);
+      const attachments = attachmentIssues(snapshot, imageCount);
       const issues: ValidationIssue[] = [
         ...attachments,
         ...(!workspace.ok ? workspace.issues : []),
         ...(!agents.ok ? agents.error.issues : []),
-        ...(!support || !support.supported
+        ...(!support.supported
           ? [
               {
                 code: "launch_unsupported",
                 path: "connection.contract",
-                message:
-                  support?.explanation ??
-                  "T3 launch capabilities are unavailable. Recheck the connection and retry this Start.",
+                message: support.explanation,
               },
             ]
           : []),
       ];
-      if (attachments.length || !workspace.ok || !agents.ok || !support || !support.supported)
+      if (attachments.length || !workspace.ok || !agents.ok || !support.supported)
         return failure(
           "validation",
           "Flow execution setup is incomplete. No Run was created.",

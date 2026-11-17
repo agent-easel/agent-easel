@@ -12,7 +12,7 @@ import {
   type CreatedMessage,
   type InteractionAnswer,
 } from "./controlled-discord.ts";
-import { holdLaunchInspection } from "./controlled-t3.ts";
+import { holdInspection } from "./controlled-t3.ts";
 import { preparedService } from "./prepared-runner.ts";
 import {
   humanReviewFlow,
@@ -184,13 +184,13 @@ export async function clicked(
   return clickAnswers(discord).at(-1)!;
 }
 
-/** Holds a confirmed Start at external preflight until the test releases it. */
+/** Holds a confirmed Start at its T3 contract snapshot until the test releases it. */
 export async function pendingStart(
   world: Pick<Awaited<ReturnType<typeof startingWorld>>, "discord" | "t3">,
   customId: string,
   options: Parameters<typeof clicked>[4] = {},
 ) {
-  const { inspecting, release } = holdLaunchInspection(world.t3);
+  const { inspecting, release } = holdInspection(world.t3);
   const answer = clicked(world.discord, customId, "610000000000000090", 1, options);
   await inspecting;
   return { answer, release };
