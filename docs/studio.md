@@ -389,7 +389,9 @@ a check would hit instead, if any. Nothing starts before confirming. **Enable an
 its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
 showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
-edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict. While creating, the review also offers **Save
+edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict.
+Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
+the same way and must be reviewed against the enabled Trigger. While creating, the review also offers **Save
 disabled**. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 

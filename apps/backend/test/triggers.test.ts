@@ -337,20 +337,47 @@ it("enabling with the revision a review showed is refused once a newer revision 
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
 
-it("enabling a Trigger keeps its saved revision", async (c) => {
+it("an edit begun while the Trigger was off is refused once the reviewed revision is enabled, and the enabled settings stay", async (c) => {
   // Arrange
-  const { f, triggerInput } = await triggerWorld(c);
-  const trigger = await triggerSaved(f, triggerInput);
+  const world = await reviewingWorld(c);
+  const reviewed = world.trigger;
+  let release = () => {};
+  let entered = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const validating = new Promise<void>((resolve) => (entered = resolve));
+  world.github.beforeAnswer = async (call) => {
+    if (call !== "openIssues") return;
+    delete world.github.beforeAnswer;
+    entered();
+    await held;
+  };
+  const widening = world.f.updateTrigger(
+    reviewed.id,
+    triggerEdit(reviewed, {
+      github: { repositoryNodeId: reviewed.github.repository.nodeId, query: "label:factory:ready" },
+    }),
+  );
+  await validating;
 
   // Act
-  const enabled = await f.setTriggerEnabled(trigger.id, {
-    enabled: true,
-    reviewedRevision: trigger.revision,
-  });
+  const [enabled, saved] = await Promise.all([
+    world.f
+      .setTriggerEnabled(reviewed.id, { enabled: true, reviewedRevision: reviewed.revision })
+      .finally(release),
+    widening,
+  ]);
 
   // Assert
   assert(enabled.ok);
-  expect(enabled.value).toMatchObject({ enabled: true, revision: 1 });
+  assert(!saved.ok);
+  expect(saved.error.issues[0]?.code).toBe("stale_revision");
+  const current = await world.f.getTrigger(reviewed.id);
+  assert(current.ok);
+  expect(current.value).toMatchObject({
+    enabled: true,
+    revision: reviewed.revision + 1,
+    github: { query: reviewed.github.query },
+  });
 });
 
 it("readiness names the login @me resolves to, the Project's repository and the Flow's readiness", async (c) => {

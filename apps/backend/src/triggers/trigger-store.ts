@@ -140,12 +140,15 @@ export const writeTriggerSettings = Effect.fnUntraced(function* (
 export const writeTriggerEnabled = (
   sql: SqlClient.SqlClient,
   triggerId: string,
-  enabled: boolean,
-  nextCheckAt: string | null,
-  updatedAt: string,
+  state: {
+    readonly enabled: boolean;
+    readonly revision: number;
+    readonly nextCheckAt: string | null;
+    readonly updatedAt: string;
+  },
 ) =>
-  sql`UPDATE run_triggers SET enabled = ${enabled ? 1 : 0}, next_check_at = ${nextCheckAt},
-      updated_at = ${updatedAt}
+  sql`UPDATE run_triggers SET enabled = ${state.enabled ? 1 : 0}, revision = ${state.revision},
+      next_check_at = ${state.nextCheckAt}, updated_at = ${state.updatedAt}
     WHERE id = ${triggerId}`;
 
 export const writeNextCheck = (sql: SqlClient.SqlClient, triggerId: string, nextCheckAt: string) =>

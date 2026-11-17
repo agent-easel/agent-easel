@@ -487,8 +487,16 @@ export const makeTriggers = (
                   `Revision ${current.revision} of this Trigger was saved after the reviewed one, so it was not enabled. Review its current settings before enabling it.`,
                 );
               const time = yield* now;
-              const nextCheckAt = enabledDeadline(current, enabled, time);
-              yield* writeTriggerEnabled(sql, id, enabled, nextCheckAt, time);
+              // Turning a Trigger on advances its revision, so an edit begun while it was off, which
+              // needed no review then, is refused as stale instead of widening the enabled Trigger.
+              const revision =
+                enabled && !current.enabled ? current.revision + 1 : current.revision;
+              yield* writeTriggerEnabled(sql, id, {
+                enabled,
+                revision,
+                nextCheckAt: enabledDeadline(current, enabled, time),
+                updatedAt: time,
+              });
               return { ok: true, value: (yield* readTrigger(id))! };
             }),
           ),
