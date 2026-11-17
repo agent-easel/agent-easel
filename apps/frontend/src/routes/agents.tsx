@@ -92,7 +92,7 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
   };
 }
 
-/** Add agent's owner: preselected from the asking Flow, else from the owner filter. */
+/** New Agent's owner: preselected from the asking Flow, else from the owner filter. */
 function useNewAgentOwner(
   definitions: StudioDefinitions,
   flows: ShownLists["flows"] | null,

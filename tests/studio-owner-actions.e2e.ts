@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { expect, type Screen } from "e2e";
 import { test } from "./support/test.ts";
-import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
+import {
+  copyAgentDefinition,
+  listAgentDefinitions,
+  readAgentDefinition,
+} from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
 import { chooseAgentAction, expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
-  exportFlowFile,
+  exportDefinitionFile,
   listFlows,
   namedAgent,
   ownedFlow,
@@ -154,7 +158,7 @@ test("Import creates the file's definitions in the chosen target Project", async
   // Arrange
   await browser.setViewport(viewport);
   const northwind = await ownedFlow(app.baseUrl, "Northwind release");
-  const file = await exportFlowFile(app.baseUrl, northwind);
+  const file = await exportDefinitionFile(app.baseUrl, "flow", northwind.id);
   await app.open("/studio/flows");
   // The list heading renders before the connection is current; a delivered row means it is.
   await expect(screen.getByRole("heading", "Northwind release", { exact: true })).toBeVisible();
@@ -176,6 +180,45 @@ test("Import creates the file's definitions in the chosen target Project", async
   assert.equal(imported.length, 1);
   assert.equal(imported[0]!.projectId, northwind.projectId);
   await app.screenshot("import-target-opened");
+});
+
+test("Import… in the New Agent menu creates the file's Agent and opens it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  const source = await copyAgentDefinition(app.baseUrl, "Sample worker", `Imported ${unique()}`);
+  const file = await exportDefinitionFile(app.baseUrl, "agent", source.id);
+  await app.open("/studio/agents");
+  // A delivered row means the connection is current.
+  await expect(screen.getByRole("link", source.name, { exact: true })).toBeVisible();
+  // Records that Import… opens the file chooser; the test supplies the chosen file below.
+  await browser.evaluate(
+    `document.querySelector('input[aria-label="Choose a Factory export file"]').addEventListener("click", (event) => { event.preventDefault(); document.body.dataset.chooserOpened = "true"; }, { once: true })`,
+  );
+  const before = new Set((await listAgentDefinitions(app.baseUrl)).map((agent) => agent.id));
+
+  // Act
+  await screen.getByRole("button", "Other ways to add an Agent").tap();
+  await browser.evaluate(settled);
+  await app.screenshot("new-agent-menu");
+  await screen.getByRole("menuitem", "Import", { exact: true }).tap();
+  await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
+  await screen
+    .getByRole("dialog", "Review the import")
+    .getByRole("button", "Confirm import", { exact: true })
+    .tap();
+
+  // Assert
+  assert.equal(await browser.evaluate("document.body.dataset.chooserOpened"), "true");
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(source.name);
+  const imported = (await listAgentDefinitions(app.baseUrl)).filter(
+    (agent) => !before.has(agent.id),
+  );
+  assert.equal(imported.length, 1);
+  assert.equal(imported[0]!.name, source.name);
 });
 
 test("a Flow of an unavailable Project is rescued by duplicating it and its Agent into another Project", async ({

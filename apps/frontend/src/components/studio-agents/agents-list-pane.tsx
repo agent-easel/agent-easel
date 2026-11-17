@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { MutationGate } from "@/client-gate";
-import { Bot, Search } from "lucide-react";
+import { Bot, ChevronDown, Plus, Search, Upload } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -9,6 +9,13 @@ import type {
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { StudioLink } from "../app-link.tsx";
 import {
@@ -18,10 +25,12 @@ import {
   projectOverridesLabel,
 } from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { NeedsModel } from "../needs-model.tsx";
-import { DefinitionImportControl } from "../definition-import-control.tsx";
+import {
+  DefinitionImportDialog,
+  useDefinitionImportChooser,
+} from "../definition-import-control.tsx";
 import { OwnerFilter, OwnerPath, ownerName } from "../studio-owner.tsx";
 import { sectionLabelClass } from "../page.tsx";
 import {
@@ -69,12 +78,7 @@ export function AgentsListPane({
           </span>
         )}
         <span className="flex-1" />
-        <DefinitionImportControl size="sm" projects={owners.projects} onImported={onImported} />
-        <MutationGate>
-          <Button size="sm" aria-label="New Agent" onClick={onCreate}>
-            + Add agent
-          </Button>
-        </MutationGate>
+        <NewAgentButton projects={owners.projects} onCreate={onCreate} onImported={onImported} />
       </div>
       <AgentListTools query={query} onQueryChange={onQueryChange} owners={owners} />
       <div className="min-h-0 min-w-0 flex-1 overflow-y-auto px-3 pt-1">
@@ -101,13 +105,54 @@ export function AgentsListPane({
           loading={loading}
         />
       </div>
-      {agents && (
-        <p className="shrink-0 border-t px-4 pt-3 pb-4 text-2xs text-subtle-foreground">
-          {count} {count === 1 ? "Agent" : "Agents"} · select one to edit it on the right. Add and
-          Delete stay on this page.
-        </p>
-      )}
     </aside>
+  );
+}
+
+/**
+ * Figma SA01: **New Agent** creates an Agent; its menu holds **Import…**. The file chooser and the
+ * review stay mounted outside the menu, which closes on select.
+ */
+function NewAgentButton({
+  projects,
+  onCreate,
+  onImported,
+}: {
+  projects: ReturnType<typeof useStudioOwners>["projects"];
+  onCreate: () => void;
+  onImported: (result: ImportResult) => void;
+}) {
+  const importer = useDefinitionImportChooser();
+  return (
+    <>
+      <MutationGate>
+        <div className="flex shrink-0 gap-px">
+          <Button onClick={onCreate}>
+            <Plus aria-hidden strokeWidth={1.5} />
+            New Agent
+          </Button>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" className="w-7" aria-label="Other ways to add an Agent">
+                    <ChevronDown aria-hidden strokeWidth={1.5} />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Other ways to add an Agent</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem aria-label="Import" onSelect={importer.choose}>
+                <Upload aria-hidden strokeWidth={1.5} />
+                Import…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </MutationGate>
+      <DefinitionImportDialog importer={importer} projects={projects} onImported={onImported} />
+    </>
   );
 }
 
@@ -287,11 +332,12 @@ function AgentListItemLink({
 }) {
   const reporting = useReportingState();
   const status = providerId ? agentReportingStatus(providerId, reporting) : undefined;
+  const attention = status?.state === "attention" ? status : undefined;
   return (
     <StudioLink
       selection={{ tab: "agents", agentId: id }}
       aria-label={name}
-      aria-describedby={status ? `agent-reporting-${id}` : undefined}
+      aria-describedby={attention ? `agent-reporting-${id}` : undefined}
       aria-current={selected ? "page" : undefined}
       className={cn(
         "flex min-w-0 w-full items-center gap-3 rounded-md px-2.5 py-2 text-left text-foreground no-underline outline-none transition-colors hover:no-underline focus-visible:ring-[3px] focus-visible:ring-ring/50",
@@ -305,14 +351,17 @@ function AgentListItemLink({
       </span>
       <span className="grid min-w-0 flex-1 gap-0.5">
         <span className="truncate text-sm font-medium">{name}</span>
-        <span className="truncate text-2xs text-subtle-foreground">{meta}</span>
-        {status && (
-          <Badge
+        {/* Figma SA01: reporting that needs attention takes the summary's line; healthy says nothing. */}
+        {attention ? (
+          <span
             id={`agent-reporting-${id}`}
-            variant={status.state === "attention" ? "attention" : "secondary"}
+            className="flex min-w-0 items-center gap-1.5 text-2xs text-attention"
           >
-            {status.label}
-          </Badge>
+            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />
+            <span className="truncate">{attention.label}</span>
+          </span>
+        ) : (
+          <span className="truncate text-2xs text-subtle-foreground">{meta}</span>
         )}
       </span>
       {usage && (

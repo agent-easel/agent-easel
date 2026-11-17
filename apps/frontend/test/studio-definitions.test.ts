@@ -248,7 +248,7 @@ it("Studio's owner filter starts at All whatever Project the Run composer select
   expect(snapshot.projects).toStrictEqual({ value: [northwind], synchronized: true, error: null });
 });
 
-it("New Flow and Add agent default to Global while the owner filter shows All", () => {
+it("New Flow and New Agent default to Global while the owner filter shows All", () => {
   // Arrange
   const filter = { kind: "all" } as const;
 
@@ -259,7 +259,7 @@ it("New Flow and Add agent default to Global while the owner filter shows All", 
   expect(owner).toBe(null);
 });
 
-it("New Flow and Add agent default to the Project the owner filter shows", () => {
+it("New Flow and New Agent default to the Project the owner filter shows", () => {
   // Arrange
   const filter = { kind: "project", projectId: "northwind" } as const;
 

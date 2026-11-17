@@ -79,12 +79,16 @@ export async function projectFlowPlacing(
   });
 }
 
-/** Saves the Flow's export document as a file Import can choose. */
-export async function exportFlowFile(baseUrl: string | undefined, flow: FlowDraft) {
-  const { document } = await call<{ document: unknown }>(baseUrl, `/api/flows/${flow.id}/export`);
+/** Saves a saved Agent's or Flow's export document as a file Import can choose. */
+export async function exportDefinitionFile(
+  baseUrl: string | undefined,
+  kind: "agent" | "flow",
+  id: string,
+) {
+  const { document } = await call<{ document: unknown }>(baseUrl, `/api/${kind}s/${id}/export`);
   const directory = join(process.cwd(), ".e2e", "tmp");
   await mkdir(directory, { recursive: true });
-  const path = join(directory, `${flow.id}.flow.json`);
+  const path = join(directory, `${id}.${kind}.json`);
   await writeFile(path, JSON.stringify(document));
   return path;
 }
