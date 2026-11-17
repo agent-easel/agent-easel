@@ -33,10 +33,11 @@ export function comparedPresentation(
   { name, prompt, execution, exits, projectOverrides }: ComparedContent,
   projects: readonly FactoryProject[],
 ) {
+  // Two Projects may share a title, so the comparison also names each by its Factory id.
   const projectName = (projectId: string) =>
     projects.some((project) => project.id === projectId)
-      ? studioOwner(projectId, projects).title
-      : `Unknown Project ${projectId}`;
+      ? `${studioOwner(projectId, projects).title} (${projectId})`
+      : `Unknown Project (${projectId})`;
   const overrideLines = projectOverrides.map(
     ({ projectId, execution: settings }) =>
       `  ${projectName(projectId)}: ${settings.environmentId} · ${settings.providerInstanceId} · ${settings.modelId} · ${optionList(settings)}`,

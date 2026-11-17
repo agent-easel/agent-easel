@@ -4,6 +4,7 @@ import { createShapedContent } from "../src/agent-draft.ts";
 import { comparedPresentation } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
+import { factoryProject } from "./support/studio-definitions.ts";
 import {
   agentDraft,
   comparedAgent,
@@ -441,6 +442,36 @@ it("two Agent revisions that differ only in a Project override read differently 
   // Assert
   expect(shown[0]).not.toBe(shown[1]);
   expect(shown[1]).toContain(
-    "Unknown Project northwind: local · primary · other-first · effort=low, old=true",
+    "Unknown Project (northwind): local · primary · other-first · effort=low, old=true",
   );
+});
+
+it("a refused Create for a Project keeps the Project overrides in the draft", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null, capabilities);
+  draft.edit({ name: "", prompt: "Release the change." });
+  const override = { projectId: "northwind", execution: savedAgent().execution! };
+  draft.setOverride(override);
+
+  // Act
+  await draft.save("ledgerly");
+
+  // Assert
+  expect(factory.createAgent).not.toHaveBeenCalled();
+  expect(draft.getSnapshot().content.projectOverrides).toStrictEqual([override]);
+  expect(draft.getSnapshot().error).not.toBe("");
+});
+
+it("Agent revisions giving the same settings to two Projects with one title read differently", () => {
+  // Arrange
+  const execution = savedAgent().execution!;
+  const projects = [factoryProject("atlas-1", "Atlas"), factoryProject("atlas-2", "Atlas")];
+  const first = savedAgent({ projectOverrides: [{ projectId: "atlas-1", execution }] });
+  const second = savedAgent({ projectOverrides: [{ projectId: "atlas-2", execution }] });
+
+  // Act
+  const shown = [comparedPresentation(first, projects), comparedPresentation(second, projects)];
+
+  // Assert
+  expect(shown[0]).not.toBe(shown[1]);
 });
