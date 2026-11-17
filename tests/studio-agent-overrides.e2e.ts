@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { expect } from "e2e";
 import { test } from "./support/test.ts";
-import { copyAgentDefinition, readAgentDefinition } from "./support/agents.ts";
+import type { ProjectCatalog, Result } from "../packages/contracts/src/index.ts";
+import {
+  copyAgentDefinition,
+  listAgentDefinitions,
+  readAgentDefinition,
+} from "./support/agents.ts";
 import { changeAgentOwnerElsewhere, ownedFlow } from "./support/owners.ts";
 import { expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
@@ -108,4 +113,43 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.projectId, northwind);
   assert.deepEqual(saved.projectOverrides, []);
+});
+
+test("removing an override while every available Project has one moves focus to Override for a Project…", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: an override for every available Project, so Override for a Project… starts disabled.
+  await browser.setViewport(viewport);
+  const response = await fetch(new URL("/api/projects", app.baseUrl));
+  const catalog = (await response.json()) as Result<ProjectCatalog>;
+  assert(catalog.ok);
+  const available = catalog.value.projects.filter(
+    (project) => project.availability === "available",
+  );
+  const sample = (await listAgentDefinitions(app.baseUrl)).find(
+    (agent) => agent.name === "Sample worker",
+  );
+  assert(sample?.execution);
+  const execution = sample.execution;
+  const agent = await copyAgentDefinition(
+    app.baseUrl,
+    "Sample worker",
+    `Every Project ${crypto.randomUUID().slice(0, 8)}`,
+    { projectOverrides: available.map((project) => ({ projectId: project.id, execution })) },
+  );
+  await app.open(`/studio/agents/${agent.id}`);
+  await screen.getByRole("button", /^Worker: /).tap();
+  await expect(screen.getByRole("button", /^Override for a Project…/)).toBeDisabled();
+  const removed = available[0]!;
+  await screen.getByRole("button", `Remove override for ${removed.title}`, { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  const add = screen.getByRole("button", "Override for a Project…", { exact: true });
+  await expect(add).toBeEnabled();
+  await expect(add).toBeFocused();
 });

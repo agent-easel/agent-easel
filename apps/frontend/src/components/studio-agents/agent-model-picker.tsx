@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps } from "react";
+import { useState, type ComponentProps } from "react";
 import { ChevronDown } from "lucide-react";
 import type {
   AgentCapabilities,
@@ -49,7 +49,6 @@ export function AgentModelPicker({
   // The Override dialog opens once the popover has closed and refocused the picker, so the dialog
   // returns focus to the picker when it closes.
   const { trigger, queue, onCloseAutoFocus } = useMenuActions();
-  const add = useRef<HTMLButtonElement>(null);
   const shown = workerTrigger(settings.execution, capabilities);
   const button = (
     <PopoverTrigger asChild>
@@ -98,15 +97,11 @@ export function AgentModelPicker({
                 capabilities={capabilities}
                 needsModel={settings.needsModel}
                 disabled={saving}
-                addRef={add}
                 onEdit={(edit) => {
                   queue(() => setEditing(edit));
                   setOpen(false);
                 }}
-                onRemove={(projectId) => {
-                  overrides.onRemove(projectId);
-                  add.current?.focus();
-                }}
+                onRemove={overrides.onRemove}
               />
               <p className="text-label text-subtle-foreground">
                 Other Projects use the Global worker. Name, prompt and exits stay shared.

@@ -1,4 +1,5 @@
-import { useState, type Ref } from "react";
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { FolderGit2, Plus, X } from "lucide-react";
 import type {
   AgentCapabilities,
@@ -54,7 +55,6 @@ export function ProjectOverridesSection({
   capabilities,
   needsModel,
   disabled,
-  addRef,
   onEdit,
   onRemove,
 }: {
@@ -64,12 +64,18 @@ export function ProjectOverridesSection({
   /** The Agent has no settings of its own, so nothing can be overridden yet. */
   needsModel: boolean;
   disabled: boolean;
-  /** **Override for a Project…**, which keeps focus in the picker after a row is removed. */
-  addRef: Ref<HTMLButtonElement>;
   onEdit: (editing: OverrideEditing) => void;
   onRemove: (projectId: string) => void;
 }) {
+  const list = useRef<HTMLUListElement>(null);
   const addable = addableProjects(projects, overrides);
+  // Removing a row removes the focused Remove button. The draft renders first, so focus lands on
+  // **Override for a Project…** only once it is enabled again, else on the first control left.
+  function remove(projectId: string) {
+    flushSync(() => onRemove(projectId));
+    const enabled = (selector: string) => list.current?.querySelector<HTMLElement>(selector);
+    (enabled("button:enabled[data-add]") ?? enabled("button:enabled"))?.focus();
+  }
   const addBlocked = needsModel
     ? "Choose this Agent's own Worker first."
     : addable.length
@@ -83,7 +89,7 @@ export function ProjectOverridesSection({
       >
         Project overrides
       </h3>
-      <ul aria-label="Project overrides" className="grid min-w-0">
+      <ul ref={list} aria-label="Project overrides" className="grid min-w-0">
         {overrides.map((override) => {
           const owner = studioOwner(override.projectId, projects);
           const worker = agentRuntimeMeta(override.execution, capabilities);
@@ -129,7 +135,7 @@ export function ProjectOverridesSection({
                     aria-label={`Remove override for ${owner.title}`}
                     // Visible on row hover or keyboard focus; never removed, so Tab still reaches it.
                     className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
-                    onClick={() => onRemove(override.projectId)}
+                    onClick={() => remove(override.projectId)}
                   >
                     <X aria-hidden />
                   </Button>
@@ -141,7 +147,7 @@ export function ProjectOverridesSection({
         })}
         <li className="flex min-w-0">
           <Button
-            ref={addRef}
+            data-add
             type="button"
             variant="ghost"
             disabled={disabled || addBlocked !== null}
