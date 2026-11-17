@@ -12,6 +12,7 @@ import { FlowDetail } from "../routes/flow-editor.tsx";
 import { StudioAgentsPage } from "../routes/agents.tsx";
 import { StudioTriggersPage } from "../routes/triggers.tsx";
 import { CreateFlow } from "./create-flow.tsx";
+import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { WorkspaceDialogHeader } from "./workspace-dialog-header.tsx";
@@ -361,7 +362,7 @@ function StudioSidebar({
         />
         {failing > 0 && (
           <span id="studio-triggers-failing" className="sr-only">
-            {failing === 1 ? "1 Trigger in Error" : `${failing} Triggers in Error`}
+            {triggersInError(failing)}
           </span>
         )}
       </nav>

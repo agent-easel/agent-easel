@@ -129,6 +129,7 @@ export function runEntry(): RunNavigationEntry {
     creationKey: "run",
     lastActivityAt: "2026-11-08T00:00:00Z",
     flowName: "Flow",
+    origin: null,
     repositories: [],
     project: {
       id: "project",

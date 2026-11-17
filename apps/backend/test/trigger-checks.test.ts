@@ -88,7 +88,7 @@ it("a started Run's detail returns its origin and names the issue in its title a
   expect(run.value.input).toContain("Start data:\nready_label: factory:ready");
 });
 
-it("a Run keeps its origin after its Trigger is renamed", async (c) => {
+it("a Run's detail and navigation entry keep its origin after its Trigger is renamed", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(12, "Fix the login crash");
@@ -105,8 +105,11 @@ it("a Run keeps its origin after its Trigger is renamed", async (c) => {
   // Assert
   assert(renamed.ok);
   const run = await world.f.getRun(runs.value[0]!.id);
+  const navigation = await world.f.listRunNavigation();
   assert(run.ok);
+  assert(navigation.ok);
   expect(run.value.origin?.trigger).toStrictEqual({ id: world.trigger.id, name: "Ready issues" });
+  expect(navigation.value.map((entry) => entry.origin)).toStrictEqual([run.value.origin]);
 });
 
 it("a Run keeps running with its origin after its Trigger is removed", async (c) => {

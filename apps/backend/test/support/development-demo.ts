@@ -1,6 +1,7 @@
 import { assert, type TestContext } from "@effect/vitest";
 import { join } from "node:path";
 import { factoryHarness } from "./factory.ts";
+import { PersistentGitHub } from "../../../../scripts/dev/persistent-github.ts";
 import { PersistentT3 } from "../../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../../scripts/dev/seed.ts";
 
@@ -9,8 +10,9 @@ export async function restoredDevelopmentDemo(c: TestContext) {
   const h = await factoryHarness(c);
   const reportingStateDirectory = join(h.processHome, "reporting-t3-state");
   const t3 = new PersistentT3(h.processHome, false);
-  const f = await h.open({ t3, reportingStateDirectory });
-  await seedDevelopment(f, t3, h.processHome);
+  const github = new PersistentGitHub(h.processHome, false);
+  const f = await h.open({ t3, github, reportingStateDirectory });
+  const seeded = await seedDevelopment(f, t3, github, h.processHome);
   const projects = await f.listProjects();
   assert(projects.ok);
   const project = projects.value.projects[0]!;
@@ -30,9 +32,14 @@ export async function restoredDevelopmentDemo(c: TestContext) {
   });
   assert(edited.ok);
   t3.save();
+  github.save();
   await f.close();
   const restored = new PersistentT3(h.processHome, true);
-  const reopened = await h.open({ t3: restored, reportingStateDirectory });
+  const reopened = await h.open({
+    t3: restored,
+    github: new PersistentGitHub(h.processHome, true),
+    reportingStateDirectory,
+  });
   return {
     f: reopened,
     t3: restored,
@@ -40,5 +47,6 @@ export async function restoredDevelopmentDemo(c: TestContext) {
     edited: edited.value,
     projectId: project.id,
     count: listed.value.length,
+    triggerStartedRun: seeded.triggerStartedRun,
   };
 }

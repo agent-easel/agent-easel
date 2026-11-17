@@ -352,6 +352,8 @@ export interface RunNavigationEntry {
   readonly createdAt: string;
   readonly lastActivityAt: string;
   readonly flowName: string;
+  /** Null for a Run that no Trigger started; see `RunDetail.origin`. */
+  readonly origin: RunOrigin | null;
   readonly repositories: readonly RunWorkerRepository[];
   /**
    * Orders entries with equal `createdAt` (ascending): the Start request key, which the

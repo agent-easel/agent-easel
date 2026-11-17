@@ -11,6 +11,7 @@ import { readRunSettlementStates } from "./manual-settlement.ts";
 import { runLifecycle } from "./lifecycle.ts";
 import { failure } from "../../result.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
+import { readRunOrigins } from "./run-origins.ts";
 import { storedProjectIcon } from "../../projects.ts";
 import { projectFaviconUrl } from "../../project-favicon.ts";
 import { dropTitleGeneration, readTitleGenerations } from "./title-generations.ts";
@@ -46,6 +47,7 @@ export function openRunNavigation(database: RunnerDatabase) {
           JOIN flow_revisions f ON f.id=r.flow_revision_id
           LEFT JOIN run_presentation rp ON rp.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
           const settlements = yield* readRunSettlementStates(sql, rows);
+          const origins = yield* readRunOrigins(sql);
           const titleGenerations = yield* readTitleGenerations(
             sql,
             rows.map((row) => row.id),
@@ -125,6 +127,7 @@ export function openRunNavigation(database: RunnerDatabase) {
                 createdAt: row.created_at,
                 lastActivityAt: row.last_activity_at,
                 flowName: row.flow_name,
+                origin: origins.get(row.id) ?? null,
                 repositories: repositories.get(row.id) ?? [],
                 creationKey: row.creation_key,
                 project: {

@@ -2,6 +2,7 @@ import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
 import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
+import { RunOriginMeta } from "../components/run-origin.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -300,6 +301,7 @@ function RunTopBar({
             {run.flowName} · captured revision
           </span>
           <span className="tracking-label">· Started {dayAndTime(run.startedAt)}</span>
+          {run.origin && <RunOriginMeta origin={run.origin} />}
         </p>
       </div>
       <NotLiveMarker freshness={freshness} />

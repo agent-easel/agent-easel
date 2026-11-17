@@ -44,6 +44,8 @@ import { promisify } from "node:util";
 import type { Factory } from "../../apps/backend/src/index.ts";
 import type { PersistentT3 } from "./persistent-t3.ts";
 import { createDemoFlows } from "./seed-flows.ts";
+import { createDemoTriggers } from "./seed-triggers.ts";
+import type { ControlledGitHub } from "../../apps/backend/test/support/controlled-github.ts";
 import { promptAnswered, promptSent } from "../../apps/backend/test/support/continuation.ts";
 import {
   delegatedWorkPending,
@@ -159,9 +161,15 @@ async function createDemoClients(factory: Factory) {
 
 /**
  * Fresh demo homes only; the owning server records completion and preserves subsequent edits.
- * Answers the demo world it created by stable keys: Runs by seed scenario key.
+ * Answers the demo world it created by stable keys: Runs by seed scenario key. `github` is the
+ * GitHub the Factory's Triggers read.
  */
-export async function seedDevelopment(factory: Factory, t3: PersistentT3, home: string) {
+export async function seedDevelopment(
+  factory: Factory,
+  t3: PersistentT3,
+  github: ControlledGitHub,
+  home: string,
+) {
   await createDemoReporting(home, t3.environmentId);
   t3.approve();
   // Runtime readiness requires a loopback hostname. Port zero cannot target a live T3 server.
@@ -178,8 +186,10 @@ export async function seedDevelopment(factory: Factory, t3: PersistentT3, home: 
   const agents = await createDemoAgents(factory, t3);
   const flows = await createDemoFlows(factory, agents);
   await createDemoClients(factory);
-  const runs = await seedScenarios({ factory, t3, projectId: project.id }, flows);
-  return { project, agents, flows, runs };
+  const context = { factory, t3, projectId: project.id };
+  const runs = await seedScenarios(context, flows);
+  const triggerStartedRun = await createDemoTriggers(context, github, project, flows);
+  return { project, agents, flows, runs, triggerStartedRun };
 }
 
 /** Starts `scenario` in `flowId` and brings its Run to the scenario's state; answers the Run. */
