@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MenuName } from "./menu-name.tsx";
 import {
   PickerMenuContent,
   PickerMenuList,
