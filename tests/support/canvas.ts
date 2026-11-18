@@ -35,7 +35,7 @@ export async function runCanvasCenterOffset(screen: Screen, blockName: string) {
 export const runCanvasHorizontalOffset = async (screen: Screen, blockName: string) =>
   Math.abs((await runCanvasCenterOffset(screen, blockName)).x);
 
-/** Opens a live build-and-review Run once its entry view has focused the implementing Block. */
+/** Opens a live build-and-review Run with the implementing Block active and following on. */
 export async function openFollowedReviewRun(
   app: App,
   screen: Screen,
@@ -45,8 +45,12 @@ export async function openFollowedReviewRun(
   await browser.setViewport({ width: 1600, height: 1000 });
   const run = await liveRun(app, key, "review");
   await app.open(`/runs/${run}`);
-  await expect.poll(() => runCanvasHorizontalOffset(screen, "Implement change")).toBeLessThan(2);
-  return screen.getByRole("region", "Execution canvas");
+  const canvas = screen.getByRole("region", "Execution canvas");
+  await expect(
+    canvas.getByRole("button", "Agent Implement change, Working", { exact: true }),
+  ).toBeVisible();
+  await expect(canvas).toHaveAttribute("data-following", "true");
+  return canvas;
 }
 
 /** The reviewer is centered, following has resumed, and the unseen-progress marker is cleared. */
