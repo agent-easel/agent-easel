@@ -11,6 +11,18 @@ import {
   unknownStart,
 } from "./support/run-draft.ts";
 
+it("an unresolved Start joins Run navigation without leaving the composer", async (context) => {
+  // Arrange
+  const { draft, startRun } = composer(context);
+  startRun.mockRejectedValueOnce(new TypeError("Response lost"));
+
+  // Act
+  await draft.start();
+
+  // Assert
+  expect(draft.getDrafts().map(draftTitle)).toStrictEqual(["Do the work"]);
+});
+
 it("an unknown Start keeps submitted fields read-only", async (context) => {
   // Arrange
   const { draft, startRun } = await unknownStart(context);
@@ -715,6 +727,42 @@ it("a Flow kept through a synchronizing Project switch clears once the Flow list
     text: "Do the work",
     projectId: "other-project",
     flowId: "",
+  });
+});
+
+it("a current delivery clears a Project that is no longer available and keeps the prompt", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+
+  // Act
+  draft.receiveChoices(
+    delivery([launchFlow("flow", "project")], { availability: { project: "project-unavailable" } }),
+  );
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "Do the work",
+    projectId: "",
+    flowId: "",
+  });
+});
+
+it("a current delivery keeps the selected Project while the connection is down", (context) => {
+  // Arrange
+  const { draft } = composer(context);
+
+  // Act
+  draft.receiveChoices(
+    delivery([launchFlow("flow", "project")], {
+      availability: { project: "connection-unavailable" },
+    }),
+  );
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    text: "Do the work",
+    projectId: "project",
+    flowId: "flow",
   });
 });
 

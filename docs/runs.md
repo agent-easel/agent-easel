@@ -97,9 +97,16 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   workers share ([Run workspace](runner.md#run-workspace)). It omits `runtimeMode` and leaves execution permissions to T3
   and its OAuth grant, so effective autonomy is not guaranteed by Factory. Use a repository you are willing to let agents
   change.
-- **Composer.** Project and Flow choices are remembered locally per selected Factory server, like drafts. Each blocking condition is a notice with a recovery action, and
-  fields that cause it are marked. The Project picker keeps searchable paths, **Recheck projects** and **Add repository**;
-  unavailable references stay visible in history but cannot be selected for a new Run.
+- **Composer.** Project and Flow choices are remembered locally per selected Factory server, like drafts. One card under the
+  box explains the single blocking condition; the field that causes it shows only its border and a short tag, and nothing
+  sits under the box while Start can run. An empty prompt leaves Start disabled, and ⌘↵ does nothing. The Project picker
+  keeps searchable paths, **Recheck projects** and **Add repository**; unavailable references stay visible in history but
+  cannot be selected for a new Run. With no saved T3 address the card is **Connect Factory to T3** (**Open T3 connection**),
+  Project and Flow are disabled, and the sidebar footer shows no connection dot or status. A connection that was saved and
+  then lost is **T3 is disconnected**: the draft is kept, Project and Flow show their last known values, and Start returns
+  when Factory reconnects. When the browser loses Factory the card is **Factory offline** and keeps the draft, without a T3
+  settings link. A connected catalog with no available Project reads **No projects in T3** and its card offers **Refresh
+  projects** and **Open T3**. A rejected Start's card body is **No Run was created.**, with one row per cause.
 - **Flow picker.** The Flow picker is disabled until a Project is chosen. With a Project it lists ready global Flows
   under **Global**, then ready Flows owned by that Project under its title; a chosen Flow that stops being ready stays
   listed and marked **Not ready**. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
@@ -120,11 +127,13 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   **New Run** (button, shortcut or palette) opens an empty prompt with the remembered choices and keeps earlier drafts; the
   Flow editor's **Start Run** does the same with its Flow. Project and Flow choices update live; while they are
   synchronizing or offline the last choices stay visible, the draft is kept and Start is disabled. A Start issued while
-  current still sends its image uploads and request if a catch-up begins meanwhile; going offline stops it. A selected Project or Flow
-  is cleared only when a current live delivery no longer lists it, and a Flow when current choices show that another
-  Project owns it, including in a restored draft, which keeps its Project, prompt and images; a non-current or failed
-  delivery changes nothing, and choosing a just-created Project or Flow waits for the delivery that lists it. A draft
-  awaiting a Start outcome is never cleared: **Check same request** sends the submitted request unchanged, and Factory
+  current still sends its image uploads and request if a catch-up begins meanwhile; going offline stops it. A selected Project
+  is cleared when a current live delivery no longer lists it or lists it as unavailable for a reason other than the
+  connection being down, and a Flow when current choices no longer list it or show that another Project owns it, including
+  in a restored draft, which keeps its prompt and images. A connection outage keeps the last known Project and Flow. A
+  non-current or failed delivery changes nothing, and choosing a just-created Project or Flow waits for the delivery that
+  lists it. A draft awaiting a Start outcome is never cleared: its sidebar row shows the Idle ring and no Draft label until
+  T3 confirms, **Check same request** sends the submitted request unchanged, and Factory
   resolves it by request key and content before any ownership, availability or readiness check. Confirmed Start removes the draft and opens its Run; a confirmed
   rejection keeps it editable. A draft's title follows its first non-empty prompt line until it is renamed; a manual title
   survives prompt edits, reload and other tabs' saves, and a title or selection alone never creates a draft.
@@ -487,7 +496,7 @@ Engine termination alone never settles a Run; automatic settlement needs every c
 ## Run list
 
 The shell sidebar lists Runs globally, newest created first, with equal creation times in ascending creation-key order;
-opening, renaming and closing never change either. Run drafts join the main list in the same order with a **Draft** indicator once you leave the New Run view
+opening, renaming and closing never change either. Run drafts join the main list in the same order once you leave the New Run view, and an unresolved Start joins immediately. A draft that is not awaiting Start shows a **Draft** indicator; one awaiting Start shows the Idle ring and no chip or Draft label
 (Settings and Studio open over it and do not count); a draft row reopens it in the composer, and editing never moves it.
 A draft's creation key is its id, and its Start sends that id as the request key, which becomes the Run's creation key. With
 the draft's title and creation time, the Run therefore replaces the draft row in place, also among entries created at the same
@@ -511,7 +520,7 @@ menu items never opens a row preview.
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
   **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip.
-- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
+- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. With no Runs, the list is one muted line, **No Runs yet**, the search field stays, and both groups stay hidden. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
 - **Needs you (N)** filters the list to exactly the Runs the desktop
   [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input

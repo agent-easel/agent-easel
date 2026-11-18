@@ -1,3 +1,4 @@
+import { fillReadyComposer } from "./support/composer.ts";
 import { confirmSettlement } from "./support/run-history.ts";
 import type { Browser } from "@e2e-dev/web";
 import { test } from "./support/test.ts";
@@ -113,6 +114,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
   // Arrange
   await app.open("/runs/new");
   await expect(screen.getByRole("button", "New Run (+)", { exact: true })).toBeEnabled();
+  await fillReadyComposer(screen, "Ship the picker");
   await screen.getByLabel("Initial prompt", { exact: false }).tap();
   // Each control that receives focus from here on is numbered in the order it was reached.
   await browser.evaluate(`(() => {

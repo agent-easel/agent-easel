@@ -35,6 +35,18 @@ export function connectionFooterText(presentation: ConnectionPresentation): stri
   return footerText[presentation];
 }
 
+/**
+ * False only once Factory has loaded a connection with no saved T3 address. Loading and a failed
+ * load keep the footer signal, because those are not "T3 not set up".
+ */
+export function connectionIsConfigured(
+  connection: T3Connection | null,
+  presentation: ConnectionPresentation,
+): boolean {
+  if (presentation === "loading" || presentation === "load-error") return true;
+  return !!connection?.endpoint;
+}
+
 type ConnectionStateContextValue = {
   connection: T3Connection | null;
   loadError: string;

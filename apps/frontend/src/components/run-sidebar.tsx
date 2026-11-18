@@ -349,11 +349,7 @@ function navigationEmptyState(
 ) {
   if (!loaded) return undefined;
   if (needsYou && !open) return { title: "Nothing needs you", body: "You're all caught up." };
-  if (!total)
-    return {
-      title: "No Runs yet",
-      body: "Start one with + (New Run). Runs from every project appear here.",
-    };
+  if (!total) return { title: "No Runs yet", body: "" };
   if (!matches)
     return {
       title: `No Run titles match “${search}”`,
@@ -365,6 +361,12 @@ function navigationEmptyState(
 
 function NavigationEmptyState({ state }: { state: ReturnType<typeof navigationEmptyState> }) {
   if (!state) return null;
+  if (!state.body)
+    return (
+      <p role="status" className="px-2 py-2 text-sm text-muted-foreground">
+        {state.title}
+      </p>
+    );
   return (
     <div
       role="status"
@@ -552,10 +554,11 @@ function DraftRow({
       kind="draft"
       selected={selected}
       onClick={() => runDraft.openDraft(draft.id)}
+      label={`${title} ${pending ? "Idle" : "Draft"}`}
       preview={
         <>
           <p className="text-sm font-medium break-words">{title}</p>
-          <p className="text-muted-foreground">Draft</p>
+          <p className="text-muted-foreground">{pending ? "Idle" : "Draft"}</p>
         </>
       }
       actions={
@@ -574,10 +577,14 @@ function DraftRow({
       }
     >
       <span className="flex min-w-0 items-center gap-2">
-        <FilePen aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        {pending ? (
+          <CircleDashed aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <FilePen aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
         <span className="truncate text-sm font-medium">{title}</span>
       </span>
-      <span className="text-2xs text-muted-foreground">Draft</span>
+      {!pending && <span className="text-2xs text-muted-foreground">Draft</span>}
     </SidebarRow>
   );
 }

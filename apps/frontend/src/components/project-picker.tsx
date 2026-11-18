@@ -130,7 +130,13 @@ function ProjectChoices({
   );
 }
 
-function ProjectTriggerSummary({ selected }: { selected: FactoryProject | undefined }) {
+function ProjectTriggerSummary({
+  selected,
+  placeholder,
+}: {
+  selected: FactoryProject | undefined;
+  placeholder: string;
+}) {
   const available = selected?.availability === "available";
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
@@ -140,14 +146,9 @@ function ProjectTriggerSummary({ selected }: { selected: FactoryProject | undefi
         faviconUrl={available ? (selected?.faviconUrl ?? null) : null}
       />
       {selected ? (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate font-medium">{selected.title}</span>
-          {!available && (
-            <span className="shrink-0 text-2xs tracking-label text-destructive">Unavailable</span>
-          )}
-        </span>
+        <span className="min-w-0 flex-1 truncate font-medium">{selected.title}</span>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">No project selected</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">{placeholder}</span>
       )}
     </span>
   );
@@ -256,12 +257,6 @@ function AddRepositoryDialog({
   );
 }
 
-/** A selected-but-unavailable project or an empty catalog marks the field invalid (Figma L02/L04). */
-function selectionBlocked(selected: FactoryProject | undefined, catalog: ProjectCatalog | null) {
-  if (selected) return selected.availability !== "available";
-  return catalog?.projects.length === 0;
-}
-
 /**
  * The Project pill of a wrapping toolbar row: the trigger shows the title and holds the repository
  * path as its tooltip; status lines are full-width rows after the toolbar's controls.
@@ -271,11 +266,13 @@ export function ProjectPicker({
   selectedId,
   onSelect,
   disabled = false,
+  placeholder = "No project selected",
 }: {
   state: ReturnType<typeof useProjectCatalog>;
   selectedId: string;
   onSelect: (id: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   const { catalog, error, act, clearError } = state;
   const busy = state.busy || disabled;
@@ -292,7 +289,6 @@ export function ProjectPicker({
   const listRef = useRef<HTMLDivElement>(null);
 
   const selected = catalog?.projects.find((p) => p.id === selectedId);
-  const invalid = selectionBlocked(selected, catalog);
   return (
     <>
       <DropdownMenu
@@ -307,15 +303,15 @@ export function ProjectPicker({
             ref={triggerRef}
             type="button"
             variant="outline"
+            disabled={disabled}
             aria-disabled={busy}
             aria-busy={busy}
-            aria-label={`Select project: ${selected?.title ?? "No project selected"}`}
-            aria-invalid={invalid || undefined}
+            aria-label={`Select project: ${selected?.title ?? placeholder}`}
             // The pill can truncate the title, so the tooltip carries it along with the path.
             title={selected && `${selected.title}\n${selected.workspaceRoot}`}
             className={cn(selectFieldClass, toolbarPillClass, "w-45")}
           >
-            <ProjectTriggerSummary selected={selected} />
+            <ProjectTriggerSummary selected={selected} placeholder={placeholder} />
             <ChevronsUpDownIcon
               className="size-4 shrink-0 text-muted-foreground"
               strokeWidth={1.5}
@@ -366,7 +362,6 @@ export function ProjectPicker({
           />
         </PickerMenuContent>
       </DropdownMenu>
-      <ProjectAvailability selected={selected} catalog={catalog} />
       <AddRepositoryDialog
         open={addDialogOpen}
         busy={busy}
@@ -389,36 +384,6 @@ export function ProjectPicker({
         <Alert variant="destructive" className={toolbarStatusClass}>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
-    </>
-  );
-}
-
-function ProjectAvailability({
-  selected,
-  catalog,
-}: {
-  selected: FactoryProject | undefined;
-  catalog: ProjectCatalog | null;
-}) {
-  return (
-    <>
-      {" "}
-      {selected && selected.availability !== "available" && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another
-          project.
-        </p>
-      )}
-      {catalog && catalog.projects.length === 0 && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          T3 doesn’t report any projects yet.
-        </p>
-      )}
-      {catalog?.problem && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-muted-foreground")} role="status">
-          {catalog.problem}
-        </p>
       )}
     </>
   );

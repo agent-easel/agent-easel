@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
 import type { ProjectCatalog, Result } from "../../packages/contracts/src/index.ts";
 import { expect, type App, type Screen } from "e2e";
+import { copyAgentDefinition } from "./agents.ts";
+import { placeAgentElsewhere, saveFlowCopy } from "./flows.ts";
 
 async function selectComposerFlow(screen: Screen, flowName: string) {
   const trigger = screen.getByLabel("Flow", { exact: true });
@@ -47,6 +49,53 @@ export async function restoreProjectSelection(baseUrl: string | undefined, id: s
 export async function openComposerWithFlow(app: App, screen: Screen, flowName: string) {
   await app.open("/runs/new");
   await selectComposerFlow(screen, flowName);
+}
+
+/** Selects a Project and a Flow, then fills the initial prompt. */
+export async function fillReadyComposer(
+  screen: Screen,
+  prompt: string,
+  project = "Northwind",
+  flow = "Northwind release",
+) {
+  await selectComposerProject(screen, project);
+  await selectComposerFlow(screen, flow);
+  await screen.getByLabel("Initial prompt", { exact: false }).fill(prompt);
+}
+
+/** Opens the New Run composer with a Project, a Flow, and a prompt. */
+export async function openReadyComposer(app: App, screen: Screen, prompt: string) {
+  await app.open("/runs/new");
+  await fillReadyComposer(screen, prompt);
+}
+
+/**
+ * Opens a checkout copy of Demo · Parallel review, places a model-less Agent on its later branch,
+ * and waits until that reason keeps Start disabled.
+ */
+export async function blockOnModelLessLaterReview(app: App, screen: Screen) {
+  const agent = await copyAgentDefinition(
+    app.baseUrl,
+    "Demo · Accessibility reviewer",
+    "Model-less accessibility reviewer",
+    { modelLess: true },
+  );
+  const flow = await saveFlowCopy(
+    app.baseUrl,
+    "Demo · Parallel review",
+    "Model-less later review",
+    {
+      mode: "checkout",
+    },
+  );
+  await openComposerWithFlow(app, screen, "Model-less later review");
+  await screen.getByLabel("Initial prompt", { exact: false }).fill("UI model-less later Agent");
+  await placeAgentElsewhere(app.baseUrl, flow, "accessibility", agent.id);
+  await expect(
+    screen.getByText(/Accessibility review: Model-less accessibility reviewer needs a model\./),
+  ).toBeVisible();
+  await expect(screen.getByRole("button", "Start", { exact: true })).toBeDisabled();
+  return { agent, flow };
 }
 
 /** Factory accepts the Start but its response is lost: the composer offers Check same request. */

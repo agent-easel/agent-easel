@@ -1,31 +1,46 @@
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ScreenLayout } from "../components/screen-layout.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import type { FlowDraft, LaunchChoices } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowDraft, LaunchChoices } from "@t3-factory/contracts";
 import { api } from "../api.ts";
-import { useConnectionState } from "../connection-state.tsx";
+import {
+  connectionIsConfigured,
+  useConnectionState,
+  type ConnectionPresentation,
+} from "../connection-state.tsx";
 import { useLiveLaunchChoices } from "../live/launch-choices.ts";
-import type { LiveScopeView } from "../live/owner.ts";
+import { useLiveStudio } from "../live/studio.ts";
+import type { LiveDelivery, LiveScopeView } from "../live/owner.ts";
 import { composerFlows, runDraft, useRunDraft } from "../run-draft.ts";
+import {
+  composerLaunchCard,
+  composerLaunchCardId,
+  t3AppUrl,
+  type LaunchCard,
+  type StartCause,
+} from "../composer-launch.ts";
+import { useLiveDelivery, useTransport, type TransportState } from "../transport.ts";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ChevronsUpDown,
   CircleHelp,
+  CloudOff,
   Info,
   Play,
   TriangleAlert,
   Unplug,
   Workflow,
-  type LucideIcon,
 } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
+import { FieldStateTag } from "../components/field-state-tag.tsx";
 import {
   Notice,
   NoticeButton,
+  NoticeExternalLink,
   NoticeSettingsLink,
   NoticeStudioLink,
 } from "../components/notice.tsx";
-import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "../components/page.tsx";
+import { selectFieldClass, toolbarPillClass } from "../components/page.tsx";
 import { Button } from "../components/ui/button.tsx";
 import {
   DropdownMenu,
@@ -46,51 +61,10 @@ import {
 } from "../components/prompt-images.tsx";
 import { PromptEditor, type PromptEditorHandle } from "../components/prompt-editor.tsx";
 import { cn } from "../lib/utils.ts";
-import type { ConnectionPresentation } from "../connection-state.tsx";
-
-const connectionNotices: Record<
-  Exclude<ConnectionPresentation, "ready">,
-  { tone: "critical" | "attention" | "neutral"; icon: LucideIcon; title: string; body: string }
-> = {
-  loading: {
-    tone: "neutral",
-    icon: CircleHelp,
-    title: "Checking T3 connection…",
-    body: "Start is available once Factory confirms T3 is connected.",
-  },
-  "load-error": {
-    tone: "critical",
-    icon: TriangleAlert,
-    title: "Could not load T3 connection status",
-    body: "Your draft is kept. Check that Factory is running, then check the connection again.",
-  },
-  unavailable: {
-    tone: "critical",
-    icon: Unplug,
-    title: "T3 is disconnected",
-    body: "Your draft is kept. Start is available again as soon as Factory reconnects to T3.",
-  },
-  "authorization-required": {
-    tone: "attention",
-    icon: TriangleAlert,
-    title: "Authorize Factory in T3",
-    body: "T3 is running but hasn’t granted this Factory access. Approve it in T3 — your draft stays here.",
-  },
-  incompatible: {
-    tone: "attention",
-    icon: TriangleAlert,
-    title: "T3 version is incompatible",
-    body: "Update T3 and check again. Until then Factory can show history but can’t start Runs.",
-  },
-};
 
 /** A Flow launches when its captured Agents and graph are ready. */
 function flowCanLaunch(flow: FlowDraft) {
   return flow.readiness.ready;
-}
-
-function flowLaunchIssues(flow: FlowDraft) {
-  return flow.readiness.issues.map((issue) => issue.message).join(" ");
 }
 
 /**
@@ -111,10 +85,13 @@ function useComposer() {
   const draft = useRunDraft();
   const choices = useLiveLaunchChoices();
   const projects = useProjectCatalog();
+  const studio = useLiveStudio();
   const flows = choices.value?.flows ?? null;
   const error = choices.error ? "Could not load launch choices. Your draft is kept." : "";
   // Start and live observation depend on readiness: keep it current while shown.
-  const { presentation } = useConnectionState();
+  const { presentation, connection } = useConnectionState();
+  const transportState = useTransport();
+  const liveDelivery = useLiveDelivery();
   const initialized = useRef(false);
   useEffect(() => {
     if (!projects.catalog || initialized.current) return;
@@ -124,47 +101,120 @@ function useComposer() {
   }, [projects.catalog, draft.projectId]);
   useReceiveChoices(choices);
   const prompt = useRef<PromptEditorHandle>(null);
-  const [promptMissing, setPromptMissing] = useState(false);
   const project = projects.catalog?.projects.find((p) => p.id === draft.projectId);
   const flow = flows?.find((f) => f.id === draft.flowId);
-  const locked = draft.pending;
+  const configured = connectionIsConfigured(connection, presentation);
   const projectReady = project?.availability === "available";
-  const flowFits = flow?.projectId === null || flow?.projectId === draft.projectId;
-  const ready =
-    choices.synchronized &&
-    presentation === "ready" &&
-    projectReady &&
-    !!flow &&
-    flowFits &&
-    flowCanLaunch(flow) &&
-    !projects.busy;
-  const start = async () => {
-    if (!draft.pending) {
-      if (!draft.text.trim()) {
-        setPromptMissing(true);
-        prompt.current?.focus();
-        return;
-      }
-      if (!ready) return;
-    }
-    const runId = await runDraft.start();
-    if (runId) void navigate({ to: "/runs/$runId", params: { runId } });
-  };
+  const ready = composerReady({
+    synchronized: choices.synchronized,
+    presentation,
+    projectReady,
+    flow,
+    projectId: draft.projectId,
+    projectsBusy: projects.busy,
+  });
+  const card = describeComposerLaunch({
+    transportKind: transportState.kind,
+    liveDelivery,
+    presentation,
+    endpoint: connection?.endpoint,
+    draft,
+    choicesError: error,
+    catalog: projects.catalog,
+    flows,
+    agents: studio.value?.agents,
+  });
   return {
     draft,
     projects,
     flows,
-    error,
     presentation,
+    configured,
     prompt,
-    promptMissing,
     project,
     flow,
-    locked,
+    locked: draft.pending,
     projectReady,
     ready,
+    card,
     edit: runDraft.edit,
-    start,
+    start: beginRun(draft, ready, navigate),
+  };
+}
+
+function composerReady(input: {
+  synchronized: boolean;
+  presentation: ConnectionPresentation;
+  projectReady: boolean;
+  flow: FlowDraft | undefined;
+  projectId: string;
+  projectsBusy: boolean;
+}) {
+  const flowFits = input.flow?.projectId === null || input.flow?.projectId === input.projectId;
+  return (
+    input.synchronized &&
+    input.presentation === "ready" &&
+    input.projectReady &&
+    !!input.flow &&
+    flowFits &&
+    flowCanLaunch(input.flow) &&
+    !input.projectsBusy
+  );
+}
+
+function launchFlow(flow: FlowDraft) {
+  return {
+    id: flow.id,
+    projectId: flow.projectId,
+    name: flow.name,
+    ready: flowCanLaunch(flow),
+    issues: flow.readiness.issues.map((issue) => issue.message),
+  };
+}
+
+function describeComposerLaunch(input: {
+  transportKind: TransportState["kind"];
+  liveDelivery: LiveDelivery;
+  presentation: ConnectionPresentation;
+  endpoint: string | null | undefined;
+  draft: ReturnType<typeof useRunDraft>;
+  choicesError: string;
+  catalog: ReturnType<typeof useProjectCatalog>["catalog"];
+  flows: readonly FlowDraft[] | null;
+  agents: readonly AgentDefinition[] | null | undefined;
+}): LaunchCard {
+  const { draft, catalog } = input;
+  return composerLaunchCard({
+    factoryOffline: input.transportKind === "offline" || input.liveDelivery === "offline",
+    presentation: input.presentation,
+    endpoint: input.endpoint ?? null,
+    pending: draft.pending,
+    startError: draft.error,
+    startIssues: draft.issues,
+    choicesError: input.choicesError,
+    saveFailed: draft.saveFailed,
+    catalog: catalog && { problem: catalog.problem, projects: catalog.projects },
+    projectId: draft.projectId,
+    flows: input.flows?.map(launchFlow) ?? null,
+    flowId: draft.flowId,
+    agents:
+      input.agents?.map((agent) => ({
+        projectId: agent.projectId,
+        execution: agent.execution,
+      })) ?? null,
+  });
+}
+
+function beginRun(
+  draft: { busy: boolean; pending: boolean; text: string },
+  ready: boolean,
+  navigate: ReturnType<typeof useNavigate>,
+) {
+  return async () => {
+    if (draft.busy) return;
+    if (!draft.pending && (!draft.text.trim() || !ready)) return;
+    const runId = await runDraft.start();
+    if (runId) void navigate({ to: "/runs/$runId", params: { runId } });
   };
 }
 
@@ -172,29 +222,29 @@ type Composer = ReturnType<typeof useComposer>;
 
 function StartButton({ model }: { model: Composer }) {
   const { draft } = model;
-  const inactive = !draft.pending && (!model.ready || !draft.text.trim());
+  const mutationsAllowed = useMutationsAllowed();
+  const enabled =
+    mutationsAllowed && !draft.busy && (draft.pending || (model.ready && !!draft.text.trim()));
   return (
     <MutationGate>
       <Button
         type="submit"
-        disabled={draft.busy || (!draft.pending && !model.ready && !!draft.text.trim())}
-        aria-disabled={inactive}
+        disabled={!enabled}
         className={cn(
           "group/start ml-auto h-9 shrink-0 gap-2 pr-3 pl-3.5 font-semibold has-[>svg]:pr-3 has-[>svg]:pl-3.5",
-          inactive && "bg-accent text-subtle-foreground hover:bg-accent disabled:opacity-100",
+          !enabled && "bg-accent text-subtle-foreground hover:bg-accent disabled:opacity-100",
         )}
       >
         <Play aria-hidden className="size-3" strokeWidth={2} />
         {draft.busy ? "Starting…" : draft.pending ? "Check same request" : "Start"}
-        <kbd
-          aria-hidden
-          className={cn(
-            "rounded-sm px-1 py-px font-sans text-2xs font-medium",
-            inactive ? "bg-foreground/8" : "bg-primary-foreground/14",
-          )}
-        >
-          ⌘↵
-        </kbd>
+        {enabled && (
+          <kbd
+            aria-hidden
+            className="rounded-sm bg-primary-foreground/14 px-1 py-px font-sans text-2xs font-medium"
+          >
+            ⌘↵
+          </kbd>
+        )}
       </Button>
     </MutationGate>
   );
@@ -223,7 +273,7 @@ export function RunComposer() {
             {projectReady ? `What should we work on in ${project?.title}?` : "Start a new Run"}
           </h1>
           <ComposerBox model={model} />
-          <ComposerNotices model={model} />
+          <LaunchNotice model={model} />
         </form>
       </main>
     </ScreenLayout>
@@ -234,21 +284,14 @@ function flowFieldState({ draft, flows, flow }: Composer) {
   const empty = flows?.length === 0;
   const choices = composerFlows(flows ?? [], draft.projectId, draft.flowId);
   const notReady = !!flow && !flowCanLaunch(flow);
-  const missing = !!flows && !!draft.flowId && !flow;
   return {
     empty,
     choices,
     notReady,
-    invalid: notReady || missing,
     placeholder: empty ? "No Flows yet" : "Choose a Flow",
     value:
       flow?.name ??
       (empty ? undefined : flows && draft.flowId ? "Selected Flow unavailable" : undefined),
-    help: notReady
-      ? flowLaunchIssues(flow)
-      : empty
-        ? "Create a Flow to define which Agents run and how they hand off."
-        : undefined,
   };
 }
 
@@ -267,9 +310,7 @@ function FlowFieldValue({
   return (
     <>
       <span className="min-w-0 truncate font-medium">{value}</span>
-      {flow && !flowCanLaunch(flow) && (
-        <span className="shrink-0 text-2xs tracking-label text-destructive">Not ready</span>
-      )}
+      {flow && !flowCanLaunch(flow) && <FieldStateTag>Not ready</FieldStateTag>}
     </>
   );
 }
@@ -399,11 +440,12 @@ function FlowChoices({
 }
 
 function FlowField({ model }: { model: Composer }) {
-  const { draft, edit, locked } = model;
+  const { draft, edit, locked, configured, card } = model;
   const state = flowFieldState(model);
   const busy = locked;
   // No Flow is chosen without a Project; a Flow held from Start Run stays visible.
-  const disabled = state.choices.disabled;
+  const disabled = state.choices.disabled || !configured;
+  const describedBy = card.kind === "flow-not-ready" ? composerLaunchCardId : undefined;
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -432,12 +474,12 @@ function FlowField({ model }: { model: Composer }) {
             aria-busy={busy}
             aria-label={`Select Flow: ${triggerLabel}`}
             aria-invalid={state.notReady || undefined}
-            aria-describedby={state.help ? "launch-flow-help" : undefined}
+            aria-describedby={describedBy}
             className={cn(
               selectFieldClass,
               toolbarPillClass,
               "w-55",
-              state.invalid && "border-destructive",
+              state.notReady && "border-destructive",
             )}
           >
             <Workflow
@@ -489,18 +531,6 @@ function FlowField({ model }: { model: Composer }) {
           />
         </PickerMenuContent>
       </DropdownMenu>
-      {state.help && (
-        <p
-          id="launch-flow-help"
-          className={cn(
-            toolbarStatusClass,
-            "text-2xs",
-            state.notReady ? "text-destructive" : "text-muted-foreground",
-          )}
-        >
-          {state.help}
-        </p>
-      )}
     </>
   );
 }
@@ -510,8 +540,7 @@ function FlowField({ model }: { model: Composer }) {
  * above a toolbar holding the Project, the Flow, image attachment and Start.
  */
 function ComposerBox({ model }: { model: Composer }) {
-  const { draft, projects, locked, edit, prompt, promptMissing, presentation } = model;
-  const missing = promptMissing && !draft.text.trim();
+  const { draft, projects, locked, edit, prompt, configured, presentation } = model;
   const [previewing, setPreviewing] = useState<string>();
   const previewed = draft.images.find((image) => image.imageId === previewing);
   const drop = useImageDrop(!locked, (files) => void prompt.current?.insertImages(files));
@@ -522,11 +551,7 @@ function ComposerBox({ model }: { model: Composer }) {
       </Label>
       <div
         {...drop.handlers}
-        className={cn(
-          // A third of the window; the toolbar and its status rows may need more.
-          "relative flex min-h-[max(12rem,32vh)] flex-col gap-2 rounded-xl border bg-card p-3 transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-[3px] focus-within:ring-ring/15",
-          missing && "border-destructive focus-within:border-destructive",
-        )}
+        className="relative flex min-h-[max(12rem,32vh)] flex-col gap-2 rounded-xl border bg-card p-3 transition-[border-color,box-shadow] focus-within:border-primary focus-within:ring-[3px] focus-within:ring-ring/15"
       >
         <div
           className={cn(
@@ -542,9 +567,8 @@ function ComposerBox({ model }: { model: Composer }) {
             segments={draft.segments}
             images={draft.images}
             locked={locked}
-            invalid={missing}
+            invalid={false}
             labelledBy="launch-prompt-label"
-            describedBy="prompt-help"
             placeholder="Describe what this Run should do…"
             onChange={(segments) => edit({ segments })}
             attachImages={runDraft.attachImages}
@@ -564,7 +588,15 @@ function ComposerBox({ model }: { model: Composer }) {
               state={projects}
               selectedId={draft.projectId}
               onSelect={(projectId) => edit({ projectId })}
-              disabled={locked}
+              disabled={locked || !configured}
+              placeholder={
+                configured &&
+                presentation === "ready" &&
+                projects.catalog?.projects.every((item) => item.availability !== "available") &&
+                !draft.projectId
+                  ? "No projects in T3"
+                  : "No project selected"
+              }
             />
             <FlowField model={model} />
           </fieldset>
@@ -576,18 +608,7 @@ function ComposerBox({ model }: { model: Composer }) {
         </div>
         {drop.dragging && <ImageDropOverlay />}
       </div>
-      <p id="prompt-help" className="text-xs text-muted-foreground">
-        The first text line becomes the Run title; you can rename it later. Paste or drop
-        screenshots to reference them.
-        {presentation === "unavailable" &&
-          " Project and Flow lists show their last known values while disconnected."}
-      </p>
       <ImageRejections rejections={draft.imageRejections} />
-      {missing && (
-        <p role="alert" className="text-2xs text-destructive">
-          Enter an initial prompt to start the Run.
-        </p>
-      )}
       {previewed && (
         <ImagePreview
           image={previewed}
@@ -599,78 +620,145 @@ function ComposerBox({ model }: { model: Composer }) {
   );
 }
 
-function ProjectNotice({ model }: { model: Composer }) {
-  const { project, projects } = model;
-  if (project) {
-    return (
-      <Notice
-        tone="attention"
-        icon={TriangleAlert}
-        title={`“${project.title}” is no longer available`}
-      >
-        Selected project is unavailable: {project.availability}. Your prompt is kept — choose
-        another available project or restore it in T3 and recheck.
-      </Notice>
-    );
-  }
-  const none = projects.catalog?.projects.length === 0;
+function RefreshProjects({ model }: { model: Composer }) {
+  const { projects } = model;
   return (
-    <Notice
-      tone="info"
-      icon={Info}
-      title={none ? "Add a project in T3 first" : "Choose a project"}
-      action={
-        <MutationGate>
-          <NoticeButton
-            disabled={projects.busy}
-            onClick={() => void projects.act(api.recheckProjects)}
-          >
-            Refresh projects
-          </NoticeButton>
-        </MutationGate>
-      }
-    >
-      {none
-        ? "Choose an available project once T3 reports one. Factory uses the projects T3 knows about: add a repository in T3 or in the Project picker, then refresh — your prompt is kept."
-        : "Choose an available project, then a Flow for it. Your prompt is kept."}
-    </Notice>
+    <MutationGate>
+      <NoticeButton disabled={projects.busy} onClick={() => void projects.act(api.recheckProjects)}>
+        Refresh projects
+      </NoticeButton>
+    </MutationGate>
   );
 }
 
-function FlowNotice({ model }: { model: Composer }) {
-  const { flows, flow } = model;
-  if (flows?.length === 0) {
+function CauseLink({ cause }: { cause: StartCause }) {
+  if (cause.destination === "reporting")
+    return (
+      <NoticeSettingsLink selection={{ tab: "agent-reporting" }}>
+        Open Settings → Agent reporting
+      </NoticeSettingsLink>
+    );
+  if (cause.destination === "connection")
+    return (
+      <NoticeSettingsLink selection={{ tab: "connection" }}>
+        Open T3 connection settings
+      </NoticeSettingsLink>
+    );
+  if (cause.destination === "flows")
+    return (
+      <NoticeStudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
+        Open Studio → Flows
+      </NoticeStudioLink>
+    );
+  return <NoticeStudioLink selection={{ tab: "agents" }}>Open Studio → Agents</NoticeStudioLink>;
+}
+
+function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
+  return (
+    <ul aria-label="Start blockers" className="list-disc space-y-1 pl-4 text-foreground">
+      {causes.map((cause, index) => (
+        <li key={`${cause.destination}:${cause.message}:${index}`} className="break-words">
+          <span className="block">{cause.message}</span>
+          <CauseLink cause={cause} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const flowStay = "Fix it in the Flow editor or pick another Flow; your project and prompt stay.";
+
+function LaunchNotice({ model }: { model: Composer }) {
+  if (model.card.kind === "none") return null;
+  return connectionLaunchNotice(model) ?? outcomeLaunchNotice(model) ?? setupLaunchNotice(model);
+}
+
+function connectionLaunchNotice(model: Composer) {
+  const { card } = model;
+  if (card.kind === "factory-offline")
+    return (
+      <Notice tone="critical" icon={CloudOff} title="Factory offline">
+        Your draft is kept.
+      </Notice>
+    );
+  if (card.kind === "checking")
+    return (
+      <Notice tone="neutral" icon={CircleHelp} title="Checking T3 connection…">
+        Start is available once Factory confirms T3 is connected.
+      </Notice>
+    );
+  if (card.kind === "status-unknown")
+    return (
+      <Notice tone="critical" icon={TriangleAlert} title="Could not load T3 connection status">
+        Your draft is kept. Check that Factory is running, then check the connection again.
+      </Notice>
+    );
+  if (card.kind === "unconfigured")
     return (
       <Notice
         tone="info"
         icon={Info}
-        title="Create your first Flow"
-        action={<NoticeStudioLink selection={{ tab: "flows" }}>Go to Flows</NoticeStudioLink>}
+        title="Connect Factory to T3"
+        action={
+          <NoticeSettingsLink selection={{ tab: "connection" }}>
+            Open T3 connection
+          </NoticeSettingsLink>
+        }
+      />
+    );
+  if (card.kind === "disconnected")
+    return (
+      <Notice
+        tone="critical"
+        icon={Unplug}
+        title="T3 is disconnected"
+        action={
+          <NoticeSettingsLink selection={{ tab: "connection" }}>
+            Open T3 connection settings
+          </NoticeSettingsLink>
+        }
       >
-        A Run needs a ready Flow. Build one in Flows — your draft is kept while you are away.
+        Your draft is kept and Project and Flow show their last known values. Start is available
+        again as soon as Factory reconnects to T3.
       </Notice>
     );
-  }
-  if (!flow || flowCanLaunch(flow)) return null;
-  return (
-    <Notice
-      tone="attention"
-      icon={TriangleAlert}
-      title={`“${flow.name}” isn’t ready to run`}
-      action={
-        <NoticeStudioLink selection={{ tab: "flows", flowId: flow.id }}>
-          Open {flow.name} in Flows
-        </NoticeStudioLink>
-      }
-    >
-      Fix its readiness issues in Studio, or pick another Flow. Your project and prompt stay.
-    </Notice>
-  );
+  if (card.kind === "authorization")
+    return (
+      <Notice
+        tone="attention"
+        icon={TriangleAlert}
+        title="Authorize Factory in T3"
+        action={
+          <NoticeSettingsLink selection={{ tab: "connection" }}>
+            Open T3 connection settings
+          </NoticeSettingsLink>
+        }
+      >
+        T3 is running but hasn’t granted this Factory access. Approve it in T3 — your draft stays
+        here.
+      </Notice>
+    );
+  if (card.kind === "incompatible")
+    return (
+      <Notice
+        tone="attention"
+        icon={TriangleAlert}
+        title="T3 version is incompatible"
+        action={
+          <NoticeSettingsLink selection={{ tab: "connection" }}>
+            Open T3 connection settings
+          </NoticeSettingsLink>
+        }
+      >
+        Update T3 and check again. Until then Factory can show history but can’t start Runs.
+      </Notice>
+    );
+  return null;
 }
 
-function StartNotice({ model }: { model: Composer }) {
-  const { draft, error, start } = model;
-  if (draft.error && draft.pending) {
+function outcomeLaunchNotice(model: Composer) {
+  const { card, start, draft } = model;
+  if (card.kind === "start-unknown")
     return (
       <Notice
         tone="neutral"
@@ -684,115 +772,132 @@ function StartNotice({ model }: { model: Composer }) {
           </MutationGate>
         }
       >
-        {draft.error}
+        {card.message}
       </Notice>
     );
-  }
-  if (draft.error) {
+  if (card.kind === "start-rejected")
     return (
       <Notice
         tone="critical"
         icon={TriangleAlert}
         title="Start was not accepted"
-        action={
-          <div className="flex min-w-0 flex-col gap-2">
-            {draft.issues.length > 0 && (
-              <ul aria-label="Start blockers" className="list-disc space-y-1 pl-4 text-foreground">
-                {draft.issues.map((issue, index) => (
-                  <li key={`${issue.path}:${issue.code}:${index}`} className="break-words">
-                    {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {draft.remedy === "reporting" && (
-              <NoticeSettingsLink selection={{ tab: "agent-reporting" }}>
-                Open Settings → Agent reporting
-              </NoticeSettingsLink>
-            )}
-            {(draft.issues.length === 0 ||
-              draft.issues.some(
-                (issue) =>
-                  issue.code === "agent_model_required" ||
-                  (issue.path.startsWith("agents.") &&
-                    !issue.path.split(".").includes("connection") &&
-                    issue.code !== "reporting_installation"),
-              )) && (
-              <NoticeStudioLink selection={{ tab: "agents" }}>
-                Open Studio → Agents
-              </NoticeStudioLink>
-            )}
-            {draft.issues.some(
-              (issue) => issue.path.startsWith("graph.") || issue.path.startsWith("workspace."),
-            ) && (
-              <NoticeStudioLink selection={{ tab: "flows", flowId: draft.flowId }}>
-                Open Studio → Flows
-              </NoticeStudioLink>
-            )}
-            {draft.issues.some(
-              (issue) =>
-                issue.path.split(".").includes("connection") || issue.code === "project_connection",
-            ) && (
-              <NoticeSettingsLink selection={{ tab: "connection" }}>
-                Open T3 connection settings
-              </NoticeSettingsLink>
-            )}
-          </div>
-        }
+        action={<StartCauseList causes={card.causes} />}
       >
-        {draft.error} Your draft is kept. Fix every listed blocker, then Start again.
+        No Run was created.
       </Notice>
     );
-  }
-  if (!error) return null;
-  return (
-    <Notice tone="neutral" icon={CircleHelp} title="Launch choices are out of date">
-      {error}
-    </Notice>
-  );
+  return null;
 }
 
-function DraftStorageNotice({ model }: { model: Composer }) {
-  const { draft } = model;
-  if (!draft.saveFailed || draft.pending) return null;
-  return (
-    <Notice tone="attention" icon={TriangleAlert} title="This browser can’t save your draft">
-      Your prompt and choices stay while this window is open. Allow site storage for Factory in your
-      browser settings to keep drafts after a reload.
-    </Notice>
-  );
-}
-
-function ComposerNotices({ model }: { model: Composer }) {
-  const { presentation, projectReady } = model;
-  if (presentation !== "ready") {
-    const notice = connectionNotices[presentation];
+function setupLaunchNotice(model: Composer) {
+  const { card } = model;
+  if (card.kind === "discovery")
     return (
-      <>
-        <DraftStorageNotice model={model} />
-        <Notice
-          tone={notice.tone}
-          icon={notice.icon}
-          title={notice.title}
-          action={
-            <NoticeSettingsLink selection={{ tab: "connection" }}>
-              Open T3 connection settings
-            </NoticeSettingsLink>
-          }
-        >
-          {notice.body}
-        </Notice>
-        <StartNotice model={model} />
-      </>
+      <Notice
+        tone="attention"
+        icon={TriangleAlert}
+        title="Project discovery failed"
+        action={<RefreshProjects model={model} />}
+      >
+        {card.message}
+      </Notice>
     );
-  }
-  return (
-    <>
-      {" "}
-      <DraftStorageNotice model={model} />
-      {!projectReady && <ProjectNotice model={model} />}
-      <FlowNotice model={model} />
-      <StartNotice model={model} />
-    </>
-  );
+  if (card.kind === "no-projects")
+    return (
+      <Notice
+        tone="info"
+        icon={Info}
+        title="Add a project in T3 first"
+        action={
+          <span className="flex flex-wrap gap-x-3 gap-y-1">
+            <RefreshProjects model={model} />
+            <NoticeExternalLink href={t3AppUrl}>Open T3</NoticeExternalLink>
+          </span>
+        }
+      >
+        Choose an available project once T3 reports one. Factory uses the projects T3 knows about:
+        add a repository in T3 or in the Project picker, then refresh — your prompt is kept.
+      </Notice>
+    );
+  if (card.kind === "choose-project")
+    return (
+      <Notice
+        tone="info"
+        icon={Info}
+        title="Choose a project"
+        action={<RefreshProjects model={model} />}
+      >
+        Choose an available project, then a Flow for it. Your prompt is kept.
+      </Notice>
+    );
+  if (card.kind === "create-agent")
+    return (
+      <Notice
+        tone="info"
+        icon={Info}
+        title="Create your first Agent"
+        action={<NoticeStudioLink selection={{ tab: "agents" }}>Go to Agents</NoticeStudioLink>}
+      />
+    );
+  if (card.kind === "setup-agent")
+    return (
+      <Notice
+        tone="info"
+        icon={Info}
+        title="Set up an Agent"
+        action={<NoticeStudioLink selection={{ tab: "agents" }}>Go to Agents</NoticeStudioLink>}
+      />
+    );
+  if (card.kind === "create-flow")
+    return (
+      <Notice
+        tone="info"
+        icon={Info}
+        title="Create your first Flow"
+        action={<NoticeStudioLink selection={{ tab: "flows" }}>Go to Flows</NoticeStudioLink>}
+      >
+        Your draft is kept while you are away.
+      </Notice>
+    );
+  if (card.kind === "no-ready-flows")
+    return (
+      <Notice
+        tone="critical"
+        icon={TriangleAlert}
+        title={`No ready Flows for ${card.projectTitle}`}
+        action={
+          <NoticeStudioLink selection={{ tab: "flows" }}>Open Flows in Studio</NoticeStudioLink>
+        }
+      />
+    );
+  if (card.kind === "flow-not-ready")
+    return (
+      <Notice
+        id={composerLaunchCardId}
+        tone="critical"
+        icon={TriangleAlert}
+        title={`“${card.flowName}” isn’t ready to run`}
+        action={
+          <NoticeStudioLink selection={{ tab: "flows", flowId: card.flowId }}>
+            Open {card.flowName} in Flows
+          </NoticeStudioLink>
+        }
+      >
+        {card.issues.length ? `${card.issues.join(" ")} ${flowStay}` : flowStay}
+      </Notice>
+    );
+  if (card.kind === "draft-storage")
+    return (
+      <Notice tone="attention" icon={TriangleAlert} title="This browser can’t save your draft">
+        Your prompt and choices stay while this window is open. Allow site storage for Factory in
+        your browser settings to keep drafts after a reload.
+      </Notice>
+    );
+  if (card.kind === "choices-stale")
+    return (
+      <Notice tone="neutral" icon={CircleHelp} title="Launch choices are out of date">
+        {card.message}
+      </Notice>
+    );
+  return null;
 }
