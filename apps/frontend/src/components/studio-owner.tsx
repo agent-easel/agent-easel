@@ -551,12 +551,7 @@ export function OwnerChangeNotice({
   if (change.status === "none") return null;
   const to = change.status === "changed" ? studioOwner(change.to, projects) : null;
   return (
-    <Alert
-      role="status"
-      aria-label="Owner changed elsewhere"
-      variant="attention"
-      className={className}
-    >
+    <Alert role="status" aria-label="Owner changed elsewhere" variant="info" className={className}>
       <RefreshCw aria-hidden />
       <AlertTitle>
         {to

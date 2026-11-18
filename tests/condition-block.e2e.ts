@@ -174,7 +174,7 @@ test("leaving a Flow with only an invalid arrival number asks first, and Keep ed
 
   // Act
   await screen
-    .getByRole("dialog", "Discard unsaved Flow changes?")
+    .getByRole("dialog", "Discard unsaved changes?")
     .getByRole("button", "Keep editing", { exact: true })
     .tap();
 

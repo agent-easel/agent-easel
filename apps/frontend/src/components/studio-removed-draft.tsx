@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CircleAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { Button } from "./ui/button";
+import { NoticeButton } from "./notice.tsx";
 import { Textarea } from "./ui/textarea";
 
 /** Recovery stays available without a server write or clipboard permission. */
@@ -19,19 +19,17 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
     }
   }
   return (
-    <Alert variant="attention" className="rounded-none border-x-0 border-t-0" role="status">
-      <CircleAlert aria-hidden />
+    <Alert variant="attention" className="gap-y-1 px-5 py-3.5" role="status">
+      <CircleAlert aria-hidden strokeWidth={1.5} />
       <AlertTitle>This {kind} was removed elsewhere. Your draft is kept.</AlertTitle>
       <AlertDescription>
         <p>
           You can keep editing and recover this draft with Copy as JSON.{" "}
           {kind === "Agent"
             ? "Save, Duplicate and Delete are unavailable because this Agent no longer exists."
-            : "Save, Start Run and Remove are unavailable because this Flow no longer exists."}
+            : "Save and Remove are unavailable because this Flow no longer exists."}
         </p>
-        <Button type="button" variant="outline" size="sm" onClick={() => void copy()}>
-          Copy as JSON
-        </Button>
+        <NoticeButton onClick={() => void copy()}>Copy as JSON</NoticeButton>
         {copied === json && <p>Copied to clipboard.</p>}
         {fallback && (
           <div className="grid w-full gap-2">

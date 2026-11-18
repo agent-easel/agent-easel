@@ -568,7 +568,7 @@ test("removing a Flow with unsaved changes returns to the Flow list without a di
   // Assert
   await expect(browser).toHaveURL(/\/studio\/flows$/);
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toHaveCount(0);
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toHaveCount(0);
   await expect(screen.getByRole("link", new RegExp(name))).toHaveCount(0);
 });
 
@@ -710,7 +710,7 @@ test("leaving an edited Flow for another Studio page asks before discarding its 
   await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
 
   // Assert
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toBeVisible();
   await expect(browser).toHaveURL(`/studio/flows/${id}`);
 });
 

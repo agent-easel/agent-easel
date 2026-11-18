@@ -54,7 +54,7 @@ export const sectionLabelClass =
   "block text-2xs font-semibold tracking-section text-subtle-foreground uppercase";
 
 /** Figma Text/Section: the uppercase group label used in the sidebar, library and panels. */
-export function SectionLabel({ className, ...props }: ComponentProps<"span">) {
+function SectionLabel({ className, ...props }: ComponentProps<"span">) {
   return <span className={cn(sectionLabelClass, className)} {...props} />;
 }
 

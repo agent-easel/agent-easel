@@ -18,7 +18,6 @@ import {
   TASK_TITLE_LIMIT,
 } from "@t3-factory/domain-validation";
 import { randomId } from "./lib/ids.ts";
-import { useNavigate } from "@tanstack/react-router";
 import { admittedStart, api, ApiError } from "./api.ts";
 import { transport } from "./transport.ts";
 import type { LiveScopeView } from "./live/owner.ts";
@@ -521,21 +520,14 @@ export function createRunDraft(
     // A stale tab's save keeps another tab's unresolved Start instead.
     return !find(currentId)?.submission;
   }
-  /**
-   * Opens a saved draft, or a fresh composition with the remembered choices or a Flow's Start Run:
-   * a Project Flow selects its owning Project, and a global Flow without a remembered Project is
-   * held until one is chosen.
-   */
-  function openComposition(
-    next: SavedRunDraft | undefined,
-    flow?: Pick<FlowDraft, "id" | "projectId">,
-  ) {
+  /** Opens a saved draft, or a fresh composition with the remembered choices. */
+  function openComposition(next: SavedRunDraft | undefined) {
     leaveComposition();
     show(next);
     if (!next)
       current = {
-        projectId: flow?.projectId ?? (remembered("project") || current.projectId),
-        flowId: flow?.id ?? (remembered("flow") || current.flowId),
+        projectId: remembered("project") || current.projectId,
+        flowId: remembered("flow") || current.flowId,
         segments: [],
         images: [],
       };
@@ -846,8 +838,6 @@ export function createRunDraft(
     edit,
     /** New Run: an empty prompt with remembered choices; the previous draft stays saved. */
     openFresh: () => openComposition(undefined),
-    /** Start Run from a Flow: a fresh composition with that Flow. */
-    openFlow: (flow: Pick<FlowDraft, "id" | "projectId">) => openComposition(undefined, flow),
     openDraft(id: string) {
       const saved = find(id);
       if (saved && saved.id !== currentId) openComposition(saved);
@@ -874,13 +864,4 @@ export function useRunDraft() {
 
 export function useRunDrafts() {
   return useSyncExternalStore(runDraft.subscribe, runDraft.getDrafts);
-}
-
-export function useComposerNavigation() {
-  const navigate = useNavigate();
-  function openFlowComposer(flow: Pick<FlowDraft, "id" | "projectId">) {
-    runDraft.openFlow(flow);
-    void navigate({ to: "/runs/new" });
-  }
-  return { openFlowComposer };
 }

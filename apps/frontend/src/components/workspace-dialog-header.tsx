@@ -11,6 +11,7 @@ export function WorkspaceDialogHeader({
   title,
   parents = [],
   section,
+  escChip = true,
   description,
   onClose,
   closeLabel = "Close",
@@ -21,6 +22,8 @@ export function WorkspaceDialogHeader({
   /** Links to the pages above `section`, outermost first. */
   parents?: readonly { label: string; link: ReactNode }[];
   section: string;
+  /** False while a panel inside the page shows its own Esc chip. */
+  escChip?: boolean;
   description: string;
   onClose: () => void;
   closeLabel?: string;
@@ -43,9 +46,8 @@ export function WorkspaceDialogHeader({
       ))}
       <span className="truncate font-medium text-foreground">{section}</span>
       <DialogDescription className="sr-only">{description}</DialogDescription>
-      <KeyChip aria-hidden className="ml-auto">
-        Esc
-      </KeyChip>
+      <span className="flex-1" />
+      {escChip && <KeyChip aria-hidden>Esc</KeyChip>}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

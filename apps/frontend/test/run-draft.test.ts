@@ -67,18 +67,6 @@ it("New Run opens an empty prompt with remembered choices and keeps the previous
   expect(draft.getDrafts().map(draftTitle)).toStrictEqual(["Do the work"]);
 });
 
-it("Start Run from a Flow opens that Flow in a fresh composition", (context) => {
-  // Arrange
-  const { draft } = composer(context);
-
-  // Act
-  draft.openFlow({ id: "other-flow", projectId: null });
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({ text: "", flowId: "other-flow", pending: false });
-  expect(draft.getDrafts().map(draftTitle)).toStrictEqual(["Do the work"]);
-});
-
 it("Check same request sends the identical key and payload after a lost response", async (context) => {
   // Arrange
   const { draft, startRun } = await unknownStart(context);
@@ -845,70 +833,6 @@ it("Check same request resends an unknown Start whose Flow now belongs to anothe
   // Assert
   expect(startRun.mock.calls[1]?.[0]).toStrictEqual(submitted);
   expect(runId).toBe("accepted-run");
-});
-
-it("Start Run on a Project Flow selects its owning Project", (context) => {
-  // Arrange
-  const { draft } = composer(context);
-
-  // Act
-  draft.openFlow({ id: "owned-flow", projectId: "other-project" });
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    text: "",
-    projectId: "other-project",
-    flowId: "owned-flow",
-  });
-});
-
-it("Start Run on a global Flow uses the remembered Project", (context) => {
-  // Arrange
-  const { draft } = composer(context);
-
-  // Act
-  draft.openFlow({ id: "global-flow", projectId: null });
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({ projectId: "project", flowId: "global-flow" });
-});
-
-it("Start Run on a global Flow without a remembered Project holds it in the disabled picker", (context) => {
-  // Arrange
-  const { draft } = reopen(composer(context), "server-b");
-  const flows = [launchFlow("global-flow", null)];
-
-  // Act
-  draft.openFlow({ id: "global-flow", projectId: null });
-
-  // Assert
-  const { projectId, flowId } = draft.getSnapshot();
-  expect({ projectId, flowId }).toStrictEqual({ projectId: "", flowId: "global-flow" });
-  expect(composerFlows(flows, projectId)).toStrictEqual({
-    disabled: true,
-    global: [],
-    project: [],
-  });
-});
-
-it("a global Flow held without a Project becomes choosable once a Project is picked", (context) => {
-  // Arrange
-  const { draft } = reopen(composer(context), "server-b");
-  const flows = [launchFlow("global-flow", null)];
-  draft.openFlow({ id: "global-flow", projectId: null });
-  draft.receiveChoices(delivery(flows));
-
-  // Act
-  draft.edit({ projectId: "project" });
-
-  // Assert
-  const { projectId, flowId } = draft.getSnapshot();
-  expect(flowId).toBe("global-flow");
-  expect(composerFlows(flows, projectId)).toStrictEqual({
-    disabled: false,
-    global: flows,
-    project: [],
-  });
 });
 
 it("the Flow picker lists every global Flow and every Flow of the selected Project, not-ready last", () => {

@@ -132,6 +132,8 @@ function useNewAgentOwner(
     projects,
     initial: defaultOwner(filter, flow),
     hint: ownerHint(filter, projects, "Agents", flow),
+    /** The Flow editor that asked for the new Agent, which Create returns to. */
+    fromFlow,
   };
 }
 
@@ -572,7 +574,11 @@ function SelectedAgentEditor({
     if (!active.current) return;
     if (value.id === agentId) return;
     onAcknowledged(value);
-    void openStudio({ tab: "agents", agentId: value.id });
+    void openStudio(
+      agentId === "new" && newOwner.fromFlow
+        ? { tab: "flows", flowId: newOwner.fromFlow }
+        : { tab: "agents", agentId: value.id },
+    );
   };
   const deleted = () => {
     void library.refreshReporting();

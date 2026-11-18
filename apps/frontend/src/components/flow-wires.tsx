@@ -27,8 +27,8 @@ type WireSelection = {
 };
 
 /**
- * How a canvas presents its wires: curved with exit labels and selectable, or orthogonal and
- * unlabelled. `label` names the wires for assistive technology.
+ * How a canvas presents its wires: curved and selectable, or orthogonal. Neither draws labels;
+ * `label` names the wires for assistive technology.
  */
 export type WirePresentation =
   | ({ readonly kind: "curved"; readonly label: string } & WireSelection)
@@ -58,7 +58,7 @@ type Wire = {
   readonly key: string;
   readonly wire: FlowWire;
   readonly path: { d: string; label: { x: number; y: number } | null };
-  /** The exit's name; Flow input and Continuation wires are unnamed and carry no label. */
+  /** The exit's name for its accessible name; Flow input and Continuation wires are unnamed. */
   readonly exit: string | null;
   readonly source: string;
   readonly target: string;
@@ -126,9 +126,8 @@ function flowInputWires(
 }
 
 /**
- * Configured connections and the Flow input's wires in one neutral style. Labels name the
- * exit; they do not mark traversal. Curved wires and their labels select that wire, and the
- * selected one offers a delete action.
+ * Configured connections and the Flow input's wires in one neutral style, without labels.
+ * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
  */
 export function FlowWires({
   graph,
@@ -216,27 +215,6 @@ export function FlowWires({
           ),
         )}
       </svg>
-      {selection &&
-        wires.map(
-          (wire) =>
-            wire.path.label &&
-            wire.exit !== null && (
-              <span
-                key={wire.key}
-                aria-hidden
-                className={cn(
-                  "pointer-events-auto absolute flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-sm border bg-background px-1.5 py-0.5 text-2xs whitespace-nowrap hover:border-border-hover",
-                  wire === selected && "border-primary hover:border-primary",
-                )}
-                style={{ left: wire.path.label.x, top: wire.path.label.y }}
-                onClick={() => selection.onSelect(wire.wire)}
-              >
-                <span className="font-mono font-medium text-foreground">{wire.exit}</span>
-                <span className="text-muted-foreground">→</span>
-                <span className="text-emphasis-foreground">{wire.target}</span>
-              </span>
-            ),
-        )}
       {selected?.path.label && (
         <DeleteConnection
           at={selected.path.label}

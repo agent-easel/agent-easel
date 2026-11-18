@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import type { ConditionRule, FlowBlock, FlowGraph } from "@t3-factory/contracts";
-import { canvasGraph, replaceBlock } from "../src/flow-graph.ts";
+import { canvasGraph, removeBlock, replaceBlock, undoRemoval } from "../src/flow-graph.ts";
 
 const position = { x: 0, y: 0 };
 
@@ -66,4 +66,19 @@ it("a Condition with many unwired rules draws every wired rule, its first eight 
 
   // Assert
   expect(drawn).toStrictEqual(["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r15", "otherwise"]);
+});
+
+it("undoing a Block removal brings back its wires and keeps an edit made since", () => {
+  // Arrange
+  const before = conditionFlow([rule("first", 2)], ["first", "otherwise"]);
+  const after = removeBlock(before, "next");
+  const edited = { ...after, flowInput: { ...after.flowInput, position: { x: 90, y: 40 } } };
+
+  // Act
+  const undone = undoRemoval(edited, before, after);
+
+  // Assert
+  expect(undone.blocks.map((block) => block.id)).toStrictEqual(["gate", "next"]);
+  expect(undone.connections).toStrictEqual(before.connections);
+  expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
 });

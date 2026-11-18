@@ -7,7 +7,7 @@ import {
   type RefObject,
 } from "react";
 import { GripVertical, RotateCcw } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowBlock, FlowGraph, ValidationIssue } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
   addWire,
@@ -32,11 +32,15 @@ import {
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-import { blockIdentity, conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { blockIdentity, conditionRoute, exitDisplayName } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
+import { issueTag, outputKey, type ReadinessMarks } from "./flow-readiness.tsx";
 
 /** Places a block dragged by `grab` at viewport point x/y, or null when x/y is outside the canvas. */
 export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | null;
+
+/** The selection id of the Flow input, whose settings hold its targets. */
+export const FLOW_INPUT = "flow-input";
 
 /** Space the floating readiness summary covers above the graph. */
 const READINESS_HEIGHT = 64;
@@ -165,32 +169,29 @@ function grip(visible: boolean) {
 }
 
 /**
- * Tags on an Agent block's header that mark its definition: an Agent that Needs a model and a
- * Revisit instruction (never its text).
+ * Tags on a block's header: its first readiness issue, and on an Agent block a Revisit
+ * instruction (never its text).
  */
-function agentBlockTags(block: FlowBlock, agents: readonly AgentDefinition[]) {
-  if (block.kind !== "agent") return { tags: null, describedBy: undefined };
-  const needsModel = agents.find((a) => a.id === block.agentId)?.execution === null;
-  const revisit = !!block.revisitInstruction.trim();
-  const needsModelId = `needs-model-${block.id}`;
+function blockTags(block: FlowBlock, issue: ValidationIssue | undefined) {
+  const revisit = block.kind === "agent" && !!block.revisitInstruction.trim();
+  const issueId = `block-issue-${block.id}`;
   const revisitId = `revisit-instruction-${block.id}`;
   return {
     tags: (
       <>
-        {needsModel && (
-          <StatusBadge id={needsModelId} kind="attention">
-            Needs a model
+        {issue && (
+          <StatusBadge id={issueId} kind="error">
+            {issueTag(issue)}
           </StatusBadge>
         )}
-        {revisit && (
+        {revisit && !issue && (
           <StatusBadge id={revisitId} kind="neutral" icon={RotateCcw}>
             Revisit instruction
           </StatusBadge>
         )}
       </>
     ),
-    describedBy:
-      [needsModel && needsModelId, revisit && revisitId].filter(Boolean).join(" ") || undefined,
+    describedBy: issue ? issueId : revisit ? revisitId : undefined,
   };
 }
 
@@ -198,10 +199,16 @@ function agentBlockTags(block: FlowBlock, agents: readonly AgentDefinition[]) {
  * An output port's handle for drawing a connection. It takes no focus; connections are drawn
  * only with a pointer.
  */
-function connectionHandle(label: string, active: boolean, drag: DragHandlers): CanvasPort {
+function connectionHandle(
+  label: string,
+  active: boolean,
+  drag: DragHandlers,
+  problem = false,
+): CanvasPort {
   return {
     className: cn(
       "border-[1.5px] border-muted-foreground bg-background transition-colors group-hover/port:border-primary",
+      problem && "border-destructive",
       active && "border-primary bg-primary",
     ),
     handle: (frame: CSSProperties, circle) => (
@@ -223,30 +230,36 @@ function connectionHandle(label: string, active: boolean, drag: DragHandlers): C
 /** A hidden or removed wired exit keeps its own endpoint but cannot start a connection. */
 const unavailablePort: CanvasPort = { className: "border-[1.5px] border-attention bg-background" };
 
-function incomingPort(pending: boolean): CanvasPort {
-  return {
+/** `accepting` marks an input a wire being drawn from the Flow input may reach. */
+const incomingPort =
+  (accepting: boolean) =>
+  (pending: boolean): CanvasPort => ({
     className: cn(
       "border-[1.5px] border-muted-foreground bg-background transition-[width,height,top,left]",
+      accepting && "border-primary",
       pending && "border-2 border-primary ring-4 ring-primary/25",
     ),
     highlighted: pending,
-  };
-}
+  });
 
 /**
- * The Flow input block: moved like a block and the source of wires to Agent blocks. It has
- * no configuration, so clicking it only clears the selection; it cannot be removed.
+ * The Flow input block: moved like a block and the source of wires to Agent blocks. Selecting
+ * it opens its targets; it cannot be removed.
  */
 function authoringFlowInput({
   dragging,
   connecting,
+  issue,
+  selected,
   onSelect,
   drag,
   connectFrom,
 }: {
   dragging: boolean;
+  selected: boolean;
   /** A wire is being drawn from its port. */
   connecting: boolean;
+  issue: ValidationIssue | null;
   onSelect: () => void;
   drag: DragHandlers;
   connectFrom: DragHandlers;
@@ -254,6 +267,8 @@ function authoringFlowInput({
   return {
     className: cn(
       "group transition-colors hover:bg-accent",
+      issue && "border-destructive",
+      selected && "ring-2 ring-primary",
       dragging && "z-10 cursor-grabbing shadow-lift",
     ),
     press: (rows) => (
@@ -266,9 +281,9 @@ function authoringFlowInput({
         {rows}
       </DragButton>
     ),
-    trailing: grip(false),
+    trailing: issue ? <StatusBadge kind="error">{issueTag(issue)}</StatusBadge> : grip(false),
     prompt: { kind: "none" },
-    port: connectionHandle("Connect Flow input", connecting, connectFrom),
+    port: connectionHandle("Connect Flow input", connecting, connectFrom, issue !== null),
   };
 }
 
@@ -280,48 +295,93 @@ const REFERENCE_TONES: Record<ReferenceTone, string> = {
 };
 
 /**
- * One exit row: where the exit comes from, its name and, for screen readers, its recipients.
- * The prefix names the connection; it does not mark traversal.
+ * One exit row: a Condition output's rule, then the exit's name and, for screen readers, its
+ * recipients. A Condition output that is not connected shows its name in the error colour.
  */
 function AuthoringExit({
   graph,
   block,
   exit,
+  unconnected,
 }: {
   graph: FlowGraph;
   block: CanvasBlock;
   exit: CanvasBlock["exits"][number];
+  unconnected: boolean;
 }) {
   const recipients = exitRecipients(graph, block.id, exit.id).join(", ");
-  if (exit.source === "continuation")
-    return (
-      <>
-        <span className="truncate text-2xs tracking-label text-muted-foreground">
-          response · prompt sent once per Run
-        </span>
-        <span className="sr-only">→ {recipients || "finish here"}</span>
-      </>
-    );
+  const name =
+    exit.source === "wait"
+      ? "after the wait"
+      : exit.source === "continuation"
+        ? "response"
+        : exitDisplayName(exit);
   return (
     <>
-      <span className="truncate text-2xs tracking-label text-muted-foreground">
-        {exit.unavailable
-          ? `Agent · ${exit.unavailable}`
-          : exit.source === "condition"
-            ? conditionRoute(block, exit.id)
-            : exitSourceLabel(exit)}
-      </span>
+      {exit.source === "condition" && (
+        <span className="truncate text-2xs tracking-label text-muted-foreground">
+          {conditionRoute(block, exit.id)}
+        </span>
+      )}
       <span className="flex-1" />
       <span
         className={cn(
-          "truncate font-mono text-xs font-medium text-foreground",
+          "truncate text-xs text-muted-foreground",
+          unconnected && "text-destructive",
           exit.unavailable && "text-attention line-through",
         )}
       >
-        {exitDisplayName(exit)}
+        {name}
       </span>
+      {exit.unavailable && <span className="sr-only">{exit.unavailable}</span>}
       <span className="sr-only">→ {recipients || "finish here"}</span>
     </>
+  );
+}
+
+/** The accessible name of an exit's connection handle. */
+function exitPortLabel(exit: CanvasBlock["exits"][number], name: string) {
+  if (isSingleOutput(exit)) return `Connect output of ${name}`;
+  return exit.source === "condition"
+    ? `Connect output ${exit.name || "Unnamed output"} of ${name}`
+    : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`;
+}
+
+/** A block frame's look for its kind, selection, readiness issue and the gestures in progress. */
+function blockFrameClass({
+  kind,
+  selected,
+  issue,
+  dimmed,
+  dragging,
+  connectTarget,
+}: {
+  kind: FlowBlock["kind"];
+  selected: boolean;
+  issue: boolean;
+  /** A wire from the Flow input can't reach this block. */
+  dimmed: boolean;
+  dragging: boolean;
+  connectTarget: boolean;
+}) {
+  const { dashedFrame } = BLOCK_KINDS[kind];
+  const selectedOnly = selected && !issue;
+  return cn(
+    "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
+    dashedFrame && "border-dashed border-border-strong",
+    // The selected 2 px edge is an outline drawn over the 1 px border and one pixel inside
+    // it, so selection keeps the frame inside the box its geometry reserves. The border is
+    // transparent so a dashed outline's gaps show the card, as a dashed border's do.
+    selectedOnly &&
+      "border-transparent outline-2 -outline-offset-2 outline-primary ring-4 ring-primary/20 hover:border-transparent",
+    selectedOnly && dashedFrame && "outline-dashed",
+    // A Block with an issue keeps its Error edge; selection adds the indigo ring outside it.
+    issue &&
+      "border-transparent outline-2 -outline-offset-2 outline-destructive hover:border-transparent",
+    issue && selected && "ring-2 ring-primary",
+    dimmed && "opacity-40",
+    dragging && "z-10 cursor-grabbing shadow-lift",
+    connectTarget && "ring-2 ring-primary/30",
   );
 }
 
@@ -330,10 +390,12 @@ function authoringBlock({
   graph,
   block,
   agents,
+  marks,
   selected,
   dragging,
   connectTarget,
   connectingExitId,
+  fromFlowInput,
   onSelect,
   drag,
   connectFrom,
@@ -341,6 +403,7 @@ function authoringBlock({
   graph: FlowGraph;
   block: CanvasBlock;
   agents: readonly AgentDefinition[];
+  marks: ReadinessMarks;
   selected: boolean;
   /** Lifted above the other blocks while it follows the pointer. */
   dragging: boolean;
@@ -348,12 +411,16 @@ function authoringBlock({
   connectTarget: boolean;
   /** The exit a connection is being drawn from, when it belongs to this block. */
   connectingExitId: string | null;
+  /** A wire is being drawn from the Flow input, which reaches only Agent blocks. */
+  fromFlowInput: boolean;
   onSelect: () => void;
   drag: DragHandlers;
   connectFrom: (exit: CanvasBlock["exits"][number]) => DragHandlers;
 }): CanvasBlockContent {
   const name = block.name || "Unnamed block";
-  const { tags, describedBy } = agentBlockTags(block, agents);
+  const issue = marks.blocks.get(block.id)?.[0]?.issue;
+  const { tags, describedBy } = blockTags(block, issue);
+  const unconnected = (exitId: string) => marks.unconnectedOutputs.has(outputKey(block.id, exitId));
   const reference = blockReference(block, { graph, agents }).card;
   const identity = blockIdentity({
     kind: block.kind,
@@ -369,18 +436,14 @@ function authoringBlock({
     ),
   });
   return {
-    className: cn(
-      "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
-      BLOCK_KINDS[block.kind].dashedFrame && "border-dashed border-border-strong",
-      // The selected 2 px edge is an outline drawn over the 1 px border and one pixel inside
-      // it, so selection keeps the frame inside the box its geometry reserves. The border is
-      // transparent so a dashed outline's gaps show the card, as a dashed border's do.
-      selected &&
-        "border-transparent outline-2 -outline-offset-2 outline-primary ring-4 ring-primary/20 hover:border-transparent",
-      selected && BLOCK_KINDS[block.kind].dashedFrame && "outline-dashed",
-      dragging && "z-10 cursor-grabbing shadow-lift",
-      connectTarget && "ring-2 ring-primary/30",
-    ),
+    className: blockFrameClass({
+      kind: block.kind,
+      selected,
+      issue: issue !== undefined,
+      dimmed: fromFlowInput && block.kind !== "agent",
+      dragging,
+      connectTarget,
+    }),
     press: {
       covers: "identity",
       render: (rows) => (
@@ -398,20 +461,19 @@ function authoringBlock({
     },
     header: identity.header,
     title: identity.title,
-    exit: (exit) => <AuthoringExit graph={graph} block={block} exit={exit} />,
+    exit: (exit) => (
+      <AuthoringExit graph={graph} block={block} exit={exit} unconnected={unconnected(exit.id)} />
+    ),
     exitPort: (exit) =>
       exit.unavailable
         ? unavailablePort
         : connectionHandle(
-            isSingleOutput(exit)
-              ? `Connect output of ${name}`
-              : exit.source === "condition"
-                ? `Connect output ${exit.name || "Unnamed output"} of ${name}`
-                : `Connect exit ${exit.name || "Unnamed exit"} of ${name}`,
+            exitPortLabel(exit, name),
             connectingExitId === exit.id,
             connectFrom(exit),
+            unconnected(exit.id),
           ),
-    incomingPort,
+    incomingPort: incomingPort(fromFlowInput && block.kind === "agent"),
     footers: [],
   };
 }
@@ -464,17 +526,19 @@ type FlowCanvasProps = {
   ref: RefObject<HTMLElement | null>;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
+  /** Where readiness issues mark the Flow input, Blocks and Condition outputs. */
+  marks: ReadinessMarks;
   selected: string | null;
   selectedWire: FlowWire | null;
-  /** Width the floating block configuration covers; fit frames the graph beside it. */
-  reservedRight: number;
-  /** The Flow's id, which scopes the saved view, and its owner in words under the canvas. */
-  flow: { readonly id: string; readonly ownerNote: string };
+  /** Blocks the view keeps visible: the selected Block and the next one. */
+  reveal: readonly string[];
+  /** Scopes the view: a new Flow opens at its entry view. */
+  flowId: string;
   savedGraph: FlowGraph | undefined;
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
   placementRef: RefObject<DropAt | null>;
-  /** A block, or null for empty canvas or the Flow input, which clears every selection. */
+  /** A block or the Flow input, or null for empty canvas, which clears every selection. */
   onSelect: (blockId: string | null) => void;
   onSelectWire: (wire: FlowWire) => void;
   onDeleteWire: (wire: FlowWire) => void;
@@ -508,17 +572,21 @@ function useAuthoringGestures({
 function authoringContent({
   graph,
   agents,
+  marks,
   selected,
   onSelect,
   gestures: { move, connect },
-}: Pick<FlowCanvasProps, "graph" | "agents" | "selected" | "onSelect"> & {
+}: Pick<FlowCanvasProps, "graph" | "agents" | "marks" | "selected" | "onSelect"> & {
   gestures: ReturnType<typeof useAuthoringGestures>;
 }) {
+  const fromFlowInput = connect.connect?.source.kind === "flow-input";
   return {
     flowInput: authoringFlowInput({
       dragging: move.drag?.node.kind === "flow-input",
-      connecting: connect.connect?.source.kind === "flow-input",
-      onSelect: () => onSelect(null),
+      connecting: fromFlowInput,
+      issue: marks.flowInput,
+      selected: selected === FLOW_INPUT,
+      onSelect: () => onSelect(FLOW_INPUT),
       drag: move.handlers({ kind: "flow-input" }),
       connectFrom: connect.handlers({ kind: "flow-input" }),
     }),
@@ -527,7 +595,9 @@ function authoringContent({
         graph,
         block,
         agents,
+        marks,
         selected: selected === block.id,
+        fromFlowInput,
         ...blockGesture(move.drag, connect.connect, block.id),
         onSelect: () => onSelect(block.id),
         drag: move.handlers({ kind: "block", blockId: block.id }),
@@ -542,10 +612,11 @@ export function FlowCanvas({
   ref,
   graph,
   agents,
+  marks,
   selected,
   selectedWire,
-  reservedRight,
-  flow,
+  reveal,
+  flowId,
   savedGraph,
   busy,
   placementRef,
@@ -557,12 +628,12 @@ export function FlowCanvas({
   onArranging,
 }: FlowCanvasProps) {
   const gestures = useAuthoringGestures({ ref, graph, placementRef, onEdit, onChange });
-  const content = authoringContent({ graph, agents, selected, onSelect, gestures });
+  const content = authoringContent({ graph, agents, marks, selected, onSelect, gestures });
   return (
     <CanvasSurface
       ref={ref}
       label="Flow canvas"
-      scope={savedGraph ? flow.id : null}
+      scope={savedGraph ? flowId : null}
       graph={graph}
       agents={agents}
       dimensions={AUTHORING_DIMENSIONS}
@@ -576,45 +647,12 @@ export function FlowCanvas({
         onSelect: onSelectWire,
         onDelete: onDeleteWire,
       }}
-      resize="refit"
-      covered={{ top: READINESS_HEIGHT, right: reservedRight }}
+      covered={{ top: READINESS_HEIGHT }}
+      reveal={reveal}
       arrangement={{ busy, saved: savedGraph, commit: onChange, onArranging }}
       gesture={gestures.gesture}
       points={gestures.points}
       onTap={() => onSelect(null)}
-      note={flow.ownerNote}
-      controls={{
-        kind: "labelled",
-        hint: "Pan empty canvas · zoom · fit · auto-arrange. Graph coordinates stay saved.",
-      }}
-    >
-      {graph.blocks.length === 0 && (
-        <FirstBlockHint flowInputs={flowInputPositions(graph, gestures.move.drag)} />
-      )}
-    </CanvasSurface>
-  );
-}
-
-/** The Flow input as drafted and as dragged now, which the first-block hint follows. */
-function flowInputPositions(graph: FlowGraph, drag: MoveDrag | null) {
-  const dragged = drag?.node.kind === "flow-input" ? [drag.position] : [];
-  return [graph.flowInput.position, ...dragged];
-}
-
-/**
- * Shown beside a new Flow's input, in canvas units, until its first block is added. It is
- * centred in the 900-unit authoring area, which widens with the Flow input dragged right.
- */
-function FirstBlockHint({ flowInputs }: { flowInputs: readonly BlockPosition[] }) {
-  return (
-    <div
-      className="pointer-events-none absolute top-40 w-80 -translate-x-1/2 text-center"
-      style={{ left: Math.max(900, ...flowInputs.map((position) => position.x + 300)) / 2 }}
-    >
-      <h2 className="text-lg font-semibold">Add your first block</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Choose a saved Agent in the library, then connect the Flow input to it.
-      </p>
-    </div>
+    />
   );
 }

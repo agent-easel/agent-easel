@@ -37,13 +37,18 @@ function useStudioSession() {
 /** The Escape handler an open Studio page registers; Studio runs it instead of closing. */
 function useEscapeHandler() {
   const escapeHandler = useRef<(() => void) | null>(null);
+  // A page that takes Escape (an open block panel) shows its own Esc chip instead of the header's.
+  const [escapeTaken, setEscapeTaken] = useState(false);
   const registerEscape = useCallback((handler: () => void) => {
     escapeHandler.current = handler;
+    setEscapeTaken(true);
     return () => {
-      if (escapeHandler.current === handler) escapeHandler.current = null;
+      if (escapeHandler.current !== handler) return;
+      escapeHandler.current = null;
+      setEscapeTaken(false);
     };
   }, []);
-  return { escapeHandler, registerEscape };
+  return { escapeHandler, escapeTaken, registerEscape };
 }
 
 /**
@@ -79,10 +84,39 @@ function useReportedDraft(kind: StudioDraft["kind"]) {
 const headerParentClass =
   "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
 
-/** The header's breadcrumb: the destination, and for Triggers the opened page within it. */
-function studioSection(selection: StudioSelection, triggers: readonly TriggerDefinition[] | null) {
-  if (selection.tab === "flows") return { section: "Flows" };
-  if (selection.tab === "agents") return { section: "Agents" };
+const crumb = (label: string, link: StudioSelection) => ({
+  label,
+  link: (
+    <StudioLink selection={link} className={headerParentClass}>
+      {label}
+    </StudioLink>
+  ),
+});
+
+/**
+ * The header's breadcrumb: the destination, an opened Flow's name, an Agent opened from a Flow
+ * after that Flow, and for Triggers the opened page within it.
+ */
+function studioSection(
+  selection: StudioSelection,
+  triggers: readonly TriggerDefinition[] | null,
+  names: { readonly flow: (id: string) => string; readonly agent: (id: string) => string },
+) {
+  if (selection.tab === "flows")
+    return selection.flowId
+      ? { parents: [crumb("Flows", { tab: "flows" })], section: names.flow(selection.flowId) }
+      : { section: "Flows" };
+  if (selection.tab === "agents") {
+    const { fromFlow, agentId } = selection;
+    if (!fromFlow) return { section: "Agents" };
+    return {
+      parents: [
+        crumb("Flows", { tab: "flows" }),
+        crumb(names.flow(fromFlow), { tab: "flows", flowId: fromFlow }),
+      ],
+      section: !agentId || agentId === "new" ? "New Agent" : names.agent(agentId),
+    };
+  }
   const opened = triggers?.find((trigger) => trigger.id === selection.triggerId);
   const section = selection.kind
     ? "GitHub Issues"
@@ -90,16 +124,8 @@ function studioSection(selection: StudioSelection, triggers: readonly TriggerDef
       ? "New"
       : opened?.name;
   if (!section) return { section: "Triggers" };
-  const parent = (label: string, link: StudioSelection) => ({
-    label,
-    link: (
-      <StudioLink selection={link} className={headerParentClass}>
-        {label}
-      </StudioLink>
-    ),
-  });
-  const parents = [parent("Triggers", { tab: "triggers" })];
-  if (selection.kind) parents.push(parent("New", { tab: "triggers", triggerId: "new" }));
+  const parents = [crumb("Triggers", { tab: "triggers" })];
+  if (selection.kind) parents.push(crumb("New", { tab: "triggers", triggerId: "new" }));
   return { parents, section };
 }
 
@@ -120,8 +146,17 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
     triggerRef: trigger.ref,
   });
   const triggers = useStudioRead(definitions, "triggers").value;
-  const { escapeHandler, registerEscape } = useEscapeHandler();
-  const close = () => void navigate(undefined);
+  const flows = useStudioRead(definitions, "flows").value;
+  const agents = useStudioRead(definitions, "agents").value;
+  const names = {
+    flow: (id: string) =>
+      flows?.find((entry) => entry.id === id)?.name ?? (created?.id === id ? created.name : "Flow"),
+    agent: (id: string) => agents?.find((entry) => entry.id === id)?.name ?? "Agent",
+  };
+  const { escapeHandler, escapeTaken, registerEscape } = useEscapeHandler();
+  // An Agent opened from the Flow editor opens over it; closing it returns to that Flow.
+  const origin = selection.tab === "agents" ? selection.fromFlow : undefined;
+  const close = () => void navigate(origin ? { tab: "flows", flowId: origin } : undefined);
   return (
     <Dialog
       open
@@ -146,15 +181,19 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
           if (escapeHandler.current) {
             event.preventDefault();
             escapeHandler.current();
+          } else if (origin) {
+            event.preventDefault();
+            close();
           }
         }}
       >
         <WorkspaceDialogHeader
           title="Studio"
-          {...studioSection(selection, triggers)}
+          {...studioSection(selection, triggers, names)}
+          escChip={!escapeTaken}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
-          closeLabel="Back to Runs"
+          closeLabel={origin ? "Back to Flow" : "Back to Runs"}
           closeDisabled={creating}
         />
         <div className="flex min-h-0 flex-1">
@@ -169,7 +208,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
             creation={{ start: () => setCreating(true), created }}
           />
         </div>
-        <DraftDiscardDialog blocker={blocker} />
+        <DraftDiscardDialog blocker={blocker} names={names} />
         {creating && (
           <CreateFlow
             definitions={definitions}
@@ -187,7 +226,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
 
 const draftKinds = { flow: "Flow", agent: "Agent", trigger: "Trigger" } as const;
 
-function discardMessage(draft: StudioDraft) {
+function discardMessage(draft: StudioDraft, name: string | undefined) {
   const kind = draftKinds[draft.kind];
   if (draft.removed)
     return {
@@ -196,15 +235,30 @@ function discardMessage(draft: StudioDraft) {
       discard: "Discard",
     };
   return {
-    title: `Discard unsaved ${kind} changes?`,
-    description: "Discard your edits to continue with the saved revision.",
+    title: "Discard unsaved changes?",
+    description: `${name ? `“${name}”` : `This ${kind}`} has changes that aren’t saved.`,
     discard: "Discard changes",
   };
 }
 
-function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioDraftGuard> }) {
+function DraftDiscardDialog({
+  blocker,
+  names,
+}: {
+  blocker: ReturnType<typeof useStudioDraftGuard>;
+  /** The saved name of a Flow or Agent draft. */
+  names: { readonly flow: (id: string) => string; readonly agent: (id: string) => string };
+}) {
   if (blocker.status !== "blocked") return null;
-  const message = discardMessage(blocker.unsaved);
+  const { kind, id } = blocker.unsaved;
+  const message = discardMessage(
+    blocker.unsaved,
+    kind === "flow"
+      ? names.flow(id)
+      : kind === "agent" && id !== "new"
+        ? names.agent(id)
+        : undefined,
+  );
   return (
     <Dialog
       open
@@ -381,6 +435,9 @@ function StudioPage({
   );
 }
 
+/** A hidden Flow editor takes no Escape; the page shown over it does. */
+const ignoreEscape = () => () => {};
+
 function StudioContent({
   selection,
   definitions,
@@ -409,7 +466,14 @@ function StudioContent({
       content.current?.focus();
     }
   }, [selection]);
-  const flowId = selection.tab === "flows" ? selection.flowId : undefined;
+  // An Agent opened from a Flow keeps that Flow's editor, and its draft, mounted beneath it.
+  const flowId =
+    selection.tab === "flows"
+      ? selection.flowId
+      : selection.tab === "agents"
+        ? selection.fromFlow
+        : undefined;
+  const flowShown = selection.tab === "flows";
   return (
     <div
       ref={content}
@@ -424,11 +488,16 @@ function StudioContent({
         onCreateFlow={creation.start}
       />
       {flowId && (
-        <div key={flowId} className="min-h-0 flex-1 overflow-auto">
+        <div
+          key={flowId}
+          hidden={!flowShown}
+          inert={!flowShown}
+          className="min-h-0 flex-1 overflow-auto"
+        >
           <FlowDetail
             id={flowId}
             definitions={definitions}
-            registerEscape={registerEscape}
+            registerEscape={flowShown ? registerEscape : ignoreEscape}
             reportDraft={reportFlowDraft}
             created={creation.created}
           />

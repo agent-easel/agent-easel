@@ -14,17 +14,23 @@ import {
 } from "./support/flow-draft.ts";
 import { savedAgent } from "./support/agent-draft.ts";
 
-it("an edit made while a readiness check is in flight is not applied", async () => {
+it("an edit made while a readiness check is in flight applies and drops that check's answer", async () => {
   // Arrange
   const { draft, factory } = editedFlow("Checked");
-  held(factory.validateFlow);
-  void draft.check();
+  const answer = held(factory.validateFlow);
+  const checking = draft.check();
 
   // Act
   draft.edit({ name: "Later" });
+  answer.answer(validated());
+  await checking;
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ content: { name: "Checked" }, busy: true });
+  expect(draft.getSnapshot()).toMatchObject({
+    content: { name: "Later" },
+    busy: false,
+    readiness: null,
+  });
 });
 
 it("a clean Flow adopts a revision saved elsewhere and says it was updated", () => {
@@ -72,7 +78,6 @@ it("keeping the local draft against the compared revision clears its readiness c
     content: { name: "Mine" },
     dirty: true,
     readiness: null,
-    canStartRun: false,
   });
 });
 
@@ -139,7 +144,7 @@ it("a revision saved elsewhere makes readiness unknown at once, even while adopt
   published();
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ readiness: null, canStartRun: false });
+  expect(draft.getSnapshot()).toMatchObject({ readiness: null });
 });
 
 it("a revision saved elsewhere clears an unsaved draft's readiness check", async () => {
@@ -155,7 +160,7 @@ it("a revision saved elsewhere clears an unsaved draft's readiness check", async
   expect(draft.getSnapshot().readiness).toBeNull();
 });
 
-it("losing synchronization makes a clean Flow's readiness unknown and disables Start Run", () => {
+it("losing synchronization makes a clean Flow's readiness unknown", () => {
   // Arrange
   const { draft, disconnected } = openedFlow();
 
@@ -163,7 +168,7 @@ it("losing synchronization makes a clean Flow's readiness unknown and disables S
   disconnected();
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ readiness: null, canStartRun: false });
+  expect(draft.getSnapshot()).toMatchObject({ readiness: null });
 });
 
 it("a removal elsewhere clears readiness and dismisses the comparison but keeps the draft", async () => {
@@ -193,7 +198,7 @@ it("an accepted removal makes a checked Flow's readiness unknown before Studio d
   await draft.remove();
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ dirty: false, readiness: null, canStartRun: false });
+  expect(draft.getSnapshot()).toMatchObject({ dirty: false, readiness: null });
 });
 
 it("an Agent change that only changes the saved Flow's readiness keeps the draft clean and unannounced", () => {
@@ -210,11 +215,10 @@ it("an Agent change that only changes the saved Flow's readiness keeps the draft
     dirty: false,
     updatedTo: null,
     readiness: notReady,
-    canStartRun: false,
   });
 });
 
-it("a change to an Agent an unsaved draft places clears its readiness check and asks to check again", async () => {
+it("a change to an Agent an unsaved draft places clears its readiness check and asks for another", async () => {
   // Arrange
   const { draft, factory, agentChanged } = editedFlow();
   await draft.check();
@@ -227,7 +231,6 @@ it("a change to an Agent an unsaved draft places clears its readiness check and 
     content: { name: "Edited" },
     dirty: true,
     readiness: null,
-    agentsChanged: true,
   });
   expect(factory.validateFlow).toHaveBeenCalledTimes(1);
 });
@@ -243,7 +246,6 @@ it("a change to an Agent the Flow does not place keeps a shown readiness check",
   // Assert
   expect(draft.getSnapshot()).toMatchObject({
     readiness: { ready: true },
-    agentsChanged: false,
   });
 });
 
@@ -259,8 +261,6 @@ it("a clean Flow's readiness check gives way to the saved Flow's readiness after
   expect(draft.getSnapshot()).toMatchObject({
     dirty: false,
     readiness: notReady,
-    agentsChanged: false,
-    canStartRun: false,
   });
 });
 
@@ -275,7 +275,7 @@ it("a readiness answer resolved against an Agent revision Studio has not shown y
   await checking;
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ readiness: null, canStartRun: false });
+  expect(draft.getSnapshot()).toMatchObject({ readiness: null });
 });
 
 it("a readiness check answered after a saved Agent changed is dropped", async () => {
@@ -321,7 +321,6 @@ it("an owner changed elsewhere clears an unsaved draft's readiness check", async
     content: { name: "Edited" },
     owner: "northwind",
     readiness: null,
-    canStartRun: false,
   });
 });
 
@@ -389,7 +388,6 @@ it("a Create answer cannot reopen a Flow Studio already delivered and then remov
     saved: null,
     error: "Flow not found.",
     canSave: false,
-    canStartRun: false,
   });
 });
 
@@ -421,7 +419,6 @@ it("a clean Flow removed during an interaction immediately refuses saving and st
     removed: true,
     dirty: false,
     canSave: false,
-    canStartRun: false,
   });
 });
 

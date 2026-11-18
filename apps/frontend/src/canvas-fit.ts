@@ -79,29 +79,22 @@ function edgeShifts(starts: readonly number[], ends: readonly number[], extent: 
 }
 
 /**
- * The view a Run canvas opens at: 100 %, centred on `target` between the covered top and bottom,
- * then moved by the smallest shift after which every box (in graph coordinates) is fully inside
- * the surface or fully outside it, keeping `target` fully inside. Equal shifts prefer the one that
- * shows more boxes. When no such shift exists the view stays centred.
+ * `view` (at 100 %) moved by the smallest shift after which every box (in graph coordinates) is
+ * fully inside the surface or fully outside it, keeping `focus` fully inside. Equal shifts prefer
+ * the one that shows more boxes. When no such shift exists the view stays as it is.
  */
-export function entryView(
-  target: GraphBounds,
+function minimalShift(
+  view: CanvasView,
+  focus: GraphBounds,
   boxes: readonly BoundsRect[],
   surface: Size,
-  padding: { top: number; bottom: number },
 ): CanvasView {
-  const available = surface.height - padding.top - padding.bottom;
-  const centred = {
-    scale: 1,
-    x: (surface.width - target.width) / 2 - target.minX,
-    y: padding.top + (available - target.height) / 2 - target.minY,
-  };
-  const screen = boxes.map((box) => ({ ...box, x: box.x + centred.x, y: box.y + centred.y }));
-  const focus = {
-    x: target.minX + centred.x,
-    y: target.minY + centred.y,
-    width: target.width,
-    height: target.height,
+  const screen = boxes.map((box) => ({ ...box, x: box.x + view.x, y: box.y + view.y }));
+  const shown = {
+    x: focus.minX + view.x,
+    y: focus.minY + view.y,
+    width: focus.width,
+    height: focus.height,
   };
   const shifts = edgeShifts(
     screen.map((box) => box.x),
@@ -118,11 +111,71 @@ export function entryView(
   let best: { dx: number; dy: number; distance: number; shown: number } | undefined;
   for (const shift of shifts) {
     if (best && shift.distance > best.distance + EPSILON) break;
-    if (placement(focus, shift.dx, shift.dy, surface) !== "inside") continue;
+    if (placement(shown, shift.dx, shift.dy, surface) !== "inside") continue;
     const placements = screen.map((box) => placement(box, shift.dx, shift.dy, surface));
     if (placements.includes("cut")) continue;
-    const shown = placements.filter((where) => where === "inside").length;
-    if (!best || shown > best.shown) best = { ...shift, shown };
+    const count = placements.filter((where) => where === "inside").length;
+    if (!best || count > best.shown) best = { ...shift, shown: count };
   }
-  return best ? { scale: 1, x: centred.x + best.dx, y: centred.y + best.dy } : centred;
+  return best ? { scale: 1, x: view.x + best.dx, y: view.y + best.dy } : view;
+}
+
+/**
+ * The view a Run canvas opens at: 100 %, centred on `target` between the covered top and bottom,
+ * then moved by the minimal shift that cuts no box at the surface edge.
+ */
+export function entryView(
+  target: GraphBounds,
+  boxes: readonly BoundsRect[],
+  surface: Size,
+  padding: { top: number; bottom: number },
+): CanvasView {
+  const available = surface.height - padding.top - padding.bottom;
+  const centred = {
+    scale: 1,
+    x: (surface.width - target.width) / 2 - target.minX,
+    y: padding.top + (available - target.height) / 2 - target.minY,
+  };
+  return minimalShift(centred, target, boxes, surface);
+}
+
+/**
+ * The view a Flow editor opens at: 100 %, the Flow input at the left margin and the graph centred
+ * between the covered top and bottom (its top below the covered top when it is taller), then
+ * moved by the minimal shift that cuts no box at the surface edge.
+ */
+export function authoringEntryView(
+  flowInput: BoundsRect,
+  graph: GraphBounds,
+  boxes: readonly BoundsRect[],
+  surface: Size,
+  padding: { x: number; top: number; bottom: number },
+): CanvasView {
+  const available = surface.height - padding.top - padding.bottom;
+  const left = {
+    scale: 1,
+    x: padding.x - flowInput.x,
+    y: padding.top + Math.max(0, (available - graph.height) / 2) - graph.minY,
+  };
+  return minimalShift(left, mergeGraphBounds(flowInput, []), boxes, surface);
+}
+
+/**
+ * The smallest pan, at the current scale, that brings `target` fully into the surface; the view
+ * itself when it already is. A target wider or taller than the surface keeps its left or top edge
+ * in view.
+ */
+export function revealView(view: CanvasView, target: GraphBounds, surface: Size): CanvasView {
+  const axis = (offset: number, start: number, extent: number, size: number) => {
+    const from = offset + start * view.scale;
+    const to = from + extent * view.scale;
+    if (from >= 0 && to <= size) return offset;
+    if (to - from > size || from < 0) return offset - from;
+    return offset - (to - size);
+  };
+  return {
+    scale: view.scale,
+    x: axis(view.x, target.minX, target.width, surface.width),
+    y: axis(view.y, target.minY, target.height, surface.height),
+  };
 }

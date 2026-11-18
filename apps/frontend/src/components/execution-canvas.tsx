@@ -590,15 +590,13 @@ export function ExecutionCanvas({
         )
       }
       wires={{ kind: "orthogonal", label: "Configured connections" }}
-      resize="preserve"
-      covered={{ top: BADGES_HEIGHT, right: 0 }}
+      covered={{ top: BADGES_HEIGHT }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}
       focusTargets={targets}
       entryTargets={selectEntryTargets(run, targets)}
       shown={shown}
       onTap={() => onSelect(null)}
       overlay={overlay}
-      controls={{ kind: "icons" }}
     />
   );
 }

@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { ChevronDown, CircleDot } from "lucide-react";
+import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
 import type { RuleFocus } from "./condition-rules.tsx";
@@ -30,11 +29,101 @@ function issueSelection(path: string, graph: FlowGraph): string | null | undefin
   return graph.blocks.find((b) => b.id === id)?.id ?? null;
 }
 
+function selectIssue(issue: ValidationIssue, graph: FlowGraph, onSelect: IssueSelect) {
+  const selection = issueSelection(issue.path, graph);
+  if (selection !== undefined) onSelect(selection, issueRule(issue.path, graph));
+}
+
+/** The short tag a Block, or the field an issue names, shows for each readiness issue. */
+const ISSUE_TAGS: Readonly<Record<string, string>> = {
+  block_name_required: "No name",
+  wait_duration_required: "No duration",
+  wait_duration_range: "Out of range",
+  continuation_prompt_required: "No prompt",
+  agent_required: "No Agent",
+  agent_scope_mismatch: "Not placeable",
+  agent_model_required: "Needs a model",
+  exit_required: "No exits",
+  exit_id_conflict: "Exit conflict",
+  exit_name_required: "No exit name",
+  exit_name_conflict: "Exit conflict",
+  exit_hidden: "Hidden exit",
+  exit_missing: "Missing exit",
+  condition_output_unconnected: "Not connected",
+  condition_rule_name_duplicate: "Duplicate name",
+  condition_threshold_required: "No arrival",
+  condition_rule_shadowed: "Never matches",
+  condition_threshold_first_arrival: "Arrival too low",
+  condition_cycle: "Loop",
+  unreachable_block: "Not connected",
+  flow_input_required: "Not connected",
+  flow_input_wait: "Not an Agent",
+};
+
+export const issueTag = (issue: ValidationIssue) => ISSUE_TAGS[issue.code] ?? "Not ready";
+
+/** One readiness issue of a Block, with the part of the Block its path names (`duration`, `rules.0`). */
+export type BlockIssue = { readonly issue: ValidationIssue; readonly field: string };
+
 /**
- * Validation issue paths such as `graph.blocks.2.name` select the block they refer to, and a
- * Condition rule path also focuses that rule's row; a connection path selects its source block, a
- * Flow input target path selects that target, and other Flow input issues clear the selection.
+ * Where the readiness issues show: each Block's issues by the field they name, the Flow input's
+ * issue, and the Condition outputs that are not connected (`blockId` and output id joined by a NUL).
  */
+export type ReadinessMarks = {
+  readonly blocks: ReadonlyMap<string, readonly BlockIssue[]>;
+  readonly flowInput: ValidationIssue | null;
+  readonly unconnectedOutputs: ReadonlySet<string>;
+};
+
+const noMarks: ReadinessMarks = {
+  blocks: new Map(),
+  flowInput: null,
+  unconnectedOutputs: new Set(),
+};
+
+export const outputKey = (blockId: string, outputId: string) => `${blockId}\u0000${outputId}`;
+
+/** The Condition output an unconnected-output issue names: a rule's, or Otherwise's at block level. */
+function unconnectedOutput(block: FlowGraph["blocks"][number], field: string) {
+  if (block.kind !== "condition") return undefined;
+  const rule = /^rules\.(\d+)/.exec(field)?.[1];
+  return rule === undefined ? block.otherwise.id : block.rules[Number(rule)]?.id;
+}
+
+/** The Block an issue path names, and the part of it within that Block. */
+function issueBlock(issue: ValidationIssue, graph: FlowGraph) {
+  const own = /^graph\.blocks\.(\d+)\.?(.*)$/.exec(issue.path);
+  const block = own ? graph.blocks[Number(own[1])] : undefined;
+  if (block) return { block, field: own?.[2] ?? "" };
+  const selection = issueSelection(issue.path, graph);
+  const selected = selection ? graph.blocks.find((b) => b.id === selection) : undefined;
+  return selected ? { block: selected, field: "" } : null;
+}
+
+export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph): ReadinessMarks {
+  if (!readiness?.issues.length) return noMarks;
+  const blocks = new Map<string, BlockIssue[]>();
+  const unconnectedOutputs = new Set<string>();
+  const flowInput = readiness.issues.find((issue) => issue.code === "flow_input_required") ?? null;
+  for (const issue of readiness.issues) {
+    const found = issue === flowInput ? null : issueBlock(issue, graph);
+    if (!found) continue;
+    const { block, field } = found;
+    blocks.set(block.id, [...(blocks.get(block.id) ?? []), { issue, field }]);
+    const output =
+      issue.code === "condition_output_unconnected" ? unconnectedOutput(block, field) : undefined;
+    if (output) unconnectedOutputs.add(outputKey(block.id, output));
+  }
+  return { blocks, flowInput, unconnectedOutputs };
+}
+
+/** The tag a settings field shows: the first issue whose path is within `field`. */
+export function fieldIssue(issues: readonly BlockIssue[], field: string) {
+  const found = issues.find((item) => item.field === field || item.field.startsWith(`${field}.`));
+  return found ? issueTag(found.issue) : null;
+}
+
+/** A save refusal's issue as a link that selects the block its path names. */
 export function IssueLink({
   issue,
   graph,
@@ -50,103 +139,116 @@ export function IssueLink({
     <button
       type="button"
       className="block rounded-sm text-left text-xs text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      onClick={() => {
-        const selection = issueSelection(issue.path, graph);
-        if (selection !== undefined) onSelect(selection, issueRule(issue.path, graph));
-      }}
+      onClick={() => selectIssue(issue, graph, onSelect)}
     >
       {children}
     </button>
   );
 }
 
+/** Readiness as last known; a check in progress keeps the previous answer shown. */
+export function useShownReadiness(readiness: FlowReadiness | null) {
+  const [shown, setShown] = useState(readiness);
+  if (readiness && readiness !== shown) setShown(readiness);
+  return readiness ?? shown;
+}
+
 /**
- * The readiness summary: the backend check's Ready / Not ready badge, or a prompt to check the
- * changed draft or, after an Agent it places changed, to check it again.
+ * The live readiness summary at the canvas's top left: Ready, or Not ready with its issue count
+ * opening one row per issue. Each row selects its Block; a missing Project folder is the one
+ * reason and names no Block. `newAgent`, when given, is offered on the Flow input issue.
  */
-function ReadinessSummary({
+export function ReadinessPanel({
   readiness,
-  agentsChanged,
+  folderMissing,
+  graph,
+  onSelect,
+  newAgent,
 }: {
+  /** The last known readiness; null before the first answer. */
   readiness: FlowReadiness | null;
-  agentsChanged: boolean;
+  /** Why the owning Project's folder can't be used on this machine; null when it can. */
+  folderMissing: string | null;
+  graph: FlowGraph;
+  onSelect: IssueSelect;
+  newAgent: ReactNode;
 }) {
-  if (!readiness)
+  const shown = readiness;
+  const issues: readonly ValidationIssue[] = folderMissing
+    ? [{ code: "project_folder_missing", path: "", message: folderMissing }]
+    : (shown?.issues ?? []);
+  const [open, setOpen] = useState(false);
+  if (!shown && !folderMissing) return null;
+  const position = "absolute top-4 left-4 z-[5]";
+  if (!issues.length)
     return (
-      <>
-        <CircleDot aria-hidden className="text-muted-foreground" />
-        <span>
-          {agentsChanged
-            ? "Agents changed — check readiness again"
-            : "Draft changed · Check readiness"}
-        </span>
-      </>
+      <div className={position}>
+        <StatusBadge kind="success">Ready</StatusBadge>
+      </div>
     );
-  return readiness.ready ? (
-    <StatusBadge kind="success">Ready</StatusBadge>
-  ) : (
-    <StatusBadge kind="error">Not ready</StatusBadge>
+  return (
+    <div className={cn(position, "grid w-110 max-w-[calc(100%-2rem)] gap-2")}>
+      <button
+        type="button"
+        className="flex h-7 w-fit items-center gap-2 rounded-md border bg-card pr-2 pl-1 text-xs text-foreground shadow-floating outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-expanded:border-primary"
+        aria-expanded={open}
+        aria-controls="flow-readiness"
+        onClick={() => setOpen(!open)}
+      >
+        <StatusBadge kind="error">Not ready</StatusBadge>
+        {issues.length} {issues.length === 1 ? "issue" : "issues"}
+        <ChevronDown aria-hidden className={cn("size-3.5", open && "rotate-180")} />
+      </button>
+      {open && (
+        <ul
+          id="flow-readiness"
+          aria-label="Readiness issues"
+          className="grid overflow-hidden rounded-lg border bg-card shadow-floating"
+        >
+          {issues.map((issue, index) => (
+            <li key={index} className="flex items-center border-b last:border-b-0">
+              <IssueRow
+                issue={issue}
+                selectable={!folderMissing}
+                onSelect={() => selectIssue(issue, graph, onSelect)}
+              />
+              {issue.code === "flow_input_required" && newAgent}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
-/** Readiness summary floating at the canvas's top left; its issue list expands on demand. */
-export function ReadinessPanel({
-  readiness,
-  agentsChanged,
-  graph,
+function IssueRow({
+  issue,
+  selectable,
   onSelect,
 }: {
-  readiness: FlowReadiness | null;
-  agentsChanged: boolean;
-  graph: FlowGraph;
-  onSelect: IssueSelect;
+  issue: ValidationIssue;
+  selectable: boolean;
+  onSelect: () => void;
 }) {
-  const issues = readiness?.issues.length ?? 0;
-  const [expanded, setExpanded] = useState({ readiness, open: issues > 0 });
-  const { open } = expanded;
-  // A check that finds problems lists them; a ready or stale result stays compact.
-  if (expanded.readiness !== readiness) {
-    setExpanded({ readiness, open: issues > 0 || open });
-  }
+  const content = (
+    <>
+      <CircleAlert aria-hidden className="size-4 shrink-0 text-destructive" strokeWidth={1.5} />
+      <span className="min-w-0 flex-1">{issue.message}</span>
+    </>
+  );
+  const row = "flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left text-sm text-foreground";
+  if (!selectable) return <p className={row}>{content}</p>;
   return (
-    <div className="absolute top-4 left-4 z-[5] grid max-w-80 gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-fit bg-card shadow-floating"
-        aria-expanded={open}
-        aria-controls="flow-readiness"
-        onClick={() => setExpanded({ readiness, open: !open })}
-      >
-        <ReadinessSummary readiness={readiness} agentsChanged={agentsChanged} />
-        {issues > 0 && (
-          <span className="text-muted-foreground">
-            · {issues} {issues === 1 ? "issue" : "issues"}
-          </span>
-        )}
-        <ChevronDown aria-hidden className={cn("transition-transform", open && "rotate-180")} />
-      </Button>
-      {open && (
-        <div
-          id="flow-readiness"
-          className="grid gap-2 rounded-lg border bg-card p-3 shadow-floating"
-        >
-          {readiness?.issues.map((issue, i) => (
-            <IssueLink key={i} issue={issue} graph={graph} onSelect={onSelect}>
-              {issue.message}
-            </IssueLink>
-          ))}
-          {readiness?.ready && (
-            <p className="text-xs text-muted-foreground">
-              Graph requirements are met. Connection, Agent settings, project and runtime checks are
-              separate launch gates.
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Incomplete drafts can be saved. Unconnected exits finish that branch.
-          </p>
-        </div>
+    <button
+      type="button"
+      className={cn(
+        row,
+        "outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
       )}
-    </div>
+      onClick={onSelect}
+    >
+      {content}
+      <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    </button>
   );
 }
