@@ -193,6 +193,7 @@ export function SettingsTechnicalDetails({ details }: { details: string }) {
 
 /** One explanation and next step for a Settings problem. */
 export function SettingsProblemCard({
+  id,
   tone,
   title,
   children,
@@ -200,6 +201,8 @@ export function SettingsProblemCard({
   action,
   icon,
 }: {
+  /** Lets a field tag point at this card with `aria-describedby`. */
+  id?: string;
   tone: "error" | "warning" | "info";
   title: ReactNode;
   children?: ReactNode;
@@ -210,7 +213,7 @@ export function SettingsProblemCard({
   const Icon = icon ?? (tone === "info" ? Info : TriangleAlert);
   const variant = tone === "error" ? "critical" : tone === "warning" ? "attention" : "info";
   return (
-    <Alert variant={variant} role={tone === "info" ? "status" : "alert"}>
+    <Alert id={id} variant={variant} role={tone === "error" ? "alert" : "status"}>
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || details || action) && (

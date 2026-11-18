@@ -319,8 +319,10 @@ function useSectionAttention(tab: SettingsSection["tab"]) {
   const discordAttention = useDiscordAttention(tab === "chat-discord");
   const modelAttention = useChatModelAttention(tab === "chat-model");
   if (tab === "agent-reporting") return reportingMarker;
-  if ((tab === "chat-discord" && discordAttention) || (tab === "chat-model" && modelAttention))
-    return "needs attention";
+  const chatAttention =
+    tab === "chat-discord" ? discordAttention : tab === "chat-model" ? modelAttention : null;
+  if (chatAttention === "error") return "failing";
+  if (chatAttention === "attention") return "needs attention";
   if (tab === "devices" && pendingDevices > 0)
     return `${pendingDevices} ${pendingDevices === 1 ? "device" : "devices"} waiting for approval`;
   return undefined;
@@ -353,7 +355,15 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
       {section.tab === "connection" && (
         <ConnectionStateDot presentation={presentation} label={status} />
       )}
-      {attention && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />}
+      {attention && (
+        <span
+          aria-hidden
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            attention === "failing" ? "bg-destructive" : "bg-attention",
+          )}
+        />
+      )}
       {locked && (
         <Lock aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" strokeWidth={1.5} />
       )}

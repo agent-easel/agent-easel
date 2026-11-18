@@ -127,6 +127,32 @@ function DropdownMenuRadioItem({
   );
 }
 
+/** A multi-select menu item; it stays open so several can be toggled in turn. */
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      className={cn(
+        "relative flex cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-3 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className,
+      )}
+      onSelect={(event) => event.preventDefault()}
+      {...props}
+    >
+      {children}
+      <span className="pointer-events-none absolute top-1/2 right-3 flex size-3.5 -translate-y-1/2 items-center justify-center text-link">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CheckIcon className="size-3.5" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+    </DropdownMenuPrimitive.CheckboxItem>
+  );
+}
+
 /** A group heading inside a menu: Figma Text/Caption, uppercase and tertiary. */
 function DropdownMenuLabel({
   className,
@@ -162,6 +188,7 @@ export {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuCheckboxItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,

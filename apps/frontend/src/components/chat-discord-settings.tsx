@@ -1,37 +1,48 @@
-import { useEffect, useState } from "react";
-import { CircleCheck, CircleX, Info, Power, TriangleAlert } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight, Unplug } from "lucide-react";
 import type {
+  DiscordCheckOutcome,
   DiscordSettings,
   DiscordTokenChange,
   UpdateDiscordConnectionInput,
 } from "@t3-factory/contracts";
 import { validateDiscordPublicKey } from "@t3-factory/domain-validation";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { fieldLabelClass } from "@/components/page";
+import { Switch } from "@/components/ui/switch";
+import { StatusBadge } from "@/components/status-badge";
 import { api, ApiError } from "../api.ts";
+import { chatControlBlocker, type ChatControlBlocker } from "../chat-control-switch.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
 import { reportDiscordSettings } from "../chat-control-attention.ts";
-import { AccessForm, useAccessSection } from "./chat-discord-access.tsx";
-import { DeliveryDiagnostics } from "./chat-discord-delivery.tsx";
+import { useSettingsOptions } from "../settings-navigation.ts";
+import { AccessCard, firstGrants, useAccessSection } from "./chat-discord-access.tsx";
+import { DeliveryCard } from "./chat-discord-delivery.tsx";
+import { CopyButton } from "./copy-button.tsx";
 import { dayAndTime } from "./execution-state.tsx";
-import { Notice } from "./notice.tsx";
-import { SegmentedChoice } from "./segmented-choice.tsx";
 import { useSettingsDraftGuard } from "./settings-draft-guard.tsx";
+import { SettingsGroup, SettingsProblemCard, SettingsRow } from "./settings-page.tsx";
 import {
   ChatControlPage,
   chatControlError,
-  SectionSaveBar,
+  fieldAria,
+  FieldRow,
+  SaveActions,
+  SecretField,
+  technicalDetails,
   useChatControlSection,
+  type FieldState,
+  type SecretChoice,
 } from "./chat-control-form.tsx";
 
-type TokenChoice = "keep" | "replace" | "remove";
+/** The setup steps live in the documentation; the page links them until the first passing check. */
+const SETUP_GUIDE_URL =
+  "https://github.com/alimek/t3-factory/blob/main/docs/chat-control.md#setting-up-the-application";
 
 interface ConnectionDraft {
   readonly publicKey: string;
-  readonly tokenChoice: TokenChoice;
+  readonly tokenChoice: SecretChoice;
   /** A new token; held only in memory and never prefilled. */
   readonly tokenValue: string;
 }
@@ -42,14 +53,14 @@ const draftOf = ({ configuration }: DiscordSettings): ConnectionDraft => ({
   tokenValue: "",
 });
 
-// The backend stores the Public Key in lowercase; compare drafts the same way.
+// The backend stores the Public key in lowercase; compare drafts the same way.
 const publicKeyOf = (draft: ConnectionDraft) => draft.publicKey.trim().toLowerCase() || null;
 
 /** Whether the draft saves a new token in place of the one Factory operated with. */
 const replacesToken = (draft: ConnectionDraft, settings: DiscordSettings) =>
   settings.application !== null &&
   (settings.configuration.tokenConfigured
-    ? draft.tokenChoice === "replace"
+    ? draft.tokenChoice === "replace" && draft.tokenValue.trim() !== ""
     : draft.tokenValue.trim() !== "");
 
 /** The token change this draft asks for, or null while a replacement has no value yet. */
@@ -65,19 +76,9 @@ function isDirty(draft: ConnectionDraft, { configuration }: DiscordSettings) {
   return (
     publicKeyOf(draft) !== configuration.publicKey ||
     draft.tokenValue.trim() !== "" ||
-    draft.tokenChoice !== "keep"
+    draft.tokenChoice === "remove"
   );
 }
-
-const saveInput = (
-  draft: ConnectionDraft,
-  settings: DiscordSettings,
-  token: DiscordTokenChange,
-): UpdateDiscordConnectionInput => ({
-  revision: settings.configuration.revision,
-  publicKey: publicKeyOf(draft),
-  token,
-});
 
 /** Whether the host already holds exactly this save, so a lost acknowledgement was a success. */
 const committed = (input: UpdateDiscordConnectionInput, current: DiscordSettings) =>
@@ -87,25 +88,129 @@ const committed = (input: UpdateDiscordConnectionInput, current: DiscordSettings
 // While On, the running connection's state changes without any action on this page.
 const STATUS_REFRESH_MS = 5_000;
 
+/** Which section a one-Save attempt stopped at; the next Save sends only what is still unsaved. */
+type SaveStop = "bot" | "access" | "access-after-bot" | null;
+
+/** Whether the Language model's provider, base URL and model are saved, as the switch needs. */
+function useModelComplete() {
+  const [complete, setComplete] = useState(true);
+  useEffect(() => {
+    // The host refuses On without a complete model anyway, so an unread model gates nothing.
+    api.getChatModelSettings().then(
+      ({ configuration }) =>
+        setComplete(
+          Boolean(configuration.providerKind && configuration.baseUrl && configuration.model),
+        ),
+      () => undefined,
+    );
+  }, []);
+  return complete;
+}
+
+/** One host action at a time with its failure message; the answer goes to `onAnswer`. */
+function useHostAction<Input>(
+  run: (input: Input) => Promise<DiscordSettings>,
+  onAnswer: (settings: DiscordSettings) => void,
+  fallback: (input: Input) => string,
+) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const act = async (input: Input) => {
+    setBusy(true);
+    setError("");
+    return await run(input)
+      .then(onAnswer)
+      .catch((cause: unknown) => {
+        setError(chatControlError(cause, fallback(input)));
+      })
+      .finally(() => {
+        setBusy(false);
+      });
+  };
+  return { busy, error, act };
+}
+
+/** The bot draft's state: unsaved edits, its token change and whether it may be saved. */
+function botDraftCheck(settings: DiscordSettings | null, draft: ConnectionDraft | null) {
+  if (!settings || !draft) return { dirty: false, token: null, publicKeyProblem: "", ready: false };
+  const validated = draft.publicKey.trim() ? validateDiscordPublicKey(draft.publicKey) : null;
+  const publicKeyProblem = validated && !validated.ok ? validated.error.message : "";
+  const token = tokenChange(draft, settings);
+  return {
+    dirty: isDirty(draft, settings),
+    token,
+    publicKeyProblem,
+    ready: token !== null && !publicKeyProblem,
+  };
+}
+
 /**
- * The page's saved settings and connection draft, with its save, check, On/Off and Discard
- * actions. While Chat control is On the settings are read again periodically, which updates the
- * connection state without touching any draft.
+ * The one Save: Bot first, then Access, each with its own revision. A failed Bot save leaves
+ * Access unsent and every edit kept; after a failed Access save the next Save sends only Access.
+ */
+function useOneSave(
+  bot: ReturnType<
+    typeof useChatControlSection<DiscordSettings, ConnectionDraft, UpdateDiscordConnectionInput>
+  >,
+  access: ReturnType<typeof useAccessSection>,
+  supersede: () => void,
+) {
+  const [stopped, setStopped] = useState<SaveStop>(null);
+  const [granted, setGranted] = useState<readonly string[]>([]);
+  const botCheck = botDraftCheck(bot.settings, bot.draft);
+  const save = async () => {
+    setGranted([]);
+    setStopped(null);
+    const botSaved = botCheck.dirty;
+    if (botCheck.dirty && botCheck.token && bot.settings && bot.draft) {
+      const saved = await bot.save({
+        revision: bot.settings.configuration.revision,
+        publicKey: publicKeyOf(bot.draft),
+        token: botCheck.token,
+      });
+      supersede();
+      if (!saved) return setStopped("bot");
+    }
+    if (access.dirty && access.input && access.settings) {
+      const firstGrant = firstGrants(access.input, access.settings.access);
+      if (!(await access.save(access.input)))
+        return setStopped(botSaved ? "access-after-bot" : "access");
+      setGranted(firstGrant);
+    }
+  };
+  const dirty = botCheck.dirty || access.dirty;
+  return {
+    botCheck,
+    dirty,
+    saving: bot.saving || access.saving,
+    canSave: dirty && (!botCheck.dirty || botCheck.ready) && (!access.dirty || !access.problem),
+    save,
+    stopped,
+    granted,
+    discard: () => {
+      bot.discard();
+      access.discard();
+      setStopped(null);
+    },
+  };
+}
+
+/**
+ * The page's saved settings and drafts, with its one Save, check, On/Off and Discard actions.
+ * While Chat control is On the settings are read again periodically, which updates the connection
+ * state without touching any draft.
  */
 function useDiscordPage() {
-  const section = useChatControlSection({
+  const bot = useChatControlSection({
     read: api.getDiscordSettings,
     update: api.updateDiscordConnection,
     draftOf,
     committed,
-    name: "the Discord settings",
+    name: "the bot",
   });
-  const [checking, setChecking] = useState(false);
-  const [checkError, setCheckError] = useState("");
-  const [switching, setSwitching] = useState(false);
-  const [switchError, setSwitchError] = useState("");
-  const { settings, draft, setSettings } = section;
-  const enabled = settings?.chatControlEnabled ?? false;
+  const access = useAccessSection();
+  const modelComplete = useModelComplete();
+  const { settings, setSettings } = bot;
   useEffect(() => {
     if (settings) reportDiscordSettings(settings);
   }, [settings]);
@@ -113,608 +218,509 @@ function useDiscordPage() {
     read: api.getDiscordSettings,
     apply: setSettings,
     intervalMs: STATUS_REFRESH_MS,
-    watching: enabled,
+    watching: settings?.chatControlEnabled ?? false,
   });
   /** An action's answer is newer than any background read still in flight. */
   const answer = (next: DiscordSettings) => {
     supersede();
     setSettings(next);
   };
-  const check = async (revision: number) => {
-    setChecking(true);
-    setCheckError("");
-    return await api
-      .checkDiscordConnection({ revision })
-      .then(answer)
-      .catch((cause: unknown) => {
-        setCheckError(chatControlError(cause, "Factory could not run the check."));
-      })
-      .finally(() => {
-        setChecking(false);
-      });
-  };
-  const turn = async (on: boolean) => {
-    setSwitching(true);
-    setSwitchError("");
-    return await api
-      .setChatControlEnabled({ enabled: on })
-      .then(answer)
-      .catch((cause: unknown) => {
-        setSwitchError(
-          chatControlError(cause, `Factory could not turn Chat control ${on ? "On" : "Off"}.`),
-        );
-      })
-      .finally(() => {
-        setSwitching(false);
-      });
-  };
-  return {
-    ...section,
-    setSettings: answer,
-    save: async (input: UpdateDiscordConnectionInput) => {
-      await section.save(input);
-      supersede();
+  const oneSave = useOneSave(bot, access, supersede);
+  const check = useHostAction(
+    (revision: number) => api.checkDiscordConnection({ revision }),
+    (next) => {
+      answer(next);
+      // Names the check looked up belong to the Access section too.
+      access.setSettings(next);
     },
+    () => "Factory could not run the check.",
+  );
+  const turn = useHostAction(
+    (on: boolean) => api.setChatControlEnabled({ enabled: on }),
+    answer,
+    (on) => `Factory could not turn Chat control ${on ? "On" : "Off"}.`,
+  );
+  return {
+    ...oneSave,
+    bot,
+    access,
+    settings,
+    draft: bot.draft,
+    botDirty: oneSave.botCheck.dirty,
+    publicKeyProblem: oneSave.botCheck.publicKeyProblem,
+    modelComplete,
+    setSettings: answer,
     // A lost read changed nothing on the host, unlike the lost answer chatControlError describes.
     refreshError: !failure
       ? ""
       : failure.cause instanceof ApiError
         ? chatControlError(failure.cause, "")
         : "Factory could not refresh the connection state. It retries automatically.",
-    dirty: settings !== null && draft !== null && isDirty(draft, settings),
-    checking,
-    checkError,
-    check,
-    switching,
-    switchError,
-    turn,
+    checking: check.busy,
+    checkError: check.error,
+    check: check.act,
+    switching: turn.busy,
+    switchError: turn.error,
+    turn: turn.act,
   };
 }
 
+type DiscordPage = ReturnType<typeof useDiscordPage>;
+
+const BADGES: Record<DiscordSettings["connectionStatus"], ReactNode> = {
+  incomplete: <StatusBadge kind="neutral">Off</StatusBadge>,
+  off: <StatusBadge kind="neutral">Off</StatusBadge>,
+  checking: <StatusBadge kind="checking">Checking</StatusBadge>,
+  connecting: <StatusBadge kind="checking">Connecting</StatusBadge>,
+  connected: <StatusBadge kind="success">Connected</StatusBadge>,
+  reconnecting: (
+    <StatusBadge kind="attention" icon={Unplug}>
+      Reconnecting
+    </StatusBadge>
+  ),
+  rejected: <StatusBadge kind="error">Rejected</StatusBadge>,
+};
+
+/** The latest check of the saved revision, the only one that describes the saved connection. */
+const currentCheck = ({ latestCheck, configuration }: DiscordSettings) =>
+  latestCheck?.revision === configuration.revision ? latestCheck : null;
+
+/** Until the first passing check the header links the setup steps. */
+const needsSetupGuide = (settings: DiscordSettings) =>
+  settings.application === null && settings.latestCheck?.outcome !== "verified";
+
+const CARD = {
+  token: "discord-token-problem",
+  publicKey: "discord-public-key-problem",
+} as const;
+
 /**
- * Settings → Chat control → Discord, host only: the On/Off switch and current delivery and action
- * recovery facts, then the Discord connection and Access, each with its own Save and Discard, and
- * the check of the saved connection.
+ * Settings → Chat control → Discord, host only: the Chat control switch, delivery problems while
+ * On, then the bot and Access, saved together by one Save in that order.
  */
 export function ChatDiscordSettings() {
   const page = useDiscordPage();
-  const access = useAccessSection();
-  const { settings, draft, loadError } = page;
+  const { settings, draft, access } = page;
   const decision = useSettingsDraftGuard("chat-discord", [
-    ...(page.dirty ? ["Discord connection"] : []),
+    ...(page.botDirty ? ["Bot"] : []),
     ...(access.dirty ? ["Access"] : []),
   ]);
   return (
     <ChatControlPage
       title="Discord"
-      loadError={loadError || access.loadError}
+      badge={settings && BADGES[settings.connectionStatus]}
+      actions={settings && <HeaderActions page={page} settings={settings} />}
+      loadError={page.bot.loadError || access.loadError}
       onRetry={() => {
-        page.reload();
+        page.bot.reload();
         access.reload();
       }}
       decision={decision}
     >
       {settings && draft && access.settings && access.draft ? (
         <>
-          <ChatControlSwitch
-            settings={settings}
-            switching={page.switching}
-            switchError={page.switchError}
-            refreshError={page.refreshError}
-            onTurn={(on) => void page.turn(on)}
-          />
-          <DeliveryDiagnostics settings={settings} onSettings={page.setSettings} />
-          <ConnectionForm
-            settings={settings}
-            draft={draft}
-            dirty={page.dirty}
-            saving={page.saving}
-            saveError={page.saveError}
-            onChange={page.setDraft}
-            onSave={(input) => void page.save(input)}
-            onDiscard={page.discard}
-          />
-          <AccessForm
+          <ChatControlRow page={page} settings={settings} />
+          <DeliveryCard settings={settings} onSettings={page.setSettings} />
+          <BotCard page={page} settings={settings} draft={draft} />
+          <AccessCard
             settings={access.settings}
             draft={access.draft}
-            dirty={access.dirty}
-            saving={access.saving}
-            saveError={access.saveError}
+            problem={access.problem}
+            disabled={page.saving}
             onChange={access.setDraft}
-            onSave={(input) => void access.save(input)}
-            onDiscard={access.discard}
           />
-          <ConnectionCheck
-            settings={settings}
-            dirty={page.dirty}
-            checking={page.checking}
-            checkError={page.checkError}
-            onCheck={(revision) => void page.check(revision)}
-          />
-          <SetupGuide />
+          <AccessProblems page={page} settings={settings} />
         </>
       ) : null}
     </ChatControlPage>
   );
 }
 
-const STATUS_LABELS: Record<DiscordSettings["connectionStatus"], string> = {
-  incomplete: "Incomplete",
-  off: "Off",
-  checking: "Checking",
-  connecting: "Connecting…",
-  connected: "Connected",
-  reconnecting: "Reconnecting",
-  rejected: "Rejected",
+/** Setup guide until the first passing check, Discard, the connection action, then Save. */
+function HeaderActions({ page, settings }: { page: DiscordPage; settings: DiscordSettings }) {
+  const { connectionStatus, commandSetup, chatControlEnabled, configuration } = settings;
+  const commandFailed = commandSetup?.outcome === "failed";
+  const retryable =
+    connectionStatus === "rejected" || connectionStatus === "reconnecting" || commandFailed;
+  const busy = page.checking || connectionStatus === "checking";
+  return (
+    <>
+      {needsSetupGuide(settings) && (
+        <Button variant="link" asChild>
+          <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer">
+            Setup guide
+            <ArrowUpRight aria-hidden strokeWidth={1.5} />
+          </a>
+        </Button>
+      )}
+      <SaveActions
+        dirty={page.dirty}
+        saving={page.saving}
+        onSave={page.canSave ? () => void page.save() : undefined}
+        onDiscard={page.discard}
+      >
+        {!chatControlEnabled ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={page.botDirty || connectionStatus === "incomplete" || busy}
+            onClick={() => void page.check(configuration.revision)}
+          >
+            {busy ? "Checking…" : "Check connection"}
+          </Button>
+        ) : (
+          retryable && (
+            <Button
+              type="button"
+              variant={connectionStatus === "rejected" || commandFailed ? "default" : "outline"}
+              disabled={page.botDirty || page.checking}
+              onClick={() => void page.check(configuration.revision)}
+            >
+              {page.checking ? "Retrying…" : "Retry connection"}
+            </Button>
+          )
+        )}
+      </SaveActions>
+    </>
+  );
+}
+
+/** The one persisted On/Off switch; while it cannot turn On, the reason sits beside it. */
+function ChatControlRow({ page, settings }: { page: DiscordPage; settings: DiscordSettings }) {
+  const blocker = chatControlBlocker(settings, page.modelComplete);
+  return (
+    <>
+      <div className="overflow-hidden rounded-lg border bg-muted">
+        <SettingsRow
+          title="Chat control"
+          control={(text) => (
+            <>
+              {blocker && (
+                <span id={`${text.title}-reason`} className="text-sm text-muted-foreground">
+                  <BlockerReason blocker={blocker} />
+                </span>
+              )}
+              <Switch
+                aria-labelledby={text.title}
+                aria-describedby={blocker ? `${text.title}-reason` : undefined}
+                checked={settings.chatControlEnabled}
+                disabled={page.switching || blocker !== null}
+                onCheckedChange={(on) => void page.turn(on)}
+              />
+            </>
+          )}
+        />
+      </div>
+      {page.switchError && (
+        <SettingsProblemCard
+          tone="error"
+          title={`Couldn’t turn Chat control ${settings.chatControlEnabled ? "off" : "on"}`}
+          details={page.switchError}
+        >
+          Fix what the details name, then try again.
+        </SettingsProblemCard>
+      )}
+      {page.refreshError && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t refresh the connection state"
+          details={page.refreshError}
+        >
+          Factory retries automatically.
+        </SettingsProblemCard>
+      )}
+    </>
+  );
+}
+
+function BlockerReason({ blocker }: { blocker: ChatControlBlocker }) {
+  const modelOptions = useSettingsOptions({ tab: "chat-model" });
+  if (blocker.kind === "rejected") return "Replace the rejected token first";
+  if (blocker.kind === "intent") return "Turn on Message Content Intent first";
+  const model = blocker.model && (
+    <Link {...modelOptions} className="text-link underline underline-offset-2">
+      a language model
+    </Link>
+  );
+  return (
+    <>
+      Save {blocker.bot}
+      {blocker.bot && model && " and "}
+      {model} first
+    </>
+  );
+}
+
+const CHECK_PROBLEMS: Record<
+  Exclude<DiscordCheckOutcome, "verified">,
+  { title: string; next: string; tag?: string }
+> = {
+  "token-rejected": {
+    title: "Discord rejected the bot token",
+    next: "Reset it on the Bot page of the Developer Portal, then replace it here.",
+    tag: "Rejected",
+  },
+  "intent-disallowed": {
+    title: "Message Content Intent is off",
+    next: "Turn it on on the application’s Bot page, then check the connection again.",
+    tag: "Intent off",
+  },
+  "timed-out": {
+    title: "Discord didn’t answer in time",
+    next: "Check the connection again in a moment.",
+  },
+  unreachable: {
+    title: "Factory can’t reach Discord",
+    next: "Check this computer’s network, then check the connection again.",
+  },
+  failed: {
+    title: "The connection check failed",
+    next: "Check the connection again; the details name what Discord answered.",
+  },
 };
 
-/** Chat control's one persisted On/Off switch, with the running connection's separate diagnostics. */
-function ChatControlSwitch({
-  settings,
-  switching,
-  switchError,
-  refreshError,
-  onTurn,
-}: {
-  settings: DiscordSettings;
-  switching: boolean;
-  switchError: string;
-  refreshError: string;
-  onTurn: (on: boolean) => void;
-}) {
-  const on = settings.chatControlEnabled;
-  const action = (
-    <div>
-      <Button
-        type="button"
-        variant={on ? "outline" : "default"}
-        size="sm"
-        disabled={switching}
-        onClick={() => onTurn(!on)}
-      >
-        {switching ? (on ? "Turning Off…" : "Turning On…") : on ? "Turn Off" : "Turn On"}
-      </Button>
-    </div>
-  );
-  return (
-    <section aria-label="Chat control state" className="grid gap-3">
-      {on ? (
-        <Notice tone="info" icon={Power} title="Chat control is On" action={action}>
-          Factory answers allowed users who mention the bot or reply to it in allowed channels. The
-          Public Key and bot token are required while Chat control is On. Turning it Off disconnects
-          from Discord and keeps the configuration, conversations and accepted work.
-        </Notice>
-      ) : (
-        <Notice tone="neutral" icon={Power} title="Chat control is Off" action={action}>
-          Factory answers no Discord messages, buttons or commands. It connects to Discord only when
-          you check the saved connection, and you can save an incomplete connection. Turning On
-          needs the saved Public Key and bot token and the Language model&apos;s provider, base URL
-          and model; a key, passed tests and Access entries are not required.
-        </Notice>
-      )}
-      {switchError && (
-        <Alert variant="destructive">
-          <AlertDescription>{switchError}</AlertDescription>
-        </Alert>
-      )}
-      {refreshError && (
-        <Alert variant="destructive">
-          <AlertDescription>{refreshError}</AlertDescription>
-        </Alert>
-      )}
-      {on && <OperatingDiagnostics settings={settings} />}
-    </section>
-  );
+/** The token's failure from the latest check while Off, or from the running connection while On. */
+function tokenFailure(settings: DiscordSettings) {
+  const outcome = settings.chatControlEnabled
+    ? settings.connectionStatus === "rejected"
+      ? settings.connectionProblem?.outcome
+      : undefined
+    : currentCheck(settings)?.outcome;
+  return outcome && outcome !== "verified" ? CHECK_PROBLEMS[outcome] : undefined;
 }
 
-/** The Gateway connection and command setup, reported separately: one is not the other. */
-function OperatingDiagnostics({ settings }: { settings: DiscordSettings }) {
-  const { connectionStatus, connectionProblem, commandSetup } = settings;
-  const failing = connectionStatus === "rejected" || connectionStatus === "reconnecting";
+function BotCard({
+  page,
+  settings,
+  draft,
+}: {
+  page: DiscordPage;
+  settings: DiscordSettings;
+  draft: ConnectionDraft;
+}) {
+  const { configuration } = settings;
+  const disabled = page.saving;
+  const onChange = page.bot.setDraft;
+  const failure = tokenFailure(settings);
+  const tokenState: FieldState | undefined = failure?.tag
+    ? { tone: "error", cardId: CARD.token }
+    : undefined;
+  const publicKeyState: FieldState | undefined = page.publicKeyProblem
+    ? { tone: "error", cardId: CARD.publicKey }
+    : undefined;
+  const verified =
+    currentCheck(settings)?.outcome === "verified" || settings.connectionStatus === "connected";
   return (
-    <dl className="grid gap-2 text-sm sm:grid-cols-[10rem_1fr]">
-      <dt className="text-muted-foreground">Gateway connection</dt>
-      <dd className={failing ? "text-foreground" : "text-muted-foreground"}>
-        <span className="font-medium text-foreground">{STATUS_LABELS[connectionStatus]}</span>
-        {connectionProblem &&
-          ` · ${dayAndTime(connectionProblem.occurredAt)} · ${connectionProblem.message}`}
-        {connectionStatus === "rejected" && " Correct the cause, then retry the connection below."}
-        {connectionStatus === "reconnecting" && " Factory retries with increasing waits."}
-      </dd>
-      <dt className="text-muted-foreground">Command setup</dt>
-      <dd className="text-muted-foreground">
-        {commandSetup ? (
-          <>
-            <span className="font-medium text-foreground">
-              {commandSetup.outcome === "registered" ? "/factory reset registered" : "Failed"}
+    <>
+      <SettingsGroup label="Bot">
+        <FieldRow
+          label="Public key"
+          htmlFor="discord-public-key"
+          tag={page.publicKeyProblem && <StatusBadge kind="error">Invalid</StatusBadge>}
+        >
+          <Input
+            id="discord-public-key"
+            value={draft.publicKey}
+            placeholder="From General Information"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={disabled}
+            className="flex-1 bg-muted font-mono text-label"
+            {...fieldAria(publicKeyState)}
+            onChange={(event) => onChange({ ...draft, publicKey: event.target.value })}
+          />
+          {configuration.publicKey && (
+            <CopyButton text={configuration.publicKey} label="Copy Public key" />
+          )}
+        </FieldRow>
+        <FieldRow
+          label="Bot token"
+          htmlFor="discord-token"
+          tag={failure?.tag && <StatusBadge kind="error">{failure.tag}</StatusBadge>}
+        >
+          <SecretField
+            id="discord-token"
+            label="bot token"
+            stored={configuration.tokenConfigured}
+            choice={draft.tokenChoice}
+            value={draft.tokenValue}
+            placeholder="From the Bot page"
+            state={tokenState}
+            disabled={disabled}
+            onChoice={(choice) => onChange({ ...draft, tokenChoice: choice, tokenValue: "" })}
+            onValue={(value) => onChange({ ...draft, tokenValue: value })}
+          />
+        </FieldRow>
+        {configuration.tokenConfigured && (
+          <FieldRow
+            label="Bot"
+            tag={verified && <StatusBadge kind="success">Gateway verified</StatusBadge>}
+          >
+            <span className="text-foreground">
+              {settings.botName ?? currentCheck(settings)?.botName ?? "—"}
             </span>
-            {` · ${dayAndTime(commandSetup.occurredAt)} · ${commandSetup.message}`}
-          </>
-        ) : (
-          "Registered after Discord authenticates the application."
+          </FieldRow>
         )}
-      </dd>
-    </dl>
+      </SettingsGroup>
+      <BotProblems page={page} settings={settings} draft={draft} />
+    </>
   );
 }
 
-const problemOf = (result: { ok: true } | { ok: false; error: { message: string } } | null) =>
-  result && !result.ok ? result.error.message : "";
-
-/** The draft's field problem, its token change and whether it may be saved as it stands. */
-function draftCheck(draft: ConnectionDraft, settings: DiscordSettings) {
-  const publicKeyProblem = problemOf(
-    draft.publicKey.trim() ? validateDiscordPublicKey(draft.publicKey) : null,
-  );
-  const token = tokenChange(draft, settings);
-  return { publicKeyProblem, token, ready: !publicKeyProblem && token !== null };
-}
-
-function ConnectionForm({
+/** One card per problem with the bot or its connection. */
+function BotProblems({
+  page,
   settings,
   draft,
-  dirty,
-  saving,
-  saveError,
-  onChange,
-  onSave,
-  onDiscard,
 }: {
+  page: DiscordPage;
   settings: DiscordSettings;
   draft: ConnectionDraft;
-  dirty: boolean;
-  saving: boolean;
-  saveError: string;
-  onChange: (draft: ConnectionDraft) => void;
-  onSave: (input: UpdateDiscordConnectionInput) => void;
-  onDiscard: () => void;
 }) {
-  const { publicKeyProblem, token, ready } = draftCheck(draft, settings);
   return (
-    <section aria-label="Discord connection" className="grid gap-4">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold text-foreground">Connection</h3>
-        <p className="text-sm text-muted-foreground">
-          From the application in the Discord Developer Portal. Factory operates as the application
-          Discord reports for the saved token when it connects; it never reads the application from
-          the token itself.
-          {settings.application !== null &&
-            ` Factory currently operates as application ${settings.application}.`}
-        </p>
-      </div>
-      <TextField
-        id="discord-public-key"
-        label="Public Key"
-        value={draft.publicKey}
-        placeholder="General Information → Public Key"
-        hint="Not a secret. Factory does not use it to verify anything during a check."
-        problem={publicKeyProblem}
-        disabled={saving}
-        onChange={(value) => onChange({ ...draft, publicKey: value })}
-      />
-      <TokenField settings={settings} draft={draft} disabled={saving} onChange={onChange} />
+    <>
+      {page.publicKeyProblem && (
+        <SettingsProblemCard id={CARD.publicKey} tone="error" title="Public key isn’t valid">
+          {page.publicKeyProblem}
+        </SettingsProblemCard>
+      )}
       {replacesToken(draft, settings) && (
-        <ApplicationReplacementNotice application={settings.application!} />
+        <SettingsProblemCard
+          tone="warning"
+          title={`A token from another bot replaces ${settings.botName ?? "the current bot"}`}
+        >
+          Its conversations are cleared and its waiting reviews stop working. A new token of the
+          same bot keeps everything.
+        </SettingsProblemCard>
       )}
-      {saveError && (
-        <Alert variant="destructive">
-          <AlertDescription>{saveError}</AlertDescription>
-        </Alert>
+      {page.stopped === "bot" && page.bot.saveFailure && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t save the bot"
+          details={page.bot.saveFailure.message}
+        >
+          {page.access.dirty
+            ? "Access changes weren’t saved. Previous grants are still active."
+            : "Your edits are kept. Save again."}
+        </SettingsProblemCard>
       )}
-      <SectionSaveBar
-        saved={settings.configuration}
-        dirty={dirty}
-        saving={saving}
-        onSave={
-          dirty && ready && token ? () => onSave(saveInput(draft, settings, token)) : undefined
-        }
-        onDiscard={onDiscard}
-      />
-    </section>
+      {settings.chatControlEnabled ? (
+        <RunningConnectionProblems settings={settings} />
+      ) : (
+        <CheckProblem settings={settings} />
+      )}
+      {page.checkError && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t check the connection"
+          details={page.checkError}
+        >
+          Try again.
+        </SettingsProblemCard>
+      )}
+    </>
   );
 }
 
-function TextField({
-  id,
-  label,
-  value,
-  placeholder,
-  hint,
-  problem,
-  disabled,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  hint: string;
-  problem: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
+/** While Off: the latest check of the saved revision, when it failed. */
+function CheckProblem({ settings }: { settings: DiscordSettings }) {
+  const check = currentCheck(settings);
+  const failure = tokenFailure(settings);
+  if (!check || !failure) return null;
   return (
-    <div className="grid content-start gap-1.5">
-      <Label htmlFor={id} className={fieldLabelClass}>
-        {label}
-      </Label>
-      <Input
-        id={id}
-        value={value}
-        placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        disabled={disabled}
-        aria-invalid={problem ? true : undefined}
-        aria-describedby={`${id}-hint`}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <p
-        id={`${id}-hint`}
-        role={problem ? "alert" : undefined}
-        className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-      >
-        {problem || hint}
-      </p>
-    </div>
-  );
-}
-
-/** A token of another application replaces the application Factory operates as, once it connects. */
-function ApplicationReplacementNotice({ application }: { application: string }) {
-  return (
-    <Notice
-      tone="attention"
-      icon={TriangleAlert}
-      title="A token of another application replaces the bot"
+    <SettingsProblemCard
+      id={CARD.token}
+      tone="error"
+      title={failure.title}
+      details={technicalDetails([
+        ["When", dayAndTime(check.checkedAt)],
+        ["Revision", String(check.revision)],
+        ["Error", check.message],
+      ])}
     >
-      Factory operates as application {application}. If the new token belongs to another Discord
-      application, Factory treats it as an application replacement when it next connects: the shared
-      conversations are cleared, the old bot&apos;s waiting reviews and buttons can never confirm
-      again, even if you switch back, and its earlier messages are no longer updated. Runs that
-      still need reporting get one new card from the new bot. A new token of the same application
-      keeps everything.
-    </Notice>
+      {failure.next}
+    </SettingsProblemCard>
   );
 }
 
-/** Blank never clears a saved token: Replace and Remove are explicit. */
-function TokenField({
-  settings,
-  draft,
-  disabled,
-  onChange,
-}: {
-  settings: DiscordSettings;
-  draft: ConnectionDraft;
-  disabled: boolean;
-  onChange: (draft: ConnectionDraft) => void;
-}) {
-  const tokenInput = (label: string, placeholder: string) => (
-    <div className="grid gap-1.5">
-      <Label htmlFor="discord-token" className={fieldLabelClass}>
-        {label}
-      </Label>
-      <Input
-        id="discord-token"
-        type="password"
-        value={draft.tokenValue}
-        placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        disabled={disabled}
-        onChange={(event) => onChange({ ...draft, tokenValue: event.target.value })}
-      />
-    </div>
-  );
-  if (!settings.configuration.tokenConfigured)
-    return tokenInput("Bot token", "Bot → Reset Token, then paste it here");
+/** While On: the running connection reconnecting or rejected, and a failed command setup. */
+function RunningConnectionProblems({ settings }: { settings: DiscordSettings }) {
+  const { connectionStatus, connectionProblem, commandSetup } = settings;
+  const failure = tokenFailure(settings);
+  const details = connectionProblem
+    ? technicalDetails([
+        ["When", dayAndTime(connectionProblem.occurredAt)],
+        ["Revision", String(settings.configuration.revision)],
+        ["Error", connectionProblem.message],
+      ])
+    : undefined;
   return (
-    <div className="grid gap-2">
-      <p id="discord-token-label" className={fieldLabelClass}>
-        Bot token · saved on this host
-      </p>
-      <SegmentedChoice
-        labelledBy="discord-token-label"
-        value={draft.tokenChoice}
-        options={[
-          ["keep", "Keep saved token"],
-          ["replace", "Replace token"],
-          ["remove", "Remove token"],
-        ]}
-        onChange={(next) => onChange({ ...draft, tokenChoice: next, tokenValue: "" })}
-      />
-      {draft.tokenChoice === "replace" && tokenInput("Replacement token", "Paste the new token")}
-      {draft.tokenChoice === "remove" && (
-        <p className="text-sm text-muted-foreground">
-          Saving removes the token; the connection is then incomplete until you save a new one.
-        </p>
+    <>
+      {connectionStatus === "reconnecting" && (
+        <SettingsProblemCard tone="warning" title="Factory can’t reach Discord" details={details}>
+          It keeps trying with increasing waits.
+        </SettingsProblemCard>
       )}
-    </div>
-  );
-}
-
-function ConnectionCheck({
-  settings,
-  dirty,
-  checking,
-  checkError,
-  onCheck,
-}: {
-  settings: DiscordSettings;
-  dirty: boolean;
-  checking: boolean;
-  checkError: string;
-  onCheck: (revision: number) => void;
-}) {
-  const { configuration, latestCheck, connectionStatus, chatControlEnabled } = settings;
-  if (chatControlEnabled)
-    return (
-      <RunningConnection
-        settings={settings}
-        dirty={dirty}
-        checking={checking}
-        checkError={checkError}
-        onRetry={() => onCheck(configuration.revision)}
-      />
-    );
-  const incomplete = connectionStatus === "incomplete";
-  const unavailable = dirty || incomplete;
-  return (
-    <section aria-label="Discord connection check" className="grid gap-3 border-t pt-5">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold text-foreground">Check the saved connection</h3>
-        <p className="text-sm text-muted-foreground">
-          Connects to the Discord Gateway with the saved token, confirms the session becomes ready
-          and reports the application Discord authenticated, then disconnects, within 30 seconds.
-          During the check Factory answers no messages, buttons or commands and posts nothing.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={unavailable || checking || connectionStatus === "checking"}
-          onClick={() => onCheck(configuration.revision)}
+      {connectionStatus === "rejected" && (
+        <SettingsProblemCard
+          id={CARD.token}
+          tone="error"
+          title={failure?.title ?? "Discord ended the connection"}
+          details={details}
         >
-          {checking || connectionStatus === "checking" ? "Checking…" : "Check saved connection"}
-        </Button>
-        {unavailable && (
-          <p className="text-sm text-muted-foreground">
-            {dirty
-              ? "Save or discard your edits to check."
-              : "Save the Public Key and bot token to check."}
-          </p>
-        )}
-      </div>
-      {checkError && (
-        <Alert variant="destructive">
-          <AlertDescription>{checkError}</AlertDescription>
-        </Alert>
+          {failure?.tag ? failure.next : "Fix the cause, then retry the connection."}
+        </SettingsProblemCard>
       )}
-      {latestCheck && (
-        <Notice
-          tone="neutral"
-          icon={latestCheck.outcome === "verified" ? CircleCheck : CircleX}
-          title={`Latest check ${latestCheck.outcome === "verified" ? "verified" : "failed"} · ${dayAndTime(latestCheck.checkedAt)} · revision ${latestCheck.revision}`}
+      {commandSetup?.outcome === "failed" && (
+        <SettingsProblemCard
+          tone="error"
+          title="/factory reset isn’t registered"
+          details={technicalDetails([
+            ["When", dayAndTime(commandSetup.occurredAt)],
+            ["Error", commandSetup.message],
+          ])}
         >
-          {latestCheck.message}
-          {latestCheck.applicationId !== null &&
-            settings.application !== null &&
-            latestCheck.applicationId !== settings.application &&
-            ` Factory operates as application ${settings.application}; turning Chat control On with this token replaces it.`}
-          {latestCheck.revision !== configuration.revision &&
-            ` This check was for an earlier configuration; revision ${configuration.revision} is unchecked.`}
-        </Notice>
+          Retry the connection to register it again.
+        </SettingsProblemCard>
       )}
-      <p className="flex items-start gap-2 text-sm text-muted-foreground">
-        <Info aria-hidden className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
-        <span>
-          A passing check shows that Discord accepted the token and which application it belongs to.
-          It does not show that the bot can read or post in your channels, that messages are
-          delivered, that commands are set up or that the Public Key is correct.
-        </span>
-      </p>
-    </section>
+    </>
   );
 }
 
-/** While On, the running connection is retried instead of opening a separate check session. */
-function RunningConnection({
-  settings,
-  dirty,
-  checking,
-  checkError,
-  onRetry,
-}: {
-  settings: DiscordSettings;
-  dirty: boolean;
-  checking: boolean;
-  checkError: string;
-  onRetry: () => void;
-}) {
-  const retryable =
-    settings.connectionStatus === "rejected" ||
-    settings.connectionStatus === "reconnecting" ||
-    settings.commandSetup?.outcome === "failed";
+/** Access save results and the empty-Access notice while On. */
+function AccessProblems({ page, settings }: { page: DiscordPage; settings: DiscordSettings }) {
+  const { access } = page;
+  const saved = access.settings?.access ?? settings.access;
+  const nobody =
+    saved.users.length === 0 || !saved.channels.some((channel) => channel.projectIds.length > 0);
+  const channelNames = page.granted.map((id) => {
+    const name = saved.channelNames[id];
+    return name ? `#${name}` : id;
+  });
   return (
-    <section aria-label="Discord connection check" className="grid gap-3 border-t pt-5">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold text-foreground">Running connection</h3>
-        <p className="text-sm text-muted-foreground">
-          While Chat control is On, Factory keeps one Gateway connection and reports its state
-          above. Retrying reconnects that connection with the saved configuration; it never opens a
-          second one.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!retryable || dirty || checking}
-          onClick={onRetry}
+    <>
+      {(page.stopped === "access" || page.stopped === "access-after-bot") && access.saveFailure && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t save Access"
+          details={access.saveFailure.message}
         >
-          {checking ? "Retrying…" : "Retry connection"}
-        </Button>
-        {retryable && dirty && (
-          <p className="text-sm text-muted-foreground">Save or discard your edits to retry.</p>
-        )}
-      </div>
-      {checkError && (
-        <Alert variant="destructive">
-          <AlertDescription>{checkError}</AlertDescription>
-        </Alert>
+          {page.stopped === "access-after-bot"
+            ? "The bot is saved. Save again to retry Access."
+            : "Your edits are kept. Save again."}
+        </SettingsProblemCard>
       )}
-    </section>
-  );
-}
-
-const permissions = [
-  "View Channels",
-  "Send Messages",
-  "Send Messages in Threads",
-  "Create Public Threads",
-  "Manage Threads",
-  "Read Message History",
-  "Add Reactions",
-  "Attach Files",
-];
-
-function SetupGuide() {
-  return (
-    <section aria-label="Discord setup" className="grid gap-3 border-t pt-5">
-      <h3 className="text-sm font-semibold text-foreground">Set up the Discord application</h3>
-      <ol className="grid list-decimal gap-2 pl-5 text-sm text-muted-foreground">
-        <li>
-          In the Discord Developer Portal, create an application and copy its{" "}
-          <strong className="font-medium text-foreground">Public Key</strong> from General
-          Information. Factory learns the application from Discord when it connects, so no
-          Application ID is needed.
-        </li>
-        <li>
-          On the Bot page, reset and copy the token, and turn on{" "}
-          <strong className="font-medium text-foreground">Message Content Intent</strong>. Without
-          it Discord refuses the connection. Other privileged intents are not needed.
-        </li>
-        <li>
-          Leave <strong className="font-medium text-foreground">Interactions Endpoint URL</strong>{" "}
-          empty. Factory receives buttons and commands over its own outbound Gateway connection;
-          with a URL set, Discord sends them to that URL instead.
-        </li>
-        <li>
-          In OAuth2 → URL Generator, choose the scopes{" "}
-          <strong className="font-medium text-foreground">bot</strong> and{" "}
-          <strong className="font-medium text-foreground">applications.commands</strong> and the bot
-          permissions {permissions.join(", ")}. Open the generated link to invite the bot to each
-          server you want to use. One application can serve several servers; no server ID is needed.
-        </li>
-        <li>
-          Keep this Factory server running. The bot works only while Factory runs, and Factory never
-          runs it anywhere else. When Chat control turns On, Factory registers its only command,{" "}
-          <strong className="font-medium text-foreground">/factory reset</strong>, which clears a
-          thread&apos;s shared conversation without deleting Discord messages or accepted work.
-        </li>
-      </ol>
-    </section>
+      {channelNames.length > 0 && (
+        <SettingsProblemCard
+          tone="info"
+          title={`Everyone who can read ${channelNames.join(", ")} sees the bot’s replies`}
+        />
+      )}
+      {settings.chatControlEnabled && !access.dirty && nobody && (
+        <SettingsProblemCard tone="info" title="Nobody can use Chat control yet">
+          Allow a user and a channel that grants a Project.
+        </SettingsProblemCard>
+      )}
+    </>
   );
 }
