@@ -16,7 +16,7 @@ export function ScreenLayout({ title, children }: { title: ReactNode; children: 
   );
 }
 
-export function SettingsPanel({ children }: { children: ReactNode }) {
+export function SettingsPanel({ children, hidden }: { children: ReactNode; hidden?: boolean }) {
   const pane = useRef<HTMLDivElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const [more, setMore] = useState(false);
@@ -31,7 +31,7 @@ export function SettingsPanel({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="relative min-h-0 min-w-0 flex-1">
+    <div hidden={hidden} className="relative min-h-0 min-w-0 flex-1">
       <div
         ref={pane}
         className="h-full overflow-y-auto pt-6 pr-6 pl-8 [scrollbar-gutter:stable] max-sm:pr-2 max-sm:pl-4 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-subtle-foreground [&::-webkit-scrollbar-thumb]:bg-clip-padding"

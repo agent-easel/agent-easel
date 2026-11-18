@@ -139,8 +139,8 @@ not have reported a rejected token or a missing Message Content intent; the serv
 otherwise. A model key, a passed Test or check and any Access entry are not required; empty Access
 admits nobody, and while On the page says so in one card. Turning On uses only saved configuration.
 While the switch cannot turn On it is disabled and the missing requirement sits beside it, for
-example "Save the bot token and a language model first", where "a language model" links to the
-Language model page.
+example "Save the bot token and a language model first", where "a language model" opens the
+Language model page over Discord; Esc or ✕ returns to Discord with its unsaved edits kept.
 
 On is persisted: after a restart Factory reconnects by itself. While On, Factory runs exactly one
 Gateway connection. It logs in with the saved token and waits for a ready session; only once

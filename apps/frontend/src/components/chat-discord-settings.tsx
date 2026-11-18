@@ -434,7 +434,7 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
 }
 
 function BlockerReason({ blocker }: { blocker: ChatControlBlocker }) {
-  const modelOptions = useSettingsOptions({ tab: "chat-model" });
+  const modelOptions = useSettingsOptions({ tab: "chat-model", from: "chat-discord" });
   if (blocker.kind === "rejected") return "Replace the rejected token first";
   if (blocker.kind === "intent") return "Turn on Message Content Intent first";
   const model = blocker.model && (

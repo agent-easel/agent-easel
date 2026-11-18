@@ -13,9 +13,14 @@ const settingsTabs = [
   "chat-model",
   "chat-discord",
 ] as const;
-export type SettingsSelection = { tab: (typeof settingsTabs)[number] };
+type SettingsTab = (typeof settingsTabs)[number];
+/**
+ * `from`: the section a cross-section link opened this one over. It stays open underneath with its
+ * unsaved edits, and Esc or ✕ returns to it.
+ */
+export type SettingsSelection = { tab: SettingsTab; from?: SettingsTab };
 /** A known Settings section, or undefined for removed and unknown ones. */
-function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
+function settingsTab(value: unknown): SettingsTab | undefined {
   return settingsTabs.find((tab) => tab === value);
 }
 export type StudioSelection =
@@ -52,8 +57,13 @@ function studioSelection(value: unknown): StudioSelection | undefined {
 }
 export function validateAppSearch(search: Record<string, unknown>): AppSearch {
   const studio = studioSelection(search.studio);
-  const tab = settingsTab(searchRecord(search.settings).tab);
-  return { ...(studio && { studio }), ...(tab && { settings: { tab } }) };
+  const settings = searchRecord(search.settings);
+  const tab = settingsTab(settings.tab);
+  const from = settingsTab(settings.from);
+  return {
+    ...(studio && { studio }),
+    ...(tab && { settings: { tab, ...(from && from !== tab && { from }) } }),
+  };
 }
 
 export function studioMask(selection: StudioSelection) {
@@ -91,6 +101,14 @@ export function settingsTabAt(location: { pathname: string; search: unknown }) {
       (tab) => `/settings/${settingsMask({ tab }).params._splat}` === location.pathname,
     )
   );
+}
+/** Whether the Settings section `tab` stays open at a location: shown, or open beneath it. */
+export function settingsKeepsTab(
+  location: { pathname: string; search: unknown },
+  tab: SettingsTab,
+) {
+  const from = validateAppSearch(searchRecord(location.search)).settings?.from;
+  return settingsTabAt(location) === tab || from === tab;
 }
 export function useSettings() {
   return useSearch({ from: "__root__", select: (search) => search.settings });

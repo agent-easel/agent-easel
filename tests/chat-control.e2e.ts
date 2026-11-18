@@ -251,6 +251,47 @@ test("leaving the Discord page with unsaved bot edits asks before discarding the
   await expect(botCard.getByLabel("Public key")).toHaveValue("cd".repeat(32));
 });
 
+test("the Discord page's language model link opens Language model, and Esc or ✕ returns with the bot edits kept", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const model = await chatModelSettings(app.baseUrl);
+  assert(model.ok);
+  // Without a saved model the switch's reason links it.
+  const cleared = await hostCall(app.baseUrl, "PUT", "/api/chat-control/model", {
+    revision: model.value.configuration.revision,
+    providerKind: null,
+    baseUrl: null,
+    model: null,
+    key: { kind: "remove" },
+  });
+  assert(cleared.ok, JSON.stringify(cleared));
+  await app.open("/settings/chat-control/discord");
+  const publicKey = screen.getByRole("region", "Bot").getByLabel("Public key");
+  await publicKey.fill("cd".repeat(32));
+  await app.screenshot("chat-discord-return-1-edited");
+  const languageModel = screen.getByRole("link", "a language model");
+
+  // Act
+  await languageModel.tap();
+  await expect(screen.getByRole("region", "Connection")).toBeVisible();
+  await app.screenshot("chat-discord-return-2-language-model");
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(publicKey).toHaveValue("cd".repeat(32));
+  await app.screenshot("chat-discord-return-3-back-after-esc");
+  await languageModel.tap();
+  await expect(screen.getByRole("region", "Connection")).toBeVisible();
+  await screen.getByRole("button", "Close", { exact: true }).tap();
+  await expect(publicKey).toHaveValue("cd".repeat(32));
+  await expect(screen.getByRole("dialog", /^Discard unsaved/)).toHaveCount(0);
+  await app.screenshot("chat-discord-return-4-back-after-close");
+  await screen.getByRole("button", "Discard", { exact: true }).tap();
+});
+
 /** The fixture's first Project, as the Access section lists it. */
 async function firstProject(baseUrl: string | undefined) {
   const response = await fetch(new URL("/api/projects", baseUrl));
