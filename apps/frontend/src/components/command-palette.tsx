@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import type { ArchivedRunMatch } from "@t3-factory/contracts";
-import { Search } from "lucide-react";
+import { Search, Unplug } from "lucide-react";
 import { api } from "../api.ts";
 import {
   buildPaletteGroups,
@@ -15,24 +15,22 @@ import { useOpenStudio, useSettingsNavigation } from "../settings-navigation.ts"
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { transport, useTransport } from "../transport.ts";
 import { RunNumber } from "./run-number.tsx";
-import { RunStatusChip } from "./run-status-chip.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 import { Dialog, DialogSurface, DialogDescription, DialogDismiss, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { KeyChip } from "./ui/key-chip";
 import { cn } from "@/lib/utils";
 
 function PaletteBadge({ item }: { item: PaletteItem }) {
-  if (item.status === "needs-input" || item.status === "problem") {
-    return <RunStatusChip kind={item.status} />;
-  }
-  const label = item.disabled ? "Offline" : item.status === "archived" ? "Archived" : null;
-  return (
-    label && (
-      <span className="shrink-0 rounded-sm bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
-        {label}
-      </span>
-    )
-  );
+  if (item.status === "needs-input" || item.status === "problem")
+    return <StatusBadge kind={item.status} />;
+  if (item.disabled)
+    return (
+      <StatusBadge kind="neutral" icon={Unplug}>
+        Offline
+      </StatusBadge>
+    );
+  return item.status === "archived" && <StatusBadge kind="stopped">Archived</StatusBadge>;
 }
 
 function PaletteRow({
