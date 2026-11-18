@@ -141,7 +141,7 @@ latest diagnostic (`GET /api/settings/run-titles`).
 options from the live T3 catalog, and saves each change at once; choosing a provider instance takes its first model, and
 the switch stays unavailable until a provider instance and model are chosen. A saved choice the catalog no longer
 offers stays visible as unavailable. The latest diagnostic follows the setting with its outcome, Run and time in a neutral
-status pill, never the error color. A closed **How it works** disclosure explains generation and that the title model runs
+status badge, never the error color. A closed **How it works** disclosure explains generation and that the title model runs
 in the Project checkout with the owner's T3 permissions, its prompt forbidding reading or editing files without Factory
 enforcing it. An approved client sees the same fields read-only with the **Managed on the Factory host** chip. The section
 reads the setting when it opens; changes are not delivered live.
@@ -418,8 +418,8 @@ fixed Human exits their old exits were mapped to.
   - A Settled Run that returns to Active does not get deleted images back. A Start naming a deleted image gets the
     missing-images outcome; uploading identical bytes again, from any client, restores the image for every Run that uses
     it, shown the next time a Run view opens.
-- Each work block shows its recorded state: not started, working, waiting, finished, error or stopped (the Run was archived
-  or manually settled before it finished). A [Continuation](#continuations) shows **sent** or **pass-through** instead of working and finished. Several blocks can be
+- Each work block shows its recorded state: Not started, Working, Waiting, Finished, Problem or Stopped (the Run was archived
+  or manually settled before it finished). A [Continuation](#continuations) shows **Sent** or **Pass-through** instead of Working and Finished. Several blocks can be
   active at once; the canvas marks no "current step", percentage or taken path. Repeated visits update the same block; the
   timeline and executions keep the sequence. Connections use one neutral style, including never-run branches.
 - A working block whose Agent reported `working` shows that message in place of its visit time; its details show the full
@@ -510,7 +510,8 @@ menu items never opens a row preview.
 
 - **Needs input**: a pending Human occurrence or native T3 question/permission.
   **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
-  project are not Problems and opening a Run clears no chip.
+  project are not Problems and opening a Run clears no chip. A Run whose project T3 no longer reports shows a neutral
+  **Not in T3** tag.
 - **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
 - **Needs you (N)** filters the list to exactly the Runs the desktop
@@ -724,9 +725,9 @@ with **Try again** and, for a later page, a refresh from arrival 1.
 
 A Continuation continues the conversation of the worker whose message reaches it. The first message in a Run queues its prompt on that
 worker's T3 thread, stating the Continuation's own Block id; after a Human step, also one whose answer first waited in a Wait, the
-person's reply follows the prompt, labelled, because the worker has not seen it. The Continuation shows **sent**, and the worker's own Agent block shows **working** while the thread works on
+person's reply follows the prompt, labelled, because the worker has not seen it. The Continuation shows **Sent**, and the worker's own Agent block shows **Working** while the thread works on
 it, without a new visit and without changing that block's result or firing its connections again. When the worker reports `finished` for
-the Continuation and its thread is finished, the response leaves the single output and the Continuation shows **pass-through**. Messages that
+the Continuation and its thread is finished, the response leaves the single output and the Continuation shows **Pass-through**. Messages that
 arrive while the prompt is pending wait (**Queued** in its details) and go out after the response, in arrival order. From then on every
 message is forwarded unchanged with its own worker, also in loops and after a restart; the prompt is never sent again in that Run.
 

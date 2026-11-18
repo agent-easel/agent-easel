@@ -452,6 +452,7 @@ function TextField({
       />
       <p
         id={`${id}-hint`}
+        role={problem ? "alert" : undefined}
         className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
       >
         {problem || hint}

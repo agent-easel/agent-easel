@@ -24,6 +24,7 @@ import { PickerMenuContent, PickerMenuSearch } from "./picker-menu-search.tsx";
 import { Label } from "@/components/ui/label";
 import { api } from "../api.ts";
 import { useLiveLaunchChoices } from "../live/launch-choices.ts";
+import { StatusBadge } from "./status-badge.tsx";
 import { cn } from "../lib/utils.ts";
 import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
@@ -142,9 +143,7 @@ function ProjectTriggerSummary({ selected }: { selected: FactoryProject | undefi
       {selected ? (
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="min-w-0 truncate font-medium">{selected.title}</span>
-          {!available && (
-            <span className="shrink-0 text-2xs tracking-label text-destructive">Unavailable</span>
-          )}
+          {!available && <StatusBadge kind="error">Unavailable</StatusBadge>}
         </span>
       ) : (
         <span className="min-w-0 flex-1 truncate text-muted-foreground">No project selected</span>

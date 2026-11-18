@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { ConnectionState, T3Connection } from "@t3-factory/contracts";
-import { Badge } from "@/components/ui/badge";
+import { KeyRound, Unplug, type LucideIcon } from "lucide-react";
+import { StatusBadge, type SettingKind } from "./components/status-badge.tsx";
 import { cn } from "@/lib/utils";
 import { useLiveConnectionStatus } from "./live/live-connection.ts";
 
@@ -13,12 +14,17 @@ const stateLabels: Record<ConnectionState, string> = {
   ready: "Connected",
 };
 
-/** Figma Run/ConnectionBadge tones: green only when Connected. */
-const badgeVariant: Record<ConnectionState, "success" | "attention" | "destructive"> = {
-  ready: "success",
-  "authorization-required": "attention",
-  incompatible: "attention",
-  unavailable: "destructive",
+/** Figma Run/ConnectionBadge: green only when Connected; Unplug and key where the glyph says it. */
+const badges: Record<
+  ConnectionPresentation,
+  { readonly kind: SettingKind; readonly icon?: LucideIcon }
+> = {
+  ready: { kind: "success" },
+  "authorization-required": { kind: "attention", icon: KeyRound },
+  incompatible: { kind: "attention" },
+  unavailable: { kind: "error", icon: Unplug },
+  loading: { kind: "checking" },
+  "load-error": { kind: "neutral" },
 };
 
 const footerText: Record<ConnectionPresentation, string> = {
@@ -129,22 +135,6 @@ export function connectionStatusLabel(presentation: ConnectionPresentation): str
   return stateLabels[presentation];
 }
 
-export function ConnectionStateBadge({
-  presentation,
-  className,
-}: {
-  presentation: ConnectionPresentation;
-  className?: string;
-}) {
-  const label = connectionStatusLabel(presentation);
-  const neutral = presentation === "loading" || presentation === "load-error";
-  return (
-    <Badge
-      variant={neutral ? "secondary" : badgeVariant[presentation]}
-      className={cn("gap-1.5 pr-2 pl-1.75", className)}
-    >
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {label}
-    </Badge>
-  );
+export function ConnectionStateBadge({ presentation }: { presentation: ConnectionPresentation }) {
+  return <StatusBadge {...badges[presentation]}>{connectionStatusLabel(presentation)}</StatusBadge>;
 }

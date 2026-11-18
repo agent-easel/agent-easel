@@ -471,7 +471,7 @@ test("a Settled Run's header shows Settled instead of its finished block's state
 
   // Assert
   await expect(status).toHaveText(/^Settled/);
-  await expect(canvas.getByText("finished", { exact: true })).toBeVisible();
+  await expect(canvas.getByText("Finished", { exact: true })).toBeVisible();
   await app.screenshot("run-header-settled");
 });
 

@@ -320,6 +320,7 @@ function BaseUrlField({
       />
       <p
         id="chat-model-base-url-hint"
+        role={problem ? "alert" : undefined}
         className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
       >
         {problem || baseUrlHints[draft.providerKind ?? "none"]}

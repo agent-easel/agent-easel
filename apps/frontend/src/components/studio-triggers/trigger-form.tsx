@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
 import type { FactoryProject, FlowDraft, TriggerReadiness } from "@t3-factory/contracts";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -206,6 +206,7 @@ function RepositoryValue({
   if (!repository)
     return (
       <p
+        role={problem ? "alert" : undefined}
         className={problem ? "max-w-60 text-sm text-destructive" : "text-sm text-muted-foreground"}
       >
         {problem ?? (projectId ? "Detecting…" : "Choose a Project first")}
@@ -215,17 +216,23 @@ function RepositoryValue({
     return (
       <div className="grid max-w-80 justify-items-end gap-1.5">
         <div className="flex items-center gap-2">
-          <Badge variant="attention" className="gap-1.25 py-0.5 pr-2 pl-1.75">
-            <span aria-hidden className="size-1.5 rounded-full bg-current" />
-            Detected now
-          </Badge>
+          <StatusBadge kind="attention">Detected now</StatusBadge>
           <span className="text-sm font-medium text-foreground">{moved.nameWithOwner}</span>
         </div>
-        <p className="text-right text-2xs leading-tight tracking-label text-attention">
+        <p
+          id="trigger-repository-moved"
+          role="status"
+          className="text-right text-2xs leading-tight tracking-label text-attention"
+        >
           This Trigger confirmed {repository.nameWithOwner}, so its checks stop. Confirm{" "}
           {moved.nameWithOwner} only if its issues should start Runs.
         </p>
-        <Button variant="outline" size="sm" onClick={() => draft.confirmRepository(moved)}>
+        <Button
+          variant="outline"
+          size="sm"
+          aria-describedby="trigger-repository-moved"
+          onClick={() => draft.confirmRepository(moved)}
+        >
           Confirm this repository
         </Button>
       </div>
@@ -233,10 +240,7 @@ function RepositoryValue({
   return (
     <div className="grid justify-items-end gap-0.75">
       <div className="flex items-center gap-2">
-        <Badge className="gap-1.25 border-transparent py-0.5 pr-2 pl-1.75">
-          <span aria-hidden className="size-1.5 rounded-full bg-current" />
-          Detected
-        </Badge>
+        <StatusBadge kind="success">Detected</StatusBadge>
         <span className="text-sm font-medium text-foreground">{repository.nameWithOwner}</span>
       </div>
       <p className={captionClass}>GitHub Issues · read with gh on the Factory host · no AI</p>
@@ -287,6 +291,7 @@ function QueryRow({
       />
       <p
         id="trigger-query-label"
+        role={"error" in query ? "alert" : undefined}
         className={
           "error" in query ? "text-2xs leading-tight tracking-label text-destructive" : captionClass
         }

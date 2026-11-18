@@ -12,7 +12,7 @@ import {
   threadOwnerName,
   waitingText,
 } from "./execution-canvas.tsx";
-import { clockTime, dayAndTime, StatePill } from "./execution-state.tsx";
+import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
 import { pendingRecovery, RequestReport, RunAttentionDetails } from "./run-attention.tsx";
@@ -98,7 +98,7 @@ function BlockNow({
                     <p className="text-sm font-medium">Visit {number}</p>
                     <p className="truncate text-xs text-subtle-foreground">{visitSpan(visit)}</p>
                   </div>
-                  <StatePill
+                  <ExecutionStateBadge
                     state={
                       block.kind === "agent" && number === visits.length
                         ? recorded.state
@@ -360,7 +360,7 @@ function ContinuationVisitItem({
           </a>
         )}
       </div>
-      <StatePill state={visitPill(visit)} />
+      <ExecutionStateBadge state={visitPill(visit)} />
     </li>
   );
 }
@@ -461,7 +461,7 @@ export function RunBlockView({
             <h2 className="truncate text-base leading-4 font-semibold">{block.name}</h2>
             <p className="truncate text-xs leading-3.5 text-subtle-foreground">{reference}</p>
           </div>
-          <StatePill state={recorded.state} />
+          <ExecutionStateBadge state={recorded.state} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

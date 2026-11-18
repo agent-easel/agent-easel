@@ -13,9 +13,8 @@ import {
   SettingsGroup,
   SettingsPage,
   SettingsRow,
-  StatusPill,
-  type StatusTone,
 } from "./settings-page.tsx";
+import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
 type Decision = "approve" | "deny" | "revoke";
 
@@ -206,11 +205,11 @@ const desktopLink = (address: string, fingerprint: string) =>
   `${address}#sha256=${fingerprint.replaceAll(":", "")}`;
 
 const deviceStatus = {
-  pending: { tone: "attention", label: "Pending" },
-  approved: { tone: "success", label: "Approved" },
-  denied: { tone: "neutral", label: "Denied" },
-  revoked: { tone: "neutral", label: "Revoked" },
-} as const satisfies Record<ClientAccessStatus, { tone: StatusTone; label: string }>;
+  pending: { kind: "attention", label: "Pending" },
+  approved: { kind: "success", label: "Approved" },
+  denied: { kind: "neutral", label: "Denied" },
+  revoked: { kind: "neutral", label: "Revoked" },
+} as const satisfies Record<ClientAccessStatus, { kind: SettingKind; label: string }>;
 
 /** Requests waiting for the owner come first, then devices that can still be revoked. */
 const listOrder: Record<ClientAccessStatus, number> = {
@@ -241,7 +240,7 @@ function DeviceList({
               title={
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{client.label}</span>
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                  <StatusBadge kind={status.kind}>{status.label}</StatusBadge>
                 </span>
               }
               description={

@@ -23,10 +23,15 @@ import { conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.t
 import { pendingArrivals } from "../wait-display.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
-import { AttentionChip } from "./run-attention.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 import { ContinueNow } from "./wait-arrivals.tsx";
 import { FlowInputTitleLine } from "./run-title-generation.tsx";
-import { clockTime, dayAndTime, executionStateLabel, StatePill } from "./execution-state.tsx";
+import {
+  clockTime,
+  dayAndTime,
+  executionStateLabel,
+  ExecutionStateBadge,
+} from "./execution-state.tsx";
 
 function blockAttention(run: RunDetail, blockId: string) {
   const pending = run.attention.filter((item) => item.blockId === blockId && !item.settledAt);
@@ -289,7 +294,7 @@ function ExecutionBlockTitle({
         >
           {block.name || "Unnamed block"}
         </span>
-        <StatePill state={state} />
+        <ExecutionStateBadge state={state} />
       </span>
       <span
         className={cn(
@@ -343,8 +348,8 @@ function executionFooters(
   if (attention.needsInput || attention.problem)
     footers.push(
       <span className={cn(footerClass, "bg-muted")}>
-        {attention.needsInput && <AttentionChip presentation="needs-input" />}
-        {attention.problem && <AttentionChip presentation="problem" />}
+        {attention.needsInput && <StatusBadge kind="needs-input" />}
+        {attention.problem && <StatusBadge kind="problem" />}
         {attention.needsInput !== attention.problem && (
           <span className="truncate text-muted-foreground">
             {attentionFooterText(block.kind, attention.needsInput)}

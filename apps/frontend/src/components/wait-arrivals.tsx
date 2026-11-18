@@ -5,7 +5,7 @@ import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
-import { clockTime, dayAndTime, StatePill } from "./execution-state.tsx";
+import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { sectionLabelClass } from "./page.tsx";
 
 const OUTCOME: Record<WaitArrival["state"], string> = {
@@ -87,7 +87,7 @@ export function WaitArrivals({ run, blockId }: { run: RunDetail; blockId: string
           >
             <div className="flex items-center gap-2">
               <p className="min-w-0 flex-1 text-sm font-medium">Arrival {number}</p>
-              <StatePill state={OUTCOME[arrival.state]} />
+              <ExecutionStateBadge state={OUTCOME[arrival.state]} />
             </div>
             {arrival.state === "pending" && run.gateOpen && (
               <div className="flex flex-col items-start gap-1">

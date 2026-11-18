@@ -10,16 +10,15 @@ import {
   SettingsGroup,
   SettingsPage,
   SettingsRow,
-  StatusPill,
-  type StatusTone,
 } from "../components/settings-page.tsx";
+import { StatusBadge, type SettingKind } from "../components/status-badge.tsx";
 import { targetNeedsAttention, useReportingState } from "../reporting-state.tsx";
 
-const statuses: Record<ReportingInstallation["status"], { label: string; tone: StatusTone }> = {
-  "not-installed": { label: "Not installed", tone: "neutral" },
-  installed: { label: "Installed", tone: "success" },
-  "needs-attention": { label: "Needs attention", tone: "attention" },
-  unsupported: { label: "Not available", tone: "neutral" },
+const statuses: Record<ReportingInstallation["status"], { label: string; kind: SettingKind }> = {
+  "not-installed": { label: "Not installed", kind: "neutral" },
+  installed: { label: "Installed", kind: "success" },
+  "needs-attention": { label: "Needs attention", kind: "attention" },
+  unsupported: { label: "Not available", kind: "neutral" },
 };
 const providerNames: Record<string, string> = {
   claudeAgent: "Claude",
@@ -76,9 +75,9 @@ export function RuntimeSettings() {
       description="Factory MCP lets Agents report progress to Factory. Install it once per harness on the host; new Runs require it."
       badge={
         attention > 0 && (
-          <StatusPill tone="attention">
+          <StatusBadge kind="attention">
             {attention} {attention === 1 ? "needs" : "need"} attention
-          </StatusPill>
+          </StatusBadge>
         )
       }
       action={
@@ -158,7 +157,7 @@ function TargetRow({
         control={(text) => (
           <>
             <span role="status">
-              <StatusPill tone={status.tone}>{status.label}</StatusPill>
+              <StatusBadge kind={status.kind}>{status.label}</StatusBadge>
             </span>
             {action && (
               <MutationGate>

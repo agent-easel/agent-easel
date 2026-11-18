@@ -7,18 +7,10 @@ import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
-import {
-  Archive,
-  Ellipsis,
-  Info,
-  Lock,
-  PanelRight,
-  TriangleAlert,
-  Unplug,
-  Workflow,
-} from "lucide-react";
+import { Archive, Ellipsis, Info, PanelRight, TriangleAlert, Unplug, Workflow } from "lucide-react";
 import { RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import { NotLiveMarker, RunHeaderStatus } from "../components/run-header-status.tsx";
 import { runFreshness, runStatus, type RunFreshness } from "../run-status.ts";
 import { GeneratingTitle } from "../components/run-title-generation.tsx";
@@ -288,12 +280,7 @@ function RunTopBar({
             </>
           )}
           <span className="truncate font-medium">{project?.title ?? "Project"}</span>
-          {unavailable && (
-            <span className="inline-flex items-center gap-1 rounded-sm border bg-muted px-1.5 py-px font-medium text-muted-foreground">
-              <Lock aria-hidden className="size-2.5" strokeWidth={1.75} />
-              Project unavailable
-            </span>
-          )}
+          {unavailable && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
           <span aria-hidden>·</span>
           <Workflow aria-hidden className="size-2.75 shrink-0" strokeWidth={1.75} />
           <span className="truncate font-medium">
@@ -361,18 +348,18 @@ function RunActionsMenu({ run }: { run: RunDetail }) {
   );
 }
 
-const canvasBadgeClass =
-  "flex h-7 items-center gap-1.5 rounded-md border border-attention/50 bg-attention/10 pr-2.5 pl-2.25 text-xs leading-4 whitespace-nowrap [&>svg]:size-3 [&>svg]:shrink-0";
-
 /** Figma RD15: shown only when the Flow changed after Start; the canvas keeps the captured revision. */
 function RevisionBadge({ run }: { run: RunDetail }) {
   if (run.currentFlowRevision === run.definitions.flow.revision) return null;
   return (
-    <p role="status" aria-label="Flow revision" className={canvasBadgeClass}>
-      <Info aria-hidden strokeWidth={1.75} className="text-attention" />
-      <span className="font-medium text-attention">
+    <p
+      role="status"
+      aria-label="Flow revision"
+      className="flex min-w-0 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs leading-4 whitespace-nowrap"
+    >
+      <StatusBadge kind="attention" icon={Info}>
         {run.currentFlowRevision === null ? "Flow removed since Start" : "Flow edited since Start"}
-      </span>
+      </StatusBadge>
       <span className="truncate text-muted-foreground">
         · this Run keeps the revision captured {dayAndTime(run.startedAt)}
       </span>
@@ -387,11 +374,12 @@ function ObservationBadge({ freshness }: { freshness: RunFreshness }) {
     <p
       role="status"
       aria-label="Run observation"
-      className={cn(canvasBadgeClass, "font-medium text-attention")}
+      className="flex min-w-0 items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-xs leading-4 whitespace-nowrap"
     >
-      <Unplug aria-hidden strokeWidth={1.75} />
-      Not live
-      <span className="font-normal text-muted-foreground">
+      <StatusBadge kind="attention" icon={Unplug}>
+        Not live
+      </StatusBadge>
+      <span className="truncate text-muted-foreground">
         ·{" "}
         {freshness.lastObservedAt
           ? `showing what Factory last observed at ${clockTime(freshness.lastObservedAt)}`

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { CircleX, Info, TriangleAlert } from "lucide-react";
+import { CirclePause, CircleX, Info, TriangleAlert } from "lucide-react";
 import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -247,13 +247,13 @@ function PreviewIssue({ issue }: { issue: TriggerPreviewIssue }) {
         {issue.title}
       </a>
       <span className={`${captionClass} shrink-0`}>{openedAgo(issue.createdAt)}</span>
-      <Badge
-        variant={startsNow ? "default" : "secondary"}
-        className={`gap-1.25 border-transparent py-0.5 pr-2 pl-1.75 ${startsNow ? "" : "text-subtle-foreground"}`}
-      >
-        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-        {startsNow ? "Starts now" : "Waits"}
-      </Badge>
+      {startsNow ? (
+        <StatusBadge kind="info">Starts now</StatusBadge>
+      ) : (
+        <StatusBadge kind="neutral" icon={CirclePause}>
+          Waits
+        </StatusBadge>
+      )}
     </li>
   );
 }

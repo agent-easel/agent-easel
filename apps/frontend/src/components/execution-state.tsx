@@ -1,41 +1,36 @@
-import { cn } from "@/lib/utils";
+import { StatusBadge, type StatusBadgeKind } from "./status-badge.tsx";
 
-/** Figma StateBadge: state-colored frame and dot; the label is the cue, color repeats it. */
-const colors: Record<string, string> = {
-  working: "border-status-working [&>span]:bg-status-working",
-  waiting: "border-status-waiting [&>span]:bg-status-waiting",
-  finished: "border-success [&>span]:bg-success",
-  sent: "border-primary [&>span]:bg-primary",
-  "pass-through": "border-success [&>span]:bg-success",
-  settled: "border-success [&>span]:bg-success",
-  forwarded: "border-success [&>span]:bg-success",
-  acknowledged: "border-success [&>span]:bg-success",
-  cancelled: "border-status-stopped [&>span]:bg-status-stopped",
-  archived: "border-status-stopped [&>span]:bg-status-stopped",
-  error: "border-destructive [&>span]:bg-destructive",
-  stopped: "border-status-stopped [&>span]:bg-status-stopped",
-  "not-started":
-    "border-border text-subtle-foreground [&>span]:border [&>span]:border-subtle-foreground",
+/** Recorded execution states in their canonical words; "error" reads as Problem. */
+const states: Record<string, { readonly kind: StatusBadgeKind; readonly label: string }> = {
+  working: { kind: "working", label: "Working" },
+  waiting: { kind: "waiting", label: "Waiting" },
+  queued: { kind: "waiting", label: "Queued" },
+  pending: { kind: "waiting", label: "Pending" },
+  sent: { kind: "info", label: "Sent" },
+  finished: { kind: "finished", label: "Finished" },
+  "pass-through": { kind: "finished", label: "Pass-through" },
+  settled: { kind: "finished", label: "Settled" },
+  forwarded: { kind: "finished", label: "Forwarded" },
+  acknowledged: { kind: "finished", label: "Acknowledged" },
+  error: { kind: "problem", label: "Problem" },
+  stopped: { kind: "stopped", label: "Stopped" },
+  cancelled: { kind: "stopped", label: "Cancelled" },
+  archived: { kind: "stopped", label: "Archived" },
+  "not-started": { kind: "neutral", label: "Not started" },
 };
 
-export function executionStateLabel(state: string) {
-  return state === "not-started" ? "not started" : state;
-}
+const executionState = (state: string) =>
+  states[state] ?? {
+    kind: "neutral" as const,
+    label: state.charAt(0).toUpperCase() + state.slice(1),
+  };
 
-/** Recorded execution state. The label is the cue; color repeats it. */
-export function StatePill({ state, className }: { state: string; className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 rounded-full border bg-muted px-2 py-0.75 text-2xs leading-3.5 font-medium whitespace-nowrap text-foreground",
-        colors[state] ?? "border-border [&>span]:bg-subtle-foreground",
-        className,
-      )}
-    >
-      <span aria-hidden="true" className="size-1.5 rounded-full" />
-      {executionStateLabel(state)}
-    </span>
-  );
+export const executionStateLabel = (state: string) => executionState(state).label;
+
+/** A recorded execution state as its status badge. */
+export function ExecutionStateBadge({ state }: { state: string }) {
+  const { kind, label } = executionState(state);
+  return <StatusBadge kind={kind}>{label}</StatusBadge>;
 }
 
 /** Wall-clock time of a recorded observation, as the Figma timeline and blocks show it. */

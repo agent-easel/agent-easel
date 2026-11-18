@@ -75,6 +75,20 @@ call-site overrides and styled wrapper elements used only to compensate for a pr
 Destructive Settle confirmation uses the shared alert dialog, initially focuses Cancel and restores
 focus to its opener (or the Run row after a row-menu action) on dismissal.
 
+Every status and field-state tag is one status badge: a 4 px rounded, 18 px high tag with an
+icon and a label in the state colour on its tint. Context such as a Block name or a time sits
+outside it as secondary text. Run and Block work states use the canonical labels **Working**
+(cyan), **Waiting** (indigo), **Needs input** (amber, never Waiting's indigo), **Problem** (red),
+**Finished** (green) and **Stopped** (neutral). Settings, field and list states use the Success,
+Attention, Error, Neutral, Checking and Info kinds with their own label, such as Connected,
+Installed, Not installed or Install failed; readiness reads **Ready** (Success) or **Not ready**
+(Error). The glyph changes only where the meaning needs it: Unplug for Disconnected, a key for
+authorization, a lock for Managed on the Factory host, a dashed circle for Not installed.
+
+A field that shows a state tag sets `aria-invalid` and `aria-describedby` pointing at the one
+message that explains it, as text next to the field or one card, never both. That message is a
+`status` live region, or an `alert` for an error.
+
 Every control needs a visible label or accessible name. Icon-only buttons also need a
 tooltip. Preserve meaningful accessible names used by the UI verification journeys.
 Unavailable choices in Agent execution settings stay visible and disabled, with their reason.
@@ -82,8 +96,8 @@ Long menus must stay within the viewport and scroll their choices without hiding
 or actions.
 
 Settings sections share one page template instead of styling their own headers and
-footnotes: a header with the title, a one-line description and optionally a status pill, the
-"Managed on the Factory host" chip and one primary action; then labelled cards of rows, each
+footnotes: a header with the title, a one-line description and optionally a status badge, the
+"Managed on the Factory host" badge and one primary action; then labelled cards of rows, each
 ending in one control; label/value rows for read-only facts; and closed disclosures for
 explanations and diagnostics. On/off settings use the switch, named by their row's title.
 

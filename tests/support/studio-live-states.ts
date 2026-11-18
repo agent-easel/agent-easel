@@ -98,10 +98,10 @@ export async function beforeRenamedDependency(fixtures: StudioFixtures, prefix: 
   const library = screen.getByRole("region", "Block library");
   const canvas = screen.getByRole("region", "Flow canvas");
   await expect(library.getByRole("button", `Add ${agent.name}`, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await screen.getByRole("button", "Human step Review", { exact: true }).tap();
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await canvas.press("ArrowRight");
@@ -172,7 +172,7 @@ export async function expectRestoredReadiness(
   state: Awaited<ReturnType<typeof beforeRestoredReadiness>>,
 ) {
   const { screen } = state;
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   return { ...state };
 }
@@ -778,7 +778,7 @@ export async function beforeChangedDirtyDependency(fixtures: StudioFixtures, pre
   await app.open(`/studio/flows/${flow}`);
   await screen.getByLabel("Flow name").fill(`Live · ${prefix} · Canvas Flow edited`);
   await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   const handoff = { id: "handoff", name: "handoff", description: "", messageRequired: false };
   return {
     app: fixtures.app,

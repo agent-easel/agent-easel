@@ -348,6 +348,7 @@ function RuleRow({
       </div>
       <p
         id={`${id}-detail`}
+        role={entry === undefined ? undefined : "alert"}
         className={cn(
           "truncate pl-7 text-xs",
           entry === undefined ? "text-muted-foreground" : "text-destructive",

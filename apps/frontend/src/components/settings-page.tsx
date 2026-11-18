@@ -1,6 +1,6 @@
 import { useId, type ReactNode } from "react";
 import { ChevronRight, Lock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "./status-badge.tsx";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button.tsx";
@@ -36,10 +36,9 @@ export function SettingsPage({
           <h2 className="text-lg leading-tight font-semibold text-foreground">{title}</h2>
           {badge}
           {hostManaged && (
-            <span className="inline-flex items-center gap-1 rounded-full border py-0.5 pr-2 pl-1.5 text-2xs font-medium text-muted-foreground">
-              <Lock aria-hidden className="size-3" strokeWidth={1.5} />
+            <StatusBadge kind="neutral" icon={Lock}>
               Managed on the Factory host
-            </span>
+            </StatusBadge>
           )}
           {action && <div className="ml-auto flex items-center">{action}</div>}
         </div>
@@ -173,25 +172,5 @@ export function SettingsDisclosure({
         {children}
       </CollapsibleContent>
     </Collapsible>
-  );
-}
-
-export type StatusTone = "success" | "attention" | "neutral" | "error" | "info";
-
-const statusVariants = {
-  success: "success",
-  attention: "attention",
-  neutral: "secondary",
-  error: "destructive",
-  info: "info",
-} as const satisfies Record<StatusTone, string>;
-
-/** A state with a dot in its tone; the label carries the meaning, never the color alone. */
-export function StatusPill({ tone, children }: { tone: StatusTone; children: ReactNode }) {
-  return (
-    <Badge variant={statusVariants[tone]} className="gap-1.5 pr-2 pl-1.75">
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {children}
-    </Badge>
   );
 }

@@ -12,6 +12,7 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
+  BellRing,
   CircleCheck,
   CircleDashed,
   CirclePause,
@@ -38,7 +39,7 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
-import { RunStatusChip } from "./run-status-chip.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { ContextMenuItem as RowMenuItem } from "./ui/context-menu";
@@ -721,10 +722,16 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
           {run.settlement === "stopping" ? "Stopping" : "Settle unresolved"}
         </span>
       )}
-      {run.presentation.woke && <RunStatusChip kind="woke" />}
-      {run.attention.needsInput && <RunStatusChip kind="needs-input" />}
-      {run.attention.problem && <RunStatusChip kind="problem" />}
-      {run.project.availability !== "available" && <RunStatusChip kind="project-unavailable" />}
+      {run.presentation.woke && (
+        <StatusBadge kind="attention" icon={BellRing}>
+          Woke
+        </StatusBadge>
+      )}
+      {run.attention.needsInput && <StatusBadge kind="needs-input" />}
+      {run.attention.problem && <StatusBadge kind="problem" />}
+      {run.project.availability !== "available" && (
+        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+      )}
     </>
   );
 }

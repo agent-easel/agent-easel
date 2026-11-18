@@ -5,7 +5,7 @@ import type {
   FlowDraft,
   FlowDuplicatePlanAgent,
 } from "@t3-factory/contracts";
-import { Bot, ChevronRight, TriangleAlert, Workflow } from "lucide-react";
+import { Bot, ChevronRight, Copy, Link, TriangleAlert, Workflow } from "lucide-react";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "./status-badge.tsx";
 import type { OwnerMove } from "../revisioned-draft.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
 import {
@@ -407,13 +408,13 @@ function DuplicateAgentRow({
           />
         </fieldset>
       ) : agent.choice === "copy" ? (
-        <span className="shrink-0 rounded-sm border border-brand-cyan bg-accent px-2 py-1 text-2xs leading-none font-medium text-brand-cyan">
+        <StatusBadge kind="neutral" icon={Copy}>
           Copied into target
-        </span>
+        </StatusBadge>
       ) : (
-        <span className="shrink-0 rounded-sm border bg-accent px-2 py-1 text-2xs leading-none font-medium text-muted-foreground">
+        <StatusBadge kind="neutral" icon={Link}>
           Kept
-        </span>
+        </StatusBadge>
       )}
     </li>
   );

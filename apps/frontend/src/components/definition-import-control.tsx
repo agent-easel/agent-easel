@@ -10,7 +10,7 @@ import type {
 } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -389,9 +389,9 @@ function ImportModelRow({
         <Label id={`${pickerId}-name`} htmlFor={pickerId} className="text-sm font-medium">
           {row.name}
         </Label>
-        <Badge variant={row.match.status === "matched" ? "success" : "secondary"}>
+        <StatusBadge kind={row.match.status === "matched" ? "success" : "neutral"}>
           {matchLabel[row.match.status]}
-        </Badge>
+        </StatusBadge>
         {!selection && <NeedsModel />}
       </div>
       {row.hint && <p className="text-xs text-muted-foreground">{hintText(row.hint)}</p>}

@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
 import { cn } from "../lib/utils.ts";
 import { fieldLabelClass, sectionLabelClass } from "./page.tsx";
-import { RunStatusChip } from "./run-status-chip.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 
 const attentionLabel = (kind: RunAttention["kind"]) =>
   ({
@@ -31,11 +31,6 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
     "condition-integrity": "Condition integrity problems",
     "settlement-unresolved": "Settle could not stop workers",
   })[kind];
-
-/** Needs input / Problem on Run-local surfaces: the same Run/StatusChip as Run navigation. */
-export function AttentionChip({ presentation }: { presentation: "needs-input" | "problem" }) {
-  return <RunStatusChip kind={presentation} />;
-}
 
 function attentionExplanation(kind: RunAttention["kind"]) {
   switch (kind) {
@@ -240,7 +235,7 @@ function PendingMatter({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        {answerable && <AttentionChip presentation={presentation} />}
+        {answerable && <StatusBadge kind={presentation} />}
         <h3 className="truncate text-2xs font-medium text-muted-foreground">
           {attentionSubject(item)}
         </h3>
@@ -360,7 +355,7 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
   return (
     <article className="flex flex-col gap-1.5 rounded-lg border bg-muted p-3 text-sm">
       <div className="flex min-w-0 items-center gap-2">
-        <AttentionChip presentation={attentionPresentation(item.kind)} />
+        <StatusBadge kind={attentionPresentation(item.kind)} />
         <h3 className="truncate text-2xs font-medium text-muted-foreground">
           {attentionSubject(item)}
         </h3>

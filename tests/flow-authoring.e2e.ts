@@ -14,6 +14,7 @@ import {
   chooseFlowAction,
   expectSavedAgentRevision,
   openEditedStudioFlow,
+  saveFlowWithReadiness,
 } from "./support/studio.ts";
 import {
   createStudioFlow,
@@ -104,11 +105,9 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await expect(wires).toHaveAttribute("data-connection-count", "4");
   await expect(screen.getByRole("button", "Delete connection")).toBeHidden();
   await expect(screen.getByRole("region", "Flow canvas")).toBeFocused();
-  await screen.getByRole("button", "Save Flow").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
-  await expect(screen.getByText("Not execution-ready")).toBeVisible();
+  await saveFlowWithReadiness(screen, /^Not ready/);
   // The issue list covers the canvas's top left, where the Flow input starts.
-  await screen.getByRole("button", /Not execution-ready/).tap();
+  await screen.getByRole("button", /^Not ready/).tap();
   const flowInputPort = screen.getByRole("button", "Connect Flow input");
   await flowInputPort.dragTo(coder);
   await expect(wires).toHaveAttribute("data-flow-input-count", "1");
@@ -137,7 +136,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await browser.keyboard.press("Escape");
   await expect(screen.getByText("Draft changed · Check readiness")).toBeVisible();
   await screen.getByRole("button", "Check readiness").tap();
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await screen.getByRole("button", "Save Flow").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
 
@@ -168,7 +167,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await browser.reload();
   await expect(screen.getByLabel("Flow name")).toHaveValue("My preserved draft");
   await expect(screen.getByRole("button", "Workspace: New worktree · develop")).toBeVisible();
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   // With no unsaved edits, the editor switches to a revision saved elsewhere.
   await renameFlow(app.baseUrl, saved.id, "Renamed elsewhere");
   await expect(screen.getByText("Updated to revision 6")).toBeVisible();
@@ -225,7 +224,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await screen.getByRole("button", "Connect exit github-url of Implement").dragTo(human);
   await expect(screen.getByRole("article", "Block Implement")).toContainText("local · message");
   await screen.getByRole("button", "Save Flow").tap();
-  await expect(screen.getByText("Graph ready", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   await app.screenshot("inherited-and-local-exits");
   await panel.getByLabel("Exit name", { exact: true }).fill("finish");

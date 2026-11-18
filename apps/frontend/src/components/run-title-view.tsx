@@ -4,7 +4,7 @@ import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
-import { TitleMark, TitleStatePill, titleStateLabel } from "./run-title-generation.tsx";
+import { TitleMark, TitleStateBadge, titleStateLabel } from "./run-title-generation.tsx";
 
 /** A deadline is 30 seconds after Start, so it reads to the second. */
 function secondsTime(at: string) {
@@ -59,7 +59,7 @@ export function RunTitleView({
               Beside the Flow · not a Block
             </p>
           </div>
-          <TitleStatePill state={state} />
+          <TitleStateBadge state={state} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

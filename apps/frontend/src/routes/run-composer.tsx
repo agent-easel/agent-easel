@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import {
   Notice,
   NoticeButton,
@@ -267,9 +268,7 @@ function FlowFieldValue({
   return (
     <>
       <span className="min-w-0 truncate font-medium">{value}</span>
-      {flow && !flowCanLaunch(flow) && (
-        <span className="shrink-0 text-2xs tracking-label text-destructive">Not ready</span>
-      )}
+      {flow && !flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
     </>
   );
 }
@@ -288,7 +287,8 @@ function FlowChoice({ flow, busy }: { flow: FlowDraft; busy: boolean }) {
       aria-label={label}
       className={flowRadioItemClass}
     >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{flow.name}</span>
+      {!flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
     </DropdownMenuRadioItem>
   );
 }
