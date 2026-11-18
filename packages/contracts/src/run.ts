@@ -279,6 +279,12 @@ export interface RunSettlementWorker {
   readonly state: "executing" | "stopping" | "finished" | "unresolved";
   /** When Factory requested T3 Stop for this worker in the current attempt. */
   readonly stopRequestedAt: string | null;
+  /**
+   * How T3 answered this attempt's Stop: `unsupported` when the connected T3 cannot stop worker
+   * threads, so only the owner can stop the worker in T3; `failed` when T3 refused the request or
+   * Factory could not send it, which a retry may repair. Null before an answer.
+   */
+  readonly stopOutcome: "acknowledged" | "failed" | "unsupported" | null;
   /** What keeps the worker from counting as finished, or why it could not be stopped. */
   readonly problem: string | null;
 }

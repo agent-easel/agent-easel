@@ -8,7 +8,6 @@ import type {
   RunTitleGeneration,
 } from "@t3-factory/contracts";
 import {
-  CircleAlert,
   CircleCheck,
   CirclePause,
   CircleStop,
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import {
+  attentionActivityText,
   blockActivityText,
   blockVisits,
   continuationPromptVisit,
@@ -35,7 +35,7 @@ import { ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { RootWork } from "./run-coordination-controls.tsx";
 import { BindingLink, bindingRole, CoordinatorActivations } from "./run-coordination.tsx";
 import { RunInitialPrompt } from "./run-prompt.tsx";
-import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
+import { BranchName, repositorySummary, RunRepositories } from "./run-repositories.tsx";
 import { InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
@@ -56,7 +56,7 @@ const stateIcon: Record<RunStateKind, { Icon: LucideIcon; className: string }> =
   waiting: { Icon: CirclePause, className: "text-status-waiting" },
   "needs-input": { Icon: MessageCircleQuestionMark, className: "text-attention" },
   finished: { Icon: CircleCheck, className: "text-success" },
-  problem: { Icon: CircleAlert, className: "text-destructive" },
+  problem: { Icon: TriangleAlert, className: "text-destructive" },
   stopped: { Icon: CircleStop, className: "text-status-stopped" },
 };
 
@@ -91,6 +91,8 @@ function sentContinuation(run: RunDetail, blockId: string) {
 function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind: RunStateKind) {
   const visits = blockVisits(run, block);
   const latest = visits.at(-1);
+  const attention = attentionActivityText(run, block, recorded);
+  if (attention) return attention;
   if (block.kind === "condition") return conditionActivityText(run, block.id);
   if (kind === "needs-input")
     return block.kind === "human"
@@ -132,7 +134,7 @@ function RunProgress({ run }: { run: RunDetail }) {
               key={block.id}
               className={cn(
                 "flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5",
-                (kind === "working" || kind === "waiting" || kind === "needs-input") && "bg-muted",
+                kind !== "finished" && kind !== "stopped" && "bg-muted",
               )}
             >
               <icon.Icon
@@ -157,8 +159,40 @@ function RunProgress({ run }: { run: RunDetail }) {
   );
 }
 
+/** Figma RD39 and RD41: the branch of a worktree Run, or that T3 is still preparing it. */
+function RunBranch({ run }: { run: RunDetail }) {
+  const { workspace } = run;
+  if (workspace.mode !== "worktree" || workspace.state === "failed") return null;
+  const bound = workspace.state === "bound" ? workspace.branch : null;
+  return (
+    <InspectorSection title="Branch" label="Run branch">
+      <div className="flex min-w-0 items-start gap-2">
+        <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {bound ? (
+            <BranchName branch={bound} />
+          ) : (
+            <p className="text-sm text-foreground">Preparing worktree</p>
+          )}
+          <p className="text-xs text-subtle-foreground">
+            {bound ? `Own worktree from ${workspace.baseRef}` : `From ${workspace.baseRef}`}
+          </p>
+        </div>
+      </div>
+    </InspectorSection>
+  );
+}
+
+/** Worker repositories besides the Run's own worktree branch, which its Branch section shows. */
+function otherRepositories(run: RunDetail) {
+  const own = run.workspace.mode === "worktree" ? run.workspace.branch : null;
+  return run.repositories.map((worker) =>
+    own && worker.branch === own ? { ...worker, branch: null } : worker,
+  );
+}
+
 function repositoriesTitle(run: RunDetail) {
-  const { branches, pullRequests } = repositorySummary(run.repositories);
+  const { branches, pullRequests } = repositorySummary(otherRepositories(run));
   const title = [
     branches.length && (branches.length > 1 ? "branches" : "branch"),
     pullRequests.length && (pullRequests.length > 1 ? "pull requests" : "pull request"),
@@ -199,7 +233,8 @@ const worktreeNote = {
   failed: ". No worker falls back to the project checkout.",
 };
 
-/** The workspace every worker of the Run shares, as T3 reported it. */
+/** The workspace every worker of the Run shares, as T3 reported it. A worktree T3 could not create
+ * is the Run's Attention card, not a fact here. */
 function RunWorkspace({ run }: { run: RunDetail }) {
   const { workspace } = run;
   if (workspace.mode === "checkout")
@@ -220,31 +255,15 @@ function RunWorkspace({ run }: { run: RunDetail }) {
         </p>
       )}
       {workspace.state === "preparing" && (
-        <p className="text-sm text-emphasis-foreground">Preparing workspace</p>
+        <p className="text-sm text-emphasis-foreground">Preparing worktree</p>
       )}
       {workspace.state === "failed" && (
-        <p className="flex items-center gap-1.5 text-sm text-destructive">
-          <TriangleAlert aria-hidden className="size-3.5 shrink-0" strokeWidth={1.75} />
-          Workspace failed
-        </p>
+        <p className="text-sm text-emphasis-foreground">Worktree not created</p>
       )}
       <p className={secondaryTextClass}>
         New worktree from {workspace.baseRef}
         {worktreeNote[workspace.state]}
       </p>
-      {workspace.problem && (
-        <p
-          role="status"
-          className={cn(
-            "rounded-md border p-3 text-xs text-emphasis-foreground",
-            workspace.state === "failed"
-              ? "border-destructive/40 bg-destructive/8"
-              : "border-attention/40 bg-attention/8",
-          )}
-        >
-          {workspace.problem}
-        </p>
-      )}
     </InspectorSection>
   );
 }
@@ -359,9 +378,10 @@ function RunOverview({
       <RunAttentionDetails run={run} />
       <PendingIntents run={run} />
       <RunProgress run={run} />
-      {run.repositories.some((worker) => worker.branch || worker.pullRequests.length > 0) && (
+      <RunBranch run={run} />
+      {otherRepositories(run).some((worker) => worker.branch || worker.pullRequests.length > 0) && (
         <InspectorSection title={repositoriesTitle(run)} label="Run repositories">
-          <RunRepositories workers={run.repositories} links />
+          <RunRepositories workers={otherRepositories(run)} links />
         </InspectorSection>
       )}
       {run.origin && <RunOriginSection origin={run.origin} />}

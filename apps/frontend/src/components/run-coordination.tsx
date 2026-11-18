@@ -1,6 +1,7 @@
 import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
+import { attentionLinks } from "./run-attention.tsx";
 import { ResultCard } from "./run-result.tsx";
 
 export const bindingRole: Record<RunThreadBinding["role"], string> = {
@@ -37,13 +38,15 @@ function Activation({ run, activation }: { run: RunDetail; activation: RunActiva
       .findIndex((a) => a.id === activation.id) + 1;
   const report = run.reports.findLast((r) => r.activationId === activation.id);
   const name = run.blocks.find((b) => b.blockId === activation.blockId)?.name ?? activation.blockId;
+  // A thread a pending Attention card already opens gets no second link here.
+  const linked = attentionLinks(run);
   const coordination = (
     <>
       {run.lifecycle !== "archived" && activation.problem && (
         <p className="text-xs text-attention">{activation.problem}</p>
       )}
       {run.threadBindings
-        .filter((b) => b.blockId === activation.blockId)
+        .filter((b) => b.blockId === activation.blockId && !(b.link && linked.has(b.link)))
         .map((binding) => (
           <div key={binding.id} className="flex flex-col gap-1 text-xs">
             <BindingLink binding={binding} />
@@ -64,7 +67,10 @@ function Activation({ run, activation }: { run: RunDetail; activation: RunActiva
       </ResultCard>
     );
   const workers = run.threadBindings.flatMap((binding) =>
-    binding.blockId === activation.blockId && binding.role === "worker" && binding.link
+    binding.blockId === activation.blockId &&
+    binding.role === "worker" &&
+    binding.link &&
+    !linked.has(binding.link)
       ? [{ id: binding.id, link: binding.link }]
       : [],
   );

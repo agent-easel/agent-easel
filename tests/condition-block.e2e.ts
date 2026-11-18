@@ -27,7 +27,7 @@ async function openTimeline(
   return screen.getByRole("region", "Timeline");
 }
 
-test("a Condition added from the library is ready with only Otherwise, and a rule's readiness issue focuses that rule", async ({
+test("a Condition added from the library is ready once its Otherwise is connected, and a rule's readiness issue focuses that rule", async ({
   app,
   screen,
   browser,
@@ -46,7 +46,17 @@ test("a Condition added from the library is ready with only Otherwise, and a rul
   await screen
     .getByRole("button", "Connect exit finish of Coder")
     .dragTo(screen.getByRole("article", "Block Escalate"));
-  await saveFlowWithReadiness(screen, /^Ready/);
+  await saveFlowWithReadiness(screen, /^Not ready/);
+  await expect(
+    screen.getByRole(
+      "button",
+      /Escalate: connect output "Otherwise"\. A Condition output cannot end a branch\./,
+    ),
+  ).toBeVisible();
+  await screen
+    .getByRole("button", "Connect output Otherwise of Escalate")
+    .dragTo(screen.getByRole("article", "Block Coder"));
+  await saveFlowWithReadiness(screen, /^Ready/, 3);
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 1 output name").fill("Human");
@@ -55,7 +65,7 @@ test("a Condition added from the library is ready with only Otherwise, and a rul
   await screen.getByLabel("Rule 2 output name").fill("End branch");
   await screen.getByLabel("Rule 2 from arrival").fill("5");
   await screen.getByRole("button", "Save Flow").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 4");
   await expect(screen.getByRole("article", "Block Escalate")).toContainText(
     /from arrival 5 onward\s*End branch/,
   );
@@ -95,6 +105,7 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
     [
       ["human", "review"],
       ["end", "review"],
+      ["otherwise", "worker"],
     ],
   );
   await app.open(`/studio/flows/${flowId}`);
@@ -123,6 +134,7 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
   expect(condition.rules).toEqual([{ id: "end", name: "End branch", fromArrival: 5 }]);
   expect(saved.graph.connections.filter((wire) => wire.sourceBlockId === "escalate")).toEqual([
     { sourceBlockId: "escalate", exitId: "end", targetBlockId: "review" },
+    { sourceBlockId: "escalate", exitId: "otherwise", targetBlockId: "worker" },
   ]);
 });
 
@@ -194,7 +206,7 @@ test("removing a Flow with only an invalid arrival number opens the Flow list wi
   expect((await fetch(new URL(`/api/flows/${flowId}`, app.baseUrl))).ok).toBe(false);
 });
 
-test("a Condition authored and wired in Studio routes a started Run's arrivals by number to Otherwise, a rule and an unwired output, shown on the canvas, inspector and Timeline", async ({
+test("a Condition authored and wired in Studio routes a started Run's arrivals by number to Otherwise and its rules, shown on the canvas, inspector and Timeline", async ({
   app,
   screen,
   browser,
@@ -230,19 +242,27 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
   await screen.getByRole("button", "Save Flow").tap();
+  await expect(
+    screen.getByRole(
+      "button",
+      /Escalate: connect output "Stop"\. A Condition output cannot end a branch\./,
+    ),
+  ).toBeVisible();
+  await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(review);
+  await screen.getByRole("button", "Save Flow").tap();
   const saveStatus = screen.getByRole("status", "Flow save status");
-  await expect(saveStatus).toContainText("Saved · Revision 2");
+  await expect(saveStatus).toContainText("Saved · Revision 3");
   await expect(screen.getByRole("button", /rule 2 "Stop" is never selected/)).toBeVisible();
   await app.screenshot("condition-authored-readiness-row");
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("listitem", "Rule 2 Stop").getByRole("button", "Move rule up").tap();
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
   await screen.getByRole("button", "Save Flow").tap();
-  await expect(saveStatus).toContainText("Saved · Revision 3");
+  await expect(saveStatus).toContainText("Saved · Revision 4");
   await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
-  await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ finish here");
+  await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ Review");
   await expect(screen.getByRole("listitem", "Rule 2 Ask a reviewer")).toContainText(
     "→ Review, Coder",
   );
@@ -262,6 +282,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
     { sourceBlockId: condition.id, exitId: ask.id, targetBlockId: humanStep.id },
     { sourceBlockId: condition.id, exitId: ask.id, targetBlockId: "worker" },
     { sourceBlockId: condition.id, exitId: "otherwise", targetBlockId: "worker" },
+    { sourceBlockId: condition.id, exitId: stop.id, targetBlockId: humanStep.id },
   ]);
   const { id: runId } = await fixture.scenarios.ensure({
     key: "condition-authored",
@@ -290,9 +311,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await expect(asked).toContainText("→ Review");
   await expect(asked).toContainText("→ Coder");
   await expect(asked).toContainText("Acknowledged");
-  await expect(details.getByRole("listitem", "Arrival 5, Stop, ends here")).toContainText(
-    "Output not connected · this arrival ends here",
-  );
+  await expect(details.getByRole("list", "Arrival 5 recipients")).toContainText("→ Review");
   const timeline = await openTimeline(app, screen, "condition-authored-run-arrivals");
   await expect(timeline).toContainText("arrival 1 → Otherwise");
   await expect(timeline).toContainText("arrival 3 → Ask a reviewer");
@@ -428,7 +447,7 @@ test("a Condition's Run block reads Not visited before its first arrival and eac
   await app.screenshot("condition-run-unvisited");
 });
 
-test("selecting a routed Condition lists each arrival's route, recipient dispositions and the arrival that ended there, with one Timeline row per arrival", async ({
+test("selecting a routed Condition lists each arrival's route and recipient dispositions, with one Timeline row per arrival", async ({
   app,
   screen,
   browser,
@@ -457,9 +476,12 @@ test("selecting a routed Condition lists each arrival's route, recipient disposi
   const recipients = details.getByRole("list", "Arrival 1 recipients");
   await expect(recipients).toContainText("Your decision");
   await expect(recipients).toContainText("Acknowledged");
-  await expect(
-    details.getByRole("listitem", "Arrival 2, Later approvals, ends here"),
-  ).toContainText("Matched rule Later approvals · selected Later approvals");
+  await expect(details.getByRole("listitem", "Arrival 2, Later approvals")).toContainText(
+    "Matched rule Later approvals · selected Later approvals",
+  );
+  await expect(details.getByRole("list", "Arrival 2 recipients")).toContainText(
+    "Note the extra approval",
+  );
   await expect(screen.getByRole("region", "Run attention")).toHaveCount(0);
   const timeline = await openTimeline(app, screen, "condition-run-arrivals");
   await expect(timeline).toContainText("arrival 1 → Otherwise");

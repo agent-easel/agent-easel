@@ -1,12 +1,19 @@
 import type { ReactNode } from "react";
-import type { FlowBlock, FlowGraph, RunBlock, RunDetail } from "@t3-factory/contracts";
+import type {
+  FlowBlock,
+  FlowGraph,
+  RunAttention,
+  RunBlock,
+  RunDetail,
+} from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
 import { selectExecutionTargets } from "../execution-focus.ts";
 import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
 import { capturedExits, exitRecipients, type CanvasBlock } from "../flow-graph.ts";
-import { blockAttention, blockStateKind, chosenExitIds } from "../run-block-state.ts";
+import { blockStateKind, chosenExitIds } from "../run-block-state.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
 import {
   CanvasSurface,
@@ -153,6 +160,52 @@ function outcomeText(run: RunDetail, block: FlowBlock) {
   return `→ ${exitDisplayName(exit)} · ${clockTime(at)}`;
 }
 
+/** A Block's activity line for each pending matter kind that has one, from when it appeared. */
+const MATTER_LINES: Partial<Record<RunAttention["kind"], (at: string) => string>> = {
+  "execution-failed": (at) => `Failed in T3 · ${at}`,
+  "condition-integrity": (at) => `Can’t count arrivals · ${at}`,
+  "native-request": (at) => `Waiting for permission in T3 · since ${at}`,
+};
+
+/** A missing or rejected report's activity line, from the earliest of its matters. */
+function reportLine(run: RunDetail, recorded: RunBlock, pending: readonly RunAttention[]) {
+  const reports = pending.filter(
+    (item) => item.kind === "missing-report" || item.kind === "report-problem",
+  );
+  const first = reports[0];
+  if (!first) return null;
+  const ids = reports.map((item) => item.id);
+  if (reportRecoveryState(run, recorded, ids).state === "no-valid-report")
+    return `No valid report · ${clockTime(recorded.observedAt ?? first.appearedAt)}`;
+  const label = reports.some((item) => item.kind === "report-problem")
+    ? "No accepted report"
+    : "No report";
+  return `${label} · ${clockTime(first.appearedAt)}`;
+}
+
+/**
+ * What a Block's pending matter, or a settlement still waiting for it, means for its own activity:
+ * "Failed in T3 · 22:16", "No report · 22:16", "Writing a report · since 22:18" or "Still running
+ * in T3 · since 22:14". Null when nothing is pending for it.
+ */
+export function attentionActivityText(
+  run: RunDetail,
+  block: FlowBlock,
+  recorded: RunBlock | undefined,
+) {
+  if (!recorded) return null;
+  const requested = pendingRecovery(run, recorded);
+  if (requested) return `Writing a report · since ${clockTime(requested.requestedAt)}`;
+  const pending = run.attention.filter((item) => item.blockId === block.id && !item.settledAt);
+  const matter = pending.find((item) => MATTER_LINES[item.kind]);
+  if (matter) return MATTER_LINES[matter.kind]!(clockTime(matter.appearedAt));
+  const report = reportLine(run, recorded, pending);
+  if (report) return report;
+  if (!run.settlement || recorded.state !== "working") return null;
+  const start = blockVisits(run, block).at(-1)?.start ?? recorded.observedAt;
+  return `Still running in T3${start ? ` · since ${clockTime(start)}` : ""}`;
+}
+
 /** Recorded visit times for the activity line; no progress is inferred. A Condition shows its
  * routing summary instead, a finished Block the exit it took. */
 export function blockActivityText(
@@ -160,6 +213,8 @@ export function blockActivityText(
   block: FlowBlock,
   recorded: RunBlock | undefined,
 ) {
+  const attention = attentionActivityText(run, block, recorded);
+  if (attention) return attention;
   if (block.kind === "condition") return conditionActivityText(run, block.id);
   const visits = blockVisits(run, block);
   const latest = visits[visits.length - 1];
@@ -200,7 +255,7 @@ function ExecutionExit({
       <span className="flex-1" />
       <span
         className={cn(
-          "truncate text-xs font-medium",
+          "truncate pr-1 text-xs font-medium",
           chosen ? "text-foreground" : "text-muted-foreground",
         )}
       >
@@ -211,10 +266,6 @@ function ExecutionExit({
       </span>
     </>
   );
-}
-
-function problemFooterText(kind: FlowBlock["kind"]) {
-  return kind === "condition" ? "Settle or Archive the Run" : "Open in T3 to investigate";
 }
 
 type BlockObservation = ReturnType<typeof blockObservation>;
@@ -258,6 +309,7 @@ function activityLine(
     };
   }
   const kind = blockStateKind(run, recorded);
+  const attention = attentionActivityText(run, block, recorded);
   const color =
     kind === "working"
       ? "text-status-working"
@@ -266,6 +318,7 @@ function activityLine(
         : kind === null
           ? "text-muted-foreground"
           : "text-foreground";
+  if (attention) return { text: attention, color };
   if (state === "working" && recorded?.workingMessage)
     return { text: recorded.workingMessage, color };
   const waiting = state === "waiting" && block.kind === "wait" && waitingText(run, block.id);
@@ -320,8 +373,7 @@ function ExecutionBlockTitle({
   );
 }
 
-/** A block draws at most an attention footer (a Wait: its Continue now footer instead) and an
- * observation footer. */
+/** A block draws at most a Wait's Continue now footer and an observation footer. */
 const MAX_FOOTERS = 2;
 
 const footerClass =
@@ -335,29 +387,20 @@ function continuableArrival(run: RunDetail, block: FlowBlock) {
   return others.length ? undefined : only;
 }
 
-/** Independent footers: attention chips and observation strips never encode the state. */
+/** Independent footers: Continue now and observation strips never encode the state, which the
+ * Block's badge, outline and activity line show. */
 function executionFooters(
   run: RunDetail,
   block: FlowBlock,
   recorded: RunBlock | undefined,
   observation: BlockObservation,
 ) {
-  const attention = blockAttention(run, recorded);
   const footers: ReactNode[] = [];
   const continuable = continuableArrival(run, block);
   if (continuable)
     footers.push(
       <span className={cn(footerClass, "bg-muted [&>p]:truncate")}>
         <ContinueNow arrival={continuable} label={`Continue ${block.name || "Wait"} now`} />
-      </span>,
-    );
-  // Needs input shows in the Block's badge, and so does a failed Block's Problem; any other
-  // Problem keeps its own footer.
-  if (attention.problem && recorded?.state !== "error")
-    footers.push(
-      <span className={cn(footerClass, "bg-muted")}>
-        <StatusBadge kind="problem" />
-        <span className="truncate text-muted-foreground">{problemFooterText(block.kind)}</span>
       </span>,
     );
   if (observation === "stale")
@@ -455,7 +498,8 @@ function executionBlock(
   return {
     className: cn(
       frameColor[state ?? "not-started"],
-      selected && "border-primary ring-1 ring-primary",
+      // The selection ring sits outside the state outline, which keeps its colour.
+      selected && "ring-2 ring-primary ring-offset-1 ring-offset-background",
     ),
     press: {
       // Continue now is its own control, so it sits outside the press target.

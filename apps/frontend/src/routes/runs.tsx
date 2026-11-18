@@ -1,6 +1,5 @@
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
-import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { RunOriginMeta } from "../components/run-origin.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
@@ -224,7 +223,6 @@ function RunDetailView({
               <RunAttentionDetails run={run} />
             </div>
           )}
-          {run.settlement && <RunSettlementSection id={run.id} settlement={run.settlement} />}
           <RunTimeline run={run} selectedBlockId={selected} />
         </div>
         {inspectorOpen && (
@@ -286,7 +284,11 @@ function RunTopBar({
           <span aria-hidden>·</span>
           <Workflow aria-hidden className="size-2.75 shrink-0" strokeWidth={1.75} />
           <RunFlowName run={run} />
-          <span className="tracking-label">· Started {dayAndTime(run.startedAt)}</span>
+          <span className="tracking-label">
+            {run.settlement
+              ? `· Settle requested ${dayAndTime(run.settlement.requestedAt)}`
+              : `· Started ${dayAndTime(run.startedAt)}`}
+          </span>
           {run.origin && <RunOriginMeta origin={run.origin} />}
         </p>
       </div>

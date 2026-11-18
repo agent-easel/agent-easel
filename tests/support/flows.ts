@@ -119,10 +119,11 @@ export async function saveSingleAgentFlow(
 
 /**
  * Saves a new ready checkout Flow at the definition size limit: the Flow input starts one block of
- * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate holding as many rules as a save
- * request can carry while staying 1,000 bytes under the limit, so a short rename still saves. Rules
- * have ID-length IDs, short names (`Route N`) and strictly descending thresholds down to 2; the
- * last rule and Otherwise reach Human step Review.
+ * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate. Every
+ * Condition output needs a wire, so Escalate holds as many rules as the connection limit leaves
+ * room for, each named `Route N` and padded so the save request stays 1,000 bytes under the
+ * size limit and a short rename still saves. Rules have ID-length IDs and strictly descending
+ * thresholds down to 2; every rule and Otherwise reach Human step Review.
  */
 export async function saveConditionAtSizeLimit(
   baseUrl: string | undefined,
@@ -164,27 +165,33 @@ export async function saveConditionAtSizeLimit(
   };
   const body = { name, workspace: { mode: "checkout" }, graph };
   const budget = DEFINITION_REQUEST_LIMIT_BYTES - 1_000;
-  const withRules = (count: number) => {
+  // The Agent's wire and Otherwise's take two of the connection limit.
+  const count = CONNECTION_LIMIT - 2;
+  const withPadding = (padding: number) => {
     condition.rules = Array.from({ length: count }, (_, index) => ({
       id: `rule-${String(index).padStart(31, "0")}`,
-      name: `Route ${index + 1}`,
+      name: `Route ${index + 1}${padding ? ` ${"·".repeat(padding)}` : ""}`,
       fromArrival: count - index + 1,
     }));
-    graph.connections[2] = {
-      sourceBlockId: condition.id,
-      exitId: condition.rules.at(-1)!.id,
-      targetBlockId: "review",
-    };
+    graph.connections.splice(
+      2,
+      Infinity,
+      ...condition.rules.map((rule) => ({
+        sourceBlockId: condition.id,
+        exitId: rule.id,
+        targetBlockId: "review",
+      })),
+    );
     return saveBytes(body);
   };
-  // The largest rule count that still fits the budget.
-  let [fits, overflows] = [1, 100_000];
+  // The longest padding that still fits the budget.
+  let [fits, overflows] = [0, 10_000];
   while (overflows - fits > 1) {
-    const count = Math.floor((fits + overflows) / 2);
-    if (withRules(count) <= budget) fits = count;
-    else overflows = count;
+    const padding = Math.floor((fits + overflows) / 2);
+    if (withPadding(padding) <= budget) fits = padding;
+    else overflows = padding;
   }
-  const bytes = withRules(fits);
+  const bytes = withPadding(fits);
   assert(definitionSaveFits(body) && bytes <= budget);
   const created = (await flowRequest(baseUrl, "/api/flows", {
     method: "POST",
@@ -193,6 +200,9 @@ export async function saveConditionAtSizeLimit(
   })) as FlowDraft;
   return { id: created.id, rules: condition.rules, bytes };
 }
+
+/** Every Flow graph holds at most this many connections. */
+const CONNECTION_LIMIT = 5000;
 
 /** A save request's size, measured like `definitionSaveFits` at the largest revision and owner. */
 const saveBytes = (body: object) =>

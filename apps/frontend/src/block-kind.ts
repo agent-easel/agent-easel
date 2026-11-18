@@ -30,8 +30,6 @@ interface BlockKind {
     readonly references: boolean;
     /** Technical details list its observation freshness. */
     readonly freshness: boolean;
-    /** The footer while there is no thread to open. */
-    readonly noThread: string;
   };
 }
 
@@ -45,7 +43,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     workerThread: true,
     dashedFrame: false,
     singleOutput: false,
-    observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
+    observed: { references: true, freshness: true },
   },
   human: {
     Icon: User,
@@ -56,7 +54,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     workerThread: false,
     dashedFrame: true,
     singleOutput: false,
-    observed: { references: true, freshness: true, noThread: "No T3 thread yet" },
+    observed: { references: true, freshness: true },
   },
   wait: {
     Icon: Hourglass,
@@ -67,7 +65,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     workerThread: false,
     dashedFrame: false,
     singleOutput: true,
-    observed: { references: false, freshness: true, noThread: "A Wait has no T3 thread" },
+    observed: { references: false, freshness: true },
   },
   continuation: {
     Icon: CornerDownLeft,
@@ -78,7 +76,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     workerThread: false,
     dashedFrame: false,
     singleOutput: true,
-    observed: { references: true, freshness: false, noThread: "No T3 thread yet" },
+    observed: { references: true, freshness: false },
   },
   condition: {
     Icon: Split,
@@ -89,7 +87,7 @@ export const BLOCK_KINDS: Record<FlowBlock["kind"], BlockKind> = {
     workerThread: false,
     dashedFrame: false,
     singleOutput: false,
-    observed: { references: false, freshness: false, noThread: "A Condition has no T3 thread" },
+    observed: { references: false, freshness: false },
   },
 };
 

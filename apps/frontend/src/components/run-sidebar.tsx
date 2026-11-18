@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   BellRing,
+  Circle,
   CircleCheck,
   CircleDashed,
   CirclePause,
@@ -53,14 +54,12 @@ import { RunOriginPreview } from "./run-origin.tsx";
 import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
 
-/** Run/ExecIndicator: whole-Run execution only; attention stays in the chips. */
+/**
+ * Run/ExecIndicator: the row icon shows activity, never state; a Problem or Needs input chip shows
+ * the state. A spinner while an Agent works, a pause while it waits, and the neutral Idle ring when
+ * nothing works but something is pending.
+ */
 function execution(run: RunNavigationEntry) {
-  if (run.settlement)
-    return {
-      Icon: run.settlement === "stopping" ? LoaderCircle : CircleDashed,
-      label: run.settlement === "stopping" ? "Stopping workers" : "Settlement unresolved",
-      className: "text-attention",
-    };
   if (run.lifecycle === "settled")
     return { Icon: CircleCheck, label: "Settled", className: "text-success" };
   if (run.blocks.some((block) => block.state !== "not-started" && block.freshness !== "fresh"))
@@ -69,12 +68,16 @@ function execution(run: RunNavigationEntry) {
       label: "Observation unknown or stale",
       className: "text-muted-foreground",
     };
-  if (run.blocks.some((block) => block.state === "working"))
+  if (run.blocks.some((block) => block.state === "working" || block.state === "sent"))
     return {
       Icon: LoaderCircle,
       label: "Working",
       className: "text-status-working motion-safe:animate-spin",
     };
+  if (run.blocks.some((block) => block.state === "waiting"))
+    return { Icon: CirclePause, label: "Waiting", className: "text-muted-foreground" };
+  if (run.attention.needsInput || run.attention.problem)
+    return { Icon: Circle, label: "Idle", className: "text-muted-foreground" };
   return { Icon: CirclePause, label: "Waiting", className: "text-muted-foreground" };
 }
 
@@ -745,10 +748,8 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
 function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
   return (
     <>
-      {run.settlement && (
-        <span className="text-2xs text-muted-foreground">
-          {run.settlement === "stopping" ? "Stopping" : "Settle unresolved"}
-        </span>
+      {run.settlement === "stopping" && (
+        <span className="text-2xs text-muted-foreground">Stopping</span>
       )}
       {run.presentation.woke && (
         <StatusBadge kind="attention" icon={BellRing}>
