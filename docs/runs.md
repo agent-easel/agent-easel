@@ -2,7 +2,7 @@
 
 ## Starting
 
-Open **New Run (+)** (`/runs/new`; the Flow editor's **Start Run** opens a fresh composition with its saved Flow selected). Choose an
+Open **New Run (+)** (`/runs/new`), the only place a Run starts. Choose an
 available project, a ready Flow that may start there (a global Flow, or a Flow
 [owned by](studio.md#ownership) that Project) and a required initial prompt. Factory checks the project and connection, the Flow's
 [readiness](studio.md#saving-and-readiness) against the current saved Agents, every referenced Agent's settings, reporting
@@ -116,9 +116,7 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   the closed field. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
   owned by another Project. A cleared Project clears the Flow, and neither New Run nor choosing a Project again
   restores it. These clears are silent: the composer shows no notice or label, and the prompt and images always stay.
-  The Flow editor's **Start Run** on a Project Flow selects its owning Project; on a global Flow it uses the remembered
-  Project, or with none shows the Flow in the disabled picker until a Project is chosen. Start stays disabled for a Flow
-  the selected Project may not start.
+  Start stays disabled for a Flow the selected Project may not start.
 - **Drafts.** Typing a prompt with a non-whitespace character or attaching an image creates a Run draft; removing all
   text and images removes it. A draft with images but no text is listed as **Untitled draft** and cannot Start. Image
   bytes are kept in the browser's IndexedDB per selected Factory server and draft, saved before the draft refers to them;
@@ -128,8 +126,7 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
   saved Flow and Agents. Drafts live in browser storage per client and selected Factory server; tabs sharing a profile share
   them, and the last save wins, except that another tab's unresolved Start is never overwritten or removed: the stale tab
   reopens that draft instead. If storage is blocked the composer says the draft lasts only while the window is open.
-  **New Run** (button, shortcut or palette) opens an empty prompt with the remembered choices and keeps earlier drafts; the
-  Flow editor's **Start Run** does the same with its Flow. Project and Flow choices update live; while they are
+  **New Run** (button, shortcut or palette) opens an empty prompt with the remembered choices and keeps earlier drafts. Project and Flow choices update live; while they are
   synchronizing or offline the last choices stay visible, the draft is kept and Start is disabled. A Start issued while
   current still sends its image uploads and request if a catch-up begins meanwhile; going offline stops it. A selected Project
   is cleared when a current live delivery no longer lists it or lists it as unavailable for a reason other than the

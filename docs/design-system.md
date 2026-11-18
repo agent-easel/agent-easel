@@ -58,7 +58,7 @@ first paint use the baseline until a client receives the presentation.
   owner badge and group icon mark an owning Project in brand cyan beside its name and an
   unavailable one in the attention color with its reason; Global stays neutral. The dot
   on **Follow active** marking unseen Run progress uses the working color.
-- Use Inter for interface text and Geist Mono for exit names and zoom levels.
+- Use Inter for interface text, exit names and key chips; Geist Mono stays for zoom levels.
   Fonts are bundled; rendering must not require network font services.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a

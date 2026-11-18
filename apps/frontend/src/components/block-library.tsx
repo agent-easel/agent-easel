@@ -1,13 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  ChevronRight,
-  GripVertical,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Plus,
-  Search,
-} from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -216,7 +209,7 @@ const GHOST_GRAB: GrabOffset = { x: 28, y: 15 };
 type Ghost = { left: number; top: number; overCanvas: boolean };
 
 /**
- * Figma Editor/LibraryItem: the whole 52 px row drags onto the canvas; activating it adds.
+ * Figma Editor/LibraryItem: the whole row drags onto the canvas; activating it adds.
  * While dragged, a ghost of the new block follows the pointer, and a drop on the canvas
  * places the block exactly where its ghost was.
  */
@@ -259,7 +252,7 @@ function LibraryItem({
       <div
         aria-disabled
         aria-label={name}
-        className="flex min-h-13 w-full shrink-0 items-center gap-2 rounded-lg py-1.5 pr-2 pl-6.5 opacity-60"
+        className="flex min-h-13 w-full shrink-0 items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 opacity-60"
       >
         {icon}
         {text}
@@ -288,28 +281,12 @@ function LibraryItem({
         onDragCancel={() => setGhost(null)}
         onClick={() => onAdd()}
       >
-        <GripVertical
-          aria-hidden
-          className={cn("size-3.5 shrink-0 text-muted-foreground", ROW_ACTION_VISIBILITY)}
-        />
         {icon}
         {text}
-        <span
-          aria-hidden
-          className={cn(
-            "flex h-7 shrink-0 items-center gap-1 rounded-md border bg-muted pr-2.5 pl-2 text-2xs font-medium text-muted-foreground group-hover:text-foreground",
-            ROW_ACTION_VISIBILITY,
-          )}
-        >
-          <Plus className="size-3" /> Add
-        </span>
       </DragButton>
     </>
   );
 }
-
-/** Hidden at rest but never removed, so the row keeps its layout, name and keyboard action. */
-const ROW_ACTION_VISIBILITY = "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100";
 
 const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   agent: "bg-brand-soft text-link",
