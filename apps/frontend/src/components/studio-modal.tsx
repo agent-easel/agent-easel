@@ -121,6 +121,25 @@ function studioSection(
   };
 }
 
+function useStudioHeader(selection: StudioSelection, definitions: StudioDefinitions) {
+  const triggers = useStudioRead(definitions, "triggers").value;
+  const flows = useStudioRead(definitions, "flows").value;
+  const fromTrigger = selection.tab === "flows" ? selection.fromTrigger : undefined;
+  const flowName =
+    selection.tab === "flows" && fromTrigger
+      ? flows?.find((entry) => entry.id === selection.flowId)?.name
+      : undefined;
+  return {
+    title:
+      selection.tab === "triggers" || fromTrigger
+        ? breadcrumbParent("Studio", { tab: "flows" }).link
+        : "Studio",
+    section: studioSection(selection, triggers, flowName),
+    closeLabel: fromTrigger ? "Back to Trigger" : "Back to Runs",
+    returnTo: fromTrigger ? { tab: "triggers" as const, triggerId: fromTrigger } : undefined,
+  };
+}
+
 export function StudioModal({ selection }: { selection: StudioSelection }) {
   const navigate = useStudioNavigation();
   const definitions = useStudioSession();
@@ -137,16 +156,9 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
     agentRef: agent.ref,
     triggerRef: trigger.ref,
   });
-  const triggers = useStudioRead(definitions, "triggers").value;
   const { escapeHandler, registerEscape } = useEscapeHandler();
-  const returnToTrigger = selection.tab === "flows" ? selection.fromTrigger : undefined;
-  const flows = useStudioRead(definitions, "flows").value;
-  const flowName =
-    selection.tab === "flows" && returnToTrigger
-      ? flows?.find((entry) => entry.id === selection.flowId)?.name
-      : undefined;
-  const close = () =>
-    void navigate(returnToTrigger ? { tab: "triggers", triggerId: returnToTrigger } : undefined);
+  const header = useStudioHeader(selection, definitions);
+  const close = () => void navigate(header.returnTo);
   return (
     <Dialog
       open
@@ -175,15 +187,11 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         }}
       >
         <WorkspaceDialogHeader
-          title={
-            selection.tab === "triggers" || returnToTrigger
-              ? breadcrumbParent("Studio", { tab: "flows" }).link
-              : "Studio"
-          }
-          {...studioSection(selection, triggers, flowName)}
+          title={header.title}
+          {...header.section}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
-          closeLabel={returnToTrigger ? "Back to Trigger" : "Back to Runs"}
+          closeLabel={header.closeLabel}
           closeDisabled={creating}
         />
         <div className="flex min-h-0 flex-1">
