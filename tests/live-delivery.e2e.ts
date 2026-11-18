@@ -48,7 +48,7 @@ test("an Agent's MCP report updates the open Run and the sidebar without polling
     .getByRole("navigation", "Open Runs")
     .getByRole("link", /Demo · Live report · Tidy the project picker/);
   await expect(row).toContainText("Working");
-  await expect(screen.getByRole("status", "Run status")).toHaveCount(0);
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toHaveText(/^Started /);
   await app.screenshot("live-run-before-report");
   // The trace sees this browser's reads, so an empty trace later means no requests.
   expect(await browserRequests(app)).toEqual(expect.arrayContaining(["GET /api/projects"]));
@@ -58,7 +58,7 @@ test("an Agent's MCP report updates the open Run and the sidebar without polling
   await liveStates(app, "report", ["result reported", "settled"], "Picker spacing tidied.");
 
   // Assert
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toHaveText(/^Settled /);
   await expect(row).toHaveCount(0);
   await app.screenshot("live-run-after-report");
   // Longer than several former polling periods of Run, navigation and connection reads.

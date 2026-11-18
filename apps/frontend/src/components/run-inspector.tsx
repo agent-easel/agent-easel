@@ -1,3 +1,4 @@
+import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import type {
@@ -87,10 +88,16 @@ function sentContinuation(run: RunDetail, blockId: string) {
   return prompt && run.definitions.flow.graph.blocks.find((item) => item.id === prompt.blockId);
 }
 
+function stoppedProgress(run: RunDetail, end: string | null | undefined) {
+  const at = stoppedVisitAt(run, end);
+  return at ? `Stopped · ${clockTime(at)}` : "Stopped";
+}
+
 /** A started Block's status line: what it is doing now, or the exit it took and when. */
 function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind: RunStateKind) {
   const visits = blockVisits(run, block);
   const latest = visits.at(-1);
+  if (recorded.state === "stopped") return stoppedProgress(run, latest?.end);
   if (block.kind === "condition") return conditionActivityText(run, block.id);
   if (kind === "needs-input")
     return block.kind === "human"
@@ -110,7 +117,7 @@ function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind
 
 /** Figma RD13 Progress: started blocks in Flow order, each with its status on a second line that
  * wraps rather than truncates; the canvas still shows the whole graph. */
-function RunProgress({ run }: { run: RunDetail }) {
+function RunProgress({ run, waitingForWorkers }: { run: RunDetail; waitingForWorkers: boolean }) {
   const started = run.definitions.flow.graph.blocks.flatMap((block) => {
     const recorded = run.blocks.find((item) => item.blockId === block.id);
     const kind = blockStateKind(run, recorded);
@@ -123,7 +130,11 @@ function RunProgress({ run }: { run: RunDetail }) {
     .map(([kind, total]) => `${total} ${RUN_STATE_LABELS[kind].toLowerCase()}`)
     .join(" · ");
   return (
-    <InspectorSection title="Progress" count={count} label="Progress">
+    <InspectorSection
+      title="Progress"
+      count={waitingForWorkers ? `${count} · waiting for T3 to confirm workers finished` : count}
+      label="Progress"
+    >
       <ul className="-mt-1 flex flex-col gap-1">
         {started.map(({ block, recorded, kind }) => {
           const icon = stateIcon[kind];
@@ -164,7 +175,7 @@ function repositoriesTitle(run: RunDetail) {
     pullRequests.length && (pullRequests.length > 1 ? "pull requests" : "pull request"),
   ]
     .filter(Boolean)
-    .join(" & ");
+    .join(" and ");
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
@@ -348,25 +359,31 @@ function RunOverview({
   run,
   project,
   projectUnavailable,
+  waitingForWorkers,
 }: {
   run: RunDetail;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
+  waitingForWorkers: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5.5 overflow-auto px-4 pt-4 pb-3">
       <h2 className="text-base leading-4 font-semibold">Overview</h2>
       <RunAttentionDetails run={run} />
       <PendingIntents run={run} />
-      <RunProgress run={run} />
+      <RunProgress run={run} waitingForWorkers={waitingForWorkers} />
       {run.repositories.some((worker) => worker.branch || worker.pullRequests.length > 0) && (
         <InspectorSection title={repositoriesTitle(run)} label="Run repositories">
-          <RunRepositories workers={run.repositories} links />
+          <RunRepositories
+            workers={run.repositories}
+            links
+            historical={run.lifecycle === "settled"}
+          />
         </InspectorSection>
       )}
       {run.origin && <RunOriginSection origin={run.origin} />}
       <InitialPrompt run={run} />
-      <CoordinatorActivations run={run} />
+      <CoordinatorActivations run={run} conciseResults={run.lifecycle === "settled"} />
       <RootWork run={run} />
       <div aria-hidden className="flex-1" />
       <ResolvedAttention run={run} />
@@ -374,7 +391,7 @@ function RunOverview({
         <InspectorSection title="Project">
           <p className="text-sm text-emphasis-foreground">
             {project?.title ?? "Project"}
-            {projectUnavailable ? " · unavailable in T3" : ""}
+            {projectUnavailable ? " · Not in T3" : ""}
           </p>
         </InspectorSection>
         <InspectorSection title="Flow revision">
@@ -400,6 +417,7 @@ export function RunInspector({
   titleGeneration,
   project,
   projectUnavailable,
+  waitingForWorkers,
   observationUnavailable,
   onSelect,
 }: {
@@ -409,6 +427,7 @@ export function RunInspector({
   titleGeneration: RunTitleGeneration | null;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
+  waitingForWorkers: boolean;
   observationUnavailable: boolean;
   onSelect: (blockId: string | null) => void;
 }) {
@@ -431,7 +450,12 @@ export function RunInspector({
           onBack={() => onSelect(null)}
         />
       ) : (
-        <RunOverview run={run} project={project} projectUnavailable={projectUnavailable} />
+        <RunOverview
+          run={run}
+          project={project}
+          projectUnavailable={projectUnavailable}
+          waitingForWorkers={waitingForWorkers}
+        />
       )}
     </aside>
   );

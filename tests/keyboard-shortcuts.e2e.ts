@@ -89,7 +89,7 @@ test("explicit palette search opens archived history without listing it in sugge
 
   // Assert
   await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Archived");
   await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
 });
 
@@ -285,7 +285,7 @@ test("Settle from an editable field on open Run detail while Mod+ shortcuts stay
   await expect
     .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
     .toBe("settled");
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
 test("Settle is ignored while Settings is open", async ({ app, screen, browser }) => {
@@ -324,7 +324,7 @@ test("Mod+Backspace opens the existing Archive confirmation for the open Run", a
 
   // Assert
   const confirmation = screen.getByRole("dialog", `Archive “${title}”?`);
-  await expect(confirmation).toContainText("cannot be restored");
+  await expect(confirmation).toContainText("command palette");
   await confirmation.getByRole("button", "Cancel", { exact: true }).tap();
   await expect(confirmation).toBeHidden();
   expect((await readHistoryRun(app.baseUrl, found.id)).lifecycle).toBe("active");

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import { currentWorkingMessages } from "./current-report.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { readRunSettlementStates } from "./manual-settlement.ts";
+import { pendingRunWork } from "./settlement.ts";
 import { runLifecycle } from "./lifecycle.ts";
 import { failure } from "../../result.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
@@ -35,6 +36,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             creation_key: string;
             settled_at: string | null;
             archived_at: null;
+            pending_work: number;
             snoozed: number | null;
             woke: number | null;
             project_id: string;
@@ -43,6 +45,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             availability: RunNavigationEntry["project"]["availability"];
           }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,
           COALESCE((SELECT MAX(e.observed_at) FROM run_events e WHERE e.run_id=r.id AND e.kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')),r.started_at) AS last_activity_at,
+          CASE WHEN r.settled_at IS NULL THEN EXISTS(${pendingRunWork(sql, sql`r.id`)}) ELSE 0 END AS pending_work,
           f.name AS flow_name,p.project_icon_json,p.favicon_path,
           p.id AS project_id,p.title AS project_title,p.workspace_root,p.availability
           FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
@@ -160,6 +163,7 @@ export function openRunNavigation(database: RunnerDatabase) {
                   snoozed: active && !!row.snoozed,
                   woke: active && !!row.woke,
                 },
+                pendingWork: !!row.pending_work,
                 attention: {
                   needsInput:
                     settlement === null &&

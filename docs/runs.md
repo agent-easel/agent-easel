@@ -449,10 +449,12 @@ fixed Human exits their old exits were mapped to.
   block differs from stale; a block that never ran says **Not visited**.
 - On entry, the view opens at 100% and is never fitted. It centers the combined bounds of the active Blocks (`working` or
   `waiting`, and a Continuation while its prompt is worked on, in place of the Agent whose thread works on it); with none, the
-  error-state Blocks if execution failed; otherwise the whole graph when it fits at 100%, or the Flow input. If a Block would
+  most recently changed finished or stopped Block. With no such visit, it frames error-state Blocks if execution failed,
+  otherwise the whole graph when it fits at 100%, or the Flow input. If a Block would
   be cut at the canvas edge, the view moves by the smallest shift that leaves every Block fully visible or fully outside it
   while the centered Blocks stay visible; of equally small shifts, the one showing more Blocks wins. Finished Blocks may sit
-  outside the frame; pan or zoom to see them.
+  outside the frame; pan or zoom to see them. Finished Blocks and their Progress rows show the outcome as
+  **→ Exit name · time**. A visit stopped by Archive shows when it stopped.
 - The view then follows that focus: when the active Blocks change, or execution fails with none active, it glides there in about 400 ms, framing the targets at up to 100%. A successful finish leaves the view where it is. Following is on each time the Run is opened and is never saved. Manual pan or zoom (wheel, pinch, buttons, keys) or **Fit Flow** turns it off and interrupts a glide; automatic moves never do. **Follow active** in the zoom controls, or its shortcut (default **.**) while the execution canvas is focused, turns it back on and moves to the current focus (the button glides; the shortcut jumps); it is disabled when nothing is active or failed. While following is off, a focus change marks the button with a dot instead of moving the view; there are no notifications. A hidden window or a Run covered by Settings or Studio stops any glide: on return, a following view jumps once to the current focus without replaying missed changes. With reduced motion, the view jumps instead of gliding.
 - Pan, zoom, fit and **Auto-arrange** are local. Zoom ranges 20%–200% (**+**/**−**, **Fit Flow**, **0**, pinch or **Mod**+wheel
   at the pointer; plain wheel and arrow keys pan; bindings are in [Keyboard shortcuts](keyboard-shortcuts.md)). Auto-arrange
@@ -466,7 +468,7 @@ fixed Human exits their old exits were mapped to.
 - One docked **inspector** beside the canvas shows the **Run overview** until a block is selected or the Run title is
   inspected: **Attention** while something is pending, **Progress** with each started block and its status on a second line
   that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**), branches (wrapping only at
-  "/" or "-") and pull requests, the initial prompt and block activations (**Name · Visit N** and **Open in T3 ↗**), then a
+  "/" or "-") and pull requests with their last known state, the initial prompt and block activations (**Name · Visit N** and **Open in T3 ↗**), then a
   closed **Resolved attention · N** row and project, Flow revision, workspace and work periods under a closed
   **Workspace & observation** section. Section headings are in sentence case. Selecting a block shows it in the
   same panel: its Needs input or Problem first (answers and Problem actions work here), its current visit and working report,
@@ -480,24 +482,26 @@ fixed Human exits their old exits were mapped to.
 - The inspector toggle in the top bar (default **Mod+.**, see [Keyboard shortcuts](keyboard-shortcuts.md)) shows or hides the
   panel. The choice is kept per browser profile on this device across what is inspected, Runs and reload; until chosen, the
   inspector opens from 1280 px wide. While it is hidden, pending attention shows below the canvas.
-- Block results, including a completed Run's Final result, appear as **result cards** in the inspector and the timeline:
-  block, visit, exit, deliveries and acceptance time around the result rendered as Markdown (CommonMark with GitHub tables
-  and task lists), collapsed to a short preview. **Read result** opens a reader with the full result, its provenance,
-  **Copy Markdown** (the unmodified text) and **Open in T3 ↗**; its execution, completion and version are under
-  **Technical details**, and **Esc** returns focus to the card. Raw HTML in a result is shown as text and never runs, links open
+- The Overview of a Settled Run shows each activation's result title and **Read result**. Other result cards in the
+  inspector and timeline preview the result with its exit, deliveries and acceptance time. **Read result** opens the
+  full Markdown result (CommonMark with GitHub tables and task lists). The reader header shows the Block, visit, exit
+  and time, with **Copy Markdown**, **Open in T3 ↗**, **Esc** and close. Execution, completion, version and delivery
+  facts live under **Technical details**. The Working report and Human context readers share the header pattern.
+  **Esc** returns focus to the opener. Raw HTML in a result is shown as text and never runs, links open
   outside Factory and images appear as links, so a result never loads remote content. Copying needs a secure context
   (Factory's own window, loopback or HTTPS); over a plain-HTTP remote address the reader says copying is unavailable.
 - Drag the inner edge of the shell sidebar (224–480 px) or of the inspector (280–640 px, at most half the area beside the
   sidebar) to resize it; with the edge focused, Left/Right step 16 px and Home/End jump to the bounds.
   Double-click restores the responsive default, which a saved width otherwise replaces. Widths are saved per browser profile
   on this device.
-- The top bar shows the title and the meta line **#N · Project · Flow · Started …** (with a Trigger-started Run's origin; the
-  Flow name opens it in Studio while it exists), then **Not live** while an Active Run's observations are stale or its live
-  delivery is unavailable, with Factory's last observation time, **Open in T3 ↗** for the Run's conversation or its first
-  worker (a pending launch says recovery is still searching and offers no replacement), the inspector toggle and, until the
-  Run is archived, a ··· menu holding **Archive…**. The top bar carries no work state: it stays on the Run's sidebar row and
-  its blocks. A Settled or Archived Run still names its lifecycle with its time, and an Active Run with nothing active or
-  pending reads **Idle**. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing workspace** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
+- The top bar shows the title and **#N · Project · Flow · Started …** (with a Trigger-started Run's origin; the
+  Flow name opens it in Studio while it exists). Settled and Archived replace **Started** with the lifecycle and
+  its event time, when recorded. A Snoozed Run shows **Snoozed · until new attention** after the title and keeps its
+  work state on the row and Blocks. The top bar shows **Not live** with the latest observation while an Active Run's
+  observations are stale or delivery is unavailable. It offers **Open in T3 ↗** for the conversation or first
+  worker when the Project is available, then the inspector toggle and ···. The menu shares the sidebar row's
+  availability and shortcuts: **Snooze** or **Restore**, **Settle**, **Rename**, and **Archive…** for Active Runs,
+  and **Rename** and **Archive…** for Settled Runs. Archived Runs have no action menu. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing workspace** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
   **Workspace failed** with the reason; an unconfirmed creator launch shows its recovery note. Retained Runs that queued a
   first visit on an idle worker prepared under the earlier contract still show **entered · prepared idle T3 thread**.
 - Running worker work is ordinary progress; unavailable observations mark the Block **Not live**, preserving prior facts without creating a Problem.
@@ -534,8 +538,10 @@ menu items never opens a row preview.
   **Conversation** below).
   **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip. A Run whose project T3 no longer reports shows a neutral
-  **Not in T3** tag.
-- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with just their project icon and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. With no Runs, the list is one muted line, **No Runs yet**, the search field stays, and both groups stay hidden. Archived Runs are not listed.
+  **Not in T3** tag on its row and after the Project in the meta line. Its saved Run stays listed, and the Run page
+  hides T3 thread links. An Active Run with finished work and nothing pending shows the green Finished check without
+  a badge, and Progress says it is waiting for T3 to confirm workers finished.
+- **Settled** (collapsed, with a count) holds Settled Runs as compact single-line rows with the project icon, number and title; details remain in the side preview. **Snoozed** sits above it. Both groups stay pinned below the open list, which scrolls on its own; an expanded group's rows scroll within a capped height so open Runs stay visible. On a short window the groups shrink and scroll together, leaving the open list room for at least one Run. Each group appears only after navigation loads and while it contains Runs; hiding it preserves its expanded state. With no Runs, the list is one muted line, **No Runs yet**, the search field stays, and both groups stay hidden. Opening a Run in a collapsed group expands that group and scrolls its selected row into view. Archived Runs are not listed.
   Case-insensitive title search shows one list of matching Runs and drafts in creation order, with a total match count and no group headers. Snoozed and Settled matches have muted titles and status icons unless selected. Drafts are titled from the first non-empty prompt line, or **Untitled draft**; Escape or × clears search.
 - **Needs you (N)** filters the list to exactly the Runs the desktop
   [Dock badge](desktop-and-clients.md#notifications-and-dock-badge) counts: Active, not Snoozed Runs with a pending Needs input
@@ -592,7 +598,7 @@ repository metadata until their workers are observed by this version.
 **Snooze** moves an Active Run to **Snoozed** and changes only presentation: Agents, handoffs and attention continue. A newly
 recorded Needs input or Problem identity, or a higher native pending-question count while questions are already pending,
 wakes it (**Woke**). Ordinary progress, stale observations and re-reads of the same matter do not. Opening a Run clears only Woke;
-**Restore** returns it to the main list. Snooze state survives reload and restart. Settling or archiving a Run clears both;
+**Restore** in either Run action menu returns it to the main list. Snooze state survives reload and restart. Settling or archiving a Run clears both;
 Settled Runs cannot be snoozed. T3 reports only a count, so a replacement question with an unchanged count cannot be detected.
 
 On every desktop installation a Snoozed Run is silent: it leaves the Dock badge, its delivered notifications are withdrawn, and
@@ -828,7 +834,8 @@ Runs. History, input, captured definitions and events remain; no transcript or r
 
 ## Archive
 
-**Archive…** in the row menu and in the Run's ··· menu both ask for confirmation, then end the Run for good.
+**Archive…** in either Run action menu asks for confirmation, names any pending Human decisions that will be cancelled
+and tells you how to find the Run again by number or title. The Archived Run shows its lifecycle in the meta line.
 Archiving closes the handoff gate, cancels unsent launches and handoffs, cancels pending Human steps without inventing answers,
 cancels pending Wait arrivals so no deadline forwards afterwards, cancels deliveries waiting at a Condition for their number
 (numbered arrivals stay history), clears every Wait and Condition arrival's message, settles pending attention

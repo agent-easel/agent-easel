@@ -222,10 +222,13 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 2 output name").fill("Stop");
   await screen.getByLabel("Rule 2 from arrival").fill("5");
+  // Fit the new blocks beside the open panel so a drop target cannot scroll the canvas mid-drag.
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   const coder = screen.getByRole("article", "Block Coder");
   const review = screen.getByRole("article", "Block Review");
   const escalate = screen.getByRole("article", "Block Escalate");
   await screen.getByRole("button", "Connect exit Done of Coder").dragTo(escalate);
+  await expect(screen.getByRole("button", "Connection Done from Coder to Escalate")).toBeVisible();
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(review);
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
