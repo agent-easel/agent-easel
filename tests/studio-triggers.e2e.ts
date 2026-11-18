@@ -238,7 +238,7 @@ test("a Trigger draft survives opening the Flow that became not ready", async ({
   const id = await saveFlowCopy(app.baseUrl, "Demo · Focused change", flowName, {
     mode: "checkout",
   });
-  const flow: FlowDraft = await readFlow(app.baseUrl, id);
+  const flow = await readFlow(app.baseUrl, id);
   await app.open("/studio/triggers/new/github-issues");
   await fillTrigger(screen, name, flowName);
   await saveFlowElsewhere(app.baseUrl, flow, {
