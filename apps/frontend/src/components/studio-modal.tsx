@@ -76,6 +76,13 @@ function useReportedDraft(kind: StudioDraft["kind"]) {
   return { draft, ref, report };
 }
 
+/** Each Agent's last listed name, kept after it leaves the list. */
+function useLastAgentNames(agents: readonly AgentDefinition[] | null) {
+  const [names] = useState(() => new Map<string, string>());
+  agents?.forEach((agent) => names.set(agent.id, agent.name));
+  return names;
+}
+
 const headerParentClass =
   "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
 
@@ -98,6 +105,7 @@ function studioSection(
     readonly triggers: readonly TriggerDefinition[] | null;
     readonly agents: readonly AgentDefinition[] | null;
     readonly flows: readonly FlowDraft[] | null;
+    readonly agentNames: ReadonlyMap<string, string>;
   },
 ) {
   if (selection.tab === "flows") return { section: "Flows" };
@@ -120,6 +128,7 @@ function agentSection(
   lists: {
     readonly agents: readonly AgentDefinition[] | null;
     readonly flows: readonly FlowDraft[] | null;
+    readonly agentNames: ReadonlyMap<string, string>;
   },
 ) {
   const { agentId, fromFlow } = selection;
@@ -135,7 +144,10 @@ function agentSection(
     return { parents, section: "New Agent" };
   }
   const agent = lists.agents?.find((entry) => entry.id === agentId);
-  return { parents: [parentLink("Agents", { tab: "agents" })], section: agent?.name ?? "Agents" };
+  // An Agent removed elsewhere keeps its open draft, so the breadcrumb keeps its last name.
+  const name = agent?.name ?? lists.agentNames.get(agentId);
+  if (name === undefined) return { section: "Agents" };
+  return { parents: [parentLink("Agents", { tab: "agents" })], section: name };
 }
 
 export function StudioModal({ selection }: { selection: StudioSelection }) {
@@ -157,6 +169,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
   const triggers = useStudioRead(definitions, "triggers").value;
   const agents = useStudioRead(definitions, "agents").value;
   const flows = useStudioRead(definitions, "flows").value;
+  const agentNames = useLastAgentNames(agents);
   const { escapeHandler, registerEscape } = useEscapeHandler();
   const close = () => void navigate(undefined);
   return (
@@ -188,7 +201,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
       >
         <WorkspaceDialogHeader
           title="Studio"
-          {...studioSection(selection, { triggers, agents, flows })}
+          {...studioSection(selection, { triggers, agents, flows, agentNames })}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
           closeLabel="Back to Runs"
