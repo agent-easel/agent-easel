@@ -271,7 +271,9 @@ function OwnerGoneCard({ ownership, ownerGone, onChangeOwner }: CardProps) {
 /** Project overrides a Project Agent can't keep (SA06n), or that Create leaves out. */
 function OverridesCard({ draft, state, ownership, global }: CardProps) {
   const overrides = state.content.projectOverrides.length;
-  if (global || overrides === 0 || state.removed) return null;
+  // While an owner change waits for acknowledgement, its own card is the one message.
+  if (global || overrides === 0 || state.removed || state.ownerChange.status !== "none")
+    return null;
   if (ownership.kind === "saved")
     return state.strandedOverrides ? (
       <SettingsProblemCard
