@@ -5,7 +5,7 @@ import type {
   FlowDraft,
   FlowDuplicatePlanAgent,
 } from "@t3-factory/contracts";
-import { Bot, ChevronRight, Copy, Link, TriangleAlert, Workflow } from "lucide-react";
+import { Bot, ChevronRight, Copy, Info, Link, TriangleAlert, Workflow } from "lucide-react";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,8 @@ import {
 } from "../studio-definitions.ts";
 import { fieldLabelClass } from "./page.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
-import { OwnerTargetMenu } from "./studio-owner.tsx";
+import { OwnerPicker, OwnerTargetMenu } from "./studio-owner.tsx";
+import { Notice } from "./notice.tsx";
 
 /** The definition a dialog acts on, with the owning Project its editor shows now. */
 interface DialogSubject {
@@ -37,8 +38,6 @@ interface DialogSubject {
 }
 
 type Kind = "Flow" | "Agent";
-
-const hintClass = "text-2xs tracking-label text-subtle-foreground";
 
 /** A dialog that cannot be dismissed while its write is pending. */
 function OwnerDialog({
@@ -70,10 +69,6 @@ function OwnerDialog({
     </Dialog>
   );
 }
-
-/** "Global" or "owned by Northwind", for sentences about a target. */
-const ownedBy = (projectId: string | null, projects: readonly FactoryProject[]) =>
-  projectId === null ? "Global" : `owned by ${studioOwner(projectId, projects).title}`;
 
 /** What the new owner means for the moved definition. */
 function changeOwnerRule(kind: Kind, target: string | null, projects: readonly FactoryProject[]) {
@@ -331,33 +326,14 @@ function BlockerRow({
   );
 }
 
-/** What Flow Duplicate does with one Agent, in words. */
-function planAgentMeta(
-  agent: FlowDuplicatePlanAgent,
-  target: string | null,
-  projects: readonly FactoryProject[],
-) {
-  const targetTitle = studioOwner(target, projects).title;
-  if (agent.projectId === null)
-    return agent.choice === "keep"
-      ? "Global Agent · stays shared — edits affect every Flow using it"
-      : `Global Agent → new ${target === null ? "global" : targetTitle} copy (own model/prompt)`;
-  const ownerTitle = studioOwner(agent.projectId, projects).title;
-  return agent.choice === "copy"
-    ? `${ownerTitle} Agent · can’t be placed in ${targetTitle}`
-    : `${ownerTitle} Agent · already owned by the target`;
-}
-
 /** Figma Studio/DuplicateAgentRow: keep or copy a global Agent; fixed choices as a tag. */
 function DuplicateAgentRow({
   agent,
-  target,
   projects,
   disabled,
   onChoose,
 }: {
   agent: FlowDuplicatePlanAgent;
-  target: string | null;
   projects: readonly FactoryProject[];
   disabled: boolean;
   onChoose: (choice: FlowDuplicatePlanAgent["choice"]) => void;
@@ -371,7 +347,7 @@ function DuplicateAgentRow({
           {agent.name}
         </span>
         <span className="truncate text-2xs tracking-label text-subtle-foreground">
-          {planAgentMeta(agent, target, projects)}
+          {studioOwner(agent.projectId, projects).title}
         </span>
       </span>
       {agent.changeable ? (
@@ -389,7 +365,7 @@ function DuplicateAgentRow({
         </fieldset>
       ) : agent.choice === "copy" ? (
         <StatusBadge kind="neutral" icon={Copy}>
-          Copied into target
+          Copied
         </StatusBadge>
       ) : (
         <StatusBadge kind="neutral" icon={Link}>
@@ -398,22 +374,6 @@ function DuplicateAgentRow({
       )}
     </li>
   );
-}
-
-/** What committing the plan creates, and that the source stays as it is. */
-function duplicateSummary(
-  state: FlowDuplicateSnapshot,
-  source: DialogSubject,
-  projects: readonly FactoryProject[],
-) {
-  const copies = state.plan?.agents.filter((agent) => agent.choice === "copy").length ?? 0;
-  const agents = copies === 0 ? "" : ` and ${copies} ${copies === 1 ? "Agent" : "Agents"}`;
-  const owner = state.target === null ? "as global definitions" : ownedBy(state.target, projects);
-  const unchanged =
-    source.projectId === null
-      ? "The source Flow and its Agents don’t change."
-      : `Nothing in ${studioOwner(source.projectId, projects).title} changes.`;
-  return `Creates 1 Flow${agents} ${owner}. ${unchanged}`;
 }
 
 /**
@@ -465,9 +425,6 @@ export function DuplicateFlowDialog({
       busy={busy}
       onClose={onClose}
       title={<>Duplicate “{source.name}”</>}
-      description={
-        dirty ? `Copies saved revision ${revision} without your unsaved changes.` : undefined
-      }
       onSubmit={(event) => void submit(event)}
       actions={
         <>
@@ -485,6 +442,11 @@ export function DuplicateFlowDialog({
         </>
       }
     >
+      {dirty && (
+        <Notice tone="info" icon={Info} title={`Copies saved revision ${revision}`}>
+          Your unsaved changes aren’t included.
+        </Notice>
+      )}
       <div className="grid gap-1.5">
         <label htmlFor="duplicate-flow-name" className={fieldLabelClass}>
           Name
@@ -497,14 +459,14 @@ export function DuplicateFlowDialog({
           onChange={(event) => model.setName(event.target.value)}
         />
       </div>
-      <OwnerTargetMenu
-        label="Target owner"
+      <OwnerPicker
+        kind="Flow"
         chosen={state.target}
-        from={source.projectId}
+        initial={source.projectId}
+        hint=""
         projects={projects}
         disabled={busy}
         onChange={(target) => void model.setTarget(target)}
-        unavailableReason=" — can’t own copies"
       />
       <div className="grid gap-1.5">
         <span id="duplicate-flow-agents" className={fieldLabelClass}>
@@ -512,7 +474,6 @@ export function DuplicateFlowDialog({
         </span>
         <DuplicatePlan state={state} projects={projects} disabled={busy} onChoose={model.choose} />
       </div>
-      {state.plan && <p className={hintClass}>{duplicateSummary(state, source, projects)}</p>}
       {state.error && (
         <p role="alert" className="text-sm text-destructive">
           {state.error}
@@ -552,7 +513,6 @@ function DuplicatePlan({
         <DuplicateAgentRow
           key={agent.agentId}
           agent={agent}
-          target={state.target}
           projects={projects}
           disabled={disabled}
           onChoose={(choice) => onChoose(agent.agentId, choice)}
