@@ -432,21 +432,18 @@ test("a Trigger cannot be saved on a Project that has already left T3", async ({
   await shot(app, browser, "triggers-not-in-t3-menu");
 });
 
-test("empty Flows and Agents, and Go to Flows returns to the composer with the draft kept", async ({
+test("empty Flows and Agents, and the composer’s Go to links return with the draft kept", async ({
   app,
   screen,
   browser,
 }) => {
   // Last: reset does not restore removed definitions, so this must not precede other journeys.
-  await removeAllAgents(app.baseUrl);
+  // Agents still exist, so the composer asks for the first Flow. No Agents asks for an Agent first.
+  await removeAllFlows(app.baseUrl);
   await app.open("/studio/flows");
   await expect(screen.getByRole("heading", "No Flows yet", { exact: true })).toBeVisible();
   await expect(screen.getByLabel("Search Flows", { exact: true })).toBeVisible();
   await shot(app, browser, "flows-empty");
-  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
-  await expect(screen.getByRole("heading", "No Agents yet", { exact: true })).toBeVisible();
-  await expect(screen.getByLabel("Search Agents", { exact: true })).toBeVisible();
-  await shot(app, browser, "agents-empty");
 
   await app.open("/runs/new");
   await expect(screen.getByRole("link", "Go to Agents", { exact: true })).toHaveCount(0);
@@ -458,4 +455,21 @@ test("empty Flows and Agents, and Go to Flows returns to the composer with the d
   await screen.getByRole("dialog", "Studio", { exact: true }).press("Escape");
   await expect(screen.getByRole("dialog", "Studio")).toHaveCount(0);
   await expect(prompt).toContainText("Keep this draft");
+
+  await removeAllAgents(app.baseUrl);
+  await app.open("/studio/agents");
+  await expect(screen.getByRole("heading", "No Agents yet", { exact: true })).toBeVisible();
+  await expect(screen.getByLabel("Search Agents", { exact: true })).toBeVisible();
+  await shot(app, browser, "agents-empty");
+  await app.open("/runs/new");
+  const kept = screen.getByRole("textbox", /Initial prompt/);
+  await expect(kept).toContainText("Keep this draft");
+  await expect(screen.getByRole("link", "Go to Agents", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", "Go to Flows", { exact: true })).toHaveCount(0);
+  await screen.getByRole("link", "Go to Agents", { exact: true }).tap();
+  await expect(screen.getByRole("heading", "No Agents yet", { exact: true })).toBeVisible();
+  await shot(app, browser, "agents-empty-from-composer");
+  await screen.getByRole("dialog", "Studio", { exact: true }).press("Escape");
+  await expect(screen.getByRole("dialog", "Studio")).toHaveCount(0);
+  await expect(kept).toContainText("Keep this draft");
 });
