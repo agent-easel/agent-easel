@@ -383,7 +383,11 @@ function KeyRow({
       state && <StatusBadge kind="error">Refused</StatusBadge>
     );
   return (
-    <FieldRow label="API key" htmlFor="chat-model-key" tag={tag}>
+    <FieldRow
+      label="API key"
+      htmlFor="chat-model-key"
+      tag={keyDecisionNeeded(draft, settings) && tag}
+    >
       {keyDecisionNeeded(draft, settings) ? (
         <KeyDestinationChoice draft={draft} state={state} disabled={disabled} onChange={onChange} />
       ) : (
@@ -395,6 +399,7 @@ function KeyRow({
           value={draft.keyValue}
           placeholder="Optional"
           state={state}
+          tag={tag}
           disabled={disabled}
           onChoice={(choice) => onChange({ ...draft, keyChoice: choice, keyValue: "" })}
           onValue={(value) => onChange({ ...draft, keyValue: value })}

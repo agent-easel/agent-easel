@@ -533,12 +533,9 @@ function BotCard({
             <CopyButton text={configuration.publicKey} label="Copy Public key" />
           )}
         </FieldRow>
-        <FieldRow
-          label="Bot token"
-          htmlFor="discord-token"
-          tag={failure?.tag && <StatusBadge kind="error">{failure.tag}</StatusBadge>}
-        >
+        <FieldRow label="Bot token" htmlFor="discord-token">
           <SecretField
+            tag={failure?.tag && <StatusBadge kind="error">{failure.tag}</StatusBadge>}
             id="discord-token"
             label="bot token"
             stored={configuration.tokenConfigured}

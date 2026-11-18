@@ -304,7 +304,10 @@ function ChannelRow({
         spellCheck={false}
         inputMode="numeric"
         disabled={disabled}
-        className={cn("min-w-40 flex-1 bg-muted font-mono text-label", fieldBorder(state))}
+        className={cn(
+          "w-auto min-w-0 flex-1 basis-40 bg-muted font-mono text-label",
+          fieldBorder(state),
+        )}
         {...fieldAria(state)}
         onChange={(event) => onChange({ channelId: event.target.value })}
       />
@@ -357,7 +360,7 @@ function ProjectsSelect({
           type="button"
           variant="outline"
           aria-label={`${label}: ${selected.length ? titles.join(", ") : "none"}`}
-          className={cn(selectFieldClass, "h-8 w-44 shrink-0 disabled:opacity-50")}
+          className={cn(selectFieldClass, "h-8 w-32 shrink-0 disabled:opacity-50")}
         >
           <span
             className={cn("min-w-0 truncate", selected.length === 0 && "text-muted-foreground")}

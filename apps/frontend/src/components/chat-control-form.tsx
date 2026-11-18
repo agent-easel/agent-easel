@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -67,30 +67,36 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
   const save = async (input: Input): Promise<boolean> => {
     setSaving(true);
     setSaveFailure(null);
-    try {
-      adopt(await update(input));
-      return true;
-    } catch (cause) {
+    const refused = (cause: unknown) => {
       if (cause instanceof ApiError) {
         setSaveFailure({
           message: chatControlError(cause, ""),
-          paths: cause.detail.issues.flatMap((issue) => (issue.path ? [issue.path] : [])),
+          paths: cause.detail.issues.map((issue) => issue.path),
         });
-        return false;
+        return Promise.resolve(false);
       }
-      const current = await read().catch(() => null);
-      if (current !== null && committed(input, current)) {
-        adopt(current);
+      return read()
+        .catch(() => null)
+        .then((current) => {
+          if (current !== null && committed(input, current)) {
+            adopt(current);
+            return true;
+          }
+          setSaveFailure({
+            message: `${chatControlError(cause, `Factory could not save ${name}.`)} Your edits are kept; save again when Factory answers.`,
+            paths: [],
+          });
+          return false;
+        });
+    };
+    return await update(input)
+      .then((next) => {
+        adopt(next);
         return true;
-      }
-      setSaveFailure({
-        message: `${chatControlError(cause, `Factory could not save ${name}.`)} Your edits are kept; save again when Factory answers.`,
-        paths: [],
+      }, refused)
+      .finally(() => {
+        setSaving(false);
       });
-      return false;
-    } finally {
-      setSaving(false);
-    }
   };
   const discard = () => {
     if (settings !== null) setDraft(draftOf(settings));
@@ -240,7 +246,7 @@ export function FieldRow({
         <span className="w-37.5 shrink-0 text-muted-foreground max-sm:w-24">{label}</span>
       )}
       <div className="grid min-w-0 flex-1 gap-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {children}
           {tag}
         </div>
@@ -268,26 +274,10 @@ export const fieldBorder = (state: FieldState | undefined) =>
   state?.tone === "attention" &&
   "border-attention aria-invalid:border-attention focus-visible:border-attention";
 
-/** What a save does with a stored secret; `null` while a required decision is missing. */
+/** What a save does with a stored secret. */
 export type SecretChoice = "keep" | "replace" | "remove";
 
-/**
- * The API key or bot token as the standard bordered, masked field. A stored secret shows Stored
- * with Replace and Remove; Replace opens the masked field with Cancel, and Remove shows None with
- * Undo until Save. A blank field never clears a stored secret.
- */
-export function SecretField({
-  id,
-  label,
-  stored,
-  choice,
-  value,
-  placeholder,
-  state,
-  disabled,
-  onChoice,
-  onValue,
-}: {
+interface SecretFieldProps {
   id: string;
   label: string;
   stored: boolean;
@@ -295,55 +285,83 @@ export function SecretField({
   value: string;
   placeholder: string;
   state?: FieldState | undefined;
+  /** The field-state tag, shown after Stored or after the open field. */
+  tag?: ReactNode;
   disabled: boolean;
   onChoice: (choice: SecretChoice) => void;
   onValue: (value: string) => void;
-}) {
-  const statusId = useId();
-  if (stored && choice !== "replace")
-    return (
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-        <span
-          id={statusId}
-          className={cn("flex-1 text-foreground", choice === "remove" && "text-muted-foreground")}
+}
+
+/**
+ * The API key or bot token as the standard bordered, masked field. A stored secret shows Stored
+ * with Replace and Remove; Replace opens the masked field with Cancel, and Remove shows None with
+ * Undo until Save. A blank field never clears a stored secret.
+ */
+export function SecretField(props: SecretFieldProps) {
+  return props.stored && props.choice !== "replace" ? (
+    <StoredSecret {...props} />
+  ) : (
+    <OpenSecret {...props} />
+  );
+}
+
+function StoredSecret({ label, choice, state, tag, disabled, onChoice }: SecretFieldProps) {
+  const removing = choice === "remove";
+  return (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <span className={removing ? "text-muted-foreground" : "text-foreground"}>
+        {removing ? "None" : "Stored"}
+      </span>
+      {tag}
+      <span className="flex-1" />
+      {removing ? (
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={`Undo removing the ${label}`}
+          disabled={disabled}
+          onClick={() => onChoice("keep")}
         >
-          {choice === "remove" ? "None" : "Stored"}
-        </span>
-        {choice === "remove" ? (
+          Undo
+        </Button>
+      ) : (
+        <>
           <Button
             type="button"
             variant="outline"
-            aria-label={`Undo removing the ${label}`}
+            aria-label={`Replace the ${label}`}
+            aria-describedby={state?.cardId}
             disabled={disabled}
-            onClick={() => onChoice("keep")}
+            onClick={() => onChoice("replace")}
           >
-            Undo
+            Replace
           </Button>
-        ) : (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              aria-label={`Replace the ${label}`}
-              aria-describedby={state?.cardId}
-              disabled={disabled}
-              onClick={() => onChoice("replace")}
-            >
-              Replace
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              aria-label={`Remove the ${label}`}
-              disabled={disabled}
-              onClick={() => onChoice("remove")}
-            >
-              Remove
-            </Button>
-          </>
-        )}
-      </div>
-    );
+          <Button
+            type="button"
+            variant="outline"
+            aria-label={`Remove the ${label}`}
+            disabled={disabled}
+            onClick={() => onChoice("remove")}
+          >
+            Remove
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function OpenSecret({
+  id,
+  stored,
+  value,
+  placeholder,
+  state,
+  tag,
+  disabled,
+  onChoice,
+  onValue,
+}: SecretFieldProps) {
   return (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <Input
@@ -360,6 +378,7 @@ export function SecretField({
         {...fieldAria(state)}
         onChange={(event) => onValue(event.target.value)}
       />
+      {tag}
       {stored && (
         <Button
           type="button"
