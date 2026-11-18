@@ -93,7 +93,10 @@ Every control needs a visible label or accessible name. Icon-only buttons also n
 tooltip. Preserve meaningful accessible names used by the UI verification journeys.
 Unavailable choices in Agent execution settings stay visible and disabled, with their reason.
 Long menus must stay within the viewport and scroll their choices without hiding search
-or actions.
+or actions. Composer Flow and Project menus open downward from the field. Their height
+is capped by the space below the field, and a scrolling list shows a visible scrollbar
+and a bottom fade. Search is pinned and appears only when the menu lists more than
+seven choices.
 
 Use the shared key chip for shortcut hints. Each chord fits in one bordered chip in
 Inter Medium at 11 px so glyphs such as ⇧ and ⌫ stay legible. On macOS, use

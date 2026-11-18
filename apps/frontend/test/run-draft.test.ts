@@ -884,7 +884,7 @@ it("Start Run on a global Flow without a remembered Project holds it in the disa
   // Assert
   const { projectId, flowId } = draft.getSnapshot();
   expect({ projectId, flowId }).toStrictEqual({ projectId: "", flowId: "global-flow" });
-  expect(composerFlows(flows, projectId, flowId)).toStrictEqual({
+  expect(composerFlows(flows, projectId)).toStrictEqual({
     disabled: true,
     global: [],
     project: [],
@@ -904,33 +904,34 @@ it("a global Flow held without a Project becomes choosable once a Project is pic
   // Assert
   const { projectId, flowId } = draft.getSnapshot();
   expect(flowId).toBe("global-flow");
-  expect(composerFlows(flows, projectId, flowId)).toStrictEqual({
+  expect(composerFlows(flows, projectId)).toStrictEqual({
     disabled: false,
     global: flows,
     project: [],
   });
 });
 
-it("the Flow picker lists ready global Flows and ready Flows of the selected Project", () => {
+it("the Flow picker lists every global Flow and every Flow of the selected Project, not-ready last", () => {
   // Arrange
   const global = launchFlow("global", null);
+  const globalNotReady = launchFlow("global-not-ready", null, false);
   const owned = launchFlow("owned", "project");
   const selectedNotReady = launchFlow("selected", "project", false);
   const flows = [
     global,
-    launchFlow("global-not-ready", null, false),
+    globalNotReady,
     owned,
     launchFlow("elsewhere", "other-project"),
     selectedNotReady,
   ];
 
   // Act
-  const listed = composerFlows(flows, "project", "selected");
+  const listed = composerFlows(flows, "project");
 
   // Assert
   expect(listed).toStrictEqual({
     disabled: false,
-    global: [global],
+    global: [global, globalNotReady],
     project: [owned, selectedNotReady],
   });
 });
