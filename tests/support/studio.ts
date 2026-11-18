@@ -41,7 +41,7 @@ export async function chooseFlowAction(screen: Screen, item: string) {
 /** The Agent editor's status line names the saved revision `revision` with no unsaved changes. */
 /** Saves the open Flow as revision 2 and expects its readiness summary, Ready or Not ready. */
 export async function saveFlowWithReadiness(screen: Screen, readiness: RegExp, revision = 2) {
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText(
     `Saved · Revision ${revision}`,
   );

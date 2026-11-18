@@ -62,7 +62,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   // The Reviewer block offers its Agent's exits; the Agent's fail exit requires a message.
   await expect(
     screen
-      .getByRole("complementary", "Block configuration")
+      .getByRole("complementary", "Block settings")
       .getByRole("listitem", "Exit fail")
       .getByText("Message required"),
   ).toBeVisible();
@@ -84,7 +84,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await browser.keyboard.press("Escape");
   await browser.mouse.up();
   await expect(wires).toHaveAttribute("data-connection-count", "2");
-  await expect(screen.getByRole("complementary", "Block configuration")).toBeVisible();
+  await expect(screen.getByRole("complementary", "Block settings")).toBeVisible();
   await finishPort.dragTo(reviewer);
   await expect(wires).toHaveAttribute("data-connection-count", "3");
   // A forward wire's midpoint carries its label; clicking there selects that connection.
@@ -94,7 +94,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await browser.mouse.down();
   await browser.mouse.up();
   await expect(finishToReviewer).toHaveAttribute("aria-pressed", "true");
-  await expect(screen.getByRole("complementary", "Block configuration")).toBeHidden();
+  await expect(screen.getByRole("complementary", "Block settings")).toBeHidden();
   await screen.getByRole("button", "Delete connection").tap();
   await expect(wires).toHaveAttribute("data-connection-count", "2");
   await finishPort.dragTo(reviewer);
@@ -138,7 +138,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await expect(screen.getByText("Draft changed · Check readiness")).toBeVisible();
   await screen.getByRole("button", "Check readiness").tap();
   await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
 
   // Assert
@@ -159,11 +159,11 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   const reconcile = screen.getByRole("region", "Reconcile Flow");
   await expect(reconcile).toContainText("Revision 4 was saved elsewhere");
   await expect(screen.getByLabel("Flow name")).toHaveValue("My preserved draft");
-  await expect(screen.getByRole("button", "Save Flow")).toBeDisabled();
+  await expect(screen.getByRole("button", "Save")).toBeDisabled();
   await screen.getByRole("button", "Compare latest revision").tap();
   await expect(screen.getByRole("heading", "Saved revision 4")).toBeVisible();
   await screen.getByRole("button", "Keep local draft against revision 4").tap();
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 5");
   await browser.reload();
   await expect(screen.getByLabel("Flow name")).toHaveValue("My preserved draft");
@@ -197,7 +197,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     .dragTo(screen.getByRole("article", "Block Implement"));
   await screen.getByRole("button", "Connect exit finish of Implement").dragTo(human);
   await screen.getByRole("button", "Agent Implement").tap();
-  const panel = screen.getByRole("complementary", "Block configuration");
+  const panel = screen.getByRole("complementary", "Block settings");
   const inherited = panel.getByRole("listitem", "Exit finish");
 
   // Act: author this Flow's exit configuration through the Block panel.
@@ -207,7 +207,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await expect(inherited).toContainText("Hidden in this Flow");
   await expect(screen.getByRole("button", "Connect exit finish of Implement")).toHaveCount(0);
   await expect(screen.getByRole("article", "Block Implement")).toContainText("Agent · hidden");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
   await expectFlowBlocked(screen, /Implement: exit "finish" is hidden/);
   await app.screenshot("wired-inherited-exit-hidden");
@@ -224,16 +224,16 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await panel.getByRole("checkbox", "Requires a message when the Agent chooses this exit").tap();
   await screen.getByRole("button", "Connect exit github-url of Implement").dragTo(human);
   await expect(screen.getByRole("article", "Block Implement")).toContainText("local · message");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   await app.screenshot("inherited-and-local-exits");
   await panel.getByLabel("Exit name", { exact: true }).fill("finish");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expectFlowBlocked(screen, /Implement: local exit "finish" has the same name/);
   await app.screenshot("local-exit-name-conflict");
   await panel.getByLabel("Exit name", { exact: true }).fill("github-url");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 5");
   await browser.reload();
   await screen.getByRole("button", "Agent Implement").tap();
@@ -282,7 +282,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await expect
     .poll(() =>
       browser.evaluate(
-        `getComputedStyle(document.querySelector('[aria-label="Block configuration"]')).opacity`,
+        `getComputedStyle(document.querySelector('[aria-label="Block settings"]')).opacity`,
       ),
     )
     .toBe("1");
@@ -298,7 +298,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     "data-connection-count",
     "1",
   );
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
   await browser.reload();
   await expect(screen.getByRole("group", "Directed connections")).toHaveAttribute(
@@ -319,7 +319,7 @@ test("a saved Agent block's Revisit instruction is shown again after reload and 
   await createStudioFlow(app, screen, browser, "Revisit review loop");
   await screen.getByRole("button", "Add Sample worker").tap();
   await screen.getByLabel("Block name").fill("Reviewer");
-  const panel = screen.getByRole("complementary", "Block configuration");
+  const panel = screen.getByRole("complementary", "Block settings");
   const field = panel.getByRole("textbox", "Revisit instruction optional");
   const reviewer = screen.getByRole("article", "Block Reviewer");
   await expect(field).toHaveValue("");
@@ -328,7 +328,7 @@ test("a saved Agent block's Revisit instruction is shown again after reload and 
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Unsaved changes");
 
   // Act
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
@@ -356,7 +356,7 @@ test("choosing another Saved Agent for a block keeps its Revisit instruction and
   });
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Agent Reviewer").tap();
-  const panel = screen.getByRole("complementary", "Block configuration");
+  const panel = screen.getByRole("complementary", "Block settings");
 
   // Act
   await panel.getByLabel("Saved Agent").selectOption("Demo · Product engineer");
@@ -384,13 +384,13 @@ test("saving a Revisit instruction over 120,000 characters is refused with an er
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Agent Reviewer").tap();
   const field = screen
-    .getByRole("complementary", "Block configuration")
+    .getByRole("complementary", "Block settings")
     .getByRole("textbox", "Revisit instruction optional");
   const oversize = "x".repeat(120_001);
   await field.fill(oversize);
 
   // Act
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(
@@ -426,7 +426,7 @@ test("a saved copy of a Flow keeps its Agent block's Revisit instruction and can
   await screen.getByRole("button", "Agent Reviewer").tap();
   await expect(
     screen
-      .getByRole("complementary", "Block configuration")
+      .getByRole("complementary", "Block settings")
       .getByRole("textbox", "Revisit instruction optional"),
   ).toHaveValue(revisitInstruction);
 });

@@ -47,7 +47,7 @@ export async function expectRetainedCleanFlow(
     screen.getByText("This Flow was removed elsewhere. Your draft is kept.", { exact: true }),
   ).toBeVisible();
   await expect(browser).toHaveURL(`/studio/flows/${id}`);
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeDisabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
   await screen.getByRole("button", "More Flow actions", { exact: true }).tap();
   await expect(screen.getByRole("menuitem", "Remove", { exact: true })).toBeDisabled();

@@ -64,12 +64,12 @@ test("a Condition added from the library is ready once its Otherwise is connecte
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 2 output name").fill("End branch");
   await screen.getByLabel("Rule 2 from arrival").fill("5");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 4");
   await expect(screen.getByRole("article", "Block Escalate")).toContainText(
     /from arrival 5 onward\s*End branch/,
   );
-  await screen.getByRole("button", "Close block configuration").tap();
+  await screen.getByRole("button", "Close block settings").tap();
 
   // Act
   await screen.getByRole("button", /rule 2 "End branch" is never selected/).tap();
@@ -120,7 +120,7 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
 
   // Act
   await screen.getByRole("listitem", "Rule 2 Human").getByRole("button", "Remove rule").tap();
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
@@ -146,7 +146,7 @@ test("an arrival number that is not a whole number from 1 stays shown as invalid
   // Arrange
   await openOneRuleCondition({ app, screen, browser }, "Invalid Condition threshold");
   await screen.getByLabel("Rule 1 output name").fill("Ask a person");
-  await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
+  await expect(screen.getByRole("button", "Save")).toBeEnabled();
 
   // Act
   await screen.getByLabel("Rule 1 from arrival").fill("2.5");
@@ -156,10 +156,10 @@ test("an arrival number that is not a whole number from 1 stays shown as invalid
   await expect(screen.getByRole("listitem", "Rule 1 Ask a person")).toContainText(
     "Use a whole number from 1 to 9,007,199,254,740,991.",
   );
-  await expect(screen.getByRole("button", "Save Flow")).toBeDisabled();
+  await expect(screen.getByRole("button", "Save")).toBeDisabled();
   await expect(screen.getByRole("button", "Check readiness")).toBeDisabled();
   await screen.getByLabel("Rule 1 from arrival").fill("");
-  await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
+  await expect(screen.getByRole("button", "Save")).toBeEnabled();
 });
 
 test("leaving a Flow with only an invalid arrival number asks first, and Keep editing keeps the text", async ({
@@ -245,7 +245,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(coder);
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   const saveStatus = screen.getByRole("status", "Flow save status");
   await expect(saveStatus).toContainText("Saved · Revision 2");
   await expect(screen.getByRole("button", /rule 2 "Stop" is never selected/)).toBeVisible();
@@ -253,7 +253,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("listitem", "Rule 2 Stop").getByRole("button", "Move rule up").tap();
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(saveStatus).toContainText("Saved · Revision 3");
   await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await browser.reload();
@@ -353,7 +353,7 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
 
   // Act
   await lastName.fill(`Route ${last} late`);
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");

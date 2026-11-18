@@ -24,7 +24,7 @@ test("a Continuation added after an Agent names the thread it continues and keep
     .dragTo(screen.getByRole("article", "Block Spec"));
 
   // Act
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("article", "Block Spec")).toContainText("Grill's thread");

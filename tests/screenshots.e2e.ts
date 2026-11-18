@@ -62,7 +62,7 @@ test("capture Studio and an authored Flow that survives reload", async ({
   await app.screenshot("flow-before-save");
 
   // Act
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");

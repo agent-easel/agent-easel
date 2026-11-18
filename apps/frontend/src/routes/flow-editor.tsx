@@ -707,7 +707,12 @@ function EditorSettings({
   const close = () => onClose(null);
   if (selected === FLOW_INPUT)
     return (
-      <SettingsPanel title="Flow input" icon={TextCursorInput} onClose={close}>
+      <SettingsPanel
+        label="Flow input settings"
+        title="Flow input"
+        icon={TextCursorInput}
+        onClose={close}
+      >
         <section aria-label="Starts" className="grid gap-2 p-4">
           <PanelHeading>Starts</PanelHeading>
           <TargetSelect
@@ -723,6 +728,7 @@ function EditorSettings({
   if (!block) return null;
   return (
     <SettingsPanel
+      label="Block settings"
       title={BLOCK_KINDS[block.kind].name}
       icon={BLOCK_KINDS[block.kind].Icon}
       onClose={close}
@@ -753,12 +759,15 @@ function EditorSettings({
 
 /** The settings panel docked at the editor's right: kind and name, Esc, ✕, body and footer. */
 function SettingsPanel({
+  label,
   title,
   icon: Icon,
   onClose,
   footer,
   children,
 }: {
+  /** The panel's accessible name: Block settings, or Flow input settings. */
+  label: string;
   title: string;
   icon: typeof X;
   onClose: () => void;
@@ -766,10 +775,7 @@ function SettingsPanel({
   children: ReactNode;
 }) {
   return (
-    <aside
-      aria-label={`${title} settings`}
-      className="flex w-90 shrink-0 flex-col border-l bg-card"
-    >
+    <aside aria-label={label} className="flex w-90 shrink-0 flex-col border-l bg-card">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
         <Icon aria-hidden className="size-4 text-link" />
         <h2 className="text-sm font-semibold">{title}</h2>

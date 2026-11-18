@@ -39,7 +39,7 @@ test("a Wait added from the library saves with a missing duration as a readiness
   await screen.getByRole("button", "Wait Cool down").tap();
   await screen.getByLabel("Wait for").fill("90");
   await screen.getByLabel("Unit").selectOption("minutes");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");

@@ -208,7 +208,7 @@ export async function expectReleasedTyping(
 ) {
   const { screen, canvas, layer, view, zoom, revision2 } = state;
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(revision2.name);
-  await expect(screen.getByRole("complementary", "Block configuration")).toHaveCount(0);
+  await expect(screen.getByRole("complementary", "Block settings")).toHaveCount(0);
   expect(await layer.getAttribute("style")).toContain(view);
   await expect(canvas).toHaveAttribute("data-zoom", zoom!);
   const worker = (await screen.getByRole("button", "Agent Worker", { exact: true }).boundingBox())!;
@@ -256,7 +256,7 @@ export async function beforeOfflineFlow(fixtures: StudioFixtures, prefix: string
 
 export async function expectOfflineFlow(state: Awaited<ReturnType<typeof beforeOfflineFlow>>) {
   const { screen } = state;
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeDisabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   return { ...state };
 }
 
@@ -279,7 +279,7 @@ export async function expectReconnectedFlow(
   state: Awaited<ReturnType<typeof beforeReconnectedFlow>>,
 ) {
   const { screen, prefix, layer, view } = state;
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeEnabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(
     `Acceptance · ${prefix} · Offline draft`,
   );
@@ -381,7 +381,7 @@ export async function expectSavedFlow(state: Awaited<ReturnType<typeof beforeSav
 export async function beforeReloadedFlow(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeSavedFlow(fixtures, prefix);
   const { screen } = previous;
-  await screen.getByRole("button", "Save Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   return expectSavedFlow({ ...previous });
 }
 
@@ -481,7 +481,7 @@ export async function expectRemovedFlow(state: Awaited<ReturnType<typeof beforeR
   await expectRetainedDefinition(
     screen,
     "Flow",
-    ["Save Flow", "Start Run"],
+    ["Save", "Start Run"],
     ["Duplicate…", "Change owner…", "Export JSON", "Remove"],
   );
   return { ...state };

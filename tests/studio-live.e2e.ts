@@ -299,7 +299,7 @@ test("Save commits the rebound Flow draft without a false external conflict", as
   const state = await beforeSavedFlow({ app, screen, browser }, "savedFlow");
 
   // Act
-  await screen.getByRole("button", "Save Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectSavedFlow({ ...state });
