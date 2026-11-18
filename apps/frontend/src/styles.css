@@ -170,11 +170,9 @@
   width: 280px;
 }
 
-/* Clear the native window controls when the Studio header reaches the title bar. */
-@media (width < 1600px) or (height < 1000px) {
-  html[data-desktop="true"] [data-studio] > header {
-    padding-left: 80px;
-  }
+/* Clear the native window controls where the Studio header meets the title bar. */
+html[data-desktop="true"] [data-studio] > header {
+  padding-left: 80px;
 }
 
 @media (prefers-reduced-motion: reduce) {

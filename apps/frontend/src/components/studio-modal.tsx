@@ -178,7 +178,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         data-studio="true"
         presentation="workspace"
         ref={dialog}
-        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-muted [@media(min-width:1600px)_and_(min-height:1000px)]:h-[clamp(800px,80vh,1200px)] [@media(min-width:1600px)_and_(min-height:1000px)]:w-[clamp(1200px,50vw,1680px)]"
+        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-muted"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           dialog.current?.focus();
