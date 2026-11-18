@@ -183,7 +183,8 @@ unknown paths, runs the suite; an empty diff also runs.
 Failed file enumeration fails selection. The final check succeeds only for an
 explicit skip or a successful full run, never a failed selection or unexpected skip.
 
-Failures upload available reports and traces from `.e2e/ci/` and fixture logs from
+The runner retains traces for failed attempts. Failures upload available reports
+and traces from `.e2e/ci/` and fixture logs from
 `.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>-shard-<n>`, including hidden files, for
 seven days. Setup failures may occur before those files exist. Download them from
 the Actions run. CI does not replace Before/After UI evidence or prove live provider,
