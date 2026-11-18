@@ -326,7 +326,7 @@ function ResultReader({
                 <X aria-hidden />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close · Esc</TooltipContent>
+            <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
         <div

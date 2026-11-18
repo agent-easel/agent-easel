@@ -170,7 +170,7 @@ test("Settings Reset restores the desktop default for New Run", async ({
   // Arrange
   const newRunGroup = await recordDesktopNewRunCandidate(app, screen, browser);
   await screen.getByRole("button", "Save shortcut").tap();
-  await expect(newRunGroup).toContainText("Shift");
+  await expect(newRunGroup).toContainText(process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N");
 
   // Act
   await newRunGroup.getByRole("button", "Reset New Run").tap();

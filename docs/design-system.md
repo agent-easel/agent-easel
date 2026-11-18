@@ -56,7 +56,7 @@ first paint use the baseline until a client receives the presentation.
   owner badge and group icon mark an owning Project in brand cyan beside its name and an
   unavailable one in the attention color with its reason; Global stays neutral. The dot
   on **Follow active** marking unseen Run progress uses the working color.
-- Use Inter for interface text and Geist Mono for keys, exit names and zoom levels.
+- Use Inter for interface text and Geist Mono for exit names and zoom levels.
   Fonts are bundled; rendering must not require network font services.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
@@ -80,6 +80,12 @@ tooltip. Preserve meaningful accessible names used by the UI verification journe
 Unavailable choices in Agent execution settings stay visible and disabled, with their reason.
 Long menus must stay within the viewport and scroll their choices without hiding search
 or actions.
+
+Use the shared key chip for shortcut hints. Each chord fits in one bordered chip in
+Inter Medium at 11 px so glyphs such as ⇧ and ⌫ stay legible. On macOS, use
+Apple modifier order (⌃⌥⇧⌘) followed by the key, as in ⌥⌘↑, ⇧⌘S, ⌘⌫ and ⌘↵.
+Windows and Linux use Ctrl-plus notation such as Ctrl+Alt+N. Show an unassigned
+binding as muted **Unbound** text in shortcut lists.
 
 Settings sections share one page template instead of styling their own headers and
 footnotes: a header with the title, a one-line description and optionally a status pill, the

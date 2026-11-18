@@ -7,6 +7,7 @@ import {
 import { useShortcutPreferences } from "./shortcut-preferences.ts";
 import { settingsMask } from "./settings-navigation.ts";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
+import { KeyChip } from "@/components/ui/key-chip";
 
 const groupOrder: ShortcutGroup[] = ["application", "navigation", "runActions", "canvas"];
 
@@ -46,8 +47,10 @@ export function ShortcutsCheatSheet({
                       className="flex items-baseline justify-between gap-3 text-sm"
                     >
                       <dt className="min-w-0 truncate text-foreground">{command.label}</dt>
-                      <dd className="shrink-0 font-mono text-2xs text-muted-foreground">
-                        {command.keys.join(" ")}
+                      <dd className="flex shrink-0 gap-1">
+                        {command.keys.map((key) => (
+                          <KeyChip key={key}>{key}</KeyChip>
+                        ))}
                       </dd>
                     </div>
                   ))}
@@ -67,7 +70,8 @@ export function ShortcutsCheatSheet({
           >
             Open Settings → Keyboard shortcuts
           </Link>
-          {" · "}Esc to close
+          {" · "}
+          <KeyChip>Esc</KeyChip> to close
         </p>
       </DialogContent>
     </Dialog>

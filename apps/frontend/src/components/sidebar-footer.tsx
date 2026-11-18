@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { reportingSummary, useReportingState } from "../reporting-state.tsx";
 import { useLiveStudio } from "../live/studio.ts";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
@@ -143,7 +142,9 @@ function FooterIcon({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="top">{withShortcutHint(label, shortcut)}</TooltipContent>
+      <TooltipContent side="top" shortcut={shortcut}>
+        {label}
+      </TooltipContent>
     </Tooltip>
   );
 }

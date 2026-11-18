@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +9,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  fixedShortcuts,
   formatShortcut,
   getDefaultShortcutBindings,
+  sameShortcutBinding,
   shortcutDefinitions,
   shortcutGroupLabels,
   shortcutFromEvent,
@@ -88,9 +91,7 @@ export function KeyboardSettings() {
                   }
                   control={
                     <>
-                      <kbd className="rounded-sm border bg-background px-1.5 py-0.5 font-sans text-2xs leading-none font-medium text-muted-foreground">
-                        {formatShortcut(bindings[command.id])}
-                      </kbd>
+                      <KeyChip>{formatShortcut(bindings[command.id])}</KeyChip>
                       <Button
                         variant="outline"
                         size="sm"
@@ -107,8 +108,8 @@ export function KeyboardSettings() {
                         size="sm"
                         aria-label={`Reset ${command.label}`}
                         disabled={
-                          formatShortcut(bindings[command.id]) ===
-                            formatShortcut(defaults[command.id]) && !conflicts.includes(command.id)
+                          sameShortcutBinding(bindings[command.id], defaults[command.id]) &&
+                          !conflicts.includes(command.id)
                         }
                         onClick={() => setError(resetShortcutBindings(command.id))}
                       >
@@ -123,16 +124,19 @@ export function KeyboardSettings() {
       ))}
       <SettingsDisclosure label="Fixed controls" hint="Not editable here">
         <p>
-          Esc closes the topmost dialog or cancels the current interaction. Arrow keys and Enter
-          navigate the palette. Tab moves focus.
+          <KeyChip>Esc</KeyChip> closes the topmost dialog or cancels the current interaction. Arrow
+          keys and <KeyChip>{formatShortcut(fixedShortcuts.openPaletteItem)}</KeyChip> navigate the
+          palette. <KeyChip>{formatShortcut(fixedShortcuts.focusNext)}</KeyChip> moves focus.
         </p>
         <p>
-          Focused canvas: arrow keys pan. Selected Flow connection: Delete removes it. Focused Run
-          row: Shift+F10 or the Context Menu key opens its menu.
+          Focused canvas: arrow keys pan. Selected Flow connection:{" "}
+          <KeyChip>{formatShortcut(fixedShortcuts.deleteConnection)}</KeyChip> removes it. Focused
+          Run row: <KeyChip>{formatShortcut(fixedShortcuts.openRowMenu)}</KeyChip> or{" "}
+          <KeyChip>{formatShortcut(fixedShortcuts.contextMenu)}</KeyChip> opens its menu.
         </p>
         <p>
-          {formatShortcut({ key: "Enter", mod: true, alt: false, shift: false })} starts a ready Run
-          from the composer.
+          <KeyChip>{formatShortcut(fixedShortcuts.startRun)}</KeyChip> starts a ready Run from the
+          composer.
         </p>
         <p>
           Global shortcuts require Command on macOS or Control elsewhere. Canvas shortcuts work only
@@ -207,11 +211,12 @@ function ShortcutRecorder({ id, onClose }: { id: ShortcutId; onClose: () => void
       >
         <DialogTitle>Change shortcut</DialogTitle>
         <DialogDescription>
-          Press a combination for {command.label}, then choose Save shortcut. Esc cancels; Tab moves
-          between buttons.
+          Press a combination for {command.label}, then choose Save shortcut. <KeyChip>Esc</KeyChip>{" "}
+          cancels. <KeyChip>{formatShortcut(fixedShortcuts.focusNext)}</KeyChip> moves between
+          buttons.
         </DialogDescription>
         <div role="status" className="rounded-lg border bg-muted p-6 text-center text-lg">
-          {candidate ? formatShortcut(candidate) : "Press a shortcut"}
+          {candidate ? <KeyChip>{formatShortcut(candidate)}</KeyChip> : "Press a shortcut"}
         </div>
         {(error || validation) && (
           <p role="alert" className="text-sm text-destructive">
