@@ -34,9 +34,11 @@ function BranchName({ branch }: { branch: string }) {
 export function RunRepositories({
   workers,
   links = false,
+  historical = false,
 }: {
   workers: readonly RunWorkerRepository[];
   links?: boolean;
+  historical?: boolean;
 }) {
   const { branches, pullRequests } = repositorySummary(workers);
   if (!branches.length && !pullRequests.length) return null;
@@ -47,7 +49,9 @@ export function RunRepositories({
           <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             <BranchName branch={branch} />
-            <p className="text-2xs text-muted-foreground">{names.join(", ")}</p>
+            {(!historical || branches.length > 1) && (
+              <p className="text-2xs text-muted-foreground">{names.join(", ")}</p>
+            )}
           </div>
         </div>
       ))}
@@ -69,14 +73,10 @@ export function RunRepositories({
                 {pr.repository} #{pr.number}
               </p>
             )}
-            <p className="text-2xs text-muted-foreground">{pr.state ?? "State unknown"}</p>
+            {pr.state && <span className="text-xs text-muted-foreground"> · {pr.state}</span>}
           </div>
         </div>
       ))}
-      <p className="text-2xs text-muted-foreground">
-        {workers.some((worker) => worker.freshness !== "fresh") ? "Not live · " : ""}Last known in
-        T3
-      </p>
     </div>
   );
 }

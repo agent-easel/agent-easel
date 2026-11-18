@@ -110,16 +110,14 @@ export function useSettleRun() {
         }}
       >
         <AlertDialogContent
-          title="Stop the work and settle this Run?"
-          description={
-            "Factory cancels remaining automatic work and settles this Run once all workers and their delegated work have stopped."
-          }
+          title={`Settle “${confirmation?.run.title ?? ""}”?`}
+          description="Factory asks T3 to stop the workers and ends the Run once T3 confirms."
           actions={
             <>
               <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
               <MutationGate>
                 <Button disabled={busy} onClick={() => void confirm()}>
-                  {busy ? "Settling…" : "Settle"}
+                  {busy ? "Settling…" : "Settle Run"}
                 </Button>
               </MutationGate>
             </>
@@ -131,7 +129,6 @@ export function useSettleRun() {
             returnFocus.current.focus();
           }}
         >
-          {confirmation && <SettlementWorkers workers={confirmation.workers} />}
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}

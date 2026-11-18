@@ -1,4 +1,9 @@
-import type { ContinuationVisit, RunBlock, RunThreadBinding } from "@t3-factory/contracts";
+import type {
+  ContinuationVisit,
+  RunBlock,
+  RunDetail,
+  RunThreadBinding,
+} from "@t3-factory/contracts";
 
 /**
  * Empty targets mean no active work. Active work takes precedence over failure. A `sent`
@@ -27,6 +32,25 @@ export function selectExecutionTargets(run: {
   );
   const targets = active.length ? active : run.blocks.filter((block) => block.state === "error");
   return targets.map((block) => block.blockId);
+}
+
+/** The latest recorded visit is an entry target only. It does not resume following. */
+export function selectEntryTargets(run: RunDetail, targets: readonly string[]): readonly string[] {
+  if (
+    targets.some((id) =>
+      run.blocks.some((block) => block.blockId === id && block.state !== "error"),
+    )
+  )
+    return targets;
+  const terminal = new Set(
+    run.blocks
+      .filter(
+        ({ state }) => state === "finished" || state === "pass-through" || state === "stopped",
+      )
+      .map(({ blockId }) => blockId),
+  );
+  const latest = run.events.findLast((event) => event.blockId && terminal.has(event.blockId));
+  return latest?.blockId ? [latest.blockId] : targets;
 }
 
 export type AutoFollowAction = "animate" | "jump" | "indicate" | "nothing";

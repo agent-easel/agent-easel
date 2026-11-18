@@ -1,4 +1,17 @@
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Archive, CircleCheck, Moon, Pencil, Undo2 } from "lucide-react";
+import { useShortcutPreferences } from "../shortcut-preferences.ts";
+import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
+import { KeyChip } from "./ui/key-chip";
+import { ContextMenuItem, ContextMenuSeparator } from "./ui/context-menu";
+import { DropdownMenuItem, DropdownMenuSeparator } from "./ui/dropdown-menu";
+import {
+  Fragment,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { api } from "../api.ts";
 import { useMutationsAllowed } from "../client-gate.tsx";
@@ -54,6 +67,62 @@ export function useRunActions(subject: RunActionSubject) {
   };
 }
 
+/** Both Run menus show the same actions, availability and shortcuts. */
+export function RunActionItems({
+  subject,
+  surface,
+  returnFocusId,
+}: {
+  subject: RunActionSubject;
+  surface: "row" | "header";
+  returnFocusId: string;
+}) {
+  const { entry, detail } = subject;
+  const lifecycle = detail?.lifecycle ?? entry?.lifecycle;
+  const { available } = useRunActions(subject);
+  const { bindings, hint } = useShortcutPreferences();
+  const Item = surface === "row" ? ContextMenuItem : DropdownMenuItem;
+  const Separator = surface === "row" ? ContextMenuSeparator : DropdownMenuSeparator;
+  const snoozed = entry?.presentation.snoozed;
+  const items = [
+    ...(lifecycle === "active"
+      ? ([
+          {
+            id: "snoozeRestore",
+            label: snoozed ? "Restore" : "Snooze",
+            Icon: snoozed ? Undo2 : Moon,
+          },
+          { id: "settle", label: "Settle", Icon: CircleCheck },
+        ] as const)
+      : []),
+    { id: "rename", label: "Rename", Icon: Pencil },
+    { id: "archive", label: "Archive…", Icon: Archive },
+  ] as const;
+  return items.map(({ id, label, Icon }) => (
+    <Fragment key={id}>
+      {id === "archive" && <Separator />}
+      <Item
+        disabled={!available[id]}
+        variant={id === "archive" ? "destructive" : "default"}
+        aria-keyshortcuts={shortcutAriaKeys(bindings[id])}
+        onSelect={() => {
+          if (id === "archive" || id === "rename")
+            runActions.openDialog(id, subject, returnFocusId);
+          else void runActions.run(subject, id);
+        }}
+      >
+        <Icon aria-hidden strokeWidth={1.5} />
+        {label}
+        {hint(id) && (
+          <KeyChip aria-hidden className="ml-auto">
+            {hint(id)}
+          </KeyChip>
+        )}
+      </Item>
+    </Fragment>
+  ));
+}
+
 const noRuns: readonly RunNavigationEntry[] = [];
 
 /** Mounted once in the app shell: the Settle confirmation, focus after an action, and the one
@@ -82,6 +151,7 @@ export function RunActionsHost() {
       {dialog?.kind === "archive" && (
         <ArchiveRunDialog
           run={{ id: dialog.runId, title: dialog.title }}
+          entry={runs.find((run) => run.id === dialog.runId)}
           open
           returnFocusId={dialog.returnFocusId}
           onOpenChange={(open) => !open && runActions.closeDialog()}

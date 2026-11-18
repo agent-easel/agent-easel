@@ -138,6 +138,7 @@ function run(
     },
     lifecycle: "active",
     settlement: null,
+    pendingWork: false,
     blocks: [],
     attention: {
       needsInput: matters.some((entry) => entry.presentation === "needs-input"),

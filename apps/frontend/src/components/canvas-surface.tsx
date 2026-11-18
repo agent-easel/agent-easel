@@ -461,6 +461,8 @@ type CanvasSurfaceProps = {
   emptyGraphSize?: { readonly width: number; readonly height: number };
   /** Blocks the entry view frames and following tracks, in a stable order; without them nothing follows. */
   focusTargets?: readonly string[];
+  /** Entry targets when the opening view differs from live following. */
+  entryTargets?: readonly string[];
   /** Whether the canvas is shown rather than covered by another screen. */
   shown?: boolean;
   /** Where an explicit arrangement is committed; without it an arrangement stays local. */
@@ -709,7 +711,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       focusTargets &&
       ((width, height) =>
         entryView(
-          entryTarget(geometry, focusTargets, width, height),
+          entryTarget(geometry, props.entryTargets ?? focusTargets, width, height),
           geometry.boxes(),
           { width, height },
           padding,

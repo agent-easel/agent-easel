@@ -1,4 +1,9 @@
-import { decideAutoFollow, selectExecutionTargets } from "../src/execution-focus.ts";
+import { block, event, runDetail } from "./support/run.ts";
+import {
+  decideAutoFollow,
+  selectEntryTargets,
+  selectExecutionTargets,
+} from "../src/execution-focus.ts";
 import { entryView, fitGraphView } from "../src/canvas-fit.ts";
 import { expect, it } from "vite-plus/test";
 import {
@@ -421,4 +426,25 @@ it("a Run that succeeds while following keeps the view on its last Block", () =>
 
   // Assert
   expect(action).toBe("nothing");
+});
+
+it("a Run without active work opens on the most recently changed finished Block", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "finished" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "human-answered" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
 });

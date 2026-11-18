@@ -1,3 +1,4 @@
+import { RunTextReaderLink } from "./run-result.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { bindingRole } from "./run-coordination.tsx";
 import { useEffect, useId, useState, type FormEvent } from "react";
@@ -18,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
 import { cn } from "../lib/utils.ts";
-import { dayAndTime } from "./execution-state.tsx";
+import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { InspectorDisclosure, InspectorHeading } from "./inspector-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
@@ -487,7 +488,16 @@ function HumanResponseForm({
   return (
     <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
       {occurrence.context && (
-        <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
+        <>
+          <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
+          <RunTextReaderLink
+            label="Read context"
+            title={`${blockName} · context`}
+            metadata={clockTime(occurrence.appearedAt)}
+            text={occurrence.context}
+            link={null}
+          />
+        </>
       )}
       <DecisionSelect
         value={exitId}

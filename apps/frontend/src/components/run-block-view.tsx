@@ -24,7 +24,7 @@ import {
 } from "./run-attention.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
-import { ResultCard } from "./run-result.tsx";
+import { ResultCard, RunTextReaderLink } from "./run-result.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
 import { ConditionArrivals } from "./condition-arrivals.tsx";
 
@@ -54,7 +54,13 @@ function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }
       <p className="text-sm break-words whitespace-pre-wrap text-foreground">
         {recorded.workingMessage}
       </p>
-      <p className="text-xs text-subtle-foreground">Working report</p>
+      <RunTextReaderLink
+        label="Read working report"
+        title={`${recorded.name} · working report`}
+        metadata={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
+        text={recorded.workingMessage}
+        link={recorded.link}
+      />
       <RequestReport
         run={run}
         blockId={recorded.blockId}

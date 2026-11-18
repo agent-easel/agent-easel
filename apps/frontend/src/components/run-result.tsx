@@ -1,13 +1,18 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunDetail } from "@t3-factory/contracts";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2 } from "lucide-react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogDismiss,
+  DialogSurface,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
@@ -209,12 +214,14 @@ export function ResultCard({
   report,
   received,
   children,
+  titleOnly,
 }: {
   run: RunDetail;
   report: RunReport;
   /** The handoff that brought this result to the block being inspected. */
   received?: Intent;
   children?: ReactNode;
+  titleOnly?: { readonly workerLink: string | null };
 }) {
   const [reading, setReading] = useState(false);
   const [preview, overflowing] = useOverflowing();
@@ -222,6 +229,37 @@ export function ResultCard({
   const footer = received
     ? [`From ${facts.block}`, received.state !== "acknowledged" && intentState(run, received)]
     : [facts.replacedBy && `Replaced by version ${facts.replacedBy}`, ...deliveries(run, report)];
+  if (titleOnly) {
+    const firstLine = report.resultMessage?.trim().split("\n", 1)[0]?.trim();
+    return (
+      <article
+        aria-label={facts.name}
+        className="flex min-w-0 flex-col gap-1 rounded-md border bg-card px-3 py-2.5"
+      >
+        <header className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+          <span className="text-sm font-semibold">{facts.block}</span>
+          <span className="text-xs text-subtle-foreground">{facts.visit}</span>
+          {titleOnly.workerLink && (
+            <OpenInT3 href={titleOnly.workerLink} className="ml-auto text-sm" />
+          )}
+        </header>
+        {firstLine && (
+          <p className="break-words text-sm font-medium">{firstLine.replace(/^#{1,6}\s+/, "")}</p>
+        )}
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          className="h-auto w-fit p-0 text-label"
+          onClick={() => setReading(true)}
+        >
+          Read result
+        </Button>
+        {children}
+        {reading && <ResultReader run={run} report={report} onClose={() => setReading(false)} />}
+      </article>
+    );
+  }
   return (
     <article
       aria-label={facts.name}
@@ -269,7 +307,68 @@ export function ResultCard({
   );
 }
 
-/** Figma RD16: the full rendered result with its provenance; raw ids stay in Technical details. */
+/** A reader uses the same actions for a result, Working report, or Human context. */
+function RunTextReader({
+  title,
+  metadata,
+  text,
+  link,
+  onClose,
+  children,
+  technicalDetails,
+}: {
+  title: string;
+  metadata: string;
+  text: string;
+  link: string | null;
+  onClose: () => void;
+  children: ReactNode;
+  technicalDetails?: ReactNode;
+}) {
+  const body = useRef<HTMLDivElement>(null);
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogSurface
+        {...(!metadata && { "aria-describedby": undefined })}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          body.current?.focus();
+        }}
+        className="flex max-h-[85dvh] w-[min(calc(100vw-32px),45rem)] flex-col gap-0 overflow-hidden p-0"
+      >
+        <header className="flex min-w-0 shrink-0 items-center gap-2 border-b py-3.5 pr-3 pl-5">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.75">
+            <DialogTitle className="truncate text-title font-semibold">{title}</DialogTitle>
+            {metadata && (
+              <DialogDescription className="truncate text-label text-subtle-foreground">
+                {metadata}
+              </DialogDescription>
+            )}
+          </div>
+          <CopyButton text={text} label="Copy Markdown" />
+          {link && <OpenInT3 href={link} className="text-sm" />}
+          <DialogDismiss label={title.endsWith(" · result") ? "Close result" : "Close reader"} />
+        </header>
+        <div
+          ref={body}
+          data-result-body
+          tabIndex={0}
+          role="region"
+          aria-label={title.endsWith(" · result") ? "Result text" : "Reader text"}
+          className="min-h-0 flex-1 overflow-y-auto px-7 py-5.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+        >
+          {children}
+        </div>
+        {technicalDetails && (
+          <footer className="shrink-0 border-t px-5 pt-1.5 pb-2.5">
+            <InspectorDisclosure label="Technical details">{technicalDetails}</InspectorDisclosure>
+          </footer>
+        )}
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
 function ResultReader({
   run,
   report,
@@ -280,73 +379,71 @@ function ResultReader({
   onClose: () => void;
 }) {
   const facts = resultFacts(run, report);
-  const body = useRef<HTMLDivElement>(null);
-  const link = run.blocks.find((block) => block.blockId === report.blockId)?.link;
-  const provenance = [
-    "Report accepted",
-    facts.exit && `exit ${facts.exit}`,
-    ...deliveries(run, report),
-    clockTime(report.acceptedAt),
-  ];
+  const link = run.blocks.find((block) => block.blockId === report.blockId)?.link ?? null;
+  const provenance = [facts.visit, facts.exit && `→ ${facts.exit}`, clockTime(report.acceptedAt)];
   return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogSurface
-        // Start on the result itself: it scrolls from the keyboard, and Esc is not spent closing
-        // the tooltip a focused header action would open.
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          body.current?.focus();
-        }}
-        className="flex max-h-[85dvh] w-[min(calc(100vw-32px),45rem)] flex-col gap-0 overflow-hidden p-0"
-      >
-        <header className="flex min-w-0 shrink-0 items-center gap-2 border-b py-3.5 pr-3 pl-5">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.75">
-            <DialogTitle className="truncate text-title font-semibold">{facts.name}</DialogTitle>
-            <DialogDescription className="truncate text-label text-subtle-foreground">
-              {provenance.filter(Boolean).join(" · ")}
-            </DialogDescription>
-          </div>
-          <CopyButton text={report.resultMessage ?? ""} label="Copy Markdown" />
-          {link && <OpenInT3 href={link} className="text-sm" />}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Close result"
-                onClick={onClose}
-              >
-                <X aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent shortcut="Esc">Close</TooltipContent>
-          </Tooltip>
-        </header>
-        <div
-          ref={body}
-          data-result-body
-          tabIndex={0}
-          role="region"
-          aria-label="Result text"
-          className="min-h-0 flex-1 overflow-y-auto px-7 py-5.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
-        >
-          {report.resultMessage ? (
-            <ResultMarkdown text={report.resultMessage} density="reader" />
-          ) : (
-            <p className="text-base text-muted-foreground">This result has no message.</p>
-          )}
+    <RunTextReader
+      title={`${facts.block} · result`}
+      metadata={provenance.filter(Boolean).join(" · ")}
+      text={report.resultMessage ?? ""}
+      link={link}
+      onClose={onClose}
+      technicalDetails={
+        <div className="flex flex-col gap-1 font-mono text-2xs leading-4 break-all text-muted-foreground">
+          <p>Execution: {report.executionId ?? "unresolved"}</p>
+          <p>Completion: {facts.completion}</p>
+          <p>Version: {facts.version}</p>
+          {deliveries(run, report).map((delivery) => (
+            <p key={delivery}>{delivery}</p>
+          ))}
         </div>
-        <footer className="shrink-0 border-t px-5 pt-1.5 pb-2.5">
-          <InspectorDisclosure label="Technical details" hint="execution · completion · version">
-            <div className="flex flex-col gap-1 font-mono text-2xs leading-4 break-all text-muted-foreground">
-              <p>Execution: {report.executionId ?? "unresolved"}</p>
-              <p>Completion: {facts.completion}</p>
-              <p>Version: {facts.version}</p>
-            </div>
-          </InspectorDisclosure>
-        </footer>
-      </DialogSurface>
-    </Dialog>
+      }
+    >
+      {report.resultMessage ? (
+        <ResultMarkdown text={report.resultMessage} density="reader" />
+      ) : (
+        <p className="text-base text-muted-foreground">This result has no message.</p>
+      )}
+    </RunTextReader>
+  );
+}
+
+export function RunTextReaderLink({
+  label,
+  title,
+  metadata,
+  text,
+  link,
+}: {
+  label: string;
+  title: string;
+  metadata: string;
+  text: string;
+  link: string | null;
+}) {
+  const [reading, setReading] = useState(false);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="link"
+        size="xs"
+        className="h-auto w-fit p-0 text-label"
+        onClick={() => setReading(true)}
+      >
+        {label}
+      </Button>
+      {reading && (
+        <RunTextReader
+          title={title}
+          metadata={metadata}
+          text={text}
+          link={link}
+          onClose={() => setReading(false)}
+        >
+          <p className="break-words whitespace-pre-wrap text-foreground">{text}</p>
+        </RunTextReader>
+      )}
+    </>
   );
 }
