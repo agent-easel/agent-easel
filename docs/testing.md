@@ -164,8 +164,9 @@ module, built with the seed's builders.
 ### PR journey check
 
 The **Controlled UI journeys** PR check runs the complete existing suite in three
-parallel shards after a frozen install, build and Chromium installation. Each shard
-is its own runner invocation with one worker and its own freshly seeded fixture, so
+parallel shards after a frozen install, a frontend build with its workspace dependencies,
+and Chromium installation. The fixture runs the backend from source. Each shard is its
+own runner invocation with one worker and its own freshly seeded fixture, so
 a journey must not depend on state another journey created; the check passes only
 when every shard passes. Browser installation
 and journey execution are separate Actions steps so their durations are distinguishable.
