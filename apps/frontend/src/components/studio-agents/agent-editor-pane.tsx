@@ -307,6 +307,7 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
   return (
     <SettingsProblemCard
       id={workerCardId}
+      label="Agent reporting status"
       tone="warning"
       title={reportingProblem.label}
       action={

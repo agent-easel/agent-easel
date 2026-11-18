@@ -451,7 +451,7 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await screen
     .getByLabel("Exit 2 description", { exact: true })
     .fill("Explain the changes needed before this work can continue.");
-  await screen.getByRole("checkbox", "Exit 2 message required", { exact: true }).tap();
+  await screen.getByRole("switch", "Exit 2 message required", { exact: true }).tap();
   await screen.getByRole("button", "Create Agent", { exact: true }).tap();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeVisible();
   const agentId = new URL(await browser.url()).pathname.split("/").at(-1)!;
@@ -528,12 +528,12 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await app.screenshot("agent-exit-renamed-wire");
   await screen.getByRole("link", "Agents", { exact: true }).tap();
   await screen.getByRole("link", /Exit journey worker/).tap();
-  await screen.getByRole("button", "Remove exit 1", { exact: true }).tap();
+  await screen.getByRole("button", "Remove exit ready-for-review", { exact: true }).tap();
   await screen.getByRole("button", "Save", { exact: true }).tap();
   await expectSavedAgentRevision(screen, 3);
   await expect(screen.getByLabel("Exit 1 name", { exact: true })).toHaveValue("changes-needed");
   await expect(
-    screen.getByRole("checkbox", "Exit 1 message required", { exact: true }),
+    screen.getByRole("switch", "Exit 1 message required", { exact: true }),
   ).toBeChecked();
   await screen.getByRole("link", "Flows", { exact: true }).tap();
   await screen.getByRole("link", /Agent exit journey/).tap();

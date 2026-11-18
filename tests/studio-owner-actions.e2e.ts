@@ -21,8 +21,9 @@ import {
 const viewport = { width: 1440, height: 900 };
 const unique = () => crypto.randomUUID().slice(0, 8);
 /** Settles dialog and menu transitions before a screenshot. */
+// allSettled: a focus transition that a later style change cancels rejects its `finished`.
 const settled =
-  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
+  "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)";
 
 const agentEditor = (screen: Screen) => screen.getByRole("region", "Agent editor");
 
@@ -99,7 +100,7 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   await app.screenshot("change-owner-refused");
   await refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }).tap();
   const duplicate = screen.getByRole("dialog", `Duplicate “${agent.name}”`);
-  await expect(duplicate.getByRole("button", "Target owner")).toContainText("Northwind");
+  await expect(duplicate.getByRole("button", "Owning Project")).toContainText("Northwind");
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused-duplicate");
   // The Duplicate that replaced the refusal still returns focus to the menu that opened the chain.
@@ -269,8 +270,8 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   const { northwind, agent } = await openGlobalAgent({ app, browser }, "Dirty owner");
   await screen.getByLabel("Prompt", { exact: true }).fill("Edited while the owner moves.");
   await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
-  const notice = screen.getByRole("status", "Owner changed elsewhere");
-  await expect(notice).toContainText("This Agent is now owned by Northwind");
+  const notice = screen.getByText("This Agent is now owned by Northwind", { exact: true });
+  await expect(notice).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Edited while the owner moves.",
@@ -278,7 +279,7 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   await app.screenshot("dirty-owner-notice");
 
   // Act
-  await notice.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
+  await screen.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert

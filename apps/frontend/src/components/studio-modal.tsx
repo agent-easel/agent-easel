@@ -232,7 +232,19 @@ function discardMessage(draft: StudioDraft) {
       description: "Discard the retained draft to continue.",
       discard: "Discard",
     };
-  return { title: "Discard unsaved changes?", description: undefined, discard: "Discard changes" };
+  // Figma SA06v: the Agent editor's guard is the short form; Flow and Trigger keep theirs until
+  // their own reviews (#519, #518) move to it.
+  if (draft.kind === "agent")
+    return {
+      title: "Discard unsaved changes?",
+      description: undefined,
+      discard: "Discard changes",
+    };
+  return {
+    title: `Discard unsaved ${kind} changes?`,
+    description: "Discard your edits to continue with the saved revision.",
+    discard: "Discard changes",
+  };
 }
 
 function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioDraftGuard> }) {
