@@ -54,13 +54,17 @@ export function ActivityAge({ at }: { at: string }) {
   );
 }
 
-function useRowInteractions(disabled: boolean) {
+function useRowInteractions(disabled: boolean, selected: boolean) {
   const { menuOpen, setMenuOpen } = useContext(SidebarRowsContext)!;
   const [ownMenuOpen, setOwnMenuOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [actionsTipOpen, setActionsTipOpen] = useState(false);
   const suppressPreview = useRef(false);
   const row = useRef<HTMLDivElement>(null);
+  // The open Run's row comes into view when it opens or the open Run changes.
+  useEffect(() => {
+    if (selected) row.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
   const link = useRef<HTMLAnchorElement>(null);
   const openAtRow = () => {
     if (disabled || !row.current) return;
@@ -149,7 +153,7 @@ export function SidebarRow({
   actions: ReactNode;
   children: ReactNode;
 }) {
-  const interaction = useRowInteractions(disabled);
+  const interaction = useRowInteractions(disabled, selected);
   const destination =
     kind === "run"
       ? { to: "/runs/$runId" as const, params: { runId: id } }

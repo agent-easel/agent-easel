@@ -1,5 +1,6 @@
 import {
   attentionPresentation,
+  awaitsReviewInT3,
   type ArchivedRunMatch,
   type Result,
   type RunAttention,
@@ -58,7 +59,9 @@ export function openRunNavigation(database: RunnerDatabase) {
             block_id: string;
             state: RunNavigationEntry["blocks"][number]["state"];
             freshness: RunNavigationEntry["blocks"][number]["freshness"];
-          }>`SELECT run_id,block_id,state,freshness FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
+            report_status: "working" | "finished" | null;
+            engine_status: string | null;
+          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
           const working = new Map(
             (yield* currentWorkingMessages(sql)).map((row) => [
               `${row.run_id}/${row.block_id}`,
@@ -66,6 +69,17 @@ export function openRunNavigation(database: RunnerDatabase) {
             ]),
           );
           const byRun = new Map<string, RunNavigationEntry["blocks"][number][]>();
+          const reviewInT3 = new Set(
+            blocks
+              .filter((block) =>
+                awaitsReviewInT3({
+                  state: block.state,
+                  reportStatus: block.report_status,
+                  engineStatus: block.engine_status,
+                }),
+              )
+              .map((block) => block.run_id),
+          );
           const repositories = new Map<string, RunNavigationEntry["repositories"][number][]>();
           for (const { runId, ...worker } of yield* readWorkerRepositories(sql)) {
             const entries = repositories.get(runId) ?? [];
@@ -149,7 +163,8 @@ export function openRunNavigation(database: RunnerDatabase) {
                 attention: {
                   needsInput:
                     settlement === null &&
-                    matters.some((matter) => matter.presentation === "needs-input"),
+                    (reviewInT3.has(row.id) ||
+                      matters.some((matter) => matter.presentation === "needs-input")),
                   problem: matters.some((matter) => matter.presentation === "problem"),
                   matters,
                 },

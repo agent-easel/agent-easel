@@ -2,23 +2,36 @@ import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
-import { sectionLabelClass } from "./page.tsx";
 
-/** Figma inspector section: an uppercase label above its content. */
+/** Figma inspector section heading: the label in sentence case, then its live count outside it,
+ * as in "Progress  2 finished · 1 needs input". */
+export function InspectorHeading({ title, count }: { title: string; count?: string | undefined }) {
+  return (
+    <h3 className="flex min-w-0 items-baseline gap-1.5 text-sm leading-4 font-semibold text-foreground">
+      {title}
+      {count && (
+        <span className="truncate text-xs font-normal text-subtle-foreground">{count}</span>
+      )}
+    </h3>
+  );
+}
+
+/** Figma inspector section: its heading above its content. */
 export function InspectorSection({
   title,
+  count,
   label,
   children,
 }: {
   title: string;
+  count?: string;
   /** Accessible region name when the section is a landmark for reads and tests. */
   label?: string;
   children: ReactNode;
 }) {
   return (
     <section className="flex min-w-0 flex-col gap-2.5" aria-label={label}>
-      <h3 className={cn(sectionLabelClass, "px-2 pt-1.5 pb-1")}>{title}</h3>
+      <InspectorHeading title={title} count={count} />
       {children}
     </section>
   );
@@ -31,7 +44,8 @@ export function InspectorDisclosure({
   children,
 }: {
   label: string;
-  hint: string;
+  /** One live value after the label, never fixed text. */
+  hint?: string;
   children: ReactNode;
 }) {
   return (
@@ -50,7 +64,7 @@ export function InspectorDisclosure({
           <span className="min-w-0 flex-1 truncate text-left font-medium text-muted-foreground">
             {label}
           </span>
-          <span className="shrink-0 font-normal text-subtle-foreground">{hint}</span>
+          {hint && <span className="shrink-0 font-normal text-subtle-foreground">{hint}</span>}
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-5">{children}</CollapsibleContent>

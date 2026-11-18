@@ -6,7 +6,9 @@ import {
   observeFor,
   repositoryFactsObserved,
   twoRunsOfOneFlow,
+  workerAtWork,
   workerLaunched,
+  workingReportedIdle,
 } from "./support/scenarios.ts";
 
 const repository = {
@@ -338,4 +340,21 @@ it("a pending native request in navigation carries the worker's pending request 
   expect(navigation.value[0]?.attention.matters).toMatchObject([
     { kind: "native-request", pendingRequestCount: 2, blockName: "Entry worker" },
   ]);
+});
+
+it("an Agent idle with a working report marks its Run Needs input in navigation without an attention matter", async (c) => {
+  // Arrange
+  const { f, world, input } = await prepared(c);
+  await workingReportedIdle(world, await workerAtWork(world, input));
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  expect(navigation.value[0]?.attention).toStrictEqual({
+    needsInput: true,
+    problem: false,
+    matters: [],
+  });
 });

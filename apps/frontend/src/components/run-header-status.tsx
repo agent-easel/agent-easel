@@ -1,28 +1,21 @@
 import type { ComponentProps } from "react";
-import type { RunFreshness, RunStatus } from "../run-status.ts";
+import type { RunFreshness, RunHeaderStatus as HeaderStatus } from "../run-status.ts";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 const statusClass = "flex min-w-0 shrink items-center gap-1.5 text-xs leading-4 whitespace-nowrap";
 
 const badges = {
-  working: { kind: "working" },
-  "needs-input": { kind: "needs-input" },
-  problem: { kind: "problem" },
   settled: { kind: "finished", children: "Settled" },
   archived: { kind: "stopped", children: "Archived" },
   idle: { kind: "neutral", children: "Idle" },
-} as const satisfies Record<RunStatus["kind"], ComponentProps<typeof StatusBadge>>;
+} as const satisfies Record<HeaderStatus["kind"], ComponentProps<typeof StatusBadge>>;
 
-function statusDetail(status: RunStatus) {
-  if (status.kind === "idle") return null;
-  if ("at" in status) return status.at ? dayAndTime(status.at) : null;
-  return status.blocks.join(", ") || null;
-}
-
-/** The one Run status in the Run header: its badge, then what it is about. */
-export function RunHeaderStatus({ status }: { status: RunStatus }) {
-  const detail = statusDetail(status);
+/** A Settled or Archived Run's lifecycle with its time, or Idle; an Active Run's work states stay
+ * on its row and Blocks. */
+export function RunHeaderStatus({ status }: { status: HeaderStatus | null }) {
+  if (!status) return null;
+  const detail = status.kind !== "idle" && status.at ? dayAndTime(status.at) : null;
   return (
     <span role="status" aria-label="Run status" className={statusClass}>
       <StatusBadge {...badges[status.kind]} />

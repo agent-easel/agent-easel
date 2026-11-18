@@ -8,11 +8,12 @@ import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 import { Archive, Ellipsis, Info, PanelRight, TriangleAlert, Unplug, Workflow } from "lucide-react";
-import { RunAttentionDetails } from "../components/run-attention.tsx";
+import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
+import { StudioLink } from "../components/app-link.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import { NotLiveMarker, RunHeaderStatus } from "../components/run-header-status.tsx";
-import { runFreshness, runStatus, type RunFreshness } from "../run-status.ts";
+import { runFreshness, runHeaderStatus, type RunFreshness } from "../run-status.ts";
 import { GeneratingTitle } from "../components/run-title-generation.tsx";
 import { RunTimeline } from "../components/run-timeline.tsx";
 import { ExecutionCanvas } from "../components/execution-canvas.tsx";
@@ -218,9 +219,9 @@ function RunDetailView({
               }
             />
           </div>
-          {!inspectorOpen && run.attention.some((item) => !item.settledAt) && (
+          {!inspectorOpen && attentionPending(run) && (
             <div className="max-h-60 shrink-0 overflow-auto border-t px-4 py-3">
-              <RunAttentionDetails run={run} observationUnavailable={unavailable} />
+              <RunAttentionDetails run={run} />
             </div>
           )}
           {run.settlement && <RunSettlementSection id={run.id} settlement={run.settlement} />}
@@ -284,16 +285,13 @@ function RunTopBar({
           {unavailable && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
           <span aria-hidden>·</span>
           <Workflow aria-hidden className="size-2.75 shrink-0" strokeWidth={1.75} />
-          <span className="truncate font-medium">
-            <span className="sr-only">Flow for this Run: </span>
-            {run.flowName} · captured revision
-          </span>
+          <RunFlowName run={run} />
           <span className="tracking-label">· Started {dayAndTime(run.startedAt)}</span>
           {run.origin && <RunOriginMeta origin={run.origin} />}
         </p>
       </div>
       <NotLiveMarker freshness={freshness} />
-      <RunHeaderStatus status={runStatus(run)} />
+      <RunHeaderStatus status={runHeaderStatus(run)} />
       <RunConversationAction run={run} />
       <Tooltip>
         <TooltipTrigger asChild>
@@ -314,6 +312,25 @@ function RunTopBar({
       </Tooltip>
       {run.lifecycle !== "archived" && <RunActionsMenu run={run} />}
     </header>
+  );
+}
+
+/** The Run's Flow, linking to it in Studio while the Flow exists. */
+function RunFlowName({ run }: { run: RunDetail }) {
+  const name = (
+    <>
+      <span className="sr-only">Flow for this Run: </span>
+      {run.flowName}
+    </>
+  );
+  if (run.currentFlowRevision === null) return <span className="truncate font-medium">{name}</span>;
+  return (
+    <StudioLink
+      selection={{ tab: "flows", flowId: run.flowId }}
+      className="truncate font-medium text-subtle-foreground hover:text-foreground"
+    >
+      {name}
+    </StudioLink>
   );
 }
 

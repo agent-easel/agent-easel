@@ -227,7 +227,20 @@ function isActive(run: RunNavigationEntry) {
   return run.lifecycle === "active";
 }
 
-/** Revealed drafts join the open Runs in creation order; title search covers both. */
+/** Runs that need you lead the open list: Needs input, then Problem; each keeps its order. */
+function needRank(entry: RunNavigationEntry | SavedRunDraft) {
+  if (!("presentation" in entry)) return 2;
+  if (entry.attention.needsInput) return 0;
+  return entry.attention.problem ? 1 : 2;
+}
+
+const byNeed = (
+  left: RunNavigationEntry | SavedRunDraft,
+  right: RunNavigationEntry | SavedRunDraft,
+) => needRank(left) - needRank(right);
+
+/** Revealed drafts join the open Runs in creation order, after the Runs that need you; title
+ * search covers both in creation order. */
 function navigationGroups(
   runs: readonly RunNavigationEntry[],
   drafts: readonly SavedRunDraft[],
@@ -243,7 +256,7 @@ function navigationGroups(
   return {
     open: query
       ? [...runMatches, ...draftMatches].toSorted(byCreation)
-      : [...main, ...draftMatches].toSorted(byCreation),
+      : [...main, ...draftMatches].toSorted(byCreation).toSorted(byNeed),
     snoozed,
     settled,
     matches: runMatches.length + draftMatches.length,

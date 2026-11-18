@@ -1,14 +1,31 @@
-import type { RunBlock } from "@t3-factory/contracts";
+import type { ContinuationVisit, RunBlock, RunThreadBinding } from "@t3-factory/contracts";
 
 /**
- * Empty targets mean a whole-graph overview. Active work takes precedence over failure. A `sent`
- * Continuation is not a target itself: its work shows on the owning Agent, which is `working`.
+ * Empty targets mean no active work. Active work takes precedence over failure. A `sent`
+ * Continuation is a target while its prompt is worked on, in place of the Agent whose thread
+ * works on it; once it has passed its response on, the focus moves to the next active Block.
  */
-export function selectExecutionTargets(
-  blocks: readonly Pick<RunBlock, "blockId" | "state">[],
-): string[] {
-  const active = blocks.filter((block) => block.state === "working" || block.state === "waiting");
-  const targets = active.length ? active : blocks.filter((block) => block.state === "error");
+export function selectExecutionTargets(run: {
+  readonly blocks: readonly Pick<RunBlock, "blockId" | "state">[];
+  readonly continuationVisits: readonly Pick<ContinuationVisit, "blockId" | "kind" | "bindingId">[];
+  readonly threadBindings: readonly Pick<RunThreadBinding, "id" | "blockId">[];
+}): string[] {
+  const sent = new Set(
+    run.blocks.filter((block) => block.state === "sent").map((block) => block.blockId),
+  );
+  const owners = new Set(
+    run.continuationVisits
+      .filter((visit) => visit.kind === "prompt" && sent.has(visit.blockId))
+      .map(
+        (visit) => run.threadBindings.find((binding) => binding.id === visit.bindingId)?.blockId,
+      ),
+  );
+  const active = run.blocks.filter(
+    (block) =>
+      block.state === "sent" ||
+      ((block.state === "working" || block.state === "waiting") && !owners.has(block.blockId)),
+  );
+  const targets = active.length ? active : run.blocks.filter((block) => block.state === "error");
   return targets.map((block) => block.blockId);
 }
 

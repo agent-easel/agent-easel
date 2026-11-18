@@ -16,7 +16,13 @@ import {
 import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
-import { pendingRecovery, RequestReport, RunAttentionDetails } from "./run-attention.tsx";
+import {
+  pendingRecovery,
+  RequestReport,
+  ResolvedAttention,
+  RunAttentionDetails,
+} from "./run-attention.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
 import { ResultCard } from "./run-result.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
@@ -30,7 +36,7 @@ export function currentVisitText(run: RunDetail, block: FlowBlock, visits: Visit
   if (waiting) return waiting;
   const latest = visits[visits.length - 1];
   if (!latest) return "Not visited";
-  return `visit ${visits.length}${latest.start ? ` · since ${clockTime(latest.start)}` : ""}`;
+  return `Visit ${visits.length}${latest.start ? ` · since ${clockTime(latest.start)}` : ""}`;
 }
 
 export const activeStates: readonly RunBlock["state"][] = ["working", "waiting", "sent"];
@@ -350,16 +356,7 @@ function ContinuationVisitItem({
           Visit {number} · {visit.kind}
         </p>
         <p className="text-xs break-words text-subtle-foreground">{visitLine(run, visit)}</p>
-        {link && (
-          <a
-            className="w-fit rounded-sm text-xs font-medium text-link outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            href={link}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open thread in T3
-          </a>
-        )}
+        {link && <OpenInT3 href={link} className="text-xs" />}
       </div>
       <ExecutionStateBadge state={visitPill(visit)} />
     </li>
@@ -478,11 +475,7 @@ export function RunBlockView({
             <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
-        <RunAttentionDetails
-          run={run}
-          blockId={block.id}
-          observationUnavailable={observationUnavailable}
-        />
+        <RunAttentionDetails run={run} blockId={block.id} />
         {block.kind === "continuation" ? (
           <ContinuationHistory run={run} block={block} recorded={recorded} />
         ) : (
@@ -492,6 +485,7 @@ export function RunBlockView({
         <CapturedRevisitInstruction block={block} />
         <BlockExits run={run} block={block} />
         <div aria-hidden className="flex-1" />
+        <ResolvedAttention run={run} blockId={block.id} />
         <TechnicalDetails
           block={block}
           recorded={recorded}
@@ -501,11 +495,7 @@ export function RunBlockView({
       </div>
       <footer className="mx-4 flex shrink-0 items-center border-t py-3">
         {link ? (
-          <Button asChild variant="outline" className="w-full">
-            <a href={link} target="_blank" rel="noreferrer">
-              Open thread in T3
-            </a>
-          </Button>
+          <OpenInT3 href={link} className="text-sm" />
         ) : (
           <p className="text-xs text-subtle-foreground">
             {BLOCK_KINDS[block.kind].observed.noThread}
