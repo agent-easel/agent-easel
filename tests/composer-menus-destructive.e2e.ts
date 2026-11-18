@@ -10,12 +10,7 @@ import {
   pageString,
   readFactoryJson,
 } from "./support/composer-menus.ts";
-import { removeFlowElsewhere } from "./support/flows.ts";
 
-/**
- * Deletes seeded Flows. Run this file by itself, after the suites that start scenario Runs.
- * A later reset in the same process cannot start those Runs once their Flows are gone.
- */
 beforeEach(async ({ app, browser, screen }) => {
   await openComposerMenus(app, browser, screen);
 });
@@ -24,6 +19,7 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   app,
   screen,
   browser,
+  fixture,
 }) => {
   // Arrange — choose a ready Flow, then delete it.
   await selectComposerProject(screen, "Northwind");
@@ -33,7 +29,7 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   assert(selected);
 
   // Act
-  await removeFlowElsewhere(app.baseUrl, selected.id);
+  await fixture.definitions.removeFlow({ id: selected.id });
 
   // Assert
   await expect(
@@ -48,11 +44,9 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   await browser.keyboard.press("Escape");
 
   // Arrange — leave only the not-ready draft.
-  const remaining = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
-  for (const flow of remaining) {
-    if (flow.name !== "Demo · Release checklist (draft)")
-      await removeFlowElsewhere(app.baseUrl, flow.id);
-  }
+  const draft = flows.find((flow) => flow.name === "Demo · Release checklist (draft)");
+  assert(draft);
+  await fixture.definitions.removeFlows({ keepId: draft.id });
   await browser.reload();
   await selectComposerProject(screen, "Northwind");
 
@@ -79,9 +73,8 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   await app.screenshot("after-flow-all-disabled");
   await browser.keyboard.press("Escape");
 
-  // Arrange — remove the last Flow. Nothing after this test may reset the fixture.
-  const left = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
-  for (const flow of left) await removeFlowElsewhere(app.baseUrl, flow.id);
+  // Arrange — remove the last Flow.
+  await fixture.definitions.removeFlows();
   await browser.reload();
   await selectComposerProject(screen, "Northwind");
 
