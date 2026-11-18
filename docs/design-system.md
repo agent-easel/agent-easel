@@ -139,12 +139,12 @@ run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow i
 still describes when it may run.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
-is inert. Studio uses `clamp(1200px, 50vw, 1680px)` by
-`clamp(800px, 80vh, 1200px)` at viewport sizes of at least 1600 × 1000 px.
+is inert. Studio fills the window with a 16 px inset on every side at all viewport
+sizes (`100vw − 32px` by `100vh − 32px`).
 Settings uses `clamp(840px, 50vw, 1280px)` by
-`clamp(560px, 80vh, 960px)` at sizes of at least 1024 × 720 px.
-Below either threshold for each workspace, it fills the window with a 16 px inset
-on every side. Unsaved-change guards and keyboard behavior are specified in
+`clamp(560px, 80vh, 960px)` at sizes of at least 1024 × 720 px. Below either
+Settings threshold, it fills the window with a 16 px inset on every side.
+Unsaved-change guards and keyboard behavior are specified in
 [Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
 
 Canvas blocks, ports and wires use the same tokens as the rest of the UI. Block rows and

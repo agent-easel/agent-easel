@@ -5,8 +5,8 @@ there with its draft intact. Settings holds connection, Agent reporting and keyb
 
 ## Shell
 
-Studio is an almost full-window dialog with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo. The desktop dialog leaves 48 px above
-it for native window controls and 16 px elsewhere; browsers use 16 px margins (8 px when narrow). The 192 px sidebar (144 px narrow) has an **Author** group with **Flows** and **Agents**, each with its
+Studio is a [full-window inset dialog](design-system.md#components-and-interaction) with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo.
+The 192 px sidebar (144 px narrow) has an **Author** group with **Flows** and **Agents**, each with its
 definition count, and an **Automate** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
 in Error while any Trigger is ([Trigger attention](#trigger-attention)). Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
 
