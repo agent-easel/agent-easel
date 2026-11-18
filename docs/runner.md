@@ -496,7 +496,7 @@ numbered arrival selects the first rule whose threshold the number reaches, else
 number, the matched captured rule (none for Otherwise), acceptance time and the Handoff's [worker provenance](#worker-provenance),
 never a copy of the rules; creates one Handoff to every recipient of the selected output, released from creation and carrying
 the unchanged text, including empty text, and provenance; acknowledges the incoming Handoff; moves the count; and appends
-one `condition-selected` event. An unwired selection counts and ends that arrival without cancelling other work or the Run.
+one `condition-selected` event. An unwired selection, possible only in a Run captured before Start required every Condition output to be connected, counts and ends that arrival without cancelling other work or the Run.
 A Condition creates no worker, prompt or report, and no attention except its integrity Problem; it shows waiting while a
 delivery is pending there and finished once every delivery has been numbered.
 

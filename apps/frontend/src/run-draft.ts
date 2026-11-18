@@ -120,16 +120,19 @@ const unsavedUnknownOutcome =
   "Start outcome unknown, and this browser could not save the request for recovery after a reload. Keep this window open and check the same request again to recover its Run without creating a duplicate.";
 
 /**
- * The Flows the composer's picker offers: ready global Flows, then ready Flows of the selected
- * Project, keeping the selected Flow listed if it stopped being ready. Without a Project the
- * picker is disabled and offers none.
+ * The Flows the composer's picker offers: every global Flow, then every Flow of the selected
+ * Project. Ready Flows come first and not-ready Flows follow, in each group. Without a Project
+ * the picker is disabled and offers none.
  */
-export function composerFlows(flows: readonly FlowDraft[], projectId: string, flowId: string) {
-  const listed = (flow: FlowDraft) => flow.readiness.ready || flow.id === flowId;
+export function composerFlows(flows: readonly FlowDraft[], projectId: string) {
+  const ordered = (matched: readonly FlowDraft[]) => [
+    ...matched.filter((flow) => flow.readiness.ready),
+    ...matched.filter((flow) => !flow.readiness.ready),
+  ];
   return {
     disabled: !projectId,
-    global: projectId ? flows.filter((flow) => flow.projectId === null && listed(flow)) : [],
-    project: projectId ? flows.filter((flow) => flow.projectId === projectId && listed(flow)) : [],
+    global: projectId ? ordered(flows.filter((flow) => flow.projectId === null)) : [],
+    project: projectId ? ordered(flows.filter((flow) => flow.projectId === projectId)) : [],
   };
 }
 

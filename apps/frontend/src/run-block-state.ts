@@ -11,7 +11,7 @@ import type { RunStateKind } from "./components/status-badge.tsx";
  * A Block's pending attention. Needs input is a pending question or decision, or an Agent that
  * awaits review in T3; a confirmed Settle answers nothing, so then nothing asks.
  */
-export function blockAttention(run: RunDetail, recorded: RunBlock | undefined) {
+function blockAttention(run: RunDetail, recorded: RunBlock | undefined) {
   if (!recorded) return { needsInput: false, problem: false };
   const pending = run.attention.filter(
     (item) => item.blockId === recorded.blockId && !item.settledAt,
@@ -36,14 +36,19 @@ const stateKinds: Record<RunBlock["state"], RunStateKind | null> = {
   stopped: "stopped",
 };
 
-/** The canonical state a started Block shows; Needs input replaces Working and Waiting. */
+/**
+ * The canonical state a started Block shows. Needs input replaces Working and Waiting; a pending
+ * Problem replaces any other settled state, but a Block still running in T3 shows Working.
+ */
 export function blockStateKind(
   run: RunDetail,
   recorded: RunBlock | undefined,
 ): RunStateKind | null {
   const kind = recorded ? stateKinds[recorded.state] : null;
-  if ((kind === "working" || kind === "waiting") && blockAttention(run, recorded).needsInput)
-    return "needs-input";
+  const attention = blockAttention(run, recorded);
+  if ((kind === "working" || kind === "waiting") && attention.needsInput) return "needs-input";
+  if (kind !== null && kind !== "working" && kind !== "waiting" && attention.problem)
+    return "problem";
   return kind;
 }
 

@@ -562,7 +562,6 @@ export function FlowCanvas({
     <CanvasSurface
       ref={ref}
       label="Flow canvas"
-      className="bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px]"
       scope={savedGraph ? flow.id : null}
       graph={graph}
       agents={agents}

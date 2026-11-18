@@ -2,6 +2,7 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  notFound,
   redirect,
   trimPathRight,
 } from "@tanstack/react-router";
@@ -67,20 +68,18 @@ const studioTriggersRoute = createRoute({
   path: "studio/triggers",
   beforeLoad: () => openStudio({ tab: "triggers" }),
 });
-const studioNewTriggerRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "studio/triggers/new",
-  beforeLoad: () => openStudio({ tab: "triggers", triggerId: "new" }),
-});
 const studioNewGitHubIssuesTriggerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "studio/triggers/new/github-issues",
-  beforeLoad: () => openStudio({ tab: "triggers", triggerId: "new", kind: "github_issues" }),
+  beforeLoad: () => openStudio({ tab: "triggers", triggerId: "new" }),
 });
 const studioTriggerRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "studio/triggers/$triggerId",
-  beforeLoad: ({ params }) => openStudio({ tab: "triggers", triggerId: params.triggerId }),
+  beforeLoad: ({ params }) => {
+    if (params.triggerId === "new") throw notFound();
+    openStudio({ tab: "triggers", triggerId: params.triggerId });
+  },
 });
 const flowsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -165,7 +164,6 @@ const routeTree = rootRoute.addChildren([
   studioAgentsRoute,
   studioAgentRoute,
   studioTriggersRoute,
-  studioNewTriggerRoute,
   studioNewGitHubIssuesTriggerRoute,
   studioTriggerRoute,
   flowsRoute,

@@ -1,7 +1,7 @@
 # Projects
 
-The Run composer discovers T3 projects, selects one, and adds an existing local Git
-repository. Selection is saved across browser/backend restarts. Global Flows stay
+The Run composer discovers T3 projects and selects one. Adding a repository is T3's
+job; the composer menu does not add one. Selection is saved across browser/backend restarts. Global Flows stay
 available across all selections without assignment; a Project Flow starts only in its
 [owning Project](studio.md#ownership). The composer clears a selected Project when a current catalog says it is no longer
 available, except while the connection is down, when Project and Flow keep their last known values. An unavailable
@@ -19,24 +19,26 @@ Missing or unreadable images fall back to a folder.
 The backend returns normalized icon metadata from T3, or null when none is supplied;
 it never manufactures a default icon. The frontend owns the folder fallback.
 Its choices show the same details with a vertically centered check
-on the right of the current selection and an accent background; unavailable
-projects remain selectable for history. Search by project name or repository
-path at the top of the dropdown (case-insensitive). The wider dropdown limits
-its height to the viewport and scrolls the project list independently, keeping
-search and actions visible. Searching does not change the selected project.
+on the right of the current selection and an accent background. Only available
+projects are listed. Search by project name or repository path appears at the
+top when the menu lists more than seven projects (case-insensitive). The menu
+opens downward, caps its height to the space below the field, and scrolls the
+list with a visible scrollbar and a bottom fade, keeping search and **Refresh
+projects** visible. Searching does not change the selected project.
 Project icons identify projects rather
 than represent their availability. The closed Project field does not tag a Project a current catalog can no
 longer start. Last-known icons remain with unavailable project references and refresh when T3 changes or
 removes the icon.
-Choose **No project selected** to clear the selection. **Recheck projects** and
-**Add repository** are actions inside the dropdown. Adding opens a dialog, retains
-the entered path on failure and selects the project after a successful add.
+The closed field's placeholder is the only empty-selection text. The menu has no
+row that clears the selection. **Refresh projects** is the action in the dropdown.
+With no available projects, the menu holds only that action.
 
 T3 owns the project identifier, title and repository path. Factory periodically
-reconciles them and offers **Recheck projects**. Rename/move/restore projects in
+reconciles them and the menu offers **Refresh projects**. Rename/move/restore projects in
 T3; Factory has no path editor, clone, initialization or repair workflow.
+A project removed from T3 is cleared from the composer and is not listed.
 
-**Add repository** accepts an absolute path on the local backend/T3 host. Factory
+The project API still accepts an absolute path on the local backend/T3 host, for setup. Factory
 validates the Git checkout and resolves symlinks and execution worktrees to their
 source checkout, looks through the complete T3 project listing for that path,
 then reuses its project or immediately registers it in T3. Registration explicitly
@@ -45,9 +47,8 @@ URLs are never used to merge identity. An ambiguous association is reported for
 resolution in T3, without a duplicate-selection workflow.
 
 Project creation has no demonstrated idempotency key. A failed or lost create response is uncertain, never automatically retried.
-Recheck projects before another add attempt: discovery may find the project that
-T3 already created. Failed discovery blocks creation. Input remains in the form
-on failure.
+Refresh projects before another registration attempt: discovery may find the project that
+T3 already created. Failed discovery blocks creation.
 
 Saved references include endpoint, environment and T3 project id. Switching the
 connection/environment retains earlier projects and selection, marks them

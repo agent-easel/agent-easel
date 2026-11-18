@@ -1,7 +1,6 @@
 import { RunTextReaderLink } from "./run-result.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
-import { bindingRole } from "./run-coordination.tsx";
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import {
   attentionPresentation,
   awaitsReviewInT3,
@@ -17,79 +16,32 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
+import {
+  blockedWorkers,
+  matterCopy,
+  pendingRecovery,
+  reportCopy,
+  reportReasonCode,
+  reportRecoveryState,
+  requestReportBlocker,
+  settlementCopy,
+  settlementPrimary,
+} from "../attention-copy.ts";
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
+import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { InspectorDisclosure, InspectorHeading } from "./inspector-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { fieldLabelClass } from "./page.tsx";
-import { StatusBadge } from "./status-badge.tsx";
-
-const attentionLabel = (kind: RunAttention["kind"]) =>
-  ({
-    human: "Human steps",
-    "native-request": "T3 questions and permissions",
-    "conversation-waiting": "Agent questions",
-    "missing-report": "Missing reports",
-    "report-problem": "Report problems",
-    "execution-failed": "Execution problems",
-    "condition-integrity": "Condition integrity problems",
-    "settlement-unresolved": "Settle could not stop workers",
-  })[kind];
-
-function attentionExplanation(kind: RunAttention["kind"]) {
-  switch (kind) {
-    case "human":
-      return null;
-    case "native-request":
-      return "Respond in T3. Factory cannot answer or approve this request.";
-    case "conversation-waiting":
-      return "An Agent question recorded before questions in chat stopped needing a report.";
-    case "missing-report":
-      return "No report was accepted for this completed execution. Check any report rejection below before requesting a separate assessment turn.";
-    case "report-problem":
-      return "A report or its work evidence needs attention. Inspect the recorded reason and the worker in T3.";
-    case "execution-failed":
-      return "T3 execution did not complete successfully. Continue in T3 to investigate.";
-    case "condition-integrity":
-      return "This Condition cannot number its next arrival, so it accepts none until the Run is Settled or Archived.";
-    case "settlement-unresolved":
-      return "Settle could not stop this Run's workers. Settle again, remove queued work in T3, or Archive the Run.";
-  }
-}
+import { runActions, useRunActions } from "./run-actions.tsx";
+import { useSettleRun } from "./settle-run.tsx";
+import { RUN_STATE_LABELS, StatusBadge } from "./status-badge.tsx";
+import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 
 /** What a matter is about: its Block, or the Run for a Run-level matter. */
 const attentionSubject = (item: RunAttention) => item.blockName ?? "Run";
-
-/** The workers a Settle could not resolve, each with what keeps it from finishing and its T3
- * thread, where queued work can be removed. */
-function BlockedWorkers({ run }: { run: RunDetail }) {
-  const blocked = (run.settlement?.workers ?? []).filter((worker) => worker.state === "unresolved");
-  if (!blocked.length) return null;
-  return (
-    <ul aria-label="Blocked workers" className="flex flex-col gap-2">
-      {blocked.map((worker) => (
-        <li key={worker.threadId ?? worker.blockId} className="flex min-w-0 flex-col gap-1">
-          <p className="text-sm font-medium text-foreground">{worker.blockName}</p>
-          {worker.problem && <p className="text-sm text-muted-foreground">{worker.problem}</p>}
-          {worker.link && <OpenInT3 href={worker.link} className="text-sm" />}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function recordedProblem(run: RunDetail, item: RunAttention) {
-  return (
-    run.executions.find(
-      (execution) =>
-        execution.blockId === item.blockId &&
-        execution.executionId === item.executionId &&
-        (!item.bindingId || execution.bindingId === item.bindingId),
-    )?.problem ?? run.blocks.find((block) => block.blockId === item.blockId)?.problem
-  );
-}
 
 function selectedExit(run: RunDetail, item: RunAttention) {
   const occurrence = run.humanOccurrences.find((entry) => entry.id === item.occurrenceId);
@@ -100,8 +52,8 @@ function selectedExit(run: RunDetail, item: RunAttention) {
 }
 
 /**
- * Run-local attention. Omit `blockId` for the whole Run. Pass a block id so a
- * later canvas selection can render the same responses, problem details and T3 links.
+ * Run-local attention. Omit `blockId` for the whole Run. Pass a block id for the selected Block's
+ * cards, which drop their status row and Technical details: the Block view shows both itself.
  */
 type AttentionDetailsProps = {
   run: RunDetail;
@@ -120,38 +72,145 @@ function reviewsInT3(run: RunDetail, blockId: string | undefined) {
   );
 }
 
+/** Figma RD40: an Active Run whose worktree T3 could not create; no worker was launched into it. */
+function workspaceFailed(run: RunDetail) {
+  return (
+    run.lifecycle === "active" &&
+    run.workspace.mode === "worktree" &&
+    run.workspace.state === "failed"
+  );
+}
+
 /** Whether anything is pending in `run`'s attention, so the Attention section shows. */
 export function attentionPending(run: RunDetail) {
-  return run.attention.some((item) => !item.settledAt) || reviewsInT3(run, undefined).length > 0;
+  return (
+    run.attention.some((item) => !item.settledAt) ||
+    reviewsInT3(run, undefined).length > 0 ||
+    workspaceFailed(run)
+  );
+}
+
+/** The Blocks whose T3 thread a pending Attention card links to; their Activations rows carry no
+ * link. */
+export function attentionLinkedBlocks(run: RunDetail) {
+  return new Set([
+    ...run.attention.flatMap((item) =>
+      !item.settledAt && item.link && item.blockId ? [item.blockId] : [],
+    ),
+    ...reviewsInT3(run, undefined).flatMap((block) => (block.link ? [block.blockId] : [])),
+    ...(run.attention.some((item) => item.kind === "settlement-unresolved" && !item.settledAt)
+      ? blockedWorkers(run).flatMap((worker) => (worker.link ? [worker.blockId] : []))
+      : []),
+  ]);
+}
+
+/** A missing report and the report rejections of the same execution are one matter. */
+function reportGroups(items: readonly RunAttention[]) {
+  const groups = new Map<string, RunAttention[]>();
+  for (const item of items)
+    if (item.kind === "missing-report" || item.kind === "report-problem") {
+      const key = `${item.blockId}\u0000${item.executionId}`;
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+  return [...groups.values()];
 }
 
 /** Pending attention only; resolved matters wait in their own closed row below. */
 function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
+  const compact = blockId !== undefined;
   const pending = run.attention.filter(
     (item) => !item.settledAt && (blockId === undefined || item.blockId === blockId),
   );
   const reviews = reviewsInT3(run, blockId);
-  const count = pending.length + reviews.length;
-  if (!count) return null;
+  const workspace = !compact && workspaceFailed(run);
+  const problems = pending.filter((item) => attentionPresentation(item.kind) === "problem");
+  const reports = reportGroups(problems);
+  const others = problems.filter(
+    (item) => item.kind !== "missing-report" && item.kind !== "report-problem",
+  );
   const questions = pending.filter((item) => attentionPresentation(item.kind) === "needs-input");
+  const count =
+    questions.length + reviews.length + reports.length + others.length + (workspace ? 1 : 0);
+  if (!count) return null;
   return (
     <section className="flex min-w-0 flex-col gap-3 wrap-anywhere" aria-label="Run attention">
-      {blockId === undefined && <InspectorHeading title="Attention" count={`${count} pending`} />}
+      {!compact && <InspectorHeading title="Attention" count={`${count} pending`} />}
       {(questions.length > 0 || reviews.length > 0) && (
         <section aria-label="Needs input" className="space-y-3">
           {reviews.map((block) => (
-            <ReviewInT3 key={block.blockId} block={block} />
+            <ReviewInT3 key={block.blockId} block={block} compact={compact} />
           ))}
           {questions.map((item) => (
-            <PendingMatter key={item.id} run={run} item={item} />
+            <QuestionMatter key={item.id} run={run} item={item} compact={compact} />
           ))}
         </section>
       )}
-      <ProblemGroup
-        items={pending.filter((item) => attentionPresentation(item.kind) === "problem")}
-        run={run}
-      />
+      {(workspace || reports.length > 0 || others.length > 0) && (
+        <section aria-label="Problem" className="space-y-3">
+          {workspace && <WorkspaceProblem run={run} />}
+          {others.map((item) =>
+            item.kind === "settlement-unresolved" ? (
+              <SettlementProblem key={item.id} run={run} item={item} />
+            ) : (
+              <ProblemMatter key={item.id} run={run} item={item} compact={compact} />
+            ),
+          )}
+          {reports.map((items) => (
+            <ReportProblem key={items[0]!.id} run={run} items={items} compact={compact} />
+          ))}
+        </section>
+      )}
     </section>
+  );
+}
+
+/**
+ * Figma Attention card: one tone, a sentence that names the Block and what happened, one sentence
+ * with the next action, at most one primary action, and raw facts folded in Technical details.
+ * In the Block view (`compact`) it has no status row and no Technical details.
+ */
+function AttentionCard({
+  tone,
+  subject,
+  label,
+  compact,
+  title,
+  next,
+  actions,
+  details,
+  children,
+}: {
+  tone: "needs-input" | "problem";
+  subject: string;
+  /** The card's accessible name; by default its tone and subject, as "Problem · Implement change". */
+  label?: string;
+  compact: boolean;
+  title?: string | undefined;
+  next?: ReactNode;
+  actions?: ReactNode;
+  details?: readonly TechnicalDetail[];
+  children?: ReactNode;
+}) {
+  return (
+    <article
+      aria-label={label ?? `${RUN_STATE_LABELS[tone]} · ${subject}`}
+      className={cn(
+        "flex min-w-0 flex-col gap-2.5 rounded-lg border bg-card p-4",
+        tone === "needs-input" ? "border-attention/75" : "border-destructive/75",
+      )}
+    >
+      {!compact && (
+        <div className="flex min-w-0 items-center gap-2">
+          <StatusBadge kind={tone} />
+          <span className="truncate text-xs text-muted-foreground">{subject}</span>
+        </div>
+      )}
+      {title && <h3 className="text-sm leading-5 font-semibold text-foreground">{title}</h3>}
+      {next && <p className="text-sm text-muted-foreground">{next}</p>}
+      {children}
+      {actions && <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{actions}</div>}
+      {!compact && details && <TechnicalDetails details={details} />}
+    </article>
   );
 }
 
@@ -159,21 +218,22 @@ function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
  * Figma RD19: an Agent idle with a working report. It may be asking in chat or have stopped
  * without reporting, so the card never says it waits for a reply; the owner reviews in T3.
  */
-function ReviewInT3({ block }: { block: RunBlock }) {
+function ReviewInT3({ block, compact }: { block: RunBlock; compact: boolean }) {
   return (
-    <article
-      aria-label={`Review ${block.name} in T3`}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border border-attention/60 bg-card p-4"
+    <AttentionCard
+      tone="needs-input"
+      subject={block.name}
+      label={`Review ${block.name} in T3`}
+      compact={compact}
+      title={`Review ${block.name} in T3`}
+      actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
-      <StatusBadge kind="needs-input" />
-      <h3 className="text-sm font-medium text-foreground">Review {block.name} in T3</h3>
       {block.workingMessage && (
         <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
           {block.workingMessage}
         </p>
       )}
-      {block.link && <OpenInT3 href={block.link} variant="button" />}
-    </article>
+    </AttentionCard>
   );
 }
 
@@ -194,14 +254,316 @@ export function ResolvedAttention({ run, blockId }: { run: RunDetail; blockId?: 
   );
 }
 
-function ProblemGroup({ items, run }: { items: readonly RunAttention[]; run: RunDetail }) {
-  if (!items.length) return null;
+/** The Block and thread binding a matter is about. */
+function matterFacts(run: RunDetail, item: RunAttention) {
+  const block = run.blocks.find((entry) => entry.blockId === item.blockId);
+  const binding = run.threadBindings.find((entry) => entry.id === item.bindingId);
+  return { block, binding };
+}
+
+/** "fresh · 22:16": how current Factory's last look at the Block's thread is. */
+function observed(item: RunAttention, block: RunBlock | undefined) {
+  return `${item.freshness}${block?.observedAt ? ` · ${clockTime(block.observedAt)}` : ""}`;
+}
+
+/** Reason, Execution, Thread and Observed of a matter about one Block's thread. */
+function matterDetails(
+  run: RunDetail,
+  item: RunAttention,
+  reason: string = item.kind,
+): TechnicalDetail[] {
+  const { block, binding } = matterFacts(run, item);
+  return [
+    ["Reason", reason],
+    ["Execution", item.executionId],
+    ["Thread", binding?.threadId ?? block?.threadId],
+    ["Observed", item.blockId ? observed(item, block) : null],
+  ];
+}
+
+function QuestionMatter({
+  run,
+  item,
+  compact,
+}: {
+  run: RunDetail;
+  item: RunAttention;
+  compact: boolean;
+}) {
+  const subject = attentionSubject(item);
+  // A settling Run accepts no answers, so its question cards show no Needs input chip.
+  const answerable = !run.settlement;
+  if (item.kind === "human") {
+    const source = occurrenceSource(
+      run,
+      run.humanOccurrences.find((entry) => entry.id === item.occurrenceId),
+    );
+    return (
+      <AttentionCard
+        tone="needs-input"
+        subject={subject}
+        label={["Needs input", subject, source].filter(Boolean).join(" · ")}
+        compact={compact || !answerable}
+      >
+        {source && <p className="text-xs text-muted-foreground">{source}</p>}
+        <PendingHuman run={run} item={item} />
+      </AttentionCard>
+    );
+  }
+  const { title, next } = matterCopy(item);
   return (
-    <section aria-label="Problem" className="space-y-3">
-      {items.map((item) => (
-        <PendingMatter key={item.id} run={run} item={item} />
-      ))}
-    </section>
+    <AttentionCard
+      tone="needs-input"
+      subject={subject}
+      compact={compact || !answerable}
+      title={title}
+      next={next}
+      actions={item.link && <OpenInT3 href={item.link} variant="button" />}
+    />
+  );
+}
+
+/** Execution failed and Condition integrity: one Block's Problem and its one action. */
+function ProblemMatter({
+  run,
+  item,
+  compact,
+}: {
+  run: RunDetail;
+  item: RunAttention;
+  compact: boolean;
+}) {
+  const { title, next } = matterCopy(item);
+  const { block } = matterFacts(run, item);
+  const recorded =
+    run.executions.find(
+      (execution) =>
+        execution.blockId === item.blockId &&
+        execution.executionId === item.executionId &&
+        (!item.bindingId || execution.bindingId === item.bindingId),
+    )?.problem ?? block?.problem;
+  const action =
+    item.kind === "condition-integrity" ? (
+      <SettleRunAction run={run} />
+    ) : (
+      item.link && <OpenInT3 href={item.link} variant="button" />
+    );
+  return (
+    <AttentionCard
+      tone="problem"
+      subject={attentionSubject(item)}
+      compact={compact}
+      title={title}
+      next={next}
+      actions={action}
+      details={[
+        ...matterDetails(run, item),
+        // A failure that recorded only its kind adds nothing to the Reason row.
+        [
+          "Detail",
+          item.kind === "condition-integrity"
+            ? item.message
+            : recorded !== item.kind
+              ? recorded
+              : null,
+        ],
+      ]}
+    />
+  );
+}
+
+/**
+ * Figma RD33–RD36 and RD55: a missing report and the rejected reports of the same execution are
+ * one card. Request report leads while it can be sent; after a request the card says so and
+ * offers nothing until the Agent's assessment turn ends.
+ */
+function ReportProblem({
+  run,
+  items,
+  compact,
+}: {
+  run: RunDetail;
+  items: readonly RunAttention[];
+  compact: boolean;
+}) {
+  const first = items[0]!;
+  const missing = items.find((item) => item.kind === "missing-report");
+  const rejection = items.findLast((item) => item.kind === "report-problem");
+  const { block } = matterFacts(run, first);
+  const recovery = reportRecoveryState(
+    run,
+    block,
+    items.map((item) => item.id),
+  );
+  const subject = attentionSubject(first);
+  const copy = reportCopy(subject, rejection, recovery.state);
+  const link = items.find((item) => item.link)?.link;
+  const reasons = items.map((item) =>
+    item.kind === "report-problem" ? (reportReasonCode(item.message) ?? item.kind) : item.kind,
+  );
+  const details: TechnicalDetail[] = [
+    ...matterDetails(run, first, [...new Set(reasons)].join(" · ")),
+    ["Report", rejection?.message],
+  ];
+  if (recovery.state === "requested")
+    return (
+      <AttentionCard
+        tone="problem"
+        subject={subject}
+        compact={compact}
+        title={copy.title}
+        next={`Report requested at ${clockTime(recovery.recovery.requestedAt)}. The Agent is checking its work.`}
+        actions={link && <OpenInT3 href={link} />}
+        details={details}
+      />
+    );
+  if (!missing)
+    return (
+      <AttentionCard
+        tone="problem"
+        subject={subject}
+        compact={compact}
+        title={copy.title}
+        next="Check the Agent’s work in T3."
+        actions={link && <OpenInT3 href={link} variant="button" />}
+        details={details}
+      />
+    );
+  return (
+    <AttentionCard
+      tone="problem"
+      subject={subject}
+      compact={compact}
+      title={copy.title}
+      next={copy.next}
+      details={details}
+    >
+      <RequestReport run={run} block={block} link={link} />
+    </AttentionCard>
+  );
+}
+
+/**
+ * Figma RD31 and RD32: Settle could not stop the Run's workers. When T3 cannot stop worker threads
+ * the owner stops them in T3, so Open in T3 leads and Retry settlement is a link; otherwise a retry
+ * can succeed and leads. Archive stays in the Run's ··· menu.
+ */
+function SettlementProblem({ run, item }: { run: RunDetail; item: RunAttention }) {
+  const blocked = blockedWorkers(run);
+  const { title, next } = settlementCopy(run);
+  return (
+    <AttentionCard
+      tone="problem"
+      subject="Run"
+      compact={false}
+      title={title}
+      next={next}
+      actions={<SettlementActions run={run} />}
+      details={[
+        ["Reason", item.kind],
+        ["Attempt", run.settlement ? String(run.settlement.attempt) : null],
+        ...blocked.map((worker): TechnicalDetail => [
+          worker.blockName,
+          [
+            worker.threadId ?? "not launched yet",
+            worker.stopOutcome && `stop ${worker.stopOutcome}`,
+            worker.problem,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        ]),
+      ]}
+    />
+  );
+}
+
+/** Retry settlement, the Run's only settlement retry, with Open in T3 for the first blocked worker. */
+function SettlementActions({ run }: { run: RunDetail }) {
+  const { settle, dialog } = useSettleRun();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const link = blockedWorkers(run).find((worker) => worker.link)?.link;
+  const primary = settlementPrimary(run);
+  async function retry() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    return await settle(run.id, true)
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Could not retry settlement.");
+      })
+      .finally(() => setBusy(false));
+  }
+  const retryButton = (
+    <MutationGate>
+      <Button
+        size="sm"
+        variant={busy ? "outline" : primary === "retry" ? "default" : "link"}
+        disabled={busy}
+        onClick={() => void retry()}
+      >
+        {busy ? "Retrying settlement…" : "Retry settlement"}
+      </Button>
+    </MutationGate>
+  );
+  return (
+    <>
+      {primary === "open-in-t3" && !busy && link ? (
+        <>
+          <OpenInT3 href={link} variant="button" />
+          {retryButton}
+        </>
+      ) : (
+        <>
+          {retryButton}
+          {link && <OpenInT3 href={link} />}
+        </>
+      )}
+      {error && (
+        <p role="alert" className="w-full text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {dialog}
+    </>
+  );
+}
+
+/** Figma RD40: T3 could not create the Run's worktree, so no worker was launched into it. */
+function WorkspaceProblem({ run }: { run: RunDetail }) {
+  const workspace = run.workspace;
+  return (
+    <AttentionCard
+      tone="problem"
+      subject="Run"
+      compact={false}
+      title="T3 couldn’t create this Run’s worktree"
+      next="Settle this Run, then start it again once T3 can create the worktree."
+      actions={<SettleRunAction run={run} />}
+      details={[
+        ["Reason", "worktree-failed"],
+        ["Base", workspace.mode === "worktree" ? workspace.baseRef : null],
+        ["Detail", workspace.mode === "worktree" ? workspace.problem : null],
+      ]}
+    />
+  );
+}
+
+/** Settle… opens the Run's one Settle confirmation, as the Run actions do. */
+function SettleRunAction({ run }: { run: RunDetail }) {
+  const { value } = useLiveNavigation();
+  const entry = value?.find((candidate) => candidate.id === run.id);
+  const { available, busy } = useRunActions({ entry, detail: run });
+  return (
+    <MutationGate>
+      <Button
+        size="sm"
+        disabled={!available.settle}
+        onClick={() => void runActions.run({ entry, detail: run }, "settle")}
+      >
+        {busy ? "Settling…" : "Settle…"}
+      </Button>
+    </MutationGate>
   );
 }
 
@@ -221,138 +583,6 @@ function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence | undefine
       .filter((activation) => activation.blockId === intent.sourceBlockId)
       .findIndex((activation) => activation.id === activationId) + 1;
   return `From ${source?.name ?? intent.sourceBlockId}${visit ? ` · Visit ${visit}` : ""}`;
-}
-
-function PendingMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
-  const presentation = attentionPresentation(item.kind);
-  // A settling Run accepts no answers, so it shows no Needs input chip or explanation.
-  const answerable = presentation !== "needs-input" || !run.settlement;
-  const binding = run.threadBindings.find((b) => b.id === item.bindingId);
-  const explanation = answerable && attentionExplanation(item.kind);
-  const source = occurrenceSource(
-    run,
-    run.humanOccurrences.find((entry) => entry.id === item.occurrenceId),
-  );
-  const subject = attentionSubject(item);
-  return (
-    <article
-      aria-label={[presentation === "needs-input" ? "Needs input" : "Problem", subject, source]
-        .filter(Boolean)
-        .join(" · ")}
-      className={cn(
-        "flex min-w-0 flex-col gap-2 rounded-lg border p-4",
-        presentation === "needs-input"
-          ? "border-attention/60 bg-card"
-          : "border-destructive/40 bg-destructive/8",
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        {answerable && <StatusBadge kind={presentation} />}
-        <h3 className="truncate text-xs text-muted-foreground">{subject}</h3>
-      </div>
-      {source && <p className="text-xs text-muted-foreground">{source}</p>}
-      {explanation && <p className="text-sm font-medium text-foreground">{explanation}</p>}
-      <MatterKindDetail run={run} item={item} binding={binding} />
-      {binding && <BindingDetail binding={binding} executionId={item.executionId} />}
-      {item.kind === "human" && <PendingHuman run={run} item={item} />}
-      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} className="text-sm" />}
-    </article>
-  );
-}
-
-function MatterKindDetail({
-  run,
-  item,
-  binding,
-}: {
-  run: RunDetail;
-  item: RunAttention;
-  binding: RunDetail["threadBindings"][number] | undefined;
-}) {
-  return (
-    <>
-      {item.kind === "native-request" && (
-        <p className="text-sm text-muted-foreground">
-          Thread-level observation; questions and permission approvals may be grouped.
-        </p>
-      )}
-      {(item.kind === "report-problem" || item.kind === "condition-integrity") && item.message && (
-        <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
-          {item.message}
-        </p>
-      )}
-      {item.kind === "execution-failed" && binding?.role === "worker" && (
-        <p className="text-sm">
-          Worker failed. Report recovery cannot repeat or replace worker work.
-        </p>
-      )}
-      {attentionPresentation(item.kind) === "problem" && <ProblemDetail run={run} item={item} />}
-      {item.kind === "settlement-unresolved" && <BlockedWorkers run={run} />}
-      {item.kind === "missing-report" && item.blockId !== null && (
-        <RequestReport
-          run={run}
-          blockId={item.blockId}
-          executionId={item.executionId}
-          recovery={run.recoveries.find((r) => r.attentionId === item.id)}
-        />
-      )}
-    </>
-  );
-}
-
-function BindingDetail({
-  binding,
-  executionId,
-}: {
-  binding: RunDetail["threadBindings"][number];
-  executionId: string;
-}) {
-  return (
-    <dl className="flex flex-col gap-0.5 text-2xs leading-4 text-muted-foreground">
-      <div className="flex gap-2">
-        <dt className="w-14 shrink-0">{bindingRole[binding.role]}</dt>
-        <dd className="min-w-0 font-mono break-all">{binding.threadId}</dd>
-      </div>
-      {executionId && (
-        <div className="flex gap-2">
-          <dt className="w-14 shrink-0">Execution</dt>
-          <dd className="min-w-0 font-mono break-all">{executionId}</dd>
-        </div>
-      )}
-    </dl>
-  );
-}
-
-/** What resolves a Problem, by kind; Needs input kinds never reach a Problem's detail. */
-function problemResolution(item: RunAttention) {
-  switch (item.kind) {
-    case "missing-report":
-      return "This stays unresolved until an explicit report or successful linked recovery is accepted and confirmed. Recovery never starts automatically.";
-    case "report-problem":
-      return item.message
-        ? "A corrected accepted report or confirmed linked recovery settles this rejection; execution progress alone does not."
-        : "Inspect the recorded work evidence in T3.";
-    case "condition-integrity":
-      return "Waiting deliveries stay unnumbered. There is no Retry or repair: Settle or Archive the Run to abandon them; neither resets the count.";
-    case "settlement-unresolved":
-      return "This resolves when settlement succeeds or the Run is Archived.";
-    case "execution-failed":
-    case "human":
-    case "native-request":
-    case "conversation-waiting":
-      return "Inspect the failed execution in T3; report recovery does not retry work.";
-  }
-}
-
-function ProblemDetail({ run, item }: { run: RunDetail; item: RunAttention }) {
-  const detail = item.kind === "report-problem" && item.message ? null : recordedProblem(run, item);
-  return (
-    <p className="text-sm text-muted-foreground">
-      {attentionLabel(item.kind)}
-      {item.executionId ? ` · execution ${item.executionId}` : ""}. {problemResolution(item)}
-      {detail ? ` ${detail}` : ""}
-    </p>
-  );
 }
 
 function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
@@ -623,58 +853,55 @@ function ResponseField({
   );
 }
 
-/** A Block's Request report still in flight: unsent, or its assessment turn not yet completed. */
-export function pendingRecovery(run: RunDetail, block: RunBlock) {
-  return run.recoveries.find(
-    (r) =>
-      r.blockId === block.blockId &&
-      (r.sourceExecutionId === block.executionId ||
-        (r.executionId === block.executionId && block.engineStatus !== "completed")),
-  );
-}
-
 /**
- * Request report for an Agent Block idle after `executionId`. `recovery` is the request already
- * made for that idle run; Factory rechecks that the worker thread is finished in T3.
+ * Request report for an Agent Block idle after its turn: Factory starts one more turn in which the
+ * Agent assesses its existing work and reports, without repeating it. While T3 has not confirmed
+ * the worker idle the button stays neutral with that reason; after a request it says so instead.
  */
 export function RequestReport({
   run,
-  blockId,
-  executionId,
-  recovery,
+  block,
+  link,
 }: {
   run: RunDetail;
+  block: RunBlock | undefined;
+  link?: string | null | undefined;
+}) {
+  const requested = block && pendingRecovery(run, block);
+  if (requested)
+    return (
+      <p className="text-sm text-muted-foreground">
+        Report requested at {clockTime(requested.requestedAt)}. The Agent is checking its work.
+      </p>
+    );
+  const blocker = requestReportBlocker(run, block);
+  if (!block || blocker === "unavailable") return link ? <OpenInT3 href={link} /> : null;
+  return (
+    <RequestReportButton runId={run.id} blockId={block.blockId} waiting={!!blocker} link={link} />
+  );
+}
+
+/** Request report, neutral with its reason while T3 has not confirmed the Agent idle, with Open in
+ * T3 beside it, or below that reason. */
+function RequestReportButton({
+  runId,
+  blockId,
+  waiting,
+  link,
+}: {
+  runId: string;
   blockId: string;
-  executionId: string | null;
-  recovery: RunDetail["recoveries"][number] | undefined;
+  waiting: boolean;
+  link: string | null | undefined;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  if (recovery)
-    return (
-      <p className="text-sm">
-        Report requested · {recovery.executionId ?? "send pending or uncertain"}. Original
-        execution: {recovery.sourceExecutionId}. Worker work is preserved; no automatic retry.
-      </p>
-    );
-  const block = run.blocks.find((b) => b.blockId === blockId);
-  if (!run.gateOpen || !executionId || block?.executionId !== executionId) return null;
-  if (
-    block.engineStatus !== "completed" ||
-    block.freshness !== "fresh" ||
-    block.pendingRequestCount !== 0
-  )
-    return (
-      <p className="text-sm">
-        Request report waits for fresh evidence that the worker thread is idle with no pending
-        native request. No assessment turn has been started.
-      </p>
-    );
+  const reasonId = useId();
   async function submit() {
     setBusy(true);
     setError("");
     return await api
-      .requestReport(run.id, { blockId })
+      .requestReport(runId, { blockId })
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : "Could not request report.");
       })
@@ -682,18 +909,36 @@ export function RequestReport({
         setBusy(false);
       });
   }
+  const openInT3 = link && <OpenInT3 href={link} />;
   return (
-    <div className="grid gap-2">
-      <p className="text-sm">
-        Starts an additional Agent turn to assess existing work and report without repeating the
-        task.
-      </p>
-      <MutationGate>
-        <Button disabled={busy} onClick={() => void submit()}>
-          {busy ? "Requesting…" : "Request report"}
-        </Button>
-      </MutationGate>
-      {error && <p role="alert">{error}</p>}
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <MutationGate>
+          <Button
+            size="sm"
+            variant={waiting ? "outline" : "default"}
+            disabled={busy || waiting}
+            aria-describedby={waiting ? reasonId : undefined}
+            onClick={() => void submit()}
+          >
+            {busy ? "Requesting…" : "Request report"}
+          </Button>
+        </MutationGate>
+        {!waiting && openInT3}
+      </div>
+      {waiting && (
+        <>
+          <p id={reasonId} className="text-xs text-muted-foreground">
+            Waiting for T3 to confirm the Agent is idle
+          </p>
+          {openInT3}
+        </>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

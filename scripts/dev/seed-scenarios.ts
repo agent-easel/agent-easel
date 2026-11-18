@@ -2,7 +2,7 @@ import { demoImages, demoPullRequest, type DemoImage } from "./seed-support.ts";
 import type { ThreadFacts } from "../../apps/backend/test/support/controlled-thread.ts";
 
 /** The demo Agents the seeded Flows place, by stable key. */
-export type DemoAgents = Record<"worker" | "reviewer" | "accessibility", string>;
+export type DemoAgents = Record<"worker" | "reviewer" | "accessibility" | "releaseNotes", string>;
 /** The ready demo Flows seed scenarios start in, by stable key. */
 export type DemoFlows = Record<
   | "simple"
@@ -56,7 +56,12 @@ export type SeedScenario = {
   | { state: "result released to a second worker"; implementation: Report }
   /** Each worker's result is a Condition arrival in `results` order; the first is with your
    * Human review. */
-  | { state: "results released to a Condition"; results: readonly [Report, Report] }
+  | {
+      state: "results released to a Condition";
+      results: readonly [Report, Report];
+      /** The result of the Agent the Condition hands later approvals to. */
+      extraApproval: Report;
+    }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
   | ({ grill: Report; approval: string } & (
       | { state: "continuation prompt sent" }
@@ -329,7 +334,7 @@ export const seedScenarioList: readonly SeedScenario[] = [
     flow: "firstApproval",
     state: "results released to a Condition",
     prompt:
-      "Review the Atlas share dialog for code quality and keyboard accessibility; the first approval comes to me, later ones end at the gate.",
+      "Review the Atlas share dialog for code quality and keyboard accessibility. The first approval comes to me; later approvals only go into the release notes.",
     results: [
       {
         exit: "Approved",
@@ -340,6 +345,10 @@ export const seedScenarioList: readonly SeedScenario[] = [
         message: "Focus stays inside the share dialog and Escape returns it to the Share button.",
       },
     ],
+    extraApproval: {
+      exit: "Done",
+      message: "Noted the accessibility approval in the share dialog release notes.",
+    },
   },
   {
     key: "worktree",

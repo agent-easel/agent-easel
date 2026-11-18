@@ -16,13 +16,11 @@ async function selectComposerFlow(screen: Screen, flowName: string) {
   await expect(screen.getByRole("menu")).toBeHidden();
 }
 
-/** Chooses a Project in the composer's picker by its title, or none with `null`. */
-export async function selectComposerProject(screen: Screen, title: string | null) {
+/** Chooses a Project in the composer's picker by its title. */
+export async function selectComposerProject(screen: Screen, title: string) {
   await screen.getByRole("button", /^Select project: /).tap();
   await expect(screen.getByRole("group", "Projects")).toBeVisible();
-  await screen
-    .getByRole("menuitemradio", title === null ? "No project selected" : new RegExp(`^${title} · `))
-    .tap();
+  await screen.getByRole("menuitemradio", new RegExp(`^${title} · `)).tap();
   await expect(screen.getByRole("menu")).toBeHidden();
 }
 

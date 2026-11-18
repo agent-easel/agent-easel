@@ -414,7 +414,7 @@ test("cancelling Rename returns focus with Run state and attention available wit
   // Assert
   await expect(row).toBeFocused();
   await expect(row).toHaveAccessibleName(
-    /Demo · Problem · Search checks failed.*Problem.*,\s*(Waiting|Observation unknown or stale)$/,
+    /Demo · Problem · Search checks failed.*Problem.*,\s*(Idle|Observation unknown or stale)$/,
   );
   await expect(preview).toBeHidden();
 });

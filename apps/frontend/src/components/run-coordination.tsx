@@ -1,6 +1,7 @@
 import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
+import { attentionLinkedBlocks } from "./run-attention.tsx";
 import { ResultCard } from "./run-result.tsx";
 
 export const bindingRole: Record<RunThreadBinding["role"], string> = {
@@ -58,21 +59,30 @@ function Activation({
       .findIndex((a) => a.id === activation.id) + 1;
   const report = run.reports.findLast((r) => r.activationId === activation.id);
   const name = run.blocks.find((b) => b.blockId === activation.blockId)?.name ?? activation.blockId;
+  // A thread a pending Attention card already opens gets no second link here, and the card
+  // states the visit's problem, whose raw reason stays in its Technical details.
+  const linked = attentionLinkedBlocks(run).has(activation.blockId);
+  const problem =
+    run.lifecycle !== "archived" &&
+    !run.attention.some((item) => item.blockId === activation.blockId && !item.settledAt) &&
+    activation.problem;
   if (report && conciseResult) {
     const worker = run.threadBindings.find(
       (binding) => binding.blockId === activation.blockId && binding.role === "worker",
     );
     return (
-      <ResultCard run={run} report={report} titleOnly={{ workerLink: worker?.link ?? null }} />
+      <ResultCard
+        run={run}
+        report={report}
+        titleOnly={{ workerLink: linked ? null : (worker?.link ?? null) }}
+      />
     );
   }
   const coordination = (
     <>
-      {run.lifecycle !== "archived" && activation.problem && (
-        <p className="text-xs text-attention">{activation.problem}</p>
-      )}
+      {problem && <p className="text-xs text-attention">{problem}</p>}
       {run.threadBindings
-        .filter((b) => b.blockId === activation.blockId)
+        .filter((b) => b.blockId === activation.blockId && !(b.link && linked))
         .map((binding) => (
           <div key={binding.id} className="flex flex-col gap-1 text-xs">
             <BindingLink binding={binding} />
@@ -93,7 +103,7 @@ function Activation({
       </ResultCard>
     );
   const workers = run.threadBindings.flatMap((binding) =>
-    binding.blockId === activation.blockId && binding.role === "worker" && binding.link
+    binding.blockId === activation.blockId && binding.role === "worker" && binding.link && !linked
       ? [{ id: binding.id, link: binding.link }]
       : [],
   );
@@ -112,9 +122,7 @@ function Activation({
           <OpenInT3 key={worker.id} href={worker.link} className="text-sm" />
         ))}
       </div>
-      {run.lifecycle !== "archived" && activation.problem && (
-        <p className="text-xs text-attention">{activation.problem}</p>
-      )}
+      {problem && <p className="text-xs text-attention">{problem}</p>}
       {run.threadBindings
         .filter((b) => b.blockId === activation.blockId && b.role === "descendant")
         .map((binding) => (
