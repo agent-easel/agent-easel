@@ -2,18 +2,23 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { ChatModelSettings, DiscordSettings } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 
+/** The navigation indicator's tone: amber while Discord reconnects, red for every other failure. */
+type ChatControlAttention = "attention" | "error" | null;
+
 /**
- * Whether one Chat control page's navigation item shows its indicator: a current unresolved
- * failure on that page while Chat control is On, as the host last reported it.
+ * One Chat control page's navigation indicator: a current unresolved failure on that page while
+ * Chat control is On, as the host last reported it.
  */
 function attentionStore<Settings extends { readonly needsAttention: boolean }>(
   read: () => Promise<Settings>,
+  tone: (settings: Settings) => Exclude<ChatControlAttention, null>,
 ) {
-  let needsAttention = false;
+  let needsAttention: ChatControlAttention = null;
   const listeners = new Set<() => void>();
   const report = (settings: Settings) => {
-    if (settings.needsAttention === needsAttention) return;
-    needsAttention = settings.needsAttention;
+    const next = settings.needsAttention ? tone(settings) : null;
+    if (next === needsAttention) return;
+    needsAttention = next;
     for (const listener of listeners) listener();
   };
   const subscribe = (listener: () => void) => {
@@ -32,8 +37,20 @@ function attentionStore<Settings extends { readonly needsAttention: boolean }>(
   return { report, useAttention };
 }
 
-const discord = attentionStore<DiscordSettings>(() => api.getDiscordSettings());
-const model = attentionStore<ChatModelSettings>(() => api.getChatModelSettings());
+const discord = attentionStore<DiscordSettings>(
+  () => api.getDiscordSettings(),
+  (settings) =>
+    settings.connectionStatus === "reconnecting" &&
+    settings.commandSetup?.outcome !== "failed" &&
+    settings.delivery.problems.length === 0 &&
+    settings.delivery.reconciling.length === 0
+      ? "attention"
+      : "error",
+);
+const model = attentionStore<ChatModelSettings>(
+  () => api.getChatModelSettings(),
+  () => "error",
+);
 
 /** Records the latest Discord settings the host returned. */
 export const reportDiscordSettings = discord.report;

@@ -16,7 +16,7 @@ import {
 } from "@t3-factory/domain-validation";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
-import { readAccess, updateAccess } from "./access.ts";
+import { accessIds, readAccess, recordNames, updateAccess } from "./access.ts";
 import type { ChatActions } from "./actions.ts";
 import type { ChatCredentials } from "./credentials.ts";
 import type { ChatDeliveries } from "./deliveries.ts";
@@ -33,15 +33,17 @@ type ConnectionRow = {
   check_at: string | null;
   check_outcome: DiscordCheckOutcome | null;
   check_application_id: string | null;
+  check_bot_name: string | null;
   check_message: string | null;
   chat_control_enabled: number;
   /** The application Chat control operates as, recorded by the operating connection. */
   application_id: string | null;
+  bot_name: string | null;
 };
 
 const readRow = (sql: SqlClient.SqlClient) =>
   Effect.map(
-    sql<ConnectionRow>`SELECT d.*,c.enabled AS chat_control_enabled,c.application_id FROM chat_discord_connection d, chat_control_state c WHERE d.singleton=1 AND c.singleton=1`,
+    sql<ConnectionRow>`SELECT d.*,c.enabled AS chat_control_enabled,c.application_id,c.bot_name FROM chat_discord_connection d, chat_control_state c WHERE d.singleton=1 AND c.singleton=1`,
     ([row]) => row!,
   );
 
@@ -76,6 +78,7 @@ const settings = (
     savedAt: row.saved_at,
   },
   application: row.application_id,
+  botName: row.bot_name,
   latestCheck:
     row.check_revision !== null && row.check_at && row.check_outcome && row.check_message
       ? {
@@ -83,6 +86,7 @@ const settings = (
           checkedAt: row.check_at,
           outcome: row.check_outcome,
           applicationId: row.check_application_id,
+          botName: row.check_bot_name,
           message: row.check_message,
         }
       : null,
@@ -126,6 +130,31 @@ function missingForOn(connection: ConnectionRow, model: ModelRow) {
     ...missing(model.base_url, "model.baseUrl", "Save the Language model base URL."),
     ...missing(model.model, "model.model", "Save the Language model name."),
   ];
+}
+
+/**
+ * Why the latest check of the current connection revision rules out On, if it does: Discord
+ * rejected the token or refused the Message Content intent, so the connection cannot work.
+ */
+function checkBlocksOn(connection: ConnectionRow) {
+  if (connection.check_revision !== connection.revision) return [];
+  if (connection.check_outcome === "token-rejected")
+    return [
+      {
+        code: "chat_control_check_failed",
+        path: "discord.token",
+        message: "Replace the rejected bot token.",
+      },
+    ];
+  if (connection.check_outcome === "intent-disallowed")
+    return [
+      {
+        code: "chat_control_check_failed",
+        path: "discord.token",
+        message: "Turn on Message Content Intent, then check the connection again.",
+      },
+    ];
+  return [];
 }
 
 /**
@@ -242,14 +271,15 @@ export const makeChatDiscord = (
             yield* operation.start;
           return yield* getDiscordSettings();
         }
-        const checked = yield* gateway.check(connection.value);
+        const checked = yield* gateway.check(connection.value, yield* accessIds(sql));
         if (Option.isNone(checked))
           return failure(
             "conflict",
             "A Discord connection check is already running. Wait for it to finish.",
           );
         const checkedAt = yield* now;
-        yield* sql`UPDATE chat_discord_connection SET check_revision=${validated.value.revision},check_at=${checkedAt},check_outcome=${checked.value.outcome},check_application_id=${checked.value.applicationId},check_message=${checked.value.message} WHERE singleton=1`;
+        yield* sql`UPDATE chat_discord_connection SET check_revision=${validated.value.revision},check_at=${checkedAt},check_outcome=${checked.value.outcome},check_application_id=${checked.value.applicationId},check_bot_name=${checked.value.botName},check_message=${checked.value.message} WHERE singleton=1`;
+        if (checked.value.names) yield* recordNames(sql, checked.value.names);
         return yield* getDiscordSettings();
       });
 
@@ -267,7 +297,8 @@ export const makeChatDiscord = (
 
     /**
      * Persists the On/Off intent. On needs the complete saved Discord connection and Language
-     * model, but no key, passed test or Access entry, and starts the operating connection. Off
+     * model and no latest check of the current revision that rules it out, but no key, passed test
+     * or Access entry, and starts the operating connection. Off
      * stops admission and returns once the Gateway session is released; configuration, data and
      * accepted work are untouched.
      */
@@ -295,6 +326,13 @@ export const makeChatDiscord = (
                   "validation",
                   "Save a complete Discord connection and Language model before turning Chat control on.",
                   missing,
+                );
+              const blocked = checkBlocksOn(connection);
+              if (blocked.length > 0)
+                return failure(
+                  "validation",
+                  "The latest check of the saved Discord connection failed. Fix it before turning Chat control on.",
+                  blocked,
                 );
               yield* sql`UPDATE chat_control_state SET enabled=1 WHERE singleton=1`;
               return { ok: true, value: true };

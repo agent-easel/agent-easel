@@ -549,6 +549,14 @@ export async function startControlledDiscord() {
     ],
     [
       "GET",
+      /^\/api\/v10\/users\/(\d+)$/,
+      ({ match }) =>
+        departed.has(match[1]!)
+          ? { status: 404, body: { message: "Unknown User", code: 10013 } }
+          : { status: 200, body: user(match[1]!, "participant", false) },
+    ],
+    [
+      "GET",
       /^\/api\/v10\/guilds\/(\d+)\/members\/(\d+)$/,
       ({ match }) =>
         departed.has(match[2]!)

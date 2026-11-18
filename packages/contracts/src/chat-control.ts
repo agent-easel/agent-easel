@@ -122,6 +122,8 @@ export interface DiscordCheckEvidence {
    * text; set exactly when the check is `verified`. Factory never reads it from the token.
    */
   readonly applicationId: string | null;
+  /** The bot user's display name Discord reported for the session; set only when `verified`. */
+  readonly botName: string | null;
   /** Factory's own description; never a Discord-supplied body. */
   readonly message: string;
 }
@@ -171,8 +173,15 @@ export interface DiscordAccessConfiguration {
   /** Decimal Discord user IDs kept as text. Roles and server membership grant nothing. */
   readonly users: readonly string[];
   readonly channels: readonly DiscordAccessChannel[];
-  /** Granted Project IDs no Factory Project has; they stay listed and grant nothing. */
+  /** Granted Project IDs no Factory Project has; they grant nothing and the next save drops them. */
   readonly unresolvedProjectIds: readonly string[];
+  /**
+   * Names Discord reported for allowed user IDs and channel IDs, looked up when a check passes or
+   * an operating session becomes ready. An ID that is absent was not looked up yet; `null` means
+   * Discord does not know it.
+   */
+  readonly userNames: Readonly<Record<string, string | null>>;
+  readonly channelNames: Readonly<Record<string, string | null>>;
   /** Increases with every committed save; stale-write checks name it. */
   readonly revision: number;
   /** When this revision was saved; null before the first save. */
@@ -242,6 +251,8 @@ export interface DiscordSettings {
    * first authenticated. A session of another application replaces it.
    */
   readonly application: string | null;
+  /** The display name of the bot user `application` runs as; null until a session became ready. */
+  readonly botName: string | null;
   readonly access: DiscordAccessConfiguration;
   readonly latestCheck: DiscordCheckEvidence | null;
   readonly delivery: ChatDeliveryDiagnostics;
@@ -271,7 +282,11 @@ export interface UpdateDiscordAccessInput {
 }
 
 export interface SetChatControlEnabledInput {
-  /** On needs a complete saved Discord connection and Language model; Off always succeeds. */
+  /**
+   * On needs a complete saved Discord connection and Language model, and no latest check of the
+   * current connection revision that reported a rejected token or a missing Message Content
+   * intent; Off always succeeds.
+   */
   readonly enabled: boolean;
 }
 

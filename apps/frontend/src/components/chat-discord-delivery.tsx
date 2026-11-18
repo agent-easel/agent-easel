@@ -5,15 +5,25 @@ import type {
   DiscordSettings,
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/status-badge";
 import { api } from "../api.ts";
-import { chatControlError } from "./chat-control-form.tsx";
+import { chatControlError, technicalDetails } from "./chat-control-form.tsx";
 import { dayAndTime } from "./execution-state.tsx";
+import {
+  SettingsDetailRow,
+  SettingsGroup,
+  SettingsProblemCard,
+  SettingsTechnicalDetails,
+} from "./settings-page.tsx";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-dialog";
 
-const STATE_LABELS: Record<ChatDeliveryProblem["state"], string> = {
-  retrying: "Retrying",
-  failed: "Failed",
-  unknown: "Unknown",
+const STATES: Record<
+  ChatDeliveryProblem["state"],
+  { label: string; kind: "checking" | "error" | "attention" }
+> = {
+  retrying: { label: "Retrying", kind: "checking" },
+  failed: { label: "Failed", kind: "error" },
+  unknown: { label: "Unknown", kind: "attention" },
 };
 
 const PURPOSE_LABELS: Record<ChatDeliveryProblem["purpose"], string> = {
@@ -29,12 +39,21 @@ const OPERATION_LABELS: Record<ChatActionOperation, string> = {
   archive: "Archive",
 };
 
+const problemDetails = (problem: ChatDeliveryProblem) =>
+  technicalDetails([
+    ["Message", `${PURPOSE_LABELS[problem.purpose]}, ${STATES[problem.state].label}`],
+    ["Error", problem.message],
+    ["Thread", problem.threadId],
+    ["Channel", problem.parentChannelId],
+    ["Next attempt", problem.nextAttemptAt && dayAndTime(problem.nextAttemptAt)],
+  ]);
+
 /**
- * Current delivery and action recovery facts while Chat control is On: owed messages Factory could
- * not deliver on its own, with Retry where it needs the owner, and confirmed actions whose outcome
- * is still being reconciled. A message Discord may already show is retried only after a warning.
+ * Owed messages Factory could not deliver on its own, with Retry where it needs the owner, and
+ * confirmed actions whose outcome is still being reconciled, while Chat control is On. Retrying a
+ * message Discord may already show asks first.
  */
-export function DeliveryDiagnostics({
+export function DeliveryCard({
   settings,
   onSettings,
 }: {
@@ -55,88 +74,73 @@ export function DeliveryDiagnostics({
         deliveryId: problem.id,
         duplicateRiskAccepted: problem.state === "unknown",
       })
-      .then((value) => {
-        onSettings(value);
-        setConfirming(null);
-      })
+      .then(onSettings)
       .catch((cause: unknown) => {
         setError(chatControlError(cause, "Factory could not retry the message."));
       })
       .finally(() => {
         setBusy(null);
+        setConfirming(null);
       });
   };
   return (
-    <section aria-label="Delivery and actions" className="grid gap-3 border-t pt-5">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-medium">Delivery and actions</h3>
-        <p className="text-sm text-muted-foreground">
-          Messages Factory owes in Discord that need attention, and confirmed actions whose outcome
-          Factory is still establishing. Retry only delivers a message again; it never repeats the
-          action the message reports.
-        </p>
-      </div>
-      {error && !confirming && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <ul className="grid gap-3">
+    <>
+      <SettingsGroup label="Delivery">
         {problems.map((problem) => (
-          <li
+          <SettingsDetailRow
             key={problem.id}
-            aria-label={`${PURPOSE_LABELS[problem.purpose]}, ${STATE_LABELS[problem.state]}`}
-            className="grid gap-2 rounded-md border p-3 text-sm sm:grid-cols-[1fr_auto] sm:items-start"
-          >
-            <div className="grid gap-1">
-              <p>
-                <span className="font-medium">{PURPOSE_LABELS[problem.purpose]}</span>
-                {` · ${STATE_LABELS[problem.state]} · ${dayAndTime(problem.occurredAt)}`}
-              </p>
-              <p className="text-muted-foreground">{problem.message}</p>
-              <p className="text-muted-foreground">
-                Thread <span className="font-mono">{problem.threadId}</span> in channel{" "}
-                <span className="font-mono">{problem.parentChannelId}</span>
-                {problem.nextAttemptAt && ` · next attempt ${dayAndTime(problem.nextAttemptAt)}`}
-              </p>
-            </div>
-            {problem.state !== "retrying" && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={busy !== null}
-                onClick={() =>
-                  problem.state === "unknown" ? setConfirming(problem) : void retry(problem)
-                }
-              >
-                {busy === problem.id ? "Retrying…" : "Retry"}
-              </Button>
-            )}
-          </li>
+            label={PURPOSE_LABELS[problem.purpose]}
+            value={
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <StatusBadge kind={STATES[problem.state].kind}>
+                  {STATES[problem.state].label}
+                </StatusBadge>
+                {dayAndTime(problem.occurredAt)}
+              </span>
+            }
+            action={
+              problem.state !== "retrying" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Retry the ${PURPOSE_LABELS[problem.purpose].toLowerCase()}`}
+                  disabled={busy !== null}
+                  onClick={() =>
+                    problem.state === "unknown" ? setConfirming(problem) : void retry(problem)
+                  }
+                >
+                  {busy === problem.id ? "Retrying…" : "Retry"}
+                </Button>
+              )
+            }
+          />
         ))}
         {reconciling.map((action) => (
-          <li
+          <SettingsDetailRow
             key={action.id}
-            aria-label="Action outcome being reconciled"
-            className="grid gap-1 rounded-md border p-3 text-sm"
-          >
-            <p>
-              <span className="font-medium">{OPERATION_LABELS[action.operation]}</span>
-              {` · Reconciling · confirmed ${dayAndTime(action.startedAt)}`}
-            </p>
-            <p className="text-muted-foreground">
-              Factory has not yet established whether this confirmed action was accepted. It
-              reconciles the same request when it restarts or the requester clicks again, and never
-              performs it a second time.
-            </p>
-          </li>
+            label={OPERATION_LABELS[action.operation]}
+            value={
+              <span className="inline-flex flex-wrap items-center gap-2">
+                <StatusBadge kind="checking">Reconciling</StatusBadge>
+                {dayAndTime(action.startedAt)}
+              </span>
+            }
+          />
         ))}
-      </ul>
-      {moreProblems > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {moreProblems} more {moreProblems === 1 ? "message needs" : "messages need"} attention.
-        </p>
+        {moreProblems > 0 && (
+          <SettingsDetailRow
+            label="More"
+            value={`${moreProblems} more ${moreProblems === 1 ? "message needs" : "messages need"} attention`}
+          />
+        )}
+      </SettingsGroup>
+      {problems.length > 0 && (
+        <SettingsTechnicalDetails details={problems.map(problemDetails).join("\n\n")} />
+      )}
+      {error && (
+        <SettingsProblemCard tone="error" title="Couldn’t retry the message" details={error}>
+          Try again.
+        </SettingsProblemCard>
       )}
       <AlertDialog
         open={confirming !== null}
@@ -145,25 +149,19 @@ export function DeliveryDiagnostics({
         }}
       >
         <AlertDialogContent
-          title="Retry a message Discord may already show?"
-          description="Discord may already show this message, so retrying could post it twice."
+          title="Retry this message?"
+          description="Discord may already show it, so it could appear twice."
           actions={
             <>
               <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
               <Button disabled={busy !== null} onClick={() => confirming && void retry(confirming)}>
-                {busy !== null ? "Retrying…" : "Retry anyway"}
+                {busy !== null ? "Retrying…" : "Retry"}
               </Button>
             </>
           }
           closeDisabled={busy !== null}
-        >
-          {error && confirming && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-        </AlertDialogContent>
+        />
       </AlertDialog>
-    </section>
+    </>
   );
 }

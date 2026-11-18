@@ -206,6 +206,7 @@ export function SettingsProblemCard({
   action,
   icon,
 }: {
+  /** Lets a field tag point at this card with `aria-describedby`. */
   id?: string;
   tone: "error" | "warning" | "info" | "neutral";
   title: ReactNode;
