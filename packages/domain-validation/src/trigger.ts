@@ -214,7 +214,7 @@ const text = (value: unknown, path: string, max: number, message: string): Resul
     : invalid(`trigger_${path.replaceAll(".", "_").toLowerCase()}`, path, message);
 };
 
-function parseSchedule(value: unknown): Result<TriggerSchedule> {
+export function validateTriggerSchedule(value: unknown): Result<TriggerSchedule> {
   const fields = record(value);
   if (!fields)
     return invalid("trigger_schedule", "schedule", "Say whether the schedule is on and how often.");
@@ -233,7 +233,7 @@ function parseSchedule(value: unknown): Result<TriggerSchedule> {
   return { ok: true, value: { enabled: fields.enabled, intervalMinutes: fields.intervalMinutes } };
 }
 
-function parseMaxActiveRuns(value: unknown): Result<number> {
+export function validateTriggerLimit(value: unknown): Result<number> {
   return isIntegerIn(value, 1, TRIGGER_MAX_ACTIVE_RUNS_LIMIT)
     ? { ok: true, value }
     : invalid(
@@ -287,11 +287,11 @@ function parseSettings(
   if (!projectId.ok) return projectId;
   const flowId = text(fields.flowId, "flowId", 256, "Choose a Flow.");
   if (!flowId.ok) return flowId;
-  const schedule = parseSchedule(
+  const schedule = validateTriggerSchedule(
     defaults && fields.schedule === undefined ? TRIGGER_DEFAULTS.schedule : fields.schedule,
   );
   if (!schedule.ok) return schedule;
-  const maxActiveRuns = parseMaxActiveRuns(
+  const maxActiveRuns = validateTriggerLimit(
     defaults && fields.maxActiveRuns === undefined
       ? TRIGGER_DEFAULTS.maxActiveRuns
       : fields.maxActiveRuns,

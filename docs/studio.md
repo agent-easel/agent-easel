@@ -8,7 +8,7 @@ there with its draft intact. Settings holds connection, Agent reporting and keyb
 Studio is a [full-window inset dialog](design-system.md#components-and-interaction) with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo.
 The 192 px sidebar (144 px narrow) has an **Author** group with **Flows** and **Agents**, each with its
 definition count, and an **Automate** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
-in Error while any Trigger is ([Trigger attention](#trigger-attention)). Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
+in Error while any Trigger is ([Trigger attention](#trigger-attention)). The Studio header breadcrumb carries the full path to the open item. Select a parent segment to go back. Pages use that breadcrumb for back navigation. Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
 
 While Studio is open, its Flow, Agent and Trigger lists, the Agents' runtime summaries and saved-Flow usage
 counts, the sidebar counts and the Flow editor's Agent library follow every committed create, save,
@@ -17,7 +17,7 @@ retry. A failed subscription shows the list's error until the automatic retry su
 saved revisions ([Following saved revisions](#following-saved-revisions)).
 
 Leaving a Flow with unsaved changes, whether for a list, Agents, Triggers, another Flow or by closing Studio, asks to **Keep editing**, which stays on the Flow, or **Discard changes** (browser Back follows the same
-rule; reload uses the browser's leave warning). Only the shown page keeps a draft, so Agent and Trigger edits are guarded the same way when leaving their page.
+rule; reload uses the browser's leave warning). Agent and Trigger edits are guarded the same way when leaving their page. A Flow opened from a Trigger keeps the Trigger draft underneath.
 
 | Destination | Browser URL |
 | --- | --- |
@@ -26,7 +26,6 @@ rule; reload uses the browser's leave warning). Only the shown page keeps a draf
 | Agent list | `/studio/agents` (`/settings/agents`) |
 | Opened or new Agent | `/studio/agents/:agentId` (`new` creates; `/settings/agents/:agentId`) |
 | Trigger list | `/studio/triggers` |
-| New Trigger type picker | `/studio/triggers/new` |
 | New GitHub Issues Trigger | `/studio/triggers/new/github-issues` |
 | Opened Trigger | `/studio/triggers/:triggerId` |
 
@@ -480,22 +479,20 @@ Project's GitHub issues. What a check reads, admits and starts, and the decision
 [Starting from a Trigger](runs.md#starting-from-a-trigger). Approved clients have the same full management as the
 host; readiness, review and checks always run on the Factory host with its `gh` login.
 
-Trigger pages fill the content width. Below the list, the header breadcrumb links each parent page
-(**Studio / Triggers / *name***, **Studio / Triggers / New / GitHub Issues**), and each page starts with a back link:
-**All Triggers** on an opened Trigger and the type picker, **Trigger types** on the create form.
+The header breadcrumb identifies the form as **Studio / Triggers / New GitHub Issues Trigger** or
+**Studio / Triggers / *name***. Select **Triggers** in the breadcrumb to return to the list.
 
 **List.** Triggers are grouped by Project, with **Search Triggers** and **New Trigger** even when the list is empty. Each row shows the name, **GitHub Issues · Project → Flow · schedule** (for example `every 5 min`, `every 2 hours` or `manual`), an enable switch, a ⋯ menu (**Check now**, **Edit**, **Remove…**) and ›. **Check now** is disabled until the Trigger is on. A problem that stops checks shows a **Problem** badge and the problem's message on its own wrapping line; a healthy Trigger shows no badge. After **Check now** the meta line reads **Checking…**, then **Started N Runs** (one Run opens it and leaves Studio; several open a menu of `#number title`) or **Nothing ready to start**. That line lasts for the visit only. A check that returns a problem keeps the route meta and shows the badge. The list shows no prompt, issue list, check history, Off pill or active-Run counts. With no Triggers it shows **No Triggers yet** and nothing else.
 Turning a switch on opens the [review](#reviewing-what-starts); turning it off saves at once.
 
-**Creating.** **New Trigger** first asks for the type, at `/studio/triggers/new`. GitHub Issues is the only one, and its
-card shows whether `gh` on the Factory host is found and signed in, and as whom; there are no placeholders for other
-kinds, and a Trigger's kind never changes. The create form has:
+**Creating.** **New Trigger** opens the GitHub Issues form directly at
+`/studio/triggers/new/github-issues`. The form has:
 
-- **Name**, unique among current Triggers regardless of case, so a removed Trigger's name can be reused.
-- **Project**, which must be local to the Factory host. Factory detects the Project's GitHub repository through `gh`
+- **Name**, unique among current Triggers regardless of case. Studio checks the name as you type. A removed Trigger's name can be reused.
+- **Project**, chosen from the Projects available in T3. The Project must be local to the Factory host. Factory detects the Project's GitHub repository through `gh`
   and shows it as **Detected**; saving confirms it. A Trigger never reads another repository. When an opened
   Trigger's Project folder later names a different repository, its checks stop with a repository mismatch and the
-  form shows that repository as **Detected now** with **Confirm this repository**. Confirming changes the draft's
+  form shows that repository as **Detected now** with **Confirm**. Confirming changes the draft's
   repository, which widens what can start, so saving it goes through the review and **Apply and check**. Factory
   accepts a changed repository only while it is the one the Project's folder names at save time.
 - **GitHub issue query**, prefilled `label:factory:ready author:@me`. It must contain exactly one positive `label:`
@@ -506,24 +503,24 @@ kinds, and a Trigger's kind never changes. The create form has:
   repository, issue type and open state. A query GitHub rejects also blocks saving. Removing the author filter on a
   public repository warns rather than refuses.
 - **Flow**, a global Flow or a Flow of the chosen Project, as New Run offers them; save refuses another Project's Flow
-  (`flow_project_mismatch`), and choosing another Project clears a Flow it may not start. Every Start uses the Flow's
+  (`flow_project_mismatch`), and choosing another Project clears a Flow it may not start. Not-ready Flows appear disabled at the end of their group. If the selected Flow becomes not ready, **Open Flow** opens its editor. Esc or ✕ returns to the Trigger with its draft kept. Every Start uses the Flow's
   current saved revision, like New Run.
 - **Run on a schedule**, with a number and minutes or hours (1 minute to 24 hours, default every 5 minutes). When off,
-  the Trigger checks only when **Run** is chosen.
+  the Trigger checks only when **Check now** is chosen.
 - **Max active Runs**, 1 to 10, default 1.
 
-A readiness list, shown only while creating, checks `gh` (found and signed in), the repository (readable and matching
-the Project's remote) and the Flow (passing Start's preflight). **Save disabled** saves the Trigger off; **Review and
-enable** saves it after the review. Saving also warns when another Trigger already watches the same repository. A new
-Trigger is always saved disabled first and enabled only through the review.
+The repository and Flow fields show their own readiness. A problem with `gh` has a card with
+**Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
+page, and **Review and enable**. When another Trigger already watches the same repository, the
+form warns before saving and the warning also appears in the review. Saving is still available.
 
-**Editing.** An opened Trigger shows the same fields under a **status strip** and has no readiness list. The strip
-shows the health and either the latest check (when it ran, how many Runs it started, how many issues are waiting for a
-free slot, each issue that did not start with its key and reason, and when the next check is due, or that the Trigger
-checks only on **Run** or is off) or the current problem: what cannot be used since when and for how many checks, its
-repair guidance and a **Run** button to check again. Guidance names steps that must happen on the Factory host, such as
-installing `gh`, `gh auth login` or restarting a Factory opened from Finder. A failing Trigger keeps checking and never
-turns itself off. Factory keeps only this latest check and problem; there is no history.
+**Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
+check, its health, started Runs, issues waiting for a slot, and the next scheduled check, or the
+current problem and its repair guidance. **Check now** is available for an enabled Trigger with
+no unsaved edits. Runs started by that action can be opened from the strip. A failing Trigger
+keeps checking. Factory keeps the latest check and problem.
+
+The pinned footer has **Save** only. Saved-revision and removal notices appear as cards above it.
 
 Triggers follow the [saved-revision rules](#following-saved-revisions) of the other editors: **Updated to revision
 N**, **Revision N was saved elsewhere** with **Compare latest revision**, **Load revision N** and **Keep my edits**, and
@@ -535,15 +532,14 @@ revision.
 
 Enabling a Trigger, and saving an edit that widens what an enabled Trigger can start, first opens a review: the matching
 issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
-already started left out, the query's author filter (or the warning that a public repository has none), and the problem
-a check would hit instead, if any. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
+already started left out, a warning when another Trigger watches the repository, and any problem
+a check would hit. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
 its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
 showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
 edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict.
 Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
-the same way and must be reviewed against the enabled Trigger. While creating, the review also offers **Save
-disabled**. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
+the same way and must be reviewed against the enabled Trigger. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 
 An edit widens what can start when it changes the Project or repository, the query or the Flow, or raises **Max active

@@ -1,3 +1,4 @@
+import { FlowGroup } from "../components/launch-picker-options.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ScreenLayout } from "../components/screen-layout.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -46,13 +47,9 @@ import { Button } from "../components/ui/button.tsx";
 import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu.tsx";
-import { MenuName } from "../components/menu-name.tsx";
 import {
   PickerMenuContent,
   PickerMenuList,
@@ -315,74 +312,6 @@ function FlowFieldValue({
     <>
       <span className="min-w-0 truncate font-medium">{value}</span>
       {flow && !flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
-    </>
-  );
-}
-
-const flowRadioItemClass =
-  "my-0.5 rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring";
-
-function FlowChoice({
-  flow,
-  busy,
-  peers,
-}: {
-  flow: FlowDraft;
-  busy: boolean;
-  peers: readonly string[];
-}) {
-  return (
-    <DropdownMenuRadioItem
-      value={flow.id}
-      data-flow-id={flow.id}
-      indicatorPosition="right"
-      disabled={busy}
-      aria-label={flow.name}
-      className={flowRadioItemClass}
-    >
-      <MenuName name={flow.name} peers={peers} />
-    </DropdownMenuRadioItem>
-  );
-}
-
-/** A not-ready Flow stays visible and cannot be chosen, hovered, or checked. */
-function FlowUnavailable({ flow, peers }: { flow: FlowDraft; peers: readonly string[] }) {
-  return (
-    <DropdownMenuItem
-      disabled
-      data-flow-id={flow.id}
-      aria-label={`${flow.name} · Not ready`}
-      className="my-0.5 rounded-md py-2 data-[disabled]:opacity-100"
-    >
-      <MenuName name={flow.name} peers={peers} className="text-muted-foreground" />
-      <StatusBadge kind="error">Not ready</StatusBadge>
-    </DropdownMenuItem>
-  );
-}
-
-/** One heading and its Flows, ready first, or nothing when none match. */
-function FlowGroup({
-  title,
-  flows,
-  busy,
-  peers,
-}: {
-  title: string;
-  flows: readonly FlowDraft[];
-  busy: boolean;
-  peers: readonly string[];
-}) {
-  if (flows.length === 0) return null;
-  return (
-    <>
-      <DropdownMenuLabel className="normal-case">{title}</DropdownMenuLabel>
-      {flows.map((flow) =>
-        flowCanLaunch(flow) ? (
-          <FlowChoice key={flow.id} flow={flow} busy={busy} peers={peers} />
-        ) : (
-          <FlowUnavailable key={flow.id} flow={flow} peers={peers} />
-        ),
-      )}
     </>
   );
 }

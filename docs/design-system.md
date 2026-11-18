@@ -138,6 +138,10 @@ run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow i
 **Save Flow** keeps the filled primary while disabled until that editor is revised; the same rule
 still describes when it may run.
 
+Save is the only filled primary action in Studio editors. The Trigger form's **Review and enable**
+is the exception. The Flow and Agent editors place Save in the header. The Trigger form keeps its
+actions in a pinned footer because its fields scroll.
+
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio fills the window with a 16 px inset on every side at all viewport
 sizes (`100vw − 32px` by `100vh − 32px`).

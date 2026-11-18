@@ -17,7 +17,7 @@ export function WorkspaceDialogHeader({
   closeDisabled = false,
   className,
 }: {
-  title: string;
+  title: ReactNode;
   /** Links to the pages above `section`, outermost first. */
   parents?: readonly { label: string; link: ReactNode }[];
   section: string;

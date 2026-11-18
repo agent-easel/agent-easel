@@ -236,29 +236,3 @@ export function SettingsProblemCard({
     </Alert>
   );
 }
-
-/** The heading and introduction used in Studio Trigger views. */
-export function StudioPage({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description: ReactNode;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-5">
-      <header className="grid gap-1.5">
-        <div className="flex min-h-8 items-center justify-between gap-2">
-          <h2 className="text-lg leading-tight font-semibold">{title}</h2>
-          {action}
-        </div>
-        <p className="text-sm leading-tight text-muted-foreground">{description}</p>
-      </header>
-      {children}
-    </div>
-  );
-}

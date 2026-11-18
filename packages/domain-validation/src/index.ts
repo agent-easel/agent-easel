@@ -673,6 +673,8 @@ export {
 } from "./chat-control.ts";
 export {
   parseTriggerQuery,
+  validateTriggerLimit,
+  validateTriggerSchedule,
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
   validateSetTriggerEnabled,

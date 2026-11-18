@@ -1,3 +1,4 @@
+import { ProjectOption } from "./launch-picker-options.tsx";
 import { useMutationsAllowed } from "@/client-gate";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
@@ -8,11 +9,9 @@ import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MenuName } from "./menu-name.tsx";
 import {
   PickerMenuContent,
   PickerMenuList,
@@ -24,55 +23,6 @@ import { useLiveLaunchChoices } from "../live/launch-choices.ts";
 import { cn } from "../lib/utils.ts";
 import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
-import { projectAvailabilityLabels } from "../use-projects.ts";
-
-function ProjectOption({
-  project,
-  busy,
-  peers,
-}: {
-  project: FactoryProject;
-  busy: boolean;
-  peers: readonly string[];
-}) {
-  const available = project.availability === "available";
-  const availability = projectAvailabilityLabels[project.availability];
-  return (
-    <DropdownMenuRadioItem
-      value={project.id}
-      data-project-id={project.id}
-      indicatorPosition="right"
-      disabled={busy}
-      aria-label={`${project.title} · ${project.workspaceRoot} · ${availability}`}
-      className="my-0.5 items-start rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring"
-    >
-      <span className="mt-px">
-        <ProjectIcon
-          inline
-          icon={project.projectIcon}
-          faviconUrl={project.availability === "available" ? project.faviconUrl : null}
-        />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="flex min-w-0">
-          <MenuName name={project.title} peers={peers} className="font-medium" />
-        </span>
-        <span
-          className="mt-0.5 block truncate text-left text-2xs tracking-label text-subtle-foreground"
-          title={project.workspaceRoot}
-          dir="rtl"
-        >
-          <bdi dir="ltr">{project.workspaceRoot}</bdi>
-        </span>
-        {!available && (
-          <span className="mt-1 block text-xs text-attention">
-            {availability} · New Runs blocked
-          </span>
-        )}
-      </span>
-    </DropdownMenuRadioItem>
-  );
-}
 
 function projectListStatus(catalog: ProjectCatalog | null, matched: number, query: string) {
   if (catalog === null) return "Loading projects…";
