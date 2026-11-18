@@ -204,7 +204,7 @@ The Run shows its generation without treating it as Flow work:
   legacy and setting-off Runs show none. Pending uses the working color, applied the success color and every other
   outcome the neutral stopped color, never the error color.
 - Pressing the line shows the **Run title** in the Run inspector: state and reason, model, deadline,
-  automatic and generated titles, and **Open title thread in T3** once the thread is known. It selects no Block,
+  automatic and generated titles, and **Open in T3 ↗** once the title thread is known. It selects no Block,
   highlights no Block timeline rows and leaves **Follow active** as it was; the card takes a lighter inspected outline
   instead of the selected-Block border. Escape, the breadcrumb or close button returns to the overview, and selecting a
   Block shows that Block.
@@ -419,25 +419,36 @@ fixed Human exits their old exits were mapped to.
   - A Settled Run that returns to Active does not get deleted images back. A Start naming a deleted image gets the
     missing-images outcome; uploading identical bytes again, from any client, restores the image for every Run that uses
     it, shown the next time a Run view opens.
-- Each work block shows its recorded state: Not started, Working, Waiting, Finished, Problem or Stopped (the Run was archived
-  or manually settled before it finished). A [Continuation](#continuations) shows **Sent** or **Pass-through** instead of Working and Finished. Several blocks can be
-  active at once; the canvas marks no "current step", percentage or taken path. Repeated visits update the same block; the
-  timeline and executions keep the sequence. Connections use one neutral style, including never-run branches.
+- Each started work block shows one status badge at its top right, where it never truncates the block name: **Working**,
+  **Waiting**, **Needs input**, **Problem**, **Finished** or **Stopped** (the Run was archived or manually settled before it
+  finished); a block not yet visited shows none. Needs input replaces Working or Waiting while the block asks for you. A
+  [Continuation](#continuations) shows Working while its prompt is worked on and Finished once it passed the response on. A
+  finished block reads its taken exit as an outcome, **→ *exit* · time**. Several blocks can be active at once; the canvas
+  marks no "current step", percentage or taken path. Repeated visits update the same block; the timeline and executions keep
+  the sequence. Connections use one neutral style, including never-run branches.
+- Exit rows name each exit in muted text until a report, an answer, a Condition selection or a forward has chosen it; a
+  chosen exit reads in primary text. Condition outputs keep their rule (**from arrival *N* onward**, **when no rule
+  matches**); other exits carry no source label.
 - A working block whose Agent reported `working` shows that message in place of its visit time; its details show the full
   message and offer **Request report** once the worker is idle.
 - A [Wait](#waits) is not started before its first arrival, waiting while any arrival is pending, with **until** and the
-  nearest deadline (and the count of waiting arrivals when there are several), and finished once every arrival has
+  nearest deadline (and **N held · next until …** when there are several), and finished once every arrival has
   continued. It has no worker, thread or attention.
 - A [Condition](#conditions) reads **Not visited** before anything reaches it, then its arrival total and
   **latest →** the output its most recent arrival selected (with the count still waiting for a number, if any); the
   latest selection is not all downstream work. Each output row shows when it is selected (**from arrival *N* onward**
   or **when no rule matches**). Routing, Otherwise and an unwired selection raise no attention; only a Condition
   integrity Problem shows on the block.
-- **Needs input** and **Problem** use the same labels as the Run sidebar, are independent of execution state and are not
-  cleared by selecting a block. Stale observations say **Not live** and **Last known**; an unknown observation on a started
+- **Needs input** and **Problem** use the same labels as the Run sidebar and are not cleared by selecting a block. A Human
+  step or Agent that asks shows Needs input in its badge; a Problem shows in a footer unless the block itself failed. Stale observations say **Not live** and **Last known**; an unknown observation on a started
   block differs from stale; a block that never ran says **Not visited**.
-- On entry, the view centers the combined bounds of active Blocks (`working` or `waiting`), with direct predecessors and successors visible where possible. With no active Block, it centers error-state Blocks if execution failed; otherwise it fits the whole graph. Entry zoom never exceeds 100%. Only target bounds determine zoom and center; surrounding Blocks are visible where they fit at that scale and clipped otherwise.
-- The view then follows that focus: when the active Blocks change, or execution fails with none active, it glides there in about 400 ms. A successful finish leaves the view where it is. Following is on each time the Run is opened and is never saved. Manual pan or zoom (wheel, pinch, buttons, keys) or **Fit Flow** turns it off and interrupts a glide; automatic moves never do. **Follow active** in the zoom controls, or its shortcut (default **.**) while the execution canvas is focused, turns it back on and moves to the current focus (the button glides; the shortcut jumps); it is disabled when nothing is active or failed. While following is off, a focus change marks the button with a dot instead of moving the view; there are no notifications. A hidden window or a Run covered by Settings or Studio stops any glide: on return, a following view jumps once to the current focus without replaying missed changes. With reduced motion, the view jumps instead of gliding.
+- On entry, the view opens at 100% and is never fitted. It centers the combined bounds of the active Blocks (`working` or
+  `waiting`, and a Continuation while its prompt is worked on, in place of the Agent whose thread works on it); with none, the
+  error-state Blocks if execution failed; otherwise the whole graph when it fits at 100%, or the Flow input. If a Block would
+  be cut at the canvas edge, the view moves by the smallest shift that leaves every Block fully visible or fully outside it
+  while the centered Blocks stay visible; of equally small shifts, the one showing more Blocks wins. Finished Blocks may sit
+  outside the frame; pan or zoom to see them.
+- The view then follows that focus: when the active Blocks change, or execution fails with none active, it glides there in about 400 ms, framing the targets at up to 100%. A successful finish leaves the view where it is. Following is on each time the Run is opened and is never saved. Manual pan or zoom (wheel, pinch, buttons, keys) or **Fit Flow** turns it off and interrupts a glide; automatic moves never do. **Follow active** in the zoom controls, or its shortcut (default **.**) while the execution canvas is focused, turns it back on and moves to the current focus (the button glides; the shortcut jumps); it is disabled when nothing is active or failed. While following is off, a focus change marks the button with a dot instead of moving the view; there are no notifications. A hidden window or a Run covered by Settings or Studio stops any glide: on return, a following view jumps once to the current focus without replaying missed changes. With reduced motion, the view jumps instead of gliding.
 - Pan, zoom, fit and **Auto-arrange** are local. Zoom ranges 20%–200% (**+**/**−**, **Fit Flow**, **0**, pinch or **Mod**+wheel
   at the pointer; plain wheel and arrow keys pan; bindings are in [Keyboard shortcuts](keyboard-shortcuts.md)). Auto-arrange
   lays out left to right, changes neither the Flow nor the captured revision and resets on reload. Apart from following, live Run updates and container resize preserve the Run viewport.
@@ -448,13 +459,15 @@ fixed Human exits their old exits were mapped to.
   shortcuts with their current bindings and a link to the cheat sheet. The Flow editor keeps its labelled controls and
   keyboard hint.
 - One docked **inspector** beside the canvas shows the **Run overview** until a block is selected or the Run title is
-  inspected: attention, started blocks
-  with their current visit or accepted exit, branches and pull requests, the initial prompt and block activations, with project,
-  Flow revision, workspace and work periods under a closed **Workspace & observation** section. Selecting a block shows it in the
+  inspected: **Attention** while something is pending, **Progress** with each started block and its status on a second line
+  that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**), branches (wrapping only at
+  "/" or "-") and pull requests, the initial prompt and block activations (**Name · Visit N** and **Open in T3 ↗**), then a
+  closed **Resolved attention · N** row and project, Flow revision, workspace and work periods under a closed
+  **Workspace & observation** section. Section headings are in sentence case. Selecting a block shows it in the
   same panel: its Needs input or Problem first (answers and Problem actions work here), its current visit and working report,
   the results handed off to an Agent block (**Received**), activations, the Agent block's
   [Revisit instruction](../GLOSSARY.md#revisit-instruction) as captured at Start (read-only, and only when it is non-empty;
-  the execution canvas never shows it, and the exact composed turn stays in the worker thread), exits, **Open thread in T3**, and its T3 thread and
+  the execution canvas never shows it, and the exact composed turn stays in the worker thread), exits, **Open in T3 ↗**, and its T3 thread and
   execution ids under a closed **Technical details** section. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.
   **Esc** or the **Overview** breadcrumb returns from the block or the Run title to the overview. Selecting never answers
@@ -465,7 +478,7 @@ fixed Human exits their old exits were mapped to.
 - Block results, including a completed Run's Final result, appear as **result cards** in the inspector and the timeline:
   block, visit, exit, deliveries and acceptance time around the result rendered as Markdown (CommonMark with GitHub tables
   and task lists), collapsed to a short preview. **Read result** opens a reader with the full result, its provenance,
-  **Copy Markdown** (the unmodified text) and **Open thread in T3**; its execution, completion and version are under
+  **Copy Markdown** (the unmodified text) and **Open in T3 ↗**; its execution, completion and version are under
   **Technical details**, and **Esc** returns focus to the card. Raw HTML in a result is shown as text and never runs, links open
   outside Factory and images appear as links, so a result never loads remote content. Copying needs a secure context
   (Factory's own window, loopback or HTTPS); over a plain-HTTP remote address the reader says copying is unavailable.
@@ -473,12 +486,13 @@ fixed Human exits their old exits were mapped to.
   sidebar) to resize it; with the edge focused, Left/Right step 16 px and Home/End jump to the bounds.
   Double-click restores the responsive default, which a saved width otherwise replaces. Widths are saved per browser profile
   on this device.
-- The top bar shows title, project, captured Flow revision, one Run status, each worker's **Open worker in T3** link (a pending launch says
-  recovery is still searching and offers no replacement), the inspector toggle and, until the Run is
-  archived, a ··· menu holding **Archive…**. The Run status is the first that applies of **Archived**, **Settled** (each with its time), **Problem**, **Needs
-  input** (both as the Run sidebar shows them, naming their blocks), **Working** (naming the active blocks) and **Idle**; block
-  states stay on the canvas. While an Active Run's observations are stale or its live delivery is unavailable, **Not live** with
-  Factory's last observation time appears beside it; a live Run shows no freshness marker. The timeline starts collapsed. The inspector's **Workspace** section reads **Project checkout**, **Preparing workspace** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
+- The top bar shows the title and the meta line **#N · Project · Flow · Started …** (with a Trigger-started Run's origin; the
+  Flow name opens it in Studio while it exists), then **Not live** while an Active Run's observations are stale or its live
+  delivery is unavailable, with Factory's last observation time, **Open in T3 ↗** for the Run's conversation or its first
+  worker (a pending launch says recovery is still searching and offers no replacement), the inspector toggle and, until the
+  Run is archived, a ··· menu holding **Archive…**. The top bar carries no work state: it stays on the Run's sidebar row and
+  its blocks. A Settled or Archived Run still names its lifecycle with its time, and an Active Run with nothing active or
+  pending reads **Idle**. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing workspace** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
   **Workspace failed** with the reason; an unconfirmed creator launch shows its recovery note. Retained Runs that queued a
   first visit on an idle worker prepared under the earlier contract still show **entered · prepared idle T3 thread**.
 - Running worker work is ordinary progress; unavailable observations mark the Block **Not live**, preserving prior facts without creating a Problem.
@@ -488,7 +502,9 @@ Engine termination alone never settles a Run; automatic settlement needs every c
 ## Run list
 
 The shell sidebar lists Runs globally, newest created first, with equal creation times in ascending creation-key order;
-opening, renaming and closing never change either. Run drafts join the main list in the same order with a **Draft** indicator once you leave the New Run view
+opening, renaming and closing never change either. In the open list, Runs that need you lead: Needs input Runs first,
+then Problem Runs, then the rest, each group in that order. When a Run opens, or the open Run changes, its row scrolls
+into view at the nearest edge and keeps the neutral selected fill. Run drafts join the main list in the same order with a **Draft** indicator once you leave the New Run view
 (Settings and Studio open over it and do not count); a draft row reopens it in the composer, and editing never moves it.
 A draft's creation key is its id, and its Start sends that id as the request key, which becomes the Run's creation key. With
 the draft's title and creation time, the Run therefore replaces the draft row in place, also among entries created at the same
@@ -509,7 +525,8 @@ the viewport. It shows the full title, project, captured Flow, a Trigger-started
 title fits. Opening a row menu dismisses and blocks the card; hovering
 menu items never opens a row preview.
 
-- **Needs input**: a pending Human occurrence or native T3 question/permission.
+- **Needs input**: a pending Human occurrence or native T3 question/permission, or an Agent to review in T3 (see
+  **Conversation** below).
   **Problem**: a pending missing report, execution failure, report problem or Condition integrity Problem. Both can show. Stale observations or an unavailable
   project are not Problems and opening a Run clears no chip. A Run whose project T3 no longer reports shows a neutral
   **Not in T3** tag.
@@ -611,9 +628,12 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   waits for CI or review, so a finished worker thread is not a missing-report Problem. A later working or finished report
   replaces it. Reported after a result, when the Agent reopens the task, it shows the block working without withdrawing the
   result, and the Run stays Active until a later report.
-- **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. The block
-  stays working and the Run shows no Needs input for it, so the next block cannot start on unanswered questions. Factory never
-  parses chat; a model may still omit or misuse a report. Earlier Agent questions recorded before this contract stay in Settled
+- **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. While an
+  Agent block's worker thread is idle and the visit's current report is still `working`, the block and the Run show **Needs
+  input**, and the overview has one card, **Review *Block* in T3**, with the working message and **Open in T3 ↗**. An Agent
+  that stopped without reporting leaves the same evidence, so the card never says the Agent waits for a reply; only an
+  explicit T3 request does. It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
+  cannot start on unanswered questions. Factory never parses chat; a model may still omit or misuse a report. Earlier Agent questions recorded before this contract stay in Settled
   attention with their text, and an upgrade turned questions still pending into the visit's working report without resuming the
   worker. See [report acceptance](runner.md#report-acceptance).
 - **Request report** on a missing-report Problem, or in the details of a block idle in working, starts one extra turn on the
@@ -624,11 +644,12 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   code, reason and repair guidance. Missing report means no report was accepted; the worker may have attempted one.
   Correct the reported issue without repeating work. Any accepted report on that Block or confirmed linked recovery settles
   the rejection while preserving its history; progress alone does not. Unknown or missing Block ids stay in MCP/T3.
-- **Attention panel** (per Run, optionally per block): Pending by default, Settled keeping times, reasons and selected Human exit.
-  Native questions and permissions link to **Open in T3** and are answered there; Factory has no native answer controls. A fresh
+- **Attention** (per Run, optionally per block) lists pending matters only; resolved ones, with their reasons, chosen
+  decision and time, move to the closed **Resolved attention · N** row. Native questions and permissions link to **Open in
+  T3 ↗** and are answered there; Factory has no native answer controls. A fresh
   read showing none records `withdrawn`; unavailable reads keep matters pending and mark the observation stale.
 - **Timeline** entries are plain sentences derived from recorded facts ("entered · new T3 thread", "handed off to Reviewer via
-  Review", "finished · exit Approved", "result version 2 replaces the earlier result", "you answered", "settled by you",
+  Review", "finished → Approved", "result version 2 replaces the earlier result", "you answered → Approve", "settled by you",
   "reported · the Run is Active again", "archived"). The timeline shows **Key events** by default: T3 status changes Factory
   observed on a Block's executions collapse into one row per run of repeats, with their count, statuses and time span, which
   opens in place; any other entry ends the run. Every other entry, including handoffs, Needs input, Problems, results and
@@ -726,13 +747,13 @@ with **Try again** and, for a later page, a refresh from arrival 1.
 
 A Continuation continues the conversation of the worker whose message reaches it. The first message in a Run queues its prompt on that
 worker's T3 thread, stating the Continuation's own Block id; after a Human step, also one whose answer first waited in a Wait, the
-person's reply follows the prompt, labelled, because the worker has not seen it. The Continuation shows **Sent**, and the worker's own Agent block shows **Working** while the thread works on
+person's reply follows the prompt, labelled, because the worker has not seen it. The Continuation shows **Working**, with **In *owner*’s thread**, and the worker's own Agent block shows **Working** while the thread works on
 it, without a new visit and without changing that block's result or firing its connections again. When the worker reports `finished` for
-the Continuation and its thread is finished, the response leaves the single output and the Continuation shows **Pass-through**. Messages that
+the Continuation and its thread is finished, the response leaves the single output and the Continuation shows **Finished**. Messages that
 arrive while the prompt is pending wait (**Queued** in its details) and go out after the response, in arrival order. From then on every
 message is forwarded unchanged with its own worker, also in loops and after a restart; the prompt is never sent again in that Run.
 
-Its details list the prompt visit (input, prompt sent and response) and each pass-through visit, each with **Open thread in T3** for the
+Its details list the prompt visit (input, prompt sent and response) and each pass-through visit, each with **Open in T3 ↗** for the
 worker its message belongs to; Blocks that share a worker open the same conversation. Timeline rows for it use the Continuation icon. A missing
 report after its prompt is a Problem on the Continuation, and **Request report** asks the same thread for it. Archive stops a pending
 Continuation and cancels waiting messages; its worker thread is interrupted with the other workers.

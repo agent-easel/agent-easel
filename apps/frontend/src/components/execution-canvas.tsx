@@ -351,8 +351,9 @@ function executionFooters(
         <ContinueNow arrival={continuable} label={`Continue ${block.name || "Wait"} now`} />
       </span>,
     );
-  // Needs input shows in the Block's badge; a Problem keeps its own footer.
-  if (attention.problem)
+  // Needs input shows in the Block's badge, and so does a failed Block's Problem; any other
+  // Problem keeps its own footer.
+  if (attention.problem && recorded?.state !== "error")
     footers.push(
       <span className={cn(footerClass, "bg-muted")}>
         <StatusBadge kind="problem" />

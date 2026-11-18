@@ -1,6 +1,6 @@
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { bindingRole } from "./run-coordination.tsx";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   attentionPresentation,
   awaitsReviewInT3,
@@ -405,17 +405,34 @@ function decisionLabel(run: RunDetail, blockId: string, exit: { id: string; name
 /** Why Submit answer is unavailable, or null while it can be sent. */
 function submitBlocker({
   online,
+  confirming,
   decided,
   messageMissing,
 }: {
   online: boolean;
+  confirming: boolean;
   decided: boolean;
   messageMissing: boolean;
 }) {
   if (!online) return "Factory offline";
+  if (confirming) return "A Discord confirmation is waiting";
   if (!decided) return "Choose a decision first";
   if (messageMissing) return "Add your changes";
   return null;
+}
+
+/** Whether `until` has not passed yet; it turns false at that moment without another Run update. */
+function useStillBefore(until: string | null) {
+  const [passed, setPassed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!until) return;
+    const timer = window.setTimeout(
+      () => setPassed(until),
+      Math.max(0, Date.parse(until) - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [until]);
+  return until !== null && passed !== until;
 }
 
 /** Sends one answer; a refusal keeps the chosen decision and the typed text for another try. */
@@ -452,11 +469,13 @@ function HumanResponseForm({
   const [message, setMessage] = useState("");
   const { error, busy, send } = useHumanAnswer(occurrence.id);
   const online = useMutationsAllowed();
+  const confirming = useStillBefore(occurrence.chatConfirmationUntil);
   const exits = capturedExits(run.definitions, occurrence.blockId);
   const selected = exits.find((exit) => exit.id === exitId);
   const messageRequired = !!selected?.messageRequired;
   const blocker = submitBlocker({
     online,
+    confirming,
     decided: !!selected,
     messageMissing: messageRequired && !message.trim(),
   });
@@ -464,7 +483,7 @@ function HumanResponseForm({
     event.preventDefault();
     if (selected && !blocker) void send(selected.id, message, () => setMessage(""));
   }
-  const locked = busy || !online;
+  const locked = busy || !online || confirming;
   return (
     <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
       {occurrence.context && (

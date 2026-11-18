@@ -74,8 +74,10 @@ function Activation({ run, activation }: { run: RunDetail; activation: RunActiva
       className="flex flex-col gap-2 rounded-md border bg-card px-3 py-2.5 text-xs break-words"
     >
       <div className="flex min-w-0 items-center gap-2">
-        <h3 className="min-w-0 truncate text-sm font-semibold">{name}</h3>
-        <span className="shrink-0 text-subtle-foreground">Visit {visit}</span>
+        <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
+        <span className="shrink-0 text-subtle-foreground">
+          <span className="sr-only"> · </span>Visit {visit}
+        </span>
         <span className="flex-1" />
         {workers.map((worker) => (
           <OpenInT3 key={worker.id} href={worker.link} className="text-sm" />

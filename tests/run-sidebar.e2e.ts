@@ -398,14 +398,29 @@ async function openRunStatus(app: App, screen: Screen, id: string) {
   return status;
 }
 
-/** Opens the open Run titled `title` with its sidebar row, to compare their presentations. */
-async function openSidebarRun(app: App, screen: Screen, title: string) {
+test("an active Run's header states no work state while its row and Blocks show Needs input", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  // Other journeys answer or settle the Human review Run; this native question stays pending.
+  const title = "Demo · Woke · A question about keyboard shortcuts";
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
-  const status = await openRunStatus(app, screen, (await findRun(app.baseUrl, title)).id);
-  return { status, row };
-}
 
-test("a working Run's header shows one Working status naming its active block and no Not live", async ({
+  // Act
+  await app.open(`/runs/${(await findRun(app.baseUrl, title)).id}`);
+
+  // Assert
+  await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
+  await expect(screen.getByRole("status", "Run status")).toHaveCount(0);
+  await expect(row).toContainText("Needs input");
+  await expect(
+    screen.getByRole("region", "Execution canvas").getByText("Needs input", { exact: true }),
+  ).toBeVisible();
+  await app.screenshot("run-header-needs-input");
+});
+
+test("a working Run's header shows no Not live while its worker is freshly observed", async ({
   app,
   screen,
 }) => {
@@ -417,45 +432,12 @@ test("a working Run's header shows one Working status naming its active block an
   expect(run.blocks.find((block) => block.blockId === "worker")?.freshness).toBe("fresh");
 
   // Act
-  const status = await openRunStatus(app, screen, id);
+  await app.open(`/runs/${id}`);
 
   // Assert
-  await expect(status).toHaveText(/^Working · \S/);
+  await expect(screen.getByRole("region", "Execution canvas")).toBeVisible();
   await expect(screen.getByRole("status", "Observation freshness")).toHaveCount(0);
   await app.screenshot("run-header-working");
-});
-
-test("a Run waiting for an answer shows the sidebar's Needs input chip as its one header status", async ({
-  app,
-  screen,
-}) => {
-  // Arrange
-  // Other journeys answer or settle the Human review Run; this native question stays pending.
-  const title = "Demo · Woke · A question about keyboard shortcuts";
-
-  // Act
-  const { status, row } = await openSidebarRun(app, screen, title);
-
-  // Assert
-  await expect(status).toHaveText(/^Needs input · /);
-  await expect(row).toContainText("Needs input");
-  await app.screenshot("run-header-needs-input");
-});
-
-test("a Run with a Problem shows the sidebar's Problem chip as its one header status", async ({
-  app,
-  screen,
-}) => {
-  // Arrange
-  const title = "Demo · Problem · Search checks failed";
-
-  // Act
-  const { status, row } = await openSidebarRun(app, screen, title);
-
-  // Assert
-  await expect(status).toHaveText(/^Problem · /);
-  await expect(row).toContainText("Problem");
-  await app.screenshot("run-header-problem");
 });
 
 test("a Settled Run's header shows Settled instead of its finished block's state", async ({

@@ -279,6 +279,9 @@ export function makeChatActions(
   deliveries: ChatDeliveries,
   /** Told after a committed origin, so its Run's status card is captured now. */
   originRecorded: (runId: string) => void,
+  /** Told after a Human answer review became confirmable or failed, so the Run's own answer
+   * form shows whether a Discord confirmation is waiting. */
+  answerReviewChanged: (runId: string) => void,
 ) {
   const byName = new Map(operations.map((operation) => [operation.name, operation]));
   const buttons = confirmationButtons(sql);
@@ -355,8 +358,22 @@ export function makeChatActions(
       )
       .pipe(Effect.tap(() => buttons.changed));
 
+  /** Hints the Run whose occurrence a committed Human answer proposal names. */
+  const answerRunChanged = (id: string) =>
+    Effect.map(
+      sql<{ run_id: string }>`SELECT h.run_id FROM chat_proposals p
+        JOIN human_occurrences h ON h.id=json_extract(p.parameters_json,'$.occurrenceId')
+        WHERE p.id=${id} AND p.operation='human-answer'`,
+      (rows) => {
+        for (const row of rows) answerReviewChanged(row.run_id);
+      },
+    );
+
   const fail = (id: string) =>
-    sql`UPDATE chat_proposals SET state='ended',ended_reason='failed' WHERE id=${id} AND state IN ('preparing','presented')`;
+    Effect.andThen(
+      sql`UPDATE chat_proposals SET state='ended',ended_reason='failed' WHERE id=${id} AND state IN ('preparing','presented')`,
+      answerRunChanged(id),
+    );
 
   /** Whether the proposal is still being prepared and current Access still grants its targets. */
   const stillPreparing = (id: string, proposed: Proposed) =>
@@ -406,6 +423,7 @@ export function makeChatActions(
         }),
       );
       if (!usable) return yield* withdrawn;
+      yield* answerRunChanged(id);
       const button = yield* create(confirmationText(expiresAt), "button", {
         customId: `${BUTTON_PREFIX}${id}`,
         label: proposed.confirmation.label,

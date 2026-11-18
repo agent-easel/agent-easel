@@ -676,6 +676,11 @@ export interface HumanOccurrence {
   readonly appearedAt: string;
   readonly settledAt: string | null;
   readonly exitId: string | null;
+  /**
+   * When the latest Discord review proposing an answer to this pending occurrence stops being
+   * confirmable; null when there is none. While it lasts, the Run's own answer form waits.
+   */
+  readonly chatConfirmationUntil: string | null;
 }
 
 /**

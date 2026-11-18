@@ -90,7 +90,7 @@ test("Start launches a top-level Block worker and no Run conversation", async ({
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open worker in T3", { exact: true }),
+      .getByRole("link", "Open in T3", { exact: true }),
   ).toHaveAttribute("href", run.threadBindings[0]!.link!);
   await app.screenshot("direct-root-worker-after-reload");
 });
@@ -253,7 +253,7 @@ test("a Start whose response was lost is recovered after reload without a duplic
   await archiveJourneyRun(app.baseUrl, recovered[0]!.id);
 });
 
-test("a worker discussing in T3 stays working without Needs input after reload", async ({
+test("a worker idle in its working report asks for review in T3 as Needs input after reload", async ({
   app,
   screen,
   browser,
@@ -270,12 +270,17 @@ test("a worker discussing in T3 stays working without Needs input after reload",
   await browser.reload();
 
   // Assert
-  await expect(screen.getByRole("article", "Block Implement change")).toContainText(
-    "Discussing the empty-state wording",
-  );
-  await expect(screen.getByRole("region", "Needs input")).toHaveCount(0);
+  const block = screen.getByRole("article", "Block Implement change");
+  await expect(block).toContainText("Discussing the empty-state wording");
+  await expect(block).toContainText("Needs input");
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
-  expect((await readHistoryRun(app.baseUrl, run.id)).activations).toEqual(run.activations);
+  const after = await readHistoryRun(app.baseUrl, run.id);
+  expect(after.activations).toEqual(run.activations);
+  expect(after.attention).toEqual(run.attention);
   await app.screenshot("worker-conversation-after-reload");
   await screen.getByRole("button", "Workspace & observation", { exact: false }).tap();
   await screen.getByRole("heading", "Work periods", { exact: true }).scrollIntoView();
@@ -423,7 +428,7 @@ test("a worker's replaced report releases only its newest result to review work"
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open worker in T3", { exact: true }),
+      .getByRole("link", "Open in T3", { exact: true }),
   ).toHaveCount(2);
   await app.screenshot("worker-report-released-to-reviewer");
 });

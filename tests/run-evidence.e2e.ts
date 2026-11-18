@@ -72,8 +72,8 @@ test("a worker whose own turn ended while its subagents still run stays working 
 
   // Assert
   const activations = screen.getByRole("region", "Block activations");
-  await expect(activations).toContainText("Worker active");
-  await expect(activations.getByRole("link", "Open worker in T3", { exact: true })).toBeVisible();
+  await expect(activations).toContainText("Implement change · Visit 1");
+  await expect(activations.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   await app.screenshot("working-delegated-subagents");
 });
@@ -197,7 +197,7 @@ test("Key events collapses a discussing worker's repeated T3 status updates into
     "aria-selected",
     "true",
   );
-  await expect(timeline).toContainText("3 key events · 12 total");
+  await expect(timeline).toContainText("3 key events");
   await expect(timeline.getByRole("listitem")).toHaveCount(4);
   await expect(timeline).toContainText("started");
   await expect(timeline).toContainText("entered · new T3 thread");
