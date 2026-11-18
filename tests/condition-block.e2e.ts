@@ -241,28 +241,21 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(review);
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
-  await screen.getByRole("button", "Save Flow").tap();
-  await expect(
-    screen.getByRole(
-      "button",
-      /Escalate: connect output "Stop"\. A Condition output cannot end a branch\./,
-    ),
-  ).toBeVisible();
-  await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(review);
+  await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(coder);
   await screen.getByRole("button", "Save Flow").tap();
   const saveStatus = screen.getByRole("status", "Flow save status");
-  await expect(saveStatus).toContainText("Saved · Revision 3");
+  await expect(saveStatus).toContainText("Saved · Revision 2");
   await expect(screen.getByRole("button", /rule 2 "Stop" is never selected/)).toBeVisible();
   await app.screenshot("condition-authored-readiness-row");
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("listitem", "Rule 2 Stop").getByRole("button", "Move rule up").tap();
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
   await screen.getByRole("button", "Save Flow").tap();
-  await expect(saveStatus).toContainText("Saved · Revision 4");
+  await expect(saveStatus).toContainText("Saved · Revision 3");
   await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
-  await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ Review");
+  await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ Coder");
   await expect(screen.getByRole("listitem", "Rule 2 Ask a reviewer")).toContainText(
     "→ Review, Coder",
   );
@@ -282,7 +275,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
     { sourceBlockId: condition.id, exitId: ask.id, targetBlockId: humanStep.id },
     { sourceBlockId: condition.id, exitId: ask.id, targetBlockId: "worker" },
     { sourceBlockId: condition.id, exitId: "otherwise", targetBlockId: "worker" },
-    { sourceBlockId: condition.id, exitId: stop.id, targetBlockId: humanStep.id },
+    { sourceBlockId: condition.id, exitId: stop.id, targetBlockId: "worker" },
   ]);
   const { id: runId } = await fixture.scenarios.ensure({
     key: "condition-authored",
@@ -311,7 +304,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await expect(asked).toContainText("→ Review");
   await expect(asked).toContainText("→ Coder");
   await expect(asked).toContainText("Acknowledged");
-  await expect(details.getByRole("list", "Arrival 5 recipients")).toContainText("→ Review");
+  await expect(details.getByRole("list", "Arrival 5 recipients")).toContainText("→ Coder");
   const timeline = await openTimeline(app, screen, "condition-authored-run-arrivals");
   await expect(timeline).toContainText("arrival 1 → Otherwise");
   await expect(timeline).toContainText("arrival 3 → Ask a reviewer");
@@ -341,6 +334,7 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
     "Condition at size limit",
     "Runtime worker",
     "done",
+    "last",
   );
   const last = flow.rules.length;
   await app.open(`/studio/flows/${flow.id}`);
@@ -387,6 +381,7 @@ test("a Run of a Condition at the definition size limit shows its first arrival'
     "Run a Condition at size limit",
     "Runtime worker",
     "done",
+    "every",
   );
   const { id: runId } = await fixture.scenarios.ensure({
     key: "condition-size-limit",

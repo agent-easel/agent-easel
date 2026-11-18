@@ -36,7 +36,7 @@ import { OpenInT3 } from "./open-in-t3.tsx";
 import { fieldLabelClass } from "./page.tsx";
 import { runActions, useRunActions } from "./run-actions.tsx";
 import { useSettleRun } from "./settle-run.tsx";
-import { StatusBadge } from "./status-badge.tsx";
+import { RUN_STATE_LABELS, StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 
 /** What a matter is about: its Block, or the Run for a Run-level matter. */
@@ -89,14 +89,18 @@ export function attentionPending(run: RunDetail) {
   );
 }
 
-/** The T3 threads a pending Attention card links to; their Activations rows carry no link. */
-export function attentionLinks(run: RunDetail) {
-  return new Set(
-    [
-      ...run.attention.filter((item) => !item.settledAt).map((item) => item.link),
-      ...reviewsInT3(run, undefined).map((block) => block.link),
-    ].filter((link): link is string => !!link),
-  );
+/** The Blocks whose T3 thread a pending Attention card links to; their Activations rows carry no
+ * link. */
+export function attentionLinkedBlocks(run: RunDetail) {
+  return new Set([
+    ...run.attention.flatMap((item) =>
+      !item.settledAt && item.link && item.blockId ? [item.blockId] : [],
+    ),
+    ...reviewsInT3(run, undefined).flatMap((block) => (block.link ? [block.blockId] : [])),
+    ...(run.attention.some((item) => item.kind === "settlement-unresolved" && !item.settledAt)
+      ? blockedWorkers(run).flatMap((worker) => (worker.link ? [worker.blockId] : []))
+      : []),
+  ]);
 }
 
 /** A missing report and the report rejections of the same execution are one matter. */
@@ -167,7 +171,7 @@ function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
 function AttentionCard({
   tone,
   subject,
-  label = subject,
+  label,
   compact,
   title,
   next,
@@ -177,6 +181,7 @@ function AttentionCard({
 }: {
   tone: "needs-input" | "problem";
   subject: string;
+  /** The card's accessible name; by default its tone and subject, as "Problem · Implement change". */
   label?: string;
   compact: boolean;
   title?: string | undefined;
@@ -187,7 +192,7 @@ function AttentionCard({
 }) {
   return (
     <article
-      aria-label={`${tone === "needs-input" ? "Needs input" : "Problem"} · ${label}`}
+      aria-label={label ?? `${RUN_STATE_LABELS[tone]} · ${subject}`}
       className={cn(
         "flex min-w-0 flex-col gap-2.5 rounded-lg border bg-card p-4",
         tone === "needs-input" ? "border-attention/75" : "border-destructive/75",
@@ -296,7 +301,7 @@ function QuestionMatter({
       <AttentionCard
         tone="needs-input"
         subject={subject}
-        label={[subject, source].filter(Boolean).join(" · ")}
+        label={["Needs input", subject, source].filter(Boolean).join(" · ")}
         compact={compact || !answerable}
       >
         {source && <p className="text-xs text-muted-foreground">{source}</p>}
@@ -352,7 +357,15 @@ function ProblemMatter({
       actions={action}
       details={[
         ...matterDetails(run, item),
-        ["Detail", item.kind === "condition-integrity" ? item.message : recorded],
+        // A failure that recorded only its kind adds nothing to the Reason row.
+        [
+          "Detail",
+          item.kind === "condition-integrity"
+            ? item.message
+            : recorded !== item.kind
+              ? recorded
+              : null,
+        ],
       ]}
     />
   );

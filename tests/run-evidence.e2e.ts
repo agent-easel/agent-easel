@@ -10,7 +10,7 @@ beforeEach(async ({ app }) => {
   await prepareScenarios(app);
 });
 
-test("long native identities remain readable in the selected Block's Needs input after reload", async ({
+test("a selected Block's Needs input names the request plainly, and its long native identities stay readable in its Technical details after reload", async ({
   app,
   screen,
   browser,
@@ -34,8 +34,12 @@ test("long native identities remain readable in the selected Block's Needs input
 
   // Assert
   const input = screen.getByRole("region", "Needs input");
-  await expect(input).toContainText(worker.threadId);
-  await expect(input).toContainText(worker.executionId);
+  await expect(input).toContainText("Implement change needs permission in T3");
+  await expect(input).not.toContainText(worker.threadId);
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await inspector.getByRole("button", "Technical details", { exact: true }).tap();
+  await expect(inspector).toContainText(worker.threadId);
+  await expect(inspector).toContainText(worker.executionId);
   await expect(input.getByRole("link", "Open in T3", { exact: true })).toHaveAttribute(
     "href",
     run.attention.find((item) => item.kind === "native-request" && !item.settledAt)!.link!,
@@ -43,7 +47,7 @@ test("long native identities remain readable in the selected Block's Needs input
   await expect
     .poll(() =>
       browser.evaluate(
-        `Array.from(document.querySelectorAll('[aria-label="Needs input"]')).every(el => el.scrollWidth <= el.clientWidth)`,
+        `Array.from(document.querySelectorAll('[aria-label="Run inspector"] dl')).every(el => el.scrollWidth <= el.clientWidth)`,
       ),
     )
     .toBe(true);

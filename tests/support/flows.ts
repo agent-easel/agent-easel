@@ -118,18 +118,21 @@ export async function saveSingleAgentFlow(
 }
 
 /**
- * Saves a new ready checkout Flow at the definition size limit: the Flow input starts one block of
- * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate. Every
- * Condition output needs a wire, so Escalate holds as many rules as the connection limit leaves
- * room for, each named `Route N` and padded so the save request stays 1,000 bytes under the
- * size limit and a short rename still saves. Rules have ID-length IDs and strictly descending
- * thresholds down to 2; every rule and Otherwise reach Human step Review.
+ * Saves a new checkout Flow at the definition size limit: the Flow input starts one block of the
+ * named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate, and
+ * Otherwise reaches Human step Review. With `wiring: "last"`, Escalate holds as many rules as a
+ * save request carries 1,000 bytes under the limit, so a short rename still saves, and only its
+ * last rule reaches Review: the Flow is not ready, since every Condition output needs a wire. With
+ * `wiring: "every"`, every rule reaches Review, so the Flow is ready and the connection limit
+ * bounds the rules, each padded to stay at the size limit. Rules are named `Route N`, have
+ * ID-length IDs and strictly descending thresholds down to 2.
  */
 export async function saveConditionAtSizeLimit(
   baseUrl: string | undefined,
   name: string,
   agentName: string,
   exitId: string,
+  wiring: "last" | "every",
 ) {
   const agents = (await flowRequest(baseUrl, "/api/agents")) as AgentDefinition[];
   const agent = agents.find((item) => item.name === agentName);
@@ -165,18 +168,17 @@ export async function saveConditionAtSizeLimit(
   };
   const body = { name, workspace: { mode: "checkout" }, graph };
   const budget = DEFINITION_REQUEST_LIMIT_BYTES - 1_000;
-  // The Agent's wire and Otherwise's take two of the connection limit.
-  const count = CONNECTION_LIMIT - 2;
-  const withPadding = (padding: number) => {
+  const withRules = (count: number, padding: number) => {
     condition.rules = Array.from({ length: count }, (_, index) => ({
       id: `rule-${String(index).padStart(31, "0")}`,
       name: `Route ${index + 1}${padding ? ` ${"·".repeat(padding)}` : ""}`,
       fromArrival: count - index + 1,
     }));
+    const wired = wiring === "every" ? condition.rules : condition.rules.slice(-1);
     graph.connections.splice(
       2,
       Infinity,
-      ...condition.rules.map((rule) => ({
+      ...wired.map((rule) => ({
         sourceBlockId: condition.id,
         exitId: rule.id,
         targetBlockId: "review",
@@ -184,14 +186,19 @@ export async function saveConditionAtSizeLimit(
     );
     return saveBytes(body);
   };
-  // The longest padding that still fits the budget.
-  let [fits, overflows] = [0, 10_000];
+  // The largest rule count, or with every rule wired the longest padding, that fits the budget.
+  // The Agent's wire and Otherwise's take two of the connection limit.
+  const fill =
+    wiring === "every"
+      ? (size: number) => withRules(CONNECTION_LIMIT - 2, size)
+      : (size: number) => withRules(size, 0);
+  let [fits, overflows] = wiring === "every" ? [0, 10_000] : [1, 100_000];
   while (overflows - fits > 1) {
-    const padding = Math.floor((fits + overflows) / 2);
-    if (withPadding(padding) <= budget) fits = padding;
-    else overflows = padding;
+    const size = Math.floor((fits + overflows) / 2);
+    if (fill(size) <= budget) fits = size;
+    else overflows = size;
   }
-  const bytes = withPadding(fits);
+  const bytes = fill(fits);
   assert(definitionSaveFits(body) && bytes <= budget);
   const created = (await flowRequest(baseUrl, "/api/flows", {
     method: "POST",
