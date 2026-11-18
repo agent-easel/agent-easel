@@ -43,6 +43,16 @@ export function clockTime(at: string) {
   });
 }
 
+/** "just now", then "12 min ago", "3 h ago" or "2 d ago", rounded down. */
+export function timeAgo(at: string, now = Date.now()) {
+  const minutes = Math.max(0, Math.floor((now - Date.parse(at)) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return `${Math.floor(hours / 24)} d ago`;
+}
+
 /** "today 20:31" for today, otherwise "12 Oct 09:40". */
 export function dayAndTime(at: string) {
   const date = new Date(at);

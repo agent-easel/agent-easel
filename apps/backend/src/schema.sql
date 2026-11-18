@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: chat_discord_names
+-- Newest applied migration: chat_access_test
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -96,6 +96,23 @@ CREATE TABLE chat_access_settings (
   revision INTEGER NOT NULL DEFAULT 0,
   saved_at TEXT,
   CHECK ((revision = 0) = (saved_at IS NULL))
+);
+
+CREATE TABLE chat_access_test_channels (
+  channel_id TEXT PRIMARY KEY,
+  outcome TEXT NOT NULL CHECK (outcome IN ('posted', 'cant-post', 'unknown-channel')),
+  sent_at TEXT NOT NULL
+);
+
+CREATE TABLE chat_access_test_messages (
+  message_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL
+);
+
+CREATE TABLE chat_access_test_users (
+  user_id TEXT PRIMARY KEY,
+  -- Null while the user has not answered the latest test.
+  reached_at TEXT
 );
 
 CREATE TABLE chat_access_users (

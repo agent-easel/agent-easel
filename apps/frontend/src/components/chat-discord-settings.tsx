@@ -17,7 +17,12 @@ import { chatControlBlocker, type ChatControlBlocker } from "../chat-control-swi
 import { useRefreshSchedule } from "../refresh-schedule.ts";
 import { reportDiscordSettings } from "../chat-control-attention.ts";
 import { useSettingsOptions } from "../settings-navigation.ts";
-import { AccessCard, firstGrants, useAccessSection } from "./chat-discord-access.tsx";
+import {
+  AccessCard,
+  firstGrants,
+  useAccessSection,
+  type AccessTestAction,
+} from "./chat-discord-access.tsx";
 import { DeliveryCard } from "./chat-discord-delivery.tsx";
 import { CopyButton } from "./copy-button.tsx";
 import { dayAndTime } from "./execution-state.tsx";
@@ -235,6 +240,14 @@ function useDiscordPage() {
     },
     () => "Factory could not run the check.",
   );
+  const accessTest = useHostAction(
+    () => api.sendDiscordAccessTest(),
+    (next) => {
+      answer(next);
+      access.setSettings(next);
+    },
+    () => "Factory could not send the access test.",
+  );
   const turn = useHostAction(
     (on: boolean) => api.setChatControlEnabled({ enabled: on }),
     answer,
@@ -259,6 +272,7 @@ function useDiscordPage() {
     checking: check.busy,
     checkError: check.error,
     check: check.act,
+    accessTest,
     switching: turn.busy,
     switchError: turn.error,
     turn: turn.act,
@@ -327,6 +341,8 @@ export function ChatDiscordSettings() {
             draft={access.draft}
             problem={access.problem}
             disabled={page.saving}
+            test={settings.access.test}
+            sendTest={accessTestAction(page, settings)}
             onChange={access.setDraft}
           />
           <AccessProblems page={page} settings={settings} />
@@ -334,6 +350,32 @@ export function ChatDiscordSettings() {
       ) : null}
     </ChatControlPage>
   );
+}
+
+/**
+ * The access test action once Access was first saved. It always tests the saved Access, so it
+ * waits for unsaved Users or Channels edits, and it needs Chat control On.
+ */
+function accessTestAction(
+  page: DiscordPage,
+  settings: DiscordSettings,
+): AccessTestAction | undefined {
+  // The Access save answers the Access section first; the page's settings catch up on the next read.
+  if ((page.access.settings ?? settings).access.savedAt === null) return undefined;
+  return {
+    label: page.accessTest.busy
+      ? "Sending…"
+      : settings.access.test
+        ? "Send again"
+        : "Send access test",
+    reason: !settings.chatControlEnabled
+      ? "Turn on Chat control to send"
+      : page.access.dirty
+        ? "Save first"
+        : "",
+    busy: page.accessTest.busy,
+    onSend: () => void page.accessTest.act(undefined),
+  };
 }
 
 /** Setup guide until the first passing check, Discard, the connection action, then Save. */
@@ -705,6 +747,15 @@ function AccessProblems({ page, settings }: { page: DiscordPage; settings: Disco
           {page.stopped === "access-after-bot"
             ? "The bot is saved. Save again to retry Access."
             : "Your edits are kept. Save again."}
+        </SettingsProblemCard>
+      )}
+      {page.accessTest.error && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t send the access test"
+          details={page.accessTest.error}
+        >
+          Try again.
         </SettingsProblemCard>
       )}
       {channelNames.length > 0 && (

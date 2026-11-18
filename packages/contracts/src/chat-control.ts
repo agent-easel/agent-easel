@@ -182,10 +182,35 @@ export interface DiscordAccessConfiguration {
    */
   readonly userNames: Readonly<Record<string, string | null>>;
   readonly channelNames: Readonly<Record<string, string | null>>;
+  /** The latest access test of the saved Access; null before one was sent. */
+  readonly test: DiscordAccessTest | null;
   /** Increases with every committed save; stale-write checks name it. */
   readonly revision: number;
   /** When this revision was saved; null before the first save. */
   readonly savedAt: string | null;
+}
+
+/**
+ * What posting the access test in one allowed channel did: `posted`, `cant-post` when Discord
+ * refused the bot's message there, `unknown-channel` when Discord does not know the channel.
+ */
+export type DiscordAccessTestPost = "posted" | "cant-post" | "unknown-channel";
+
+/**
+ * The latest access test: the bot asked every allowed user, in each allowed channel, to reply.
+ * It stays as it was while Chat control is Off; an Access save drops the channels and users it
+ * removes.
+ */
+export interface DiscordAccessTest {
+  /** When the test was sent. */
+  readonly sentAt: string;
+  /** Each saved channel the test was sent to, with what its post did. */
+  readonly channels: Readonly<Record<string, DiscordAccessTestPost>>;
+  /**
+   * When each user the test asked answered it; null while Waiting, which has no timeout. A user
+   * allowed after the test is absent until they answer or the next test.
+   */
+  readonly users: Readonly<Record<string, string | null>>;
 }
 
 /**
@@ -333,6 +358,14 @@ export const chatControlOperations = {
     method: "PUT",
     path: "/api/chat-control/discord/access",
     body: "json",
+  }),
+  /**
+   * Posts the access test in every saved allowed channel while Chat control is On and connected,
+   * replacing the previous test. Unsaved Access edits are never tested.
+   */
+  sendDiscordAccessTest: operation<never, DiscordSettings>()({
+    method: "POST",
+    path: "/api/chat-control/discord/access-test",
   }),
   setChatControlEnabled: operation<SetChatControlEnabledInput, DiscordSettings>()({
     method: "PUT",

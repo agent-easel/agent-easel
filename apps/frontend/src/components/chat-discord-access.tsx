@@ -1,5 +1,6 @@
 import { ChevronsUpDown, Trash2 } from "lucide-react";
 import type {
+  DiscordAccessTest,
   DiscordSettings,
   FactoryProject,
   UpdateDiscordAccessInput,
@@ -18,6 +19,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
+import { timeAgo } from "./execution-state.tsx";
 import { randomId } from "../lib/ids.ts";
 import { SettingsGroup, SettingsProblemCard } from "./settings-page.tsx";
 import {
@@ -133,6 +135,52 @@ function unknownIds(draft: AccessDraft, access: DiscordSettings["access"]) {
 
 const PROBLEM = "discord-access-problem";
 const UNKNOWN = "discord-access-unknown";
+const GONE = "discord-access-gone";
+
+/** Sending the access test from the "Add channel" row; absent before the first Access save. */
+export interface AccessTestAction {
+  readonly label: string;
+  /** Why it cannot be sent now; empty when it can. */
+  readonly reason: string;
+  readonly busy: boolean;
+  readonly onSend: () => void;
+}
+
+/**
+ * The draft's channels the latest access test could not post in: refused, or gone although
+ * Discord's name lookup has not marked them unknown yet.
+ */
+function testProblems(
+  draft: AccessDraft,
+  test: DiscordAccessTest | null,
+  access: DiscordSettings["access"],
+) {
+  const outcome = (channel: ChannelDraft) => test?.channels[channel.channelId.trim()];
+  return {
+    cantPost: draft.channels.filter((channel) => outcome(channel) === "cant-post"),
+    gone: draft.channels.filter(
+      (channel) =>
+        outcome(channel) === "unknown-channel" &&
+        access.channelNames[channel.channelId.trim()] !== null,
+    ),
+  };
+}
+
+/** "#name" for a channel Discord named, otherwise its ID. */
+const channelLabel = (channelId: string, access: DiscordSettings["access"]) => {
+  const name = access.channelNames[channelId];
+  return name ? `#${name}` : channelId;
+};
+
+/** The latest access test's state of one allowed user, if the test asked or heard from them. */
+function TestBadge({ reachedAt }: { reachedAt: string | null | undefined }) {
+  if (reachedAt === undefined) return null;
+  return reachedAt === null ? (
+    <StatusBadge kind="checking">Waiting</StatusBadge>
+  ) : (
+    <StatusBadge kind="success">Reached · {timeAgo(reachedAt)}</StatusBadge>
+  );
+}
 
 /**
  * Who may invoke Chat control and where: allowed users, then each allowed channel with the
@@ -143,12 +191,17 @@ export function AccessCard({
   draft,
   problem,
   disabled,
+  test,
+  sendTest,
   onChange,
 }: {
   settings: DiscordSettings;
   draft: AccessDraft;
   problem: string;
   disabled: boolean;
+  /** The latest access test, as the page's most recent read shows it. */
+  test: DiscordAccessTest | null;
+  sendTest: AccessTestAction | undefined;
   onChange: (draft: AccessDraft) => void;
 }) {
   const projects = useProjects();
@@ -171,21 +224,7 @@ export function AccessCard({
         <FieldRow
           label="Users"
           htmlFor="discord-access-users"
-          secondary={
-            users.some((id) => id in userNames) &&
-            users.map((id, index) =>
-              userNames[id] === null ? (
-                <StatusBadge key={id} kind="attention">
-                  Unknown user
-                </StatusBadge>
-              ) : (
-                <span key={id}>
-                  {userNames[id] ?? id}
-                  {index < users.length - 1 && ","}
-                </span>
-              ),
-            )
-          }
+          secondary={userNamesLine(users, userNames, test)}
         >
           <Input
             id="discord-access-users"
@@ -212,6 +251,7 @@ export function AccessCard({
             index={index}
             channel={channel}
             name={channelNames[channel.channelId.trim()]}
+            post={test?.channels[channel.channelId.trim()]}
             projects={projects}
             disabled={disabled}
             onChange={(change) => setChannel(channel.key, change)}
@@ -223,21 +263,17 @@ export function AccessCard({
             }
           />
         ))}
-        <FieldRow label={draft.channels.length === 0 ? "Channels" : ""}>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={disabled}
-            onClick={() =>
-              onChange({
-                ...draft,
-                channels: [...draft.channels, { key: randomId(), channelId: "", projectIds: [] }],
-              })
-            }
-          >
-            Add channel
-          </Button>
-        </FieldRow>
+        <AddChannelRow
+          first={draft.channels.length === 0}
+          disabled={disabled}
+          sendTest={sendTest}
+          onAdd={() =>
+            onChange({
+              ...draft,
+              channels: [...draft.channels, { key: randomId(), channelId: "", projectIds: [] }],
+            })
+          }
+        />
       </SettingsGroup>
       {problem && (
         <SettingsProblemCard id={PROBLEM} tone="error" title="Access isn’t valid">
@@ -247,6 +283,117 @@ export function AccessCard({
       {(unknown.users.length > 0 || unknown.channels.length > 0) && (
         <SettingsProblemCard id={UNKNOWN} tone="warning" title={unknownTitle(unknown)}>
           Fix the IDs, then save.
+        </SettingsProblemCard>
+      )}
+      <AccessTestProblems settings={settings} draft={draft} test={test} />
+    </>
+  );
+}
+
+/**
+ * Allowed users by name; while an access test covers them, one per line with its state. Null
+ * before Discord named any of them.
+ */
+function userNamesLine(
+  users: readonly string[],
+  userNames: DiscordSettings["access"]["userNames"],
+  test: DiscordAccessTest | null,
+) {
+  const name = (id: string) =>
+    userNames[id] === null ? (
+      <StatusBadge kind="attention">Unknown user</StatusBadge>
+    ) : (
+      (userNames[id] ?? id)
+    );
+  if (test && users.some((id) => id in test.users))
+    return users.map((id) => (
+      <span key={id} className="flex basis-full items-center gap-2">
+        {name(id)}
+        <TestBadge reachedAt={test.users[id]} />
+      </span>
+    ));
+  if (!users.some((id) => id in userNames)) return null;
+  return users.map((id, index) => (
+    <span key={id}>
+      {name(id)}
+      {userNames[id] !== null && index < users.length - 1 && ","}
+    </span>
+  ));
+}
+
+/** The row under the channels: Add channel and, once Access was saved, the access test. */
+function AddChannelRow({
+  first,
+  disabled,
+  sendTest,
+  onAdd,
+}: {
+  first: boolean;
+  disabled: boolean;
+  sendTest: AccessTestAction | undefined;
+  onAdd: () => void;
+}) {
+  const reasonId = "discord-access-test-reason";
+  return (
+    <FieldRow
+      label={first ? "Channels" : ""}
+      secondary={
+        sendTest?.reason && (
+          <span id={reasonId} className="ml-auto">
+            {sendTest.reason}
+          </span>
+        )
+      }
+    >
+      <Button type="button" variant="outline" disabled={disabled} onClick={onAdd}>
+        Add channel
+      </Button>
+      {sendTest && (
+        <Button
+          type="button"
+          variant="outline"
+          className="ml-auto"
+          disabled={sendTest.busy || sendTest.reason !== ""}
+          aria-describedby={sendTest.reason ? reasonId : undefined}
+          onClick={sendTest.onSend}
+        >
+          {sendTest.label}
+        </Button>
+      )}
+    </FieldRow>
+  );
+}
+
+/** One card for the channels the access test couldn't post in and one for those that are gone. */
+function AccessTestProblems({
+  settings,
+  draft,
+  test,
+}: {
+  settings: DiscordSettings;
+  draft: AccessDraft;
+  test: DiscordAccessTest | null;
+}) {
+  const { cantPost, gone } = testProblems(draft, test, settings.access);
+  const labels = (channels: readonly ChannelDraft[]) =>
+    channels.map((channel) => channelLabel(channel.channelId.trim(), settings.access)).join(", ");
+  return (
+    <>
+      {cantPost.length > 0 && (
+        <SettingsProblemCard
+          tone="warning"
+          title={`${settings.botName ?? "The bot"} can’t post in ${labels(cantPost)}`}
+        >
+          Allow it to send messages there, then send again.
+        </SettingsProblemCard>
+      )}
+      {gone.length > 0 && (
+        <SettingsProblemCard
+          id={GONE}
+          tone="warning"
+          title={`${labels(gone)} no longer exist${gone.length === 1 ? "s" : ""}`}
+        >
+          Remove {gone.length === 1 ? "it" : "them"}, then send again.
         </SettingsProblemCard>
       )}
     </>
@@ -263,10 +410,36 @@ function unknownTitle(unknown: ReturnType<typeof unknownIds>) {
   return `Discord doesn’t know ${parts.join(" and ")}`;
 }
 
+type TestPost = DiscordAccessTest["channels"][string];
+
+/** A channel ID Discord doesn't know, by its name lookup or the access test's post. */
+function channelState(
+  name: string | null | undefined,
+  post: TestPost | undefined,
+): FieldState | undefined {
+  if (name === null) return { tone: "attention", cardId: UNKNOWN };
+  if (post === "unknown-channel") return { tone: "attention", cardId: GONE };
+  return undefined;
+}
+
+/** The channel's name with the access test's problem there; null when there is neither. */
+function channelName(name: string | null | undefined, post: TestPost | undefined) {
+  if (name === null || post === "unknown-channel")
+    return <StatusBadge kind="attention">Unknown channel</StatusBadge>;
+  if (!name && post !== "cant-post") return null;
+  return (
+    <>
+      {name && `#${name}`}
+      {post === "cant-post" && <StatusBadge kind="attention">Can’t post</StatusBadge>}
+    </>
+  );
+}
+
 function ChannelRow({
   index,
   channel,
   name,
+  post,
   projects,
   disabled,
   onChange,
@@ -276,25 +449,17 @@ function ChannelRow({
   channel: ChannelDraft;
   /** The name Discord reported; null when unknown, undefined before a lookup. */
   name: string | null | undefined;
+  /** What the latest access test's post here did, if it was sent here. */
+  post: TestPost | undefined;
   projects: readonly FactoryProject[] | undefined;
   disabled: boolean;
   onChange: (change: Partial<ChannelDraft>) => void;
   onRemove: () => void;
 }) {
   const id = `discord-access-channel-${channel.key}`;
-  const state: FieldState | undefined =
-    name === null ? { tone: "attention", cardId: UNKNOWN } : undefined;
+  const state = channelState(name, post);
   return (
-    <FieldRow
-      label={index === 0 ? "Channels" : ""}
-      secondary={
-        name === null ? (
-          <StatusBadge kind="attention">Unknown channel</StatusBadge>
-        ) : (
-          name && `#${name}`
-        )
-      }
-    >
+    <FieldRow label={index === 0 ? "Channels" : ""} secondary={channelName(name, post)}>
       <Input
         id={id}
         aria-label={`Channel ${index + 1} ID`}

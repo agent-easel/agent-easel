@@ -296,6 +296,18 @@ export const makeChatDiscord = (
       });
 
     /**
+     * Posts the access test with the saved Access while Chat control is On; the latest results,
+     * readable while Off too, show in the Access section.
+     */
+    const sendDiscordAccessTest = () =>
+      Effect.gen(function* (): Effect.fn.Return<Result<DiscordSettings>, unknown> {
+        if ((yield* readRow(sql)).chat_control_enabled !== 1)
+          return failure("conflict", "Turn Chat control on to send the access test.");
+        const sent = yield* operation.sendAccessTest;
+        return sent.ok ? yield* getDiscordSettings() : sent;
+      });
+
+    /**
      * Persists the On/Off intent. On needs the complete saved Discord connection and Language
      * model and no latest check of the current revision that rules it out, but no key, passed test
      * or Access entry, and starts the operating connection. Off
@@ -367,6 +379,7 @@ export const makeChatDiscord = (
       updateDiscordConnection,
       checkDiscordConnection,
       updateDiscordAccess,
+      sendDiscordAccessTest,
       setChatControlEnabled,
     };
   });
