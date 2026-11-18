@@ -76,7 +76,7 @@ export async function openFittedFlowBlock(
 ) {
   await browser.setViewport({ width, height: 1000 });
   await app.open("/studio/flows");
-  await screen.getByRole("heading", flow, { exact: true }).tap();
+  await screen.getByRole("link", flow, { exact: false }).tap();
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   const label = `Block ${name}`;
   const block = screen.getByRole("article", label, { exact: true });

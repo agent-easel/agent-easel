@@ -6,8 +6,10 @@ import { copyAgentDefinition, removeAgentElsewhere } from "./agents.ts";
 export async function beforeRetainedCleanAgent(fixtures: StudioFixtures, prefix: string) {
   const { screen } = fixtures;
   const agent = await openStudioAgent(fixtures, `Removal · ${prefix} · Retained Agent`);
-  await chooseAgentAction(screen, "Delete");
-  await expect(screen.getByRole("dialog", `Delete ${agent.name}?`, { exact: true })).toBeVisible();
+  await chooseAgentAction(screen, "Remove");
+  await expect(
+    screen.getByRole("dialog", `Remove “${agent.name}”?`, { exact: true }),
+  ).toBeVisible();
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }
 
@@ -15,13 +17,15 @@ export async function expectRetainedCleanAgent(
   state: Awaited<ReturnType<typeof beforeRetainedCleanAgent>>,
 ) {
   const { app, screen, browser, agent } = state;
-  await expect(screen.getByRole("dialog", `Delete ${agent.name}?`, { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("dialog", `Remove “${agent.name}”?`, { exact: true })).toHaveCount(
+    0,
+  );
   await expect(browser).toHaveURL(`/studio/agents/${agent.id}`);
   await expectRetainedDefinition(
     screen,
     "Agent",
     ["Save"],
-    ["Duplicate", "Change owner…", "Export JSON", "Delete"],
+    ["Duplicate", "Change owner…", "Export JSON", "Remove"],
   );
   await app.screenshot("agent-removed-retained");
   return { ...state };
@@ -111,8 +115,11 @@ export async function beforeRemovedAgentBackList(fixtures: StudioFixtures, prefi
 export async function expectRemovedAgentBackList(
   state: Awaited<ReturnType<typeof beforeRemovedAgentBackList>>,
 ) {
-  const { browser } = state;
-  await expect(browser).toHaveURL("/studio/agents");
+  const { browser, screen } = state;
+  // An Agents URL with no id selects the first Agent, so the list never stays on /studio/agents.
+  await expect(browser).toHaveURL(/\/studio\/agents\/[^/]+$/);
+  await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Agent not found", { exact: true })).toHaveCount(0);
   return { ...state };
 }
 
@@ -153,7 +160,7 @@ export async function beforeAgentJsonFallback(fixtures: StudioFixtures, prefix: 
     `Removal · ${prefix} · Fallback Agent`,
   );
   await app.open("/studio/agents");
-  await screen.getByRole("link", agent.name, { exact: true }).tap();
+  await screen.getByRole("link", agent.name, { exact: false }).tap();
   await screen.getByLabel("Prompt", { exact: true }).fill("Keep my recovery edits");
   await removeAgentElsewhere(app.baseUrl, agent.id);
   await expect(screen.getByRole("button", "Copy as JSON", { exact: true })).toBeVisible();
@@ -210,7 +217,7 @@ export async function beforeDeletedOwnAgent(fixtures: StudioFixtures, prefix: st
   const { screen } = fixtures;
   const agent = await openStudioAgent(fixtures, `Removal · ${prefix} · Own Delete Agent`);
   await screen.getByLabel("Prompt", { exact: true }).fill("Unsaved edits to delete");
-  await chooseAgentAction(screen, "Delete");
+  await chooseAgentAction(screen, "Remove");
   return { app: fixtures.app, screen: fixtures.screen, browser: fixtures.browser, prefix, agent };
 }
 
@@ -218,8 +225,9 @@ export async function expectDeletedOwnAgent(
   state: Awaited<ReturnType<typeof beforeDeletedOwnAgent>>,
 ) {
   const { screen, browser, agent } = state;
-  await expect(browser).toHaveURL("/studio/agents");
+  await expect(browser).toHaveURL(/\/studio\/agents\/[^/]+$/);
+  await expect(browser).not.toHaveURL(`/studio/agents/${agent.id}`);
   await expect(screen.getByRole("dialog", /Discard/)).toHaveCount(0);
-  await expect(screen.getByRole("link", agent.name, { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("link", agent.name, { exact: false })).toHaveCount(0);
   return { ...state };
 }

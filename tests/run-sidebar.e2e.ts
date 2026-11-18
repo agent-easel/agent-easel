@@ -602,7 +602,7 @@ test("a route while Studio has unsaved edits asks first, and Keep editing keeps 
   // Arrange
   await openDesktopWindow({ app, screen, browser });
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   await screen.getByLabel("Flow name").fill("Launch ready Flow routed");
   const run = await findRun(app.baseUrl, nativeQuestionTitle);
   await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });

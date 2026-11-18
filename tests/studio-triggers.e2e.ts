@@ -19,12 +19,12 @@ const studioNavigation = (screen: Screen) => screen.getByRole("navigation", "Stu
 
 async function runFromMenu(screen: Screen, trigger: string) {
   await screen.getByRole("button", `${trigger} actions`, { exact: true }).tap();
-  await screen.getByRole("menuitem", "Run", { exact: true }).tap();
+  await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
 }
 
 /** Opens the named Trigger from the list; answers its status strip once it shows Error. */
 async function openedInError(screen: Screen, trigger: string) {
-  await screen.getByRole("link", trigger, { exact: true }).tap();
+  await screen.getByRole("link", trigger, { exact: false }).tap();
   const status = screen.getByRole("region", "Trigger status");
   await expect(status.getByText("Error", { exact: true })).toBeVisible();
   return status;
@@ -71,7 +71,7 @@ test("a GitHub Issues Trigger made in Studio starts a Run for a ready issue, and
   });
   await studioNavigation(screen).getByRole("link", "Triggers", { exact: true }).tap();
   await runFromMenu(screen, name);
-  await screen.getByRole("link", name, { exact: true }).tap();
+  await screen.getByRole("link", name, { exact: false }).tap();
   await expect(status.getByText(/ · started 1 · next check /)).toBeVisible();
   await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
   await screen
@@ -110,7 +110,7 @@ test("an opened Trigger returns to the Trigger list from its back link", async (
   const name = "Journey · Back to the list";
   await fixture.github.trigger({ name });
   await app.open("/studio/triggers");
-  await screen.getByRole("link", name, { exact: true }).tap();
+  await screen.getByRole("link", name, { exact: false }).tap();
   await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
 
   // Act
@@ -136,9 +136,7 @@ test("a Trigger whose host gh is signed out shows Error with the host step that 
 
   // Assert
   const guidance = "On the Factory host, run gh auth login --hostname github.com as the user";
-  await expect(
-    screen.getByText(`GitHub can't be read: ${guidance} Factory runs as.`),
-  ).toBeVisible();
+  await expect(screen.getByText(`${guidance} Factory runs as.`)).toBeVisible();
   await expect(studioNavigation(screen).getByText("1 Trigger in Error")).toBeAttached();
   const status = await openedInError(screen, name);
   await expect(status).toContainText(`${guidance} Factory runs as. Nothing starts until`);

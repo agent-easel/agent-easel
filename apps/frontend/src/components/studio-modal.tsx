@@ -304,7 +304,7 @@ function StudioSidebar({
     <aside className="flex w-48 shrink-0 flex-col border-r bg-sidebar max-sm:w-36">
       <nav aria-label="Studio navigation" className="grid gap-0.5 px-3 pt-3">
         <p className="px-3 pb-1 text-2xs font-semibold tracking-section text-subtle-foreground">
-          AUTHOR
+          Author
         </p>
         <RailLink
           selection={{ tab: "flows" }}
@@ -321,7 +321,7 @@ function StudioSidebar({
           count={agents?.length}
         />
         <p className="px-3 pt-3 pb-1 text-2xs font-semibold tracking-section text-subtle-foreground">
-          AUTOMATE
+          Automate
         </p>
         <RailLink
           selection={{ tab: "triggers" }}

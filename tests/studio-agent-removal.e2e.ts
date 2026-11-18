@@ -152,7 +152,7 @@ test("an accepted Agent Delete discards its edits and navigates without another 
   const state = await beforeDeletedOwnAgent({ app, screen, browser }, "deletedOwnAgent");
 
   // Act
-  await screen.getByRole("button", "Delete Agent", { exact: true }).tap();
+  await screen.getByRole("button", "Remove Agent", { exact: true }).tap();
 
   // Assert
   await expectDeletedOwnAgent({ ...state });

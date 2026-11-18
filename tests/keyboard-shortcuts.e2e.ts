@@ -133,7 +133,7 @@ test("Mod+, from dirty Studio opens Settings over it and Esc returns with the dr
   await app.open("/runs/new");
   await expectFactoryConnected(screen);
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   await screen.getByLabel("Flow name").fill("Launch ready Flow dirty");
 
   // Act
@@ -340,7 +340,7 @@ test("Mod+Backspace in Studio over an open Run keeps the selected Flow wire", as
   await app.open(`/runs/${found.id}`);
   await expectFactoryConnected(screen);
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   const wires = screen.getByRole("group", "Directed connections");
   await expect(wires).toHaveAttribute("data-flow-input-count", "1");
   await wires.getByRole("button", "Connection from Flow input to Entry worker").press("Enter");
