@@ -1,7 +1,6 @@
 import { T3LinksAvailable } from "../components/open-in-t3.tsx";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
-import { RunSettlementSection } from "../components/settle-run.tsx";
 import { RunInspector } from "../components/run-inspector.tsx";
 import { RunOriginMeta } from "../components/run-origin.tsx";
 import { useSettings, useStudio } from "../settings-navigation.ts";
@@ -235,7 +234,6 @@ function RunDetailView({
               <RunAttentionDetails run={run} />
             </div>
           )}
-          {run.settlement && <RunSettlementSection id={run.id} settlement={run.settlement} />}
           <RunTimeline run={run} selectedBlockId={selected} />
         </div>
         {inspectorOpen && (
@@ -356,7 +354,9 @@ function RunFlowName({ run }: { run: RunDetail }) {
   );
 }
 
+/** While a confirmed Settle waits for its workers, the meta line says when it was asked. */
 function lifecycleText(run: RunDetail) {
+  if (run.settlement) return `Settle requested ${dayAndTime(run.settlement.requestedAt)}`;
   if (run.lifecycle === "active") return `Started ${dayAndTime(run.startedAt)}`;
   const archived = run.lifecycle === "archived";
   const at = lifecycleAt(run, archived ? "run-archived" : "run-settled");

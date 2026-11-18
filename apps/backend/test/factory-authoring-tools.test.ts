@@ -434,6 +434,8 @@ it("an MCP-created Flow whose Condition rules ascend saves with Studio's readine
     ],
     connections: [
       { sourceBlockId: "coder", exitId: "done", targetBlockId: "gate" },
+      { sourceBlockId: "gate", exitId: "ask", targetBlockId: "coder" },
+      { sourceBlockId: "gate", exitId: "end", targetBlockId: "coder" },
       { sourceBlockId: "gate", exitId: "otherwise", targetBlockId: "coder" },
     ],
   };

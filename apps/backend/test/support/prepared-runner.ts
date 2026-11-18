@@ -1,4 +1,10 @@
-import { singleWorkerFlow, type ReadyFlowShape, type SingleWorkerVariant } from "./scenarios.ts";
+import {
+  singleWorkerFlow,
+  type ReadyFlowShape,
+  type ScenarioWorld,
+  type SingleWorkerVariant,
+} from "./scenarios.ts";
+import { capturedConditionOutputUnwired } from "./condition-storage.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -71,15 +77,38 @@ export async function prepared(
 ) {
   const h = await factoryHarness(c);
   const { root, t3, github, reportingStateDirectory } = await preparedHomes(h.processHome);
-  const f = await h.open({
+  const options = {
     t3,
     github,
     reportingStateDirectory,
     connectionRetryMs: 60_000,
     ...(discordApiUrl ? { discordApiUrl } : {}),
-  });
+  };
+  const f = await h.open(options);
   c.onTestFinished(() => f.close());
-  return { h, f, t3, git: h.git, github, ...(await readyFlow(f, t3, root, shape)) };
+  const ready = await readyFlow(f, t3, root, shape);
+  const result = {
+    h,
+    f,
+    t3,
+    git: h.git,
+    github,
+    ...ready,
+    /**
+     * Closes the backend, unwires Condition `blockId`'s output `exitId` from the captured revision
+     * and reopens the same database, as a Run captured before Condition outputs had to be
+     * connected. `f` and `world` then act on the reopened backend.
+     */
+    async reopenWithCapturedOutputUnwired(blockId: string, exitId: string) {
+      await result.f.close();
+      capturedConditionOutputUnwired(h.databasePath, blockId, exitId);
+      const reopened = await h.open(options);
+      c.onTestFinished(() => reopened.close());
+      result.f = reopened;
+      (ready.world as { factory: ScenarioWorld["factory"] }).factory = reopened;
+    },
+  };
+  return result;
 }
 
 /**

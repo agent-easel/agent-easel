@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 export const T3LinksAvailable = createContext(true);
 
 /**
- * The one way out to a T3 thread: "Open in T3 ↗" as a link. The button form is only for a card
- * whose action is to go to T3 (Review *Block* in T3).
+ * The one way out to a T3 thread: "Open in T3 ↗" as a link. The filled button form is only for
+ * an Attention card whose action is to go to T3.
  */
 export function OpenInT3({
   href,
@@ -28,7 +28,7 @@ export function OpenInT3({
   );
   if (variant === "button")
     return (
-      <Button asChild variant="outline" size="sm" className={cn("w-fit", className)}>
+      <Button asChild size="sm" className={cn("w-fit", className)}>
         {content}
       </Button>
     );

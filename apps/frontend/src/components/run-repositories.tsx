@@ -18,7 +18,7 @@ export function repositorySummary(workers: readonly RunWorkerRepository[]) {
 
 /** A branch name that wraps only after "/" or "-", never inside a word, unless one word alone is
  * wider than its line. */
-function BranchName({ branch }: { branch: string }) {
+export function BranchName({ branch }: { branch: string }) {
   return (
     <p className="font-mono text-xs break-words text-foreground">
       {branch.split(/(?<=[/-])/).map((part, index) => (

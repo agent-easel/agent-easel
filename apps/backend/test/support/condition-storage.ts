@@ -54,3 +54,27 @@ export function capturedConditionRuleDeleted(databasePath: string, ruleId: strin
   database.exec("COMMIT");
   database.close();
 }
+
+/**
+ * Removes every captured wire leaving Condition `blockId` by `exitId`, as a Run captured before
+ * Condition outputs had to be connected keeps it: that output then ends its branch. Start refuses
+ * such a Flow now, so no public operation can make one. Captured revisions are immutable, so the
+ * immutability trigger is dropped for the change and recreated as the schema defines it.
+ */
+export function capturedConditionOutputUnwired(
+  databasePath: string,
+  blockId: string,
+  exitId: string,
+) {
+  const database = openStorage(databasePath);
+  database.exec("BEGIN");
+  database.exec("DROP TRIGGER immutable_flow_revision_connection_delete");
+  database
+    .prepare("DELETE FROM flow_revision_connections WHERE source_block_id=? AND exit_id=?")
+    .run(blockId, exitId);
+  database.exec(
+    "CREATE TRIGGER immutable_flow_revision_connection_delete BEFORE DELETE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END",
+  );
+  database.exec("COMMIT");
+  database.close();
+}

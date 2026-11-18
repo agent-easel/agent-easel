@@ -1,11 +1,20 @@
 import { useEffect, useRef } from "react";
-import type { ContinuationVisit, FlowBlock, RunBlock, RunDetail } from "@t3-factory/contracts";
+import {
+  attentionPresentation,
+  awaitsReviewInT3,
+  type ContinuationVisit,
+  type FlowBlock,
+  type RunBlock,
+  type RunDetail,
+} from "@t3-factory/contracts";
 import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { pendingRecovery } from "../attention-copy.ts";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
+import { blockStateKind } from "../run-block-state.ts";
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
 import {
   blockVisits,
@@ -13,16 +22,13 @@ import {
   threadOwnerName,
   waitingText,
 } from "./execution-canvas.tsx";
-import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
+import { clockTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
-import { DetailRow, InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
-import {
-  pendingRecovery,
-  RequestReport,
-  ResolvedAttention,
-  RunAttentionDetails,
-} from "./run-attention.tsx";
+import { DetailRow, InspectorSection } from "./inspector-section.tsx";
+import { RequestReport, ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
+import { StatusBadge } from "./status-badge.tsx";
+import { TechnicalDetails } from "./technical-details.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
 import { ResultCard, RunTextReaderLink } from "./run-result.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
@@ -45,7 +51,8 @@ function visitSpan(visit: Visits[number]) {
   return `${visit.start ? clockTime(visit.start) : "—"} → ${visit.end ? clockTime(visit.end) : "now"}`;
 }
 
-/** The current report of a working visit; a sent Continuation reports like an Agent. */
+/** The current report of a working visit; a sent Continuation reports like an Agent. An Agent
+ * idle with it can be asked to report. */
 function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
   if (recorded.state !== "working" && recorded.state !== "sent") return null;
   if (!recorded.workingMessage) return null;
@@ -61,12 +68,9 @@ function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }
         text={recorded.workingMessage}
         link={recorded.link}
       />
-      <RequestReport
-        run={run}
-        blockId={recorded.blockId}
-        executionId={recorded.executionId}
-        recovery={pendingRecovery(run, recorded)}
-      />
+      {(awaitsReviewInT3(recorded) || pendingRecovery(run, recorded)) && (
+        <RequestReport run={run} block={recorded} />
+      )}
     </div>
   );
 }
@@ -82,16 +86,9 @@ function BlockNow({
   recorded: RunBlock;
 }) {
   const visits = blockVisits(run, block);
-  const current = currentVisitText(run, block, visits);
   return (
     <>
-      {current !== "Not visited" && (
-        <InspectorSection
-          title={`${activeStates.includes(recorded.state) ? "Now" : "Latest"} · ${current}`}
-        >
-          <WorkingReport run={run} recorded={recorded} />
-        </InspectorSection>
-      )}
+      <WorkingReport run={run} recorded={recorded} />
       {block.kind === "wait" && <WaitArrivals run={run} blockId={block.id} />}
       {block.kind === "condition" && (
         <ConditionArrivals key={`${run.id}:${block.id}`} run={run} blockId={block.id} />
@@ -369,39 +366,44 @@ function ContinuationVisitItem({
   );
 }
 
-/** Raw T3 references and observation freshness, for diagnosis only. */
-function TechnicalDetails({
+/** Figma RD04: the Block's raw T3 references, its pending Problem reasons and observation
+ * freshness, for diagnosis only. */
+function BlockTechnicalDetails({
+  run,
   block,
   recorded,
   threadId,
   observationUnavailable,
 }: {
+  run: RunDetail;
   block: FlowBlock;
   recorded: RunBlock;
   threadId: string | null | undefined;
   observationUnavailable: boolean;
 }) {
   const { references, freshness } = BLOCK_KINDS[block.kind].observed;
-  const hint = [references && "thread · execution", freshness && "observation"]
-    .filter(Boolean)
-    .join(" · ");
+  const reasons = run.attention
+    .filter(
+      (item) =>
+        item.blockId === block.id &&
+        !item.settledAt &&
+        attentionPresentation(item.kind) === "problem",
+    )
+    .map((item) => item.kind);
   return (
-    <InspectorDisclosure label="Technical details" hint={hint}>
-      <div className="flex flex-col gap-1 font-mono text-2xs leading-4 break-all text-muted-foreground">
-        {references && (
-          <>
-            <p>Thread: {threadId ?? "unresolved"}</p>
-            <p>Exact execution: {recorded.executionId ?? "unresolved"}</p>
-          </>
-        )}
-        {freshness && (
-          <p>
-            Observation: {observationUnavailable ? "stale" : recorded.freshness}
-            {recorded.observedAt ? ` · ${dayAndTime(recorded.observedAt)}` : ""}
-          </p>
-        )}
-      </div>
-    </InspectorDisclosure>
+    <TechnicalDetails
+      details={[
+        ["Thread", references ? (threadId ?? "unresolved") : null],
+        ["Execution", references ? (recorded.executionId ?? "unresolved") : null],
+        ["Reason", [...new Set(reasons)].join(" · ")],
+        [
+          "Observed",
+          freshness
+            ? `${observationUnavailable ? "stale" : recorded.freshness}${recorded.observedAt ? ` · ${clockTime(recorded.observedAt)}` : ""}`
+            : null,
+        ],
+      ]}
+    />
   );
 }
 
@@ -434,7 +436,6 @@ export function RunBlockView({
     : run.threadBindings.find(
         (binding) => binding.id === continuationPromptVisit(run, block.id)?.bindingId,
       );
-  const link = recorded.link ?? promptBinding?.link ?? null;
   const threadId = recorded.threadId ?? promptBinding?.threadId;
   return (
     <>
@@ -465,7 +466,7 @@ export function RunBlockView({
             <h2 className="truncate text-base leading-4 font-semibold">{block.name}</h2>
             <p className="truncate text-xs leading-3.5 text-subtle-foreground">{reference}</p>
           </div>
-          <ExecutionStateBadge state={recorded.state} />
+          <BlockStateBadge run={run} recorded={recorded} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -492,22 +493,20 @@ export function RunBlockView({
         <BlockExits run={run} block={block} />
         <div aria-hidden className="flex-1" />
         <ResolvedAttention run={run} blockId={block.id} />
-        <TechnicalDetails
+        <BlockTechnicalDetails
+          run={run}
           block={block}
           recorded={recorded}
           threadId={threadId}
           observationUnavailable={observationUnavailable}
         />
       </div>
-      <footer className="mx-4 flex shrink-0 items-center border-t py-3">
-        {link ? (
-          <OpenInT3 href={link} className="text-sm" />
-        ) : (
-          <p className="text-xs text-subtle-foreground">
-            {BLOCK_KINDS[block.kind].observed.noThread}
-          </p>
-        )}
-      </footer>
     </>
   );
+}
+
+/** The Block's canonical state, as its canvas card shows it. */
+function BlockStateBadge({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
+  const kind = blockStateKind(run, recorded);
+  return kind ? <StatusBadge kind={kind} /> : <ExecutionStateBadge state={recorded.state} />;
 }

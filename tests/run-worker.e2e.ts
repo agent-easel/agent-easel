@@ -114,6 +114,9 @@ test("a worktree Run shows the worktree its workers share and creates no worker 
     .toMatchObject({ state: "bound" });
   const run = await readHistoryRun(app.baseUrl, created.id);
   assert(run.workspace.mode === "worktree");
+  await expect(screen.getByRole("region", "Run branch")).toContainText(
+    `${run.workspace.branch} Own worktree from ${run.workspace.baseRef}`,
+  );
   await screen.getByRole("button", "Workspace & observation", { exact: false }).tap();
   await expect(screen.getByRole("region", "Run workspace")).toContainText(
     `Worktree · ${run.workspace.branch} · ${run.workspace.path}`,
@@ -123,7 +126,7 @@ test("a worktree Run shows the worktree its workers share and creates no worker 
   await screen.getByRole("button", "Agent Review implementation", { exact: false }).tap();
   const inspector = screen.getByRole("complementary", "Run inspector");
   await inspector.getByRole("button", "Technical details", { exact: false }).tap();
-  await expect(inspector).toContainText("Thread: unresolved");
+  await expect(inspector).toContainText(/Thread\s*unresolved/);
   await app.screenshot("worktree-run-unvisited-block");
 });
 
@@ -333,14 +336,14 @@ test("Request report asks a worker idle in working to assess its existing work",
   await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
   const details = screen.getByRole("complementary", "Run inspector");
   await expect(details).toContainText("Opened pull request #42");
-  await expect(details.getByText("Working", { exact: true })).toBeVisible();
+  await expect(details.getByText("Needs input", { exact: true })).toBeVisible();
   await app.screenshot("worker-working-visit");
 
   // Act
   await details.getByRole("button", "Request report", { exact: true }).tap();
 
   // Assert
-  await expect(details.getByText("Report requested ·", { exact: false })).toBeVisible();
+  await expect(details.getByText("Report requested at", { exact: false })).toBeVisible();
   const saved = await readHistoryRun(app.baseUrl, found.id);
   expect(saved.recoveries).toMatchObject([{ blockId: "worker", attentionId: null }]);
   expect(saved.attention.filter((a) => a.kind === "missing-report")).toEqual([]);
@@ -502,9 +505,7 @@ test("Settle confirmation cancels without changes, then stops workers and settle
   // Act
   await screen.getByRole("menuitem", "Settle", { exact: true }).tap();
   const dialog = screen.getByRole("alertdialog", `Settle “${title}”?`);
-  await expect(dialog).toContainText(
-    "Factory asks T3 to stop the workers and ends the Run once T3 confirms.",
-  );
+  await expect(dialog).toContainText("Factory asks T3 to stop the working Agent");
   await expect(dialog.getByRole("button", "Cancel", { exact: true })).toBeFocused();
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
@@ -560,7 +561,7 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
-test("Retry of an unresolved settlement keeps focus on the settlement section while stopping", async ({
+test("an unresolved settlement is one Run card whose Retry settlement asks T3 to stop again", async ({
   app,
   screen,
 }) => {
@@ -570,58 +571,35 @@ test("Retry of an unresolved settlement keeps focus on the settlement section wh
     "UI worker · Settlement unresolved · Stop support unavailable",
   );
   await app.open(`/runs/${found.id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  await expect(progress).toContainText("Settlement unresolved");
-  await expect(progress).toContainText("not resolved");
-  await expect(
-    screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(found.title)),
-  ).toContainText("Settle unresolved");
+  const card = screen.getByRole("article", "Problem · Run");
+  await expect(card).toContainText("Settle couldn’t stop Implement change");
+  await expect(card).toContainText("This T3 version can’t stop worker threads.");
+  await expect(card.getByRole("link", "Open in T3", { exact: false })).toBeVisible();
+  await expect(screen.getByText("Settle requested", { exact: false })).toBeVisible();
+  const row = screen
+    .getByRole("navigation", "Open Runs")
+    .getByRole("link", new RegExp(found.title));
+  await expect(row).not.toContainText("Settle unresolved");
+  await expect(row).toContainText("Problem");
   const before = await readHistoryRun(app.baseUrl, found.id);
   assert(before.settlement?.workers[0]?.problem);
-  await expect(progress).toContainText(before.settlement.workers[0].problem);
-  await screen.getByRole("textbox", "Search Run titles", { exact: true }).fill("no matching Run");
-  await expect(
-    screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(found.title)),
-  ).toHaveCount(0);
+  await card.getByRole("button", "Technical details").tap();
+  await expect(card).toContainText(before.settlement.workers[0].problem);
   await app.screenshot("settlement-unresolved");
   await applyRunState(app, found.id, "Stop taken while the turn continues");
 
   // Act
-  await progress.getByRole("button", "Retry", { exact: true }).tap();
+  await card.getByRole("button", "Retry settlement", { exact: true }).tap();
 
   // Assert
-  await expect(progress).toContainText("Stopping workers…");
-  await expect(progress).toBeFocused();
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).settlement?.state)
+    .toBe("stopping");
+  await expect(screen.getByRole("region", "Run settlement")).toHaveCount(0);
   await app.screenshot("settlement-retry-stopping");
 });
 
-test("a Retry the user left does not pull focus to the settlement section once it is stopping", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const id = await liveRun(app, "settle-left-retry");
-  await applyRunState(app, id, "settlement unresolved");
-  await app.open(`/runs/${id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  const retry = progress.getByRole("button", "Retry", { exact: true });
-  await retry.focus();
-  await expect(retry).toBeFocused();
-  // Focus falls to the page, as when the user clicks content outside any focusable container.
-  await browser.evaluate("document.activeElement.blur()");
-  expect(await browser.evaluate("document.activeElement === document.body")).toBe(true);
-  await applyRunState(app, id, "Stop taken while the turn continues");
-
-  // Act
-  await settleStoppingWorkers(app.baseUrl, id);
-
-  // Assert
-  await expect(progress).toContainText("Stopping workers…");
-  await expect(progress).not.toBeFocused();
-});
-
-test("a held Stop that ends settles the Run and removes its settlement progress", async ({
+test("a held Stop that ends settles the Run and its meta line stops saying Settle requested", async ({
   app,
   screen,
 }) => {
@@ -630,15 +608,15 @@ test("a held Stop that ends settles the Run and removes its settlement progress"
   await applyRunState(app, id, "Stop taken while the turn continues");
   await settleStoppingWorkers(app.baseUrl, id);
   await app.open(`/runs/${id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  await expect(progress).toContainText("Stopping workers…");
+  const requested = screen.getByText("Settle requested", { exact: false });
+  await expect(requested).toBeVisible();
 
   // Act
   await applyRunState(app, id, "stopped turns ended");
 
   // Assert
   await expect.poll(async () => (await readHistoryRun(app.baseUrl, id)).lifecycle).toBe("settled");
-  await expect(progress).toHaveCount(0);
+  await expect(requested).toHaveCount(0);
   await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
   await app.screenshot("settlement-stop-finished");
 });
