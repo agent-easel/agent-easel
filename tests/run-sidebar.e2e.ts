@@ -22,6 +22,35 @@ const workingTitle = "Demo · Working · Improve the project picker";
 // such a Run, so Settle journeys use the scenario copy started under the current authorization.
 const settleTitle = "UI worker · Snoozed · Navigation research";
 
+test("wheeling over the sidebar footer keeps the Run page pinned to the viewport", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 600 });
+  const title = "Demo · Parallel review from one prompt";
+  const run = await findRun(app.baseUrl, title);
+  await app.open(`/runs/${run.id}`);
+  await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
+  const footer = screen.getByRole("navigation", "Sidebar footer");
+  await footer.hover();
+
+  // Act
+  await browser.mouse.wheel(0, 220);
+
+  // Assert
+  expect(
+    await browser.evaluate(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+      return { scrollTop, overflow: scrollHeight - clientHeight };
+    }),
+  ).toEqual({ scrollTop: 0, overflow: 0 });
+  const bounds = await footer.boundingBox();
+  expect(bounds!.y + bounds!.height).toBe(600);
+});
+
 test("the Run preview opens to the right of its row", async ({ app, screen, browser }) => {
   // Arrange
   const { row, preview } = await prepareSidebarPreview({ app, screen, browser }, workingTitle);

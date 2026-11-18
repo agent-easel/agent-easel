@@ -168,7 +168,8 @@ export function SidebarRow({
           {...interaction.trigger}
           data-sidebar-row={id}
           className={cn(
-            "group/row flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
+            // Keep absolutely positioned screen-reader labels inside the list's scroll area.
+            "group/row relative flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
             (selected || interaction.ownMenuOpen) && "bg-accent",
             selected && "ring-1 ring-border-strong ring-inset",
           )}
