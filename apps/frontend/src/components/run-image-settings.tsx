@@ -76,10 +76,7 @@ export function RunImageSettings() {
     />
   );
   return (
-    <SettingsPage
-      title="Run images"
-      description="Images attached to Settled and Archived Runs, stored by the Factory server. Deleting an image removes only its file: the Run keeps its history and shows “Image unavailable” in its place."
-    >
+    <SettingsPage title="Run images">
       <div className="grid gap-4">
         {listing.error && (
           <Alert variant="destructive">

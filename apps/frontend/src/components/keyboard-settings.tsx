@@ -33,7 +33,6 @@ export function KeyboardSettings() {
   return (
     <SettingsPage
       title="Keyboard shortcuts"
-      description="Changes apply immediately and are saved on this device."
       action={
         <Button
           variant="outline"

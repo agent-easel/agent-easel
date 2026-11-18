@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StudioBackLink, StudioLink } from "../app-link.tsx";
-import { SettingsPage } from "../settings-page.tsx";
+import { StudioPage } from "../settings-page.tsx";
 import { GitHubMark } from "./github-mark.tsx";
 import { useTriggerReadiness } from "./use-trigger-readiness.ts";
 
@@ -10,7 +10,7 @@ export function TriggerTypePicker() {
   return (
     <main className="grid content-start gap-4 px-8 pt-6 pb-8 max-sm:px-4">
       <StudioBackLink selection={{ tab: "triggers" }}>All Triggers</StudioBackLink>
-      <SettingsPage
+      <StudioPage
         title="New Trigger"
         description="Choose what starts the Flow. More trigger types can come later."
       >
@@ -37,7 +37,7 @@ export function TriggerTypePicker() {
             strokeWidth={1.5}
           />
         </StudioLink>
-      </SettingsPage>
+      </StudioPage>
     </main>
   );
 }

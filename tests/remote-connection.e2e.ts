@@ -23,21 +23,20 @@ test("opening authorization from a remote browser starts approval in the host's 
   await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
   await expect(screen.getByRole("link", "Devices & access")).toHaveCount(0);
   await expect(screen.getByText("Authorize Factory in T3").first()).toBeVisible();
-  await expect(screen.getByRole("button", "Open authorization on server")).toBeVisible();
+  await expect(screen.getByRole("button", "Authorize")).toBeVisible();
   await expect(screen.getByRole("button", "Edit address")).toHaveCount(0);
-  await expect(screen.getByLabel("T3 MCP endpoint")).toHaveCount(0);
-  await expect(screen.getByRole("button", /Authorize on backend host|Reauthorize/)).toHaveCount(0);
+  await expect(screen.getByLabel("Address", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "Reauthorize")).toHaveCount(0);
   await app.screenshot("remote-connection-needs-authorization");
 
   // Act
-  await screen.getByRole("button", "Open authorization on server").tap();
+  await screen.getByRole("button", "Authorize").tap();
 
   // Assert
   await expect(
-    screen.getByText("Waiting for approval in the host’s browser").first(),
+    screen.getByText("Approve in the browser on the Factory host").first(),
   ).toBeVisible();
-  await expect(screen.getByRole("status")).toContainText("open in the browser on the Factory host");
-  await expect(screen.getByText("Waiting for approval on the Factory host")).toBeVisible();
+  await expect(screen.getByText("Waiting for approval", { exact: true })).toBeVisible();
   expect((await hostT3Observations(app)).authorizationStarts).toBe(1);
   await app.screenshot("remote-connection-waiting");
 });
@@ -59,10 +58,10 @@ test("the waiting connection screen turns Connected from the live connection, wi
   await expect(screen.getByText("Connected", { exact: true }).first()).toBeVisible({
     timeout: 8_000,
   });
-  await expect(screen.getByText("Waiting for approval in the host’s browser").first()).toHaveCount(
+  await expect(screen.getByText("Approve in the browser on the Factory host").first()).toHaveCount(
     0,
   );
-  await expect(screen.getByRole("button", "Open authorization on server")).toHaveCount(0);
+  await expect(screen.getByRole("button", "Authorize")).toHaveCount(0);
   await expect(screen.getByRole("button", /Reauthorize/)).toHaveCount(0);
   expect((await hostT3Observations(app)).connectionReads).toBe(0);
   await app.screenshot("remote-connection-connected");

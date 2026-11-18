@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
 import { KeyChip } from "@/components/ui/key-chip";
 import { DialogDescription, DialogTitle } from "./ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -14,6 +15,7 @@ export function WorkspaceDialogHeader({
   onClose,
   closeLabel = "Close",
   closeDisabled = false,
+  className,
 }: {
   title: string;
   /** Links to the pages above `section`, outermost first. */
@@ -23,9 +25,12 @@ export function WorkspaceDialogHeader({
   onClose: () => void;
   closeLabel?: string;
   closeDisabled?: boolean;
+  className?: string;
 }) {
   return (
-    <header className="flex h-13 shrink-0 items-center gap-2 border-b pr-3 pl-5 text-sm">
+    <header
+      className={cn("flex h-13 shrink-0 items-center gap-2 border-b pr-3 pl-5 text-sm", className)}
+    >
       <DialogTitle className="text-sm leading-none font-normal text-muted-foreground">
         {title}
       </DialogTitle>

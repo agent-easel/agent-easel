@@ -9,18 +9,6 @@ function targetTitle(target: UpgradeTarget) {
   return target.local || !target.host ? "Server · This device" : `Server · ${target.host}`;
 }
 
-function TargetChange({ target }: { target: UpgradeTarget }) {
-  return (
-    <section aria-label={targetTitle(target)} className="grid gap-1 text-sm">
-      <h3 className="text-muted-foreground">{targetTitle(target)}</h3>
-      <p className="break-all text-muted-foreground">
-        {target.current} →<br />
-        <span className="text-foreground">{target.update.version}</span>
-      </p>
-    </section>
-  );
-}
-
 /** Open Runs on the server being replaced; they wait and reconcile, they are never stopped. */
 function useOpenRunCount(server: UpgradeTarget | undefined) {
   const [count, setCount] = useState<number | null>(null);
@@ -51,10 +39,21 @@ export function UpgradeReview({
   const ready = targets.filter((target) => target.update.state === "downloaded");
   const server = ready.find((target) => target.kind === "server");
   const openRuns = useOpenRunCount(server);
+  const version = ready[0]?.update.version ?? "the downloaded version";
+  const title = ready.length > 1 ? `Upgrade ${upgradeScope(targets)}?` : `Upgrade to ${version}?`;
+  const description =
+    ready.length > 1
+      ? "The server updates before the client restarts."
+      : server
+        ? openRuns
+          ? `Factory restarts while ${openRuns} open Run${openRuns === 1 ? "" : "s"} keep going.`
+          : "Factory restarts and open Runs keep going."
+        : "The desktop app restarts to apply the update.";
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent
-        title={`Upgrade ${upgradeScope(targets)}?`}
+        title={title}
+        description={description}
         actions={
           <>
             <Button variant="outline" onClick={onCancel}>
@@ -63,26 +62,7 @@ export function UpgradeReview({
             <Button onClick={onConfirm}>Upgrade</Button>
           </>
         }
-      >
-        {ready.map((target) => (
-          <TargetChange key={target.kind} target={target} />
-        ))}
-        {(ready.length > 1 || (openRuns !== null && openRuns > 0)) && (
-          <p className="text-sm text-muted-foreground">
-            {ready.length > 1 &&
-              (server?.local
-                ? "The server updates before the client restarts."
-                : "The remote server updates before the client restarts.")}
-            {openRuns !== null && openRuns > 0 && (
-              <>
-                {" "}
-                {openRuns} open Run{openRuns === 1 ? "" : "s"} keep going and reconcile after the
-                server restarts.
-              </>
-            )}
-          </p>
-        )}
-      </DialogContent>
+      />
     </Dialog>
   );
 }

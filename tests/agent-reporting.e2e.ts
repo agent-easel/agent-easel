@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
-import {
-  copyAgentDefinition,
-  listAgentDefinitions,
-  repairCodexReporting,
-} from "./support/agents.ts";
+import { copyAgentDefinition, listAgentDefinitions } from "./support/agents.ts";
 import { ownedFlow } from "./support/owners.ts";
 
 test("reporting problems are visible before Start and clear after repairing the provider", async ({
@@ -64,6 +60,8 @@ test("reporting problems are visible before Start and clear after repairing the 
     screen.getByRole("link", "Settings, Agent reporting needs attention", { exact: true }),
   ).toBeVisible();
   await app.open(`/studio/agents/${worker.id}`);
+  const draftName = "Runtime worker · unsaved";
+  await screen.getByLabel("Name", { exact: true }).fill(draftName);
   await screen.getByRole("link", "Open Agent reporting").tap();
   await expect(screen.getByRole("heading", "Agent reporting", { exact: true })).toBeVisible();
   await expect(screen.getByRole("group", "Codex", { exact: true }).getByRole("status")).toHaveText(
@@ -72,17 +70,15 @@ test("reporting problems are visible before Start and clear after repairing the 
   await expect(
     screen.getByRole("link", "Agent reporting, Needs attention", { exact: true }),
   ).toBeVisible();
-  await repairCodexReporting(screen);
-
-  // Assert: healthy reporting says nothing in the Agent list or editor.
-  await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
+  await screen.getByRole("button", "Install all", { exact: true }).tap();
+  await expect(screen.getByRole("group", "Codex", { exact: true }).getByRole("status")).toHaveText(
+    "Installed",
+  );
   await app.screenshot("settings-reporting-repaired");
-  // Navigating within the app keeps the installed reading, so an absence is not "still checking".
   await browser.keyboard.press("Escape");
-  await screen.getByRole("link", "Studio", { exact: true }).tap();
-  await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
-  await screen.getByRole("link", "Runtime worker", { exact: true }).tap();
-  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue("Runtime worker");
+
+  // Assert: Settings returns to the same editable draft, with healthy reporting.
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(draftName);
   await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
     "GPT 6.1 Sol",
   );
@@ -118,7 +114,7 @@ test("a failed reporting inspection warns instead of showing green Connected", a
   ).toBeVisible();
   await screen.getByRole("link", "Settings, Reporting status unavailable", { exact: true }).tap();
   await expect(screen.getByRole("heading", "Agent reporting", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("alert")).toContainText("Factory could not check Agent reporting");
+  await expect(screen.getByRole("alert")).toContainText("Couldn’t check Agent reporting");
 });
 
 test("the Agent reporting attention dot clears once every harness is installed", async ({
@@ -186,6 +182,8 @@ test("installed reporting shows the file and manual remedy for a linked optional
     )
     .toBe("1");
   await app.screenshot("reporting-optional-skill-diagnostic");
+  await expect(codex.getByText(path)).not.toBeVisible();
+  await codex.getByRole("button", "Technical details").tap();
   await expect(codex).toContainText(path);
   await expect(codex).toContainText("Replace or remove it manually, then Reinstall.");
 });
@@ -209,4 +207,33 @@ test("a disconnected T3 connection takes precedence over reporting warnings", as
   await expect(screen.getByRole("link", "Settings, Disconnected", { exact: true })).toBeVisible();
   await screen.getByRole("link", "Settings, Disconnected", { exact: true }).tap();
   await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+});
+
+test("Install all continues after a failed home and leaves that home available to retry", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await fixture.reporting.blockRequiredSkillWrite();
+  await app.open("/settings/agent-reporting");
+  const codex = screen.getByRole("group", "Codex", { exact: true });
+  const cursor = screen.getByRole("group", "Cursor", { exact: true });
+  await expect(codex.getByRole("status")).toHaveText("Needs attention");
+  await expect(cursor.getByRole("status")).toHaveText("Not installed");
+
+  // Act
+  await screen.getByRole("button", "Install all", { exact: true }).tap();
+
+  // Assert
+  await expect(codex.getByRole("status")).toHaveText("Install failed");
+  await expect(codex.getByRole("button", "Repair Codex")).toBeEnabled();
+  await expect(cursor.getByRole("status")).toHaveText("Installed");
+  await expect(screen.getByText("Couldn’t install for Codex", { exact: true })).toHaveCount(1);
+  await expect(
+    screen.getByText("Symlink, special or hard-linked", { exact: false }),
+  ).not.toBeVisible();
+  await app.screenshot("agent-reporting-partial-install");
 });

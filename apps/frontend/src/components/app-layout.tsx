@@ -42,8 +42,8 @@ function AppShell() {
           <Outlet />
         </div>
       </div>
-      {settings && <SettingsModal />}
       {studio && <StudioModal selection={studio} />}
+      {settings && <SettingsModal />}
       <RunActionsHost />
     </div>
   );

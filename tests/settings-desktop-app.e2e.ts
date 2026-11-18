@@ -16,14 +16,14 @@ test("a desktop user turns on the menu bar icon, which is off by default, in Des
   screen,
 }) => {
   // Arrange
-  await expect(screen.getByRole("switch", "Show Factory in the menu bar")).not.toBeChecked();
+  await expect(screen.getByRole("switch", "Show in the menu bar")).not.toBeChecked();
   await app.screenshot("settings-desktop-app-menu-bar-off");
 
   // Act
-  await screen.getByRole("switch", "Show Factory in the menu bar").tap();
+  await screen.getByRole("switch", "Show in the menu bar").tap();
 
   // Assert: the stand-in bridge publishes the stored choice like the desktop shell.
-  await expect(screen.getByRole("switch", "Show Factory in the menu bar")).toBeChecked();
+  await expect(screen.getByRole("switch", "Show in the menu bar")).toBeChecked();
   await app.screenshot("settings-desktop-app-menu-bar-on");
 });
 
@@ -34,10 +34,8 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
   // Arrange
   await expect(screen.getByRole("switch", "Notifications")).toBeChecked();
   await expect(screen.getByRole("switch", "Dock badge")).toBeChecked();
-  await expect(screen.getByRole("switch", "Show Run details in notifications")).not.toBeChecked();
-  const undetermined = screen.getByText(
-    "macOS asks the first time Factory would show a notification.",
-  );
+  await expect(screen.getByRole("switch", "Run details in notifications")).not.toBeChecked();
+  const undetermined = screen.getByText("macOS permission", { exact: true });
   await expect(undetermined).toBeVisible();
   await undetermined.scrollIntoView();
   await app.screenshot("settings-desktop-app-notifications-default");
@@ -45,12 +43,12 @@ test("a desktop user turns off Notifications and the Dock badge and shows Run de
   // Act
   await screen.getByRole("switch", "Notifications").tap();
   await screen.getByRole("switch", "Dock badge").tap();
-  await screen.getByRole("switch", "Show Run details in notifications").tap();
+  await screen.getByRole("switch", "Run details in notifications").tap();
 
   // Assert: the stand-in bridge publishes the stored choices like the desktop shell.
   await expect(screen.getByRole("switch", "Notifications")).not.toBeChecked();
   await expect(screen.getByRole("switch", "Dock badge")).not.toBeChecked();
-  await expect(screen.getByRole("switch", "Show Run details in notifications")).toBeChecked();
+  await expect(screen.getByRole("switch", "Run details in notifications")).toBeChecked();
   await app.screenshot("settings-desktop-app-notifications-changed");
 });
 
@@ -61,9 +59,7 @@ test("after macOS notification permission is denied, Desktop app settings say so
 }) => {
   // Arrange
   await browser.evaluate(`window.__observePermission("denied")`);
-  await expect(
-    screen.getByText("Not allowed. Factory won't ask again; the Dock badge still works."),
-  ).toBeVisible();
+  await expect(screen.getByText("Not allowed", { exact: true })).toBeVisible();
   await expect
     .poll(() =>
       browser.evaluate(`getComputedStyle(document.querySelector('[role="dialog"]')).opacity`),
