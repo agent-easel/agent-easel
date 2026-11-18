@@ -312,6 +312,7 @@ function OpenedTriggerEditor(props: OpenedTriggerEditorProps) {
           checking={pending === "run"}
           disabled={state.removed || state.saving || Boolean(pending)}
           dirty={state.dirty}
+          removed={state.removed}
           moved={moved}
           onEnable={onEnable}
           onDisable={(target) => void actions.disable(target)}
@@ -346,7 +347,7 @@ function OpenedTriggerEditor(props: OpenedTriggerEditorProps) {
             ghProblem={editor.ghProblem}
             retry={retry}
           />
-          <SharedRepositoryCard {...editor.sharedRepository} />
+          {!state.removed && <SharedRepositoryCard {...editor.sharedRepository} />}
         </div>
         <EditorActions
           creating={creating}
@@ -446,13 +447,12 @@ function useDraftReview({
   const [review, setReview] = useState<Omit<TriggerReview, "watchers"> | null>(null);
   function reviewDraft() {
     const proposal = draft.proposal();
-    const { query, saved } = draft.getSnapshot();
-    if (!proposal || "error" in query) return;
+    const { saved } = draft.getSnapshot();
+    if (!proposal) return;
     const { input } = proposal;
     const reviewed = {
       summary: reviewSummary(input, repositoryName, names),
       repository: repositoryName,
-      readyLabel: query.readyLabel,
     };
     if (proposal.kind === "create") {
       setReview({
@@ -490,6 +490,7 @@ function TriggerEditorHeader({
   checking,
   disabled,
   dirty,
+  removed,
   moved,
   onEnable,
   onDisable,
@@ -500,6 +501,7 @@ function TriggerEditorHeader({
   checking: boolean;
   disabled: boolean;
   dirty: boolean;
+  removed: boolean;
   moved: TriggerRepository | null;
   onEnable: (trigger: TriggerDefinition) => void;
   onDisable: (trigger: TriggerDefinition) => void;
@@ -511,7 +513,7 @@ function TriggerEditorHeader({
         <h2 className="text-xl leading-tight font-semibold">
           {trigger?.name ?? "New GitHub Issues Trigger"}
         </h2>
-        {trigger && (
+        {trigger && !removed && (
           <MutationGate>
             <Switch
               aria-label="Trigger enabled"
@@ -522,7 +524,7 @@ function TriggerEditorHeader({
           </MutationGate>
         )}
       </div>
-      {trigger && (
+      {trigger && !removed && (
         <TriggerStatusStrip
           trigger={trigger}
           checked={checked}
@@ -554,17 +556,14 @@ function EditorActions({
   const { name, projectId, flowId } = state.content;
   const missing = !name.trim() || !projectId || !flowId;
   const saveDisabled = !canSave || (!creating && !state.dirty);
+  const saveVariant = saveDisabled ? "secondary" : creating ? "outline" : "default";
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       {creating && missing && (
         <p className="mr-auto text-xs text-muted-foreground">Name, Project and Flow are required</p>
       )}
       <MutationGate>
-        <Button
-          variant={creating && !canSave ? "secondary" : "outline"}
-          disabled={saveDisabled}
-          onClick={onSave}
-        >
+        <Button variant={saveVariant} disabled={saveDisabled} onClick={onSave}>
           {state.saving ? "Saving…" : "Save"}
         </Button>
         {creating && (

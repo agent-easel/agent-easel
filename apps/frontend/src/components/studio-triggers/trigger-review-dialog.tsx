@@ -17,7 +17,6 @@ export interface TriggerReview {
   readonly summary: string;
   readonly repository: string;
   readonly watchers: readonly TriggerDefinition[];
-  readonly readyLabel: string;
   readonly confirmLabel: "Enable and check" | "Apply and check";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
@@ -92,6 +91,7 @@ function ReviewBody({
   onCancel: () => void;
 }) {
   const read = usePreview(review.load);
+  const confirmDisabled = busy || blocked || read.status !== "answered";
   return (
     <DialogContent
       title={review.title}
@@ -110,7 +110,9 @@ function ReviewBody({
               </Button>
             )}
             <Button
-              disabled={busy || blocked || read.status !== "answered"}
+              variant={confirmDisabled ? "outline" : "default"}
+              className={confirmDisabled ? "bg-muted" : undefined}
+              disabled={confirmDisabled}
               onClick={() => read.status === "answered" && onConfirm(read.preview)}
             >
               {busy ? "Checking…" : review.confirmLabel}
@@ -127,7 +129,7 @@ function ReviewBody({
       )}
       <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
       {read.status === "loading" && (
-        <div role="status">
+        <div role="status" className="rounded-lg border bg-background px-3.5 py-2.5">
           <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
         </div>
       )}
@@ -137,7 +139,7 @@ function ReviewBody({
           <AlertDescription className="text-foreground">{read.message}</AlertDescription>
         </Alert>
       )}
-      {read.status === "answered" && <PreviewResult review={review} preview={read.preview} />}
+      {read.status === "answered" && <PreviewResult preview={read.preview} />}
     </DialogContent>
   );
 }
@@ -167,7 +169,7 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
   return read?.load === load ? read.read : { status: "loading" };
 }
 
-function PreviewResult({ review, preview }: { review: TriggerReview; preview: TriggerPreview }) {
+function PreviewResult({ preview }: { preview: TriggerPreview }) {
   const { problem, issues } = preview;
   return (
     <>
@@ -189,8 +191,7 @@ function PreviewResult({ review, preview }: { review: TriggerReview; preview: Tr
           <ul className="divide-y overflow-hidden rounded-lg border bg-background">
             {issues.length === 0 ? (
               <li className="px-3.5 py-3 text-sm text-muted-foreground">
-                No open issue matches right now. Issues that get <code>{review.readyLabel}</code>{" "}
-                later start at the next check.
+                No open issue matches right now.
               </li>
             ) : (
               issues.map((issue) => <PreviewIssue key={issue.issue} issue={issue} />)

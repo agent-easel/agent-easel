@@ -34,7 +34,6 @@ const enableReview = (
 ): TriggerReview => ({
   title: `Enable “${trigger.name}”?`,
   summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
-  readyLabel: trigger.github.readyLabel,
   repository: trigger.github.repository.nameWithOwner,
   watchers: otherRepositoryWatchers(triggers, trigger.github.repository, trigger.id),
   confirmLabel: "Enable and check",

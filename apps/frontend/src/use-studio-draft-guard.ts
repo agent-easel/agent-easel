@@ -58,7 +58,7 @@ function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
   );
 }
 
-/** Only the shown page's editor has a draft, so a navigation leaves at most one. */
+/** A Flow opened from a Trigger keeps the Trigger draft while the Flow covers it. */
 export function useStudioDraftGuard(input: StudioDraftGuardInput) {
   const guarded = liveDrafts(input).length > 0;
   return useNavigationBlock(guarded, (location) => {

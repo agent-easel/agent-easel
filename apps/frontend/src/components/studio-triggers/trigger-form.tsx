@@ -438,7 +438,12 @@ function QueryRow({
       <Input
         id="trigger-query"
         {...fieldProblem(description, error)}
-        className={cn(inputClass, "font-mono text-label", warning && "border-attention")}
+        className={cn(
+          inputClass,
+          "font-mono text-label",
+          warning &&
+            "border-attention focus-visible:border-attention focus-visible:ring-attention/25",
+        )}
         value={content.query}
         onChange={(event) => draft.edit({ query: event.target.value })}
       />

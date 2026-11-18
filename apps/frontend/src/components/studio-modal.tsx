@@ -90,16 +90,20 @@ function breadcrumbParent(label: string, selection: StudioSelection) {
   };
 }
 
-function triggerTitle(id: string, triggers: readonly TriggerDefinition[] | null) {
-  return id === "new"
-    ? "New GitHub Issues Trigger"
-    : (triggers?.find((trigger) => trigger.id === id)?.name ?? "Trigger");
+function useTriggerTitle(id: string | undefined, triggers: readonly TriggerDefinition[] | null) {
+  const name = triggers?.find((trigger) => trigger.id === id)?.name;
+  const [lastOpened, setLastOpened] = useState<{ id: string; name: string }>();
+  if (id && name && (id !== lastOpened?.id || name !== lastOpened.name)) {
+    setLastOpened({ id, name });
+  }
+  if (id === "new") return "New GitHub Issues Trigger";
+  return name ?? (lastOpened?.id === id ? lastOpened?.name : undefined) ?? "Trigger";
 }
 
 /** The header links the parents of the editor or list currently shown. */
 function studioSection(
   selection: StudioSelection,
-  triggers: readonly TriggerDefinition[] | null,
+  triggerName: string,
   flowName: string | undefined,
 ) {
   if (selection.tab === "flows") {
@@ -108,7 +112,7 @@ function studioSection(
     return {
       parents: [
         breadcrumbParent("Triggers", { tab: "triggers" }),
-        breadcrumbParent(triggerTitle(selection.fromTrigger, triggers), trigger),
+        breadcrumbParent(triggerName, trigger),
       ],
       section: flowName ?? "Flow",
     };
@@ -117,7 +121,7 @@ function studioSection(
   if (!selection.triggerId) return { section: "Triggers" };
   return {
     parents: [breadcrumbParent("Triggers", { tab: "triggers" })],
-    section: triggerTitle(selection.triggerId, triggers),
+    section: triggerName,
   };
 }
 
@@ -125,6 +129,10 @@ function useStudioHeader(selection: StudioSelection, definitions: StudioDefiniti
   const triggers = useStudioRead(definitions, "triggers").value;
   const flows = useStudioRead(definitions, "flows").value;
   const fromTrigger = selection.tab === "flows" ? selection.fromTrigger : undefined;
+  const triggerName = useTriggerTitle(
+    selection.tab === "triggers" ? selection.triggerId : fromTrigger,
+    triggers,
+  );
   const flowName =
     selection.tab === "flows" && fromTrigger
       ? flows?.find((entry) => entry.id === selection.flowId)?.name
@@ -134,7 +142,7 @@ function useStudioHeader(selection: StudioSelection, definitions: StudioDefiniti
       selection.tab === "triggers" || fromTrigger
         ? breadcrumbParent("Studio", { tab: "flows" }).link
         : "Studio",
-    section: studioSection(selection, triggers, flowName),
+    section: studioSection(selection, triggerName, flowName),
     closeLabel: fromTrigger ? "Back to Trigger" : "Back to Runs",
     returnTo: fromTrigger ? { tab: "triggers" as const, triggerId: fromTrigger } : undefined,
   };

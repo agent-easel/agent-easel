@@ -308,7 +308,7 @@ function SaveFailure({
       title={title ?? (creating ? "Couldn’t create this Trigger" : "Couldn’t save this Trigger")}
       details={guidance.details}
     >
-      {guidance.message}
+      {guidance.message} {creating && "Your settings are still here."}
     </SettingsProblemCard>
   );
 }

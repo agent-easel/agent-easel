@@ -43,11 +43,11 @@ async function expectEditorOff(screen: Screen, name: string) {
   ).toBeVisible();
 }
 
-/** Opens the named Trigger from the list; answers its status strip once it shows Error. */
-async function openedInError(screen: Screen, trigger: string) {
+/** Opens the named Trigger from the list; answers its status strip once it shows Problem. */
+async function openedInProblem(screen: Screen, trigger: string) {
   await screen.getByRole("link", trigger, { exact: false }).tap();
   const status = screen.getByRole("region", "Trigger status");
-  await expect(status.getByText("Error", { exact: true })).toBeVisible();
+  await expect(status.getByText("Problem", { exact: true })).toBeVisible();
   return status;
 }
 
@@ -133,7 +133,7 @@ test("an opened Trigger returns to the Trigger list from its breadcrumb", async 
   await expect(screen.getByRole("button", `${name} actions`, { exact: true })).toBeVisible();
 });
 
-test("a Trigger whose host gh is signed out shows Error with the host step that repairs it", async ({
+test("a Trigger whose host gh is signed out shows Problem with the host step that repairs it", async ({
   app,
   screen,
   fixture,
@@ -151,7 +151,7 @@ test("a Trigger whose host gh is signed out shows Error with the host step that 
   const guidance = "On the Factory host, run gh auth login --hostname github.com as the user";
   await expect(screen.getByText(`${guidance} Factory runs as.`)).toBeVisible();
   await expect(studioNavigation(screen).getByText("1 Trigger in Error")).toBeAttached();
-  const status = await openedInError(screen, name);
+  const status = await openedInProblem(screen, name);
   await expect(status).toContainText(`${guidance} Factory runs as.`);
   await app.screenshot("trigger-error-strip");
   await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
@@ -171,7 +171,7 @@ test("a Trigger whose Project now names another repository is repaired by confir
   await fixture.github.repository({ nameWithOwner: "factory-demo/atlas-next" });
   await app.open("/studio/triggers");
   await runFromMenu(screen, name);
-  const status = await openedInError(screen, name);
+  const status = await openedInProblem(screen, name);
   await expect(status).toContainText("Choose Confirm under Repository");
   await expect(screen.getByText("Detected now", { exact: true })).toBeVisible();
   await expect(screen.getByText("factory-demo/atlas-next", { exact: true })).toBeVisible();
