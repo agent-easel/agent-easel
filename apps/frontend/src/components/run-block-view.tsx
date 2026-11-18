@@ -3,6 +3,7 @@ import type { ContinuationVisit, FlowBlock, RunBlock, RunDetail } from "@t3-fact
 import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
@@ -449,7 +450,7 @@ export function RunBlockView({
         >
           <ChevronLeft aria-hidden />
           Overview
-          <kbd className="ml-1 font-mono text-overline font-normal text-subtle-foreground">Esc</kbd>
+          <KeyChip className="ml-1">Esc</KeyChip>
         </Button>
         <header className="flex min-w-0 items-center gap-2">
           <KindIcon
@@ -474,7 +475,7 @@ export function RunBlockView({
                 <X aria-hidden />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close · Esc</TooltipContent>
+            <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
         <RunAttentionDetails

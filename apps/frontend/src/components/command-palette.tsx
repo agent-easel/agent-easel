@@ -8,13 +8,14 @@ import {
   paletteMatchesQuery,
   type PaletteItem,
 } from "../command-palette-items.ts";
-import type { ShortcutId } from "../keyboard-shortcuts.ts";
+import { fixedShortcuts, formatShortcut, type ShortcutId } from "../keyboard-shortcuts.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useLiveStudio } from "../live/studio.ts";
 import { useOpenStudio, useSettingsNavigation } from "../settings-navigation.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
+import { KeyChip } from "@/components/ui/key-chip";
 import { RunNumber } from "./run-number.tsx";
 import { cn } from "@/lib/utils";
 
@@ -63,9 +64,13 @@ function PaletteResults({
             <span className="block truncate text-xs text-muted-foreground">{item.detail}</span>
           )}
         </span>
-        <span className="text-2xs tracking-label text-subtle-foreground capitalize">
-          {hint ?? item.kind}
-        </span>
+        {hint ? (
+          <KeyChip>{hint}</KeyChip>
+        ) : (
+          <span className="text-2xs tracking-label text-subtle-foreground capitalize">
+            {item.kind}
+          </span>
+        )}
       </button>
     );
   });
@@ -173,11 +178,7 @@ function PaletteContent({
           }}
           onKeyDown={onKeyDown}
         />
-        {paletteHint && (
-          <kbd className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground">
-            {paletteHint}
-          </kbd>
-        )}
+        {paletteHint && <KeyChip>{paletteHint}</KeyChip>}
       </div>
       <CatalogStatus catalog={catalog} />
       {!items.length && (
@@ -202,7 +203,9 @@ function PaletteContent({
         />
       </div>
       <p className="border-t px-3 py-2 text-2xs text-muted-foreground">
-        ↑↓ to navigate · Enter to open · Esc to close · Prefix &gt; for actions only
+        <KeyChip>↑↓</KeyChip> to navigate ·{" "}
+        <KeyChip>{formatShortcut(fixedShortcuts.openPaletteItem)}</KeyChip> to open ·{" "}
+        <KeyChip>Esc</KeyChip> to close · Prefix <KeyChip>&gt;</KeyChip> for actions only
       </p>
     </>
   );

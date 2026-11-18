@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { DialogDescription, DialogTitle } from "./ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -37,12 +38,9 @@ export function WorkspaceDialogHeader({
       ))}
       <span className="truncate font-medium text-foreground">{section}</span>
       <DialogDescription className="sr-only">{description}</DialogDescription>
-      <kbd
-        aria-hidden
-        className="ml-auto rounded-sm border px-1.5 py-0.5 font-sans text-2xs leading-none font-medium text-subtle-foreground"
-      >
+      <KeyChip aria-hidden className="ml-auto">
         Esc
-      </kbd>
+      </KeyChip>
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -56,7 +54,7 @@ export function WorkspaceDialogHeader({
             <X aria-hidden className="size-4" strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{closeLabel} (Esc)</TooltipContent>
+        <TooltipContent shortcut="Esc">{closeLabel}</TooltipContent>
       </Tooltip>
     </header>
   );

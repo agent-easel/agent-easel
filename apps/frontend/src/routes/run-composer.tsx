@@ -26,7 +26,9 @@ import {
   NoticeStudioLink,
 } from "../components/notice.tsx";
 import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "../components/page.tsx";
+import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
+import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
   DropdownMenuLabel,
@@ -186,15 +188,15 @@ function StartButton({ model }: { model: Composer }) {
       >
         <Play aria-hidden className="size-3" strokeWidth={2} />
         {draft.busy ? "Starting…" : draft.pending ? "Check same request" : "Start"}
-        <kbd
+        <KeyChip
           aria-hidden
           className={cn(
-            "rounded-sm px-1 py-px font-sans text-2xs font-medium",
+            "border-0 px-1 text-inherit",
             inactive ? "bg-foreground/8" : "bg-primary-foreground/14",
           )}
         >
-          ⌘↵
-        </kbd>
+          {formatShortcut(fixedShortcuts.startRun)}
+        </KeyChip>
       </Button>
     </MutationGate>
   );

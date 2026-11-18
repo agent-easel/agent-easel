@@ -4,6 +4,7 @@ import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "./key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -124,13 +125,7 @@ function DialogLayout({
       <header className="flex shrink-0 items-start justify-between gap-3">
         {heading}
         <div className="flex shrink-0 items-center gap-2">
-          {/* Use the shared key chip when #526 lands. */}
-          <kbd
-            aria-hidden
-            className="rounded-sm border border-border-strong px-1 py-0.5 font-sans text-2xs leading-none text-muted-foreground"
-          >
-            Esc
-          </kbd>
+          <KeyChip aria-hidden>Esc</KeyChip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Close asChild>

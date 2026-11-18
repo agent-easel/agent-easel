@@ -31,7 +31,7 @@ import { runActions, useRunActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { withShortcutHint } from "../keyboard-shortcuts.ts";
+import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
@@ -40,6 +40,7 @@ import { useLiveDelivery } from "../transport.ts";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -320,8 +321,8 @@ function RunTopBar({
             <PanelRight aria-hidden strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>
-          {withShortcutHint(inspectorOpen ? "Hide inspector" : "Show inspector", inspectorHint)}
+        <TooltipContent shortcut={inspectorHint}>
+          {inspectorOpen ? "Hide inspector" : "Show inspector"}
         </TooltipContent>
       </Tooltip>
       {run.lifecycle !== "archived" && <RunActionsMenu run={run} />}
@@ -335,7 +336,7 @@ function RunTopBar({
  */
 function RunActionsMenu({ run }: { run: RunDetail }) {
   const { available } = useRunActions({ detail: run });
-  const { hint } = useShortcutPreferences();
+  const { bindings, hint } = useShortcutPreferences();
   const archiveHint = hint("archive");
   return (
     <DropdownMenu>
@@ -348,13 +349,15 @@ function RunActionsMenu({ run }: { run: RunDetail }) {
         <DropdownMenuItem
           disabled={!available.archive}
           onSelect={() => runActions.openDialog("archive", { detail: run })}
-          aria-keyshortcuts={archiveHint}
+          aria-keyshortcuts={shortcutAriaKeys(bindings.archive)}
         >
           <Archive aria-hidden strokeWidth={1.5} />
           Archive…
-          <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-            {archiveHint}
-          </span>
+          {archiveHint && (
+            <KeyChip aria-hidden className="ml-auto">
+              {archiveHint}
+            </KeyChip>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

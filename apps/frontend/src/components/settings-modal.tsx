@@ -359,7 +359,7 @@ function SettingsSearchField({
               <X aria-hidden strokeWidth={1.5} className="size-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Clear search (Esc)</TooltipContent>
+          <TooltipContent shortcut="Esc">Clear search</TooltipContent>
         </Tooltip>
       )}
     </div>

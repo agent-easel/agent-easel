@@ -36,6 +36,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1090,9 +1091,7 @@ function BlockPanel({
           {BLOCK_KINDS[block.kind].panelLabel}
         </Badge>
         <span className="flex-1" />
-        <kbd className="rounded-sm border border-border-strong bg-accent px-1.25 font-mono text-2xs text-muted-foreground">
-          Esc
-        </kbd>
+        <KeyChip>Esc</KeyChip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -1105,7 +1104,7 @@ function BlockPanel({
               <X aria-hidden />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Close · Esc</TooltipContent>
+          <TooltipContent shortcut="Esc">Close</TooltipContent>
         </Tooltip>
       </div>
       <div

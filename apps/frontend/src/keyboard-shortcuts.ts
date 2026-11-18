@@ -192,7 +192,8 @@ export function shortcutFromEvent(event: KeyboardEvent): ShortcutBinding | undef
   };
 }
 
-function sameShortcutBinding(left: ShortcutBinding, right: ShortcutBinding) {
+export function sameShortcutBinding(left: ShortcutBinding | null, right: ShortcutBinding | null) {
+  if (!left || !right) return left === right;
   return (
     left.key === right.key &&
     left.mod === right.mod &&
@@ -290,8 +291,8 @@ const browserFunctionKeys = new Set([
 
 function isShortcutPlatformReserved(binding: ShortcutBinding, platform: ShortcutPlatform) {
   if (
-    Object.values(getDefaultShortcutBindings(platform)).some(
-      (candidate) => candidate && sameShortcutBinding(candidate, binding),
+    Object.values(getDefaultShortcutBindings(platform)).some((candidate) =>
+      sameShortcutBinding(candidate, binding),
     )
   )
     return false;
@@ -336,68 +337,89 @@ export function validateShortcutBinding(
       ? "This combination is reserved by the browser. Choose another key."
       : "This combination is reserved for browser navigation or text editing. Add Alt or choose another key.";
   const conflict = shortcutDefinitions.find(
-    (other) =>
-      other.id !== id && bindings[other.id] && sameShortcutBinding(binding, bindings[other.id]!),
+    (other) => other.id !== id && sameShortcutBinding(binding, bindings[other.id]),
   );
   return conflict
     ? `Already used by ${conflict.label}. Change that shortcut first or choose another combination.`
     : undefined;
 }
 
-/** The hint a menu or tooltip shows for a command: its binding, or none while unbound. */
-export function shortcutHint(binding: ShortcutBinding | null | undefined) {
-  return binding ? formatShortcut(binding) : undefined;
+const macKeyGlyphs = new Map([
+  ["ArrowLeft", "←"],
+  ["ArrowUp", "↑"],
+  ["ArrowRight", "→"],
+  ["ArrowDown", "↓"],
+  ["Backspace", "⌫"],
+  ["Delete", "⌦"],
+  ["Enter", "↵"],
+  ["Escape", "Esc"],
+  ["Tab", "⇥"],
+  [" ", "␣"],
+  ["Home", "↖"],
+  ["End", "↘"],
+  ["PageUp", "⇞"],
+  ["PageDown", "⇟"],
+  ["Insert", "Ins"],
+  ["ContextMenu", "☰"],
+]);
+
+// The binding model reserves Control on Mac. The remaining modifiers follow Apple order.
+const macModifierGlyphs = [
+  ["alt", "⌥"],
+  ["shift", "⇧"],
+  ["mod", "⌘"],
+] as const;
+
+const pcModifierLabels = [
+  ["mod", "Ctrl"],
+  ["alt", "Alt"],
+  ["shift", "Shift"],
+] as const;
+
+export function formatShortcut(binding: ShortcutBinding | null | undefined): string | undefined {
+  if (!binding) return undefined;
+  const mac = isMacPlatform();
+  const modifiers = (mac ? macModifierGlyphs : pcModifierLabels)
+    .filter(([modifier]) => binding[modifier])
+    .map(([, label]) => label);
+  const key = binding.key;
+  const platformKey = mac ? macKeyGlyphs.get(key) : key === " " ? "Space" : undefined;
+  const sharedKey = key === "=" ? "+ / =" : key.length === 1 ? key.toUpperCase() : key;
+  return [...modifiers, platformKey ?? sharedKey].join(mac ? "" : "+");
 }
 
-/** A tooltip text followed by the command's hint, when it has one. */
-export function withShortcutHint(text: string, hint: string | undefined) {
-  return hint ? `${text} · ${hint}` : text;
-}
-
-/** The canvas helper line's key list, naming only bound canvas commands; arrow pan is fixed. */
-export function canvasShortcutHelp(hints: {
-  zoomIn: string | undefined;
-  zoomOut: string | undefined;
-  fit: string | undefined;
-}) {
-  const zoom = [hints.zoomIn, hints.zoomOut].filter(Boolean).join(" / ");
-  const keys = [zoom && `${zoom} zoom`, hints.fit && `${hints.fit} fits`]
-    .filter(Boolean)
-    .join(", ");
-  return keys ? `${keys}; arrows pan` : "arrows pan";
-}
-
-/** A binding as lists of bindings show it, including Unbound. */
-export function formatShortcut(binding: ShortcutBinding | null | undefined) {
-  if (!binding) return "Unbound";
-  const key =
-    binding.key === "="
-      ? "+ / ="
-      : binding.key === " "
-        ? "Space"
-        : binding.key.length === 1
-          ? binding.key.toUpperCase()
-          : binding.key;
+/** ARIA uses UI Events key names and plus separators on every platform. */
+export function shortcutAriaKeys(binding: ShortcutBinding | null) {
+  if (!binding) return undefined;
   return [
-    binding.mod ? (isMacPlatform() ? "⌘" : "Ctrl") : "",
+    binding.mod ? (isMacPlatform() ? "Meta" : "Control") : "",
     binding.alt ? "Alt" : "",
     binding.shift ? "Shift" : "",
-    key,
+    binding.key === " " ? "Space" : binding.key,
   ]
     .filter(Boolean)
-    .join(isMacPlatform() ? "" : "+");
+    .join("+");
 }
 
 /** One line of a shortcut group as the cheat sheet and the canvas shortcuts popover list it. */
 export type ShortcutEntry = {
   readonly id: string;
   readonly label: string;
-  readonly keys: readonly string[];
+  readonly keys: readonly (string | undefined)[];
 };
 
 /** Fixed contextual controls listed with a registry group; they cannot be rebound. */
 const fixedGroupEntries: Partial<Record<ShortcutGroup, readonly ShortcutEntry[]>> = {
   canvas: [{ id: "pan", label: "Pan", keys: ["←", "↑", "→", "↓"] }],
+};
+
+export const fixedShortcuts = {
+  openPaletteItem: binding("Enter"),
+  focusNext: binding("Tab"),
+  deleteConnection: binding("Delete"),
+  openRowMenu: binding("F10", { shift: true }),
+  contextMenu: binding("ContextMenu"),
+  startRun: binding("Enter", { mod: true }),
 };
 
 /** A group's registry commands with their current bindings, then its fixed controls. */
