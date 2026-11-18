@@ -3,13 +3,12 @@ import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { runActions, useRunActions, useRunActionsState } from "./run-actions.tsx";
+import { RunActionItems, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
 import { runListView, useRunListView } from "../run-list-view.ts";
 import { mattersNeedingOwner, type RunNavigationEntry } from "@t3-factory/contracts";
-import type { RunActionAvailability } from "../run-actions.ts";
+import { waitsForWorkerConfirmation } from "../run-status.ts";
 import {
-  Archive,
   ChevronDown,
   ChevronRight,
   BellRing,
@@ -21,12 +20,10 @@ import {
   GitBranch,
   GitPullRequest,
   Workflow,
-  Moon,
   Pencil,
   Plus,
   Search,
   Trash2,
-  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -63,6 +60,8 @@ function execution(run: RunNavigationEntry) {
     };
   if (run.lifecycle === "settled")
     return { Icon: CircleCheck, label: "Settled", className: "text-success" };
+  if (waitsForWorkerConfirmation(run))
+    return { Icon: CircleCheck, label: "Finished", className: "text-success" };
   if (run.blocks.some((block) => block.state !== "not-started" && block.freshness !== "fresh"))
     return {
       Icon: CircleDashed,
@@ -123,15 +122,22 @@ function useRunListRows(runs: readonly RunNavigationEntry[]) {
   return { ...groups, search, needsYou, query, filtered: !!query || needsYou };
 }
 
+function useGroupExpansion(path: string, runs: readonly RunNavigationEntry[], filtered: boolean) {
+  const selected = filtered ? undefined : runs.find((run) => path === `/runs/${run.id}`)?.id;
+  const [group, setGroup] = useState({ selected, expanded: !!selected });
+  if (group.selected !== selected) setGroup({ selected, expanded: group.expanded || !!selected });
+  return [group.expanded, () => setGroup({ selected, expanded: !group.expanded })] as const;
+}
+
 export function RunSidebar({ path }: { path: string }) {
   const { runs, loaded, loadError } = useRunNavigation();
   const composition = useRunDraft();
   const searchRef = useRef<HTMLInputElement>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [renamingDraft, setRenamingDraft] = useState<SavedRunDraft>();
   const { open, snoozed, settled, matches, total, search, needsYou, query, filtered } =
     useRunListRows(runs);
+  const [expanded, onExpand] = useGroupExpansion(path, settled, filtered);
+  const [snoozedExpanded, onExpandSnoozed] = useGroupExpansion(path, snoozed, filtered);
   const actionError = useRunActionsState((state) => state.error);
   useLayoutEffect(() => {
     publishSidebarNavigation({
@@ -166,7 +172,7 @@ export function RunSidebar({ path }: { path: string }) {
           settled={settled}
           snoozed={snoozed}
           snoozedExpanded={snoozedExpanded}
-          onExpandSnoozed={() => setSnoozedExpanded(!snoozedExpanded)}
+          onExpandSnoozed={onExpandSnoozed}
           expanded={expanded}
           query={query}
           filtered={filtered}
@@ -175,7 +181,7 @@ export function RunSidebar({ path }: { path: string }) {
           loaded={loaded}
           total={total}
           matches={matches}
-          onExpand={() => setExpanded(!expanded)}
+          onExpand={onExpand}
           onRenameDraft={setRenamingDraft}
         />
       </SidebarRowsProvider>
@@ -227,7 +233,20 @@ function isActive(run: RunNavigationEntry) {
   return run.lifecycle === "active";
 }
 
-/** Revealed drafts join the open Runs in creation order; title search covers both. */
+/** Runs that need you lead the open list: Needs input, then Problem; each keeps its order. */
+function needRank(entry: RunNavigationEntry | SavedRunDraft) {
+  if (!("presentation" in entry)) return 2;
+  if (entry.attention.needsInput) return 0;
+  return entry.attention.problem ? 1 : 2;
+}
+
+const byNeed = (
+  left: RunNavigationEntry | SavedRunDraft,
+  right: RunNavigationEntry | SavedRunDraft,
+) => needRank(left) - needRank(right);
+
+/** Revealed drafts join the open Runs in creation order, after the Runs that need you; title
+ * search covers both in creation order. */
 function navigationGroups(
   runs: readonly RunNavigationEntry[],
   drafts: readonly SavedRunDraft[],
@@ -243,7 +262,7 @@ function navigationGroups(
   return {
     open: query
       ? [...runMatches, ...draftMatches].toSorted(byCreation)
-      : [...main, ...draftMatches].toSorted(byCreation),
+      : [...main, ...draftMatches].toSorted(byCreation).toSorted(byNeed),
     snoozed,
     settled,
     matches: runMatches.length + draftMatches.length,
@@ -352,11 +371,7 @@ function navigationEmptyState(
 ) {
   if (!loaded) return undefined;
   if (needsYou && !open) return { title: "Nothing needs you", body: "You're all caught up." };
-  if (!total)
-    return {
-      title: "No Runs yet",
-      body: "Start one with + (New Run). Runs from every project appear here.",
-    };
+  if (!total) return { title: "No Runs yet", body: "" };
   if (!matches)
     return {
       title: `No Run titles match “${search}”`,
@@ -368,6 +383,12 @@ function navigationEmptyState(
 
 function NavigationEmptyState({ state }: { state: ReturnType<typeof navigationEmptyState> }) {
   if (!state) return null;
+  if (!state.body)
+    return (
+      <p role="status" className="px-2 py-2 text-sm text-muted-foreground">
+        {state.title}
+      </p>
+    );
   return (
     <div
       role="status"
@@ -561,10 +582,11 @@ function DraftRow({
       kind="draft"
       selected={selected}
       onClick={() => runDraft.openDraft(draft.id)}
+      label={`${title} ${pending ? "Idle" : "Draft"}`}
       preview={
         <>
           <p className="text-sm font-medium break-words">{title}</p>
-          <p className="text-muted-foreground">Draft</p>
+          <p className="text-muted-foreground">{pending ? "Idle" : "Draft"}</p>
         </>
       }
       actions={
@@ -583,10 +605,14 @@ function DraftRow({
       }
     >
       <span className="flex min-w-0 items-center gap-2">
-        <FilePen aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        {pending ? (
+          <CircleDashed aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        ) : (
+          <FilePen aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+        )}
         <span className="truncate text-sm font-medium">{title}</span>
       </span>
-      <span className="text-2xs text-muted-foreground">Draft</span>
+      {!pending && <span className="text-2xs text-muted-foreground">Draft</span>}
     </SidebarRow>
   );
 }
@@ -600,7 +626,7 @@ function RunRow({
   selected: boolean;
   searchMuted?: boolean;
 }) {
-  const { available, busy } = useRunActions({ entry: run });
+  const { busy } = useRunActions({ entry: run });
   const state = execution(run);
   const { branches, pullRequests } = repositorySummary(run.repositories);
   const compact = run.lifecycle === "settled";
@@ -623,13 +649,11 @@ function RunRow({
       disabled={busy}
       preview={<RunPreview run={run} />}
       actions={
-        <>
-          <RenameItem
-            onSelect={() => runActions.openDialog("rename", { entry: run })}
-            disabled={!available.rename}
-          />
-          <RunActionItems run={run} available={available} />
-        </>
+        <RunActionItems
+          subject={{ entry: run }}
+          surface="row"
+          returnFocusId={`run-row-${run.id}`}
+        />
       }
     >
       {compact ? (
@@ -661,6 +685,9 @@ function RunRow({
         </span>
         <GeneratingTitle generation={run.titleGeneration} />
       </span>
+      {compact && run.project.availability !== "available" && (
+        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+      )}
       {!compact && hasMetadata && (
         <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-muted-foreground">
           {branches.length > 0 && (
@@ -740,70 +767,6 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
       {run.project.availability !== "available" && (
         <StatusBadge kind="neutral">Not in T3</StatusBadge>
       )}
-    </>
-  );
-}
-
-function RunActionItems({
-  run,
-  available,
-}: {
-  run: RunNavigationEntry;
-  available: RunActionAvailability;
-}) {
-  const { bindings, hint } = useShortcutPreferences();
-  const snoozeHint = hint("snoozeRestore");
-  const settleHint = hint("settle");
-  const archiveHint = hint("archive");
-  return (
-    <>
-      {isActive(run) && (
-        <RowMenuItem
-          disabled={!available.snoozeRestore}
-          onSelect={() => void runActions.run({ entry: run }, "snoozeRestore")}
-          aria-keyshortcuts={shortcutAriaKeys(bindings.snoozeRestore)}
-        >
-          {run.presentation.snoozed ? (
-            <Undo2 aria-hidden strokeWidth={1.5} />
-          ) : (
-            <Moon aria-hidden strokeWidth={1.5} />
-          )}
-          {run.presentation.snoozed ? "Restore" : "Snooze"}
-          {snoozeHint && (
-            <KeyChip aria-hidden className="ml-auto">
-              {snoozeHint}
-            </KeyChip>
-          )}
-        </RowMenuItem>
-      )}
-      {isActive(run) && (
-        <RowMenuItem
-          disabled={!available.settle}
-          onSelect={() => void runActions.run({ entry: run }, "settle")}
-          aria-keyshortcuts={shortcutAriaKeys(bindings.settle)}
-        >
-          <CircleCheck aria-hidden strokeWidth={1.5} />
-          Settle
-          {settleHint && (
-            <KeyChip aria-hidden className="ml-auto">
-              {settleHint}
-            </KeyChip>
-          )}
-        </RowMenuItem>
-      )}
-      <RowMenuItem
-        disabled={!available.archive}
-        onSelect={() => runActions.openDialog("archive", { entry: run }, `run-row-${run.id}`)}
-        aria-keyshortcuts={shortcutAriaKeys(bindings.archive)}
-      >
-        <Archive aria-hidden strokeWidth={1.5} />
-        Archive…
-        {archiveHint && (
-          <KeyChip aria-hidden className="ml-auto">
-            {archiveHint}
-          </KeyChip>
-        )}
-      </RowMenuItem>
     </>
   );
 }

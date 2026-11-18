@@ -1,13 +1,9 @@
 import { applyRunState } from "./support/scenarios.ts";
-import {
-  copyAgentDefinition,
-  removeAgentElsewhere,
-  repairCodexReporting,
-} from "./support/agents.ts";
+import { removeAgentElsewhere, repairCodexReporting } from "./support/agents.ts";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
-import { openComposerWithFlow } from "./support/composer.ts";
-import { placeAgentElsewhere, removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
+import { blockOnModelLessLaterReview, openComposerWithFlow } from "./support/composer.ts";
+import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
 import { archiveJourneyRun, findRun, readHistoryRun, runsTitled } from "./support/run-history.ts";
 
 beforeEach(async ({ browser }) => {
@@ -42,7 +38,7 @@ test("Start names every blocked Agent including later branches and succeeds afte
   await expect(screen.getByLabel("Initial prompt", { exact: false })).toHaveText(
     "UI whole Flow readiness",
   );
-  await screen.getByRole("link", "Open Settings → Agent reporting", { exact: true }).tap();
+  await screen.getByRole("link", "Open Settings → Agent reporting", { exact: true }).first().tap();
   await repairCodexReporting(screen);
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
   await app.screenshot("whole-flow-configuration-repaired");
@@ -72,32 +68,10 @@ test("a chosen Flow whose later-branch Agent comes to Need a model is Not ready 
   app,
   screen,
 }) => {
-  // Arrange
-  const agent = await copyAgentDefinition(
-    app.baseUrl,
-    "Demo · Accessibility reviewer",
-    "Model-less accessibility reviewer",
-    { modelLess: true },
-  );
-  const flow = await saveFlowCopy(
-    app.baseUrl,
-    "Demo · Parallel review",
-    "Model-less later review",
-    {
-      mode: "checkout",
-    },
-  );
-  await openComposerWithFlow(app, screen, "Model-less later review");
-  await screen.getByLabel("Initial prompt", { exact: false }).fill("UI model-less later Agent");
-
   // Act
-  await placeAgentElsewhere(app.baseUrl, flow, "accessibility", agent.id);
+  const { agent, flow } = await blockOnModelLessLaterReview(app, screen);
 
   // Assert
-  await expect(
-    screen.getByText("Accessibility review: Model-less accessibility reviewer needs a model."),
-  ).toBeVisible();
-  await expect(screen.getByRole("button", "Start", { exact: true })).toBeDisabled();
   await app.screenshot("model-less-agent-not-ready");
   expect(await runsTitled(app.baseUrl, "UI model-less later Agent")).toHaveLength(0);
   await screen.getByRole("link", "Open Model-less later review in Flows", { exact: true }).tap();
@@ -129,7 +103,7 @@ test("Agent-scoped runtime contract blockers point to the connection without bla
     "t3_thread_send lacks required runtime fields",
   );
   await expect(
-    screen.getByRole("link", "Open T3 connection settings", { exact: true }),
+    screen.getByRole("link", "Open T3 connection settings", { exact: true }).first(),
   ).toBeVisible();
   await app.screenshot("connection-only-blocker");
   await expect(screen.getByRole("link", "Open Studio → Agents", { exact: true })).toHaveCount(0);

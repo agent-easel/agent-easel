@@ -1,3 +1,4 @@
+import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -11,12 +12,14 @@ import { Dialog, DialogContent } from "./ui/dialog";
  */
 export function ArchiveRunDialog({
   run,
+  entry,
   open,
   onOpenChange,
   onArchived,
   returnFocusId,
 }: {
   run: { readonly id: string; readonly title: string };
+  entry: RunNavigationEntry | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onArchived?: () => void;
@@ -25,6 +28,18 @@ export function ArchiveRunDialog({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const decisionNames = [
+    ...new Set(
+      entry?.attention.matters.flatMap((matter) =>
+        matter.kind === "human" && matter.blockName ? [`“${matter.blockName}”`] : [],
+      ),
+    ),
+  ];
+  const findAgain =
+    typeof entry?.number === "number" ? `#${entry.number} or its title` : "its title";
+  const description = decisionNames.length
+    ? `Archiving cancels the pending ${decisionNames.join(", ")} ${decisionNames.length === 1 ? "decision" : "decisions"}; find the Run again in the command palette by ${findAgain}.`
+    : `Find this Run again in the command palette by ${findAgain}.`;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function archive() {
@@ -56,9 +71,7 @@ export function ArchiveRunDialog({
     >
       <DialogContent
         title={<>Archive “{run.title}”?</>}
-        description={
-          "This Run cannot be restored after archiving, which keeps its history and asks T3 to interrupt its workers."
-        }
+        description={description}
         actions={
           <>
             <Button
@@ -70,12 +83,7 @@ export function ArchiveRunDialog({
               Cancel
             </Button>
             <MutationGate>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={busy}
-                onClick={() => void archive()}
-              >
+              <Button type="button" variant="danger" disabled={busy} onClick={() => void archive()}>
                 {busy ? "Archiving…" : "Archive Run"}
               </Button>
             </MutationGate>

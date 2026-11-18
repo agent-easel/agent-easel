@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useRef, useState, type ReactNode } from "react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
@@ -58,15 +58,25 @@ export function agentReportingStatus(
   };
 }
 
+type ReportingInstallState = {
+  running: string | null;
+  failures: Readonly<Record<string, string>>;
+  install: (targets: readonly ReportingInstallation[]) => Promise<void>;
+};
+
 const ReportingStateContext = createContext<
-  (ReportingReads & { refresh: () => Promise<void> }) | null
+  | (ReportingReads & ReportingInstallState & { refresh: () => Promise<void>; readDetails: string })
+  | null
 >(null);
 
 /** Shared by Agent definitions, reporting setup and the Settings indicator. */
 export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
+  const [running, setRunning] = useState<string | null>(null);
+  const [failures, setFailures] = useState<Record<string, string>>({});
+  const installing = useRef(false);
   const agents = useLiveStudio().value?.agents ?? null;
-  const { failure, refresh } = useRefreshSchedule({
+  const { failure, refresh, supersede } = useRefreshSchedule({
     read: api.getReportingInstallations,
     apply: setTargets,
     intervalMs: 30_000,
@@ -75,11 +85,45 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
     ? {
         targets: null,
         agents,
-        error: "Factory could not check Agent reporting. Recheck the installation in Settings.",
+        error:
+          "Factory could not check Agent reporting. Check that Factory is running, then check again.",
       }
     : { targets, agents, error: "" };
+  const installHome = async (target: ReportingInstallation) => {
+    setRunning(target.id);
+    await api.installReporting({ targetId: target.id }).then(
+      (installed) => {
+        supersede();
+        setTargets(
+          (current) =>
+            current?.map((item) => (item.id === installed.id ? installed : item)) ?? current,
+        );
+        setFailures((current) => {
+          const remaining = { ...current };
+          delete remaining[target.id];
+          return remaining;
+        });
+      },
+      (cause: unknown) => setFailures((current) => ({ ...current, [target.id]: String(cause) })),
+    );
+  };
+  const install = async (selection: readonly ReportingInstallation[]) => {
+    if (installing.current || !selection.length) return;
+    installing.current = true;
+    const run = async () => {
+      for (const target of selection) await installHome(target);
+      await refresh();
+    };
+    await run().finally(() => {
+      setRunning(null);
+      installing.current = false;
+    });
+  };
+  const readDetails = failure ? String(failure.cause) : "";
   return (
-    <ReportingStateContext.Provider value={{ ...reads, refresh }}>
+    <ReportingStateContext.Provider
+      value={{ ...reads, refresh, readDetails, running, failures, install }}
+    >
       {children}
     </ReportingStateContext.Provider>
   );

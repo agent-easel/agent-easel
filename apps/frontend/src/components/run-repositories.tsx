@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { RunPullRequest, RunWorkerRepository } from "@t3-factory/contracts";
 import { GitBranch, GitPullRequest } from "lucide-react";
 
@@ -15,12 +16,29 @@ export function repositorySummary(workers: readonly RunWorkerRepository[]) {
   };
 }
 
+/** A branch name that wraps only after "/" or "-", never inside a word, unless one word alone is
+ * wider than its line. */
+function BranchName({ branch }: { branch: string }) {
+  return (
+    <p className="font-mono text-xs break-words text-foreground">
+      {branch.split(/(?<=[/-])/).map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && <wbr />}
+          {part}
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 export function RunRepositories({
   workers,
   links = false,
+  historical = false,
 }: {
   workers: readonly RunWorkerRepository[];
   links?: boolean;
+  historical?: boolean;
 }) {
   const { branches, pullRequests } = repositorySummary(workers);
   if (!branches.length && !pullRequests.length) return null;
@@ -30,8 +48,10 @@ export function RunRepositories({
         <div key={branch} className="flex items-start gap-2">
           <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
-            <p className="break-all text-foreground">{branch}</p>
-            <p className="text-2xs text-muted-foreground">{names.join(", ")}</p>
+            <BranchName branch={branch} />
+            {(!historical || branches.length > 1) && (
+              <p className="text-2xs text-muted-foreground">{names.join(", ")}</p>
+            )}
           </div>
         </div>
       ))}
@@ -53,14 +73,10 @@ export function RunRepositories({
                 {pr.repository} #{pr.number}
               </p>
             )}
-            <p className="text-2xs text-muted-foreground">{pr.state ?? "State unknown"}</p>
+            {pr.state && <span className="text-xs text-muted-foreground"> · {pr.state}</span>}
           </div>
         </div>
       ))}
-      <p className="text-2xs text-muted-foreground">
-        {workers.some((worker) => worker.freshness !== "fresh") ? "Not live · " : ""}Last known in
-        T3
-      </p>
     </div>
   );
 }

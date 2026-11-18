@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { KeyChip } from "@/components/ui/key-chip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import {
-  fixedShortcuts,
+  conflictingShortcut,
+  fixedShortcutRows,
   formatShortcut,
   getDefaultShortcutBindings,
   sameShortcutBinding,
@@ -14,6 +18,7 @@ import {
   validateShortcutBinding,
   type ShortcutBinding,
   type ShortcutId,
+  type ShortcutProblem,
 } from "../keyboard-shortcuts.ts";
 import {
   resetShortcutBindings,
@@ -21,22 +26,27 @@ import {
   setShortcutRecording,
   useShortcutPreferences,
 } from "../shortcut-preferences.ts";
-import { SettingsDisclosure, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
+import { SettingsGroup, SettingsPage, SettingsProblemCard, SettingsRow } from "./settings-page.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 
-/** Settings → Keyboard shortcuts: every registry command by group, with its current binding. */
+type Command = (typeof shortcutDefinitions)[number];
+const groups = [...new Set(shortcutDefinitions.map((command) => command.group))];
+
 export function KeyboardSettings() {
-  const { bindings, conflicts, sessionOnly, storageIssue, isConflict } = useShortcutPreferences();
+  const { bindings, sessionOnly, storageIssue, isConflict } = useShortcutPreferences();
   const defaults = getDefaultShortcutBindings();
-  const [editing, setEditing] = useState<ShortcutId>();
-  const [error, setError] = useState<string>();
-  const groups = [...new Set(shortcutDefinitions.map((command) => command.group))];
+  const conflictCommands = shortcutDefinitions.filter(({ id }) => isConflict(id));
+  const [editing, setEditing] = useState<Command>();
+  const [error, setError] = useState<ShortcutProblem>();
+  const customised = (id: ShortcutId) =>
+    isConflict(id) || !sameShortcutBinding(bindings[id], defaults[id]);
   return (
     <SettingsPage
       title="Keyboard shortcuts"
-      description="Changes apply immediately and are saved on this device."
       action={
         <Button
           variant="outline"
+          disabled={!shortcutDefinitions.some(({ id }) => customised(id))}
           onClick={() => {
             resetShortcutBindings();
             setError(undefined);
@@ -46,156 +56,195 @@ export function KeyboardSettings() {
         </Button>
       }
     >
-      {sessionOnly && (
-        <p role="status" className="text-sm text-attention">
-          Browser storage is unavailable. Changes apply only for this session.
-        </p>
-      )}
-      {storageIssue && (
-        <p role="status" className="text-sm text-attention">
-          {storageIssue}
-        </p>
+      {(sessionOnly || storageIssue) && (
+        <SettingsProblemCard
+          tone="warning"
+          title={
+            sessionOnly
+              ? "Changes last only for this session"
+              : "Couldn’t restore keyboard shortcuts"
+          }
+        >
+          {storageIssue ?? "This browser can’t store shortcuts."}
+        </SettingsProblemCard>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <SettingsProblemCard tone="error" title={error.title}>
+          {error.message}
+        </SettingsProblemCard>
+      )}
+      {conflictCommands.length > 0 && (
+        <div className="grid gap-5">
+          {conflictCommands.map((command) => {
+            const binding = defaults[command.id];
+            const other = binding && conflictingShortcut(command.id, binding, bindings);
+            return (
+              <SettingsProblemCard
+                id={`shortcut-conflict-${command.id}`}
+                key={command.id}
+                tone="error"
+                title={`${command.label} has no shortcut`}
+              >
+                {other
+                  ? `Its default, ${formatShortcut(binding)}, is now used by ${other.label}. Change ${other.label}, then reset ${command.label}.`
+                  : `Reset ${command.label} to restore its default.`}
+              </SettingsProblemCard>
+            );
+          })}
+        </div>
       )}
       {groups.map((group) => (
         <SettingsGroup key={group} label={shortcutGroupLabels[group]}>
           {shortcutDefinitions
             .filter((command) => command.group === group)
             .map((command) => (
-              <div key={command.id} role="group" aria-label={command.label}>
-                <SettingsRow
-                  title={command.label}
-                  description={
-                    (command.scope === "contextual" || isConflict(command.id)) && (
-                      <>
-                        {command.scope === "contextual" &&
-                          "Open Run; outside text fields without Mod"}
-                        {isConflict(command.id) && (
-                          <p className="text-destructive">
-                            Unbound because another command already uses the default combination.
-                            Change or reset the conflicting shortcut, then reset this one.
-                          </p>
-                        )}
-                      </>
-                    )
-                  }
-                  control={
-                    <>
-                      <KeyChip>{formatShortcut(bindings[command.id])}</KeyChip>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        aria-label={`Change ${command.label}`}
-                        onClick={() => {
-                          setError(undefined);
-                          setEditing(command.id);
-                        }}
-                      >
-                        Change
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Reset ${command.label}`}
-                        disabled={
-                          sameShortcutBinding(bindings[command.id], defaults[command.id]) &&
-                          !conflicts.includes(command.id)
-                        }
-                        onClick={() => setError(resetShortcutBindings(command.id))}
-                      >
-                        Reset
-                      </Button>
-                    </>
-                  }
-                />
-              </div>
+              <ShortcutRow
+                key={command.id}
+                command={command}
+                binding={bindings[command.id]}
+                conflict={isConflict(command.id)}
+                onEdit={() => {
+                  setError(undefined);
+                  setEditing(command);
+                }}
+                onReset={
+                  customised(command.id)
+                    ? () => {
+                        const problem = resetShortcutBindings(command.id);
+                        setError(isConflict(command.id) ? undefined : problem);
+                      }
+                    : undefined
+                }
+              />
             ))}
         </SettingsGroup>
       ))}
-      <SettingsDisclosure label="Fixed controls" hint="Not editable here">
-        <p>
-          <KeyChip>Esc</KeyChip> closes the topmost dialog or cancels the current interaction. Arrow
-          keys and <KeyChip>{formatShortcut(fixedShortcuts.openPaletteItem)}</KeyChip> navigate the
-          palette. <KeyChip>{formatShortcut(fixedShortcuts.focusNext)}</KeyChip> moves focus.
-        </p>
-        <p>
-          Focused canvas: arrow keys pan. Selected Flow connection:{" "}
-          <KeyChip>{formatShortcut(fixedShortcuts.deleteConnection)}</KeyChip> removes it. Focused
-          Run row: <KeyChip>{formatShortcut(fixedShortcuts.openRowMenu)}</KeyChip> or{" "}
-          <KeyChip>{formatShortcut(fixedShortcuts.contextMenu)}</KeyChip> opens its menu.
-        </p>
-        <p>
-          <KeyChip>{formatShortcut(fixedShortcuts.startRun)}</KeyChip> starts a ready Run from the
-          composer.
-        </p>
-        <p>
-          Global shortcuts require Command on macOS or Control elsewhere. Canvas shortcuts work only
-          on a focused canvas and may also use a bare key. + and = share one binding. Browser and
-          operating system shortcuts may take priority; choose another combination if a key is not
-          received.
-        </p>
-      </SettingsDisclosure>
-      {editing && <ShortcutRecorder id={editing} onClose={() => setEditing(undefined)} />}
+      <SettingsGroup label="Fixed">
+        {fixedShortcutRows().map(({ label, keys }) => (
+          <SettingsRow
+            key={label}
+            title={label}
+            control={keys.map((key) => (
+              <KeyChip key={key}>{key}</KeyChip>
+            ))}
+          />
+        ))}
+      </SettingsGroup>
+      {editing && <ShortcutRecorder command={editing} onClose={() => setEditing(undefined)} />}
     </SettingsPage>
   );
 }
 
-function ShortcutRecorder({ id, onClose }: { id: ShortcutId; onClose: () => void }) {
+function ShortcutRow({
+  command,
+  binding,
+  conflict,
+  onEdit,
+  onReset,
+}: {
+  command: Command;
+  binding: ShortcutBinding | null;
+  conflict: boolean;
+  onEdit: () => void;
+  onReset: (() => void) | undefined;
+}) {
+  const change = useRef<HTMLButtonElement>(null);
+  return (
+    <div
+      role="group"
+      aria-label={command.label}
+      aria-invalid={conflict || undefined}
+      aria-describedby={conflict ? `shortcut-conflict-${command.id}` : undefined}
+    >
+      <SettingsRow
+        title={
+          <span className="flex flex-wrap items-center gap-2">
+            {command.label}
+            {conflict && <StatusBadge kind="error">Conflict</StatusBadge>}
+          </span>
+        }
+        control={
+          <>
+            <KeyChip>{formatShortcut(binding)}</KeyChip>
+            {onReset && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="-my-0.5 size-8 p-0.5"
+                    aria-label={`Reset ${command.label}`}
+                    onClick={() => {
+                      change.current?.focus();
+                      onReset();
+                    }}
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md border">
+                      <RotateCcw aria-hidden className="size-3.5" />
+                    </span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Reset</TooltipContent>
+              </Tooltip>
+            )}
+            <Button
+              ref={change}
+              variant="outline"
+              size="sm"
+              aria-label={`Change ${command.label}`}
+              onClick={onEdit}
+            >
+              Change
+            </Button>
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+function useShortcutCapture(id: ShortcutId) {
   const { bindings } = useShortcutPreferences();
-  const content = useRef<HTMLDivElement>(null);
   const [candidate, setCandidate] = useState<ShortcutBinding>();
-  const [error, setError] = useState<string>();
-  const command = shortcutDefinitions.find((definition) => definition.id === id)!;
+  const [modifierError, setModifierError] = useState<ShortcutProblem>();
+  const [saveError, setSaveError] = useState<ShortcutProblem>();
+  const validation = candidate ? validateShortcutBinding(id, candidate, bindings) : modifierError;
+  const problem = validation ?? saveError;
   useEffect(() => {
     setShortcutRecording(true);
     const record = (event: KeyboardEvent) => {
-      if (event.repeat || event.isComposing || event.keyCode === 229) return;
-      // Preserve focus navigation and Radix topmost Escape handling.
-      if (event.key === "Tab" || event.key === "Escape") return;
-      // Keep buttons operable without recording Enter/Space as a candidate.
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest("button") &&
-        !event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        ["Enter", " "].includes(event.key)
-      )
-        return;
+      if (!shouldRecord(event)) return;
       event.stopPropagation();
       const next = shortcutFromEvent(event);
-      if (!next) {
-        const modifierError = shortcutModifierError(event);
-        if (modifierError) {
-          event.preventDefault();
-          setCandidate(undefined);
-          setError(modifierError);
-        }
-        return;
-      }
+      const modifier = shortcutModifierError(event);
+      if (!next && !modifier) return;
       event.preventDefault();
       setCandidate(next);
-      setError(validateShortcutBinding(id, next, bindings));
+      setModifierError(modifier);
+      setSaveError(undefined);
     };
     window.addEventListener("keydown", record, true);
     return () => {
       window.removeEventListener("keydown", record, true);
       setShortcutRecording(false);
     };
-  }, [id, bindings]);
-  const validation = candidate ? validateShortcutBinding(id, candidate, bindings) : undefined;
+  }, []);
+  const canSave = Boolean(candidate && !validation);
+  const save = () => {
+    if (!candidate) return false;
+    const result = saveShortcutBinding(id, candidate);
+    if (result) setSaveError(result);
+    return !result;
+  };
+  return { candidate, problem, canSave, save };
+}
+
+function ShortcutRecorder({ command, onClose }: { command: Command; onClose: () => void }) {
+  const { candidate, problem, canSave, save } = useShortcutCapture(command.id);
+  const capture = useRef<HTMLDivElement>(null);
+  const issueId = useId();
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) onClose();
-      }}
-    >
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
         title={`Change “${command.label}”`}
         actions={
@@ -204,33 +253,53 @@ function ShortcutRecorder({ id, onClose }: { id: ShortcutId; onClose: () => void
               Cancel
             </Button>
             <Button
-              disabled={!candidate || !!validation}
+              variant={canSave ? "default" : "outline"}
+              disabled={!canSave}
               onClick={() => {
-                if (!candidate) return;
-                const result = saveShortcutBinding(id, candidate);
-                if (result) setError(result);
-                else onClose();
+                if (save()) onClose();
               }}
             >
-              Save shortcut
+              Save
             </Button>
           </>
         }
-        ref={content}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
-          content.current?.focus();
+          capture.current?.focus();
         }}
       >
-        <div role="status" className="rounded-lg border bg-muted p-6 text-center text-lg">
-          {candidate ? <KeyChip>{formatShortcut(candidate)}</KeyChip> : "Press a shortcut"}
+        <div
+          ref={capture}
+          role="textbox"
+          tabIndex={0}
+          aria-label="Shortcut"
+          aria-readonly
+          aria-invalid={problem ? true : undefined}
+          aria-describedby={problem ? issueId : undefined}
+          className={cn(
+            "flex min-h-16 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm text-muted-foreground outline-none",
+            problem ? "border-destructive" : "border-ring ring-1 ring-ring/30",
+          )}
+        >
+          <span aria-live="polite">
+            {candidate ? <KeyChip>{formatShortcut(candidate)}</KeyChip> : "Press a shortcut"}
+          </span>
+          {problem && <StatusBadge kind="error">{problem.tag}</StatusBadge>}
         </div>
-        {(error || validation) && (
-          <p role="alert" className="text-sm text-destructive">
-            {error || validation}
-          </p>
+        {problem && (
+          <SettingsProblemCard id={issueId} tone="error" title={problem.title}>
+            {problem.message}
+          </SettingsProblemCard>
         )}
       </DialogContent>
     </Dialog>
   );
+}
+
+function shouldRecord(event: KeyboardEvent) {
+  if (event.repeat || event.isComposing || event.keyCode === 229) return false;
+  if (event.key === "Tab" || event.key === "Escape") return false;
+  const fromButton = event.target instanceof HTMLElement && event.target.closest("button");
+  const modified = event.metaKey || event.ctrlKey || event.altKey || event.shiftKey;
+  return !(fromButton && !modified && ["Enter", " "].includes(event.key));
 }

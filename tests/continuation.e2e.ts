@@ -55,9 +55,9 @@ test("a Continuation whose response went on passes through while the next Contin
   // Assert
   const spec = screen.getByRole("article", "Block Spec");
   const tickets = screen.getByRole("article", "Block Tickets");
-  await expect(spec).toContainText("Pass-through");
+  await expect(spec).toContainText("Finished");
   await expect(spec).toContainText("Grill the change's thread");
-  await expect(tickets).toContainText("Sent");
+  await expect(tickets).toContainText("Working");
   await expect(tickets).toContainText("Grill the change's thread");
   await screen.getByRole("button", "Fit Flow").tap();
   await spec.getByRole("button", "Continuation Spec", { exact: false }).tap();

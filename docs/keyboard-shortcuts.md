@@ -47,23 +47,27 @@ Pinch and **Mod**+wheel pan/zoom at the pointer follow the canvas rules in
 
 **Settings → Keyboard shortcuts** (`/settings/keyboard`) lists every registry command in
 the same groups as the cheat sheet: Application, Navigation, Open Run actions and
-Canvas. Choose **Change**, press the new combination, then **Save shortcut**. Escape or
-Cancel discards the candidate. Recording never executes the command.
+Canvas. An unassigned binding appears as muted **Unbound** text. The last group, **Fixed**,
+lists chords for closing or cancelling, starting a Run from the composer, panning the canvas,
+removing a selected connection, opening a Run row’s menu and undoing a structural Flow edit (**Mod+Z**).
+Choose **Change**, press the new combination, then **Save**. Escape or Cancel discards the candidate.
+Recording never executes the command.
 
 **Global** commands require Mod. **Canvas** commands may use a bare key or Mod. **Rename
 Run** is a contextual command (default F2 without Mod) and can be rebound like the rest.
-A conflict, an invalid key or a platform-reserved combination explains why Save is
-unavailable. Desktop and browser each maintain their own reserved-combination list so
+The capture field shows a short tag such as **In use**, **Needs ⌘** or **Reserved** while an
+Error card explains how to correct the chord. Desktop and browser each maintain their own reserved-combination list so
 Mod+N, Mod+1…9 and Mod+[ ] validate on desktop but stay reserved in the browser.
 
-**Reset** restores one command to the current platform default; **Reset all** in the
-page header restores the full default set. If another command occupies a default,
-resetting that command reports the conflict. The UI hints and active handlers update immediately.
+**Reset** appears only on a changed or conflicted row and restores that command’s platform
+default. **Reset all** in the page header restores all defaults and is enabled when at least one row
+has changed or has a conflict. An Error card names the command occupying a conflicted default.
+The UI hints and active handlers update immediately.
 
 Preferences persist in browser storage on this client and Factory origin
 (`factory.keyboardShortcuts`, storage **version 2**). They do not sync to T3 or other
 devices. When storage is unavailable, changes apply for the current session only and
-Settings shows a notice.
+Settings shows a Warning card.
 
 ### Upgrade from storage version 1
 
@@ -102,8 +106,9 @@ shortcuts could not be restored. Defaults are in use.**
 ## Command behaviour
 
 Run actions, sidebar navigation and the cheat sheet do not run over overlays or menus.
-Settings, New Run and Studio shortcuts can switch between the workspace dialogs using
-the unsaved-change guard; nested dialogs, menus, the palette and cheat sheet block them.
+New Run and Studio shortcuts can switch between the workspace dialogs using the
+unsaved-change guard. Settings opens over the composer or Studio, and Esc or ✕ returns to
+it with its draft kept. Nested dialogs, menus, the palette and cheat sheet block them.
 The palette binding still toggles the palette. A bare Run number or `#` followed by
 that number finds the exact Run number. Other searches match titles and keywords. Studio and Settings leave the underlying
 Run composer and detail **inert**; see

@@ -1,17 +1,13 @@
+import { stoppedVisitAt } from "../run-status.ts";
 import type { ReactNode } from "react";
-import {
-  attentionPresentation,
-  type FlowBlock,
-  type FlowGraph,
-  type RunBlock,
-  type RunDetail,
-} from "@t3-factory/contracts";
+import type { FlowBlock, FlowGraph, RunBlock, RunDetail } from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { selectExecutionTargets } from "../execution-focus.ts";
+import { selectEntryTargets, selectExecutionTargets } from "../execution-focus.ts";
 import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
-import { exitRecipients, type CanvasBlock } from "../flow-graph.ts";
+import { capturedExits, exitRecipients, type CanvasBlock } from "../flow-graph.ts";
+import { blockAttention, blockStateKind, chosenExitIds } from "../run-block-state.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
 import {
   CanvasSurface,
@@ -19,28 +15,14 @@ import {
   type CanvasFlowInputContent,
   type CanvasPort,
 } from "./canvas-surface.tsx";
-import { conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
+import { conditionRoute, exitDisplayName } from "./flow-block.tsx";
 import { pendingArrivals } from "../wait-display.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
-import { StatusBadge } from "./status-badge.tsx";
+import { RUN_STATE_LABELS, StatusBadge, type RunStateKind } from "./status-badge.tsx";
 import { ContinueNow } from "./wait-arrivals.tsx";
 import { FlowInputTitleLine } from "./run-title-generation.tsx";
-import {
-  clockTime,
-  dayAndTime,
-  executionStateLabel,
-  ExecutionStateBadge,
-} from "./execution-state.tsx";
-
-function blockAttention(run: RunDetail, blockId: string) {
-  const pending = run.attention.filter((item) => item.blockId === blockId && !item.settledAt);
-  return {
-    needsInput:
-      !run.settlement && pending.some((item) => attentionPresentation(item.kind) === "needs-input"),
-    problem: pending.some((item) => attentionPresentation(item.kind) === "problem"),
-  };
-}
+import { clockTime, dayAndTime, executionStateLabel } from "./execution-state.tsx";
 
 /** Not-started blocks were never observed. Stale and unknown apply only after a block starts. */
 function blockObservation(block: RunBlock, unavailable: boolean) {
@@ -72,22 +54,14 @@ export function threadOwnerName(run: RunDetail, bindingId: string | null) {
 }
 
 /** Figma Run/ExecBlock frames: active states use a 75 % state line, settled ones a quieter one. */
-const frameColor: Record<RunBlock["state"], string> = {
+const frameColor: Record<RunStateKind | "not-started", string> = {
   "not-started": "border-border bg-muted",
   working: "border-status-working/75 bg-card",
   waiting: "border-status-waiting/75 bg-card",
+  "needs-input": "border-attention/75 bg-card",
   finished: "border-success/50 bg-card",
-  error: "border-destructive/75 bg-card",
+  problem: "border-destructive/75 bg-card",
   stopped: "border-status-stopped/50 bg-card",
-  sent: "border-primary/75 bg-card",
-  "pass-through": "border-success/50 bg-card",
-};
-
-const activityColor: Partial<Record<RunBlock["state"], string>> = {
-  working: "text-status-working",
-  waiting: "text-status-waiting",
-  sent: "text-link",
-  error: "text-destructive",
 };
 
 type BlockVisit = {
@@ -147,98 +121,132 @@ export function waitingText(run: RunDetail, blockId: string) {
   const next = pending[0];
   if (!next) return null;
   const until = `until ${dayAndTime(next.deadlineAt)}`;
-  return pending.length > 1 ? `${pending.length} waiting · next ${until}` : until;
+  return pending.length > 1 ? `${pending.length} held · next ${until}` : until;
 }
 
-/** A Continuation's activity: when its prompt went out, and where its work shows meanwhile. */
+/** A Continuation's activity: whose thread works on its prompt, then where it passed the response. */
 function continuationActivity(run: RunDetail, blockId: string, state: RunBlock["state"]) {
   const prompt = continuationPromptVisit(run, blockId);
   if (!prompt) return null;
-  const sent = clockTime(prompt.arrivedAt);
   if (state === "sent") {
     const owner = threadOwnerName(run, prompt.bindingId);
-    return `prompt sent ${sent}${owner ? ` · work shows on ${owner}` : ""}`;
+    return `In ${owner ? `${owner}’s` : "its worker’s"} thread · since ${clockTime(prompt.arrivedAt)}`;
   }
-  if (state !== "pass-through") return null;
-  const passed = run.continuationVisits.filter(
-    (visit) => visit.blockId === blockId && visit.kind === "pass-through",
-  ).length;
-  return `pass-through · prompt used ${sent}${passed ? ` · ${passed} passed through` : ""}`;
+  if (state !== "pass-through" || !prompt.forwardedAt) return null;
+  const recipients = exitRecipients(run.definitions.flow.graph, blockId, "output").filter(Boolean);
+  return `Passed on${recipients.length ? ` to ${recipients.join(", ")}` : ""} · ${clockTime(prompt.forwardedAt)}`;
+}
+
+/** A finished Block's taken exit as its outcome, with the time it was accepted. */
+function outcomeText(run: RunDetail, block: FlowBlock) {
+  const [exitId] = chosenExitIds(
+    run,
+    block,
+    run.blocks.find((item) => item.blockId === block.id),
+  );
+  const exit = capturedExits(run.definitions, block.id).find((item) => item.id === exitId);
+  const at =
+    block.kind === "human"
+      ? run.humanOccurrences.findLast((item) => item.blockId === block.id)?.settledAt
+      : run.reports.findLast((item) => item.blockId === block.id && item.status === "finished")
+          ?.acceptedAt;
+  if (!exit || !exitDisplayName(exit) || !at) return null;
+  return `→ ${exitDisplayName(exit)} · ${clockTime(at)}`;
+}
+
+function stoppedVisitText(run: RunDetail, visit: number, end: string | null) {
+  const at = stoppedVisitAt(run, end);
+  return `Visit ${visit} · stopped${at ? ` ${clockTime(at)}` : ""}`;
 }
 
 /** Recorded visit times for the activity line; no progress is inferred. A Condition shows its
- * routing summary instead. */
-function activityText(run: RunDetail, block: FlowBlock, recorded: RunBlock | undefined) {
+ * routing summary instead, a finished Block the exit it took. */
+export function blockActivityText(
+  run: RunDetail,
+  block: FlowBlock,
+  recorded: RunBlock | undefined,
+) {
   if (block.kind === "condition") return conditionActivityText(run, block.id);
   const visits = blockVisits(run, block);
   const latest = visits[visits.length - 1];
   if (!recorded || recorded.state === "not-started" || !latest) return "Not visited";
+  if (recorded.state === "stopped") return stoppedVisitText(run, visits.length, latest.end);
   const continuation =
     block.kind === "continuation" && continuationActivity(run, block.id, recorded.state);
   if (continuation) return continuation;
   const start = latest.start ?? recorded.observedAt;
   const end = latest.end;
   const active = recorded.state === "working" || recorded.state === "waiting";
-  if (active || !end) return `visit ${visits.length}${start ? ` · since ${clockTime(start)}` : ""}`;
-  return `visit ${visits.length}${start ? ` · ${clockTime(start)}–${clockTime(end)}` : ""}`;
+  const outcome = recorded.state === "finished" && outcomeText(run, block);
+  if (outcome) return outcome;
+  if (active || !end) return `Visit ${visits.length}${start ? ` · since ${clockTime(start)}` : ""}`;
+  return `Visit ${visits.length}${start ? ` · ${clockTime(start)}–${clockTime(end)}` : ""}`;
 }
 
-/** One exit row: where the exit comes from, its name and, for screen readers, its recipients. */
+/** One exit row: a Condition output's rule, the exit's name (primary text only once chosen)
+ * and, for screen readers, its recipients. */
 function ExecutionExit({
   graph,
   block,
   exit,
+  chosen,
 }: {
   graph: FlowGraph;
   block: CanvasBlock;
   exit: EffectiveExit;
+  chosen: boolean;
 }) {
   const recipients = exitRecipients(graph, block.id, exit.id).join(", ");
-  const continuation = exit.source === "continuation";
   return (
     <>
-      <span className="truncate text-2xs tracking-label text-subtle-foreground">
-        {continuation
-          ? "output"
-          : exit.source === "condition"
-            ? conditionRoute(block, exit.id)
-            : exitSourceLabel(exit)}
-      </span>
+      {exit.source === "condition" && (
+        <span className="truncate text-2xs tracking-label text-subtle-foreground">
+          {conditionRoute(block, exit.id)}
+        </span>
+      )}
       <span className="flex-1" />
-      <span className="truncate text-xs font-medium text-foreground">
-        {continuation ? "response" : exitDisplayName(exit)}
+      <span
+        className={cn(
+          "truncate text-xs font-medium",
+          chosen ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {exit.source === "continuation" ? "Response" : exitDisplayName(exit)}
       </span>
-      <span className="sr-only">configured → {recipients || "finish here"}</span>
+      <span className="sr-only">
+        {chosen ? "chosen" : "not chosen"} · configured → {recipients || "finish here"}
+      </span>
     </>
   );
 }
 
-function attentionFooterText(kind: FlowBlock["kind"], needsInput: boolean) {
-  if (kind === "condition") return "Settle or Archive the Run";
-  if (!needsInput) return "Investigate in T3";
-  return kind === "human" ? "Waiting for your answer" : "Respond in T3";
+function problemFooterText(kind: FlowBlock["kind"]) {
+  return kind === "condition" ? "Settle or Archive the Run" : "Open in T3 to investigate";
 }
 
 type BlockObservation = ReturnType<typeof blockObservation>;
 
+/** The kind label, and the Block's state badge at the top right, where it never truncates the
+ * Block name. */
 function ExecutionBlockHeader({
   kind,
   state,
 }: {
   kind: FlowBlock["kind"];
-  state: RunBlock["state"];
+  state: RunStateKind | null;
 }) {
   const { Icon: KindIcon, executionLabel } = BLOCK_KINDS[kind];
   return (
-    <span className="flex flex-1 items-center gap-1.5 pt-2 pr-2.5 pl-3">
+    <span className="flex min-w-0 flex-1 items-center gap-1.5 pt-1.5 pr-2 pl-3">
       <KindIcon
         aria-hidden
-        className={cn("size-3", state === "not-started" ? "text-subtle-foreground" : "text-link")}
+        className={cn("size-3", state === null ? "text-subtle-foreground" : "text-link")}
         strokeWidth={1.75}
       />
-      <span className="text-2xs leading-3 font-semibold tracking-section text-subtle-foreground">
+      <span className="flex-1 truncate text-2xs leading-3 font-semibold tracking-section text-subtle-foreground">
         {executionLabel}
       </span>
+      {state && <StatusBadge kind={state} />}
     </span>
   );
 }
@@ -256,14 +264,20 @@ function activityLine(
       color: "text-status-working",
     };
   }
+  const kind = blockStateKind(run, recorded);
+  const color =
+    kind === "working"
+      ? "text-status-working"
+      : kind === "problem"
+        ? "text-destructive"
+        : kind === null
+          ? "text-muted-foreground"
+          : "text-foreground";
   if (state === "working" && recorded?.workingMessage)
-    return { text: recorded.workingMessage, color: activityColor.working };
+    return { text: recorded.workingMessage, color };
   const waiting = state === "waiting" && block.kind === "wait" && waitingText(run, block.id);
-  if (waiting) return { text: waiting, color: activityColor.waiting };
-  return {
-    text: activityText(run, block, recorded),
-    color: activityColor[state] ?? "text-muted-foreground",
-  };
+  if (waiting) return { text: waiting, color };
+  return { text: blockActivityText(run, block, recorded), color };
 }
 
 function ExecutionBlockTitle({
@@ -294,7 +308,6 @@ function ExecutionBlockTitle({
         >
           {block.name || "Unnamed block"}
         </span>
-        <ExecutionStateBadge state={state} />
       </span>
       <span
         className={cn(
@@ -336,7 +349,7 @@ function executionFooters(
   recorded: RunBlock | undefined,
   observation: BlockObservation,
 ) {
-  const attention = blockAttention(run, block.id);
+  const attention = blockAttention(run, recorded);
   const footers: ReactNode[] = [];
   const continuable = continuableArrival(run, block);
   if (continuable)
@@ -345,16 +358,13 @@ function executionFooters(
         <ContinueNow arrival={continuable} label={`Continue ${block.name || "Wait"} now`} />
       </span>,
     );
-  if (attention.needsInput || attention.problem)
+  // Needs input shows in the Block's badge, and so does a failed Block's Problem; any other
+  // Problem keeps its own footer.
+  if (attention.problem && recorded?.state !== "error")
     footers.push(
       <span className={cn(footerClass, "bg-muted")}>
-        {attention.needsInput && <StatusBadge kind="needs-input" />}
-        {attention.problem && <StatusBadge kind="problem" />}
-        {attention.needsInput !== attention.problem && (
-          <span className="truncate text-muted-foreground">
-            {attentionFooterText(block.kind, attention.needsInput)}
-          </span>
-        )}
+        <StatusBadge kind="problem" />
+        <span className="truncate text-muted-foreground">{problemFooterText(block.kind)}</span>
       </span>,
     );
   if (observation === "stale")
@@ -445,11 +455,15 @@ function executionBlock(
   onSelect: () => void,
 ): CanvasBlockContent {
   const recorded = run.blocks.find((item) => item.blockId === block.id);
-  const state = recorded?.state ?? "not-started";
-  const workingMessage = state === "working" ? recorded?.workingMessage : null;
+  const state = blockStateKind(run, recorded);
+  const workingMessage = recorded?.state === "working" ? recorded.workingMessage : null;
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
+  const chosen = chosenExitIds(run, block, recorded);
   return {
-    className: cn(frameColor[state], selected && "border-primary ring-1 ring-primary"),
+    className: cn(
+      frameColor[state ?? "not-started"],
+      selected && "border-primary ring-1 ring-primary",
+    ),
     press: {
       // Continue now is its own control, so it sits outside the press target.
       covers: continuableArrival(run, block) ? "identity" : "block",
@@ -457,7 +471,7 @@ function executionBlock(
         <button
           type="button"
           className={pressClass}
-          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${executionStateLabel(state)}${workingMessage ? ` · ${workingMessage}` : ""}`}
+          aria-label={`${BLOCK_KINDS[block.kind].name} ${block.name || "Unnamed block"}, ${state ? RUN_STATE_LABELS[state] : "Not started"}${workingMessage ? ` · ${workingMessage}` : ""}`}
           aria-pressed={selected}
           onClick={onSelect}
         >
@@ -469,7 +483,14 @@ function executionBlock(
     title: (
       <ExecutionBlockTitle run={run} block={block} recorded={recorded} observation={observation} />
     ),
-    exit: (exit) => <ExecutionExit graph={run.definitions.flow.graph} block={block} exit={exit} />,
+    exit: (exit) => (
+      <ExecutionExit
+        graph={run.definitions.flow.graph}
+        block={block}
+        exit={exit}
+        chosen={chosen.has(exit.id)}
+      />
+    ),
     exitPort: () => port,
     incomingPort: () => port,
     footers: executionFooters(run, block, recorded, observation),
@@ -502,6 +523,7 @@ export function ExecutionCanvas({
   /** Top-left badges and notices (Figma "Overlay · top-left"); they never block panning. */
   overlay?: ReactNode;
 }) {
+  const targets = selectExecutionTargets(run);
   return (
     <CanvasSurface
       label="Execution canvas"
@@ -520,7 +542,8 @@ export function ExecutionCanvas({
       resize="preserve"
       covered={{ top: BADGES_HEIGHT, right: 0 }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}
-      focusTargets={selectExecutionTargets(run.blocks)}
+      focusTargets={targets}
+      entryTargets={selectEntryTargets(run, targets)}
       shown={shown}
       onTap={() => onSelect(null)}
       overlay={overlay}

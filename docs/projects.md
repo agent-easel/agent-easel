@@ -3,8 +3,9 @@
 The Run composer discovers T3 projects, selects one, and adds an existing local Git
 repository. Selection is saved across browser/backend restarts. Global Flows stay
 available across all selections without assignment; a Project Flow starts only in its
-[owning Project](studio.md#ownership). Selecting an unavailable
-project preserves its reference and explains why new Runs are blocked.
+[owning Project](studio.md#ownership). The composer clears a selected Project when a current catalog says it is no longer
+available, except while the connection is down, when Project and Flow keep their last known values. An unavailable
+Project's history stays readable.
 
 The composer's **Select project** dropdown shows the selected project's name and
 icon supplied by T3, with its full name and repository path as a tooltip; the open menu lists each
@@ -23,9 +24,10 @@ projects remain selectable for history. Search by project name or repository
 path at the top of the dropdown (case-insensitive). The wider dropdown limits
 its height to the viewport and scrolls the project list independently, keeping
 search and actions visible. Searching does not change the selected project.
-Availability problems appear as text; project icons identify projects rather
-than represent their availability. Last-known icons remain with unavailable
-project references and refresh when T3 changes or removes the icon.
+Project icons identify projects rather
+than represent their availability. The closed Project field does not tag a Project a current catalog can no
+longer start. Last-known icons remain with unavailable project references and refresh when T3 changes or
+removes the icon.
 Choose **No project selected** to clear the selection. **Recheck projects** and
 **Add repository** are actions inside the dropdown. Adding opens a dialog, retains
 the entered path on failure and selects the project after a successful add.
@@ -60,8 +62,8 @@ Controlled tests verify persistence, reconciliation, outages, missing paths, env
 against controlled OAuth/HTTP verifies paginated project lists and repository validation. This is not evidence of authenticated live T3 project behavior; project discovery, path reuse, creation,
 T3 title/path changes and missing paths need verification against real T3 in neutral repositories, and duplicate or racing creation is unproven. T3 exposes list/create/read but no path lookup, so
 Factory pairs paginated listing with canonical local-path comparison and checks the required schema fields in each authenticated session. Remote T3 repository validation is unsupported: directory checks
-and add-repository work only with loopback T3 on the backend host. No workload is launched to check projects. The composer picker offers available projects only; a previously selected unavailable
-reference stays displayed with its reason until explicitly replaced.
+and add-repository work only with loopback T3 on the backend host. No workload is launched to check projects. The composer picker offers available projects only. A current catalog clears a selected Project that is no longer
+available, except a connection outage, which keeps the last known selection and does not tag it Unavailable.
 
 ## Identity and API
 

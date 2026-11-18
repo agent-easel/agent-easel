@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: agent_project_overrides
+-- Newest applied migration: chat_access_test
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -98,6 +98,23 @@ CREATE TABLE chat_access_settings (
   CHECK ((revision = 0) = (saved_at IS NULL))
 );
 
+CREATE TABLE chat_access_test_channels (
+  channel_id TEXT PRIMARY KEY,
+  outcome TEXT NOT NULL CHECK (outcome IN ('posted', 'cant-post', 'unknown-channel')),
+  sent_at TEXT NOT NULL
+);
+
+CREATE TABLE chat_access_test_messages (
+  message_id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL
+);
+
+CREATE TABLE chat_access_test_users (
+  user_id TEXT PRIMARY KEY,
+  -- Null while the user has not answered the latest test.
+  reached_at TEXT
+);
+
 CREATE TABLE chat_access_users (
   user_id TEXT PRIMARY KEY,
   position INTEGER NOT NULL
@@ -123,7 +140,7 @@ CREATE TABLE "chat_control_state" (
   ),
   rejected_message TEXT,
   rejected_at TEXT
-);
+, bot_name TEXT);
 
 CREATE TABLE chat_conversation_handles (
   application_id TEXT NOT NULL,
@@ -216,12 +233,20 @@ CREATE TABLE "chat_discord_connection" (
     )
   ),
   check_application_id TEXT,
-  check_message TEXT,
+  check_message TEXT, check_bot_name TEXT,
   CHECK ((revision = 0) = (saved_at IS NULL)),
   CHECK ((check_revision IS NULL) = (check_at IS NULL)),
   CHECK ((check_revision IS NULL) = (check_outcome IS NULL)),
   CHECK ((check_revision IS NULL) = (check_message IS NULL)),
   CHECK ((check_outcome IS 'verified') = (check_application_id IS NOT NULL))
+);
+
+CREATE TABLE chat_discord_names (
+  kind TEXT NOT NULL CHECK (kind IN ('user', 'channel')),
+  discord_id TEXT NOT NULL,
+  -- Null when Discord does not know the ID.
+  name TEXT,
+  PRIMARY KEY (kind, discord_id)
 );
 
 CREATE TABLE chat_ingress_events (

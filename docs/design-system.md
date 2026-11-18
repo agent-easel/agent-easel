@@ -25,8 +25,9 @@ system palette in either mode; meaning stays carried by labels and icons.
 
 With [theme colors](t3-integration.md#theme-colors), every color token can come
 from the T3 environment's default theme instead of the baseline, separately per mode: the local
-mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline. Only
-colors change; typography, geometry, radii, shadows and motion stay Factory's.
+mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline.
+Appearance shows **Following T3** when either mode uses T3 colors, **Checking** during the read,
+and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and motion.
 
 The backend maps T3 roles by meaning: canvas to the background, raised surfaces to cards and
 popovers, text and muted text to the foregrounds, sidebar roles to the sidebar, borders and
@@ -38,7 +39,8 @@ mode's baseline. A mode must keep its own polarity (a dark canvas in Dark, a lig
 Contrast policy: text, secondary text, action labels, links and status colors need 4.5:1 on
 every surface they appear on, and focus rings and section labels 3:1. A color that misses is moved
 in lightness only, toward black or white, until it passes; if a required pair cannot pass, that
-whole mode is rejected to its baseline with the reason in Settings, never partially applied.
+whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
+shows **Technical details** when Factory cannot use the theme at all.
 The primary action darkens on hover as in the baselines; an accent of middle lightness, on which
 only a dark label is readable, lightens on hover instead so the label stays readable. The same
 mapping and policy apply to built-in, seed-generated, overridden and variant palettes.
@@ -101,14 +103,23 @@ Apple modifier order (⌃⌥⇧⌘) followed by the key, as in ⌥⌘↑, ⇧⌘
 Windows and Linux use Ctrl-plus notation such as Ctrl+Alt+N. Show an unassigned
 binding as muted **Unbound** text in shortcut lists.
 
-Settings sections share one page template instead of styling their own headers and
-footnotes: a header with the title, a one-line description and optionally a status badge, the
-"Managed on the Factory host" badge and one primary action; then labelled cards of rows, each
-ending in one control; label/value rows for read-only facts; and closed disclosures for
-explanations and diagnostics. On/off settings use the switch, named by their row's title.
+Settings sections share a title, an optional status badge, a host-management badge
+where applicable, and trailing page actions. Labelled cards group settings and
+read-only facts in rows. On/off settings use a switch named by the row title.
+The content pane scrolls with a visible scrollbar and fades at the bottom
+while more content follows.
+
+Use **StatusBadge** for Run states, Settings states and field tags. Use a
+single problem card for each issue with its next step. Put raw errors, paths
+and identifiers under closed **Technical details**, with **Copy details**.
+Agent reporting shows the configuration home on the row to identify it.
+
+Use **Refresh** to fetch the latest list or snapshot, **Check again** to repeat
+a diagnostic check, and **Try again** to retry a failed read or operation.
+In Settings, put the primary recovery action in the page header when the page read or check fails.
 
 Confirmations and forms open in a centred dialog over a dimmed backdrop, with a
-stronger scrim in Light mode. The header shows the title, Esc key chip and close
+stronger scrim and a visible modal shadow in Light mode. The header shows the title, Esc key chip and close
 button. Use at most one short introductory sentence in the body. Place any actions
 at the trailing edge, with Cancel or Keep editing before the primary or destructive
 action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between

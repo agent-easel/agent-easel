@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "@tanstack/react-router";
 import {
-  AppWindow,
+  Monitor,
   BotMessageSquare,
   ImageIcon,
   Keyboard,
@@ -16,6 +16,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import { shortcutDefinitions } from "../keyboard-shortcuts.ts";
 import { KeyboardSettings } from "./keyboard-settings.tsx";
 import { AccessSettings, DeviceAccessProvider, usePendingDeviceCount } from "./access-settings.tsx";
 import { AppearanceSettings } from "./appearance-settings.tsx";
@@ -34,6 +35,7 @@ import { ConnectionSettingsPanel } from "../routes/connection.tsx";
 import {
   ConnectionStateDot,
   connectionStatusLabel,
+  settingsConnectionPresentation,
   useConnectionState,
 } from "../connection-state.tsx";
 import {
@@ -54,6 +56,7 @@ type ClientScope = ReturnType<typeof useClientScope>;
 /** Settings are grouped by whose settings they are: the whole Factory, its Runs or this device. */
 const settingsGroups = [
   { id: "factory", label: "Factory" },
+  { id: "chat", label: "Chat control" },
   { id: "runs", label: "Runs" },
   { id: "device", label: "This device" },
 ] as const;
@@ -62,6 +65,7 @@ type SettingsSection = {
   tab: SettingsSelection["tab"];
   label: string;
   icon: LucideIcon;
+  rowLabels: readonly string[];
   group: (typeof settingsGroups)[number]["id"];
   /** Where the section applies; absent sections are not listed at all. */
   visibility?: "desktop" | "host";
@@ -74,6 +78,7 @@ type SettingsSection = {
 const settingsSections: readonly SettingsSection[] = [
   {
     tab: "connection",
+    rowLabels: ["Address", "T3 version", "Authorization", "Last checked"],
     label: "T3 connection",
     icon: Plug,
     group: "factory",
@@ -81,6 +86,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "agent-reporting",
+    rowLabels: ["Harnesses", "Codex", "Claude", "Cursor", "Grok"],
     label: "Agent reporting",
     icon: RadioTower,
     group: "factory",
@@ -88,6 +94,14 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "devices",
+    rowLabels: [
+      "Remote access",
+      "Allow approved devices on my LAN or tailnet",
+      "Address",
+      "CA fingerprint",
+      "Desktop link",
+      "Browser certificate",
+    ],
     label: "Devices & access",
     icon: MonitorSmartphone,
     group: "factory",
@@ -96,22 +110,35 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "chat-model",
+    rowLabels: ["Provider", "Base URL", "Model", "API key", "Last tested"],
     label: "Language model",
     icon: BotMessageSquare,
-    group: "factory",
+    group: "chat",
     visibility: "host",
     content: () => <ChatModelSettings />,
   },
   {
     tab: "chat-discord",
+    rowLabels: [
+      "Chat control",
+      "Public key",
+      "Bot token",
+      "Bot",
+      "Access",
+      "Users",
+      "Channels",
+      "Projects",
+      "Delivery",
+    ],
     label: "Discord",
     icon: MessagesSquare,
-    group: "factory",
+    group: "chat",
     visibility: "host",
     content: () => <ChatDiscordSettings />,
   },
   {
     tab: "run-titles",
+    rowLabels: ["Generate Run titles", "Provider instance", "Model", "Latest result"],
     label: "Run titles",
     icon: Sparkle,
     group: "runs",
@@ -120,6 +147,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "run-images",
+    rowLabels: ["Project", "Used by", "Delete all"],
     label: "Run images",
     icon: ImageIcon,
     group: "runs",
@@ -127,6 +155,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "appearance",
+    rowLabels: ["Light", "Dark", "Theme colors"],
     label: "Appearance",
     icon: Palette,
     group: "device",
@@ -134,6 +163,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "keyboard",
+    rowLabels: shortcutDefinitions.map((command) => command.label),
     label: "Keyboard shortcuts",
     icon: Keyboard,
     group: "device",
@@ -141,8 +171,21 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "desktop",
+    rowLabels: [
+      "Version",
+      "Release channel",
+      "Last checked",
+      "Open in the background at login",
+      "Show in the menu bar",
+      "Notifications",
+      "Dock badge",
+      "Run details in notifications",
+      "macOS permission",
+      "Role",
+      "Server",
+    ],
     label: "Desktop app",
-    icon: AppWindow,
+    icon: Monitor,
     group: "device",
     visibility: "desktop",
     content: () => <DesktopAppSettings />,
@@ -159,20 +202,23 @@ function sectionApplies(section: SettingsSection, scope: ClientScope) {
 function matchingSections(sections: readonly SettingsSection[], query: string) {
   const needle = query.trim().toLowerCase();
   if (!needle) return sections;
-  return sections.filter((section) => section.label.toLowerCase().includes(needle));
+  return sections.filter((section) =>
+    [section.label, ...section.rowLabels].some((label) => label.toLowerCase().includes(needle)),
+  );
 }
 
 /** Figma Settings/ModalShell: breadcrumb header, section nav and the selected section's pane. */
 export function SettingsModal() {
   const openSettings = useSettingsNavigation();
   const [query, setQuery] = useState("");
-  const selectedTab = useSettings()?.tab;
+  const selection = useSettings();
   const scope = useClientScope();
   const sections = settingsSections.filter((section) => sectionApplies(section, scope));
-  const current = sections.find((section) => section.tab === selectedTab) ?? defaultSection;
+  const current = sections.find((section) => section.tab === selection?.tab) ?? defaultSection;
+  const origin = sections.find((section) => section.tab === selection?.from);
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const close = () => void openSettings(undefined);
+  const close = () => void openSettings(origin && { tab: origin.tab });
   const dialog = (
     <Dialog
       open
@@ -183,7 +229,7 @@ export function SettingsModal() {
       <DialogSurface
         data-settings="true"
         presentation="workspace"
-        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-muted [@media(min-width:1024px)_and_(min-height:720px)]:h-[clamp(560px,80vh,960px)] [@media(min-width:1024px)_and_(min-height:720px)]:w-[clamp(840px,50vw,1280px)]"
+        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-background [@media(min-width:1024px)_and_(min-height:720px)]:h-[clamp(560px,80vh,960px)] [@media(min-width:1024px)_and_(min-height:720px)]:w-[clamp(840px,50vw,1280px)]"
         ref={content}
         onOpenAutoFocus={(event) => {
           // Land on the dialog itself, not the header Close button, so opening shows no focus ring.
@@ -200,6 +246,7 @@ export function SettingsModal() {
       >
         <WorkspaceDialogHeader
           title="Settings"
+          className="h-12 bg-card"
           section={current.label}
           description="Settings for the whole Factory, its Runs and this device."
           onClose={close}
@@ -212,7 +259,12 @@ export function SettingsModal() {
             searchRef={search}
             onQueryChange={setQuery}
           />
-          <SettingsPanel className="min-w-0 flex-1 max-sm:px-4">{current.content()}</SettingsPanel>
+          {/* One keyed list, so the origin stays mounted beneath with its unsaved edits. */}
+          {(origin ? [origin, current] : [current]).map((section) => (
+            <SettingsPanel key={section.tab} hidden={section !== current}>
+              {section.content()}
+            </SettingsPanel>
+          ))}
         </div>
       </DialogSurface>
     </Dialog>
@@ -235,7 +287,7 @@ function SettingsNav({
 }) {
   const visible = matchingSections(sections, query);
   return (
-    <aside className="flex w-60 shrink-0 flex-col gap-0.5 border-r bg-sidebar px-2 py-3 max-sm:w-full max-sm:border-r-0 max-sm:border-b">
+    <aside className="flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-2 py-3 max-sm:max-h-[40%] max-sm:w-full max-sm:border-r-0 max-sm:border-b">
       <SettingsSearchField inputRef={searchRef} value={query} onChange={onQueryChange} />
       <nav aria-label="Settings sections" className="grid gap-0.5">
         {settingsGroups.map((group) => {
@@ -243,10 +295,7 @@ function SettingsNav({
           if (grouped.length === 0) return null;
           return (
             <div key={group.id} role="group" aria-label={group.label} className="grid gap-0.5">
-              <p
-                aria-hidden
-                className="pt-3 pb-1 pl-2 text-2xs font-semibold tracking-section text-subtle-foreground uppercase"
-              >
+              <p aria-hidden className="pt-3 pb-1 pl-2 text-xs text-subtle-foreground">
                 {group.label}
               </p>
               {grouped.map((section) => (
@@ -276,8 +325,10 @@ function useSectionAttention(tab: SettingsSection["tab"]) {
   const discordAttention = useDiscordAttention(tab === "chat-discord");
   const modelAttention = useChatModelAttention(tab === "chat-model");
   if (tab === "agent-reporting") return reportingMarker;
-  if ((tab === "chat-discord" && discordAttention) || (tab === "chat-model" && modelAttention))
-    return "needs attention";
+  const chatAttention =
+    tab === "chat-discord" ? discordAttention : tab === "chat-model" ? modelAttention : null;
+  if (chatAttention === "error") return "failing";
+  if (chatAttention === "attention") return "needs attention";
   if (tab === "devices" && pendingDevices > 0)
     return `${pendingDevices} ${pendingDevices === 1 ? "device" : "devices"} waiting for approval`;
   return undefined;
@@ -285,7 +336,8 @@ function useSectionAttention(tab: SettingsSection["tab"]) {
 
 function SettingsNavItem({ section, active }: { section: SettingsSection; active: boolean }) {
   const options = useSettingsOptions({ tab: section.tab });
-  const { presentation } = useConnectionState();
+  const { connection, presentation: state } = useConnectionState();
+  const presentation = settingsConnectionPresentation(connection, state);
   const status = connectionStatusLabel(presentation);
   const attention = useSectionAttention(section.tab);
   const scope = useClientScope();
@@ -309,7 +361,15 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
       {section.tab === "connection" && (
         <ConnectionStateDot presentation={presentation} label={status} />
       )}
-      {attention && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />}
+      {attention && (
+        <span
+          aria-hidden
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            attention === "failing" ? "bg-destructive" : "bg-attention",
+          )}
+        />
+      )}
       {locked && (
         <Lock aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" strokeWidth={1.5} />
       )}

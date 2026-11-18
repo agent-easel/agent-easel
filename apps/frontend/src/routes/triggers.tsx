@@ -16,7 +16,7 @@ import {
   type TriggerDraftSnapshot,
 } from "../trigger-draft.ts";
 import { StudioBackLink } from "../components/app-link.tsx";
-import { SettingsPage } from "../components/settings-page.tsx";
+import { StudioPage } from "../components/settings-page.tsx";
 import { TriggersList, useEnableReview } from "../components/studio-triggers/triggers-list.tsx";
 import { TriggerTypePicker } from "../components/studio-triggers/trigger-type-picker.tsx";
 import {
@@ -279,7 +279,7 @@ function OpenedTriggerEditor({
   return (
     <main className="grid content-start gap-4 px-8 pt-6 pb-8 max-sm:px-4">
       <EditorBackLink creating={!trigger} />
-      <SettingsPage
+      <StudioPage
         title={shown ? shown.name : "New Trigger · GitHub Issues"}
         description={
           shown
@@ -313,7 +313,7 @@ function OpenedTriggerEditor({
           onReview={() => reviewDraft(trigger ? "Apply and check" : "Enable and check")}
           onCancel={() => void openStudio({ tab: "triggers" })}
         />
-      </SettingsPage>
+      </StudioPage>
       <TriggerReviewDialog
         review={review}
         busy={state.saving || pending === "enable" || pending === "run"}

@@ -197,7 +197,7 @@ export function PromptEditor({
   locked: boolean;
   invalid: boolean;
   labelledBy: string;
-  describedBy: string;
+  describedBy?: string;
   placeholder: string;
   /** False when the draft kept its content instead. */
   onChange: (segments: readonly PromptSegment[]) => boolean;

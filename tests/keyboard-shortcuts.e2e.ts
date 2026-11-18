@@ -1,3 +1,4 @@
+import { fillReadyComposer } from "./support/composer.ts";
 import { confirmSettlement } from "./support/run-history.ts";
 import type { Browser } from "@e2e-dev/web";
 import { test } from "./support/test.ts";
@@ -88,7 +89,7 @@ test("explicit palette search opens archived history without listing it in sugge
 
   // Assert
   await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Archived");
   await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
 });
 
@@ -123,7 +124,7 @@ test("offline New Run stays disabled and palette navigation skips it", async ({
   await expect(newRun).toHaveAttribute("aria-selected", "false");
 });
 
-test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
+test("Mod+, from dirty Studio opens Settings over it and Esc returns with the draft kept", async ({
   app,
   screen,
   browser,
@@ -139,8 +140,9 @@ test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
   await browser.keyboard.press(`${shortcutMod}+,`);
 
   // Assert
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
-  await screen.getByRole("button", "Keep editing", { exact: true }).tap();
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toHaveCount(0);
   await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow dirty");
 });
 
@@ -172,6 +174,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
   // Arrange
   await app.open("/runs/new");
   await expect(screen.getByRole("button", "New Run (+)", { exact: true })).toBeEnabled();
+  await fillReadyComposer(screen, "Ship the picker");
   await screen.getByLabel("Initial prompt", { exact: false }).tap();
   // Each control that receives focus from here on is numbered in the order it was reached.
   await browser.evaluate(`(() => {
@@ -228,7 +231,7 @@ test("Settings Reset restores the desktop default for New Run", async ({
 }) => {
   // Arrange
   const newRunGroup = await recordDesktopNewRunCandidate(app, screen, browser);
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await expect(newRunGroup).toContainText(process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N");
 
   // Act
@@ -282,7 +285,7 @@ test("Settle from an editable field on open Run detail while Mod+ shortcuts stay
   await expect
     .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
     .toBe("settled");
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
 test("Settle is ignored while Settings is open", async ({ app, screen, browser }) => {
@@ -321,7 +324,7 @@ test("Mod+Backspace opens the existing Archive confirmation for the open Run", a
 
   // Assert
   const confirmation = screen.getByRole("dialog", `Archive “${title}”?`);
-  await expect(confirmation).toContainText("cannot be restored");
+  await expect(confirmation).toContainText("command palette");
   await confirmation.getByRole("button", "Cancel", { exact: true }).tap();
   await expect(confirmation).toBeHidden();
   expect((await readHistoryRun(app.baseUrl, found.id)).lifecycle).toBe("active");
@@ -463,7 +466,7 @@ test("a customized binding reaches the desktop menu", async ({ app, screen, brow
   await recordDesktopNewRunCandidate(app, screen, browser);
 
   // Act
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect
@@ -523,7 +526,7 @@ test("the canvas shortcuts popover lists a customized binding and opens the chea
   await openKeyboardSettings(screen, browser);
   await screen.getByRole("group", "Zoom in").getByRole("button", "Change Zoom in").tap();
   await browser.keyboard.press("i");
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await browser.keyboard.press("Escape");
   await expect(screen.getByRole("heading", { name: "Keyboard shortcuts", level: 2 })).toBeHidden();
   await screen.getByRole("button", "Canvas shortcuts", { exact: true }).tap();

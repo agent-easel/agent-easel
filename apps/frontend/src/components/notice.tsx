@@ -1,7 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, ExternalLink, type LucideIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { SettingsLink, StudioLink } from "./app-link.tsx";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +11,7 @@ type NoticeTone = "critical" | "attention" | "info" | "neutral";
  * The icon and title carry the meaning, so tone never relies on color alone.
  */
 export function Notice({
+  id,
   tone,
   icon: Icon,
   title,
@@ -19,6 +19,7 @@ export function Notice({
   action,
   className,
 }: {
+  id?: string;
   tone: NoticeTone;
   icon: LucideIcon;
   title: ReactNode;
@@ -27,7 +28,7 @@ export function Notice({
   className?: string;
 }) {
   return (
-    <Alert variant={tone} className={cn("gap-y-1 px-5 py-3.5", className)}>
+    <Alert id={id} variant={tone} className={cn("gap-y-1 px-5 py-3.5", className)}>
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || action) && (
@@ -76,25 +77,21 @@ export function NoticeButton({
   );
 }
 
+/** Leaves Factory. The composer uses this only to open T3, and Factory takes no action there. */
+export function NoticeExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={actionClass}>
+      {children}
+      <ExternalLink aria-hidden className="size-3.5" strokeWidth={1.5} />
+    </a>
+  );
+}
+
 export function NoticeStudioLink({ children, ...props }: ComponentProps<typeof StudioLink>) {
   return (
     <StudioLink {...props} className={actionClass}>
       {children}
       <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
     </StudioLink>
-  );
-}
-
-/** A failed read with its explanation and a Retry that reads again. */
-export function ReadFailure({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <Alert variant="destructive">
-      <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-        {message}
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
-      </AlertDescription>
-    </Alert>
   );
 }

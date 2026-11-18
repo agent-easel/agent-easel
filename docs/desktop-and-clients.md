@@ -32,7 +32,7 @@ same conflict in the other direction.
   [routes](#notifications-and-dock-badge) to waiting Runs.
 - Closing the last window also leaves [notifications and the Dock badge](#notifications-and-dock-badge)
   running, in both roles; they stop with Quit.
-- **Settings → Desktop app → Show Factory in the menu bar** (desktop only) is off by
+- **Settings → Desktop app → Show in the menu bar** (desktop only) is off by
   default. When enabled, a menu-bar icon shows the installation's role and status with
   **Open Factory** and **Quit Factory**. The choice is stored per installation and
   applies immediately, without a restart.
@@ -79,16 +79,21 @@ commands execute on the server and reporting setup changes the server's harness 
 Keeping files and credentials on the server does not by itself restrict an operation
 to its local panel. The T3 endpoint and host reauthorization remain host-only: remote
 clients see their status and the "Managed on the Factory host" chip.
-When T3 needs approval, a remote client may choose **Open authorization on
-server** to reopen or start consent in the host's browser for the saved endpoint; see
-[T3 connection](t3-integration.md#authorizing). Lifecycle and approvals are host-local
+When T3 needs approval, a remote client can choose **Authorize** or
+**Open the page again** for the saved endpoint. Both open the host's browser.
+See [T3 connection](t3-integration.md#authorizing). Lifecycle and approvals are host-local
 only; an approved client may check, download and install the server's own update
 ([updates](#updates)).
 
-Unanswered requests expire after 15 minutes; at most ten may wait at once. **Deny**
-rejects a request. **Revoke** opens a confirmation, and confirming removes an approved client's access
-immediately, including its open connections. Denied and revoked clients may request again, which is
-a new request needing new approval.
+The Devices list shows Waiting, Approved, Revoked and Denied alongside the
+device name, with the verification code for a waiting request and the last
+seen time when available for other devices. Unanswered requests expire after
+15 minutes. Up to ten can wait at once. **Deny** rejects a request.
+**Revoke…** asks for confirmation, then removes access immediately, including
+in open windows. Denied and revoked clients can request access again. If the
+remote listener cannot start, its switch row shows **Couldn’t start**, address
+and certificate rows are hidden, and the problem card keeps raw diagnostics
+under **Technical details**.
 
 ## Connection states
 
@@ -131,7 +136,7 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   per Run, with `+N more` for the others; a later matter gets its own notification. A rise in a
   worker's native pending-question count notifies once per increase (1, 2, 1, 2 is two
   increases). By default the text is generic: "A Run needs your input" or "A Run has a problem".
-  **Show Run details in notifications** adds the project, Run title and Block name; message,
+  **Run details in notifications** adds the project, Run title and Block name; message,
   report or question text and paths never appear. Notifications play no sound and the Dock icon
   never bounces. Ordinary Agent chat questions are not attention and never notify.
 - **Snooze and Settle hold**: a [Snoozed](runs.md#snooze-and-woke) Run is silent. Matters
@@ -149,7 +154,7 @@ role and status, and [Chat control](chat-control.md) notices are unaffected.
   is shown. Matters that became pending meanwhile count as seen and never notify later, also
   after switching to another app.
 - **Settings**: **Settings → Desktop app → Notifications** holds the per-installation switches
-  **Notifications** (on), **Dock badge** (on) and **Show Run details in notifications** (off).
+  **Notifications** (on), **Dock badge** (on) and **Run details in notifications** (off).
   They are stored with the desktop settings, apply immediately and are never synchronized
   through the server, so each Mac is tuned on its own. While **Notifications** is off nothing is
   shown; turning it on shows what is still pending, at most one notification per Run.
@@ -212,7 +217,10 @@ When the T3 connection shares [T3 theme colors](t3-integration.md#theme-colors),
 presentation with a Light and a Dark half to approved clients and the host panel through live
 delivery; each client shows the half of its own mode, so two clients of the same server can show the
 same T3 theme in different modes. A missing or rejected half shows Factory's colors for that mode,
-and the mode choice itself never changes. Connection and access gates and unapproved clients
+and the mode choice itself never changes. The **Appearance** header shows **Following T3** when
+at least one mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise.
+The **T3 theme** card shows the theme name and which modes use its colors. Connection and access
+gates and unapproved clients
 receive no theme colors and use Factory's colors.
 
 Each client caches the last presentation its server published: one snapshot with both halves, in the
@@ -271,7 +279,7 @@ menu bar is hidden until Alt is pressed.
 
 Updates are checked automatically on launch and every hour, so a running app shows a new Release or beta build in the sidebar without a manual check. **Settings → Desktop app → Updates** (desktop only) chooses the installation's **release channel**: **Stable** (tagged Releases) or **Beta** (nightly and
 on-demand [beta builds](release.md#beta-builds) of main, plus newer stable Releases). Until chosen, an installation follows the channel of the build it runs. Changing the channel discards an update found on the
-previous one and checks again; it is refused while a download is in progress. Leaving beta never downgrades: the installed beta stays until a newer Release exists, and Desktop app settings says so. The same section shows the updater state with the last check time and a labelled update control.
+previous one and checks again; it is refused while a download is in progress. Leaving beta never downgrades: the installed beta stays until a newer Release exists, and Desktop app settings says so. The page header shows the update state and action. The Updates card shows the installed version, release channel and last check time when supported. The release-channel control is disabled during a download. Update failures keep their diagnostics under **Technical details**.
 
 One control at the right of the Run sidebar footer drives the lifecycle for every installation this window can replace: the desktop app itself, and the server when the window talks to one through its update
 API (a desktop client's remote server, or the server a browser profile uses). A desktop server is one target. Its states:
@@ -287,8 +295,10 @@ API (a desktop client's remote server, or the server a browser profile uses). A 
 | Upgrading | Spinner, **Upgrading…** | — |
 | Error | Warning, **Update failed · Click to retry** | Shows what failed, e.g. **Server update failed · Client kept**, with **Retry** |
 
-The centred **upgrade review** dialog lists each downloaded target (**Client · This device**, **Server · <host>**) as current → target release, notes that the remote
-server updates first and how many open Runs keep going. Nothing changes until **Upgrade**; **Cancel** keeps everything. This confirmation replaces the native dialog, and ordinary Quit never installs. With two targets
+The sidebar and Desktop app page open the same centred confirmation, **Upgrade
+to *version*?** for one target or **Upgrade client + server?** for two.
+**Upgrade** starts installation and **Cancel** dismisses the confirmation.
+Ordinary Quit never installs. With two targets
 the server installs first: the client waits until the server answers its handshake with the target release and only then restarts. If the server does not return on that release within ten minutes, or reports an
 installation error, the upgrade stops with **Server update failed · Client kept** and the client is unchanged. A browser reloads its UI after the server upgrade.
 

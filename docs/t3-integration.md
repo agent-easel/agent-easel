@@ -13,15 +13,17 @@ minutes. Wrong-state callbacks are rejected; denial, expiry and browser-launch f
 explanations. Approval must happen in a browser **on the backend host**: a remote UI cannot complete the loopback
 redirect. Factory uses `open` on macOS, `xdg-open` on Linux and `rundll32` on Windows; only macOS is verified.
 
-While approval waits the pane says **Waiting for approval in the host's browser** and offers **Open authorization on
-server**, which reopens the same pending consent page (same OAuth state and verifier). An expired, denied or
-never-started attempt is replaced by a new one. On the host, **Start new authorization** replaces a pending attempt
-and **Reauthorize** replaces a working grant. Reconnecting never opens a browser automatically.
+While approval waits the pane says **Approve in the browser on the Factory host**
+and offers **Open the page again**, which reopens the same pending consent page
+with its existing OAuth state and verifier. An expired, denied or never-started
+attempt is replaced by a new one. On the host, **Start over** replaces a pending
+attempt and **Reauthorize** replaces a working grant.
 
-An [approved remote client](desktop-and-clients.md) may use **Open authorization on server** for the endpoint already saved on the
-host; consent still happens in the host's browser and the consent URL, state, verifier and tokens never reach the
-client. A remote client cannot save or edit the endpoint, reauthorize or reset a working connection
-(those routes answer `host_only`). Agent reporting installation is available remotely as described below.
+An [approved remote client](desktop-and-clients.md) may use **Authorize** or
+**Open the page again** for the endpoint saved on the host. Consent happens
+in the host's browser. The consent URL, state, verifier and tokens stay on
+the host. Editing the endpoint and replacing an existing grant are host-only
+operations. Agent reporting installation is available remotely as described below.
 Opening is serialized with checks: Factory rechecks first, does nothing
 for a ready or incompatible connection, waits for an in-flight callback exchange and opens the host browser at most
 once every five seconds.
@@ -30,7 +32,8 @@ once every five seconds.
 
 | State (badge) | Meaning and action |
 | --- | --- |
-| Disconnected (`unavailable`) | No endpoint saved, or T3, network or storage inspection failed. Save/check the endpoint and start T3. |
+| Not set up | Save the T3 address on the Factory host. |
+| Disconnected (`unavailable`) | T3, network or storage inspection failed. Check the address and start T3. |
 | Needs authorization (`authorization-required`) | Approve access, finish pending approval on the host, or reauthorize after revocation. |
 | Incompatible version (`incompatible`) | The MCP protocol or connection contract is unsupported. Inspect problems, update T3 if appropriate, recheck. |
 | Connected (`ready`) | An approved grant, live tool inventory and environment identity passed connection checks. |
@@ -40,16 +43,18 @@ red when disconnected. The sidebar Settings dot also checks reporting configurat
 while Connected, a missing, outdated, unsupported or unreadable installation makes it amber with a labelled warning and
 opens **Agent reporting**. Unused providers do not raise this warning. Reporting inspection is neutral while loading;
 connection problems take precedence. The footer names problems, so status never relies on color. The
-T3 connection pane header carries the status badge and **Check again** in every state; a notice explains any state
-other than Connected. Its Connection group lists the address with **Edit** (the address form is open by default when no
-endpoint is saved), T3 version, authorization with **Authorize on backend host**, **Reauthorize** or **Start new
-authorization** when authorization applies, and the last-check time. The environment ID and inspected tool schemas sit
-under the closed **Diagnostics** disclosure. Only the Factory host edits the address or authorizes. Settings groups its
-sections by scope: **Factory** (T3 connection, Agent reporting, Devices & access), **Runs** (Run titles, Run images)
-and **This device** (Appearance, [Keyboard shortcuts](keyboard-shortcuts.md), Desktop app). Sections that do not apply
-are not listed: Desktop app only in the desktop app, Devices & access only on the Factory host. On other clients Run
-titles carries a lock because only the host changes it. A search field filters sections by name; Esc clears it, then
-closes Settings. Below 640 px the nav stacks above the pane. Agent definitions are authored in [Studio](studio.md).
+T3 connection pane shows the status and **Check again** in the header. The
+Connection card lists the address, T3 version, authorization and when the last
+check ran. An unsaved address opens for editing automatically on the host. A
+problem gets one card with the next step and raw diagnostics under closed
+**Technical details**. The connected view keeps environment and tool diagnostics
+under the same disclosure. Settings navigation groups are **Factory** (T3 connection,
+Agent reporting, Devices & access), **Chat control** (Language model, Discord),
+**Runs** (Run titles, Run images) and **This device** (Appearance, [Keyboard
+shortcuts](keyboard-shortcuts.md), Desktop app). Search filters sections by name
+and row labels while leaving the open page in place. Esc clears the search, then
+closes Settings. Settings opened from the composer or a Studio editor returns
+to the draft on close.
 
 Connection status refreshes automatically while the application is visible, so approval
 on the host can turn a waiting remote view Connected without another click. **Check again**
@@ -86,10 +91,10 @@ environment identity and the default theme id, and, when that id names a publish
 It keeps only the environment id, the default theme id and that definition. Factory reads on startup, whenever the
 saved endpoint or its authorization context changes, and on every connection-check interval; a change made in T3
 appears by the next interval, since the tool pushes no updates. A T3 that lists no `t3_theme_read` (builds before
-November 2026) shows **Not supported** and Factory's colors. Factory once paired a separate `orchestration:read`
+November 2026) uses Factory’s colors and shows **Update T3 to follow its theme**. Factory once paired a separate `orchestration:read`
 session for theme colors; a backend deletes any token of that session it still stores, and T3 keeps the session
-until it expires or the owner revokes it (`t3 auth session revoke`). Host and approved clients see, under
-**Settings → Appearance**, what their mode shows and why; there are no theme-color actions.
+until it expires or the owner revokes it (`t3 auth session revoke`). Hosts and approved clients see
+the same read-only theme and color sources in [Appearance](desktop-and-clients.md#appearance).
 
 **Resolution.** Built-in T3 themes (`t3-chat`, `grove`, `ocean`, `ember`, `iris` and their legacy aliases) and
 published theme definitions resolve through one bounded resolver ported from T3 Code (MIT, © 2026 T3 Tools Inc.)
@@ -117,16 +122,16 @@ Support limits of published definitions:
 - **Color syntax.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with channels in 0–255, and `oklch()`
   with numbers or percentages. T3 itself accepts more CSS color syntax (named colors, `hsl()`, `lab()` and others);
   Factory ignores such a color as T3 ignores an unparseable one, so the role keeps its seed-generated or T3 Chat
-  value, and Settings counts the ignored colors of mapped roles. No color text, declaration or URL from a definition
-  reaches a client: clients receive only values Factory formatted itself.
+  value. Clients receive color values formatted by Factory.
 - **Translucent colors.** A mapped role resolving to a color with alpha rejects that mode to Factory's colors.
 - **Parity.** Verified against upstream output for seeds in both appearances, overrides, partial and complete
   colors and variants, to the six decimals T3 writes; other inputs are not claimed.
 
 **Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
 `t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
-and a mismatched environment all show Factory's colors for the selected mode with
-the reason in Settings. During a transient outage the last presentation of the same endpoint and environment stays.
+and a mismatched environment all use Factory’s colors for the selected mode. Appearance explains
+an unreadable theme or a connection problem and identifies each mode’s color source when the theme is applied.
+During a transient outage the last presentation of the same endpoint and environment stays.
 A changed endpoint or connection environment discards it at once. Theme colors
 never change connection readiness, Start, execution or Run attention.
 
@@ -154,11 +159,15 @@ files. The worker's first message starts with `$factory-block` followed by a `Fa
 
 ### Installation actions
 
-**Settings → Agent reporting** lists each discovered configuration home as one row with its path,
-a Not installed, Installed or Needs attention status and the one action that applies, with a
-global **Check again**. While any home is Not installed or Needs attention, or the inspection
-fails, the Agent reporting navigation item carries an attention dot; unlike the sidebar Settings
-dot, it counts homes no saved Agent uses. Those homes belong to the drivers listed under
+**Settings → Agent reporting** lists each discovered configuration home as one row
+with its provider, path, status and available action. Provider instance display
+names distinguish rows when a provider has several homes. **Check again** shows
+in the header alongside **Install all** when a home offers Install or Repair.
+Install all calls the same installation action for each eligible home in order,
+shows its progress on that row, and refreshes the list at the end. A failed
+home keeps its retry action and its own problem card with **Technical details**.
+The Agent reporting navigation dot surfaces homes needing action and failed
+inspections even for homes that no saved Agent uses. Those homes belong to the drivers listed under
 [Reporting installation](#reporting-installation). Every other provider instance is listed as **Not available**,
 with the `factory-runtime` MCP URL to add by hand and no install action. Agent capabilities
 publish the same per-provider `reporting` status, and Start blocks an unsupported provider with
