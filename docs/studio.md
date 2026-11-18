@@ -42,13 +42,12 @@ are listed there under **Canvas**; defaults can be changed in **Settings → Key
 shortcuts**.
 
 While Studio or Settings is open, the Run composer and detail underneath are **inert**.
-Run actions, sidebar navigation and the cheat sheet are blocked. Settings, New Run and
-Studio shortcuts remain available through the existing unsaved-change guards; nested
-dialogs and menus block them. **Mod+/** opens the read-only shortcuts cheat
+Run actions, sidebar navigation and the cheat sheet are blocked. New Run and Studio
+shortcuts remain available through the existing unsaved-change guards; Settings opens over
+Studio, and Esc or ✕ returns to it with its draft kept. Nested dialogs and menus block them. **Mod+/** opens the read-only shortcuts cheat
 sheet from the same registry grouping as Settings. Escape closes only the topmost layer
 (palette, nested dialogs, block configuration, then Studio). Switching from a dirty Flow
-by shortcut or palette uses the same Keep editing / Discard changes guard; opening
-Settings from a clean Studio closes Studio. Palette navigation stays available while
+by shortcut or palette uses the same Keep editing / Discard changes guard. Palette navigation stays available while
 catalogs load or fail (errors name the section).
 
 ## Following saved revisions

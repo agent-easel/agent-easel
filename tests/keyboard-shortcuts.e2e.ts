@@ -124,7 +124,7 @@ test("offline New Run stays disabled and palette navigation skips it", async ({
   await expect(newRun).toHaveAttribute("aria-selected", "false");
 });
 
-test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
+test("Mod+, from dirty Studio opens Settings over it and Esc returns with the draft kept", async ({
   app,
   screen,
   browser,
@@ -140,8 +140,9 @@ test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
   await browser.keyboard.press(`${shortcutMod}+,`);
 
   // Assert
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
-  await screen.getByRole("button", "Keep editing", { exact: true }).tap();
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toHaveCount(0);
   await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow dirty");
 });
 

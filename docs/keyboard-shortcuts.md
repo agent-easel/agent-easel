@@ -102,8 +102,9 @@ shortcuts could not be restored. Defaults are in use.**
 ## Command behaviour
 
 Run actions, sidebar navigation and the cheat sheet do not run over overlays or menus.
-Settings, New Run and Studio shortcuts can switch between the workspace dialogs using
-the unsaved-change guard; nested dialogs, menus, the palette and cheat sheet block them.
+New Run and Studio shortcuts can switch between the workspace dialogs using the
+unsaved-change guard. Settings opens over the composer or Studio, and Esc or ✕ returns to
+it with its draft kept. Nested dialogs, menus, the palette and cheat sheet block them.
 The palette binding still toggles the palette. A bare Run number or `#` followed by
 that number finds the exact Run number. Other searches match titles and keywords. Studio and Settings leave the underlying
 Run composer and detail **inert**; see
