@@ -6,7 +6,7 @@ import {
 } from "./keyboard-shortcuts.ts";
 import { useShortcutPreferences } from "./shortcut-preferences.ts";
 import { settingsMask } from "./settings-navigation.ts";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
+import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "./components/ui/dialog";
 
 const groupOrder: ShortcutGroup[] = ["application", "navigation", "runActions", "canvas"];
 
@@ -23,7 +23,10 @@ export function ShortcutsCheatSheet({
   const { bindings } = useShortcutPreferences();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <DialogSurface
+        showCloseButton
+        className="w-[calc(100%-2rem)] max-w-lg gap-0 overflow-hidden p-0 sm:max-w-lg"
+      >
         <DialogTitle className="border-b px-4 py-3 text-base font-semibold">
           Keyboard shortcuts
         </DialogTitle>
@@ -69,7 +72,7 @@ export function ShortcutsCheatSheet({
           </Link>
           {" · "}Esc to close
         </p>
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }

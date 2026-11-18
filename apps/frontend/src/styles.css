@@ -126,7 +126,7 @@
   --border-hover: #a1a1aa;
   --input: #d4d4d8;
   --ring: #6366f1;
-  --overlay: rgb(24 24 27 / 0.28);
+  --overlay: rgb(24 24 27 / 0.48);
 
   /* Status */
   --destructive: #dc2626;
@@ -170,9 +170,11 @@
   width: 280px;
 }
 
-/* Keep the native window controls outside the inset Studio dialog. */
-html[data-desktop="true"] [data-studio] {
-  top: 48px;
+/* Clear the native window controls when the Studio header reaches the title bar. */
+@media (width < 1600px) or (height < 1000px) {
+  html[data-desktop="true"] [data-studio] > header {
+    padding-left: 80px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

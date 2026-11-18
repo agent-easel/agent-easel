@@ -637,7 +637,7 @@ test("the host retries a status card Discord may already show only after a dupli
   await app.screenshot("chat-discord-delivery-unknown");
   await card.getByRole("button", "Retry").tap();
   const warning = screen.getByRole("alertdialog", "Retry a message Discord may already show?");
-  await expect(warning.getByText(/the thread may show it twice/)).toBeVisible();
+  await expect(warning.getByText(/retrying could post it twice/)).toBeVisible();
   // The dialog fades in; the Run sidebar's progress indicators never settle.
   await browser.evaluate(
     "Promise.all([...document.querySelectorAll('[role=alertdialog]')].flatMap((element) => element.getAnimations()).map((animation) => animation.finished))",

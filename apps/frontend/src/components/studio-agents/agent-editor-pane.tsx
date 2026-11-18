@@ -25,14 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -576,35 +569,37 @@ function DeleteAgentDialog({
         if (!value && !deleting) onClose();
       }}
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Delete {agent.name}?</DialogTitle>
-          <DialogDescription>
-            {flowUsage > 0
-              ? `This Agent is used in ${flowUsageLabel(flowUsage)}. Remove it from those Flows before deleting, or Factory will reject the delete.`
-              : "This removes the Agent from Studio with no restore. Its saved revisions are kept, so Runs that used it keep the Agent they started with."}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        title={<>Delete {agent.name}?</>}
+        description={
+          flowUsage > 0
+            ? `Remove this Agent from ${flowUsageLabel(flowUsage)} before deleting it.`
+            : "Deleting this Agent removes it from Studio and keeps its saved revisions for existing Runs."
+        }
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={deleting} onClick={onClose}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={deleting || state.removed}
+                onClick={() => void confirmDelete()}
+              >
+                {deleting ? "Deleting…" : "Delete Agent"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+        closeDisabled={deleting}
+      >
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={deleting} onClick={onClose}>
-            Cancel
-          </Button>
-          <MutationGate>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleting || state.removed}
-              onClick={() => void confirmDelete()}
-            >
-              {deleting ? "Deleting…" : "Delete Agent"}
-            </Button>
-          </MutationGate>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

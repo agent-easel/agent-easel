@@ -13,7 +13,7 @@ import { useLiveNavigation } from "../live/navigation.ts";
 import { useLiveStudio } from "../live/studio.ts";
 import { useOpenStudio, useSettingsNavigation } from "../settings-navigation.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { RunNumber } from "./run-number.tsx";
 import { cn } from "@/lib/utils";
@@ -222,9 +222,8 @@ export function CommandPalette({
   const pendingAction = useRef<(() => void) | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        className="top-[12%] max-w-lg translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg"
+      <DialogSurface
+        className="top-[12%] w-[calc(100%-2rem)] max-w-lg translate-y-0 gap-0 overflow-hidden p-0 sm:max-w-lg"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           restoreFocus();
@@ -246,7 +245,7 @@ export function CommandPalette({
             }}
           />
         )}
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }

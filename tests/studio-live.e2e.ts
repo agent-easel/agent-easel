@@ -279,10 +279,12 @@ test("keeping a Flow draft against the newest revision sends no save", async ({
 }) => {
   // Arrange
   const state = await beforeReboundFlow({ app, screen, browser }, "reboundFlow");
-  const { flowPanel } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
 
   // Act
-  await flowPanel.getByRole("button", "Keep local draft against revision 5", { exact: true }).tap();
+  await comparison
+    .getByRole("button", "Keep local draft against revision 5", { exact: true })
+    .tap();
 
   // Assert
   await expectReboundFlow({ ...state });
@@ -463,10 +465,10 @@ test("keeping Agent edits against the newest revision sends no save", async ({
 }) => {
   // Arrange
   const state = await beforeReboundAgent({ app, screen, browser }, "reboundAgent");
-  const { agentPanel } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
 
   // Act
-  await agentPanel.getByRole("button", "Keep my edits against revision 5", { exact: true }).tap();
+  await comparison.getByRole("button", "Keep my edits against revision 5", { exact: true }).tap();
 
   // Assert
   await expectReboundAgent({ ...state });

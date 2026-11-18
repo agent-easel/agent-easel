@@ -43,7 +43,7 @@ import {
   type SettingsSelection,
 } from "../settings-navigation.ts";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogSurface } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -180,11 +180,10 @@ export function SettingsModal() {
         if (!open) close();
       }}
     >
-      <DialogContent
+      <DialogSurface
         data-settings="true"
         presentation="workspace"
-        showCloseButton={false}
-        className="flex h-[min(90dvh,45rem)] w-full max-w-[min(calc(100%-2rem),65rem)] flex-col gap-0 overflow-hidden bg-muted p-0 sm:max-w-[min(calc(100%-2rem),65rem)]"
+        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-muted [@media(min-width:1024px)_and_(min-height:720px)]:h-[clamp(560px,80vh,960px)] [@media(min-width:1024px)_and_(min-height:720px)]:w-[clamp(840px,50vw,1280px)]"
         ref={content}
         onOpenAutoFocus={(event) => {
           // Land on the dialog itself, not the header Close button, so opening shows no focus ring.
@@ -215,7 +214,7 @@ export function SettingsModal() {
           />
           <SettingsPanel className="min-w-0 flex-1 max-sm:px-4">{current.content()}</SettingsPanel>
         </div>
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
   return scope === "host" ? <DeviceAccessProvider>{dialog}</DeviceAccessProvider> : dialog;

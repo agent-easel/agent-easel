@@ -46,14 +46,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { BLOCK_KINDS } from "../block-kind.ts";
@@ -969,46 +962,39 @@ function RemoveFlowDialog({
       }}
     >
       <DialogContent
+        title={<>Remove “{content.name}”?</>}
+        description={
+          dirty
+            ? "Removing this Flow discards your unsaved edits and keeps the saved revisions for existing Runs."
+            : "Removing this Flow keeps its saved revisions for existing Runs."
+        }
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={removing || state.removed}
+                onClick={() => void confirmRemove()}
+              >
+                {removing ? "Removing…" : "Remove Flow"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+        closeDisabled={removing}
         onKeyDownCapture={(event) => {
           if (event.key === "Escape" && !removing) event.stopPropagation();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>Remove “{content.name}”?</DialogTitle>
-          <DialogDescription asChild>
-            <div className="grid gap-2 text-sm text-muted-foreground">
-              <p>
-                This removes the Flow from Studio with no restore. Its saved revisions are kept, so
-                existing Runs and their history keep the Flow they started with.
-              </p>
-              {dirty && (
-                <p className="text-attention">
-                  You have unsaved changes in this editor. Removing the Flow discards them.
-                </p>
-              )}
-            </div>
-          </DialogDescription>
-        </DialogHeader>
         {removalError && (
           <p role="alert" className="text-sm text-destructive">
             {removalError}
           </p>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
-            Cancel
-          </Button>
-          <MutationGate>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={removing || state.removed}
-              onClick={() => void confirmRemove()}
-            >
-              {removing ? "Removing…" : "Remove Flow"}
-            </Button>
-          </MutationGate>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -1164,6 +1150,7 @@ function ConflictPanel({
   onTakeLatest: (revision: number) => void;
   onKeepLocal: (revision: number) => void;
 }) {
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   const latest = conflict.status === "compared" ? conflict.latest : null;
   const revision = newerRevision(conflict);
   return (
@@ -1176,46 +1163,55 @@ function ConflictPanel({
           {revision !== null && (
             <span className="font-medium">Revision {revision} was saved elsewhere. </span>
           )}
-          Your local draft is preserved. Load the latest revision to compare before choosing what to
-          save.
+          Your local draft is preserved.
         </p>
-        <Button variant="outline" size="sm" onClick={onCompare}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setComparisonOpen(true);
+            onCompare();
+          }}
+        >
           Compare latest revision
         </Button>
       </div>
-      {latest && (
-        <>
-          <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-            <div className="min-w-0">
-              <h3 className="mb-1.5 text-base font-semibold">Your local draft</h3>
-              <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs">
-                {JSON.stringify(local, null, 2)}
-              </pre>
+      {comparisonOpen && latest && (
+        <Dialog open onOpenChange={(open) => !open && setComparisonOpen(false)}>
+          <DialogContent
+            title="Compare latest revision"
+            size="wide"
+            actions={
+              <>
+                <Button variant="outline" onClick={() => onKeepLocal(latest.revision)}>
+                  Keep local draft against revision {latest.revision}
+                </Button>
+                <Button variant="destructive" onClick={() => onTakeLatest(latest.revision)}>
+                  Use latest saved Flow
+                </Button>
+              </>
+            }
+          >
+            <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
+              <div className="min-w-0">
+                <h3 className="mb-1.5 text-base font-semibold">Your local draft</h3>
+                <pre className="rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap wrap-anywhere">
+                  {JSON.stringify(local, null, 2)}
+                </pre>
+              </div>
+              <div className="min-w-0">
+                <h3 className="mb-1.5 text-base font-semibold">Saved revision {latest.revision}</h3>
+                <pre className="rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap wrap-anywhere">
+                  {JSON.stringify(
+                    { name: latest.name, workspace: latest.workspace, graph: latest.graph },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h3 className="mb-1.5 text-base font-semibold">Saved revision {latest.revision}</h3>
-              <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs">
-                {JSON.stringify(
-                  { name: latest.name, workspace: latest.workspace, graph: latest.graph },
-                  null,
-                  2,
-                )}
-              </pre>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onTakeLatest(latest.revision)}>
-              Use latest saved Flow
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => onKeepLocal(latest.revision)}>
-              Keep local draft against revision {latest.revision}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Keeping your draft requires another explicit Save Flow. Reconcile any differences
-              first.
-            </p>
-          </div>
-        </>
+          </DialogContent>
+        </Dialog>
       )}
     </section>
   );

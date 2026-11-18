@@ -51,9 +51,12 @@ export async function beforeAgentComparison(fixtures: StudioFixtures, prefix: st
 export async function expectAgentComparison(
   state: Awaited<ReturnType<typeof beforeAgentComparison>>,
 ) {
-  const { app, prefix, panel } = state;
-  await expect(panel.getByLabel("Your local draft", { exact: true })).toContainText(editedPrompt);
-  await expect(panel.getByLabel("Saved revision 2", { exact: true })).toContainText(
+  const { app, prefix, screen } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  await expect(comparison.getByLabel("Your local draft", { exact: true })).toContainText(
+    editedPrompt,
+  );
+  await expect(comparison.getByLabel("Saved revision 2", { exact: true })).toContainText(
     `Name: Live · ${prefix} · Dirty Agent renamed elsewhere`,
   );
   await app.screenshot("agent-editor-compare-latest-revision");
@@ -79,8 +82,11 @@ export async function expectKeptAgentEdits(
 
 export async function beforeSavedAgentEdits(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeKeptAgentEdits(fixtures, prefix);
-  const { panel } = previous;
-  await panel.getByRole("button", "Keep my edits against revision 2", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare latest revision")
+    .getByRole("button", "Keep my edits against revision 2", { exact: true })
+    .tap();
   return expectKeptAgentEdits({ ...previous });
 }
 
@@ -148,8 +154,11 @@ export async function expectAgentLoadConfirmation(
 
 export async function beforeLoadedAgentRevision(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeAgentLoadConfirmation(fixtures, prefix);
-  const { panel } = previous;
-  await panel.getByRole("button", "Load latest revision", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare latest revision")
+    .getByRole("button", "Load latest revision", { exact: true })
+    .tap();
   return expectAgentLoadConfirmation({ ...previous });
 }
 
