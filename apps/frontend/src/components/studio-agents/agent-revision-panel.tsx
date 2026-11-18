@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type {
   AgentDefinition,
@@ -6,14 +6,8 @@ import type {
   FactoryProject,
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
 
@@ -75,7 +69,7 @@ function Presentation({
       <h3 className="mb-1.5 text-base font-semibold">{title}</h3>
       <pre
         aria-label={title}
-        className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap break-words"
+        className="rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap wrap-anywhere"
       >
         {comparedPresentation(content, projects)}
       </pre>
@@ -99,6 +93,7 @@ export function AgentRevisionPanel({
   projects: readonly FactoryProject[];
 }) {
   const { conflict, updatedTo } = state;
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   useEffect(() => {
     if (updatedTo === null) return;
     const timer = setTimeout(() => draft.dismissUpdate(), updatedNoticeMs);
@@ -134,8 +129,16 @@ export function AgentRevisionPanel({
           </span>{" "}
           Your edits are kept.
         </p>
-        {conflict.status === "detected" && (
-          <Button type="button" variant="outline" size="sm" onClick={draft.compare}>
+        {conflict.status !== "comparing" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setComparisonOpen(true);
+              draft.compare();
+            }}
+          >
             Compare latest revision
           </Button>
         )}
@@ -145,8 +148,14 @@ export function AgentRevisionPanel({
           </p>
         )}
       </div>
-      {conflict.status === "compared" && (
-        <Comparison draft={draft} state={state} latest={conflict.latest} projects={projects} />
+      {comparisonOpen && conflict.status === "compared" && (
+        <Comparison
+          draft={draft}
+          state={state}
+          latest={conflict.latest}
+          projects={projects}
+          onClose={() => setComparisonOpen(false)}
+        />
       )}
     </section>
   );
@@ -157,58 +166,70 @@ function Comparison({
   state,
   latest,
   projects,
+  onClose,
 }: {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
   latest: AgentDefinition;
   projects: readonly FactoryProject[];
+  onClose: () => void;
 }) {
   const { revision } = latest;
   return (
-    <>
-      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-        <Presentation title="Your local draft" content={state.content} projects={projects} />
-        <Presentation title={`Saved revision ${revision}`} content={latest} projects={projects} />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => draft.requestLoadLatest(revision)}
-        >
-          Load latest revision
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => draft.keepEdits(revision)}>
-          Keep my edits against revision {revision}
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Keeping your edits requires another explicit Save. Reconcile any differences first.
-        </p>
-      </div>
-      {/* Bound to the revision shown: a newer one closes it, so it never applies unseen. */}
-      <AlertDialog
-        open={state.confirmingLoad === revision}
-        onOpenChange={(open) => {
-          if (!open) draft.cancelLoadLatest();
-        }}
-      >
-        <AlertDialogContent>
-          <DialogHeader>
-            <AlertDialogTitle>Load revision {revision}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your unsaved edits to this Agent are discarded and replaced with saved revision{" "}
-              {revision}.
-            </AlertDialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <Button type="button" onClick={() => draft.loadLatest(revision)}>
-              Load revision {revision}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        size="wide"
+        title="Compare latest revision"
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                draft.keepEdits(revision);
+                onClose();
+              }}
+            >
+              Keep my edits against revision {revision}
             </Button>
-          </DialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+            <Button type="button" onClick={() => draft.requestLoadLatest(revision)}>
+              Load latest revision
+            </Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
+          <Presentation title="Your local draft" content={state.content} projects={projects} />
+          <Presentation title={`Saved revision ${revision}`} content={latest} projects={projects} />
+        </div>
+        {/* A newer revision closes its confirmation before it can apply an unseen revision. */}
+        <AlertDialog
+          open={state.confirmingLoad === revision}
+          onOpenChange={(open) => {
+            if (!open) draft.cancelLoadLatest();
+          }}
+        >
+          <AlertDialogContent
+            title={`Load revision ${revision}?`}
+            description={`Loading revision ${revision} replaces your unsaved Agent edits.`}
+            actions={
+              <>
+                <AlertDialogCancel>Keep editing</AlertDialogCancel>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => {
+                    draft.loadLatest(revision);
+                    onClose();
+                  }}
+                >
+                  Load revision {revision}
+                </Button>
+              </>
+            }
+          />
+        </AlertDialog>
+      </DialogContent>
+    </Dialog>
   );
 }

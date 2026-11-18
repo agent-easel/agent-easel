@@ -12,8 +12,13 @@ import {
 } from "./keyboard-shortcuts.ts";
 import { useShortcutPreferences } from "./shortcut-preferences.ts";
 import { settingsMask } from "./settings-navigation.ts";
-import { PaletteDialogDismiss } from "./components/palette-dialog-dismiss.tsx";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./components/ui/dialog";
+import {
+  Dialog,
+  DialogSurface,
+  DialogDescription,
+  DialogDismiss,
+  DialogTitle,
+} from "./components/ui/dialog";
 import { KeyChip } from "./components/ui/key-chip";
 
 const columns = [
@@ -93,10 +98,9 @@ export function ShortcutsCheatSheet({
   const titleRef = useRef<HTMLHeadingElement>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
+      <DialogSurface
         presentation="workspace"
-        className="flex max-h-[85dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[720px]"
+        className="flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-[720px] flex-col overflow-hidden"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           titleRef.current?.focus();
@@ -116,10 +120,7 @@ export function ShortcutsCheatSheet({
           >
             Edit in Settings
           </Link>
-          <PaletteDialogDismiss
-            label="Close keyboard shortcuts"
-            onClose={() => onOpenChange(false)}
-          />
+          <DialogDismiss label="Close keyboard shortcuts" />
         </header>
         <DialogDescription className="sr-only">
           Factory commands and their current bindings.
@@ -133,7 +134,7 @@ export function ShortcutsCheatSheet({
             </div>
           ))}
         </div>
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }

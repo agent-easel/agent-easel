@@ -14,7 +14,7 @@ import { StudioTriggersPage } from "../routes/triggers.tsx";
 import { StudioLink } from "./app-link.tsx";
 import { CreateFlow } from "./create-flow.tsx";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogContent, DialogSurface } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { WorkspaceDialogHeader } from "./workspace-dialog-header.tsx";
 import { cn } from "@/lib/utils";
@@ -129,12 +129,11 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         if (!open && !creating && blocker.status !== "blocked") close();
       }}
     >
-      <DialogContent
+      <DialogSurface
         data-studio="true"
         presentation="workspace"
-        showCloseButton={false}
         ref={dialog}
-        className="inset-4 flex h-auto min-h-0 w-auto max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden bg-muted p-0 max-sm:inset-2 sm:max-w-none"
+        className="flex h-[calc(100vh-32px)] w-[calc(100vw-32px)] flex-col overflow-hidden bg-muted [@media(min-width:1600px)_and_(min-height:1000px)]:h-[clamp(800px,80vh,1200px)] [@media(min-width:1600px)_and_(min-height:1000px)]:w-[clamp(1200px,50vw,1680px)]"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           dialog.current?.focus();
@@ -181,7 +180,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
             }}
           />
         )}
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }
@@ -193,12 +192,12 @@ function discardMessage(draft: StudioDraft) {
   if (draft.removed)
     return {
       title: `This ${kind} was removed elsewhere. Discard the retained draft?`,
-      description: `This ${kind} was removed elsewhere. Its retained draft will be discarded.`,
+      description: "Discard the retained draft to continue.",
       discard: "Discard",
     };
   return {
     title: `Discard unsaved ${kind} changes?`,
-    description: `${draft.kind === "flow" ? "Your" : "This"} ${kind} has unsaved changes. Keep editing to save them, or discard them to continue.`,
+    description: "Discard your edits to continue with the saved revision.",
     discard: "Discard changes",
   };
 }
@@ -214,6 +213,18 @@ function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioD
       }}
     >
       <DialogContent
+        title={message.title}
+        description={message.description}
+        actions={
+          <>
+            <Button variant="outline" onClick={blocker.reset}>
+              Keep editing
+            </Button>
+            <Button variant="destructive" onClick={blocker.proceed}>
+              {message.discard}
+            </Button>
+          </>
+        }
         onKeyDownCapture={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
@@ -225,18 +236,7 @@ function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioD
           event.preventDefault();
           blocker.reset();
         }}
-      >
-        <DialogTitle>{message.title}</DialogTitle>
-        <DialogDescription>{message.description}</DialogDescription>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={blocker.reset}>
-            Keep editing
-          </Button>
-          <Button variant="destructive" onClick={blocker.proceed}>
-            {message.discard}
-          </Button>
-        </div>
-      </DialogContent>
+      ></DialogContent>
     </Dialog>
   );
 }

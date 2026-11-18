@@ -29,7 +29,8 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   browser,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1920, height: 1000 });
+  // Keep the large authoring canvas for port drags within the inset Studio layout.
+  await browser.setViewport({ width: 1920, height: 999 });
   await app.open("/studio/flows");
 
   // Act
@@ -183,7 +184,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
 }) => {
   // Arrange
   const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", "UI exit worker");
-  await browser.setViewport({ width: 1600, height: 1000 });
+  await browser.setViewport({ width: 1600, height: 999 });
   await app.open("/studio/flows");
   await screen.getByRole("button", "New Flow").tap();
   await screen.getByLabel("Flow name").fill("Block exit configuration");
@@ -560,7 +561,7 @@ test("removing a Flow with unsaved changes returns to the Flow list without a di
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Unsaved changes");
   await chooseFlowAction(screen, "Remove");
   const confirmation = screen.getByRole("dialog", `Remove “${name} edited”?`);
-  await expect(confirmation).toContainText("Removing the Flow discards them.");
+  await expect(confirmation).toContainText("Removing this Flow discards your unsaved edits");
 
   // Act
   await confirmation.getByRole("button", "Remove Flow", { exact: true }).tap();

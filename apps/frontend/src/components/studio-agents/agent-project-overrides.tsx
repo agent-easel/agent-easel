@@ -10,14 +10,7 @@ import type {
 import { ChoiceMenu } from "@/components/choice-menu";
 import { fieldLabelClass } from "@/components/page";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
@@ -202,16 +195,23 @@ export function OverrideDialog({
   const title = studioOwner(projectId, projects).title;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>
-            {projectChoices.length ? "Override for a Project" : `Override for ${title}`}
-          </DialogTitle>
-          <DialogDescription>
-            Runs in this Project use these settings instead of the Agent's Worker. Save the Agent to
-            apply them.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent
+        title={projectChoices.length ? "Override for a Project" : `Override for ${title}`}
+        actions={
+          <>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={!complete}
+              onClick={() => onApply({ projectId, execution: settings })}
+            >
+              Apply
+            </Button>
+          </>
+        }
+      >
         <div className="@container/agent-form grid gap-3.5">
           {projectChoices.length > 0 && (
             <div className="grid gap-1.5">
@@ -247,18 +247,6 @@ export function OverrideDialog({
             }}
           />
         </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            disabled={!complete}
-            onClick={() => onApply({ projectId, execution: settings })}
-          >
-            Apply
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

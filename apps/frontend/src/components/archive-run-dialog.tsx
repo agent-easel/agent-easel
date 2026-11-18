@@ -3,14 +3,7 @@ import { useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { api } from "../api.ts";
 import { Button } from "./ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { Dialog, DialogContent } from "./ui/dialog";
 
 /**
  * Archive is final, so every entry point confirms it here. An archived Run leaves navigation, so
@@ -62,6 +55,33 @@ export function ArchiveRunDialog({
       }}
     >
       <DialogContent
+        title={<>Archive “{run.title}”?</>}
+        description={
+          "This Run cannot be restored after archiving, which keeps its history and asks T3 to interrupt its workers."
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={busy}
+                onClick={() => void archive()}
+              >
+                {busy ? "Archiving…" : "Archive Run"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+        closeDisabled={busy}
         onCloseAutoFocus={(event) => {
           const target = returnFocusId && document.getElementById(returnFocusId);
           if (!target) return;
@@ -69,39 +89,11 @@ export function ArchiveRunDialog({
           target.focus();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>Archive “{run.title}”?</DialogTitle>
-          <DialogDescription>
-            Archiving ends this Run for good: Factory hands off nothing more, cancels work it has
-            not sent and asks T3 to interrupt the Run’s worker threads without waiting for them. The
-            Run leaves the sidebar and cannot be restored; its history is kept.
-          </DialogDescription>
-        </DialogHeader>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <MutationGate>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy}
-              onClick={() => void archive()}
-            >
-              {busy ? "Archiving…" : "Archive Run"}
-            </Button>
-          </MutationGate>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

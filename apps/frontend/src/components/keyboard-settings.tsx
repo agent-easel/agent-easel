@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { KeyChip } from "@/components/ui/key-chip";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   fixedShortcuts,
   formatShortcut,
@@ -203,18 +197,31 @@ function ShortcutRecorder({ id, onClose }: { id: ShortcutId; onClose: () => void
       }}
     >
       <DialogContent
+        title={`Change “${command.label}”`}
+        actions={
+          <>
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!candidate || !!validation}
+              onClick={() => {
+                if (!candidate) return;
+                const result = saveShortcutBinding(id, candidate);
+                if (result) setError(result);
+                else onClose();
+              }}
+            >
+              Save shortcut
+            </Button>
+          </>
+        }
         ref={content}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           content.current?.focus();
         }}
       >
-        <DialogTitle>Change shortcut</DialogTitle>
-        <DialogDescription>
-          Press a combination for {command.label}, then choose Save shortcut. <KeyChip>Esc</KeyChip>{" "}
-          cancels. <KeyChip>{formatShortcut(fixedShortcuts.focusNext)}</KeyChip> moves between
-          buttons.
-        </DialogDescription>
         <div role="status" className="rounded-lg border bg-muted p-6 text-center text-lg">
           {candidate ? <KeyChip>{formatShortcut(candidate)}</KeyChip> : "Press a shortcut"}
         </div>
@@ -223,22 +230,6 @@ function ShortcutRecorder({ id, onClose }: { id: ShortcutId; onClose: () => void
             {error || validation}
           </p>
         )}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!candidate || !!validation}
-            onClick={() => {
-              if (!candidate) return;
-              const result = saveShortcutBinding(id, candidate);
-              if (result) setError(result);
-              else onClose();
-            }}
-          >
-            Save shortcut
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

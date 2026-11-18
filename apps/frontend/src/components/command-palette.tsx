@@ -14,10 +14,9 @@ import { useLiveStudio } from "../live/studio.ts";
 import { useOpenStudio, useSettingsNavigation } from "../settings-navigation.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { transport, useTransport } from "../transport.ts";
-import { PaletteDialogDismiss } from "./palette-dialog-dismiss.tsx";
 import { RunNumber } from "./run-number.tsx";
 import { RunStatusChip } from "./run-status-chip.tsx";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { Dialog, DialogSurface, DialogDescription, DialogDismiss, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { KeyChip } from "./ui/key-chip";
 import { cn } from "@/lib/utils";
@@ -267,11 +266,9 @@ function usePaletteSelection(
 function PaletteContent({
   onActivate,
   onNewRun,
-  onClose,
 }: {
   onActivate: (item: PaletteItem) => void;
   onNewRun: () => void;
-  onClose: () => void;
 }) {
   const navigate = useNavigate();
   const openStudio = useOpenStudio();
@@ -321,7 +318,7 @@ function PaletteContent({
           }}
           onKeyDown={onKeyDown}
         />
-        <PaletteDialogDismiss label="Close command palette" onClose={onClose} />
+        <DialogDismiss label="Close command palette" />
       </div>
       <PaletteList
         listId={listId}
@@ -364,10 +361,9 @@ export function CommandPalette({
   const pendingAction = useRef<(() => void) | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        showCloseButton={false}
+      <DialogSurface
         presentation="workspace"
-        className="top-[12%] flex max-h-[88dvh] translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-lg"
+        className="top-[12%] flex max-h-[88dvh] w-[calc(100%-2rem)] max-w-lg translate-y-0 flex-col overflow-hidden"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           restoreFocus();
@@ -383,7 +379,6 @@ export function CommandPalette({
         {open && (
           <PaletteContent
             onNewRun={onNewRun}
-            onClose={() => onOpenChange(false)}
             onActivate={(item) => {
               if (item.disabled || (item.id === "action-new-run" && !transport.acceptsMutations()))
                 return;
@@ -392,7 +387,7 @@ export function CommandPalette({
             }}
           />
         )}
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }

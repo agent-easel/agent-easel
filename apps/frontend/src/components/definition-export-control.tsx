@@ -1,13 +1,6 @@
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type { DefinitionExportModel, DefinitionExportSnapshot } from "../definition-export.ts";
 
@@ -50,20 +43,20 @@ export function DefinitionExportDialog({ model, state }: Exporter) {
         if (!open) model.keepEditing();
       }}
     >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Export the saved revision?</DialogTitle>
-          <DialogDescription>Unsaved changes won't be included.</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={model.keepEditing}>
-            Keep editing
-          </Button>
-          <Button type="button" onClick={() => void model.confirm()}>
-            Export saved revision
-          </Button>
-        </DialogFooter>
-      </DialogContent>
+      <DialogContent
+        title="Export the saved revision?"
+        description="Unsaved changes won't be included."
+        actions={
+          <>
+            <Button type="button" variant="outline" onClick={model.keepEditing}>
+              Keep editing
+            </Button>
+            <Button type="button" onClick={() => void model.confirm()}>
+              Export saved revision
+            </Button>
+          </>
+        }
+      ></DialogContent>
     </Dialog>
   );
 }

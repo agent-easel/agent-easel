@@ -408,9 +408,9 @@ fixed Human exits their old exits were mapped to.
     each with **Open Run**.
   - A card's delete icon or the preview's **Delete image** deletes one image. **Delete all** deletes every image the
     current filter lists.
-  - Each deletion first asks inline. It states the images' count, total size and Runs, that they cannot be restored, and
-    that history shows **Image unavailable**. A filtered **Delete all** also says whether the images are used by Runs in
-    other projects.
+  - A centred confirmation names the image or the number of images, the total size and the affected Runs.
+    It explains that history shows **Image unavailable**. A filtered **Delete all** also says whether the
+    images are used by Runs in other projects.
   - The server rechecks each image and deletes only its file. An image an Active Run now uses is kept and reported as not
     deleted.
   - Manifests, prompts and timelines stay. The image reads as missing everywhere, including Factory MCP reads and worker

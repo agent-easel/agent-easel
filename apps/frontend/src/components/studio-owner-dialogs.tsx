@@ -9,14 +9,7 @@ import { Bot, ChevronRight, TriangleAlert, Workflow } from "lucide-react";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { OwnerMove } from "../revisioned-draft.ts";
@@ -50,13 +43,10 @@ const hintClass = "text-2xs tracking-label text-subtle-foreground";
 function OwnerDialog({
   busy,
   onClose,
-  className,
-  children,
-}: {
+  ...content
+}: React.ComponentProps<typeof DialogContent> & {
   busy: boolean;
   onClose: () => void;
-  className?: string;
-  children: React.ReactNode;
 }) {
   return (
     <Dialog
@@ -66,8 +56,8 @@ function OwnerDialog({
       }}
     >
       <DialogContent
-        showCloseButton={false}
-        className={cn("gap-4 sm:max-w-120", className)}
+        {...content}
+        closeDisabled={busy}
         // A parent Studio modal must not also take this Escape.
         onKeyDownCapture={(event) => {
           if (event.key === "Escape") event.stopPropagation();
@@ -75,9 +65,7 @@ function OwnerDialog({
         onInteractOutside={(event) => {
           if (busy) event.preventDefault();
         }}
-      >
-        {children}
-      </DialogContent>
+      />
     </Dialog>
   );
 }
@@ -140,47 +128,26 @@ export function ChangeOwnerDialog({
   }
   if (state.blockers.length > 0)
     return (
-      <OwnerDialog busy={false} onClose={onClose}>
-        <ChangeOwnerRefusal
-          kind={kind}
-          subject={subject}
-          target={state.target}
-          blockers={state.blockers}
-          projects={projects}
-          duplicateBlocked={duplicateBlocked}
-          onCancel={onClose}
-          onDuplicate={() => onDuplicateInstead(state.target)}
-        />
-      </OwnerDialog>
+      <ChangeOwnerRefusal
+        kind={kind}
+        subject={subject}
+        target={state.target}
+        blockers={state.blockers}
+        projects={projects}
+        duplicateBlocked={duplicateBlocked}
+        onCancel={onClose}
+        onDuplicate={() => onDuplicateInstead(state.target)}
+      />
     );
   return (
-    <OwnerDialog busy={state.changing} onClose={onClose}>
-      <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
-        <DialogHeader>
-          <DialogTitle className="text-base leading-normal">
-            Change owner of “{subject.name}”
-          </DialogTitle>
-          <DialogDescription>
-            Moves this {kind} without creating a revision. Runs keep what they captured, and no
-            other Flow or Agent is edited.
-          </DialogDescription>
-        </DialogHeader>
-        <OwnerTargetMenu
-          label="New owner"
-          chosen={state.target}
-          from={subject.projectId}
-          projects={projects}
-          disabled={state.changing}
-          onChange={model.setTarget}
-          unavailableReason=" — can’t own definitions"
-        />
-        <p className={hintClass}>{changeOwnerRule(kind, state.target, projects)}</p>
-        {state.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {state.error}
-          </p>
-        )}
-        <DialogFooter>
+    <OwnerDialog
+      busy={state.changing}
+      onClose={onClose}
+      title={<>Change owner of “{subject.name}”</>}
+      description={changeOwnerRule(kind, state.target, projects)}
+      onSubmit={(event) => void submit(event)}
+      actions={
+        <>
           <Button type="button" variant="outline" disabled={state.changing} onClick={onClose}>
             Cancel
           </Button>
@@ -192,8 +159,23 @@ export function ChangeOwnerDialog({
               {state.changing ? "Changing…" : "Change owner"}
             </Button>
           </MutationGate>
-        </DialogFooter>
-      </form>
+        </>
+      }
+    >
+      <OwnerTargetMenu
+        label="New owner"
+        chosen={state.target}
+        from={subject.projectId}
+        projects={projects}
+        disabled={state.changing}
+        onChange={model.setTarget}
+        unavailableReason=" — can’t own definitions"
+      />
+      {state.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {state.error}
+        </p>
+      )}
     </OwnerDialog>
   );
 }
@@ -221,16 +203,32 @@ function ChangeOwnerRefusal({
   const title = studioOwner(target, projects).title;
   const asOwner = target === null ? "Global" : `a ${title}`;
   return (
-    <>
-      <DialogHeader className="flex-row items-center gap-2.5">
-        <TriangleAlert aria-hidden className="size-4 shrink-0 text-attention" strokeWidth={1.5} />
-        <DialogTitle className="text-base leading-normal">
+    <OwnerDialog
+      busy={false}
+      onClose={onCancel}
+      title={
+        <>
           Can’t make “{subject.name}” {asOwner} {kind}
-        </DialogTitle>
-        <DialogDescription className="sr-only">
-          The placement rule would break for the definitions listed.
-        </DialogDescription>
-      </DialogHeader>
+        </>
+      }
+      actions={
+        <>
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <MutationGate>
+            <Button
+              type="button"
+              disabled={Boolean(duplicateBlocked)}
+              title={duplicateBlocked}
+              onClick={onDuplicate}
+            >
+              Duplicate to {title}…
+            </Button>
+          </MutationGate>
+        </>
+      }
+    >
       <Alert variant="attention" className="px-3 py-2.5">
         <TriangleAlert aria-hidden strokeWidth={1.5} />
         <AlertTitle>
@@ -257,25 +255,7 @@ function ChangeOwnerRefusal({
           />
         ))}
       </ul>
-      <div className="flex flex-wrap items-center gap-2">
-        <p className="min-w-40 flex-1 text-2xs text-subtle-foreground">
-          Changing the owner never edits other {kind === "Agent" ? "Flows" : "Agents"}.
-        </p>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <MutationGate>
-          <Button
-            type="button"
-            disabled={Boolean(duplicateBlocked)}
-            title={duplicateBlocked}
-            onClick={onDuplicate}
-          >
-            Duplicate to {title}…
-          </Button>
-        </MutationGate>
-      </div>
-    </>
+    </OwnerDialog>
   );
 }
 
@@ -480,54 +460,16 @@ export function DuplicateFlowDialog({
     if (result) onDuplicated(result.flow);
   }
   return (
-    <OwnerDialog busy={busy} onClose={onClose} className="sm:max-w-130">
-      <form className="grid min-w-0 gap-4" onSubmit={(event) => void submit(event)}>
-        <DialogHeader>
-          <DialogTitle className="text-base leading-normal">Duplicate “{source.name}”</DialogTitle>
-          <DialogDescription>
-            Creates an independent copy. Later edits to either Flow don’t sync.
-            {dirty && ` Copies saved revision ${revision}; your unsaved changes aren’t included.`}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-1.5">
-          <label htmlFor="duplicate-flow-name" className={fieldLabelClass}>
-            Name
-          </label>
-          <Input
-            id="duplicate-flow-name"
-            maxLength={200}
-            value={state.name}
-            disabled={busy}
-            onChange={(event) => model.setName(event.target.value)}
-          />
-        </div>
-        <OwnerTargetMenu
-          label="Target owner"
-          chosen={state.target}
-          from={source.projectId}
-          projects={projects}
-          disabled={busy}
-          onChange={(target) => void model.setTarget(target)}
-          unavailableReason=" — can’t own copies"
-        />
-        <div className="grid gap-1.5">
-          <span id="duplicate-flow-agents" className={fieldLabelClass}>
-            Agents in this Flow
-          </span>
-          <DuplicatePlan
-            state={state}
-            projects={projects}
-            disabled={busy}
-            onChoose={model.choose}
-          />
-        </div>
-        {state.plan && <p className={hintClass}>{duplicateSummary(state, source, projects)}</p>}
-        {state.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {state.error}
-          </p>
-        )}
-        <DialogFooter>
+    <OwnerDialog
+      busy={busy}
+      onClose={onClose}
+      title={<>Duplicate “{source.name}”</>}
+      description={
+        dirty ? `Copies saved revision ${revision} without your unsaved changes.` : undefined
+      }
+      onSubmit={(event) => void submit(event)}
+      actions={
+        <>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
@@ -539,8 +481,42 @@ export function DuplicateFlowDialog({
               {busy ? "Duplicating…" : "Duplicate"}
             </Button>
           </MutationGate>
-        </DialogFooter>
-      </form>
+        </>
+      }
+    >
+      <div className="grid gap-1.5">
+        <label htmlFor="duplicate-flow-name" className={fieldLabelClass}>
+          Name
+        </label>
+        <Input
+          id="duplicate-flow-name"
+          maxLength={200}
+          value={state.name}
+          disabled={busy}
+          onChange={(event) => model.setName(event.target.value)}
+        />
+      </div>
+      <OwnerTargetMenu
+        label="Target owner"
+        chosen={state.target}
+        from={source.projectId}
+        projects={projects}
+        disabled={busy}
+        onChange={(target) => void model.setTarget(target)}
+        unavailableReason=" — can’t own copies"
+      />
+      <div className="grid gap-1.5">
+        <span id="duplicate-flow-agents" className={fieldLabelClass}>
+          Agents in this Flow
+        </span>
+        <DuplicatePlan state={state} projects={projects} disabled={busy} onChoose={model.choose} />
+      </div>
+      {state.plan && <p className={hintClass}>{duplicateSummary(state, source, projects)}</p>}
+      {state.error && (
+        <p role="alert" className="text-sm text-destructive">
+          {state.error}
+        </p>
+      )}
     </OwnerDialog>
   );
 }
@@ -611,37 +587,17 @@ export function DuplicateAgentDialog({
   );
   const blocked = ownerPicker(target, projects).blocked;
   return (
-    <OwnerDialog busy={duplicating} onClose={onClose}>
-      <form
-        className="grid gap-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!blocked && !duplicating) onDuplicate(target);
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle className="text-base leading-normal">Duplicate “{source.name}”</DialogTitle>
-          <DialogDescription>
-            Creates an independent copy of the saved revision. Later edits to either Agent don’t
-            sync.
-          </DialogDescription>
-        </DialogHeader>
-        <OwnerTargetMenu
-          label="Target owner"
-          chosen={target}
-          from={source.projectId}
-          projects={projects}
-          disabled={duplicating}
-          onChange={setTarget}
-          unavailableReason=" — can’t own copies"
-        />
-        <p className={hintClass}>{changeOwnerRule("Agent", target, projects)}</p>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <DialogFooter>
+    <OwnerDialog
+      busy={duplicating}
+      onClose={onClose}
+      title={<>Duplicate “{source.name}”</>}
+      description={changeOwnerRule("Agent", target, projects)}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!blocked && !duplicating) onDuplicate(target);
+      }}
+      actions={
+        <>
           <Button type="button" variant="outline" disabled={duplicating} onClick={onClose}>
             Cancel
           </Button>
@@ -650,8 +606,23 @@ export function DuplicateAgentDialog({
               {duplicating ? "Duplicating…" : "Duplicate"}
             </Button>
           </MutationGate>
-        </DialogFooter>
-      </form>
+        </>
+      }
+    >
+      <OwnerTargetMenu
+        label="Target owner"
+        chosen={target}
+        from={source.projectId}
+        projects={projects}
+        disabled={duplicating}
+        onChange={setTarget}
+        unavailableReason=" — can’t own copies"
+      />
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </OwnerDialog>
   );
 }

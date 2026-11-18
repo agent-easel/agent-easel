@@ -8,14 +8,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "../api.ts";
 import { chatControlError } from "./chat-control-form.tsx";
 import { dayAndTime } from "./execution-state.tsx";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
-import { DialogFooter, DialogHeader } from "./ui/dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-dialog";
 
 const STATE_LABELS: Record<ChatDeliveryProblem["state"], string> = {
   retrying: "Retrying",
@@ -151,26 +144,24 @@ export function DeliveryDiagnostics({
           if (!open && busy === null) setConfirming(null);
         }}
       >
-        <AlertDialogContent>
-          <DialogHeader>
-            <AlertDialogTitle>Retry a message Discord may already show?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Factory cannot tell whether Discord created this message. Retrying sends it once more,
-              so the thread may show it twice. The action it reports is not performed again. If this
-              attempt is also uncertain, you decide again.
-            </AlertDialogDescription>
-          </DialogHeader>
+        <AlertDialogContent
+          title="Retry a message Discord may already show?"
+          description="Discord may already show this message, so retrying could post it twice."
+          actions={
+            <>
+              <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
+              <Button disabled={busy !== null} onClick={() => confirming && void retry(confirming)}>
+                {busy !== null ? "Retrying…" : "Retry anyway"}
+              </Button>
+            </>
+          }
+          closeDisabled={busy !== null}
+        >
           {error && confirming && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <DialogFooter>
-            <AlertDialogCancel disabled={busy !== null}>Cancel</AlertDialogCancel>
-            <Button disabled={busy !== null} onClick={() => confirming && void retry(confirming)}>
-              {busy !== null ? "Retrying…" : "Retry anyway"}
-            </Button>
-          </DialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </section>

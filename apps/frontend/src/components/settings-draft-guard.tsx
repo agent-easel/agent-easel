@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { settingsTabAt, type SettingsSelection } from "../settings-navigation.ts";
 import { useNavigationBlock } from "../use-navigation-block.ts";
 
@@ -29,24 +29,23 @@ export function SettingsDraftDialog({
       }}
     >
       <DialogContent
+        title={`Discard unsaved ${names} changes?`}
+        description="Discard your edits to continue with the saved settings."
+        actions={
+          <>
+            <Button variant="outline" onClick={decision.reset}>
+              Keep editing
+            </Button>
+            <Button variant="destructive" onClick={decision.proceed}>
+              Discard changes
+            </Button>
+          </>
+        }
         onEscapeKeyDown={(event) => {
           event.preventDefault();
           decision.reset();
         }}
-      >
-        <DialogTitle>Discard unsaved {names} changes?</DialogTitle>
-        <DialogDescription>
-          Keep editing to save them, or discard them to continue. Saved settings stay as they are.
-        </DialogDescription>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={decision.reset}>
-            Keep editing
-          </Button>
-          <Button variant="destructive" onClick={decision.proceed}>
-            Discard changes
-          </Button>
-        </div>
-      </DialogContent>
+      ></DialogContent>
     </Dialog>
   );
 }

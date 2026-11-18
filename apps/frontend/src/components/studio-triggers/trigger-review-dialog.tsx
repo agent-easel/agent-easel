@@ -5,13 +5,7 @@ import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { sectionLabelClass } from "../page.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
@@ -64,9 +58,7 @@ export function TriggerReviewDialog({
       }}
     >
       {review && (
-        <DialogContent showCloseButton={false} className="gap-3.5 px-5.5 py-5 sm:max-w-155">
-          <ReviewBody review={review} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
-        </DialogContent>
+        <ReviewBody review={review} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
       )}
     </Dialog>
   );
@@ -85,11 +77,32 @@ function ReviewBody({
 }) {
   const read = usePreview(review.load);
   return (
-    <>
-      <DialogTitle className="text-sm leading-tight tracking-tight">{review.title}</DialogTitle>
-      <DialogDescription className="leading-tight text-subtle-foreground">
-        {review.summary}
-      </DialogDescription>
+    <DialogContent
+      title={review.title}
+      description={review.summary}
+      closeDisabled={busy}
+      size="wide"
+      actions={
+        <>
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
+          </Button>
+          <MutationGate>
+            {review.saveDisabled && (
+              <Button variant="outline" disabled={busy} onClick={review.saveDisabled}>
+                Save disabled
+              </Button>
+            )}
+            <Button
+              disabled={busy || read.status !== "answered"}
+              onClick={() => read.status === "answered" && onConfirm(read.preview)}
+            >
+              {busy ? "Checking…" : review.confirmLabel}
+            </Button>
+          </MutationGate>
+        </>
+      }
+    >
       {review.notice && (
         <Alert variant="attention" role="status">
           <TriangleAlert aria-hidden />
@@ -108,29 +121,7 @@ function ReviewBody({
         </Alert>
       )}
       {read.status === "answered" && <PreviewResult review={review} preview={read.preview} />}
-      <p className={captionClass}>
-        Later saved revisions of the Flow and its Agents are used without asking again, like New
-        Run.
-      </p>
-      <DialogFooter className="gap-2">
-        <Button variant="outline" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-        <MutationGate>
-          {review.saveDisabled && (
-            <Button variant="outline" disabled={busy} onClick={review.saveDisabled}>
-              Save disabled
-            </Button>
-          )}
-          <Button
-            disabled={busy || read.status !== "answered"}
-            onClick={() => read.status === "answered" && onConfirm(read.preview)}
-          >
-            {busy ? "Checking…" : review.confirmLabel}
-          </Button>
-        </MutationGate>
-      </DialogFooter>
-    </>
+    </DialogContent>
   );
 }
 

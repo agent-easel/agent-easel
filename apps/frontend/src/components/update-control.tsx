@@ -101,42 +101,6 @@ const inlineLabels: Record<UpgradePhase, string> = {
   error: "Review error",
 };
 
-/** The upgrade review or the failure, anchored to the control and named for assistive tech. */
-function UpgradePanel({
-  panel,
-  upgrade,
-  onClose,
-  onUpgrade,
-  onRetry,
-}: {
-  panel: "review" | "error" | null;
-  upgrade: ReturnType<typeof useUpgrade>;
-  onClose: () => void;
-  onUpgrade: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <PopoverContent
-      side="top"
-      collisionPadding={8}
-      aria-label={panel === "error" ? "Update error" : "Upgrade review"}
-      className="p-4"
-    >
-      {panel === "review" && (
-        <UpgradeReview targets={upgrade.targets} onCancel={onClose} onConfirm={onUpgrade} />
-      )}
-      {panel === "error" && (
-        <UpgradeError
-          failure={upgrade.failure}
-          targets={upgrade.targets}
-          onClose={onClose}
-          onRetry={onRetry}
-        />
-      )}
-    </PopoverContent>
-  );
-}
-
 /**
  * One update control for this app and its server: the footer icon, or the labelled button in
  * Desktop app settings. Without `includeServer` only this desktop app is updated.
@@ -163,7 +127,7 @@ export function UpdateControl({
   };
   const close = () => setPanel(null);
   return (
-    <Popover open={panel !== null} onOpenChange={(open) => !open && close()}>
+    <Popover open={panel === "error"} onOpenChange={(open) => !open && close()}>
       <Tooltip>
         <PopoverAnchor asChild>
           <TooltipTrigger asChild>
@@ -191,19 +155,29 @@ export function UpdateControl({
           </TooltipContent>
         )}
       </Tooltip>
-      <UpgradePanel
-        panel={panel}
-        upgrade={upgrade}
-        onClose={close}
-        onUpgrade={() => {
-          close();
-          void upgrade.upgrade();
-        }}
-        onRetry={() => {
-          close();
-          void upgrade.check();
-        }}
-      />
+      {panel === "review" && (
+        <UpgradeReview
+          targets={targets}
+          onCancel={close}
+          onConfirm={() => {
+            close();
+            void upgrade.upgrade();
+          }}
+        />
+      )}
+      {panel === "error" && (
+        <PopoverContent side="top" collisionPadding={8} aria-label="Update error" className="p-4">
+          <UpgradeError
+            failure={upgrade.failure}
+            targets={targets}
+            onClose={close}
+            onRetry={() => {
+              close();
+              void check();
+            }}
+          />
+        </PopoverContent>
+      )}
     </Popover>
   );
 }
