@@ -209,6 +209,9 @@ test("a Draft opened by keyboard from a focused prompt with the same text contin
   await app.open("/runs/new");
   await screen.getByRole("button", "New Run (+)").tap();
   await prompt.fill(text);
+  // Runs that need you lead the open list, so the search leaves only the two Drafts as rows.
+  await screen.getByRole("textbox", "Search Run titles").fill(text);
+  await prompt.tap();
   await browser.keyboard.press("Home");
   await browser.keyboard.press(`${shortcutMod}+1`);
   await expect(listedDrafts).toHaveCount(2);
