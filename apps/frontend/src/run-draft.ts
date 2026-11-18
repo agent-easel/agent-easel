@@ -542,9 +542,11 @@ export function createRunDraft(
     publish();
   }
   /**
-   * Applies a launch-choice delivery. A current one clears a Project or Flow it no longer lists
-   * and a Flow that doesn't fit the Project, silently and keeping the prompt; a non-current one
-   * changes nothing. A draft awaiting a Start outcome keeps its submitted choices.
+   * Applies a launch-choice delivery. A current one clears a Project it no longer lists or that
+   * is unavailable for a reason other than the connection, and a Flow it no longer lists or that
+   * doesn't fit, silently and keeping the prompt. A connection outage keeps the last known
+   * Project. A non-current delivery changes nothing. A draft awaiting a Start outcome keeps its
+   * submitted choices.
    */
   function receiveChoices({
     value,
@@ -555,9 +557,11 @@ export function createRunDraft(
         ? new Map(value.flows.map((flow) => [flow.id, flow.projectId]))
         : undefined;
     if (!value || !currentOwners || find(currentId)?.submission) return;
-    const projectId = value.catalog.projects.some((project) => project.id === current.projectId)
-      ? current.projectId
-      : "";
+    const listed = value.catalog.projects.find((project) => project.id === current.projectId);
+    const projectId =
+      listed?.availability === "available" || listed?.availability === "connection-unavailable"
+        ? current.projectId
+        : "";
     const flowId =
       currentOwners.has(current.flowId) && fits(current.flowId, projectId) ? current.flowId : "";
     if (projectId === current.projectId && flowId === current.flowId) return;
@@ -633,6 +637,8 @@ export function createRunDraft(
     const recoverable = commit(requestServer, id, (latest = saved) => ({
       ...latest,
       submission: request,
+      // The unresolved Start is the sidebar's Idle row while this composer stays open.
+      listed: true,
     }));
     error = "";
     issues = [];

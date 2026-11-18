@@ -1,3 +1,4 @@
+import { fillReadyComposer } from "./support/composer.ts";
 import { confirmSettlement } from "./support/run-history.ts";
 import type { Browser } from "@e2e-dev/web";
 import { test } from "./support/test.ts";
@@ -123,7 +124,7 @@ test("offline New Run stays disabled and palette navigation skips it", async ({
   await expect(newRun).toHaveAttribute("aria-selected", "false");
 });
 
-test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
+test("Mod+, from dirty Studio opens Settings over it and Esc returns with the draft kept", async ({
   app,
   screen,
   browser,
@@ -139,8 +140,9 @@ test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
   await browser.keyboard.press(`${shortcutMod}+,`);
 
   // Assert
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
-  await screen.getByRole("button", "Keep editing", { exact: true }).tap();
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toHaveCount(0);
   await expect(screen.getByLabel("Flow name")).toHaveValue("Launch ready Flow dirty");
 });
 
@@ -172,6 +174,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
   // Arrange
   await app.open("/runs/new");
   await expect(screen.getByRole("button", "New Run (+)", { exact: true })).toBeEnabled();
+  await fillReadyComposer(screen, "Ship the picker");
   await screen.getByLabel("Initial prompt", { exact: false }).tap();
   // Each control that receives focus from here on is numbered in the order it was reached.
   await browser.evaluate(`(() => {

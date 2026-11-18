@@ -137,6 +137,7 @@ export function SidebarRow({
   preview,
   actions,
   children,
+  label,
 }: {
   id: string;
   title: string;
@@ -148,6 +149,8 @@ export function SidebarRow({
   preview: ReactNode;
   actions: ReactNode;
   children: ReactNode;
+  /** Overrides the draft row's accessible name. Pending Starts say Idle, not Draft. */
+  label?: string;
 }) {
   const interaction = useRowInteractions(disabled);
   const destination =
@@ -173,7 +176,7 @@ export function SidebarRow({
                 {...interaction.link}
                 id={`run-row-${id}`}
                 onClick={onClick}
-                aria-label={kind === "draft" ? `${title} Draft` : undefined}
+                aria-label={kind === "draft" ? label : undefined}
                 aria-current={selected ? "page" : undefined}
                 className={cn(
                   "flex min-w-0 flex-1 rounded-md px-2.5 text-foreground no-underline hover:no-underline",

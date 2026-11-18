@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight, ExternalLink, type LucideIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { SettingsLink, StudioLink } from "./app-link.tsx";
@@ -12,6 +12,7 @@ type NoticeTone = "critical" | "attention" | "info" | "neutral";
  * The icon and title carry the meaning, so tone never relies on color alone.
  */
 export function Notice({
+  id,
   tone,
   icon: Icon,
   title,
@@ -19,6 +20,7 @@ export function Notice({
   action,
   className,
 }: {
+  id?: string;
   tone: NoticeTone;
   icon: LucideIcon;
   title: ReactNode;
@@ -27,7 +29,7 @@ export function Notice({
   className?: string;
 }) {
   return (
-    <Alert variant={tone} className={cn("gap-y-1 px-5 py-3.5", className)}>
+    <Alert id={id} variant={tone} className={cn("gap-y-1 px-5 py-3.5", className)}>
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || action) && (
@@ -73,6 +75,16 @@ export function NoticeButton({
       {children}
       <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
     </button>
+  );
+}
+
+/** Leaves Factory. The composer uses this only to open T3, and Factory takes no action there. */
+export function NoticeExternalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={actionClass}>
+      {children}
+      <ExternalLink aria-hidden className="size-3.5" strokeWidth={1.5} />
+    </a>
   );
 }
 
