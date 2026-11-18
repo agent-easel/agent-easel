@@ -81,7 +81,14 @@ test("switching Project silently clears another Project's Flow and no Project di
   await browser.reload();
   await expect(flowPicker).toHaveAccessibleName("Select Flow: Choose a Flow");
   await expect(prompt).toHaveText("UI Project switch");
-  await selectComposerProject(screen, null);
+  // The menu no longer offers a row that clears the Project. An empty selection still disables Flow.
+  await restoreProjectSelection(app.baseUrl, null);
+  await browser.evaluate(`(() => {
+    localStorage.removeItem("factory-last-project:browser");
+    localStorage.removeItem("factory-last-flow:browser");
+    localStorage.removeItem("factory-run-drafts:browser");
+  })()`);
+  await browser.reload();
   await expect(flowPicker).toBeDisabled();
   await app.screenshot("composer-flow-picker-without-project");
   await restoreProjectSelection(app.baseUrl, selection);

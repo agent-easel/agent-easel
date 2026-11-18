@@ -1,10 +1,9 @@
-import { MutationGate, useMutationsAllowed } from "@/client-gate";
+import { useMutationsAllowed } from "@/client-gate";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
-import { ChevronsUpDownIcon, FolderPlusIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronsUpDownIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -13,9 +12,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { PickerMenuContent, PickerMenuSearch } from "./picker-menu-search.tsx";
-import { Label } from "@/components/ui/label";
+import { MenuName } from "./menu-name.tsx";
+import {
+  PickerMenuContent,
+  PickerMenuList,
+  PickerMenuSearch,
+  pickerShowsSearch,
+} from "./picker-menu-search.tsx";
 import { api } from "../api.ts";
 import { useLiveLaunchChoices } from "../live/launch-choices.ts";
 import { cn } from "../lib/utils.ts";
@@ -23,7 +26,15 @@ import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.t
 import { ProjectIcon } from "./project-icon.tsx";
 import { projectAvailabilityLabels } from "../use-projects.ts";
 
-function ProjectOption({ project, busy }: { project: FactoryProject; busy: boolean }) {
+function ProjectOption({
+  project,
+  busy,
+  peers,
+}: {
+  project: FactoryProject;
+  busy: boolean;
+  peers: readonly string[];
+}) {
   const available = project.availability === "available";
   const availability = projectAvailabilityLabels[project.availability];
   return (
@@ -43,8 +54,8 @@ function ProjectOption({ project, busy }: { project: FactoryProject; busy: boole
         />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium" title={project.title}>
-          {project.title}
+        <span className="flex min-w-0">
+          <MenuName name={project.title} peers={peers} className="font-medium" />
         </span>
         <span
           className="mt-0.5 block truncate text-left text-2xs tracking-label text-subtle-foreground"
@@ -61,6 +72,12 @@ function ProjectOption({ project, busy }: { project: FactoryProject; busy: boole
       </span>
     </DropdownMenuRadioItem>
   );
+}
+
+function projectListStatus(catalog: ProjectCatalog | null, matched: number, query: string) {
+  if (catalog === null) return "Loading projects…";
+  if (query && matched === 0) return "No matching projects";
+  return undefined;
 }
 
 function ProjectChoices({
@@ -82,6 +99,8 @@ function ProjectChoices({
   const projects = (catalog?.projects ?? []).filter((project) =>
     `${project.title} ${project.workspaceRoot}`.toLocaleLowerCase().includes(query),
   );
+  const titles = projects.map((project) => project.title);
+  const status = projectListStatus(catalog, projects.length, query);
   const positioned = useRef(false);
   useLayoutEffect(() => {
     if (positioned.current || !catalog) return;
@@ -90,37 +109,20 @@ function ProjectChoices({
       ?.scrollIntoView({ block: "nearest" });
     positioned.current = true;
   }, [catalog, listRef]);
+  const selected = projects.some((project) => project.id === catalog?.selectedProjectId)
+    ? (catalog?.selectedProjectId ?? "")
+    : "";
   return (
-    <div
-      ref={listRef}
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
-      role="group"
-      aria-label="Projects"
-    >
-      <DropdownMenuRadioGroup value={catalog?.selectedProjectId ?? ""} onValueChange={onSelect}>
-        <DropdownMenuRadioItem
-          value=""
-          disabled={selectionDisabled}
-          aria-label="No project selected"
-          indicatorPosition="right"
-          className="my-0.5 rounded-md py-2.5 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring"
-        >
-          <span className="text-sm text-muted-foreground">No project selected</span>
-        </DropdownMenuRadioItem>
-        {projects.map((project) => (
-          <ProjectOption key={project.id} project={project} busy={selectionDisabled} />
-        ))}
-      </DropdownMenuRadioGroup>
-      {projects.length === 0 && (
+    <DropdownMenuRadioGroup value={selected} onValueChange={onSelect}>
+      {projects.map((project) => (
+        <ProjectOption key={project.id} project={project} busy={selectionDisabled} peers={titles} />
+      ))}
+      {status && (
         <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
-          {catalog === null
-            ? "Loading projects…"
-            : query
-              ? "No matching projects."
-              : "No projects found. Add an existing repository to get started."}
+          {status}
         </p>
       )}
-    </div>
+    </DropdownMenuRadioGroup>
   );
 }
 
@@ -173,87 +175,7 @@ export function useProjectCatalog() {
       });
   }
 
-  return { catalog, error, busy, act, clearError: () => setError("") };
-}
-
-function AddRepositoryDialog({
-  open,
-  onOpenChange,
-  busy,
-  error,
-  onAdd,
-  triggerRef,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  busy: boolean;
-  error: string;
-  onAdd: (path: string) => Promise<boolean>;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-}) {
-  const [path, setPath] = useState("");
-  const pathRef = useRef<HTMLInputElement>(null);
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!busy) onOpenChange(next);
-      }}
-    >
-      <DialogContent
-        title="Add repository"
-        description="Use an existing repository on the local T3 host."
-        closeDisabled={busy}
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          triggerRef.current?.focus();
-        }}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (busy) return;
-          void onAdd(path).then((success) => {
-            if (success) setPath("");
-            else pathRef.current?.focus();
-          });
-        }}
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <MutationGate>
-              <Button type="submit" disabled={busy || !path.trim()}>
-                Add existing repository
-              </Button>
-            </MutationGate>
-          </>
-        }
-      >
-        <div className="grid gap-1.5">
-          <Label htmlFor="repository-path">Existing local repository path</Label>
-          <Input
-            ref={pathRef}
-            id="repository-path"
-            value={path}
-            onChange={(event) => setPath(event.target.value)}
-            placeholder="/absolute/path/to/repository"
-            required
-            readOnly={busy}
-          />
-        </div>
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
+  return { catalog, error, busy, act };
 }
 
 /**
@@ -273,21 +195,21 @@ export function ProjectPicker({
   disabled?: boolean;
   placeholder?: string;
 }) {
-  const { catalog, error, act, clearError } = state;
+  const { catalog, error, act } = state;
   const busy = state.busy || disabled;
   const choices = catalog && {
     ...catalog,
     selectedProjectId: selectedId,
-    projects: catalog.projects.filter((p) => p.availability === "available"),
+    projects: catalog.projects.filter((project) => project.availability === "available"),
   };
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const projectCount = choices?.projects.length ?? 0;
+  const showSearch = pickerShowsSearch(projectCount);
 
-  const selected = catalog?.projects.find((p) => p.id === selectedId);
+  const selected = catalog?.projects.find((project) => project.id === selectedId);
   return (
     <>
       <DropdownMenu
@@ -299,7 +221,6 @@ export function ProjectPicker({
       >
         <DropdownMenuTrigger asChild>
           <Button
-            ref={triggerRef}
             type="button"
             variant="outline"
             disabled={disabled}
@@ -319,67 +240,52 @@ export function ProjectPicker({
           </Button>
         </DropdownMenuTrigger>
         <PickerMenuContent
-          className="flex max-h-[min(30rem,var(--radix-dropdown-menu-content-available-height))] w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0"
+          className="overflow-y-hidden"
           searchRef={searchRef}
           listRef={listRef}
-          searchEnabled
+          searchEnabled={showSearch}
         >
-          <PickerMenuSearch
-            ariaLabel="Search projects"
-            placeholder="Search by name or repository path…"
-            value={search}
-            onChange={setSearch}
-            inputRef={searchRef}
+          {showSearch && (
+            <PickerMenuSearch
+              ariaLabel="Search projects"
+              placeholder="Search projects"
+              value={search}
+              onChange={setSearch}
+              inputRef={searchRef}
+              listRef={listRef}
+              firstChoiceSelector="[data-project-id]:not([data-disabled])"
+            />
+          )}
+          <PickerMenuList
             listRef={listRef}
-            firstChoiceSelector="[data-project-id]"
-          />
-          <ProjectChoices
-            catalog={choices}
-            busy={busy}
-            search={search}
-            listRef={listRef}
-            onSelect={(value) => {
-              if (busy) return;
-              setMenuOpen(false);
-              const id = value || null;
-              void act(() => api.selectProject({ id })).then((success) => {
-                if (!success) return;
-                onSelect(value);
-              });
-            }}
-          />
+            label="Projects"
+            watch={`${search}:${projectCount}:${catalog === null}`}
+          >
+            <ProjectChoices
+              catalog={choices}
+              busy={busy}
+              search={search}
+              listRef={listRef}
+              onSelect={(value) => {
+                if (busy || !value) return;
+                setMenuOpen(false);
+                void act(() => api.selectProject({ id: value })).then((success) => {
+                  if (!success) return;
+                  onSelect(value);
+                });
+              }}
+            />
+          </PickerMenuList>
           <DropdownMenuSeparator className="m-0 shrink-0" />
-          <ProjectMutationItems
+          <ProjectRefresh
             busy={busy}
-            onRecheck={() => {
+            onRefresh={() => {
               void act(api.recheckProjects);
-            }}
-            onAdd={() => {
-              clearError();
-              setAddDialogOpen(true);
             }}
           />
         </PickerMenuContent>
       </DropdownMenu>
-      <AddRepositoryDialog
-        open={addDialogOpen}
-        busy={busy}
-        error={error}
-        triggerRef={triggerRef}
-        onOpenChange={(open) => {
-          clearError();
-          setAddDialogOpen(open);
-        }}
-        onAdd={(path) =>
-          act(async () => {
-            const project = await api.addRepository({ path });
-            await api.selectProject({ id: project.id });
-            setAddDialogOpen(false);
-            onSelect(project.id);
-          })
-        }
-      />
-      {error && !addDialogOpen && (
+      {error && (
         <Alert variant="destructive" className={toolbarStatusClass}>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
@@ -388,24 +294,13 @@ export function ProjectPicker({
   );
 }
 
-function ProjectMutationItems({
-  busy,
-  onRecheck,
-  onAdd,
-}: {
-  busy: boolean;
-  onRecheck: () => void;
-  onAdd: () => void;
-}) {
+function ProjectRefresh({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
   const mutationsAllowed = useMutationsAllowed();
   const disabled = busy || !mutationsAllowed;
   return (
     <div className="shrink-0 p-1">
-      <DropdownMenuItem disabled={disabled} onSelect={onRecheck}>
-        <RefreshCwIcon aria-hidden /> Recheck projects
-      </DropdownMenuItem>
-      <DropdownMenuItem disabled={disabled} onSelect={onAdd}>
-        <FolderPlusIcon aria-hidden /> Add repository
+      <DropdownMenuItem disabled={disabled} onSelect={onRefresh}>
+        <RefreshCwIcon aria-hidden /> Refresh projects
       </DropdownMenuItem>
     </div>
   );

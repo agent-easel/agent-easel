@@ -1,5 +1,7 @@
 import {
   useCallback,
+  useLayoutEffect,
+  useState,
   type FocusEvent,
   type KeyboardEvent,
   type PointerEvent,
@@ -10,6 +12,15 @@ import { SearchIcon } from "lucide-react";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+/** Search appears only once a menu lists more choices than fit without it. */
+const pickerSearchMinimum = 7;
+
+export function pickerShowsSearch(count: number) {
+  return count > pickerSearchMinimum;
+}
+
+const enabledRadio = '[role="menuitemradio"]:not([data-disabled])';
 
 export function PickerMenuSearch({
   ariaLabel,
@@ -41,18 +52,19 @@ export function PickerMenuSearch({
           aria-label={ariaLabel}
           placeholder={placeholder}
           value={value}
-          className="h-9 pl-8"
+          // muted-foreground clears 4.5:1 on the field; the tertiary placeholder color does not.
+          className="h-9 pl-8 placeholder:text-muted-foreground"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") return;
             event.stopPropagation();
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              const choice =
-                listRef.current?.querySelector<HTMLElement>(firstChoiceSelector) ??
-                listRef.current?.querySelector<HTMLElement>('[role="menuitemradio"]');
-              choice?.focus();
-            }
+            if (event.key === "Enter") event.preventDefault();
+            if (event.key !== "ArrowDown") return;
+            event.preventDefault();
+            const choice =
+              listRef.current?.querySelector<HTMLElement>(firstChoiceSelector) ??
+              listRef.current?.querySelector<HTMLElement>(enabledRadio);
+            choice?.focus();
           }}
         />
       </div>
@@ -86,17 +98,22 @@ function usePickerMenuContentHandlers({
   );
   const onKeyDownCapture = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== "ArrowUp") return;
-      if (event.target !== listRef.current?.querySelector('[role="menuitemradio"]')) return;
+      if (!searchEnabled || event.key !== "ArrowUp") return;
+      const first = listRef.current?.querySelector(enabledRadio);
+      if (event.target !== first) return;
       event.preventDefault();
       event.stopPropagation();
       searchRef.current?.focus();
     },
-    [listRef, searchRef],
+    [listRef, searchEnabled, searchRef],
   );
   return { onFocusCapture, onPointerMoveCapture, onKeyDownCapture };
 }
 
+/**
+ * Opens under the field and stops at the space below it, so a long menu scrolls instead of
+ * flipping up over the heading.
+ */
 export function PickerMenuContent({
   className,
   searchRef,
@@ -112,8 +129,83 @@ export function PickerMenuContent({
 }) {
   const menuHandlers = usePickerMenuContentHandlers({ searchRef, listRef, searchEnabled });
   return (
-    <DropdownMenuContent align="start" className={cn(className)} {...menuHandlers}>
+    <DropdownMenuContent
+      side="bottom"
+      avoidCollisions={false}
+      align="start"
+      // Tracks the popper as the anchor moves, and leaves a 12px gap above the window edge.
+      style={{ maxHeight: "calc(var(--radix-dropdown-menu-content-available-height) - 12px)" }}
+      className={cn("flex w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0", className)}
+      {...menuHandlers}
+    >
       {children}
     </DropdownMenuContent>
+  );
+}
+
+/** The scrolling choice list: a visible scrollbar, and a fade over the row the cap cuts off. */
+export function PickerMenuList({
+  listRef,
+  label,
+  watch,
+  children,
+}: {
+  listRef: RefObject<HTMLDivElement | null>;
+  label: string;
+  watch: string;
+  children: ReactNode;
+}) {
+  const [cut, setCut] = useState(false);
+  const updateCut = useCallback(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const overflowing = list.scrollHeight - list.scrollTop - list.clientHeight > 1;
+    setCut((current) => (current === overflowing ? current : overflowing));
+  }, [listRef]);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const fit = () => {
+      const content = list.closest("[data-slot='dropdown-menu-content']");
+      if (content instanceof HTMLElement) {
+        const cap = Number.parseFloat(getComputedStyle(content).maxHeight);
+        if (Number.isFinite(cap)) {
+          const pinned = [...content.children].reduce((sum, child) => {
+            if (!(child instanceof HTMLElement) || child.contains(list)) return sum;
+            return sum + child.offsetHeight;
+          }, 0);
+          const frame = content.offsetHeight - content.clientHeight;
+          const next = `${Math.max(0, cap - pinned - frame)}px`;
+          if (list.style.maxHeight !== next) list.style.maxHeight = next;
+        }
+      }
+      updateCut();
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(list);
+    const content = list.closest("[data-slot='dropdown-menu-content']");
+    if (content) observer.observe(content);
+    return () => observer.disconnect();
+  }, [listRef, updateCut, watch]);
+  return (
+    <div className="relative min-h-0">
+      <div
+        ref={listRef}
+        role="group"
+        aria-label={label}
+        onScroll={updateCut}
+        className="min-h-0 overflow-y-auto overscroll-contain p-1 [scrollbar-color:var(--border-strong)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-strong"
+      >
+        {children}
+      </div>
+      {cut && (
+        <div
+          aria-hidden
+          data-slot="picker-menu-fade"
+          className="pointer-events-none absolute bottom-0 left-0 h-8 w-[calc(100%-0.5rem)] bg-linear-to-t from-popover to-transparent"
+        />
+      )}
+    </div>
   );
 }

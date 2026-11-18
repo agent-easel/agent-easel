@@ -100,17 +100,21 @@ T3 owns the fetch and checkout during [worktree preparation](runner.md#run-works
 - **Composer.** Project and Flow choices are remembered locally per selected Factory server, like drafts. One card under the
   box explains the single blocking condition; the field that causes it shows only its border and a short tag, and nothing
   sits under the box while Start can run. An empty prompt leaves Start disabled, and ⌘↵ does nothing. The Project picker
-  keeps searchable paths, **Recheck projects** and **Add repository**; unavailable references stay visible in history but
-  cannot be selected for a new Run. With no saved T3 address the card is **Connect Factory to T3** (**Open T3 connection**),
+  lists available projects and offers **Refresh projects**. Search appears when the menu has more than seven projects.
+  A project T3 no longer lists is cleared from the field and is not shown; unavailable references stay visible in
+  history but cannot be selected for a new Run. With no saved T3 address the card is **Connect Factory to T3** (**Open T3 connection**),
   Project and Flow are disabled, and the sidebar footer shows no connection dot or status. A connection that was saved and
   then lost is **T3 is disconnected**: the draft is kept, Project and Flow show their last known values, and Start returns
   when Factory reconnects. When the browser loses Factory the card is **Factory offline** and keeps the draft, without a T3
   settings link. A connected catalog with no available Project reads **No projects in T3** and its card offers **Refresh
   projects** and **Open T3**. A rejected Start's card body is **No Run was created.**, with one row per cause.
-- **Flow picker.** The Flow picker is disabled until a Project is chosen. With a Project it lists ready global Flows
-  under **Global**, then ready Flows owned by that Project under its title; a chosen Flow that stops being ready stays
-  listed and marked **Not ready**. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
-  owned by another Project. Clearing the Project clears the Flow, and neither New Run nor choosing a Project again
+- **Flow picker.** The Flow picker is disabled until a Project is chosen. With a Project it lists every global Flow
+  under **Global**, then every Flow owned by that Project under its title. Ready Flows come first. A Flow that is not
+  ready is a disabled row at the end of its group, with a **Not ready** tag, and it is not checked. A chosen Flow that
+  stops being ready stays in the field with that tag. A chosen Flow that no longer exists is cleared, and the field
+  returns to **Choose a Flow**. Search appears when the menu has more than seven Flows. The placeholder lives only on
+  the closed field. Switching Project keeps a global Flow or a Flow of the new Project and clears a Flow
+  owned by another Project. A cleared Project clears the Flow, and neither New Run nor choosing a Project again
   restores it. These clears are silent: the composer shows no notice or label, and the prompt and images always stay.
   The Flow editor's **Start Run** on a Project Flow selects its owning Project; on a global Flow it uses the remembered
   Project, or with none shows the Flow in the disabled picker until a Project is chosen. Start stays disabled for a Flow
