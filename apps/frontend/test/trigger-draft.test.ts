@@ -28,6 +28,13 @@ it("a case-insensitive Trigger name already in Studio disables saving the draft"
   });
   const draft = createTriggerDraft(null, definitions);
   const disconnect = draft.connect();
+  draft.edit({ name: "New name", projectId: "atlas", flowId: "global" });
+  draft.detectRepository("atlas", {
+    host: "github.com",
+    nameWithOwner: "factory-demo/atlas",
+    nodeId: "atlas-repository",
+  });
+  expect(draft.getSnapshot().canSave).toBe(true);
 
   // Act
   draft.edit({ name: " ready issues " });
