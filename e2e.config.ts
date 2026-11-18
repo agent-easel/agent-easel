@@ -13,7 +13,7 @@ export default {
           executable: "node",
           args: ["--conditions=factory-source", "tests/support/server.ts"],
           env: { PORT: "{port}" },
-          log: ".e2e/logs/fixture.log",
+          log: process.env.E2E_FIXTURE_LOG ?? ".e2e/logs/fixture.log",
         },
         // The result reader's Copy Markdown is read back from the clipboard.
         permissions: { "clipboard-read": "grant", "clipboard-write": "grant" },

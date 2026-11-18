@@ -163,13 +163,14 @@ module, built with the seed's builders.
 
 ### PR journey check
 
-The **Controlled UI journeys** PR check runs the complete existing suite in three
-parallel shards after a frozen install, a frontend build with its workspace dependencies,
-and Chromium installation. The fixture runs the backend from source. Each shard is its
-own runner invocation with one worker and its own freshly seeded fixture, so
-a journey must not depend on state another journey created; the check passes only
-when every shard passes. Browser installation
-and journey execution are separate Actions steps so their durations are distinguishable.
+The **Controlled UI journeys** PR check runs the complete suite in three parallel
+shards on two GitHub-hosted runners. The first two shards share a frozen install,
+a frontend build with its workspace dependencies, and Chromium. The third shard
+has its own runner. Every shard has a separate e2e invocation, fixture and logs,
+and runs one worker against the backend from source. A journey must not depend
+on state another journey created. The check passes only when every shard passes.
+Browser installation and journey execution are separate Actions steps so their
+durations are distinguishable.
 It runs on PR open, reopen and source synchronization, including drafts and forks,
 without model or production credentials. Becoming ready for review preserves the
 existing journey result rather than cancelling or repeating the same validation.
@@ -185,7 +186,7 @@ explicit skip or a successful full run, never a failed selection or unexpected s
 
 The runner retains traces for failed attempts. Failures upload available reports
 and traces from `.e2e/ci/` and fixture logs from
-`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>-shard-<n>`, including hidden files, for
+`.e2e/logs/` as `ui-journeys-<run_id>-<run_attempt>-shards-<group>`, including hidden files, for
 seven days. Setup failures may occur before those files exist. Download them from
 the Actions run. CI does not replace Before/After UI evidence or prove live provider,
 native desktop or remote-device compatibility. Requiring the check is an owner
