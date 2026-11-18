@@ -274,11 +274,18 @@ export interface StudioOwner {
   readonly title: string;
   /**
    * The Project's repository path, with its environment and endpoint and then an id suffix only
-   * while those still leave two Projects alike; null for Global.
+   * while those still leave two Projects alike; null for Global and for a Project gone from T3.
    */
   readonly detail: string | null;
-  /** The owning Project's availability reason while it is unavailable; otherwise null. */
+  /**
+   * Why a picker disables this Project; null when it can own a new definition. A lost T3
+   * connection still disables the picker and is not a list-row state.
+   */
   readonly unavailable: string | null;
+  /** The Project is gone from T3, so its definitions stay listed only to be moved or removed. */
+  readonly gone: boolean;
+  /** The Project is in T3 and its folder is missing, so its Flows are not ready. */
+  readonly folderMissing: boolean;
 }
 
 /** One owner's definitions in a Studio list. */
@@ -299,6 +306,8 @@ const globalOwner: StudioOwner = {
   title: "Global",
   detail: null,
   unavailable: null,
+  gone: false,
+  folderMissing: false,
 };
 
 /** The repository path, extended only while another Project still reads the same. */
@@ -322,6 +331,11 @@ function projectDetail(project: FactoryProject, projects: readonly FactoryProjec
 const byLabel = (a: StudioOwner, b: StudioOwner) =>
   a.title.localeCompare(b.title) || (a.detail ?? "").localeCompare(b.detail ?? "");
 
+/** A Project T3 no longer lists, as distinct from a missing folder or a lost connection. */
+function projectGone(availability: FactoryProject["availability"]) {
+  return availability === "project-unavailable" || availability === "different-environment";
+}
+
 /** How Studio labels a definition owned by `projectId`, from the Project catalog. */
 export function studioOwner(
   projectId: string | null,
@@ -330,19 +344,29 @@ export function studioOwner(
   if (projectId === null) return globalOwner;
   const project = projects.find((entry) => entry.id === projectId);
   if (!project)
-    return { projectId, title: "Unknown Project", detail: projectId, unavailable: null };
+    return {
+      projectId,
+      title: "Unknown Project",
+      detail: projectId,
+      unavailable: null,
+      gone: false,
+      folderMissing: false,
+    };
+  const gone = projectGone(project.availability);
   return {
     projectId,
     title: project.title,
-    detail: projectDetail(project, projects),
+    detail: gone ? null : projectDetail(project, projects),
     unavailable:
       project.availability === "available" ? null : projectAvailabilityLabels[project.availability],
+    gone,
+    folderMissing: project.availability === "directory-unavailable",
   };
 }
 
 /**
- * A Studio list grouped by owner: Global first, then one group per owning Project ordered by
- * label. Each group keeps the list's own order.
+ * A Studio list grouped by owner: Global first, then Projects still in T3 by label, then Projects
+ * gone from T3. Each group keeps the list's own order.
  */
 export function ownerGroups<D extends { readonly projectId: string | null }>(
   items: readonly D[],
@@ -361,7 +385,7 @@ export function ownerGroups<D extends { readonly projectId: string | null }>(
     .flatMap(([projectId, group]) =>
       projectId === null ? [] : [{ owner: studioOwner(projectId, projects), items: group }],
     )
-    .sort((a, b) => byLabel(a.owner, b.owner));
+    .sort((a, b) => Number(a.owner.gone) - Number(b.owner.gone) || byLabel(a.owner, b.owner));
   return global ? [{ owner: globalOwner, items: global }, ...owned] : owned;
 }
 

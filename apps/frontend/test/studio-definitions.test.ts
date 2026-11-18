@@ -211,9 +211,68 @@ it("a Project group shows its title and repository path, and an unavailable one 
   expect(groups[0]?.owner).toStrictEqual({
     projectId: "docs",
     title: "Docs site",
-    detail: "~/code/docs",
+    detail: null,
     unavailable: "Project unavailable",
+    gone: true,
+    folderMissing: false,
   });
+});
+
+it("a Project no longer in T3 groups last, and a missing folder or a lost connection does not", () => {
+  // Arrange
+  const alpha = factoryProject("alpha", "Alpha");
+  const gone = factoryProject("gone", "Aardvark", {
+    availability: "project-unavailable",
+    workspaceRoot: "~/gone",
+  });
+  const folder = factoryProject("folder", "Folder", {
+    availability: "directory-unavailable",
+    workspaceRoot: "~/folder",
+  });
+  const offline = factoryProject("offline", "Offline", {
+    availability: "connection-unavailable",
+    workspaceRoot: "~/offline",
+  });
+  const other = factoryProject("other", "Zebra", { availability: "different-environment" });
+
+  // Act
+  const groups = ownerGroups(
+    [
+      savedFlow("Gone", { projectId: gone.id }),
+      savedFlow("Alpha", { projectId: alpha.id }),
+      savedFlow("Folder", { projectId: folder.id }),
+      savedFlow("Offline", { projectId: offline.id }),
+      savedFlow("Other", { projectId: other.id }),
+    ],
+    [gone, alpha, folder, offline, other],
+    { kind: "all" },
+  );
+
+  // Assert
+  expect(groups.map((group) => group.owner.title)).toStrictEqual([
+    "Alpha",
+    "Folder",
+    "Offline",
+    "Aardvark",
+    "Zebra",
+  ]);
+  expect(groups[1]?.owner).toMatchObject({
+    gone: false,
+    folderMissing: true,
+    detail: "~/folder",
+    unavailable: "Repository unavailable",
+  });
+  expect(groups[2]?.owner).toMatchObject({
+    gone: false,
+    folderMissing: false,
+    unavailable: "T3 connection unavailable",
+  });
+  expect(groups[3]?.owner).toMatchObject({
+    gone: true,
+    folderMissing: false,
+    detail: null,
+  });
+  expect(groups[4]?.owner.gone).toBe(true);
 });
 
 it("Projects sharing a title and repository path are told apart by their environment", () => {

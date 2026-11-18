@@ -8,7 +8,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /** The workspace in one line; a custom ref appears exactly. */
-export function workspaceSummary(workspace: FlowWorkspace) {
+function workspaceSummary(workspace: FlowWorkspace) {
   if (workspace.mode === "checkout") return "Project checkout";
   if (workspace.base.kind === "default") return "New worktree · default branch";
   return `New worktree · ${workspace.base.ref.trim() || "custom ref"}`;

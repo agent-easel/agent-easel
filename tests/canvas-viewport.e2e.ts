@@ -14,7 +14,7 @@ test("resizing the Flow editor refits a manually zoomed view", async ({ app, scr
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
   await app.open("/studio/flows");
-  await screen.getByRole("heading", "Demo · Focused change", { exact: true }).tap();
+  await screen.getByRole("link", "Demo · Focused change", { exact: false }).tap();
   const canvas = screen.getByRole("region", "Flow canvas");
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await expect(canvas).toHaveAttribute("data-zoom", "1.000");

@@ -117,6 +117,13 @@ Compare latest revision, Review and enable, and Import use the wide width
 `clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
 32 px.
 
+A primary action with a blank required name stays neutral and disabled, with no reason and without
+marking the field invalid. Any other cause that keeps it from running shows that one reason beside
+the action. The control stays neutral while disabled and uses the filled primary only when it can
+run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow it. Flow editor
+**Save Flow** keeps the filled primary while disabled until that editor is revised; the same rule
+still describes when it may run.
+
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio uses `clamp(1200px, 50vw, 1680px)` by
 `clamp(800px, 80vh, 1200px)` at viewport sizes of at least 1600 × 1000 px.

@@ -1,16 +1,8 @@
 import { useRef } from "react";
-import { ShieldAlert, Upload } from "lucide-react";
-import type {
-  AgentCapabilities,
-  AgentModelOptionValue,
-  FactoryProject,
-  ImportResult,
-  ImportReviewFlow,
-  PortableModelHint,
-} from "@t3-factory/contracts";
+import { CircleAlert, ShieldAlert, Upload } from "lucide-react";
+import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,17 +13,17 @@ import {
   useDefinitionImport,
   type DefinitionImportModel,
   type DefinitionImportSnapshot,
+  type ImportFile,
   type ImportRow,
 } from "../definition-import.ts";
 import { ModelOptionField } from "./execution-settings-fields.tsx";
-import { workspaceSummary } from "./flow-workspace-control.tsx";
 import { NeedsModel } from "./needs-model.tsx";
-import { OwnerTargetMenu } from "./studio-owner.tsx";
-import { ownerPicker, studioOwner } from "../studio-definitions.ts";
+import { OwnerPicker } from "./studio-owner.tsx";
+import { ownerPicker } from "../studio-definitions.ts";
 
 /**
- * **Import** on the Flows list: choose a `.json` file, review what it creates and confirm. Either
- * list accepts either kind of file; the file decides what is created.
+ * **Import** on the Flows and Agents lists: choose a `.json` file, review what it creates and
+ * confirm. Either list accepts either kind of file; the file decides what is created.
  */
 export function DefinitionImportControl({
   projects,
@@ -58,7 +50,7 @@ export function DefinitionImportControl({
 type DefinitionImporter = ReturnType<typeof useDefinitionImportChooser>;
 
 /** An import whose `choose` opens the file chooser that `DefinitionImportDialog` renders. */
-export function useDefinitionImportChooser() {
+function useDefinitionImportChooser() {
   const { model, state } = useDefinitionImport();
   const chooser = useRef<HTMLInputElement>(null);
   return { model, state, chooser, choose: () => chooser.current?.click() };
@@ -68,7 +60,7 @@ export function useDefinitionImportChooser() {
  * The file chooser and the review of the chosen file. Render it outside a menu that opens the
  * chooser, which unmounts its content on select.
  */
-export function DefinitionImportDialog({
+function DefinitionImportDialog({
   importer: { model, state, chooser },
   projects,
   onImported,
@@ -112,54 +104,79 @@ export function DefinitionImportDialog({
             onConfirm={() => void confirm()}
           />
         ) : (
-          <ImportFileContent model={model} state={state} />
+          <ImportFileContent
+            state={state}
+            onCancel={model.cancel}
+            onChooseAnother={() => chooser.current?.click()}
+          />
         )}
       </Dialog>
     </>
   );
 }
 
-function ImportProblem({ state }: { state: DefinitionImportSnapshot }) {
-  if (!state.error) return null;
-  return (
-    <div role="alert" className="grid gap-1 text-sm text-destructive">
-      <p>{state.error}</p>
-      {state.issues.length > 0 && (
-        <ul className="list-disc pl-5 text-xs">
-          {state.issues.map((issue) => (
-            <li key={issue}>{issue}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+/** Blocks in the held Flow file, or null when the file is not a Flow or cannot be read. */
+function importedBlockCount(file: ImportFile | null): number | null {
+  if (!file) return null;
+  try {
+    const document = JSON.parse(file.text) as {
+      flow?: { graph?: { blocks?: readonly unknown[] } };
+    };
+    const blocks = document.flow?.graph?.blocks;
+    return Array.isArray(blocks) ? blocks.length : null;
+  } catch {
+    return null;
+  }
 }
 
-/** Before a review answers: reading the file, or why it was rejected, keeping it for a retry. */
+/** Before a review answers: reading the file, or one error card when it was rejected. */
 function ImportFileContent({
-  model,
   state,
+  onCancel,
+  onChooseAnother,
 }: {
-  model: DefinitionImportModel;
   state: DefinitionImportSnapshot;
+  onCancel: () => void;
+  onChooseAnother: () => void;
 }) {
+  const rejected = !state.reviewing && Boolean(state.error);
   return (
     <DialogContent
       size="wide"
-      title={<>Import {state.file?.name}</>}
-      description={state.reviewing ? "Reading the file…" : "Factory could not import this file."}
+      title={<>Import “{state.file?.name}”</>}
       actions={
         <>
-          <Button type="button" variant="outline" onClick={model.cancel}>
+          <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          <Button type="button" disabled={state.reviewing} onClick={() => void model.retry()}>
-            Try again
-          </Button>
+          {rejected && (
+            <Button type="button" onClick={onChooseAnother}>
+              Choose another file
+            </Button>
+          )}
         </>
       }
     >
-      <ImportProblem state={state} />
+      {state.reviewing && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Reading the file…
+        </p>
+      )}
+      {rejected && (
+        <Alert variant="critical">
+          <CircleAlert aria-hidden />
+          <AlertTitle>{state.error}</AlertTitle>
+          {state.issues.length > 0 && (
+            <AlertDescription>
+              <ul className="list-disc pl-5">
+                {state.issues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </AlertDescription>
+          )}
+        </Alert>
+      )}
     </DialogContent>
   );
 }
@@ -179,19 +196,15 @@ function ImportReviewContent({
 }) {
   const { rows, capabilities, flow } = review;
   const blocked = ownerPicker(state.target, projects).blocked;
-  const agentCount = rows.length === 1 ? "one new Agent" : `${rows.length} new Agents`;
+  const blocks = importedBlockCount(state.file);
   return (
     <DialogContent
       size="wide"
       closeDisabled={state.committing}
-      title="Review the import"
-      description={
-        flow
-          ? `Import creates a new Flow “${flow.name}” and ${agentCount} from ${state.file?.name}.`
-          : `Import creates ${agentCount} from ${state.file?.name}.`
-      }
+      title={<>Import “{state.file?.name}”</>}
       actions={
         <>
+          {blocked && <p className="mr-auto text-sm text-destructive">{blocked}</p>}
           <Button
             type="button"
             variant="outline"
@@ -200,148 +213,60 @@ function ImportReviewContent({
           >
             Cancel
           </Button>
-          <Button type="button" disabled={Boolean(blocked)} onClick={onConfirm}>
-            {state.committing ? "Importing…" : "Confirm import"}
+          <Button
+            type="button"
+            variant={state.committing || !blocked ? "default" : "outline"}
+            disabled={state.committing || Boolean(blocked)}
+            onClick={onConfirm}
+          >
+            {state.committing ? "Importing…" : "Import"}
           </Button>
         </>
       }
     >
-      <div className="grid gap-1.5">
-        <OwnerTargetMenu
-          label="Target owner"
-          chosen={state.target}
-          from={null}
-          projects={projects}
-          disabled={state.committing}
-          onChange={model.setTarget}
-          unavailableReason=" — can’t own imported definitions"
-        />
-        <p className="text-2xs tracking-label text-subtle-foreground">
-          {state.target === null
-            ? "Every imported Flow and Agent is created as a global definition."
-            : `Every imported Flow and Agent is created owned by ${studioOwner(state.target, projects).title}.`}
-        </p>
-      </div>
+      <OwnerPicker
+        kind={flow ? "Flow" : "Agent"}
+        chosen={state.target}
+        projects={projects}
+        onChange={model.setTarget}
+        disabled={state.committing}
+        initial={state.target}
+        hint=""
+        quietStatus
+      />
       <Alert variant="attention">
         <ShieldAlert aria-hidden />
-        <AlertTitle>Imported instructions run with your T3 capabilities</AlertTitle>
         <AlertDescription>
-          When you start a Run, its workers follow these{" "}
-          {flow ? "Agent prompts, Continuation prompts and Revisit instructions" : "Agent prompts"}{" "}
-          with everything your T3 environment allows. Importing does not start a Run; read them in
-          Studio first.
+          Imported prompts run with your T3 permissions — Read them in Studio before you start a
+          Run.
         </AlertDescription>
       </Alert>
-      {flow && <ImportFlowWorkspace flow={flow} />}
-      <section aria-labelledby="import-inventory" className="grid gap-2">
-        <h3 id="import-inventory" className="text-sm font-semibold">
-          Instructions in this file
+      <section aria-labelledby="import-creates" className="grid gap-3">
+        <h3 id="import-creates" className="text-sm font-semibold">
+          Creates
         </h3>
-        <ul className="grid gap-1 text-sm">
-          {rows.map((row) => (
-            <li key={row.key} className="flex flex-wrap gap-x-2">
-              <span className="font-medium">{row.name}</span>
-              <span className="text-muted-foreground">
-                prompt {row.promptLength.toLocaleString()} characters · {row.exitCount}{" "}
-                {row.exitCount === 1 ? "exit" : "exits"}
-              </span>
-            </li>
-          ))}
-          {flow?.continuations.map((continuation, index) => (
-            <li key={`continuation-${index}`} className="flex flex-wrap gap-x-2">
-              <span className="font-medium">{continuation.blockName}</span>
-              <span className="text-muted-foreground">
-                Continuation prompt {continuation.promptLength.toLocaleString()} characters
-              </span>
-            </li>
-          ))}
-          {flow?.revisitInstructions.map((revisit, index) => (
-            <li key={`revisit-${index}`} className="flex flex-wrap gap-x-2">
-              <span className="font-medium">{revisit.blockName}</span>
-              <span className="text-muted-foreground">
-                Revisit instruction {revisit.length.toLocaleString()} characters
-              </span>
-            </li>
-          ))}
-        </ul>
+        {flow && (
+          <div className="grid gap-0.5">
+            <p className="text-sm font-medium">{flow.name}</p>
+            {blocks !== null && (
+              <p className="text-2xs tracking-label text-muted-foreground">
+                {blocks} {blocks === 1 ? "block" : "blocks"}
+              </p>
+            )}
+          </div>
+        )}
+        {rows.map((row) => (
+          <ImportModelRow
+            key={row.key}
+            model={model}
+            row={row}
+            capabilities={capabilities}
+            disabled={state.committing}
+          />
+        ))}
       </section>
-      {rows.length > 0 && (
-        <section aria-labelledby="import-models" className="grid gap-3">
-          <h3 id="import-models" className="text-sm font-semibold">
-            Models
-          </h3>
-          {rows.map((row) => (
-            <ImportModelRow
-              key={row.key}
-              model={model}
-              row={row}
-              capabilities={capabilities}
-              disabled={state.committing}
-            />
-          ))}
-        </section>
-      )}
-      <ImportProblem state={state} />
     </DialogContent>
   );
-}
-
-/** Where the imported Flow's workers will act, with a custom ref shown exactly. */
-function ImportFlowWorkspace({ flow }: { flow: ImportReviewFlow }) {
-  const { workspace } = flow;
-  return (
-    <section aria-labelledby="import-workspace" className="grid gap-1">
-      <h3 id="import-workspace" className="text-sm font-semibold">
-        Workspace
-      </h3>
-      <p className="text-sm break-all">{workspaceSummary(workspace)}</p>
-      <p className="text-xs text-muted-foreground">
-        {workspace.mode === "checkout"
-          ? "Workers edit the selected project's checkout, shared with other Runs."
-          : workspace.base.kind === "default"
-            ? "Each Run gets its own worktree from the project repository's default branch."
-            : "Each Run gets its own worktree from this Git ref."}
-      </p>
-    </section>
-  );
-}
-
-const optionsText = (options: readonly AgentModelOptionValue[]) =>
-  options.map((option) => `${option.id} ${String(option.value)}`).join(", ");
-
-function hintText(hint: PortableModelHint): string {
-  return [
-    `Exported model: ${hint.modelId} on ${hint.providerInstanceId}`,
-    hint.driverKind ? ` (${hint.driverKind})` : "",
-    hint.modelOptions.length > 0 ? `, ${optionsText(hint.modelOptions)}` : "",
-    ".",
-  ].join("");
-}
-
-const matchLabel = {
-  matched: "Matched",
-  ambiguous: "Ambiguous",
-  unmatched: "Unmatched",
-  no_model: "No model in file",
-} as const;
-
-/** Why the review proposed no model for this row; nothing for a match. */
-function unmatchedReason(row: ImportRow, capabilities: AgentCapabilities): string {
-  const { match, hint } = row;
-  if (match.status === "ambiguous") {
-    const names = match.candidates.map(
-      (id) =>
-        capabilities.providers.find((provider) => provider.providerInstanceId === id)
-          ?.displayName ?? id,
-    );
-    return `Several providers offer this model: ${names.join(", ")}. Choose one.`;
-  }
-  if (match.status !== "unmatched" || !hint) return "";
-  if (capabilities.state !== "ready")
-    return "Nothing was matched because the T3 catalog is unavailable.";
-  return hint.driverKind
-    ? `No reporting-capable ${hint.driverKind} provider here offers ${hint.modelId}.`
-    : `The file names no driver kind, so only a reporting-capable provider named ${hint.providerInstanceId} offering ${hint.modelId} could match.`;
 }
 
 const choiceId = (providerInstanceId: string, modelId: string) =>
@@ -364,28 +289,22 @@ function ImportModelRow({
     .find((provider) => provider.providerInstanceId === selection?.providerInstanceId)
     ?.models.find((entry) => entry.id === selection?.modelId);
   const pickerId = `import-model-${row.key}`;
-  const reason = unmatchedReason(row, capabilities);
-  // The group names its Agent, so the row's option fields keep the Worker section's plain labels.
   return (
     <div
       role="group"
       aria-labelledby={`${pickerId}-name`}
       className="grid gap-1.5 rounded-lg border px-3 py-2.5"
     >
-      <div className="flex flex-wrap items-baseline gap-x-2">
+      <div className="flex flex-wrap items-center gap-x-2">
         <Label id={`${pickerId}-name`} htmlFor={pickerId} className="text-sm font-medium">
           {row.name}
         </Label>
-        <StatusBadge kind={row.match.status === "matched" ? "success" : "neutral"}>
-          {matchLabel[row.match.status]}
-        </StatusBadge>
         {!selection && <NeedsModel />}
       </div>
-      {row.hint && <p className="text-xs text-muted-foreground">{hintText(row.hint)}</p>}
-      {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
       <ChoiceMenu
         id={pickerId}
         label={`Model for ${row.name}`}
+        {...(selection ? {} : { className: "border-attention" })}
         value={selection ? choiceId(selection.providerInstanceId, selection.modelId) : ""}
         choices={[
           { id: "", label: "Needs a model" },
@@ -418,18 +337,6 @@ function ImportModelRow({
             />
           ))}
         </div>
-      )}
-      {row.droppedOptions.length > 0 && (
-        <p className="text-xs text-attention">
-          Dropped because the chosen model does not accept them: {optionsText(row.droppedOptions)}.
-        </p>
-      )}
-      {choices.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          {capabilities.state === "ready"
-            ? "T3 offers no provider with Factory reporting; import now and choose a model later."
-            : `${capabilities.explanation} Import now and choose a model in the Agent editor later.`}
-        </p>
       )}
       {row.refusal && (
         <p role="alert" className="text-xs text-destructive">

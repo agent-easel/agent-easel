@@ -171,6 +171,7 @@ export async function expectLoadedAgentRevision(
   );
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(agent.prompt);
   await expect(panel).toHaveCount(0);
-  await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
+  // Loading the saved revision leaves a clean Agent, so Save stays neutral.
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   return { ...state };
 }

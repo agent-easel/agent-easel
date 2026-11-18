@@ -7,18 +7,11 @@ import type {
   AgentDefinition,
   AgentProjectOverride,
   FactoryProject,
+  FlowDraft,
 } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Check,
-  CircleAlert,
-  Copy,
-  FolderGit2,
-  MoreHorizontal,
-  Trash2,
-  Workflow,
-} from "lucide-react";
+import { Check, CircleAlert, Copy, FolderGit2, MoreHorizontal, Workflow } from "lucide-react";
 import { SettingsLink } from "../app-link.tsx";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { Button } from "@/components/ui/button";
@@ -40,7 +33,7 @@ import {
   type AgentDraftModel,
   type AgentDraftSnapshot,
 } from "../../agent-draft.ts";
-import { agentRuntimeMeta, flowUsageLabel } from "@/lib/agent-display";
+import { agentRuntimeMeta, flowUsageLabel, placingFlows } from "@/lib/agent-display";
 import { AgentExitsField } from "./agent-exits-field.tsx";
 import { DefinitionExportDialog, DefinitionExportMenuItem } from "../definition-export-control.tsx";
 import { useMenuActions } from "../menu-actions.ts";
@@ -48,6 +41,14 @@ import type { DefinitionExportModel, DefinitionExportSnapshot } from "../../defi
 import { AgentRevisionPanel } from "./agent-revision-panel.tsx";
 import { AgentModelPicker } from "./agent-model-picker.tsx";
 import { OwnerChangeNotice, OwnerPicker, ownerName } from "../studio-owner.tsx";
+import {
+  CantRemoveDialog,
+  RemoveMenuItem,
+  flowBlockers,
+  namedBlockers,
+  racedBlockers,
+} from "../studio-removal.tsx";
+import { useStudioNavigation } from "../../settings-navigation.ts";
 import { studioOwner, type StudioOwner } from "../../studio-definitions.ts";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
@@ -74,6 +75,8 @@ type AgentEditorProps = {
   capabilities: AgentCapabilities | null;
   ownership: AgentOwnership;
   flowUsage: number;
+  /** Saved Flows, so Remove can name the ones that still place this Agent. */
+  flows: readonly FlowDraft[];
   duplicating: boolean;
   onSave: () => Promise<void>;
   /** Opens Duplicate…; absent before the first save. */
@@ -314,6 +317,11 @@ function AgentEditorHeader(
   const { state, flowUsage, name, saving, ownership, picker } = props;
   const agent = state.saved;
   const saveLabel = agent ? "Save" : "Create Agent";
+  const ownerBlock = ownership.kind === "new" ? ownership.blocked : null;
+  const blankName = name.trim() === "";
+  // A blank name disables the action with no reason. A clean Agent has nothing to save.
+  const ready = state.canSave && state.dirty && !ownerBlock && !blankName;
+  const beside = blankName ? "" : ownerBlock || saveBlockedReason(state) || "";
   return (
     <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-4 pt-5 pb-4 sm:px-6 md:px-8">
       {ownership.kind === "saved" && <AgentOwner owner={ownership.owner} />}
@@ -325,13 +333,12 @@ function AgentEditorHeader(
         <div className="ml-auto flex max-w-full min-w-0 items-center gap-2">
           {picker}
           {agent && <AgentMoreActions {...props} agent={agent} />}
+          {beside && <p className="min-w-0 text-sm text-destructive">{beside}</p>}
           <MutationGate>
             <Button
               type="submit"
-              disabled={
-                saving || !state.canSave || (ownership.kind === "new" && Boolean(ownership.blocked))
-              }
-              title={saveBlockedReason(state)}
+              variant={saving || ready ? "default" : "outline"}
+              disabled={saving || !ready}
             >
               {saving ? "Saving…" : saveLabel}
             </Button>
@@ -393,15 +400,16 @@ function AgentStatusLine({ state, flowUsage }: { state: AgentDraftSnapshot; flow
 const removedReason = "This Agent was removed elsewhere.";
 
 /**
- * Figma SA01d: Duplicate…, Change owner…, Export JSON and Delete… act on the saved revision, so
+ * Figma SA01d: Duplicate…, Change owner…, Export JSON and Remove… act on the saved revision, so
  * they exist only after the first save.
  */
 function AgentMoreActions({
   agent,
   draft,
   state,
-  flowUsage,
+  flows,
   saving,
+  ownership,
   onDuplicate,
   onChangeOwner,
   exporter,
@@ -446,12 +454,13 @@ function AgentMoreActions({
         </DropdownMenuContent>
       </DropdownMenu>
       {exporter && <DefinitionExportDialog {...exporter} />}
-      <DeleteAgentDialog
+      <AgentRemoveDialog
         open={confirmingDelete}
         agent={agent}
         draft={draft}
         state={state}
-        flowUsage={flowUsage}
+        flows={flows}
+        projects={ownership.projects}
         onClose={() => setConfirmingDelete(false)}
         onDeleted={onDeleted}
       />
@@ -505,16 +514,7 @@ function AgentMenuItems({
         />
       )}
       <DropdownMenuSeparator />
-      <DropdownMenuItem
-        variant="destructive"
-        aria-label="Delete"
-        disabled={!writable}
-        description={reason}
-        onSelect={() => queue(onDelete)}
-      >
-        <Trash2 aria-hidden />
-        Delete…
-      </DropdownMenuItem>
+      <RemoveMenuItem disabled={!writable} description={reason} onSelect={() => queue(onDelete)} />
     </>
   );
 }
@@ -537,13 +537,14 @@ function saveBlockedReason(state: AgentDraftSnapshot): string | undefined {
   return undefined;
 }
 
-/** Delete… confirms, or says which Flows still use the Agent; it closes on a removal elsewhere. */
-function DeleteAgentDialog({
+/** Remove… confirms, or lists the Flows that still place the Agent. */
+function AgentRemoveDialog({
   open,
   agent,
   draft,
   state,
-  flowUsage,
+  flows,
+  projects,
   onClose,
   onDeleted,
 }: {
@@ -551,53 +552,63 @@ function DeleteAgentDialog({
   agent: AgentDefinition;
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
-  flowUsage: number;
+  flows: readonly FlowDraft[];
+  projects: readonly FactoryProject[];
   onClose: () => void;
   onDeleted: () => void;
 }) {
-  const { removing: deleting, removalError: error } = state;
-  async function confirmDelete() {
+  const openStudio = useStudioNavigation();
+  const { removing, removalError, removalIssues } = state;
+  const placing = placingFlows(flows, agent.id);
+  const raced = namedBlockers(removalIssues, "agent_in_use").filter(
+    (blocker) => !placing.some((flow) => flow.id === blocker.id),
+  );
+  async function confirm() {
     if (await draft.remove()) {
       onClose();
       onDeleted();
     }
   }
+  if (placing.length > 0 || raced.length > 0)
+    return (
+      <CantRemoveDialog open={open} name={agent.name} label="Flows" onClose={onClose}>
+        {flowBlockers(placing, projects, (id) => void openStudio({ tab: "flows", flowId: id }))}
+        {racedBlockers(raced, "Flow", (id) => void openStudio({ tab: "flows", flowId: id }))}
+      </CantRemoveDialog>
+    );
+  const inUse = removalIssues.some((issue) => issue.code === "agent_in_use");
   return (
     <Dialog
       open={open}
       onOpenChange={(value) => {
-        if (!value && !deleting) onClose();
+        if (!value && !removing) onClose();
       }}
     >
       <DialogContent
-        title={<>Delete {agent.name}?</>}
-        description={
-          flowUsage > 0
-            ? `Remove this Agent from ${flowUsageLabel(flowUsage)} before deleting it.`
-            : "Deleting this Agent removes it from Studio and keeps its saved revisions for existing Runs."
-        }
+        title={<>Remove “{agent.name}”?</>}
+        description="Removing this Agent removes it from Studio and keeps its saved revisions for existing Runs."
         actions={
           <>
-            <Button type="button" variant="outline" disabled={deleting} onClick={onClose}>
+            <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
               Cancel
             </Button>
             <MutationGate>
               <Button
                 type="button"
                 variant="destructive"
-                disabled={deleting || state.removed}
-                onClick={() => void confirmDelete()}
+                disabled={removing || state.removed}
+                onClick={() => void confirm()}
               >
-                {deleting ? "Deleting…" : "Delete Agent"}
+                {removing ? "Removing…" : "Remove Agent"}
               </Button>
             </MutationGate>
           </>
         }
-        closeDisabled={deleting}
+        closeDisabled={removing}
       >
-        {error && (
+        {removalError && !inUse && (
           <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{removalError}</AlertDescription>
           </Alert>
         )}
       </DialogContent>

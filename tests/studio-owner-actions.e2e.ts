@@ -165,18 +165,18 @@ test("Import creates the file's definitions in the chosen target Project", async
   const file = await exportDefinitionFile(app.baseUrl, "flow", northwind.id);
   await app.open("/studio/flows");
   // The list heading renders before the connection is current; a delivered row means it is.
-  await expect(screen.getByRole("heading", "Northwind release", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", /Northwind release/)).toBeVisible();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
-  const review = screen.getByRole("dialog", "Review the import");
-  await expect(review.getByRole("button", "Target owner")).toContainText("Global");
-  await review.getByRole("button", "Target owner").tap();
+  const review = screen.getByRole("dialog", /^Import “/);
+  await review.getByRole("radio", "Project", { exact: true }).tap();
+  await review.getByRole("button", "Owning Project", { exact: true }).tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
   await browser.evaluate(settled);
   await app.screenshot("import-target");
   const before = new Set((await listFlows(app.baseUrl)).map((flow) => flow.id));
 
   // Act
-  await review.getByRole("button", "Confirm import", { exact: true }).tap();
+  await review.getByRole("button", "Import", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByLabel("Flow name")).toHaveValue("Northwind release");
@@ -186,7 +186,7 @@ test("Import creates the file's definitions in the chosen target Project", async
   await app.screenshot("import-target-opened");
 });
 
-test("Import… in the New Agent menu creates the file's Agent and opens it", async ({
+test("Import on the Agents list creates the file's Agent and opens it", async ({
   app,
   screen,
   browser,
@@ -197,7 +197,7 @@ test("Import… in the New Agent menu creates the file's Agent and opens it", as
   const file = await exportDefinitionFile(app.baseUrl, "agent", source.id);
   await app.open("/studio/agents");
   // A delivered row means the connection is current.
-  await expect(screen.getByRole("link", source.name, { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", source.name, { exact: false })).toBeVisible();
   // Records that Import… opens the file chooser; the test supplies the chosen file below.
   await browser.evaluate(
     `document.querySelector('input[aria-label="Choose a Factory export file"]').addEventListener("click", (event) => { event.preventDefault(); document.body.dataset.chooserOpened = "true"; }, { once: true })`,
@@ -205,14 +205,12 @@ test("Import… in the New Agent menu creates the file's Agent and opens it", as
   const before = new Set((await listAgentDefinitions(app.baseUrl)).map((agent) => agent.id));
 
   // Act
-  await screen.getByRole("button", "Other ways to add an Agent").tap();
-  await browser.evaluate(settled);
-  await app.screenshot("new-agent-menu");
-  await screen.getByRole("menuitem", "Import", { exact: true }).tap();
+  await app.screenshot("agents-import");
+  await screen.getByRole("button", "Import", { exact: true }).tap();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
   await screen
-    .getByRole("dialog", "Review the import")
-    .getByRole("button", "Confirm import", { exact: true })
+    .getByRole("dialog", /^Import “/)
+    .getByRole("button", "Import", { exact: true })
     .tap();
 
   // Assert

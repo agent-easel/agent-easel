@@ -49,11 +49,11 @@ test("reporting problems are visible before Start and clear after repairing the 
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
     "Reporting needs attention",
   );
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).toContainText(
     "Reporting needs attention",
   );
   // The attention line replaces the summary but keeps a global Agent's override count.
-  const overriddenRow = screen.getByRole("link", overridden.name, { exact: true });
+  const overriddenRow = screen.getByRole("link", overridden.name, { exact: false });
   await expect(overriddenRow).toContainText("Reporting needs attention");
   await expect(overriddenRow).toContainText("+1 Project override");
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
@@ -81,12 +81,12 @@ test("reporting problems are visible before Start and clear after repairing the 
   await browser.keyboard.press("Escape");
   await screen.getByRole("link", "Studio", { exact: true }).tap();
   await screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents").tap();
-  await screen.getByRole("link", "Runtime worker", { exact: true }).tap();
+  await screen.getByRole("link", "Runtime worker", { exact: false }).tap();
   await expect(screen.getByLabel("Name", { exact: true })).toHaveValue("Runtime worker");
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).toContainText(
     "GPT 6.1 Sol",
   );
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).not.toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).not.toContainText(
     "Reporting",
   );
   await expect(screen.getByRole("status", "Agent reporting status")).not.toBeVisible();

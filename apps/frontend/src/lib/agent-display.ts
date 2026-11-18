@@ -10,8 +10,9 @@ import type {
   FlowDraft,
 } from "@t3-factory/contracts";
 
-export function flowUsageCount(flows: readonly FlowDraft[], agentId: string): number {
-  return flows.filter((flow) => flowGraphReferencesAgent(flow.graph, agentId)).length;
+/** Saved Flows whose graph places `agentId`, in the list's order. */
+export function placingFlows(flows: readonly FlowDraft[], agentId: string): FlowDraft[] {
+  return flows.filter((flow) => flowGraphReferencesAgent(flow.graph, agentId));
 }
 
 export function flowUsageLabel(count: number): string {
@@ -106,17 +107,19 @@ function workerEffort(
   return descriptor.choices?.find((choice) => choice.id === value)?.label ?? String(value);
 }
 
-/** The provider, model and thinking options of saved execution settings. */
+/** The first letter of each word, so an effort choice reads “High”. */
+function titleCase(value: string) {
+  return value.replace(/\b([a-z])/g, (letter) => letter.toUpperCase());
+}
+
+/** The provider, model and effort of saved execution settings, in display names. */
 export function agentRuntimeMeta(
   execution: AgentExecutionSettings,
   capabilities: AgentCapabilities | null,
 ): string {
-  const { provider, model } = resolveAgentModel(execution, capabilities);
+  const shown = workerTrigger(execution, capabilities);
+  if (shown.state === "needs-model") return "";
+  const { provider } = resolveAgentModel(execution, capabilities);
   const providerLabel = provider?.displayName ?? execution.providerInstanceId;
-  const modelLabel = model?.label ?? execution.modelId;
-  const thinking = execution.modelOptions
-    .map((entry) => String(entry.value))
-    .filter((value) => value.length > 0)
-    .join(", ");
-  return [providerLabel, modelLabel, thinking].filter(Boolean).join(" · ");
+  return [providerLabel, shown.model, titleCase(shown.effort)].filter(Boolean).join(" · ");
 }

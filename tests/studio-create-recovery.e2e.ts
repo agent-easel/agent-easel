@@ -51,13 +51,13 @@ test("Back to a created Agent removed after its first live appearance shows not 
   await screen.getByLabel("Prompt", { exact: true }).fill("Review the requested change.");
   await screen.getByRole("button", "Create Agent", { exact: true }).tap();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("link", name, { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", name, { exact: false })).toBeVisible();
   const path = new URL(await browser.url()).pathname;
   const id = path.split("/").at(-1)!;
-  await screen.getByRole("link", "Sample worker", { exact: true }).tap();
+  await screen.getByRole("link", "Sample worker", { exact: false }).tap();
   await expect(screen.getByLabel("Name", { exact: true })).toHaveValue("Sample worker");
   await removeAgentElsewhere(app.baseUrl, id);
-  await expect(screen.getByRole("link", name, { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("link", name, { exact: false })).toHaveCount(0);
 
   // Act
   await browser.back();
