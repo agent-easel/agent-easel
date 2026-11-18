@@ -163,11 +163,11 @@ module, built with the seed's builders.
 
 ### PR journey check
 
-The **Controlled UI journeys** PR check runs the complete suite in three parallel
-shards on two GitHub-hosted runners. The first two shards share a frozen install,
-a frontend build with its workspace dependencies, and Chromium. The third shard
-has its own runner. Every shard has a separate e2e invocation, fixture and logs,
-and runs one worker against the backend from source. A journey must not depend
+The **Controlled UI journeys** PR check runs the complete suite in four parallel
+shards on two GitHub-hosted runners. Each runner prepares a frozen install,
+a frontend build with its workspace dependencies, and Chromium for two shards.
+Every shard has a separate e2e invocation, fixture and logs, and runs one
+worker against the backend from source. A journey must not depend
 on state another journey created. The check passes only when every shard passes.
 Browser installation and journey execution are separate Actions steps so their
 durations are distinguishable.

@@ -38,15 +38,15 @@ jobs:
     if: needs.select.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # Pair the shorter shards on one runner, but give each shard its own seeded fixture.
+    # Pair shards by measured workload, with a separate seeded fixture for each.
     strategy:
       fail-fast: false
       matrix:
         include:
           - group: "1-2"
             shards: "1 2"
-          - group: "3"
-            shards: "3"
+          - group: "3-4"
+            shards: "3 4"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -72,7 +72,7 @@ jobs:
           pids=()
           for shard in "${shards[@]}"; do
             E2E_FIXTURE_LOG=".e2e/logs/fixture-shard-$shard.log" \
-              pnpm exec e2e run --shard "$shard/3" --retries 0 --trace retain-on-failure \
+              pnpm exec e2e run --shard "$shard/4" --retries 0 --trace retain-on-failure \
                 --output ".e2e/ci/journeys-$shard" 2>&1 |
               awk -v prefix="[shard $shard] " '{ print prefix $0; fflush() }' &
             pids+=("$!")
