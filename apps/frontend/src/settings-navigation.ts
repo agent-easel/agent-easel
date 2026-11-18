@@ -52,9 +52,8 @@ function studioSelection(value: unknown): StudioSelection | undefined {
 }
 export function validateAppSearch(search: Record<string, unknown>): AppSearch {
   const studio = studioSelection(search.studio);
-  if (studio) return { studio };
   const tab = settingsTab(searchRecord(search.settings).tab);
-  return tab ? { settings: { tab } } : {};
+  return { ...(studio && { studio }), ...(tab && { settings: { tab } }) };
 }
 
 export function studioMask(selection: StudioSelection) {
@@ -101,9 +100,10 @@ export function useStudio() {
 }
 export function useSettingsOptions(selection: SettingsSelection) {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const studio = useStudio();
   return {
     to: pathname,
-    search: { settings: selection },
+    search: { ...(studio && { studio }), settings: selection },
     mask: settingsMask(selection),
     resetScroll: false,
   };
@@ -149,11 +149,16 @@ export function useOpenStudio() {
 export function useSettingsNavigation() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const studio = useStudio();
   return (selection: SettingsSelection | undefined) =>
     navigate({
       to: pathname,
-      search: selection ? { settings: selection } : {},
-      ...(selection ? { mask: settingsMask(selection) } : {}),
+      search: { ...(studio && { studio }), ...(selection && { settings: selection }) },
+      ...(selection
+        ? { mask: settingsMask(selection) }
+        : studio
+          ? { mask: studioMask(studio) }
+          : {}),
       resetScroll: false,
     });
 }
