@@ -36,6 +36,12 @@ async function projects(app: App) {
   return { demo: catalog.projects[0]!, withoutRuns };
 }
 
+async function selectProject(screen: Screen, project: string) {
+  await screen.getByRole("button", /^Project: /).tap();
+  await screen.getByRole("menuitemradio", project, { exact: true }).tap();
+  await expect(screen.getByRole("menu")).toBeHidden();
+}
+
 const cards = (screen: Screen) =>
   screen.getByRole("list", "Run images").getByRole("button", /^Preview /);
 
@@ -98,9 +104,9 @@ test("a Run image card opens its preview with every Run that uses it", async ({ 
 
   // Assert
   const preview = screen.getByRole("region", "Preview of compact-navigation.png");
-  await expect(preview).toContainText(/Image \d+ of \d+/);
+  await expect(preview).toContainText(/\d+ of \d+/);
   await expect(preview.getByRole("image", "compact-navigation.png")).toBeVisible();
-  const usedBy = preview.getByRole("list", "Used by");
+  const usedBy = preview.getByRole("region", "Used by");
   await expect(usedBy).toContainText("Demo · Archived · Earlier navigation experiment");
   await expect(usedBy).toContainText("Archived · ");
   await expect(usedBy).toContainText("Image 1");
@@ -116,7 +122,7 @@ test("filtering Run images by the demo project names it in the summary", async (
   const { demo } = await openRunImages(app, screen);
 
   // Act
-  await screen.getByRole("combobox", "Project").selectOption({ label: demo.title });
+  await selectProject(screen, demo.title);
 
   // Assert
   await expect(screen.getByText(new RegExp(` Runs? in ${demo.title}$`))).toBeVisible();
@@ -132,13 +138,10 @@ test("a project without Settled or Archived Run images shows the empty state", a
   const { withoutRuns } = await openRunImages(app, screen);
 
   // Act
-  await screen.getByRole("combobox", "Project").selectOption({ label: withoutRuns.title });
+  await selectProject(screen, withoutRuns.title);
 
   // Assert
-  await expect(screen.getByText("No images to delete", { exact: true })).toBeVisible();
-  await expect(
-    screen.getByText("No stored images from Settled or Archived Runs", { exact: true }),
-  ).toBeVisible();
+  await expect(screen.getByText("No Run images", { exact: true })).toBeVisible();
   await expect(cards(screen)).toHaveCount(0);
   await app.screenshot("settings-run-images-empty");
 });
@@ -155,9 +158,9 @@ async function failRunImageListing(browser: Browser) {
 }
 
 const listingAlert = (screen: Screen) =>
-  screen.getByRole("alert").filter({ has: screen.getByRole("button", "Retry") });
+  screen.getByRole("alert").filter({ hasText: "Couldn’t list Run images" });
 
-test("a failed Run images listing shows its error with Retry instead of loading forever", async ({
+test("a failed Run images listing shows its error with Try again instead of loading forever", async ({
   app,
   screen,
   browser,
@@ -171,13 +174,11 @@ test("a failed Run images listing shows its error with Retry instead of loading 
 
   // Assert
   await expect(listingAlert(screen)).toBeVisible();
-  await expect(screen.getByText("Images not listed", { exact: true })).toBeVisible();
-  await expect(screen.getByText("Listing images…", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "Try again")).toBeVisible();
+  await expect(screen.getByText("Checking", { exact: true })).toHaveCount(0);
   await expect(cards(screen)).toHaveCount(0);
-  await expect(
-    screen.getByText("No stored images from Settled or Archived Runs", { exact: true }),
-  ).toHaveCount(0);
-  await expect(screen.getByRole("button", /^Delete all /)).toHaveCount(0);
+  await expect(screen.getByText("No Run images", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", /^Delete \d+ images?…$/)).toHaveCount(0);
 });
 
 test("returning to a filter whose listing failed shows its new listing as pending, not the old failure", async ({
@@ -188,23 +189,22 @@ test("returning to a filter whose listing failed shows its new listing as pendin
   const { demo } = await openRunImages(app, screen);
   await withHeldRunImageListings(browser, demo.id, async () => {
     // Arrange
-    const projectFilter = screen.getByRole("combobox", "Project");
-    await projectFilter.selectOption({ label: demo.title });
+    await selectProject(screen, demo.title);
     await expect(listingAlert(screen)).toBeVisible();
-    await projectFilter.selectOption({ label: "All projects" });
-    await expect(screen.getByText("Listing images…", { exact: true })).toBeVisible();
+    await selectProject(screen, "All projects");
+    await expect(screen.getByText("Checking", { exact: true })).toBeVisible();
 
     // Act
-    await projectFilter.selectOption({ label: demo.title });
+    await selectProject(screen, demo.title);
 
     // Assert
-    await expect(screen.getByText("Listing images…", { exact: true })).toBeVisible();
+    await expect(screen.getByText("Checking", { exact: true })).toBeVisible();
     await expect(listingAlert(screen)).toHaveCount(0);
-    await expect(screen.getByText("Images not listed", { exact: true })).toHaveCount(0);
+    await expect(screen.getByRole("button", "Try again")).toHaveCount(0);
   });
 });
 
-test("Retry after a failed Run images listing lists the images", async ({
+test("Try again after a failed Run images listing lists the images", async ({
   app,
   screen,
   browser,
@@ -216,19 +216,19 @@ test("Retry after a failed Run images listing lists the images", async ({
   recover();
 
   // Act
-  await listingAlert(screen).getByRole("button", "Retry").tap();
+  await screen.getByRole("button", "Try again").tap();
 
   // Assert
   await expect(cards(screen).first()).toBeVisible();
   await expect(listingAlert(screen)).toHaveCount(0);
-  await expect(screen.getByText("Images not listed", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "Try again")).toHaveCount(0);
 });
 
 /** Run images filtered to the demo project; returns the fixture projects. */
 async function openDemoRunImages(app: App, screen: Screen) {
   const fixtureProjects = await openRunImages(app, screen);
   const { demo } = fixtureProjects;
-  await screen.getByRole("combobox", "Project").selectOption({ label: demo.title });
+  await selectProject(screen, demo.title);
   await expect(screen.getByText(new RegExp(` Runs? in ${demo.title}$`))).toBeVisible();
   return fixtureProjects;
 }
@@ -239,12 +239,11 @@ test("cancelling a filtered Delete all keeps every listed image", async ({ app, 
   // Arrange
   const { demo } = await openDemoRunImages(app, screen);
   const listed = await cards(screen).count();
-  await screen.getByRole("button", `Delete all ${listed}`).tap();
+  await screen.getByRole("button", `Delete ${listed} images…`).tap();
   const dialog = confirmation(screen);
-  await expect(dialog).toContainText(
-    new RegExp(`^Delete ${listed} images \\(.+\\) from \\d+ Runs in ${demo.title}\\?`),
-  );
-  await expect(dialog).toContainText("cannot be restored");
+  await expect(
+    dialog.getByRole("heading", `Delete ${listed} images in ${demo.title}?`),
+  ).toBeVisible();
   await expect(dialog).toContainText("“Image unavailable”");
   await expect(dialog).toContainText("Images in other projects are kept.");
   await expect(dialog.getByRole("button", `Delete ${listed} images`)).toBeVisible();
@@ -329,11 +328,9 @@ test("an image deleted in Settings shows Image unavailable in the Run it was vie
   // Arrange
   const run = await closedRunWith(app, "welcome-copy.png");
   const preview = await previewFromRun(app, screen, browser, run.id, "welcome-copy.png");
-  await preview.getByRole("button", "Delete image").tap();
+  await preview.getByRole("button", "Delete image…", { exact: true }).tap();
   const dialog = confirmation(screen);
-  await expect(dialog).toContainText(/^Delete welcome-copy\.png \(.+\)\?/);
-  // Earlier journeys in the same run can attach the same bytes to another closed Run.
-  await expect(dialog).toContainText(/Used by \d+ Runs? in /);
+  await expect(dialog.getByRole("heading", "Delete “welcome-copy.png”?")).toBeVisible();
   await expect(dialog).toContainText(/keeps? (its|their) history and shows? “Image unavailable”/);
   await app.screenshot("settings-run-images-confirm-one");
 
@@ -360,7 +357,7 @@ test("an image whose deletion answer is lost still shows Image unavailable in th
     await route.fetch();
     await route.abort();
   });
-  await preview.getByRole("button", "Delete image").tap();
+  await preview.getByRole("button", "Delete image…", { exact: true }).tap();
 
   // Act
   await confirmation(screen).getByRole("button", "Delete image").tap();
@@ -380,7 +377,7 @@ test("an image this client deleted shows again when its Run is revisited after a
   await uploadAsAnotherClient(app, demoImages.welcomeCopy);
   const run = await closedRunWith(app, "welcome-copy.png");
   const preview = await previewFromRun(app, screen, browser, run.id, "welcome-copy.png");
-  await preview.getByRole("button", "Delete image").tap();
+  await preview.getByRole("button", "Delete image…", { exact: true }).tap();
   await confirmation(screen).getByRole("button", "Delete image").tap();
   await expect(screen.getByRole("button", "Preview welcome-copy.png")).toHaveCount(0);
   await screen.getByRole("button", "Close", { exact: true }).tap();
@@ -452,7 +449,7 @@ test("Delete all deletes every image the project filter lists", async ({ app, sc
   await uploadAsAnotherClient(app, demoImages.compactNavigation);
   await uploadAsAnotherClient(app, demoImages.welcomeCopy);
   const { demo } = await openDemoRunImages(app, screen);
-  await screen.getByRole("button", /^Delete all \d+$/).tap();
+  await screen.getByRole("button", /^Delete \d+ images?…$/).tap();
 
   // Act
   await confirmation(screen)
@@ -460,9 +457,7 @@ test("Delete all deletes every image the project filter lists", async ({ app, sc
     .tap();
 
   // Assert
-  await expect(
-    screen.getByText("No stored images from Settled or Archived Runs", { exact: true }),
-  ).toBeVisible();
+  await expect(screen.getByText("No Run images", { exact: true })).toBeVisible();
   expect(
     await read<readonly EligibleRunImage[]>(app, `/api/run-images?projectId=${demo.id}`),
   ).toEqual([]);

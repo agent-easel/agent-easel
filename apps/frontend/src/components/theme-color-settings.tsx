@@ -1,78 +1,84 @@
-import type {
-  AppearancePresentation,
-  T3Appearance,
-  T3AppearanceState,
-} from "@t3-factory/contracts";
-import { useAppearance } from "../appearance.ts";
-import { useLiveAppearance } from "../live/live-connection.ts";
-import { SettingsDetailRow, SettingsGroup, SettingsRow } from "./settings-page.tsx";
-import { StatusBadge, type SettingKind } from "./status-badge.tsx";
+import { Unplug } from "lucide-react";
+import type { AppearancePresentation, T3Appearance } from "@t3-factory/contracts";
+import { Button } from "@/components/ui/button";
+import { useSettingsNavigation } from "../settings-navigation.ts";
+import { SettingsDetailRow, SettingsGroup, SettingsProblemCard } from "./settings-page.tsx";
 
-const statePills: Record<T3AppearanceState, { label: string; kind: SettingKind }> = {
-  connecting: { label: "Connecting", kind: "neutral" },
-  following: { label: "Following T3", kind: "success" },
-  unavailable: { label: "Unavailable", kind: "attention" },
-  unsupported: { label: "Not supported", kind: "neutral" },
-};
-
-function modeText(presentation: AppearancePresentation | null, mode: "light" | "dark") {
-  if (!presentation) return "Factory colors";
-  const half = presentation.modes[mode];
-  return half.kind === "inherited" ? `T3 “${presentation.theme.name}” colors` : half.explanation;
-}
-
-function ThemeColorDetails({ appearance }: { appearance: T3Appearance | null }) {
-  const presentation = appearance?.presentation ?? null;
+export function ThemeColorSettings({
+  status,
+  presentation,
+}: {
+  status: T3Appearance | null;
+  presentation: AppearancePresentation | null;
+}) {
+  if (status?.state === "unsupported")
+    return (
+      <SettingsProblemCard tone="info" title="This T3 doesn’t share its theme">
+        Update T3 to follow its theme.
+      </SettingsProblemCard>
+    );
+  if (status?.state === "unavailable" && !presentation) return <ThemeConnectionProblem />;
+  const name = presentation?.theme.name ?? status?.unreadableTheme;
+  const checking = !status || status.state === "connecting";
+  const modes = presentation?.modes;
+  const rejected = modes?.light.kind === "baseline" && modes.dark.kind === "baseline";
+  const details = rejected
+    ? [modes.light.explanation, modes.dark.explanation].join("\n")
+    : status?.unreadableTheme
+      ? status.explanation
+      : undefined;
   return (
     <>
-      <SettingsDetailRow label="Light" value={modeText(presentation, "light")} />
-      <SettingsDetailRow label="Dark" value={modeText(presentation, "dark")} />
+      <SettingsGroup label="T3 theme">
+        <SettingsDetailRow label="Theme" value={name ?? (checking ? "—" : "None set in T3")} />
+        {modes && !rejected && <ThemeModes modes={modes} />}
+      </SettingsGroup>
+      {details && (
+        <SettingsProblemCard
+          tone="info"
+          title={`Factory can’t use the “${name}” theme`}
+          details={details}
+        >
+          Factory uses its own colors.
+        </SettingsProblemCard>
+      )}
     </>
   );
 }
 
-/**
- * Host Settings → Appearance → T3 theme colors: whether Factory follows the T3 environment's
- * default theme through the T3 connection, why not, and what each mode shows. Independent of
- * the connection's readiness.
- */
-export function ThemeColorSettings() {
-  const appearance = useLiveAppearance().value;
-  const pill = appearance && statePills[appearance.state];
+function ThemeModes({ modes }: { modes: AppearancePresentation["modes"] }) {
   return (
-    <SettingsGroup
-      label="T3 theme colors"
-      badge={pill && <StatusBadge kind={pill.kind}>{pill.label}</StatusBadge>}
-    >
-      <SettingsRow
-        title="T3’s default theme colors"
-        description={
-          <span aria-live="polite">
-            {appearance?.explanation ??
-              "Factory follows the colors of the T3 environment’s default theme through the T3 connection."}{" "}
-            Runs never depend on theme colors.
-          </span>
-        }
+    <>
+      <SettingsDetailRow
+        label="Light"
+        value={modes.light.kind === "inherited" ? "T3 colors" : "Factory colors"}
       />
-      <ThemeColorDetails appearance={appearance} />
-    </SettingsGroup>
+      <SettingsDetailRow
+        label="Dark"
+        value={modes.dark.kind === "inherited" ? "T3 colors" : "Factory colors"}
+      />
+    </>
   );
 }
 
-/** T3 theme colors on clients other than the host: what the selected mode shows, and why. */
-export function ThemeColorsNote() {
-  const mode = useAppearance();
-  const appearance = useLiveAppearance().value;
-  if (!appearance) return null;
-  const presentation = appearance.presentation;
-  const half = presentation?.modes[mode];
-  let text = appearance.explanation;
-  if (half?.kind === "inherited")
-    text = `Colors follow T3’s default theme “${presentation!.theme.name}”.`;
-  else if (half) text = half.explanation;
+function ThemeConnectionProblem() {
+  const openSettings = useSettingsNavigation();
   return (
-    <SettingsGroup label="T3 theme colors">
-      <SettingsRow description={text} />
-    </SettingsGroup>
+    <SettingsProblemCard
+      tone="info"
+      icon={Unplug}
+      title="Theme colors wait for the T3 connection"
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void openSettings({ tab: "connection" })}
+        >
+          Open T3 connection
+        </Button>
+      }
+    >
+      Factory colors are used meanwhile.
+    </SettingsProblemCard>
   );
 }

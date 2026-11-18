@@ -29,41 +29,38 @@ async function runTitleSetting(baseUrl: string | undefined, input?: UpdateRunTit
 }
 
 beforeEach(async ({ browser }) => {
-  await browser.setViewport({ width: 1440, height: 1000 });
+  await browser.setViewport({ width: 1440, height: 900 });
 });
 
-test("the host turns on Generate Run titles with a provider instance and model from T3", async ({
+test("Run title generation enables locally and saves when the host chooses a provider", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
+  await runTitleSetting(app.baseUrl, { enabled: false, model: null });
   await app.open("/settings/run-titles");
   const generation = screen.getByRole("region", "Generation");
-  await expect(screen.getByRole("button", /^How it works/)).toHaveAttribute(
-    "aria-expanded",
-    "false",
-  );
-  await generation.getByRole("button", /^Provider instance: /).tap();
-  await screen.getByRole("menuitemradio", "Codex", { exact: true }).tap();
-  await generation.getByRole("button", /^Model: /).tap();
-  await screen.getByRole("menuitemradio", "GPT 6 Astra", { exact: true }).tap();
-  await expect(generation.getByRole("button", "Model: GPT 6 Astra")).toBeEnabled();
+  const toggle = generation.getByRole("switch", "Generate Run titles");
+  await expect(generation.getByRole("button", /^Provider: /)).toHaveCount(0);
 
   // Act
-  await generation.getByRole("switch", "Generate Run titles").tap();
+  await toggle.tap();
 
   // Assert
-  await expect(generation.getByRole("switch", "Generate Run titles")).toBeChecked();
-  await expect(generation).toContainText("On · applies to Runs started from now on.");
+  await expect(toggle).toBeChecked();
+  await expect(screen.getByText("Not saved yet")).toBeVisible();
+  expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
+  await generation.getByRole("button", /^Provider: /).tap();
+  await screen.getByRole("menuitemradio", "Codex", { exact: true }).tap();
+  await expect(screen.getByText("Not saved yet")).toHaveCount(0);
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({
     enabled: true,
-    model: { providerInstanceId: "codex-main", modelId: "gpt-6-astra" },
+    model: { providerInstanceId: "codex-main", modelId: "gpt-6.1-sol" },
   });
   await browser.reload();
-  await expect(
-    screen.getByRole("region", "Generation").getByRole("switch", "Generate Run titles"),
-  ).toBeChecked();
+  await expect(toggle).toBeChecked();
+  await expect(generation.getByRole("button", /^Model: GPT /)).toBeVisible();
   await app.screenshot("run-titles-host-on");
 });
 
@@ -149,6 +146,7 @@ test("an approved client sees Generate Run titles and its latest diagnostic read
 }) => {
   // Arrange
   await fixture.runImagesAndTitles.titleDiagnostic();
+  await runTitleSetting(app.baseUrl, { enabled: true, model: titleModel });
   await openRemoteBrowser(app);
 
   // Act
@@ -157,13 +155,14 @@ test("an approved client sees Generate Run titles and its latest diagnostic read
   // Assert
   await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
   const generation = screen.getByRole("region", "Generation");
-  await expect(generation.getByRole("switch", "Generate Run titles")).toBeChecked();
-  await expect(generation.getByRole("switch", "Generate Run titles")).toBeDisabled();
-  await expect(generation.getByRole("button", /^Provider instance: /)).toBeDisabled();
-  await expect(generation.getByRole("button", /^Model: /)).toBeDisabled();
-  const latest = screen.getByRole("region", "Latest result");
-  await expect(latest.getByText(/^Skipped$/)).toBeVisible();
-  await expect(latest.getByText(/^Run #\d+ · /)).toBeVisible();
+  await expect(generation.getByText("On", { exact: true })).toBeVisible();
+  await expect(generation.getByText("Codex · GPT 6.1 Sol · Low", { exact: true })).toBeVisible();
+  await expect(generation.getByRole("switch")).toHaveCount(0);
+  const latest = screen
+    .getByRole("status")
+    .filter({ hasText: /Run #\d+ kept its first-line title/ });
+  await expect(latest.getByText(/Title generation was skipped ·/)).toBeVisible();
+  await latest.getByRole("button", "Technical details").tap();
   await expect(latest.getByText(/T3 does not offer gpt-6\.1-luna for Codex\./)).toBeVisible();
   await app.screenshot("run-titles-approved-client");
 });

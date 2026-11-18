@@ -195,7 +195,7 @@ function mapMode(palette: T3ThemePalette, mode: Appearance) {
     input: formatHex(toRgb(t3.input)),
     ring: formatHex(ring),
     overlay:
-      mode === "dark" ? formatTranslucent(background, 0.8) : formatTranslucent(foreground, 0.28),
+      mode === "dark" ? formatTranslucent(background, 0.8) : formatTranslucent(foreground, 0.43),
     ...status,
   };
   return colors;

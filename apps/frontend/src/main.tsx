@@ -21,17 +21,18 @@ createRoot(document.getElementById("root")!).render(
     <TooltipProvider delayDuration={300}>
       <DesktopShell>
         <ClientGate>
-          <InheritedColors />
-          <ConnectionStateProvider>
-            <ReportingStateProvider>
-              <RouterProvider router={router} />
-              <TanStackRouterDevtools
-                router={router}
-                initialIsOpen={false}
-                position="bottom-right"
-              />
-            </ReportingStateProvider>
-          </ConnectionStateProvider>
+          <InheritedColors>
+            <ConnectionStateProvider>
+              <ReportingStateProvider>
+                <RouterProvider router={router} />
+                <TanStackRouterDevtools
+                  router={router}
+                  initialIsOpen={false}
+                  position="bottom-right"
+                />
+              </ReportingStateProvider>
+            </ConnectionStateProvider>
+          </InheritedColors>
         </ClientGate>
       </DesktopShell>
     </TooltipProvider>

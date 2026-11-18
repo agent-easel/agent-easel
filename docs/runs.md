@@ -137,14 +137,13 @@ Factory is refused); an unknown instance, model or option is rejected and the se
 the chosen model. Only the Factory host changes it (`PUT /api/settings/run-titles`); approved clients read it, with its
 latest diagnostic (`GET /api/settings/run-titles`).
 
-**Settings → Run titles** holds the setting. On the host it offers the on/off choice and the provider instance, model and
-options from the live T3 catalog, and saves each change at once; choosing a provider instance takes its first model, and
-the switch stays unavailable until a provider instance and model are chosen. A saved choice the catalog no longer
-offers stays visible as unavailable. The latest diagnostic follows the setting with its outcome, Run and time in a neutral
-status badge, never the error color. A closed **How it works** disclosure explains generation and that the title model runs
-in the Project checkout with the owner's T3 permissions, its prompt forbidding reading or editing files without Factory
-enforcing it. An approved client sees the same fields read-only with the **Managed on the Factory host** chip. The section
-reads the setting when it opens; changes are not delivered live.
+**Settings → Run titles** holds the setting. The host can switch generation On before choosing a model.
+The Worker rows unlock, and the header shows **Not saved yet** until the host chooses a provider.
+Factory selects that provider’s first model and saves the setting. Switching Off keeps the Worker and
+disables its rows. Choices come from the live T3 catalog. A choice T3 no longer offers is cleared from
+its field and shows **Needs a model**. The latest diagnostic appears as an Info card with the Run,
+outcome, time and **Technical details**. Approved clients see read-only values under **Managed on the
+Factory host**. The section reads the setting each time it opens.
 
 The shared Start operation, used by the composer, by `factory_start_run` and by a confirmed
 [Chat control](chat-control.md#actions) Start, makes the decision, so every Start path behaves the same. A Run is eligible only when the setting is on at acceptance and its title provenance is automatic; manual and
@@ -400,19 +399,16 @@ fixed Human exits their old exits were mapped to.
   elsewhere until the view opens again. Missing or corrupt retained bytes show **Image unavailable** with
   the image's ordinal and name; the rest of the history stays readable, and a failed read is not retried in that view and
   creates no attention or state change.
-- **Settings → Run images** lists each image whose file is stored and whose every Run is Settled or Archived. An image an
-  Active Run also uses is not listed. If the list cannot be read, the section shows the error with **Retry** and lists
-  nothing until a read succeeds.
-  - The list can be filtered to one project; a Run's project is its Task's. Each card shows the image's Runs, states and
-    projects. A card opens an in-section preview with **Image N of M** within the list and every Run that uses the image,
-    each with **Open Run**.
-  - A card's delete icon or the preview's **Delete image** deletes one image. **Delete all** deletes every image the
-    current filter lists.
-  - A centred confirmation names the image or the number of images, the total size and the affected Runs.
-    It explains that history shows **Image unavailable**. A filtered **Delete all** also says whether the
-    images are used by Runs in other projects.
-  - The server rechecks each image and deletes only its file. An image an Active Run now uses is kept and reported as not
-    deleted.
+- **Settings → Run images** lists stored images whose every Run is Settled or Archived. The header has
+  the Project filter and the deletion action. The list summarizes stored images, size and affected Runs.
+  An empty list shows **No Run images**. A list failure shows **Try again** in the header.
+  - A tile opens an in-section preview with its position in the list and a **Used by** card. Each Run
+    in that card has an **Open Run** action.
+  - A tile’s delete icon or the preview’s **Delete image…** opens a centred confirmation for that image.
+    **Delete N images…** confirms deletion for the current list. Both explain that the affected Runs keep
+    their history and show **Image unavailable**. A filtered confirmation also accounts for shared
+    images used by Runs in other Projects.
+  - The server rechecks each image and deletes only its file. An image an Active Run now uses is kept. The result card explains the skip, and the retained tile offers only Preview.
   - Manifests, prompts and timelines stay. The image reads as missing everywhere, including Factory MCP reads and worker
     launches. It shows as unavailable in the deleting client's open views, also when the deletion's answer was lost, and
     in every view opened afterwards on any client, even where it was viewed before.

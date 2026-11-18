@@ -25,7 +25,8 @@ system palette in either mode; meaning stays carried by labels and icons.
 
 With [theme colors](t3-integration.md#theme-colors), every color token can come
 from the T3 environment's default theme instead of the baseline, separately per mode: the local
-mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline. Only
+mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline. Appearance shows **Following T3** when either
+mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise. Only
 colors change; typography, geometry, radii, shadows and motion stay Factory's.
 
 The backend maps T3 roles by meaning: canvas to the background, raised surfaces to cards and
@@ -114,11 +115,10 @@ Agent reporting shows the configuration home on the row to identify it.
 
 Use **Refresh** to fetch the latest list or snapshot, **Check again** to repeat
 a diagnostic check, and **Try again** to retry a failed read or operation.
-In Settings, place **Check again** in the page header and make it primary
-when the check is the main recovery action.
+In Settings, put the primary recovery action in the page header when the page read or check fails.
 
 Confirmations and forms open in a centred dialog over a dimmed backdrop, with a
-stronger scrim in Light mode. The header shows the title, Esc key chip and close
+stronger scrim and a visible modal shadow in Light mode. The header shows the title, Esc key chip and close
 button. Use at most one short introductory sentence in the body. Place any actions
 at the trailing edge, with Cancel or Keep editing before the primary or destructive
 action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between

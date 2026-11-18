@@ -94,7 +94,10 @@ export async function chooseAppearance(appearance: Appearance): Promise<string |
   apply(appearance);
   const desktop = desktopBridge();
   if (desktop) {
-    const result = await desktop.setAppearance(appearance);
+    const result = await desktop.setAppearance(appearance).catch((cause: unknown) => ({
+      ok: false as const,
+      message: cause instanceof Error ? cause.message : "The desktop app couldn’t save the mode.",
+    }));
     if (result.ok) return null;
     apply(previous);
     return result.message;

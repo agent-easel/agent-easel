@@ -33,8 +33,9 @@ test("the host follows the T3 environment's default theme through the T3 connect
   await app.open("/settings/appearance");
 
   // Assert
+  await expect(screen.getByText("Following T3", { exact: true })).toBeVisible();
   await expect(
-    screen.getByText("Following T3’s default theme “Ocean”.", { exact: false }),
+    screen.getByRole("region", "T3 theme").getByText("Ocean", { exact: true }),
   ).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
   expect(await screen.getByRole("button", "Pair theme colors").count()).toBe(0);
@@ -94,14 +95,15 @@ test("a published T3 theme generated from canvas and accent seeds colors Factory
   await colors.setDefaultTheme("nightfall");
 
   // Assert
+  await expect(screen.getByText("Following T3", { exact: true })).toBeVisible();
   await expect(
-    screen.getByText("Following T3’s default theme “Nightfall”.", { exact: false }),
+    screen.getByRole("region", "T3 theme").getByText("Nightfall", { exact: true }),
   ).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(nightfallDark);
   await app.screenshot("theme-colors-published-seed-dark");
 });
 
-test("a published theme without a Light variant keeps Factory's Light colors and says why", async ({
+test("a published Dark-only theme keeps Factory's Light colors and reports both modes", async ({
   app,
   screen,
   browser,
@@ -116,9 +118,10 @@ test("a published theme without a Light variant keeps Factory's Light colors and
   await screen.getByRole("radio", "Light").tap();
 
   // Assert
-  await expect(
-    screen.getByText("T3 theme “Nightfall” has no Light colors. Factory’s Light colors are used."),
-  ).toBeVisible();
+  const theme = screen.getByRole("region", "T3 theme");
+  await expect(theme.getByText("Factory colors", { exact: true })).toBeVisible();
+  await expect(theme.getByText("T3 colors", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Following T3", { exact: true })).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(factoryLight);
   await app.screenshot("theme-colors-published-missing-light-variant");
 });
@@ -138,7 +141,9 @@ test("a published theme's Light variant colors Factory in Light", async ({
   await colors.setDefaultTheme("dusk");
 
   // Assert
-  await expect(screen.getByText("Colors follow T3’s default theme “Dusk”.")).toBeVisible();
+  await expect(
+    screen.getByRole("region", "T3 theme").getByText("Dusk", { exact: true }),
+  ).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(duskLight);
   await app.screenshot("theme-colors-published-light-variant");
 });
@@ -159,6 +164,12 @@ test("a default theme in a format Factory does not support returns to Factory's 
   await colors.setDefaultTheme("future");
 
   // Assert
+  await expect(screen.getByText("Factory colors", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Following T3", { exact: true })).toHaveCount(0);
+  const problem = screen
+    .getByRole("status")
+    .filter({ hasText: "Factory can’t use the “Future” theme" });
+  await problem.getByRole("button", "Technical details").tap();
   await expect(
     screen.getByText(
       "T3’s default theme “Future” uses a theme format Factory does not support, so Factory’s own colors are used.",
@@ -217,9 +228,13 @@ test("a client whose Factory access was revoked keeps no cached theme", async (j
 
 test("a T3 default that no longer colors Factory leaves a reopening client nothing to restore", async (journey) => {
   // Arrange
-  const { app, browser } = journey;
+  const { app, browser, screen } = journey;
   const { colors, appearance } = await clientWithCachedOcean(journey);
   await colors.setDefaultTheme("");
+  const theme = screen.getByRole("region", "T3 theme");
+  await expect(theme.getByText("None set in T3")).toBeVisible();
+  await expect(theme.getByText("Dark", { exact: true })).toHaveCount(0);
+  await expect(screen.getByText("Factory colors", { exact: true })).toBeVisible();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(factoryDark);
   await delayLiveSnapshots(app, noLiveDeliveryMs);
 

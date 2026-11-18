@@ -298,6 +298,22 @@ export function ModelOptionField({
   );
 }
 
+export function modelOptionChoices(descriptor: AgentModelOptionDescriptor): readonly MenuChoice[] {
+  return (
+    descriptor.values?.map((entry) => ({
+      id: JSON.stringify(entry),
+      label:
+        typeof entry === "boolean"
+          ? entry
+            ? "On"
+            : "Off"
+          : entry.charAt(0).toUpperCase() + entry.slice(1),
+    })) ??
+    descriptor.choices ??
+    []
+  );
+}
+
 export function ModelOptionSelect({
   id,
   label,
@@ -320,10 +336,7 @@ export function ModelOptionSelect({
   const { values } = descriptor;
   // Published value domains may mix types (e.g. [false, "auto"]); JSON keeps each typed.
   const key = values ? JSON.stringify(value) : String(value);
-  const choices: readonly MenuChoice[] =
-    values?.map((entry) => ({ id: JSON.stringify(entry), label: String(entry) })) ??
-    descriptor.choices ??
-    [];
+  const choices = modelOptionChoices(descriptor);
   const savedUnavailable = !choices.some((choice) => choice.id === key);
   return (
     <ChoiceMenu

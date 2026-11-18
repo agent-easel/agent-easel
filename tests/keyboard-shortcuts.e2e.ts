@@ -228,7 +228,7 @@ test("Settings Reset restores the desktop default for New Run", async ({
 }) => {
   // Arrange
   const newRunGroup = await recordDesktopNewRunCandidate(app, screen, browser);
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await expect(newRunGroup).toContainText(process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N");
 
   // Act
@@ -463,7 +463,7 @@ test("a customized binding reaches the desktop menu", async ({ app, screen, brow
   await recordDesktopNewRunCandidate(app, screen, browser);
 
   // Act
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect
@@ -523,7 +523,7 @@ test("the canvas shortcuts popover lists a customized binding and opens the chea
   await openKeyboardSettings(screen, browser);
   await screen.getByRole("group", "Zoom in").getByRole("button", "Change Zoom in").tap();
   await browser.keyboard.press("i");
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await browser.keyboard.press("Escape");
   await expect(screen.getByRole("heading", { name: "Keyboard shortcuts", level: 2 })).toBeHidden();
   await screen.getByRole("button", "Canvas shortcuts", { exact: true }).tap();

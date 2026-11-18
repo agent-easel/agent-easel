@@ -52,6 +52,8 @@ export interface DeleteRunImagesInput {
 export interface RunImageDeletion {
   readonly deleted: readonly string[];
   readonly skipped: readonly string[];
+  /** Skipped digests whose file is still stored and referenced by an Active Run. */
+  readonly keptForActiveRuns?: readonly string[];
 }
 /** The initial prompt in order: text, and references to images of the manifest. */
 export type PromptSegment =
