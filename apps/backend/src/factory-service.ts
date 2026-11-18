@@ -261,6 +261,7 @@ export const makeFactoryService = (
       updateDiscordConnection: (input) => chatDiscord.updateDiscordConnection(input),
       checkDiscordConnection: (input) => chatDiscord.checkDiscordConnection(input),
       updateDiscordAccess: (input) => chatDiscord.updateDiscordAccess(input),
+      sendDiscordAccessTest: () => chatDiscord.sendDiscordAccessTest(),
       setChatControlEnabled: (input) => chatDiscord.setChatControlEnabled(input),
       retryChatDelivery: (input) => chatDiscord.retryChatDelivery(input),
       getTriggerReadiness: (projectId, flowId) => triggers.getTriggerReadiness(projectId, flowId),

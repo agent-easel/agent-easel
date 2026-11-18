@@ -251,6 +251,14 @@ export async function startControlledDiscord() {
   /** Users who left every server; Discord answers Unknown Member for them. */
   const departed = new Set<string>();
   const hiddenChannels = new Map<string, Set<string>>();
+  /** Parent channels whose permissions deny the bot Send Messages. */
+  const postingDenied = new Set<string>();
+  /** Every reaction the bot added, in order. */
+  const reactions: {
+    readonly channelId: string;
+    readonly messageId: string;
+    readonly emoji: string;
+  }[] = [];
   let gatewayAvailable = true;
   let typingAvailable = true;
   let commandsAvailable = true;
@@ -454,10 +462,25 @@ export async function startControlledDiscord() {
         if (faulted) return faulted;
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
+        if (!thread && !parentOf(match[1]!)) return unknownChannel;
+        if (postingDenied.has(match[1]!))
+          return { status: 403, body: { message: "Missing Permissions", code: 50013 } };
         if (thread?.locked && !bot.manageThreads) return locked;
         // A post Discord accepts reopens an archived thread, locked ones included.
         if (thread) thread.archived = false;
         return { status: 200, body: createdOnce(match[1]!, fields, bot), lost: fault === "lost" };
+      },
+    ],
+    [
+      "PUT",
+      /^\/api\/v10\/channels\/(\d+)\/messages\/(\d+)\/reactions\/([^/]+)\/(?:@|%40)me$/,
+      ({ match }) => {
+        reactions.push({
+          channelId: match[1]!,
+          messageId: match[2]!,
+          emoji: decodeURIComponent(match[3]!),
+        });
+        return { status: 204 };
       },
     ],
     [
@@ -845,6 +868,13 @@ export async function startControlledDiscord() {
       hidden.add(userId);
       hiddenChannels.set(channelId, hidden);
     },
+    /** The channel's permissions stop, or again let, the bot post there. */
+    setPostingDenied(channelId: string, denied: boolean) {
+      if (denied) postingDenied.add(channelId);
+      else postingDenied.delete(channelId);
+    },
+    /** Every reaction the bot added, in order. */
+    reactions,
     /** Messages Discord created, in order. */
     created,
     /** Later message creates meet these faults in order, one each. */

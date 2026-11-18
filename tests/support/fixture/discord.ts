@@ -17,11 +17,14 @@ export async function startJourneyDiscord() {
   const discord = await startControlledDiscord();
   const bot = { token: "ui-journey-bot-token", applicationId: "112233445566778899" };
   discord.addBot(bot);
-  // The bot's server, with the channel UI journeys allow in Access.
+  // The bot's server, with the channels UI journeys allow in Access.
   const guild = {
     id: "400000000000000001",
     name: "Team",
-    channels: [{ id: "400000000000000002", name: "factory" }],
+    channels: [
+      { id: "400000000000000002", name: "factory" },
+      { id: "400000000000000003", name: "deploys" },
+    ],
   };
   discord.addGuild(guild);
   return { discord, bot, guild, apiUrl: discord.apiUrl };
@@ -112,6 +115,36 @@ export function discordFixture(
           content: message.content,
           customId: buttonOf(message)?.custom_id ?? null,
         })),
+      /** The channel's permissions stop, or again let, the bot post there. */
+      posting({ channelId, denied }: { channelId: string; denied: boolean }) {
+        discord.setPostingDenied(channelId, denied);
+      },
+      /** `userId` replies "here" to the latest access test message in `channelId`. */
+      replyToAccessTest({ userId, channelId }: { userId: string; channelId: string }) {
+        invocations += 1;
+        const test = discord.created.findLast(
+          (message) =>
+            message.channelId === channelId && message.content.endsWith("you can use Factory."),
+        )!;
+        discord.deliver(
+          messageEvent({
+            bot,
+            guildId: guild.id,
+            channelId,
+            id: String(320000000000000000n + BigInt(invocations)),
+            authorId: userId,
+            content: "here",
+            mention: false,
+            replyTo: {
+              id: test.id,
+              channelId,
+              authorId: bot.applicationId,
+              authorIsBot: true,
+              content: test.content,
+            },
+          }),
+        );
+      },
       /** Discord meets the next message creates with these faults, in order. */
       fault({ faults }: { faults: MessageFault[] }) {
         discord.faultMessages(...faults);
@@ -146,6 +179,7 @@ export function discordFixture(
     async reset() {
       discord.setCommandsAvailable(true);
       discord.clearFaults();
+      for (const channel of guild.channels) discord.setPostingDenied(channel.id, false);
       await restoreChatControl();
       earlierSessions = discord.sessions.length;
     },

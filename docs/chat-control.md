@@ -195,6 +195,24 @@ ID Discord does not know shows an **Unknown user** or **Unknown channel** tag an
 stays allowed. Names are display only: matching always uses IDs, and IDs added after the latest
 lookup show no name until the next passing check or ready session.
 
+### Access test
+
+After the first Access save the section offers **Send access test** (**Send again** once a test was
+sent). It always tests the saved Access, so it is disabled with "Save first" while Users or Channels
+have unsaved edits, and with its reason while Chat control is Off; it needs the operating connection.
+The bot posts one message in each allowed channel that mentions every allowed user and asks them to
+reply; the message pings only those users. A list too long for one Discord message is split across
+several. Sending again replaces the previous test, so everyone it asks is **Waiting** again.
+
+A reply from an allowed user to one of the test's messages takes the normal admission path of an
+[invocation](#invocations) (an allowed user, in an allowed channel that grants a Project), but it
+opens no thread or conversation and never reaches the Language model: the bot reacts ✅ and Factory
+records the user as **Reached** with the time. One reply in any allowed channel is enough. Waiting
+has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
+channels; a channel Discord no longer knows shows **Unknown channel** and one warning to remove it.
+The latest results stay visible while Off, and an Access save drops the results of the channels and
+users it removes.
+
 ### Invocations
 
 Factory admits only a new message from a human, in a server channel, that mentions the bot or

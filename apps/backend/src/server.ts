@@ -311,6 +311,10 @@ function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOpe
       body: standardBody,
       handle: ({ input }) => answer(() => factory.updateDiscordAccess(input)),
     },
+    sendDiscordAccessTest: {
+      hostOnly: true,
+      handle: () => answer(() => factory.sendDiscordAccessTest()),
+    },
     setChatControlEnabled: {
       hostOnly: true,
       body: standardBody,

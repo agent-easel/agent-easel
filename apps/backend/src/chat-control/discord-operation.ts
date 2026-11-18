@@ -6,6 +6,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FiberSet from "effect/FiberSet";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import type {
   DiscordCommandSetup,
@@ -17,6 +18,7 @@ import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { sqliteChatState } from "./chat-state.ts";
 import { accessIds, recordNames } from "./access.ts";
+import { sendAccessTest } from "./access-test.ts";
 import { clearConversations, conversationGenerations } from "./conversations.ts";
 import type { ChatCredentials } from "./credentials.ts";
 import {
@@ -296,6 +298,9 @@ export const makeDiscordOperation = (
     const sql = yield* SqlClient.SqlClient;
     /** The serving session's interpretation, while one serves. */
     let interpreter: InterpretationEngine | undefined;
+    /** The serving session's Discord client, while one serves. */
+    let serving: { client: Client<true>; released: () => boolean } | undefined;
+    const testing = Semaphore.makeUnsafe(1);
     const supervisor = yield* FiberHandle.make<void>();
     const generations = conversationGenerations(sql);
     let current: Omit<OperationStatus, "connectionStatus"> & {
@@ -447,6 +452,13 @@ export const makeDiscordOperation = (
           if (removed_member_ids.length > 0 || added_members.length > 0) changed(guild_id);
         });
         adapter.listen(client, released);
+        const session = { client, released };
+        serving = session;
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (serving === session) serving = undefined;
+          }),
+        );
         const commandSetup = yield* registerCommands(client, applicationId);
         current = { connectionStatus: "connected", connectionProblem: null, commandSetup };
         interpreter = engine;
@@ -549,6 +561,20 @@ export const makeDiscordOperation = (
       start,
       /** A committed Language model save discards the serving session's unfinished interpretation. */
       modelSaved: Effect.suspend(() => interpreter?.discardAll ?? Effect.void),
+      /** Sends the access test from the serving session; one test at a time. */
+      sendAccessTest: testing.withPermits(1)(
+        Effect.suspend(() => {
+          const session = serving;
+          return session && !session.released()
+            ? sendAccessTest(sql, session.client)
+            : Effect.succeed(
+                failure(
+                  "conflict",
+                  "Chat control isn’t connected to Discord. Send the access test once it is connected.",
+                ),
+              );
+        }),
+      ),
       /** Stops the supervisor and waits until its Gateway session is released. */
       stop: FiberHandle.clear(supervisor),
       /** The operating connection now, for a persisted On state. */

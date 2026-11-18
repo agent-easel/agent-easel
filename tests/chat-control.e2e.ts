@@ -400,6 +400,90 @@ test("the host turns Chat control On with the switch and sees the connection bad
   await app.screenshot("chat-discord-on");
 });
 
+const TEST_USERS = ["200000000000000001", "200000000000000002"];
+const TEST_CHANNEL = "400000000000000002";
+const REFUSING_CHANNEL = "400000000000000003";
+
+/**
+ * Operating Chat control whose Access allows two users in two channels, where the second channel's
+ * permissions refuse the bot's posts.
+ */
+async function accessTestReady(baseUrl: string | undefined) {
+  await discord(baseUrl).posting({ channelId: REFUSING_CHANNEL, denied: true });
+  await operatingChatControl(baseUrl, {
+    users: TEST_USERS,
+    channels: [TEST_CHANNEL, REFUSING_CHANNEL],
+  });
+}
+
+test("sending the access test asks each allowed user to reply and names the channel the bot can't post in", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await accessTestReady(app.baseUrl);
+  await app.open("/settings/chat-control/discord");
+  const accessCard = screen.getByRole("region", "Access");
+  await expect(accessCard.getByRole("button", "Send access test")).toBeEnabled();
+  await app.screenshot("chat-discord-access-test-1-not-sent");
+
+  // Act
+  await accessCard.getByRole("button", "Send access test").tap();
+
+  // Assert
+  await expect(accessCard.getByText("Waiting", { exact: true })).toHaveCount(2);
+  await expect(accessCard.getByText("Can’t post", { exact: true })).toBeVisible();
+  await expect(accessCard.getByRole("button", "Send again")).toBeEnabled();
+  await app.screenshot("chat-discord-access-test-2-sent");
+  const card = screen.getByText(/^Factory bot can’t post in /);
+  await expect(card).toBeVisible();
+  // The card sits below the fold; bring it fully into view for the screenshot.
+  await browser.evaluate(() => {
+    const alerts = Array.from(document.querySelectorAll('[role="status"]'));
+    alerts
+      .find((alert) => alert.textContent.includes("can’t post in"))
+      ?.scrollIntoView({ block: "end" });
+    return null;
+  });
+  await app.screenshot("chat-discord-access-test-3-cant-post");
+});
+
+test("a user who replied to the access test shows Reached, which stays while Chat control is Off", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await accessTestReady(app.baseUrl);
+  const sent = await hostCall(app.baseUrl, "POST", "/api/chat-control/discord/access-test", {});
+  assert(sent.ok, JSON.stringify(sent));
+  await discord(app.baseUrl).replyToAccessTest({ userId: TEST_USERS[0]!, channelId: TEST_CHANNEL });
+  await settingsWhen<DiscordSettings>(
+    app.baseUrl,
+    "/api/chat-control/discord",
+    (settings) => typeof settings.access.test?.users[TEST_USERS[0]!] === "string",
+  );
+  await app.open("/settings/chat-control/discord");
+  const accessCard = screen.getByRole("region", "Access");
+  await expect(accessCard.getByText(/^Reached · /)).toBeVisible();
+  await expect(accessCard.getByText("Waiting", { exact: true })).toHaveCount(1);
+  await app.screenshot("chat-discord-access-test-4-reached");
+  const toggle = screen.getByRole("switch", "Chat control");
+
+  // Act
+  await toggle.tap();
+
+  // Assert
+  await expect(toggle).not.toBeChecked();
+  await expect(accessCard.getByRole("button", "Send again")).toBeDisabled();
+  await expect(accessCard.getByText("Turn on Chat control to send", { exact: true })).toBeVisible();
+  await expect(accessCard.getByText(/^Reached · /)).toBeVisible();
+  await app.screenshot("chat-discord-access-test-5-off");
+});
+
 test("the host retries failed command setup while the Gateway is connected", async ({
   app,
   screen,
@@ -471,15 +555,18 @@ async function settingsWhen<Settings>(
 }
 
 /** Chat control On and serving, with the participant allowed in the fixture's channel. */
-async function operatingChatControl(baseUrl: string | undefined) {
+async function operatingChatControl(
+  baseUrl: string | undefined,
+  allowed = { users: ["200000000000000001"], channels: ["400000000000000002"] },
+) {
   const project = await firstProject(baseUrl);
   await completeChatControl(baseUrl);
   const discord = await discordSettings(baseUrl);
   assert(discord.ok);
   const access = await hostCall(baseUrl, "PUT", "/api/chat-control/discord/access", {
     revision: discord.value.access.revision,
-    users: ["200000000000000001"],
-    channels: [{ channelId: "400000000000000002", projectIds: [project.id] }],
+    users: allowed.users,
+    channels: allowed.channels.map((channelId) => ({ channelId, projectIds: [project.id] })),
   });
   assert(access.ok, JSON.stringify(access));
   const on = await hostCall(baseUrl, "PUT", "/api/chat-control/enabled", { enabled: true });
