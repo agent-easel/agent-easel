@@ -1048,13 +1048,16 @@ function DraftProblems({
     return <StudioRemovedDraft kind="Flow" json={JSON.stringify(state.content, null, 2)} />;
   return (
     <>
-      <OwnerChangeNotice
-        kind="Flow"
-        change={state.ownerChange}
-        projects={projects}
-        onAcknowledge={draft.acknowledgeOwner}
-        className="rounded-none border-x-0 border-t-0"
-      />
+      {state.ownerChange.status !== "none" && (
+        <div className="px-4 pt-3">
+          <OwnerChangeNotice
+            kind="Flow"
+            change={state.ownerChange}
+            projects={projects}
+            onAcknowledge={draft.acknowledgeOwner}
+          />
+        </div>
+      )}
       {state.error && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertTitle>{state.error}</AlertTitle>

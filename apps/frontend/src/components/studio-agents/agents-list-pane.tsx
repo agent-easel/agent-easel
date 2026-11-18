@@ -20,6 +20,7 @@ import {
   type useStudioOwners,
 } from "../../studio-definitions.ts";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
+import { offeredExecution } from "../../agent-draft.ts";
 
 export function AgentsListColumn({
   agents,
@@ -187,12 +188,16 @@ function AgentRow({
   onRemove: () => void;
 }) {
   const reporting = useReportingState();
-  const status = agent.execution
-    ? agentReportingStatus(agent.execution.providerInstanceId, reporting)
-    : undefined;
+  // A saved selection T3 no longer offers reads Needs a model, as the editor shows it.
+  const summary = agent.execution
+    ? agentRuntimeMeta(offeredExecution(agent.execution, capabilities), capabilities)
+    : "";
+  const status =
+    agent.execution && summary
+      ? agentReportingStatus(agent.execution.providerInstanceId, reporting)
+      : undefined;
   const attention = status?.state === "attention" ? status : undefined;
   const overrides = projectOverridesLabel(agent.projectOverrides.length);
-  const summary = agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : "";
   const meta = attention ? (
     <span
       id={`agent-reporting-${agent.id}`}

@@ -16,6 +16,8 @@ export interface MenuChoice {
   readonly label: string;
   /** Short marker shown next to the label, in the menu and on the trigger. */
   readonly badge?: string;
+  /** The badge's tone; attention unless the marker only explains a disabled choice. */
+  readonly badgeKind?: "attention" | "neutral";
   /** Why the choice is limited; shown under the label in the menu. */
   readonly description?: string;
   readonly disabled?: boolean;
@@ -33,7 +35,6 @@ export function ChoiceMenu({
   onChange,
   disabled,
   placeholder,
-  hint,
   className,
   describedBy,
 }: {
@@ -45,8 +46,6 @@ export function ChoiceMenu({
   onChange: (value: string) => void;
   disabled: boolean;
   placeholder: string;
-  /** Where the choices come from, shown inside the trigger on wide forms. */
-  hint?: string;
   /** Trigger size where the form is denser than the composer, such as a Settings row. */
   className?: string;
   describedBy?: string | undefined;
@@ -73,16 +72,10 @@ export function ChoiceMenu({
           <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>
             {shown}
           </span>
-          {selected?.badge && <StatusBadge kind="attention">{selected.badge}</StatusBadge>}
-          <span className="flex-1" />
-          {hint && (
-            <span
-              aria-hidden
-              className="hidden shrink-0 text-2xs font-medium text-subtle-foreground @xl/agent-form:inline"
-            >
-              {hint}
-            </span>
+          {selected?.badge && (
+            <StatusBadge kind={selected.badgeKind ?? "attention"}>{selected.badge}</StatusBadge>
           )}
+          <span className="flex-1" />
           <ChevronsUpDown
             aria-hidden
             className="size-4 shrink-0 text-muted-foreground"
@@ -106,7 +99,9 @@ export function ChoiceMenu({
               <span className="grid min-w-0 flex-1 gap-0.5">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{choice.label}</span>
-                  {choice.badge && <StatusBadge kind="attention">{choice.badge}</StatusBadge>}
+                  {choice.badge && (
+                    <StatusBadge kind={choice.badgeKind ?? "attention"}>{choice.badge}</StatusBadge>
+                  )}
                 </span>
                 {choice.description && (
                   <span className="text-2xs text-muted-foreground">{choice.description}</span>

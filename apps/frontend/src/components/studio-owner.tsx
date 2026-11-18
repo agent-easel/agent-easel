@@ -2,7 +2,6 @@ import { useId } from "react";
 import type { FactoryProject } from "@t3-factory/contracts";
 import { ChevronDown, ChevronsUpDown, FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
+import { NoticeButton } from "./notice.tsx";
+import { SettingsProblemCard } from "./settings-page.tsx";
 import { fieldLabelClass, selectFieldClass } from "./page.tsx";
 import type { OwnerChange } from "../revisioned-draft.ts";
 import {
@@ -408,21 +409,6 @@ function OwnerPath({ path, className }: { path: string; className?: string }) {
   );
 }
 
-/** Where New Flow's or New Agent's preselected owner came from. */
-export function ownerHint(
-  filter: StudioOwnerFilter,
-  projects: readonly FactoryProject[],
-  kind: "Flows" | "Agents",
-  fromFlow?: { readonly name: string; readonly projectId: string | null },
-) {
-  const rule = `Only available Projects can own new ${kind}.`;
-  if (fromFlow)
-    return `Prefilled from the Flow “${fromFlow.name}” (${studioOwner(fromFlow.projectId, projects).title}), so it can place this Agent. ${rule}`;
-  if (filter.kind === "all") return `Starts Global while the Owner filter shows All. ${rule}`;
-  const title = filter.kind === "global" ? "Global" : studioOwner(filter.projectId, projects).title;
-  return `Prefilled from the Owner filter (${title}). ${rule}`;
-}
-
 /**
  * Figma Run/SelectField for the owner a copy or move goes to: Global or one available Project. An
  * unavailable chosen owner stays shown, disabled with its reason, and
@@ -532,60 +518,42 @@ export function OwnerTargetMenu({
 }
 
 /**
- * An editor's notice that another client changed its definition's owning Project while it had
- * unsaved changes: the edits stay, and saving waits until the new owner is acknowledged.
+ * Figma SA06m: another client changed the definition's owning Project while it had unsaved
+ * changes; the edits stay, and saving waits until the new owner is acknowledged.
  */
 export function OwnerChangeNotice({
   kind,
   change,
   projects,
   onAcknowledge,
-  className,
 }: {
   kind: "Flow" | "Agent";
   change: OwnerChange;
   projects: readonly FactoryProject[];
   onAcknowledge: (owner: string | null) => void;
-  className?: string;
 }) {
   if (change.status === "none") return null;
   const to = change.status === "changed" ? studioOwner(change.to, projects) : null;
   return (
-    <Alert
-      role="status"
-      aria-label="Owner changed elsewhere"
-      variant="attention"
-      className={className}
-    >
-      <RefreshCw aria-hidden />
-      <AlertTitle>
-        {to
+    <SettingsProblemCard
+      tone="info"
+      icon={RefreshCw}
+      title={
+        to
           ? `This ${kind} is now ${to.projectId === null ? "Global" : `owned by ${ownerName(to)}`}`
-          : `This ${kind}’s owning Project changed elsewhere`}
-      </AlertTitle>
-      <AlertDescription>
-        {change.status === "changed" ? (
-          <>
-            <p>
-              Another client moved it from {studioOwner(change.from, projects).title}. Your unsaved
-              changes are kept; acknowledge the new owner before saving them.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-1.5"
-              onClick={() => onAcknowledge(change.to)}
-            >
-              Acknowledge new owner
-            </Button>
-          </>
-        ) : (
-          <p>
-            Nothing was saved and your changes are kept. Waiting for Studio to show the new owner…
-          </p>
-        )}
-      </AlertDescription>
-    </Alert>
+          : `This ${kind}’s owner changed elsewhere`
+      }
+      action={
+        change.status === "changed" && (
+          <NoticeButton onClick={() => onAcknowledge(change.to)}>
+            Acknowledge new owner
+          </NoticeButton>
+        )
+      }
+    >
+      {change.status === "changed"
+        ? "Your changes are kept. Acknowledge the new owner before saving."
+        : "Your changes are kept. Waiting for Studio to show the new owner…"}
+    </SettingsProblemCard>
   );
 }

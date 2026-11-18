@@ -26,7 +26,6 @@ import {
   type StudioDefinitions,
   type StudioDefinitionsSnapshot,
 } from "../studio-definitions.ts";
-import { ownerHint } from "../components/studio-owner.tsx";
 import { ChangeOwnerDialog, DuplicateAgentDialog } from "../components/studio-owner-dialogs.tsx";
 import { useActiveView } from "../use-active-view.ts";
 import {
@@ -52,6 +51,7 @@ import {
 } from "../components/studio-removal.tsx";
 import { Dialog, DialogContent } from "../components/ui/dialog.tsx";
 import { MutationGate } from "@/client-gate";
+import { SettingsProblemCard } from "../components/settings-page.tsx";
 import { ApiError } from "../api.ts";
 import { Bot } from "lucide-react";
 import { useReportingState } from "../reporting-state.tsx";
@@ -120,7 +120,10 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
   };
 }
 
-/** New Agent's owner: preselected from the asking Flow, else from the owner filter. */
+/**
+ * New Agent's context: the owner, preselected from the asking Flow, else from the owner filter,
+ * and that Flow, which Create Agent returns to.
+ */
 function useNewAgentOwner(
   definitions: StudioDefinitions,
   flows: ShownLists["flows"] | null,
@@ -128,11 +131,33 @@ function useNewAgentOwner(
 ) {
   const { projects, filter } = useStudioOwners(definitions);
   const flow = fromFlow ? flows?.find((entry) => entry.id === fromFlow) : undefined;
-  return {
-    projects,
-    initial: defaultOwner(filter, flow),
-    hint: ownerHint(filter, projects, "Agents", flow),
-  };
+  return { projects, initial: defaultOwner(filter, flow), fromFlow };
+}
+
+/**
+ * The Agents page's own navigation: with no Agent opened it opens `firstId`, and Esc from a new
+ * Agent that a Flow's editor asked for returns to that Flow.
+ */
+function useAgentsNavigation(
+  agentId: string | undefined,
+  fromFlow: string | undefined,
+  firstId: string | undefined,
+  registerEscape: (handler: () => void) => () => void,
+) {
+  const openStudio = useStudioNavigation();
+  const openRef = useRef(openStudio);
+  useEffect(() => {
+    openRef.current = openStudio;
+  }, [openStudio]);
+  useEffect(() => {
+    if (agentId !== "new" || !fromFlow) return;
+    return registerEscape(() => void openRef.current({ tab: "flows", flowId: fromFlow }));
+  }, [agentId, fromFlow, registerEscape]);
+  useEffect(() => {
+    if (agentId !== undefined || !firstId) return;
+    void openRef.current({ tab: "agents", agentId: firstId });
+  }, [agentId, firstId]);
+  return openStudio;
 }
 
 export function StudioAgentsPage({
@@ -140,18 +165,15 @@ export function StudioAgentsPage({
   fromFlow,
   definitions,
   reportAgentDraft,
+  registerEscape,
 }: {
   agentId: string | undefined;
-  /** The Flow whose editor asked for a new Agent. */
+  /** The Flow whose editor asked for a new Agent; Create Agent and Esc return to it. */
   fromFlow: string | undefined;
   definitions: StudioDefinitions;
   reportAgentDraft: ReportDraft;
+  registerEscape: (handler: () => void) => () => void;
 }) {
-  const openStudio = useStudioNavigation();
-  const openRef = useRef(openStudio);
-  useEffect(() => {
-    openRef.current = openStudio;
-  }, [openStudio]);
   const library = useAgentsLibrary(definitions);
   const owners = useStudioOwners(definitions);
   const newOwner = useNewAgentOwner(definitions, library.flows, fromFlow);
@@ -162,10 +184,7 @@ export function StudioAgentsPage({
   const [acknowledged, setAcknowledged] = useState<AgentDefinition | null>(null);
   const creating = agentId === "new";
   const firstId = firstOpenAgent(library.agents, query, owners);
-  useEffect(() => {
-    if (agentId !== undefined || !firstId) return;
-    void openRef.current({ tab: "agents", agentId: firstId });
-  }, [agentId, firstId]);
+  const openStudio = useAgentsNavigation(agentId, fromFlow, firstId, registerEscape);
   const empty = agentsListEmpty(library.agents, creating, owners.filter, query);
   const showEditor = agentId !== undefined;
   return (
@@ -319,7 +338,7 @@ function OpenedAgentSection({
   return (
     <section
       aria-label="Agent editor"
-      className="flex min-h-0 min-w-0 flex-1 flex-col border-l pl-6"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border"
     >
       <SelectedAgentEditor
         key={`${serverId ?? ""}:${agentId}`}
@@ -423,11 +442,11 @@ function AgentDuplicateFromList({
       duplicating={duplicating}
       error={error}
       onClose={onClose}
-      onDuplicate={(next) => {
+      onDuplicate={(next, name) => {
         setDuplicating(true);
         setError("");
         void definitions
-          .duplicateAgent(agent.id, { projectId: next })
+          .duplicateAgent(agent.id, { projectId: next, name })
           .then((copy) => {
             onClose();
             void openStudio({ tab: "agents", agentId: copy.id });
@@ -483,7 +502,7 @@ function AgentRemoveFromList({
     >
       <DialogContent
         title={<>Remove “{agent.name}”?</>}
-        description="Removing this Agent removes it from Studio and keeps its saved revisions for existing Runs."
+        description="Runs that used it keep the revision they started with."
         closeDisabled={removing}
         actions={
           <>
@@ -518,9 +537,9 @@ function AgentRemoveFromList({
         }
       >
         {error && (
-          <p role="alert" className="text-sm text-destructive">
+          <SettingsProblemCard tone="error" title="Couldn’t remove the Agent">
             {error}
-          </p>
+          </SettingsProblemCard>
         )}
       </DialogContent>
     </Dialog>
@@ -572,7 +591,9 @@ function SelectedAgentEditor({
     if (!active.current) return;
     if (value.id === agentId) return;
     onAcknowledged(value);
-    void openStudio({ tab: "agents", agentId: value.id });
+    if (agentId === "new" && newOwner.fromFlow)
+      void openStudio({ tab: "flows", flowId: newOwner.fromFlow });
+    else void openStudio({ tab: "agents", agentId: value.id });
   };
   const deleted = () => {
     void library.refreshReporting();
@@ -634,7 +655,6 @@ function useAgentOwnership(
     chosen,
     initial: newOwner.initial,
     projects,
-    hint: newOwner.hint,
     blocked: ownerPicker(chosen, projects).blocked,
     onChange: (owner: string | null) => setPicked({ owner }),
   } as const;
@@ -681,12 +701,12 @@ function useAgentOwnerDialogs(
       setDialog(null);
       setError("");
     },
-    async duplicate(target: string | null) {
+    async duplicate(target: string | null, name: string) {
       if (duplicating) return;
       setDuplicating(true);
       setError("");
       await draft
-        .duplicate(target)
+        .duplicate(target, name)
         .then((copy) => {
           if (!copy) return;
           setDialog(null);
@@ -728,9 +748,6 @@ function AgentOwnerDialogs({
         onClose={dialogs.close}
         onChanged={draft.ownerChangedHere}
         onDuplicateInstead={(target) => dialogs.open({ kind: "duplicate", target })}
-        duplicateBlocked={
-          state.dirty ? "Save your changes before duplicating this Agent." : undefined
-        }
       />
     );
   return (
@@ -738,10 +755,11 @@ function AgentOwnerDialogs({
       source={subject}
       projects={projects}
       initialTarget={dialog.target}
+      unsavedRevision={state.dirty ? saved.revision : undefined}
       duplicating={dialogs.duplicating}
       error={dialogs.error}
       onClose={dialogs.close}
-      onDuplicate={(target) => void dialogs.duplicate(target)}
+      onDuplicate={(target, name) => void dialogs.duplicate(target, name)}
     />
   );
 }
@@ -796,6 +814,7 @@ function OpenedAgentEditor({
         ownership={ownership}
         exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
+        onOpenCreated={onSaved}
         duplicating={dialogs.duplicating}
         onDuplicate={agent ? () => dialogs.open({ kind: "duplicate" }) : undefined}
         onChangeOwner={agent ? () => dialogs.open({ kind: "change-owner" }) : undefined}

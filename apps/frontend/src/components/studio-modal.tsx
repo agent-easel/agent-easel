@@ -24,7 +24,7 @@ import {
   useStudioRead,
   type StudioDefinitions,
 } from "../studio-definitions.ts";
-import type { FlowDraft, TriggerDefinition } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowDraft, TriggerDefinition } from "@t3-factory/contracts";
 import { liveOwner } from "../live/live-connection.ts";
 
 /** This Studio session's saved definitions, delivered live while Studio is open. */
@@ -79,10 +79,30 @@ function useReportedDraft(kind: StudioDraft["kind"]) {
 const headerParentClass =
   "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
 
-/** The header's breadcrumb: the destination, and for Triggers the opened page within it. */
-function studioSection(selection: StudioSelection, triggers: readonly TriggerDefinition[] | null) {
+const parentLink = (label: string, link: StudioSelection) => ({
+  label,
+  link: (
+    <StudioLink selection={link} className={headerParentClass}>
+      {label}
+    </StudioLink>
+  ),
+});
+
+/**
+ * The header's breadcrumb, ending with the opened page: an Agent's name or New Agent, which a
+ * Flow's New Agent nests under that Flow.
+ */
+function studioSection(
+  selection: StudioSelection,
+  lists: {
+    readonly triggers: readonly TriggerDefinition[] | null;
+    readonly agents: readonly AgentDefinition[] | null;
+    readonly flows: readonly FlowDraft[] | null;
+  },
+) {
   if (selection.tab === "flows") return { section: "Flows" };
-  if (selection.tab === "agents") return { section: "Agents" };
+  if (selection.tab === "agents") return agentSection(selection, lists);
+  const { triggers } = lists;
   const opened = triggers?.find((trigger) => trigger.id === selection.triggerId);
   const section = selection.kind
     ? "GitHub Issues"
@@ -90,17 +110,32 @@ function studioSection(selection: StudioSelection, triggers: readonly TriggerDef
       ? "New"
       : opened?.name;
   if (!section) return { section: "Triggers" };
-  const parent = (label: string, link: StudioSelection) => ({
-    label,
-    link: (
-      <StudioLink selection={link} className={headerParentClass}>
-        {label}
-      </StudioLink>
-    ),
-  });
-  const parents = [parent("Triggers", { tab: "triggers" })];
-  if (selection.kind) parents.push(parent("New", { tab: "triggers", triggerId: "new" }));
+  const parents = [parentLink("Triggers", { tab: "triggers" })];
+  if (selection.kind) parents.push(parentLink("New", { tab: "triggers", triggerId: "new" }));
   return { parents, section };
+}
+
+function agentSection(
+  selection: Extract<StudioSelection, { tab: "agents" }>,
+  lists: {
+    readonly agents: readonly AgentDefinition[] | null;
+    readonly flows: readonly FlowDraft[] | null;
+  },
+) {
+  const { agentId, fromFlow } = selection;
+  if (agentId === undefined) return { section: "Agents" };
+  if (agentId === "new") {
+    const flow = fromFlow ? lists.flows?.find((entry) => entry.id === fromFlow) : undefined;
+    const parents = flow
+      ? [
+          parentLink("Flows", { tab: "flows" }),
+          parentLink(flow.name, { tab: "flows", flowId: flow.id }),
+        ]
+      : [parentLink("Agents", { tab: "agents" })];
+    return { parents, section: "New Agent" };
+  }
+  const agent = lists.agents?.find((entry) => entry.id === agentId);
+  return { parents: [parentLink("Agents", { tab: "agents" })], section: agent?.name ?? "Agents" };
 }
 
 export function StudioModal({ selection }: { selection: StudioSelection }) {
@@ -120,6 +155,8 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
     triggerRef: trigger.ref,
   });
   const triggers = useStudioRead(definitions, "triggers").value;
+  const agents = useStudioRead(definitions, "agents").value;
+  const flows = useStudioRead(definitions, "flows").value;
   const { escapeHandler, registerEscape } = useEscapeHandler();
   const close = () => void navigate(undefined);
   return (
@@ -151,7 +188,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
       >
         <WorkspaceDialogHeader
           title="Studio"
-          {...studioSection(selection, triggers)}
+          {...studioSection(selection, { triggers, agents, flows })}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
           closeLabel="Back to Runs"
@@ -195,11 +232,7 @@ function discardMessage(draft: StudioDraft) {
       description: "Discard the retained draft to continue.",
       discard: "Discard",
     };
-  return {
-    title: `Discard unsaved ${kind} changes?`,
-    description: "Discard your edits to continue with the saved revision.",
-    discard: "Discard changes",
-  };
+  return { title: "Discard unsaved changes?", description: undefined, discard: "Discard changes" };
 }
 
 function DraftDiscardDialog({ blocker }: { blocker: ReturnType<typeof useStudioDraftGuard> }) {
@@ -349,12 +382,14 @@ function StudioPage({
   reportAgentDraft,
   reportTriggerDraft,
   onCreateFlow,
+  registerEscape,
 }: {
   selection: StudioSelection;
   definitions: StudioDefinitions;
   reportAgentDraft: ReportDraft;
   reportTriggerDraft: ReportDraft;
   onCreateFlow: () => void;
+  registerEscape: (handler: () => void) => () => void;
 }) {
   if (selection.tab === "agents")
     return (
@@ -363,6 +398,7 @@ function StudioPage({
         fromFlow={selection.fromFlow}
         definitions={definitions}
         reportAgentDraft={reportAgentDraft}
+        registerEscape={registerEscape}
       />
     );
   if (selection.tab === "flows" && selection.flowId) return null;
@@ -422,6 +458,7 @@ function StudioContent({
         reportAgentDraft={reportAgentDraft}
         reportTriggerDraft={reportTriggerDraft}
         onCreateFlow={creation.start}
+        registerEscape={registerEscape}
       />
       {flowId && (
         <div key={flowId} className="min-h-0 flex-1 overflow-auto">

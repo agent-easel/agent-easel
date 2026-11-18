@@ -27,7 +27,8 @@ import {
 } from "../studio-definitions.ts";
 import { fieldLabelClass } from "./page.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
-import { OwnerTargetMenu } from "./studio-owner.tsx";
+import { OwnerPicker, OwnerTargetMenu } from "./studio-owner.tsx";
+import { SettingsProblemCard } from "./settings-page.tsx";
 
 /** The definition a dialog acts on, with the owning Project its editor shows now. */
 interface DialogSubject {
@@ -98,7 +99,6 @@ export function ChangeOwnerDialog({
   onClose,
   onChanged,
   onDuplicateInstead,
-  duplicateBlocked,
 }: {
   kind: Kind;
   subject: DialogSubject;
@@ -108,8 +108,6 @@ export function ChangeOwnerDialog({
   onChanged: (moved: OwnerMove) => void;
   /** Opens Duplicate with `target` preselected, the alternative to a refused move. */
   onDuplicateInstead: (target: string | null) => void;
-  /** Why Duplicate is not offered now, such as unsaved Agent changes. */
-  duplicateBlocked?: string | undefined;
 }) {
   const { projects } = useStudioOwners(definitions);
   const [model] = useState(() =>
@@ -135,7 +133,6 @@ export function ChangeOwnerDialog({
         target={state.target}
         blockers={state.blockers}
         projects={projects}
-        duplicateBlocked={duplicateBlocked}
         onCancel={onClose}
         onDuplicate={() => onDuplicateInstead(state.target)}
       />
@@ -188,7 +185,6 @@ function ChangeOwnerRefusal({
   target,
   blockers,
   projects,
-  duplicateBlocked,
   onCancel,
   onDuplicate,
 }: {
@@ -197,7 +193,6 @@ function ChangeOwnerRefusal({
   target: string | null;
   blockers: readonly OwnerChangeBlocker[];
   projects: readonly FactoryProject[];
-  duplicateBlocked: string | undefined;
   onCancel: () => void;
   onDuplicate: () => void;
 }) {
@@ -218,12 +213,7 @@ function ChangeOwnerRefusal({
             Cancel
           </Button>
           <MutationGate>
-            <Button
-              type="button"
-              disabled={Boolean(duplicateBlocked)}
-              title={duplicateBlocked}
-              onClick={onDuplicate}
-            >
+            <Button type="button" onClick={onDuplicate}>
               Duplicate to {title}…
             </Button>
           </MutationGate>
@@ -563,13 +553,14 @@ function DuplicatePlan({
 }
 
 /**
- * Agent Duplicate into a target owner, defaulting to the source's owning Project. An unavailable
- * default, as when rescuing an Agent from an unavailable Project, must be changed first.
+ * Figma SA06z: Duplicate copies the saved revision as a new Agent with its own name and owner.
+ * From an editor with unsaved changes, one card says they are not included.
  */
 export function DuplicateAgentDialog({
   source,
   projects,
   initialTarget,
+  unsavedRevision,
   duplicating,
   error,
   onClose,
@@ -578,24 +569,27 @@ export function DuplicateAgentDialog({
   source: DialogSubject;
   projects: readonly FactoryProject[];
   initialTarget?: string | null | undefined;
+  /** The saved revision copied while the editor holds unsaved changes; absent when clean. */
+  unsavedRevision?: number | undefined;
   duplicating: boolean;
   error: string;
   onClose: () => void;
-  onDuplicate: (target: string | null) => void;
+  onDuplicate: (target: string | null, name: string) => void;
 }) {
   const [target, setTarget] = useState(
     initialTarget === undefined ? source.projectId : initialTarget,
   );
+  const [name, setName] = useState(`${source.name} (copy)`);
   const blocked = ownerPicker(target, projects).blocked;
+  const ready = !blocked && name.trim() !== "" && !duplicating;
   return (
     <OwnerDialog
       busy={duplicating}
       onClose={onClose}
       title={<>Duplicate “{source.name}”</>}
-      description={changeOwnerRule("Agent", target, projects)}
       onSubmit={(event) => {
         event.preventDefault();
-        if (!blocked && !duplicating) onDuplicate(target);
+        if (ready) onDuplicate(target, name.trim());
       }}
       actions={
         <>
@@ -603,26 +597,44 @@ export function DuplicateAgentDialog({
             Cancel
           </Button>
           <MutationGate>
-            <Button type="submit" disabled={duplicating || Boolean(blocked)}>
+            <Button type="submit" disabled={!ready}>
               {duplicating ? "Duplicating…" : "Duplicate"}
             </Button>
           </MutationGate>
         </>
       }
     >
-      <OwnerTargetMenu
-        label="Target owner"
+      <div className="grid gap-1.5">
+        <label htmlFor="duplicate-agent-name" className={fieldLabelClass}>
+          Name
+        </label>
+        <Input
+          id="duplicate-agent-name"
+          maxLength={200}
+          value={name}
+          disabled={duplicating}
+          onChange={(event) => setName(event.target.value)}
+          className="bg-muted"
+        />
+      </div>
+      <OwnerPicker
+        kind="Agent"
         chosen={target}
-        from={source.projectId}
         projects={projects}
-        disabled={duplicating}
         onChange={setTarget}
-        unavailableReason=" — can’t own copies"
+        disabled={duplicating}
+        initial={target}
+        hint=""
       />
+      {unsavedRevision !== undefined && (
+        <SettingsProblemCard tone="info" title={`Copies saved revision ${unsavedRevision}`}>
+          Your unsaved changes aren’t included.
+        </SettingsProblemCard>
+      )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
+        <SettingsProblemCard tone="error" title="Couldn’t duplicate the Agent">
           {error}
-        </p>
+        </SettingsProblemCard>
       )}
     </OwnerDialog>
   );

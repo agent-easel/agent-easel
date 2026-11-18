@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { CircleAlert } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { Button } from "./ui/button";
+import { NoticeButton } from "./notice.tsx";
+import { SettingsProblemCard } from "./settings-page.tsx";
 import { Textarea } from "./ui/textarea";
 
-/** Recovery stays available without a server write or clipboard permission. */
+/**
+ * Figma SA06l: the definition was removed elsewhere and the draft is kept. Recovery stays
+ * available without a server write or clipboard permission.
+ */
 export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; json: string }) {
   const [copied, setCopied] = useState<string | null>(null);
   const [fallback, setFallback] = useState(false);
@@ -19,34 +21,30 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
     }
   }
   return (
-    <Alert variant="attention" className="rounded-none border-x-0 border-t-0" role="status">
-      <CircleAlert aria-hidden />
-      <AlertTitle>This {kind} was removed elsewhere. Your draft is kept.</AlertTitle>
-      <AlertDescription>
-        <p>
-          You can keep editing and recover this draft with Copy as JSON.{" "}
-          {kind === "Agent"
-            ? "Save, Duplicate and Delete are unavailable because this Agent no longer exists."
-            : "Save, Start Run and Remove are unavailable because this Flow no longer exists."}
-        </p>
-        <Button type="button" variant="outline" size="sm" onClick={() => void copy()}>
-          Copy as JSON
-        </Button>
-        {copied === json && <p>Copied to clipboard.</p>}
-        {fallback && (
-          <div className="grid w-full gap-2">
-            <p>Clipboard unavailable. Select and copy the JSON below.</p>
-            <Textarea
-              aria-label={`${kind} draft JSON`}
-              readOnly
-              value={json}
-              rows={8}
-              className="max-h-48 overflow-y-auto font-mono text-xs"
-              onFocus={(event) => event.currentTarget.select()}
-            />
-          </div>
-        )}
-      </AlertDescription>
-    </Alert>
+    <SettingsProblemCard
+      tone="warning"
+      title={`This ${kind} was removed elsewhere`}
+      action={
+        <div className="grid gap-2">
+          <NoticeButton onClick={() => void copy()}>Copy as JSON</NoticeButton>
+          {copied === json && <p role="status">Copied to clipboard.</p>}
+          {fallback && (
+            <div className="grid w-full gap-2">
+              <p>Clipboard unavailable. Select and copy the JSON below.</p>
+              <Textarea
+                aria-label={`${kind} draft JSON`}
+                readOnly
+                value={json}
+                rows={8}
+                className="max-h-48 overflow-y-auto font-mono text-xs"
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </div>
+          )}
+        </div>
+      }
+    >
+      Your draft is kept.
+    </SettingsProblemCard>
   );
 }
