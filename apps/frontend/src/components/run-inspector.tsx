@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { capturedExits } from "../flow-graph.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import { blockVisits } from "./execution-canvas.tsx";
-import { clockTime, executionStateLabel, StatePill } from "./execution-state.tsx";
+import { clockTime, executionStateLabel, ExecutionStateBadge } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
 import { RunAttentionDetails } from "./run-attention.tsx";
@@ -255,7 +255,8 @@ function WorkPeriods({ run }: { run: RunDetail }) {
               {execution.executionId}
             </h4>
             <p className="flex flex-wrap items-center gap-1">
-              T3 execution: <StatePill state={execution.engineStatus ?? "unknown"} /> · Report:{" "}
+              T3 execution: <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> ·
+              Report:{" "}
               {execution.reportStatus
                 ? `accepted ${execution.reportStatus}`
                 : binding?.role === "descendant"

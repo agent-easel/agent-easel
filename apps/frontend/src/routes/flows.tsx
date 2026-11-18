@@ -1,9 +1,9 @@
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
 import type { FactoryProject, FlowDraft } from "@t3-factory/contracts";
-import { Plus, ChevronRight, CircleCheck, TriangleAlert, Workflow } from "lucide-react";
+import { Plus, ChevronRight, Workflow } from "lucide-react";
+import { StatusBadge } from "../components/status-badge.tsx";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StudioLink } from "../components/app-link.tsx";
 import { StudioListHeader, studioRowClass, editedLabel } from "../components/studio-list.tsx";
@@ -145,6 +145,8 @@ function FlowItems({
 }
 
 function FlowRow({ flow, owner }: { flow: FlowDraft; owner: StudioOwner }) {
+  const reason =
+    owner.unavailable ?? (flow.readiness.ready ? null : flow.readiness.issues[0]?.message);
   return (
     <StudioLink selection={{ tab: "flows", flowId: flow.id }} className={studioRowClass}>
       <span className="grid size-8 shrink-0 place-items-center rounded-md bg-accent text-muted-foreground">
@@ -157,25 +159,14 @@ function FlowRow({ flow, owner }: { flow: FlowDraft; owner: StudioOwner }) {
           Revision {flow.revision} ·{" "}
           {owner.projectId === null ? "Global" : `Owned by ${owner.title}`}
         </p>
+        {reason && <p className="text-xs text-muted-foreground">{reason}</p>}
       </div>
       {owner.unavailable ? (
-        <Badge variant="attention" className="max-w-64 border-transparent">
-          <TriangleAlert aria-hidden strokeWidth={1.5} />
-          <span className="truncate">Can’t start — {owner.unavailable}</span>
-        </Badge>
+        <StatusBadge kind="attention">Can’t start</StatusBadge>
       ) : flow.readiness.ready ? (
-        <Badge variant="success" className="border-transparent">
-          <CircleCheck aria-hidden strokeWidth={1.5} />
-          Ready
-        </Badge>
+        <StatusBadge kind="success">Ready</StatusBadge>
       ) : (
-        <Badge variant="attention" className="max-w-64 border-transparent">
-          <TriangleAlert aria-hidden strokeWidth={1.5} />
-          <span className="truncate">
-            Not ready
-            {flow.readiness.issues[0] ? ` — ${flow.readiness.issues[0].message}` : ""}
-          </span>
-        </Badge>
+        <StatusBadge kind="error">Not ready</StatusBadge>
       )}
       <span className="shrink-0 text-2xs tracking-label text-subtle-foreground">
         {editedLabel(flow.updatedAt)}

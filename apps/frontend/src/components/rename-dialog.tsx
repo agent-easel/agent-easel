@@ -4,14 +4,7 @@ import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "./ui/dialog";
+import { Dialog, DialogContent } from "./ui/dialog";
 export function RenameDialog({
   id,
   title: initialTitle,
@@ -54,6 +47,20 @@ export function RenameDialog({
       }}
     >
       <DialogContent
+        title={<>Rename {kind}</>}
+        description={description}
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button disabled={busy || !title.trim()}>Save title</Button>
+            </MutationGate>
+          </>
+        }
+        onSubmit={(event) => void submit(event)}
+        closeDisabled={busy}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           const target =
@@ -62,31 +69,17 @@ export function RenameDialog({
           target?.focus({ preventScroll: true });
         }}
       >
-        <form className="space-y-4" onSubmit={(event) => void submit(event)}>
-          <DialogHeader>
-            <DialogTitle>Rename {kind}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-          </DialogHeader>
-          <Label htmlFor="rename-run-title">{kind === "Run" ? "Run title" : "Draft title"}</Label>
-          <Input
-            id="rename-run-title"
-            autoFocus
-            required
-            maxLength={TASK_TITLE_LIMIT}
-            disabled={busy}
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-          />
-          {error && <p role="alert">{error}</p>}
-          <DialogFooter>
-            <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
-              Cancel
-            </Button>
-            <MutationGate>
-              <Button disabled={busy || !title.trim()}>Save title</Button>
-            </MutationGate>
-          </DialogFooter>
-        </form>
+        <Label htmlFor="rename-run-title">{kind === "Run" ? "Run title" : "Draft title"}</Label>
+        <Input
+          id="rename-run-title"
+          autoFocus
+          required
+          maxLength={TASK_TITLE_LIMIT}
+          disabled={busy}
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
+        {error && <p role="alert">{error}</p>}
       </DialogContent>
     </Dialog>
   );

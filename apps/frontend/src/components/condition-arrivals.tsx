@@ -12,7 +12,7 @@ import {
   countText,
   emptyArrivalWindow,
 } from "../condition-arrivals.ts";
-import { clockTime, dayAndTime, StatePill } from "./execution-state.tsx";
+import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { sectionLabelClass } from "./page.tsx";
 
 /** One window of the Condition's arrivals from the bounded read. The first page opens on its own
@@ -109,7 +109,7 @@ function ArrivalItem({
               <span className="min-w-0 flex-1 truncate text-foreground">
                 → {blockName(run, recipient.blockId)}
               </span>
-              <StatePill state={recipient.disposition} />
+              <ExecutionStateBadge state={recipient.disposition} />
             </li>
           ))}
         </ul>

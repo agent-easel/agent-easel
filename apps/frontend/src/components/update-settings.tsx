@@ -1,85 +1,157 @@
 import { useState } from "react";
-import type { ApplicationUpdate, UpdateChannel } from "@t3-factory/contracts";
-import { cn } from "@/lib/utils";
-import type { DesktopState } from "@t3-factory/contracts/desktop-bridge";
-import { desktopBridge } from "../desktop-bridge.ts";
+import type { DesktopState, FactoryDesktop } from "@t3-factory/contracts/desktop-bridge";
+import { Button } from "@/components/ui/button";
+import { useUpgrade } from "../use-upgrade.ts";
+import { dayAndTime } from "./execution-state.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
-import { SettingsGroup, SettingsRow } from "./settings-page.tsx";
-import { UpdateControl } from "./update-control.tsx";
+import {
+  SettingsDetailRow,
+  SettingsGroup,
+  SettingsProblemCard,
+  SettingsRow,
+} from "./settings-page.tsx";
+import { StatusBadge, type SettingKind } from "./status-badge.tsx";
+import { downloadPercent, versionIn } from "./update-control.tsx";
+import { UpgradeReview } from "./upgrade-review.tsx";
 
 const channelOptions = [
   ["stable", "Stable"],
   ["beta", "Beta"],
 ] as const;
 
-function checkedAgo(checkedAt: string | null) {
-  if (!checkedAt) return "";
-  const minutes = Math.floor((Date.now() - Date.parse(checkedAt)) / 60_000);
-  if (minutes < 1) return " · Last checked just now.";
-  if (minutes < 60) return ` · Last checked ${minutes} min ago.`;
-  return ` · Last checked at ${new Date(checkedAt).toLocaleTimeString([], { timeStyle: "short" })}.`;
+export function useSettingsUpdate(local: boolean) {
+  const upgrade = useUpgrade({ includeServer: !local });
+  const { phase, targets } = upgrade;
+  const [reviewing, setReviewing] = useState(false);
+  const available = targets.length > 0;
+  const labels: Record<typeof phase, [SettingKind, string]> = {
+    idle: ["success", "Up to date"],
+    "up-to-date": ["success", "Up to date"],
+    checking: ["checking", "Checking…"],
+    available: ["info", `${versionIn(targets, "available")} available`],
+    downloading: ["checking", `Downloading · ${downloadPercent(targets)}%`],
+    ready: ["info", `${versionIn(targets, "downloaded")} downloaded`],
+    upgrading: ["checking", "Upgrading…"],
+    error: ["error", "Update failed"],
+  };
+  const [kind, label] = available ? labels[phase] : (["neutral", "Updates unavailable"] as const);
+  const action = available ? settingsUpdateAction(upgrade, () => setReviewing(true)) : null;
+
+  return {
+    badge: (
+      <StatusBadge role="status" kind={kind}>
+        {label}
+      </StatusBadge>
+    ),
+    action,
+    phase,
+    feedback: (
+      <>
+        {phase === "error" && <UpdateProblem upgrade={upgrade} />}
+        {reviewing && phase === "ready" && (
+          <UpgradeReview
+            targets={targets}
+            onCancel={() => setReviewing(false)}
+            onConfirm={() => {
+              setReviewing(false);
+              void upgrade.upgrade();
+            }}
+          />
+        )}
+      </>
+    ),
+  };
 }
 
-function statusLine(update: ApplicationUpdate) {
-  const version = update.version ?? "An update";
-  switch (update.state) {
-    case "idle":
-      return `You’re up to date${checkedAgo(update.checkedAt) || "."}`;
-    case "checking":
-      return "Checking for updates…";
+function settingsUpdateAction(upgrade: ReturnType<typeof useUpgrade>, review: () => void) {
+  switch (upgrade.phase) {
     case "available":
-      return `${version} is available.`;
-    case "downloading":
-      return `Downloading ${version} · ${Math.round(update.progress ?? 0)}%.`;
-    case "downloaded":
-      return `${version} is downloaded and ready to upgrade.`;
+      return <Button onClick={() => void upgrade.download()}>Download update</Button>;
+    case "ready":
+      return <Button onClick={review}>Upgrade…</Button>;
     case "error":
-    case "unsupported":
-      return update.message ?? "Updates are unavailable.";
+      return <Button onClick={() => void upgrade.check()}>Check again</Button>;
+    case "idle":
+    case "up-to-date":
+      return (
+        <Button
+          variant="outline"
+          disabled={upgrade.phase === "up-to-date"}
+          onClick={() => void upgrade.check()}
+        >
+          Check for updates
+        </Button>
+      );
+    case "checking":
+    case "downloading":
+    case "upgrading":
+      return null;
   }
 }
 
-/**
- * Settings → Desktop app updates: the release channel this installation follows,
- * its updater state and the update control. `local` gates update only this app.
- */
-export function UpdateSettings({ state, local }: { state: DesktopState; local: boolean }) {
-  const desktop = desktopBridge();
-  const [error, setError] = useState("");
-  if (!desktop) return null;
-  const choose = async (channel: UpdateChannel) => {
-    const result = await desktop.setUpdateChannel(channel);
-    setError(result.ok ? "" : result.message);
-  };
+function UpdateProblem({ upgrade }: { upgrade: ReturnType<typeof useUpgrade> }) {
+  const failed = upgrade.targets.filter((target) => target.update.state === "error");
+  const details =
+    upgrade.failure?.message ??
+    failed
+      .map(({ update }) => [update.checkedAt, update.message].filter(Boolean).join(" · "))
+      .filter(Boolean)
+      .join("\n");
+  const version = failed[0]?.update.version;
   return (
-    <SettingsGroup label="Updates">
-      <SettingsRow
-        title="Release channel"
-        description={
+    <SettingsProblemCard
+      tone="error"
+      title={
+        upgrade.failure?.title ??
+        (version ? `Couldn’t install ${version}` : "Couldn’t update Factory")
+      }
+      details={details}
+    >
+      Factory stays on its current version.
+    </SettingsProblemCard>
+  );
+}
+
+export function UpdateSettings({
+  state,
+  desktop,
+  downloading,
+  onChange,
+}: {
+  state: DesktopState;
+  desktop: FactoryDesktop;
+  downloading: boolean;
+  onChange: (operation: () => ReturnType<FactoryDesktop["setUpdateChannel"]>) => void;
+}) {
+  const supported = state.update.state !== "unsupported";
+  return (
+    <>
+      {supported && state.updateChannel === "stable" && state.version.includes("-beta.") && (
+        <SettingsProblemCard tone="info" title="This beta stays until a newer stable release" />
+      )}
+      <SettingsGroup label="Updates">
+        <SettingsDetailRow label="Version" value={state.version} />
+        {supported && (
           <>
-            Stable: tagged releases from main. Beta: nightly and manual builds.
-            {state.updateChannel === "stable" &&
-              state.version.includes("-beta.") &&
-              " This beta stays installed until a newer stable release is published."}
+            <SettingsRow
+              title="Release channel"
+              control={(text) => (
+                <SegmentedChoice
+                  labelledBy={text.title}
+                  value={state.updateChannel}
+                  options={channelOptions}
+                  disabled={downloading}
+                  onChange={(channel) => onChange(() => desktop.setUpdateChannel(channel))}
+                />
+              )}
+            />
+            <SettingsDetailRow
+              label="Last checked"
+              value={state.update.checkedAt ? dayAndTime(state.update.checkedAt) : "—"}
+            />
           </>
-        }
-        control={(text) => (
-          <SegmentedChoice
-            labelledBy={text.title}
-            value={state.updateChannel}
-            options={channelOptions}
-            onChange={(channel) => void choose(channel)}
-          />
         )}
-      />
-      <SettingsRow
-        description={
-          <span role="status" className={cn(error && "text-destructive")}>
-            {error || statusLine(state.update)}
-          </span>
-        }
-        control={<UpdateControl inline includeServer={!local} />}
-      />
-    </SettingsGroup>
+      </SettingsGroup>
+    </>
   );
 }

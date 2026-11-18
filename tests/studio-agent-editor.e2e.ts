@@ -82,10 +82,10 @@ test("keeping Agent edits against a saved revision sends no implicit save", asyn
 }) => {
   // Arrange
   const state = await beforeKeptAgentEdits({ app, screen, browser }, "keptAgentEdits");
-  const { panel } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
 
   // Act
-  await panel.getByRole("button", "Keep my edits against revision 2", { exact: true }).tap();
+  await comparison.getByRole("button", "Keep my edits against revision 2", { exact: true }).tap();
 
   // Assert
   await expectKeptAgentEdits({ ...state });
@@ -123,10 +123,10 @@ test("Load latest revision asks for confirmation with Keep editing focused", asy
     { app, screen, browser },
     "agentLoadConfirmation",
   );
-  const { panel } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
 
   // Act
-  await panel.getByRole("button", "Load latest revision", { exact: true }).tap();
+  await comparison.getByRole("button", "Load latest revision", { exact: true }).tap();
 
   // Assert
   await expectAgentLoadConfirmation({ ...state });

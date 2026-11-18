@@ -6,7 +6,7 @@ import {
   type CSSProperties,
   type RefObject,
 } from "react";
-import { GripVertical } from "lucide-react";
+import { GripVertical, RotateCcw } from "lucide-react";
 import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
@@ -31,6 +31,7 @@ import {
   type Placement,
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 import { blockIdentity, conditionRoute, exitDisplayName, exitSourceLabel } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 
@@ -163,12 +164,9 @@ function grip(visible: boolean) {
   );
 }
 
-const blockTagClass =
-  "min-w-0 truncate rounded-sm border px-1 text-2xs leading-3.5 tracking-label whitespace-nowrap";
-
 /**
- * Neutral tags on an Agent block's header that mark its definition: an Agent that Needs a model and
- * a Revisit instruction (never its text). They are never shaped like an execution state pill.
+ * Tags on an Agent block's header that mark its definition: an Agent that Needs a model and a
+ * Revisit instruction (never its text).
  */
 function agentBlockTags(block: FlowBlock, agents: readonly AgentDefinition[]) {
   if (block.kind !== "agent") return { tags: null, describedBy: undefined };
@@ -180,14 +178,14 @@ function agentBlockTags(block: FlowBlock, agents: readonly AgentDefinition[]) {
     tags: (
       <>
         {needsModel && (
-          <span id={needsModelId} className={cn(blockTagClass, "text-attention")}>
+          <StatusBadge id={needsModelId} kind="attention">
             Needs a model
-          </span>
+          </StatusBadge>
         )}
         {revisit && (
-          <span id={revisitId} className={cn(blockTagClass, "text-muted-foreground")}>
+          <StatusBadge id={revisitId} kind="neutral" icon={RotateCcw}>
             Revisit instruction
-          </span>
+          </StatusBadge>
         )}
       </>
     ),

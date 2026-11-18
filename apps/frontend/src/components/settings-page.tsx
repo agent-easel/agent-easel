@@ -1,10 +1,10 @@
 import { useId, type ReactNode } from "react";
-import { ChevronRight, Lock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ChevronRight, Info, Lock, TriangleAlert, type LucideIcon } from "lucide-react";
+import { StatusBadge } from "./status-badge.tsx";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button.tsx";
-import { sectionLabelClass } from "./page.tsx";
 
 /**
  * Figma Settings v2 page template: every Settings section is one header followed by groups of
@@ -12,38 +12,33 @@ import { sectionLabelClass } from "./page.tsx";
  */
 export function SettingsPage({
   title,
-  description,
   badge,
   hostManaged = false,
   action,
   children,
 }: {
   title: string;
-  /** One sentence saying what the page controls. */
-  description: ReactNode;
-  /** A status pill shown after the title. */
+  /** A status badge shown after the title. */
   badge?: ReactNode;
   /** Shows the "Managed on the Factory host" chip on clients that cannot change the page. */
   hostManaged?: boolean;
-  /** The page's single primary action. */
+  /** Trailing page actions, ordered from secondary to primary. */
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="grid gap-5">
-      <header className="grid gap-1.5">
+      <header>
         <div className="flex min-h-8 flex-wrap items-center gap-2.5">
           <h2 className="text-lg leading-tight font-semibold text-foreground">{title}</h2>
           {badge}
           {hostManaged && (
-            <span className="inline-flex items-center gap-1 rounded-full border py-0.5 pr-2 pl-1.5 text-2xs font-medium text-muted-foreground">
-              <Lock aria-hidden className="size-3" strokeWidth={1.5} />
+            <StatusBadge kind="neutral" icon={Lock}>
               Managed on the Factory host
-            </span>
+            </StatusBadge>
           )}
-          {action && <div className="ml-auto flex items-center">{action}</div>}
+          {action && <div className="ml-auto flex flex-wrap items-center gap-2">{action}</div>}
         </div>
-        <p className="text-sm leading-tight text-muted-foreground">{description}</p>
       </header>
       {children}
     </div>
@@ -57,7 +52,7 @@ export function SettingsGroup({
   children,
 }: {
   label: string;
-  /** A status pill shown after the label. */
+  /** A status badge shown after the label. */
   badge?: ReactNode;
   children: ReactNode;
 }) {
@@ -65,12 +60,12 @@ export function SettingsGroup({
   return (
     <section aria-labelledby={id} className="grid gap-2">
       <div className="flex min-h-4.5 items-center gap-2 pl-0.5">
-        <h3 id={id} className={sectionLabelClass}>
+        <h3 id={id} className="text-sm font-medium text-muted-foreground">
           {label}
         </h3>
         {badge}
       </div>
-      <div className="divide-y overflow-hidden rounded-lg border bg-background">{children}</div>
+      <div className="divide-y overflow-hidden rounded-lg border bg-muted">{children}</div>
     </section>
   );
 }
@@ -97,8 +92,13 @@ export function SettingsRow({
     description: description ? `${id}-description` : undefined,
   };
   return (
-    <div className="flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
-      <div className="grid min-w-48 flex-1 gap-0.5 text-sm leading-tight">
+    <div
+      className={cn(
+        "flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 px-4",
+        description ? "py-2.5" : "py-1.5",
+      )}
+    >
+      <div className="grid min-w-32 flex-1 gap-0.5 text-sm leading-tight">
         {title && (
           <div id={text.title} className="font-medium text-foreground">
             {title}
@@ -135,13 +135,16 @@ export function SettingsDetailRow({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-10 items-center gap-3 px-4 py-2 text-sm leading-tight">
-      <span className="w-40 shrink-0 text-muted-foreground">{label}</span>
-      <span
-        className={cn("min-w-0 flex-1 break-words text-foreground", mono && "font-mono text-label")}
+    <div className="flex min-h-11 flex-wrap items-center gap-3 px-4 py-1.5 text-sm leading-tight">
+      <span className="w-37.5 shrink-0 max-sm:w-24 text-muted-foreground">{label}</span>
+      <div
+        className={cn(
+          "min-w-0 flex-1 wrap-anywhere text-foreground",
+          mono && "font-mono text-label",
+        )}
       >
         {value}
-      </span>
+      </div>
       {copy !== undefined && <CopyButton text={copy} label={`Copy ${label}`} />}
       {action}
     </div>
@@ -176,22 +179,73 @@ export function SettingsDisclosure({
   );
 }
 
-export type StatusTone = "success" | "attention" | "neutral" | "error" | "info";
-
-const statusVariants = {
-  success: "success",
-  attention: "attention",
-  neutral: "secondary",
-  error: "destructive",
-  info: "info",
-} as const satisfies Record<StatusTone, string>;
-
-/** A state with a dot in its tone; the label carries the meaning, never the color alone. */
-export function StatusPill({ tone, children }: { tone: StatusTone; children: ReactNode }) {
+/** Raw diagnostics are collapsed by default and copied as a single block. */
+export function SettingsTechnicalDetails({ details }: { details: string }) {
   return (
-    <Badge variant={statusVariants[tone]} className="gap-1.5 pr-2 pl-1.75">
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
+    <SettingsDisclosure label="Technical details">
+      <pre className="min-w-0 font-mono text-label wrap-anywhere whitespace-pre-wrap">
+        {details}
+      </pre>
+      <CopyButton text={details} label="Copy details" showLabel />
+    </SettingsDisclosure>
+  );
+}
+
+/** One explanation and next step for a Settings problem. */
+export function SettingsProblemCard({
+  tone,
+  title,
+  children,
+  details,
+  action,
+  icon,
+}: {
+  tone: "error" | "warning" | "info";
+  title: ReactNode;
+  children?: ReactNode;
+  details?: string | undefined;
+  action?: ReactNode;
+  icon?: LucideIcon;
+}) {
+  const Icon = icon ?? (tone === "info" ? Info : TriangleAlert);
+  const variant = tone === "error" ? "critical" : tone === "warning" ? "attention" : "info";
+  return (
+    <Alert variant={variant} role={tone === "info" ? "status" : "alert"}>
+      <Icon aria-hidden strokeWidth={1.5} />
+      <AlertTitle>{title}</AlertTitle>
+      {(children || details || action) && (
+        <AlertDescription className="min-w-0 justify-items-stretch gap-2">
+          {children && <p>{children}</p>}
+          {action && <div>{action}</div>}
+          {details && <SettingsTechnicalDetails details={details} />}
+        </AlertDescription>
+      )}
+    </Alert>
+  );
+}
+
+/** The heading and introduction used in Studio Trigger views. */
+export function StudioPage({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description: ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-5">
+      <header className="grid gap-1.5">
+        <div className="flex min-h-8 items-center justify-between gap-2">
+          <h2 className="text-lg leading-tight font-semibold">{title}</h2>
+          {action}
+        </div>
+        <p className="text-sm leading-tight text-muted-foreground">{description}</p>
+      </header>
       {children}
-    </Badge>
+    </div>
   );
 }

@@ -1,25 +1,24 @@
-import { LaunchSkillStatus } from "../components/launch-skill-status.tsx";
+import { CircleDashed } from "lucide-react";
 import { MutationGate } from "@/client-gate";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "../api.ts";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
-  SettingsDisclosure,
   SettingsGroup,
   SettingsPage,
+  SettingsProblemCard,
   SettingsRow,
-  StatusPill,
-  type StatusTone,
+  SettingsTechnicalDetails,
 } from "../components/settings-page.tsx";
+import { StatusBadge, type SettingKind } from "../components/status-badge.tsx";
 import { targetNeedsAttention, useReportingState } from "../reporting-state.tsx";
 
-const statuses: Record<ReportingInstallation["status"], { label: string; tone: StatusTone }> = {
-  "not-installed": { label: "Not installed", tone: "neutral" },
-  installed: { label: "Installed", tone: "success" },
-  "needs-attention": { label: "Needs attention", tone: "attention" },
-  unsupported: { label: "Not available", tone: "neutral" },
+const statuses: Record<ReportingInstallation["status"], { label: string; kind: SettingKind }> = {
+  "not-installed": { label: "Not installed", kind: "attention" },
+  installed: { label: "Installed", kind: "success" },
+  "needs-attention": { label: "Needs attention", kind: "attention" },
+  unsupported: { label: "Not available", kind: "neutral" },
 };
 const providerNames: Record<string, string> = {
   claudeAgent: "Claude",
@@ -28,154 +27,307 @@ const providerNames: Record<string, string> = {
   grok: "Grok",
 };
 
-/** The one action a target offers; the backend never offers more than one at a time. */
-function targetAction({ actions }: ReportingInstallation) {
-  if (actions.install) return { label: "Install", variant: "default" } as const;
-  if (actions.repair) return { label: "Repair", variant: "default" } as const;
-  if (actions.reinstall) return { label: "Reinstall", variant: "outline" } as const;
-  return null;
-}
+const providerName = (target: ReportingInstallation) =>
+  providerNames[target.provider] ?? target.provider;
+const installable = (target: ReportingInstallation) =>
+  target.actions.install || target.actions.repair;
 
-/** Settings → Agent reporting: one row per harness configuration home Factory MCP installs into. */
 export function RuntimeSettings() {
-  const { targets, refresh: refreshReporting, error: readError } = useReportingState();
-  const [busy, setBusy] = useState(true);
-  const [error, setError] = useState("");
-  const refresh = useCallback(async () => {
-    setBusy(true);
-    setError("");
-    await refreshReporting();
-    setBusy(false);
-  }, [refreshReporting]);
+  const { targets, refresh, error, readDetails, running, failures, install } = useReportingState();
+  const [checking, setChecking] = useState(true);
+  const [instanceNames, setInstanceNames] = useState<ReadonlyMap<string, string | null>>(new Map());
   useEffect(() => {
     let active = true;
-    void refreshReporting().then(() => {
-      if (active) setBusy(false);
+    void refresh().then(() => {
+      if (active) setChecking(false);
     });
+    void api.getAgentCapabilities().then(
+      (value) => {
+        if (active && value.state === "ready")
+          setInstanceNames(
+            new Map(
+              value.providers.map((provider) => [
+                provider.providerInstanceId,
+                provider.displayName,
+              ]),
+            ),
+          );
+      },
+      () => {}, // The configuration path still distinguishes homes while the T3 catalog is unreachable.
+    );
     return () => {
       active = false;
     };
-  }, [refreshReporting]);
-  const install = async (targetId: string) => {
-    setBusy(true);
-    setError("");
-    return await api
-      .installReporting({ targetId })
-      .then(() => refreshReporting())
-      .catch((error: unknown) => {
-        setError(String(error));
-      })
-      .finally(() => {
-        setBusy(false);
-      });
-  };
-  const attention = targets?.filter(targetNeedsAttention).length ?? 0;
+  }, [refresh]);
+
+  const group = targets ?? [];
+  const pending = group.filter(installable);
+  const needsAction = group.filter(
+    (target) => targetNeedsAttention(target) || failures[target.id],
+  ).length;
+  const busy = checking || running !== null;
   return (
     <SettingsPage
       title="Agent reporting"
-      description="Factory MCP lets Agents report progress to Factory. Install it once per harness on the host; new Runs require it."
-      badge={
-        attention > 0 && (
-          <StatusPill tone="attention">
-            {attention} {attention === 1 ? "needs" : "need"} attention
-          </StatusPill>
-        )
-      }
+      badge={!checking && needsAction > 0 && <ReportingCount count={needsAction} />}
       action={
-        <Button variant="outline" disabled={busy} onClick={() => void refresh()}>
-          Check again
-        </Button>
+        <MutationGate>
+          <Button
+            variant={pending.length || (!error && !needsAction) ? "outline" : "default"}
+            disabled={busy}
+            onClick={() => {
+              setChecking(true);
+              void refresh().then(() => setChecking(false));
+            }}
+          >
+            Check again
+          </Button>
+          {pending.length > 0 && (
+            <Button disabled={busy} onClick={() => void install(pending)}>
+              Install all
+            </Button>
+          )}
+        </MutationGate>
       }
     >
-      {(error || readError) && (
-        <Alert variant="destructive">
-          <AlertDescription>{error || readError}</AlertDescription>
-        </Alert>
+      {error && !checking && (
+        <SettingsProblemCard
+          tone="error"
+          title="Couldn’t check Agent reporting"
+          details={readDetails}
+        >
+          Check again in a moment. Runs already started aren’t affected.
+        </SettingsProblemCard>
       )}
-      {targets && targets.length > 0 && (
+      {checking && !targets ? (
         <SettingsGroup label="Harnesses">
-          {targets.map((target) => (
-            <TargetRow
-              key={target.id}
-              target={target}
-              busy={busy}
-              onInstall={() => void install(target.id)}
-            />
-          ))}
+          <SettingsRow
+            control={
+              <StatusBadge kind="checking" role="status">
+                Checking harnesses…
+              </StatusBadge>
+            }
+          />
         </SettingsGroup>
+      ) : (
+        <ReportingResults
+          targets={group}
+          failures={failures}
+          running={running}
+          busy={busy}
+          secondary={pending.length > 0}
+          instanceNames={instanceNames}
+          install={install}
+        />
       )}
-      <SettingsDisclosure label="How it works" hint="Start a fresh T3 session after installing">
-        <p>
-          Install, Repair and Reinstall write Factory’s own entry into the harness configuration on
-          the server computer, once per harness home, for all Projects, worktrees and Agents. New
-          Runs require MCP reporting; existing Runs keep their saved reporting protocol.
-        </p>
-        <p>
-          Installed configuration does not prove that live reporting works in the harness today.
-          Start a fresh T3 session after installation and review native tool permissions in your
-          harness: managed policy, project overrides and disabled MCP servers may prevent
-          visibility. Factory does not change trust policy, restart sessions or launch diagnostic
-          work.
-        </p>
-      </SettingsDisclosure>
     </SettingsPage>
+  );
+}
+
+function ReportingResults({
+  targets,
+  failures,
+  running,
+  busy,
+  secondary,
+  instanceNames,
+  install,
+}: {
+  targets: readonly ReportingInstallation[];
+  failures: Readonly<Record<string, string>>;
+  running: string | null;
+  busy: boolean;
+  secondary: boolean;
+  instanceNames: ReadonlyMap<string, string | null>;
+  install: (targets: readonly ReportingInstallation[]) => Promise<void>;
+}) {
+  if (!targets.length) return null;
+  const homes = new Map<string, number>();
+  for (const target of targets) homes.set(target.provider, (homes.get(target.provider) ?? 0) + 1);
+  return (
+    <>
+      <SettingsGroup label="Harnesses">
+        {targets.map((target) => (
+          <TargetRow
+            key={target.id}
+            target={target}
+            busy={busy}
+            running={running === target.id}
+            failed={!!failures[target.id]}
+            secondary={secondary}
+            instances={displayNames(target, homes, instanceNames)}
+            onInstall={() => void install([target])}
+          />
+        ))}
+      </SettingsGroup>
+      {targets.map((target) => (
+        <TargetProblem key={target.id} target={target} failure={failures[target.id]} />
+      ))}
+    </>
+  );
+}
+
+function ReportingCount({ count }: { count: number }) {
+  return (
+    <StatusBadge kind="attention">
+      {count} {count === 1 ? "needs" : "need"} action
+    </StatusBadge>
+  );
+}
+
+function displayNames(
+  target: ReportingInstallation,
+  homes: ReadonlyMap<string, number>,
+  instanceNames: ReadonlyMap<string, string | null>,
+) {
+  if ((homes.get(target.provider) ?? 0) < 2) return "";
+  return target.instances
+    .map((id) => instanceNames.get(id))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function targetAction({ actions }: ReportingInstallation) {
+  if (actions.install) return "Install";
+  if (actions.repair) return "Repair";
+  if (actions.reinstall) return "Reinstall";
+  return null;
+}
+
+function targetStatus(target: ReportingInstallation, running: boolean, failed: boolean) {
+  if (running)
+    return {
+      kind: "checking",
+      label: target.actions.repair ? "Repairing…" : "Installing…",
+    } as const;
+  if (failed) return { kind: "error", label: "Install failed" } as const;
+  return statuses[target.status];
+}
+
+function TargetDescription({
+  target,
+  instances,
+}: {
+  target: ReportingInstallation;
+  instances: string;
+}) {
+  return (
+    <>
+      {instances && <span className="block">{instances}</span>}
+      {target.path && (
+        <span className="block font-mono text-label wrap-anywhere">{target.path}</span>
+      )}
+      {target.status === "installed" && target.launchSkill && target.launchSkill !== "current" && (
+        <span className="block">
+          Optional skills {target.launchSkill} · {targetAction(target)}{" "}
+          {target.launchSkill === "missing" ? "adds them" : "updates them"}
+        </span>
+      )}
+    </>
+  );
+}
+
+function targetHasDetails(target: ReportingInstallation) {
+  return (
+    target.status === "unsupported" ||
+    (target.status === "installed" && target.launchSkill !== "current")
   );
 }
 
 function TargetRow({
   target,
   busy,
+  running,
+  failed,
+  secondary,
+  instances,
   onInstall,
 }: {
   target: ReportingInstallation;
   busy: boolean;
+  running: boolean;
+  failed: boolean;
+  secondary: boolean;
+  instances: string;
   onInstall: () => void;
 }) {
   const actionId = useId();
-  const name = providerNames[target.provider] ?? target.provider;
-  const status = statuses[target.status];
+  const name = providerName(target);
   const action = targetAction(target);
+  const status = targetStatus(target, running, failed);
   return (
     <div role="group" aria-label={name}>
       <SettingsRow
         title={name}
-        description={
-          <>
-            {target.status !== "unsupported" && (
-              <span className="block font-mono text-label break-all">
-                {target.path ?? "Configuration target unavailable"}
-              </span>
-            )}
-            {/* The T3 instances tell apart rows of one provider, including unsupported ones without a path. */}
-            <span className="block">{target.instances.join(", ")}</span>
-            {/* Healthy installed rows keep the generic caveat in "How it works". */}
-            {(target.status !== "installed" || target.launchSkill !== "current") && (
-              <span className="block">{target.message}</span>
-            )}
-            {target.launchSkill !== "current" && <LaunchSkillStatus state={target.launchSkill} />}
-          </>
-        }
+        description={<TargetDescription target={target} instances={instances} />}
         control={(text) => (
           <>
-            <span role="status">
-              <StatusPill tone={status.tone}>{status.label}</StatusPill>
-            </span>
+            <StatusBadge
+              role="status"
+              kind={status.kind}
+              {...(status.label === "Not installed" ? { icon: CircleDashed } : {})}
+            >
+              {status.label}
+            </StatusBadge>
             {action && (
               <MutationGate>
                 <Button
                   id={actionId}
-                  variant={action.variant}
+                  variant={secondary || action === "Reinstall" ? "outline" : "default"}
                   aria-labelledby={`${actionId} ${text.title}`}
                   disabled={busy}
                   onClick={onInstall}
                 >
-                  {action.label}
+                  {action}
                 </Button>
               </MutationGate>
             )}
           </>
         )}
       />
+      {!failed && targetHasDetails(target) && (
+        <div className="px-4 pb-3">
+          <SettingsTechnicalDetails details={target.message} />
+        </div>
+      )}
     </div>
   );
+}
+
+function TargetProblem({
+  target,
+  failure,
+}: {
+  target: ReportingInstallation;
+  failure?: string | undefined;
+}) {
+  const name = providerName(target);
+  const details = [target.path, failure ?? target.message].filter(Boolean).join("\n");
+  if (failure)
+    return (
+      <SettingsProblemCard tone="error" title={`Couldn’t install for ${name}`} details={details}>
+        Check the configuration permissions, then install again.
+      </SettingsProblemCard>
+    );
+  if (target.status === "needs-attention") {
+    const missing = !target.path && target.message.includes("ENOENT");
+    return (
+      <SettingsProblemCard
+        tone="warning"
+        title={
+          missing
+            ? `${name}’s configuration folder is missing`
+            : `${name}’s reporting configuration needs attention`
+        }
+        details={details}
+      >
+        {missing
+          ? "Restore it on the Factory host, then check again."
+          : target.actions.repair
+            ? "Repair the configuration, then start a fresh T3 session."
+            : "Review Technical details and fix the configuration on the Factory host."}
+      </SettingsProblemCard>
+    );
+  }
+  return null;
 }

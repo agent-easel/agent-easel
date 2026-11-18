@@ -5,7 +5,7 @@ import { readFlow, saveConditionAtSizeLimit, saveSingleAgentFlow } from "./suppo
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
-import { chooseFlowAction } from "./support/studio.ts";
+import { chooseFlowAction, saveFlowWithReadiness } from "./support/studio.ts";
 
 /** Adds a block from the library row `row` and names and places it in its configuration. */
 async function addBlock(screen: Screen, row: string, name: string, x: string, y: string) {
@@ -46,9 +46,7 @@ test("a Condition added from the library is ready with only Otherwise, and a rul
   await screen
     .getByRole("button", "Connect exit finish of Coder")
     .dragTo(screen.getByRole("article", "Block Escalate"));
-  await screen.getByRole("button", "Save Flow").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await saveFlowWithReadiness(screen, /^Ready/);
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 1 output name").fill("Human");
@@ -118,7 +116,7 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
   await expect(screen.getByRole("listitem", "Rule 1 End branch")).toContainText("→ Review");
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   const saved = await readFlow(app.baseUrl, flowId);
   const condition = saved.graph.blocks.find((block) => block.id === "escalate");
   assert(condition?.kind === "condition");
@@ -241,7 +239,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
   await screen.getByRole("button", "Save Flow").tap();
   await expect(saveStatus).toContainText("Saved · Revision 3");
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
   await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ finish here");
@@ -291,7 +289,7 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   const asked = details.getByRole("list", "Arrival 3 recipients");
   await expect(asked).toContainText("→ Review");
   await expect(asked).toContainText("→ Coder");
-  await expect(asked).toContainText("acknowledged");
+  await expect(asked).toContainText("Acknowledged");
   await expect(details.getByRole("listitem", "Arrival 5, Stop, ends here")).toContainText(
     "Output not connected · this arrival ends here",
   );
@@ -458,7 +456,7 @@ test("selecting a routed Condition lists each arrival's route, recipient disposi
   );
   const recipients = details.getByRole("list", "Arrival 1 recipients");
   await expect(recipients).toContainText("Your decision");
-  await expect(recipients).toContainText("acknowledged");
+  await expect(recipients).toContainText("Acknowledged");
   await expect(
     details.getByRole("listitem", "Arrival 2, Later approvals, ends here"),
   ).toContainText("Matched rule Later approvals · selected Later approvals");

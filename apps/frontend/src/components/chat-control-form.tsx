@@ -137,14 +137,12 @@ export function useChatControlSection<Settings, Draft, Input>(section: {
  */
 export function ChatControlPage({
   title,
-  intro,
   loadError,
   onRetry,
   decision,
   children,
 }: {
   title: string;
-  intro: ReactNode;
   loadError: string;
   onRetry: () => void;
   decision: ReturnType<typeof useSettingsDraftGuard>;
@@ -152,7 +150,7 @@ export function ChatControlPage({
   children: ReactNode | null;
 }) {
   return (
-    <SettingsPage title={title} description={intro}>
+    <SettingsPage title={title}>
       {loadError && <ReadFailure message={loadError} onRetry={onRetry} />}
       {children !== null ? (
         <MutationGate>{children}</MutationGate>

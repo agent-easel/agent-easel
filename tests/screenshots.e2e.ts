@@ -13,7 +13,7 @@ const settled =
 async function expectStudioViewport(screen: Screen, browser: Browser) {
   await expect
     .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
-    .toMatchObject({ x: 16, y: 16, width: 1568, height: 968 });
+    .toMatchObject({ x: 200, y: 100, width: 1200, height: 800 });
   await expect
     .poll(() =>
       browser.evaluate(`getComputedStyle(document.querySelector('[data-studio]')).opacity`),
@@ -72,7 +72,7 @@ test("capture Studio and an authored Flow that survives reload", async ({
   await expectStudioViewport(screen, browser);
   await expect
     .poll(async () => (await screen.getByLabel("Flow name").boundingBox())?.y)
-    .toBeLessThan(120);
+    .toBeLessThan(220);
   await app.screenshot("flow-saved-after-reload");
 });
 

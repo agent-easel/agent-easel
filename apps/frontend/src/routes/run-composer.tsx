@@ -32,7 +32,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
-import { FieldStateTag } from "../components/field-state-tag.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import {
   Notice,
   NoticeButton,
@@ -41,7 +41,9 @@ import {
   NoticeStudioLink,
 } from "../components/notice.tsx";
 import { selectFieldClass, toolbarPillClass } from "../components/page.tsx";
+import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
+import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
   DropdownMenuLabel,
@@ -238,12 +240,9 @@ function StartButton({ model }: { model: Composer }) {
         <Play aria-hidden className="size-3" strokeWidth={2} />
         {draft.busy ? "Starting…" : draft.pending ? "Check same request" : "Start"}
         {enabled && (
-          <kbd
-            aria-hidden
-            className="rounded-sm bg-primary-foreground/14 px-1 py-px font-sans text-2xs font-medium"
-          >
-            ⌘↵
-          </kbd>
+          <KeyChip aria-hidden className="border-0 bg-primary-foreground/14 px-1 text-inherit">
+            {formatShortcut(fixedShortcuts.startRun)}
+          </KeyChip>
         )}
       </Button>
     </MutationGate>
@@ -310,7 +309,7 @@ function FlowFieldValue({
   return (
     <>
       <span className="min-w-0 truncate font-medium">{value}</span>
-      {flow && !flowCanLaunch(flow) && <FieldStateTag>Not ready</FieldStateTag>}
+      {flow && !flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
     </>
   );
 }
@@ -329,7 +328,8 @@ function FlowChoice({ flow, busy }: { flow: FlowDraft; busy: boolean }) {
       aria-label={label}
       className={flowRadioItemClass}
     >
-      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <span className="min-w-0 flex-1 truncate">{flow.name}</span>
+      {!flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
     </DropdownMenuRadioItem>
   );
 }

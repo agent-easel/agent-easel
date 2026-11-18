@@ -41,7 +41,7 @@ test("the host approves a pending device listed first, which clears the Devices 
 
   // Act
   await devices
-    .getByRole("group", `${tablet}, Pending`, { exact: true })
+    .getByRole("group", `${tablet}, Waiting`, { exact: true })
     .getByRole("button", "Approve")
     .tap();
 
@@ -69,7 +69,7 @@ test("the host denies a pending device, which clears the Devices & access attent
 
   // Act
   await devices
-    .getByRole("group", `${kiosk}, Pending`, { exact: true })
+    .getByRole("group", `${kiosk}, Waiting`, { exact: true })
     .getByRole("button", "Deny")
     .tap();
 
@@ -104,21 +104,36 @@ test("a new browser profile waits for host approval, then operates the server's 
   await app.screenshot("remote-approved-studio");
 });
 
-test("revoking an approved browser profile replaces the product with the revoked screen", async ({
+test("confirming revocation in Settings removes access from an approved browser profile", async ({
   fixture,
   app,
   screen,
+  browser,
 }) => {
   // Arrange
-  await approvedBrowser(app, screen);
+  const label = "Revocation journey browser";
+  await app.open("/runs/new");
+  await screen.getByLabel("Device name shown to the owner").fill(label);
+  await screen.getByRole("button", "Request access").tap();
+  await expect(screen.getByLabel("Verification code")).toBeVisible();
+  await fixture.remoteAccess.approve();
   await expect(screen.getByRole("button", "New Run (+)")).toBeVisible();
+  await browser.clearCookies({ name: "fixture_remote" });
+  await app.open("/settings/devices");
+  await screen
+    .getByRole("group", `${label}, Approved`, { exact: true })
+    .getByRole("button", "Revoke…", { exact: true })
+    .tap();
+  const confirmation = screen.getByRole("dialog", `Revoke “${label}”?`);
+  await expect(confirmation).toBeVisible();
 
   // Act
-  await fixture.remoteAccess.revoke();
+  await confirmation.getByRole("button", "Revoke", { exact: true }).tap();
 
   // Assert
+  await expect(screen.getByRole("group", `${label}, Revoked`, { exact: true })).toBeVisible();
+  await openRemoteBrowser(app);
   await expect(screen.getByRole("heading", "Access was revoked")).toBeVisible();
-  await expect(screen.getByRole("button", "New Run (+)")).toHaveCount(0);
   await app.screenshot("remote-revoked");
 });
 
@@ -245,22 +260,21 @@ test("an incompatible desktop client can upgrade itself from local application s
   // Arrange
   await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("client"));
   await openIncompatibleApplicationSettings(app, screen);
-  await screen.getByRole("button", "Review upgrade").tap();
-  await expect(screen.getByRole("heading", "Upgrade client?")).toBeVisible();
+  await screen.getByRole("button", "Upgrade…").tap();
+  await expect(screen.getByRole("heading", "Upgrade to 0.2.0?")).toBeVisible();
   await app.screenshot("local-upgrade-review");
 
   // Act
   await screen.getByRole("button", "Upgrade", { exact: true }).tap();
 
   // Assert: the stand-in bridge records the request instead of restarting the app.
-  await expect(screen.getByRole("button", "Upgrading…")).toBeVisible();
+  await expect(screen.getByRole("status")).toContainText("Upgrading…");
 });
 
 test("an approved browser upgrades the server after reviewing it", async ({ app, screen }) => {
   // Arrange
   const before = (await serverUpdateActions(app)).length;
   await openUpgradeReview(app, screen, "server");
-  await expect(screen.getByRole("region", /^Server · /)).toContainText("0.1.1-beta.3");
 
   // Act
   await screen.getByRole("button", "Upgrade", { exact: true }).tap();
@@ -278,9 +292,8 @@ test("a desktop client upgrades its server first and waits for it before restart
   await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("client"));
   const before = (await serverUpdateActions(app)).length;
   await openUpgradeReview(app, screen, "client + server");
-  await expect(screen.getByRole("region", "Client · This device")).toContainText("0.2.0");
-  await expect(screen.getByRole("region", "Server · factory.example")).toContainText(
-    "0.1.1-beta.3",
+  await expect(screen.getByRole("dialog", "Upgrade client + server?")).toContainText(
+    "The server updates before the client restarts.",
   );
   await app.screenshot("upgrade-review-client-and-server");
 

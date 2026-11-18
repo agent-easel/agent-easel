@@ -1,10 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { ConnectionState, T3Connection } from "@t3-factory/contracts";
-import { Badge } from "@/components/ui/badge";
+import { KeyRound, Unplug, type LucideIcon } from "lucide-react";
+import { StatusBadge, type SettingKind } from "./components/status-badge.tsx";
 import { cn } from "@/lib/utils";
 import { useLiveConnectionStatus } from "./live/live-connection.ts";
 
 export type ConnectionPresentation = "loading" | ConnectionState | "load-error";
+export type SettingsConnectionPresentation = ConnectionPresentation | "not-set-up";
 
 const stateLabels: Record<ConnectionState, string> = {
   unavailable: "Disconnected",
@@ -13,12 +15,18 @@ const stateLabels: Record<ConnectionState, string> = {
   ready: "Connected",
 };
 
-/** Figma Run/ConnectionBadge tones: green only when Connected. */
-const badgeVariant: Record<ConnectionState, "success" | "attention" | "destructive"> = {
-  ready: "success",
-  "authorization-required": "attention",
-  incompatible: "attention",
-  unavailable: "destructive",
+/** Figma Run/ConnectionBadge: green only when Connected; Unplug and key where the glyph says it. */
+const badges: Record<
+  SettingsConnectionPresentation,
+  { readonly kind: SettingKind; readonly icon?: LucideIcon }
+> = {
+  ready: { kind: "success" },
+  "authorization-required": { kind: "attention", icon: KeyRound },
+  incompatible: { kind: "attention" },
+  unavailable: { kind: "error", icon: Unplug },
+  loading: { kind: "checking" },
+  "load-error": { kind: "neutral" },
+  "not-set-up": { kind: "neutral" },
 };
 
 const footerText: Record<ConnectionPresentation, string> = {
@@ -78,9 +86,7 @@ export function ConnectionStateProvider({ children }: { children: ReactNode }) {
     basis: typeof live;
   } | null>(null);
   const connection = commanded?.basis === live ? commanded.connection : live.value;
-  const loadError = live.error
-    ? "Factory could not load connection status. Check the backend and recheck."
-    : "";
+  const loadError = live.error ? `${live.error.code}: ${live.error.message}` : "";
   const setConnection = useCallback(
     (next: T3Connection) => setCommanded({ connection: next, basis: live }),
     [live],
@@ -101,7 +107,7 @@ export function useConnectionState() {
   return value;
 }
 
-function dotClass(presentation: ConnectionPresentation): string {
+function dotClass(presentation: SettingsConnectionPresentation): string {
   if (presentation === "ready") return "bg-success";
   if (presentation === "authorization-required" || presentation === "incompatible")
     return "bg-attention";
@@ -115,7 +121,7 @@ export function ConnectionStateDot({
   label,
   overlay = false,
 }: {
-  presentation: ConnectionPresentation;
+  presentation: SettingsConnectionPresentation;
   className?: string;
   label: string;
   /** Pin to the top-right of a relative icon button (sidebar Settings). */
@@ -135,28 +141,26 @@ export function ConnectionStateDot({
   );
 }
 
-export function connectionStatusLabel(presentation: ConnectionPresentation): string {
-  if (presentation === "loading") return "Checking connection…";
-  if (presentation === "load-error") return "Connection status unavailable";
+export function connectionStatusLabel(presentation: SettingsConnectionPresentation): string {
+  if (presentation === "loading") return "Checking…";
+  if (presentation === "load-error") return "Status unavailable";
+  if (presentation === "not-set-up") return "Not set up";
   return stateLabels[presentation];
 }
 
 export function ConnectionStateBadge({
   presentation,
-  className,
 }: {
-  presentation: ConnectionPresentation;
-  className?: string;
+  presentation: SettingsConnectionPresentation;
 }) {
-  const label = connectionStatusLabel(presentation);
-  const neutral = presentation === "loading" || presentation === "load-error";
-  return (
-    <Badge
-      variant={neutral ? "secondary" : badgeVariant[presentation]}
-      className={cn("gap-1.5 pr-2 pl-1.75", className)}
-    >
-      <span aria-hidden className="size-1.5 rounded-full bg-current" />
-      {label}
-    </Badge>
-  );
+  return <StatusBadge {...badges[presentation]}>{connectionStatusLabel(presentation)}</StatusBadge>;
+}
+
+export function settingsConnectionPresentation(
+  connection: T3Connection | null,
+  presentation: ConnectionPresentation,
+): SettingsConnectionPresentation {
+  return presentation === "unavailable" && connection?.endpoint === null
+    ? "not-set-up"
+    : presentation;
 }

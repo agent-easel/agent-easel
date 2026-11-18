@@ -23,7 +23,8 @@ test("resizing the Flow editor refits a manually zoomed view", async ({ app, scr
   await app.screenshot("flow-manual-zoom");
 
   // Act
-  await browser.setViewport({ width: 1800, height: 1000 });
+  // Crossing the height breakpoint changes the Studio canvas dimensions.
+  await browser.setViewport({ width: 1800, height: 999 });
 
   // Assert
   await expect(canvas).toHaveAttribute("data-zoom", "1.000");

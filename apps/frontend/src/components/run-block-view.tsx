@@ -3,6 +3,7 @@ import type { ContinuationVisit, FlowBlock, RunBlock, RunDetail } from "@t3-fact
 import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
@@ -12,7 +13,7 @@ import {
   threadOwnerName,
   waitingText,
 } from "./execution-canvas.tsx";
-import { clockTime, dayAndTime, StatePill } from "./execution-state.tsx";
+import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
 import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
 import { pendingRecovery, RequestReport, RunAttentionDetails } from "./run-attention.tsx";
@@ -98,7 +99,7 @@ function BlockNow({
                     <p className="text-sm font-medium">Visit {number}</p>
                     <p className="truncate text-xs text-subtle-foreground">{visitSpan(visit)}</p>
                   </div>
-                  <StatePill
+                  <ExecutionStateBadge
                     state={
                       block.kind === "agent" && number === visits.length
                         ? recorded.state
@@ -360,7 +361,7 @@ function ContinuationVisitItem({
           </a>
         )}
       </div>
-      <StatePill state={visitPill(visit)} />
+      <ExecutionStateBadge state={visitPill(visit)} />
     </li>
   );
 }
@@ -449,7 +450,7 @@ export function RunBlockView({
         >
           <ChevronLeft aria-hidden />
           Overview
-          <kbd className="ml-1 font-mono text-overline font-normal text-subtle-foreground">Esc</kbd>
+          <KeyChip className="ml-1">Esc</KeyChip>
         </Button>
         <header className="flex min-w-0 items-center gap-2">
           <KindIcon
@@ -461,7 +462,7 @@ export function RunBlockView({
             <h2 className="truncate text-base leading-4 font-semibold">{block.name}</h2>
             <p className="truncate text-xs leading-3.5 text-subtle-foreground">{reference}</p>
           </div>
-          <StatePill state={recorded.state} />
+          <ExecutionStateBadge state={recorded.state} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -474,7 +475,7 @@ export function RunBlockView({
                 <X aria-hidden />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close · Esc</TooltipContent>
+            <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
         <RunAttentionDetails

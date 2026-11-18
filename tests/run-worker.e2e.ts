@@ -325,7 +325,7 @@ test("Request report asks a worker idle in working to assess its existing work",
   await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
   const details = screen.getByRole("complementary", "Run inspector");
   await expect(details).toContainText("Opened pull request #42");
-  await expect(details.getByText("working", { exact: true })).toBeVisible();
+  await expect(details.getByText("Working", { exact: true })).toBeVisible();
   await app.screenshot("worker-working-visit");
 
   // Act

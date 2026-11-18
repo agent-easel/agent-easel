@@ -1,7 +1,7 @@
 import { RenameDialog } from "./rename-dialog.tsx";
 import { MutationGate } from "@/client-gate";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { withShortcutHint } from "../keyboard-shortcuts.ts";
+import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { runActions, useRunActions, useRunActionsState } from "./run-actions.tsx";
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
@@ -12,6 +12,7 @@ import {
   Archive,
   ChevronDown,
   ChevronRight,
+  BellRing,
   CircleCheck,
   CircleDashed,
   CirclePause,
@@ -38,8 +39,9 @@ import {
 } from "../run-draft.ts";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveNavigation } from "../live/navigation.ts";
-import { RunStatusChip } from "./run-status-chip.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "./ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Input } from "./ui/input";
 import { ContextMenuItem as RowMenuItem } from "./ui/context-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -106,7 +108,7 @@ function NewRunButton({ current }: { current: boolean }) {
             <Plus aria-hidden strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{withShortcutHint("New Run", hint("newRun"))}</TooltipContent>
+        <TooltipContent shortcut={hint("newRun")}>New Run</TooltipContent>
       </Tooltip>
     </MutationGate>
   );
@@ -297,6 +299,7 @@ function RunSearchField({
   onChange: (value: string) => void;
 }) {
   const { hint } = useShortcutPreferences();
+  const searchHint = hint("searchRuns");
   return (
     <div className="relative min-w-0 flex-1">
       <Search
@@ -307,7 +310,7 @@ function RunSearchField({
       <Input
         ref={ref}
         aria-label="Search Run titles"
-        title={withShortcutHint("Search Runs", hint("searchRuns"))}
+        title={searchHint ? `Search Run titles · ${searchHint}` : "Search Run titles"}
         placeholder="Search Run titles"
         className={cn("bg-muted pl-8", value && "pr-8")}
         value={value}
@@ -332,7 +335,7 @@ function RunSearchField({
               <X aria-hidden strokeWidth={1.5} className="size-3" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Clear search (Esc)</TooltipContent>
+          <TooltipContent shortcut="Esc">Clear search</TooltipContent>
         </Tooltip>
       )}
     </div>
@@ -522,15 +525,21 @@ function RunGroups({
 }
 
 function RenameItem({ onSelect, disabled }: { onSelect: () => void; disabled?: boolean }) {
-  const { hint } = useShortcutPreferences();
-  const binding = hint("rename");
+  const { bindings, hint } = useShortcutPreferences();
+  const renameHint = hint("rename");
   return (
-    <RowMenuItem onSelect={onSelect} disabled={disabled} aria-keyshortcuts={binding}>
+    <RowMenuItem
+      onSelect={onSelect}
+      disabled={disabled}
+      aria-keyshortcuts={shortcutAriaKeys(bindings.rename)}
+    >
       <Pencil aria-hidden strokeWidth={1.5} />
       Rename
-      <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-        {binding}
-      </span>
+      {renameHint && (
+        <KeyChip aria-hidden className="ml-auto">
+          {renameHint}
+        </KeyChip>
+      )}
     </RowMenuItem>
   );
 }
@@ -728,10 +737,16 @@ function RunRowIndicators({ run }: { run: RunNavigationEntry }) {
           {run.settlement === "stopping" ? "Stopping" : "Settle unresolved"}
         </span>
       )}
-      {run.presentation.woke && <RunStatusChip kind="woke" />}
-      {run.attention.needsInput && <RunStatusChip kind="needs-input" />}
-      {run.attention.problem && <RunStatusChip kind="problem" />}
-      {run.project.availability !== "available" && <RunStatusChip kind="project-unavailable" />}
+      {run.presentation.woke && (
+        <StatusBadge kind="attention" icon={BellRing}>
+          Woke
+        </StatusBadge>
+      )}
+      {run.attention.needsInput && <StatusBadge kind="needs-input" />}
+      {run.attention.problem && <StatusBadge kind="problem" />}
+      {run.project.availability !== "available" && (
+        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+      )}
     </>
   );
 }
@@ -743,7 +758,7 @@ function RunActionItems({
   run: RunNavigationEntry;
   available: RunActionAvailability;
 }) {
-  const { hint } = useShortcutPreferences();
+  const { bindings, hint } = useShortcutPreferences();
   const snoozeHint = hint("snoozeRestore");
   const settleHint = hint("settle");
   const archiveHint = hint("archive");
@@ -753,7 +768,7 @@ function RunActionItems({
         <RowMenuItem
           disabled={!available.snoozeRestore}
           onSelect={() => void runActions.run({ entry: run }, "snoozeRestore")}
-          aria-keyshortcuts={snoozeHint}
+          aria-keyshortcuts={shortcutAriaKeys(bindings.snoozeRestore)}
         >
           {run.presentation.snoozed ? (
             <Undo2 aria-hidden strokeWidth={1.5} />
@@ -761,34 +776,40 @@ function RunActionItems({
             <Moon aria-hidden strokeWidth={1.5} />
           )}
           {run.presentation.snoozed ? "Restore" : "Snooze"}
-          <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-            {snoozeHint}
-          </span>
+          {snoozeHint && (
+            <KeyChip aria-hidden className="ml-auto">
+              {snoozeHint}
+            </KeyChip>
+          )}
         </RowMenuItem>
       )}
       {isActive(run) && (
         <RowMenuItem
           disabled={!available.settle}
           onSelect={() => void runActions.run({ entry: run }, "settle")}
-          aria-keyshortcuts={settleHint}
+          aria-keyshortcuts={shortcutAriaKeys(bindings.settle)}
         >
           <CircleCheck aria-hidden strokeWidth={1.5} />
           Settle
-          <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-            {settleHint}
-          </span>
+          {settleHint && (
+            <KeyChip aria-hidden className="ml-auto">
+              {settleHint}
+            </KeyChip>
+          )}
         </RowMenuItem>
       )}
       <RowMenuItem
         disabled={!available.archive}
         onSelect={() => runActions.openDialog("archive", { entry: run }, `run-row-${run.id}`)}
-        aria-keyshortcuts={archiveHint}
+        aria-keyshortcuts={shortcutAriaKeys(bindings.archive)}
       >
         <Archive aria-hidden strokeWidth={1.5} />
         Archive…
-        <span aria-hidden className="ml-auto text-2xs tracking-label text-subtle-foreground">
-          {archiveHint}
-        </span>
+        {archiveHint && (
+          <KeyChip aria-hidden className="ml-auto">
+            {archiveHint}
+          </KeyChip>
+        )}
       </RowMenuItem>
     </>
   );

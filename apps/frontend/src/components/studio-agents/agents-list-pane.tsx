@@ -24,6 +24,7 @@ import {
   flowUsageLabel,
   projectOverridesLabel,
 } from "@/lib/agent-display";
+import { StatusBadge } from "../status-badge.tsx";
 import { cn } from "@/lib/utils";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { NeedsModel } from "../needs-model.tsx";
@@ -358,12 +359,8 @@ function AgentListItemLink({
         {/* Figma SA01: reporting that needs attention takes the summary's line, keeping the override
             count; healthy says nothing. */}
         {attention ? (
-          <span
-            id={`agent-reporting-${id}`}
-            className="flex min-w-0 items-center gap-1.5 text-2xs text-attention"
-          >
-            <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />
-            <span className="truncate">{attention.label}</span>
+          <span id={`agent-reporting-${id}`} className="flex min-w-0 items-center gap-1.5 text-2xs">
+            <StatusBadge kind="attention">{attention.label}</StatusBadge>
             {overrides && <span className="shrink-0 text-subtle-foreground">· {overrides}</span>}
           </span>
         ) : (

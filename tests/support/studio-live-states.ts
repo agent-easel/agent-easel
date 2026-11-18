@@ -98,10 +98,10 @@ export async function beforeRenamedDependency(fixtures: StudioFixtures, prefix: 
   const library = screen.getByRole("region", "Block library");
   const canvas = screen.getByRole("region", "Flow canvas");
   await expect(library.getByRole("button", `Add ${agent.name}`, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await screen.getByRole("button", "Human step Review", { exact: true }).tap();
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await canvas.press("ArrowRight");
@@ -172,7 +172,7 @@ export async function expectRestoredReadiness(
   state: Awaited<ReturnType<typeof beforeRestoredReadiness>>,
 ) {
   const { screen } = state;
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
   return { ...state };
 }
@@ -330,11 +330,12 @@ export async function expectNewestFlowComparison(
     revision5: Awaited<ReturnType<typeof saveFlowElsewhere>>;
   },
 ) {
-  const { flowPanel, revision5 } = state;
-  await expect(flowPanel.getByRole("heading", "Saved revision 5", { exact: true })).toBeVisible();
-  await expect(flowPanel).toContainText(revision5.name);
+  const { screen, revision5 } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  await expect(comparison.getByRole("heading", "Saved revision 5", { exact: true })).toBeVisible();
+  await expect(comparison).toContainText(revision5.name);
   await expect(
-    flowPanel.getByRole("button", "Keep local draft against revision 4", { exact: true }),
+    comparison.getByRole("button", "Keep local draft against revision 4", { exact: true }),
   ).toHaveCount(0);
   return { ...state };
 }
@@ -359,8 +360,11 @@ export async function expectReboundFlow(state: Awaited<ReturnType<typeof beforeR
 
 export async function beforeSavedFlow(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeReboundFlow(fixtures, prefix);
-  const { flowPanel } = previous;
-  await flowPanel.getByRole("button", "Keep local draft against revision 5", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare latest revision")
+    .getByRole("button", "Keep local draft against revision 5", { exact: true })
+    .tap();
   return expectReboundFlow({ ...previous });
 }
 
@@ -576,8 +580,9 @@ export async function beforeComparedAgent(fixtures: StudioFixtures, prefix: stri
 }
 
 export async function expectComparedAgent(state: Awaited<ReturnType<typeof beforeComparedAgent>>) {
-  const { agentPanel } = state;
-  await expect(agentPanel.getByLabel("Your local draft", { exact: true })).toContainText(
+  const { screen } = state;
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  await expect(comparison.getByLabel("Your local draft", { exact: true })).toContainText(
     "My retained prompt",
   );
   return { ...state };
@@ -590,8 +595,11 @@ export async function beforeInvalidatedAgentConfirmation(fixtures: StudioFixture
     await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
     return expectComparedAgent({ ...previous });
   })();
-  const { screen, agentPanel } = state;
-  await agentPanel.getByRole("button", "Load latest revision", { exact: true }).tap();
+  const { screen } = state;
+  await screen
+    .getByRole("dialog", "Compare latest revision")
+    .getByRole("button", "Load latest revision", { exact: true })
+    .tap();
   await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toBeVisible();
   return { ...state };
 }
@@ -599,9 +607,10 @@ export async function beforeInvalidatedAgentConfirmation(fixtures: StudioFixture
 export async function expectInvalidatedAgentConfirmation(
   state: Awaited<ReturnType<typeof beforeInvalidatedAgentConfirmation>>,
 ) {
-  const { screen, agentPanel } = state;
+  const { screen } = state;
   await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toHaveCount(0);
-  await expect(agentPanel.getByLabel("Saved revision 5", { exact: true })).toContainText(
+  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  await expect(comparison.getByLabel("Saved revision 5", { exact: true })).toContainText(
     "Saved prompt 5",
   );
   return { ...state };
@@ -624,8 +633,11 @@ export async function expectReboundAgent(state: Awaited<ReturnType<typeof before
 
 export async function beforeSavedAgent(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeReboundAgent(fixtures, prefix);
-  const { agentPanel } = previous;
-  await agentPanel.getByRole("button", "Keep my edits against revision 5", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare latest revision")
+    .getByRole("button", "Keep my edits against revision 5", { exact: true })
+    .tap();
   return expectReboundAgent({ ...previous });
 }
 
@@ -778,7 +790,7 @@ export async function beforeChangedDirtyDependency(fixtures: StudioFixtures, pre
   await app.open(`/studio/flows/${flow}`);
   await screen.getByLabel("Flow name").fill(`Live · ${prefix} · Canvas Flow edited`);
   await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
   const handoff = { id: "handoff", name: "handoff", description: "", messageRequired: false };
   return {
     app: fixtures.app,

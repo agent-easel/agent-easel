@@ -187,7 +187,6 @@ export function ChatDiscordSettings() {
   return (
     <ChatControlPage
       title="Discord"
-      intro="The Discord bot Chat control uses. Factory connects to Discord over outbound connections only; it needs no public address, webhook or tunnel. Only this Factory host can see or change these settings."
       loadError={loadError || access.loadError}
       onRetry={() => {
         page.reload();
@@ -452,6 +451,7 @@ function TextField({
       />
       <p
         id={`${id}-hint`}
+        role={problem ? "alert" : undefined}
         className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
       >
         {problem || hint}

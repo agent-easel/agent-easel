@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { Check, ChevronDown, CircleAlert, CircleDot } from "lucide-react";
+import { ChevronDown, CircleDot } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "./status-badge.tsx";
 import type { RuleFocus } from "./condition-rules.tsx";
 
 /** Selects a block, or with null clears the selection; `rule` also focuses one Condition rule. */
@@ -60,21 +61,32 @@ export function IssueLink({
 }
 
 /**
- * The readiness label: a backend check result, or a prompt to check the changed draft or, after
- * an Agent it places changed, to check it again.
+ * The readiness summary: the backend check's Ready / Not ready badge, or a prompt to check the
+ * changed draft or, after an Agent it places changed, to check it again.
  */
-function readinessSummary(readiness: FlowReadiness | null, agentsChanged: boolean) {
+function ReadinessSummary({
+  readiness,
+  agentsChanged,
+}: {
+  readiness: FlowReadiness | null;
+  agentsChanged: boolean;
+}) {
   if (!readiness)
-    return {
-      label: agentsChanged
-        ? "Agents changed — check readiness again"
-        : "Draft changed · Check readiness",
-      Icon: CircleDot,
-      tone: "text-muted-foreground",
-    };
-  return readiness.ready
-    ? { label: "Graph ready", Icon: Check, tone: "text-success" }
-    : { label: "Not execution-ready", Icon: CircleAlert, tone: "text-attention" };
+    return (
+      <>
+        <CircleDot aria-hidden className="text-muted-foreground" />
+        <span>
+          {agentsChanged
+            ? "Agents changed — check readiness again"
+            : "Draft changed · Check readiness"}
+        </span>
+      </>
+    );
+  return readiness.ready ? (
+    <StatusBadge kind="success">Ready</StatusBadge>
+  ) : (
+    <StatusBadge kind="error">Not ready</StatusBadge>
+  );
 }
 
 /** Readiness summary floating at the canvas's top left; its issue list expands on demand. */
@@ -96,7 +108,6 @@ export function ReadinessPanel({
   if (expanded.readiness !== readiness) {
     setExpanded({ readiness, open: issues > 0 || open });
   }
-  const summary = readinessSummary(readiness, agentsChanged);
   return (
     <div className="absolute top-4 left-4 z-[5] grid max-w-80 gap-2">
       <Button
@@ -107,8 +118,7 @@ export function ReadinessPanel({
         aria-controls="flow-readiness"
         onClick={() => setExpanded({ readiness, open: !open })}
       >
-        <summary.Icon aria-hidden className={summary.tone} />
-        <span>{summary.label}</span>
+        <ReadinessSummary readiness={readiness} agentsChanged={agentsChanged} />
         {issues > 0 && (
           <span className="text-muted-foreground">
             · {issues} {issues === 1 ? "issue" : "issues"}

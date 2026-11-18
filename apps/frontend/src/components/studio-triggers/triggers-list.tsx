@@ -13,7 +13,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { StudioLink } from "../app-link.tsx";
-import { SettingsGroup, SettingsPage } from "../settings-page.tsx";
+import { SettingsGroup, StudioPage } from "../settings-page.tsx";
 import { useStudioNavigation } from "../../settings-navigation.ts";
 import type { StudioRead } from "../../studio-definitions.ts";
 import { RemoveTriggerDialog } from "./remove-trigger-dialog.tsx";
@@ -107,7 +107,7 @@ export function TriggersList({
   const { failure, pending } = actions.state;
   return (
     <main className="grid content-start px-8 pt-6 pb-8 max-sm:px-4">
-      <SettingsPage
+      <StudioPage
         title="Triggers"
         description={description}
         action={
@@ -136,7 +136,7 @@ export function TriggersList({
             setRemoving(trigger);
           }}
         />
-      </SettingsPage>
+      </StudioPage>
       <RemoveTriggerDialog
         trigger={removing}
         removing={removing !== null && pending.get(removing.id) === "remove"}

@@ -279,6 +279,7 @@ export const makeFactoryService = (
       listEligibleRunImages: (projectId) => images.listEligibleRunImages(projectId),
       deleteRunImages: (input) => images.deleteRunImages(input),
       listRunNavigation: () => runner.listRunNavigation(),
+      searchArchivedRuns: (query) => runner.searchArchivedRuns(query),
       renameRun: (id, input) => runner.renameRun(id, input),
       snoozeRun: (id) => runner.snoozeRun(id),
       restoreRun: (id) => runner.restoreRun(id),

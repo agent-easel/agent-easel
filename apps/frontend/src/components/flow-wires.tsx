@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
 import { incomingPortIndex, wireRouteKey } from "@t3-factory/flow-layout";
+import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -321,7 +322,9 @@ function DeleteConnection({
           <Trash2 aria-hidden />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete connection · Del</TooltipContent>
+      <TooltipContent shortcut={formatShortcut(fixedShortcuts.deleteConnection)}>
+        Delete connection
+      </TooltipContent>
     </Tooltip>
   );
 }

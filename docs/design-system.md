@@ -56,7 +56,7 @@ first paint use the baseline until a client receives the presentation.
   owner badge and group icon mark an owning Project in brand cyan beside its name and an
   unavailable one in the attention color with its reason; Global stays neutral. The dot
   on **Follow active** marking unseen Run progress uses the working color.
-- Use Inter for interface text and Geist Mono for keys, exit names and zoom levels.
+- Use Inter for interface text and Geist Mono for exit names and zoom levels.
   Fonts are bundled; rendering must not require network font services.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
@@ -75,21 +75,66 @@ call-site overrides and styled wrapper elements used only to compensate for a pr
 Destructive Settle confirmation uses the shared alert dialog, initially focuses Cancel and restores
 focus to its opener (or the Run row after a row-menu action) on dismissal.
 
+Every status and field-state tag is one status badge: a 4 px rounded, 18 px high tag with an
+icon and a label in the state colour on its tint. Context such as a Block name or a time sits
+outside it as secondary text. Run and Block work states use the canonical labels **Working**
+(cyan), **Waiting** (indigo), **Needs input** (amber, never Waiting's indigo), **Problem** (red),
+**Finished** (green) and **Stopped** (neutral). Settings, field and list states use the Success,
+Attention, Error, Neutral, Checking and Info kinds with their own label, such as Connected,
+Installed, Not installed or Install failed; readiness reads **Ready** (Success) or **Not ready**
+(Error). The glyph changes only where the meaning needs it: Unplug for Disconnected, a key for
+authorization, a lock for Managed on the Factory host, a dashed circle for Not installed.
+
+A field that shows a state tag sets `aria-invalid` and `aria-describedby` pointing at the one
+message that explains it, as text next to the field or one card, never both. That message is a
+`status` live region, or an `alert` for an error.
+
 Every control needs a visible label or accessible name. Icon-only buttons also need a
 tooltip. Preserve meaningful accessible names used by the UI verification journeys.
 Unavailable choices in Agent execution settings stay visible and disabled, with their reason.
 Long menus must stay within the viewport and scroll their choices without hiding search
 or actions.
 
-Settings sections share one page template instead of styling their own headers and
-footnotes: a header with the title, a one-line description and optionally a status pill, the
-"Managed on the Factory host" chip and one primary action; then labelled cards of rows, each
-ending in one control; label/value rows for read-only facts; and closed disclosures for
-explanations and diagnostics. On/off settings use the switch, named by their row's title.
+Use the shared key chip for shortcut hints. Each chord fits in one bordered chip in
+Inter Medium at 11 px so glyphs such as ⇧ and ⌫ stay legible. On macOS, use
+Apple modifier order (⌃⌥⇧⌘) followed by the key, as in ⌥⌘↑, ⇧⌘S, ⌘⌫ and ⌘↵.
+Windows and Linux use Ctrl-plus notation such as Ctrl+Alt+N. Show an unassigned
+binding as muted **Unbound** text in shortcut lists.
 
-Settings and Studio use the same dialog conventions. The Run shell stays mounted behind
-them, while hidden content is inert. Unsaved-change guards and keyboard behavior are
-specified in [Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
+Settings sections share a title, an optional status badge, a host-management badge
+where applicable, and trailing page actions. Labelled cards group settings and
+read-only facts in rows. On/off settings use a switch named by the row title.
+The content pane scrolls with a visible scrollbar and fades at the bottom
+while more content follows.
+
+Use **StatusBadge** for Run states, Settings states and field tags. Use a
+single problem card for each issue with its next step. Put raw errors, paths
+and identifiers under closed **Technical details**, with **Copy details**.
+Agent reporting shows the configuration home on the row to identify it.
+
+Use **Refresh** to fetch the latest list or snapshot, **Check again** to repeat
+a diagnostic check, and **Try again** to retry a failed read or operation.
+In Settings, place **Check again** in the page header and make it primary
+when the check is the main recovery action.
+
+Confirmations and forms open in a centred dialog over a dimmed backdrop, with a
+stronger scrim in Light mode. The header shows the title, Esc key chip and close
+button. Use at most one short introductory sentence in the body. Place any actions
+at the trailing edge, with Cancel or Keep editing before the primary or destructive
+action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between
+the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
+Compare latest revision, Review and enable, and Import use the wide width
+`clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
+32 px.
+
+Studio and Settings stay centred over the mounted Run shell, whose hidden content
+is inert. Studio uses `clamp(1200px, 50vw, 1680px)` by
+`clamp(800px, 80vh, 1200px)` at viewport sizes of at least 1600 × 1000 px.
+Settings uses `clamp(840px, 50vw, 1280px)` by
+`clamp(560px, 80vh, 960px)` at sizes of at least 1024 × 720 px.
+Below either threshold for each workspace, it fills the window with a 16 px inset
+on every side. Unsaved-change guards and keyboard behavior are specified in
+[Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
 
 Canvas blocks, ports and wires use the same tokens as the rest of the UI. Block rows and
 ports are sized from the canvas surface's block dimensions, not with height, size or offset

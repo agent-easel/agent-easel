@@ -5,19 +5,14 @@ import type {
 } from "@t3-factory/contracts";
 import { useAppearance } from "../appearance.ts";
 import { useLiveAppearance } from "../live/live-connection.ts";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsRow,
-  StatusPill,
-  type StatusTone,
-} from "./settings-page.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsRow } from "./settings-page.tsx";
+import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
-const statePills: Record<T3AppearanceState, { label: string; tone: StatusTone }> = {
-  connecting: { label: "Connecting", tone: "neutral" },
-  following: { label: "Following T3", tone: "success" },
-  unavailable: { label: "Unavailable", tone: "attention" },
-  unsupported: { label: "Not supported", tone: "neutral" },
+const statePills: Record<T3AppearanceState, { label: string; kind: SettingKind }> = {
+  connecting: { label: "Connecting", kind: "neutral" },
+  following: { label: "Following T3", kind: "success" },
+  unavailable: { label: "Unavailable", kind: "attention" },
+  unsupported: { label: "Not supported", kind: "neutral" },
 };
 
 function modeText(presentation: AppearancePresentation | null, mode: "light" | "dark") {
@@ -47,7 +42,7 @@ export function ThemeColorSettings() {
   return (
     <SettingsGroup
       label="T3 theme colors"
-      badge={pill && <StatusPill tone={pill.tone}>{pill.label}</StatusPill>}
+      badge={pill && <StatusBadge kind={pill.kind}>{pill.label}</StatusBadge>}
     >
       <SettingsRow
         title="T3’s default theme colors"

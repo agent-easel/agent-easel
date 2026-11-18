@@ -145,7 +145,6 @@ export function ChatModelSettings() {
   return (
     <ChatControlPage
       title="Language model"
-      intro="The model connection Chat control uses to understand chat requests. It is separate from Agents, T3 and Run title generation, and only this Factory host can see or change it."
       loadError={loadError}
       onRetry={page.reload}
       decision={decision}
@@ -320,6 +319,7 @@ function BaseUrlField({
       />
       <p
         id="chat-model-base-url-hint"
+        role={problem ? "alert" : undefined}
         className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
       >
         {problem || baseUrlHints[draft.providerKind ?? "none"]}

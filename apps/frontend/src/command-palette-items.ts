@@ -1,7 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { Bot, Play, Settings, Workflow } from "lucide-react";
+import { Bot, ClipboardCheck, Play, Settings, Workflow, Zap } from "lucide-react";
 import type {
   AgentDefinition,
+  ArchivedRunMatch,
   FlowDraft,
   RunNavigationEntry,
   StudioDefinitions,
@@ -15,7 +16,6 @@ export const paletteActionShortcut: Partial<Record<string, ShortcutId>> = {
   "action-new-run": "newRun",
   "action-settings": "settings",
   "action-studio-flows": "studio",
-  "action-studio-agents": "studio",
 };
 
 export type PaletteItem = {
@@ -24,6 +24,8 @@ export type PaletteItem = {
   number?: number | null;
   label: string;
   detail?: string;
+  disabled?: boolean;
+  status?: "archived" | "needs-input" | "problem" | undefined;
   icon: LucideIcon;
   keywords: string;
   run: () => void;
@@ -39,7 +41,7 @@ export type PaletteNavigation = {
 
 /**
  * The palette's items from the navigation and Studio scopes, with each scope's state named by the
- * sections it supplies: unread, cached while not current, or refused. Cached items stay listed.
+ * sections it supplies. Cached items stay listed while the scopes resynchronize.
  */
 export function paletteCatalog(
   navigation: LiveScopeView<readonly RunNavigationEntry[]>,
@@ -54,7 +56,6 @@ export function paletteCatalog(
   const pending = (view: LiveScopeView<unknown>) => !view.synchronized && !view.error;
   return {
     loading: named((view) => view.value === null && pending(view)),
-    synchronizing: named((view) => view.value !== null && pending(view)),
     refused: named((view) => view.error !== null),
     runs: navigation.value ?? [],
     flows: studio.value?.flows ?? [],
@@ -73,31 +74,30 @@ export function paletteMatchesQuery(item: PaletteItem, query: string) {
     if (item.kind === "action") return normalize(item.label).includes(q.slice(1).trim());
     return false;
   }
+  if (/^#?\d+$/.test(q)) return item.kind === "run" && String(item.number) === q.replace(/^#/, "");
   const haystack = `${item.label} ${item.detail ?? ""} ${item.keywords}`.toLowerCase();
-  return (
-    (item.kind === "run" &&
-      typeof item.number === "number" &&
-      q.replace(/^#/, "") === String(item.number)) ||
-    haystack.includes(q)
-  );
+  return haystack.includes(q);
 }
 
-export function buildPaletteItems(input: {
+export function buildPaletteGroups(input: {
   navigate: Navigate;
   navigation: PaletteNavigation;
   onNewRun: () => void;
+  canStart: boolean;
+  query: string;
+  archived: readonly ArchivedRunMatch[];
   runs: readonly RunNavigationEntry[];
   flows: readonly FlowDraft[];
   agents: readonly AgentDefinition[];
-}): PaletteItem[] {
-  const { navigate, navigation, onNewRun, runs, flows, agents } = input;
+}) {
+  const { navigate, navigation, onNewRun, canStart, runs, archived, flows, agents } = input;
   const { openStudio, openSettings } = navigation;
   const actions: PaletteItem[] = [
     {
       id: "action-new-run",
       kind: "action",
       label: "New Run",
-      detail: "Open the Run composer without starting",
+      disabled: !canStart,
       icon: Play,
       keywords: "composer create",
       run: onNewRun,
@@ -119,23 +119,39 @@ export function buildPaletteItems(input: {
       run: () => openStudio({ tab: "agents" }),
     },
     {
+      id: "action-studio-triggers",
+      kind: "action",
+      label: "Studio · Triggers",
+      icon: Zap,
+      keywords: "author studio triggers list",
+      run: () => openStudio({ tab: "triggers" }),
+    },
+    {
       id: "action-settings",
       kind: "action",
       label: "Settings",
-      detail: "T3 connection and reporting",
       icon: Settings,
-      keywords: "connection reporting preferences",
+      keywords: "t3 connection preferences",
       run: () => void openSettings({ tab: "connection" }),
     },
+    {
+      id: "action-agent-reporting",
+      kind: "action",
+      label: "Settings · Agent reporting",
+      icon: ClipboardCheck,
+      keywords: "t3 reporting preferences",
+      run: () => void openSettings({ tab: "agent-reporting" }),
+    },
   ];
-  const runItems = runs.map((run) => ({
+  const runItem = (run: ArchivedRunMatch, status?: PaletteItem["status"]): PaletteItem => ({
     id: `run-${run.id}`,
-    kind: "run" as const,
+    kind: "run",
     number: run.number,
     label: run.title,
-    detail: run.project.title,
+    detail: run.projectTitle,
+    status,
     icon: Play,
-    keywords: `run ${run.project.title}`,
+    keywords: "run",
     run: () => {
       void navigate({
         to: "/runs/$runId",
@@ -144,12 +160,17 @@ export function buildPaletteItems(input: {
         resetScroll: false,
       });
     },
-  }));
+  });
+  const runItems = runs.map((run) =>
+    runItem(
+      { id: run.id, number: run.number, title: run.title, projectTitle: run.project.title },
+      run.attention.problem ? "problem" : run.attention.needsInput ? "needs-input" : undefined,
+    ),
+  );
   const flowItems = flows.map((flow) => ({
     id: `flow-${flow.id}`,
     kind: "flow" as const,
     label: flow.name,
-    detail: "Flow",
     icon: Workflow,
     keywords: "flow studio",
     run: () => openStudio({ tab: "flows", flowId: flow.id }),
@@ -158,10 +179,19 @@ export function buildPaletteItems(input: {
     id: `agent-${agent.id}`,
     kind: "agent" as const,
     label: agent.name,
-    detail: "Agent definition",
     icon: Bot,
     keywords: "agent studio definition",
     run: () => openStudio({ tab: "agents", agentId: agent.id }),
   }));
-  return [...actions, ...runItems, ...flowItems, ...agentItems];
+  const matching = (items: readonly PaletteItem[]) =>
+    items.filter((item) => paletteMatchesQuery(item, input.query));
+  return [
+    { name: "Actions", items: matching(actions) },
+    {
+      name: "Runs",
+      items: [...matching(runItems), ...archived.map((run) => runItem(run, "archived"))],
+    },
+    { name: "Flows", items: matching(flowItems) },
+    { name: "Agents", items: matching(agentItems) },
+  ].filter((group) => group.items.length > 0);
 }

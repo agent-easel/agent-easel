@@ -8,6 +8,7 @@ import type { Host } from "./host.ts";
 /** The Factory reporting the seed installs for Codex, and the runtime contract T3 advertises. */
 export function reportingFixture({ factory, t3, home }: Host) {
   const codex = join(home, "reporting-codex");
+  const requiredSkill = join(codex, "skills", "factory-block", "SKILL.md");
   const optionalSkill = join(codex, "skills", "factory-start-run", "SKILL.md");
 
   async function optionalSkillMatches() {
@@ -33,7 +34,11 @@ export function reportingFixture({ factory, t3, home }: Host) {
         await rm(join(codex, "config.toml"));
       },
       async breakRequiredSkill() {
-        await rm(join(codex, "skills", "factory-block", "SKILL.md"));
+        await rm(requiredSkill);
+      },
+      async blockRequiredSkillWrite() {
+        await rm(requiredSkill);
+        await symlink(join(codex, "missing-skill"), requiredSkill);
       },
       /** Replaces the optional Start a Run skill with a link, which Factory leaves for the owner. */
       async linkOptionalSkill() {
@@ -51,6 +56,12 @@ export function reportingFixture({ factory, t3, home }: Host) {
     },
     async reset() {
       t3.runtimeContractComplete = true;
+      await rm(join(home, ".cursor", "mcp.json"), { force: true });
+      const required = await lstat(requiredSkill).catch((cause: unknown) => {
+        if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;
+        return null;
+      });
+      if (required?.isSymbolicLink()) await rm(requiredSkill);
       // Factory refuses to replace a linked optional skill, so the fixture puts the file back.
       if (!(await optionalSkillMatches())) {
         await rm(optionalSkill, { force: true });

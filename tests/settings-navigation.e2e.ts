@@ -5,7 +5,7 @@ import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const sections = (screen: Screen) => screen.getByRole("navigation", "Settings sections");
 
-test("the desktop host lists every Settings section under Factory, Runs and This device", async ({
+test("the desktop host lists every Settings section under Factory, Chat control, Runs and This device", async ({
   app,
   screen,
   browser,
@@ -21,8 +21,9 @@ test("the desktop host lists every Settings section under Factory, Runs and This
   await expect(factory.getByRole("link", /^T3 connection, /)).toBeVisible();
   await expect(factory.getByRole("link", /^Agent reporting/)).toBeVisible();
   await expect(factory.getByRole("link", /^Devices & access/)).toBeVisible();
-  await expect(factory.getByRole("link", /^Language model/)).toBeVisible();
-  await expect(factory.getByRole("link", /^Discord/)).toBeVisible();
+  const chat = sections(screen).getByRole("group", "Chat control");
+  await expect(chat.getByRole("link", /^Language model/)).toBeVisible();
+  await expect(chat.getByRole("link", /^Discord/)).toBeVisible();
   const runs = sections(screen).getByRole("group", "Runs");
   await expect(runs.getByRole("link", "Run titles", { exact: true })).toBeVisible();
   await expect(runs.getByRole("link", "Run images", { exact: true })).toBeVisible();
@@ -95,4 +96,24 @@ test("Esc with a filled Settings search clears it and keeps Settings open", asyn
   await expect(screen.getByLabel("Search settings")).toHaveValue("");
   await expect(sections(screen).getByRole("link", "Appearance")).toBeVisible();
   await expect(screen.getByRole("dialog", "Settings", { exact: true })).toBeVisible();
+});
+
+test("searching for notifications finds Desktop app and keeps the open page", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("notifications");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Desktop app", { exact: true })).toBeVisible();
+  await expect(sections(screen).getByRole("group", "Factory", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await app.screenshot("settings-search-notifications");
 });
