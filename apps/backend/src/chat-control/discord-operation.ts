@@ -16,10 +16,12 @@ import type {
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { sqliteChatState } from "./chat-state.ts";
+import { accessIds, recordNames } from "./access.ts";
 import { clearConversations, conversationGenerations } from "./conversations.ts";
 import type { ChatCredentials } from "./credentials.ts";
 import {
   closeResult,
+  lookupNames,
   type DiscordConnection,
   type DiscordGateway,
   type GatewayResult,
@@ -258,15 +260,15 @@ const RECONNECTING: Omit<DiscordConnectionProblem, "occurredAt"> = {
  * switching back later revives none. Owed messages stay owed; the deliveries of the serving
  * application retire the old application's edits and replace its cards.
  */
-const adoptApplication = (sql: SqlClient.SqlClient, applicationId: string) =>
+const adoptApplication = (sql: SqlClient.SqlClient, applicationId: string, botName: string) =>
   sql.withTransaction(
     Effect.gen(function* () {
       const [state] = yield* sql<{
         application_id: string | null;
       }>`SELECT application_id FROM chat_control_state WHERE singleton=1`;
       const recorded = state!.application_id;
+      yield* sql`UPDATE chat_control_state SET application_id=${applicationId},bot_name=${botName} WHERE singleton=1`;
       if (recorded === applicationId) return;
-      yield* sql`UPDATE chat_control_state SET application_id=${applicationId} WHERE singleton=1`;
       if (recorded === null) return;
       yield* clearConversations(sql, "all");
       yield* retireApplicationProposals(sql, recorded);
@@ -481,7 +483,20 @@ export const makeDiscordOperation = (
           state: sqliteChatState(sql, Effect.runPromise),
           adapter: (config) => new FactoryDiscordAdapter(config),
         },
-        (session) => Effect.andThen(adoptApplication(sql, session.applicationId), serve(session)),
+        (session) =>
+          adoptApplication(sql, session.applicationId, session.botName).pipe(
+            // Names are display only, so the lookup runs beside serving and never delays it.
+            Effect.andThen(
+              Effect.forkScoped(
+                accessIds(sql).pipe(
+                  Effect.flatMap((ids) => lookupNames(session.client, ids)),
+                  Effect.flatMap((names) => recordNames(sql, names)),
+                  Effect.ignore,
+                ),
+              ),
+            ),
+            Effect.andThen(serve(session)),
+          ),
       );
 
     const supervise = Effect.gen(function* () {

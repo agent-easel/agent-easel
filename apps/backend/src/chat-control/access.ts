@@ -8,6 +8,7 @@ import type {
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { clearConversations } from "./conversations.ts";
+import type { DiscordIds, DiscordNames } from "./discord-gateway.ts";
 import { applyAccessRevocation } from "./revocation.ts";
 
 type AccessRow = { revision: number; saved_at: string | null };
@@ -35,10 +36,21 @@ export const readAccess = (sql: SqlClient.SqlClient) =>
       projects.push(grant.project_id);
       if (grant.known !== 1) unresolved.add(grant.project_id);
     }
+    const names = yield* sql<{
+      kind: "user" | "channel";
+      discord_id: string;
+      name: string | null;
+    }>`SELECT kind,discord_id,name FROM chat_discord_names`;
+    const named = (kind: "user" | "channel") =>
+      Object.fromEntries(
+        names.filter((row) => row.kind === kind).map((row) => [row.discord_id, row.name]),
+      );
     return {
       users: users.map((user) => user.user_id),
       channels: [...channels].map(([channelId, projectIds]) => ({ channelId, projectIds })),
       unresolvedProjectIds: [...unresolved],
+      userNames: named("user"),
+      channelNames: named("channel"),
       revision: row!.revision,
       savedAt: row!.saved_at,
     } satisfies DiscordAccessConfiguration;
@@ -123,5 +135,30 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
       }
       yield* sql`UPDATE chat_access_settings SET revision=revision+1,saved_at=${savedAt} WHERE singleton=1`;
       return { ok: true, value: undefined };
+    }),
+  );
+
+/** The allowed user and channel IDs, for a name lookup. */
+export const accessIds = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    const users = yield* sql<{ id: string }>`SELECT user_id AS id FROM chat_access_users`;
+    const channels = yield* sql<{ id: string }>`SELECT channel_id AS id FROM chat_access_channels`;
+    return {
+      users: users.map((row) => row.id),
+      channels: channels.map((row) => row.id),
+    } satisfies DiscordIds;
+  });
+
+/** Replaces the recorded names with the latest lookup. */
+export const recordNames = (sql: SqlClient.SqlClient, names: DiscordNames) =>
+  sql.withTransaction(
+    Effect.gen(function* () {
+      yield* sql`DELETE FROM chat_discord_names`;
+      for (const [kind, entries] of [
+        ["user", names.users],
+        ["channel", names.channels],
+      ] as const)
+        for (const [id, name] of entries)
+          yield* sql`INSERT INTO chat_discord_names (kind,discord_id,name) VALUES (${kind},${id},${name})`;
     }),
   );
