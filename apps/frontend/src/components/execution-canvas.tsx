@@ -1,3 +1,4 @@
+import { stoppedVisitAt } from "../run-status.ts";
 import type { ReactNode } from "react";
 import type {
   FlowBlock,
@@ -10,7 +11,7 @@ import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
-import { selectExecutionTargets } from "../execution-focus.ts";
+import { selectEntryTargets, selectExecutionTargets } from "../execution-focus.ts";
 import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
 import { capturedExits, exitRecipients, type CanvasBlock } from "../flow-graph.ts";
 import { blockStateKind, chosenExitIds } from "../run-block-state.ts";
@@ -206,6 +207,11 @@ export function attentionActivityText(
   return `Still running in T3${start ? ` · since ${clockTime(start)}` : ""}`;
 }
 
+function stoppedVisitText(run: RunDetail, visit: number, end: string | null) {
+  const at = stoppedVisitAt(run, end);
+  return `Visit ${visit} · stopped${at ? ` ${clockTime(at)}` : ""}`;
+}
+
 /** Recorded visit times for the activity line; no progress is inferred. A Condition shows its
  * routing summary instead, a finished Block the exit it took. */
 export function blockActivityText(
@@ -213,12 +219,20 @@ export function blockActivityText(
   block: FlowBlock,
   recorded: RunBlock | undefined,
 ) {
-  const attention = attentionActivityText(run, block, recorded);
-  if (attention) return attention;
-  if (block.kind === "condition") return conditionActivityText(run, block.id);
+  return (
+    attentionActivityText(run, block, recorded) ??
+    (block.kind === "condition"
+      ? conditionActivityText(run, block.id)
+      : visitActivityText(run, block, recorded))
+  );
+}
+
+/** The latest visit's times, how it stopped, or the exit it took. */
+function visitActivityText(run: RunDetail, block: FlowBlock, recorded: RunBlock | undefined) {
   const visits = blockVisits(run, block);
   const latest = visits[visits.length - 1];
   if (!recorded || recorded.state === "not-started" || !latest) return "Not visited";
+  if (recorded.state === "stopped") return stoppedVisitText(run, visits.length, latest.end);
   const continuation =
     block.kind === "continuation" && continuationActivity(run, block.id, recorded.state);
   if (continuation) return continuation;
@@ -560,6 +574,7 @@ export function ExecutionCanvas({
   /** Top-left badges and notices (Figma "Overlay · top-left"); they never block panning. */
   overlay?: ReactNode;
 }) {
+  const targets = selectExecutionTargets(run);
   return (
     <CanvasSurface
       label="Execution canvas"
@@ -578,7 +593,8 @@ export function ExecutionCanvas({
       resize="preserve"
       covered={{ top: BADGES_HEIGHT, right: 0 }}
       emptyGraphSize={EMPTY_GRAPH_SIZE}
-      focusTargets={selectExecutionTargets(run)}
+      focusTargets={targets}
+      entryTargets={selectEntryTargets(run, targets)}
       shown={shown}
       onTap={() => onSelect(null)}
       overlay={overlay}

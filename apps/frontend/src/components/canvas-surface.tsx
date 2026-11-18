@@ -440,8 +440,6 @@ type CanvasSurfaceProps = {
   ref?: RefObject<HTMLElement | null>;
   /** The canvas region's accessible name. */
   label: string;
-  /** The region's background. */
-  className?: string;
   /** What the canvas shows, such as a Flow or a Run, once its graph is ready; a new scope fits and arranges afresh. */
   scope: string | null;
   graph: FlowGraph;
@@ -461,6 +459,8 @@ type CanvasSurfaceProps = {
   emptyGraphSize?: { readonly width: number; readonly height: number };
   /** Blocks the entry view frames and following tracks, in a stable order; without them nothing follows. */
   focusTargets?: readonly string[];
+  /** Entry targets when the opening view differs from live following. */
+  entryTargets?: readonly string[];
   /** Whether the canvas is shown rather than covered by another screen. */
   shown?: boolean;
   /** Where an explicit arrangement is committed; without it an arrangement stays local. */
@@ -691,7 +691,7 @@ function entryTarget(
  * the surface only through `arrangement.commit`.
  */
 export function CanvasSurface(props: CanvasSurfaceProps) {
-  const { ref, label, className, scope, dimensions, focusTargets, shown = true, covered } = props;
+  const { ref, label, scope, dimensions, focusTargets, shown = true, covered } = props;
   const own = useRef<HTMLElement>(null);
   const surface = ref ?? own;
   const surfaceGraph = useSurfaceGraph(props);
@@ -709,7 +709,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       focusTargets &&
       ((width, height) =>
         entryView(
-          entryTarget(geometry, focusTargets, width, height),
+          entryTarget(geometry, props.entryTargets ?? focusTargets, width, height),
           geometry.boxes(),
           { width, height },
           padding,
@@ -731,10 +731,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       data-following={focusTargets ? viewport.following : undefined}
       tabIndex={0}
       onKeyDown={viewport.onKeyDown}
-      className={cn(
-        "relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
-        className,
-      )}
+      className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer

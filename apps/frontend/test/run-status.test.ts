@@ -1,52 +1,38 @@
 import { expect, it } from "vite-plus/test";
-import { runFreshness, runHeaderStatus } from "../src/run-status.ts";
-import { attention, block, event, runDetail } from "./support/run.ts";
+import { lifecycleAt, runFreshness, waitsForWorkerConfirmation } from "../src/run-status.ts";
+import { block, event, runDetail, runEntry } from "./support/run.ts";
 
-it("an Active Run whose Block asks for input states nothing in the header", () => {
+it("a reopened Run shows the time of its latest settlement", () => {
   // Arrange
   const run = {
     ...runDetail(),
-    blocks: [{ ...block("review"), state: "waiting" as const }],
-    attention: [attention("review", "human")],
+    events: [
+      { ...event(1), kind: "run-settled", observedAt: "2026-11-08T09:00:00Z" },
+      { ...event(2), kind: "run-activated", observedAt: "2026-11-08T09:30:00Z" },
+      { ...event(3), kind: "run-settled", observedAt: "2026-11-08T10:15:00Z" },
+    ],
   };
 
   // Act
-  const status = runHeaderStatus(run);
+  const at = lifecycleAt(run, "run-settled");
 
   // Assert
-  expect(status).toBeNull();
+  expect(at).toBe("2026-11-08T10:15:00Z");
 });
 
-it("a Settled Run shows Settled with its settle time instead of its block states", () => {
+it("a finished Block with a pending handoff is not yet waiting for worker confirmation", () => {
   // Arrange
   const run = {
-    ...runDetail(),
-    lifecycle: "settled" as const,
-    blocks: [{ ...block("worker"), state: "error" as const }],
-    events: [{ ...event(1), kind: "run-settled", observedAt: "2026-11-08T10:15:00Z" }],
+    ...runEntry(),
+    pendingWork: true,
+    blocks: [{ ...block("worker"), state: "finished" as const }],
   };
 
   // Act
-  const status = runHeaderStatus(run);
+  const waiting = waitsForWorkerConfirmation(run);
 
   // Assert
-  expect(status).toStrictEqual({ kind: "settled", at: "2026-11-08T10:15:00Z" });
-});
-
-it("an Archived Run shows Archived although a block still asks for input", () => {
-  // Arrange
-  const run = {
-    ...runDetail(),
-    lifecycle: "archived" as const,
-    attention: [attention("worker", "human")],
-    events: [{ ...event(1), kind: "run-archived", observedAt: "2026-11-08T11:00:00Z" }],
-  };
-
-  // Act
-  const status = runHeaderStatus(run);
-
-  // Assert
-  expect(status).toStrictEqual({ kind: "archived", at: "2026-11-08T11:00:00Z" });
+  expect(waiting).toBe(false);
 });
 
 it("a stale started block makes an active Run Not live since its latest observation", () => {

@@ -7,6 +7,7 @@ import type {
 } from "@t3-factory/contracts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
+import { forgetRemovedFromTest, readAccessTest } from "./access-test.ts";
 import { clearConversations } from "./conversations.ts";
 import type { DiscordIds, DiscordNames } from "./discord-gateway.ts";
 import { applyAccessRevocation } from "./revocation.ts";
@@ -51,6 +52,7 @@ export const readAccess = (sql: SqlClient.SqlClient) =>
       unresolvedProjectIds: [...unresolved],
       userNames: named("user"),
       channelNames: named("channel"),
+      test: yield* readAccessTest(sql),
       revision: row!.revision,
       savedAt: row!.saved_at,
     } satisfies DiscordAccessConfiguration;
@@ -133,6 +135,7 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
         for (const [index, projectId] of channel.projectIds.entries())
           yield* sql`INSERT INTO chat_access_channel_projects (channel_id,project_id,position) VALUES (${channel.channelId},${projectId},${index})`;
       }
+      yield* forgetRemovedFromTest(sql);
       yield* sql`UPDATE chat_access_settings SET revision=revision+1,saved_at=${savedAt} WHERE singleton=1`;
       return { ok: true, value: undefined };
     }),

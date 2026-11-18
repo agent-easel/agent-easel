@@ -6,8 +6,8 @@ there with its draft intact. Settings holds connection, Agent reporting and keyb
 ## Shell
 
 Studio is an almost full-window dialog with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo. The desktop dialog leaves 48 px above
-it for native window controls and 16 px elsewhere; browsers use 16 px margins (8 px when narrow). The 192 px sidebar (144 px narrow) has an **AUTHOR** group with **Flows** and **Agents**, each with its
-definition count, and an **AUTOMATE** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
+it for native window controls and 16 px elsewhere; browsers use 16 px margins (8 px when narrow). The 192 px sidebar (144 px narrow) has an **Author** group with **Flows** and **Agents**, each with its
+definition count, and an **Automate** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
 in Error while any Trigger is ([Trigger attention](#trigger-attention)). Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
 
 While Studio is open, its Flow, Agent and Trigger lists, the Agents' runtime summaries and saved-Flow usage
@@ -147,9 +147,8 @@ records why a per-project variant is an independent copy rather than an override
 - **Saves expect the owner.** Flow and Agent saves carry `expectedProjectId` beside `expectedRevision`. A save after Change
   owner moved the definition is refused (conflict, `stale_owner`), appends nothing and keeps the editor's draft. Studio's
   editors follow owner changes live ([Owners in Studio](#owners-in-studio)).
-- **Unavailable owner.** Definitions owned by an unavailable Project, for any availability reason, stay listed, editable,
-  exportable, duplicable and removable; only Start is refused ([Runs](runs.md#starting)). Removing an Agent is still refused while the
-  latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability.
+- **Unavailable owner.** Definitions of a Project no longer in T3 (removed, or belonging to another environment) stay listed only to be moved with **Change owner…** or removed. They sit at the bottom of each list under the Project name and a neutral **Not in T3** tag, with no path. They are not opened from the list, run or used, and a Trigger there offers only **Remove…**. A missing repository folder is not this state: that Project stays a normal group and its Flows read **Not ready** with the reason. A lost T3 connection is the ordinary offline state and marks no row. Owner pickers, the Owner filter and the composer never offer a Project gone from T3. Removing an Agent is still refused while the
+  latest revision of any current Flow places it (`agent_in_use`), whatever that Flow's owner or availability. Removing a Flow is refused while a Trigger starts it (`flow_in_use`).
 - **Export** carries no Project. **Import** creates every bundled Agent new in the single import target, never matching an
   existing Agent by name, so an imported Flow can always place its Agents.
 
@@ -160,11 +159,8 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
 
 ### Owners in Studio
 
-- **Grouped lists.** The Flow list and the Agent list group definitions as **Global** first, then one group per owning Project
-  ordered by title. Each Project group shows the Project's last-known title and repository path; when two Projects still read
-  alike, its environment and endpoint are added, then an id suffix. An unavailable Project's group shows its availability reason
-  (for Flows, "Flows here can't start."), and its Flows read **Can't start — *reason*** instead of their readiness. Flow rows
-  name their owner; the Agent editor header shows the owner as text above the name, in the same tones (Global neutral, a Project
+- **Grouped lists.** Flows, Agents and Triggers share one list. The header is the title, the total loaded count (hidden while loading), **Import** on Flows and Agents, and **New Flow**, **New Agent** or **New Trigger**. Search sits at the left of the toolbar (**Search Flows**, **Search Agents**, **Search Triggers**); Flows and Agents add the Owner filter, and Triggers do not, so the search field stays put. Switching lists does not move the title, the buttons, the toolbar or the first group heading. Groups are **Global** first (Flows and Agents; a Trigger always belongs to a Project), then Projects still in T3 by title, then Projects gone from T3. Each present Project group shows its title and repository path; when two Projects still read
+  alike, its environment and endpoint are added, then an id suffix. A Project whose folder is missing stays in that order, and its Flows read **Not ready** with **Repository unavailable** even when the graph is ready. A lost T3 connection does not mark a row or make a Not-in-T3 group. Every row has an always-visible ⋯ menu: Flows and Agents offer **Change owner…** and **Remove…** (Duplicate stays in the editor), and Triggers offer **Check now**, **Edit** and **Remove…**. Flows and Triggers also show › and open their page; Agent rows do not, because the editor opens beside the list. A Flow row's meta is its block count and revision, and the first readiness reason wraps in full under it beside **Ready** or **Not ready**. The Agent editor header shows the owner as text above the name, in the same tones (Global neutral, a Project
   in brand cyan, an unavailable Project in the attention color with its reason in the tooltip; a Project's tooltip says only
   its Flows can place the Agent), and the Flow editor's toolbar shows an owner badge for a Project-owned Flow only (none for a
   Global Flow).
@@ -201,8 +197,7 @@ Project's override chose, without overrides; a copy into Global keeps them. Expo
   **Kept**. Changing the target previews again, a summary names what is created, and a stale plan is previewed again with
   the reason and never committed blindly. Flow Duplicate copies the saved revision (unsaved edits are named as left out) and
   opens the new Flow once Studio lists it; Agent Duplicate opens the copy.
-- **Import target.** The import review has a **Target owner** menu, starting at **Global**; Confirm creates every definition
-  in the chosen target and is disabled while an unavailable Project is chosen.
+- **Import target.** The import dialog chooses **Global** or **Project**, then an **Owning Project** among the available Projects, starting at Global. **Import** creates every definition in the chosen target and stays disabled, with the reason beside it, while an unavailable Project is chosen.
 - **Owner changed elsewhere.** An open editor follows its definition's owning Project from Studio's synchronized lists, which
   appends no revision. Without unsaved changes it simply shows the new owner. With unsaved changes it keeps them, shows
   **This *kind* is now owned by *owner*** (or **is now Global**) and disables Save until **Acknowledge new owner**; the next
@@ -226,8 +221,8 @@ defaults. An Agent is global or a Project Agent ([Ownership](#ownership)); Runs 
 are distinct and non-empty. A new Agent starts with one exit, `done`, which needs no message. Every Flow block of the Agent offers its current exits, so an exit edit reaches open Flow editors through Studio's saved definitions without changing their graphs, while a Run keeps the exits of the Agent revision it captured. Renaming an exit keeps its ID and therefore every wire; removing a wired exit makes those Flows not ready and disables **Start Run** in their editors (see
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
-A persistent 300 px list sits beside the editor with a split **New Agent ▾** button (the button creates an Agent; its menu holds **Import…**, see [Import](#import)), **Search Agents**, the owner filter and owner groups ([Owners in Studio](#owners-in-studio)). Each row shows the Agent's name, its runtime summary and the count of distinct saved Flows using it (excluding Runs and unsaved
-drafts); narrow screens stack list and editor. The header shows the owner above the name, the model picker (see **Worker settings** below), a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Delete…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header the form holds the name, the owner choice for a new Agent, the
+Under the shared Studio header, a 300 px list sits beside the editor ([Owners in Studio](#owners-in-studio)). Opening Agents with no Agent in the URL selects the first listed Agent, skipping a Project gone from T3. An empty list shows **No Agents yet** and no editor, unless the URL is a new-Agent draft or already names an Agent. **Import** is its own button ([Import](#import)); **New Agent** in the header is outline while that draft is open, because **Create Agent** is the primary. Each row shows the Agent's name, a runtime summary such as **Codex · GPT 6.1 Sol · High**, and **1 Flow** or **Unused** (distinct saved Flows, excluding Runs and unsaved
+drafts); the name and summary wrap, and narrow screens stack list and editor. The editor header shows the owner above the name, the model picker (see **Worker settings** below), a ⋯ **More actions** menu, **Save** (**Create Agent** for a new one) and one status line: **✓ Saved · rev *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · rev *N* · …** while the draft is dirty, or **Removed elsewhere · retained draft**. **Save** and **Create Agent** stay neutral and disabled until there is something to save, and use the filled primary only then. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)) and **Remove…**; a disabled item shows its reason under its label, and focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header the form holds the name, the owner choice for a new Agent, the
 Prompt, which grows to fill the editor, and the exits; draft notices such as the Project override warnings and a reporting
 problem sit above the name. Leaving an edited Agent asks to **Keep
 editing** or **Discard changes**.
@@ -298,8 +293,8 @@ A Create or Duplicate answer bridges only the wait for its first appearance in S
 lists. After that appearance, reopening its URL uses the saved lists; an old answer cannot reopen
 a definition removed elsewhere.
 
-**Removing.** **Delete…** in **More actions** confirms by name and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
-rejects Agents placed in the latest revision of any current Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
+**Removing.** **Remove…** in the list and in **More actions** confirms by name (**Remove “*name*”?**) and removes the Agent from Studio, Flow references and Start selection with no restore; its saved revisions are kept and later saves to it are rejected. It
+rejects Agents placed in the latest revision of any current Flow. The dialog then lists those Flows with their owner and a **Not in T3** tag where it applies, and each entry opens that Flow; the backend checks those blocks at removal time even if the usage count is stale, while removed Flows and Runs never block
 removal. An unsaved Flow draft may still reference a removed Agent and needs repair before running. Runs keep the Agent revision they started with, and removing an absent or removed Agent succeeds.
 Factory MCP's [`factory_remove_agent`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
 
@@ -324,7 +319,7 @@ See [T3 integration](t3-integration.md) for authorization and capability reads.
 
 ## Flow authoring
 
-Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. A Flow is global or a Project Flow
+Open **Studio → Flows** (`/studio/flows`), choose **New Flow** (or **Import**, see [Import](#import)) and save a name; the editor opens at `/studio/flows/:flowId`. **Create Flow** stays neutral and disabled while the name is blank, with no error on the field. Any other cause, such as an owner that cannot be used, shows its reason beside the action. A failed create shows one error card, **Couldn’t create the Flow**, and leaves the name as typed. A Flow is global or a Project Flow
 ([Ownership](#ownership)); the composer's project selection never assigns one, and no connection or project is needed to author. Block and exit IDs, positions, graph, name and revision persist across restarts.
 
 Factory installs no built-in Flow and assumes no development process: the blocks, exits and wires you connect are the
@@ -452,7 +447,7 @@ lists Factory's validation issues under its error; selecting one that names a bl
 
 ### Removing a Flow
 
-**Remove…** in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. Success returns to
+**Remove…** in the Flow list and in the Flow editor's **More Flow actions** menu removes the editable definition from Studio and the Run composer after a confirmation that names the Flow, says existing Runs remain and warns about unsaved changes. A Flow a Trigger still starts cannot be removed: the dialog lists those Triggers, and one whose Project is still in T3 opens that Trigger. The same refusal answers `DELETE` and [`factory_remove_flow`](t3-integration.md#authoring-tools) (`flow_in_use`). Success returns to
 the Flow list, also when another view already removed it: removing an absent or removed Flow succeeds. Runs, their captured revisions, shared Agents and T3 threads are unaffected: active Runs continue, Run canvases show the revision each Run started with, and
 removal is not Archive. Its saved revisions are kept, but there is no restore. Removal needs no revision match; a save that reaches a removed Flow errors, keeps the local draft visible for copying and never recreates it. New Runs cannot select a removed
 Flow. Factory MCP's [`factory_remove_flow`](t3-integration.md#authoring-tools) performs the same removal; open Studio lists drop it at once.
@@ -489,12 +484,7 @@ Trigger pages fill the content width. Below the list, the header breadcrumb link
 (**Studio / Triggers / *name***, **Studio / Triggers / New / GitHub Issues**), and each page starts with a back link:
 **All Triggers** on an opened Trigger and the type picker, **Trigger types** on the create form.
 
-**List.** Each row shows the Trigger's name, its health (**Healthy** after a completed check without a problem,
-**Error** while a problem stops every check, nothing before the first completed check), **GitHub Issues · Project →
-Flow · schedule** (for example `every 5 min`, `every 2 hours` or `manual`), one line naming the problem while it is in
-Error, an enable switch and a ⋯ menu with **Run** (only while enabled), **Edit** and **Remove**. Clicking the row opens
-Edit. The list shows no prompt, issue list, check history, Off pill or active-Run counts. With no Triggers it explains
-what a Trigger does and suggests running [`setup-factory`](installation.md#optional-skills) in the repository first.
+**List.** Triggers are grouped by Project, with **Search Triggers** and **New Trigger** even when the list is empty. Each row shows the name, **GitHub Issues · Project → Flow · schedule** (for example `every 5 min`, `every 2 hours` or `manual`), an enable switch, a ⋯ menu (**Check now**, **Edit**, **Remove…**) and ›. **Check now** is disabled until the Trigger is on. A problem that stops checks shows a **Problem** badge and the problem's message on its own wrapping line; a healthy Trigger shows no badge. After **Check now** the meta line reads **Checking…**, then **Started N Runs** (one Run opens it and leaves Studio; several open a menu of `#number title`) or **Nothing ready to start**. That line lasts for the visit only. A check that returns a problem keeps the route meta and shows the badge. The list shows no prompt, issue list, check history, Off pill or active-Run counts. With no Triggers it shows **No Triggers yet** and nothing else.
 Turning a switch on opens the [review](#reviewing-what-starts); turning it off saves at once.
 
 **Creating.** **New Trigger** first asks for the type, at `/studio/triggers/new`. GitHub Issues is the only one, and its
@@ -710,19 +700,14 @@ without a Condition, and asks to be updated before it can import it. Stored defi
 
 ### Import
 
-**Import…** in the Agents list's **New Agent ▾** menu and **Import** on the Flows list open a chooser for a `.json` file; either list accepts either kind of file and the file decides
-what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows the review dialog:
+**Import** on the Flows list and on the Agents list opens a chooser for a `.json` file; either list accepts either kind of file and the file decides
+what is created. Studio sends the file's bytes to `POST /api/imports/review`, which validates it and writes nothing, then shows **Import “*file*”**:
 
-- a trust notice: imported instructions (Agent prompts, and for a Flow file Continuation prompts and Revisit instructions) run with the user's T3
-  capabilities when a Run that uses them starts, and importing does not start a Run;
-- for a Flow file, the workspace in full: the project checkout, or a new worktree from the default branch or from the exact custom ref;
-- the instruction inventory, never instruction text: each Agent's name, prompt length and exit count and, for a Flow file, each Continuation's
-  block name and prompt length and each non-empty Revisit instruction's block name and length;
-- one row per Agent labelled **Matched**, **Ambiguous** (naming the candidates), **Unmatched** or **No model in file**, with its model hint
-  and the reason as text, and a picker of the live Worker catalog for the connected environment, limited to reporting-capable providers, with
-  the chosen model's thinking options. A Matched row starts with the matched model, which can be kept, changed to any listed model or set to
-  **Needs a model**; every other row starts as **Needs a model** with nothing preselected. The row lists the hint's options that the chosen
-  model does not accept and recomputes them whenever the choice changes.
+- **Global** or **Project**, and an **Owning Project** when Project is chosen. No helper line. An owner that cannot be used disables **Import** and shows its reason beside the action;
+- one warning: imported prompts run with the user's T3 permissions, so read them in Studio before starting a Run;
+- **Creates**: the Flow's name and block count, when the file has a Flow, and one row per Agent with its model select and thinking options. An Agent without a matched model shows **Needs a model** and an attention border on the select, and can still be imported.
+
+While the file is read, the dialog shows **Reading the file…**. A file that cannot be imported shows one error card and **Choose another file**.
 
 The review matches each hint against the connected environment's live catalog. Candidates are reporting-capable provider instances of the
 hint's `driverKind` that offer its exact `modelId`. The candidate with the hint's `providerInstanceId` wins; otherwise a single candidate wins;
@@ -732,10 +717,10 @@ first listed candidate, and matches nothing while the catalog is unavailable. A 
 options the model accepts; the model's other options take their defaults and the hint's remaining options are dropped. Picking a model in the
 review applies the same option rule.
 
-Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Confirm import** is always
-enabled, also when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
-model). Confirm sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`), a request id
-the dialog generated for this import and an optional [target](#ownership) `projectId` (Global when omitted; the review's **Target owner**). The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
+Names, prompts, exits and the Flow's graph and workspace arrive exactly as exported; the review offers no other edits. **Cancel** writes nothing. **Import** is
+enabled when some or every Agent needs a model, and also with T3 disconnected (the picker is then empty and every Agent is imported without a
+model). It sends `POST /api/imports` with the document, the reviewed selection per Agent key (complete settings or `null`), a request id
+the dialog generated for this import and an optional [target](#ownership) `projectId` (Global when omitted). The commit validates the document again, applies the ordinary Agent save rules to the selections and saves
 exactly what was reviewed, without matching or changing options. It creates new Agents with new ids at revision 1 and their exported names and, for a
 Flow file, the Flow at revision 1 with each `agentKey` replaced by the new Agent's id, all in one transaction. It never reuses or updates an
 existing Agent or Flow and never starts a Run. A block whose `agentKey` is `null` arrives without an Agent, which readiness reports as a
@@ -746,7 +731,7 @@ changes still asks **Keep editing** / **Discard changes** first.
 - If a chosen provider is listed by T3 but has lost Factory reporting support, the whole commit is refused, the affected Agents are named and
   their rows return to the review for another choice. A provider T3 does not list, including while the catalog is unavailable, never refuses a
   commit.
-- Every Confirm in one dialog reuses its request id. When the answer is lost, Confirm again returns the original result instead of a copy; the
+- Every Import in one dialog reuses its request id. When the answer is lost, Import again returns the original result instead of a copy; the
   same id with different content or another target is refused as a conflict. A replay answers before the target's availability is
   checked, so a retry still returns the original result after its target Project became unavailable. Choosing a file again starts a new import, so two deliberate imports create two
   independent copies. See [import receipts](foundation.md#persistence-model).
@@ -763,7 +748,7 @@ The distinct rejections are:
 - over a limit, HTTP 413: an import request or file over 16 MiB, more than 500 bundled Agents, or a definition over 2 MB.
 - not received completely (`document_unreadable`): the upload broke off before its body arrived. Only a body over the limit is reported as too large.
 
-Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Try again**.
+Every rejection writes nothing, never repeats prompt text and keeps the chosen file in the dialog for **Choose another file**.
 
 ## Validation contract
 

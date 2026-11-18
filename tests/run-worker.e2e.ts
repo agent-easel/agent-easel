@@ -526,12 +526,11 @@ test("Settle confirmation cancels without changes, then stops workers and settle
     .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
     .toBe("settled");
   await browser.reload();
-  await screen.getByRole("button", /^Settled/).tap();
   await expect(
     screen.getByRole("navigation", "Settled Runs").getByRole("link", new RegExp(title)),
   ).toBeVisible();
   await expect(row).toHaveCount(0);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
   await app.screenshot("run-settled-from-row-menu");
 });
 
@@ -559,7 +558,7 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   expect(after.lifecycle).toBe("settled");
   expect(after.reports).toEqual(before.reports);
   expect(after.activations).toEqual(before.activations);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
 test("an unresolved settlement is one Run card whose Retry settlement asks T3 to stop again", async ({
@@ -618,7 +617,7 @@ test("a held Stop that ends settles the Run and its meta line stops saying Settl
   // Assert
   await expect.poll(async () => (await readHistoryRun(app.baseUrl, id)).lifecycle).toBe("settled");
   await expect(requested).toHaveCount(0);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
   await app.screenshot("settlement-stop-finished");
 });
 
@@ -728,7 +727,7 @@ test("Archive from the Run page's ··· menu asks for confirmation and archives
   await screen.getByRole("button", "Run actions", { exact: true }).tap();
   await screen.getByRole("menuitem", "Archive…", { exact: true }).tap();
   const confirmation = screen.getByRole("dialog", `Archive “${title}”?`);
-  await expect(confirmation).toContainText("cannot be restored");
+  await expect(confirmation).toContainText("command palette");
   await app.screenshot("run-page-archive-confirmation");
 
   // Act
@@ -744,8 +743,7 @@ test("Archive from the Run page's ··· menu asks for confirmation and archives
   expect(await runsTitled(app.baseUrl, title)).toHaveLength(0);
   await app.open(`/runs/${found.id}`);
   await browser.reload();
-  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
-  // Archive is the only Run action, so archived history offers no actions menu.
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Archived");
   await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
   await app.screenshot("archived-run-history-by-link");
 });

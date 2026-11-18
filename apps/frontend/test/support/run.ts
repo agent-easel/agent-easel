@@ -145,6 +145,7 @@ export function runEntry(): RunNavigationEntry {
     },
     lifecycle: "active",
     settlement: null,
+    pendingWork: false,
     blocks: [],
     presentation: { snoozed: false, woke: false },
     attention: { needsInput: false, problem: false, matters: [] },

@@ -5,9 +5,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { useStudioNavigation, type StudioSelection } from "../settings-navigation.ts";
-import { useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
+import { useStudioOwners, useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
 import { triggerDraftId } from "../use-studio-draft-guard.ts";
-import { useProjects } from "../use-projects.ts";
 import { useActiveView } from "../use-active-view.ts";
 import { useServerId } from "../client-scope.ts";
 import {
@@ -47,7 +46,7 @@ type TriggersSelection = Extract<StudioSelection, { tab: "triggers" }>;
 /** This window's Create was accepted; `enable` asks to enable it as the review showed. */
 type OnCreated = (trigger: TriggerDefinition, enable: boolean) => Promise<void> | undefined;
 
-/** Studio → AUTOMATE → Triggers: the list, the type picker, and the create and edit forms. */
+/** Studio → Automate → Triggers: the list, the type picker, and the create and edit forms. */
 export function StudioTriggersPage({
   selection,
   definitions,
@@ -58,8 +57,9 @@ export function StudioTriggersPage({
   reportTriggerDraft: ReportDraft;
 }) {
   const triggers = useStudioRead(definitions, "triggers");
+  const owners = useStudioOwners(definitions);
   const names: TriggerNames = {
-    projects: useProjects(),
+    projects: owners.projects,
     flows: useStudioRead(definitions, "flows").value,
   };
   const actions = useTriggerActions(definitions);
@@ -75,6 +75,7 @@ export function StudioTriggersPage({
         <TriggersList
           triggers={triggers}
           names={names}
+          projects={owners.projects}
           actions={actions}
           onEnable={enabling.open}
         />

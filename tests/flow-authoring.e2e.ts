@@ -602,10 +602,11 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
 
   // Act: import the file through the review and confirm.
   await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
-  const review = screen.getByRole("dialog", "Review the import");
-  await expect(review).toContainText("New worktree · release/2.0");
-  await expect(review).toContainText("Continuation prompt");
-  await expect(review).toContainText("Imported instructions run with your T3 capabilities");
+  const review = screen.getByRole("dialog", /^Import “/);
+  await expect(review).toContainText(name);
+  await expect(review).toContainText(
+    "Imported prompts run with your T3 permissions — Read them in Studio before you start a Run.",
+  );
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
   );
@@ -614,7 +615,7 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await review.getByRole("group", "Demo · Product engineer").scrollIntoView();
   await app.screenshot("flow-import-review-narrow");
   await browser.setViewport({ width: 1600, height: 1000 });
-  await review.getByRole("button", "Confirm import", { exact: true }).tap();
+  await review.getByRole("button", "Import", { exact: true }).tap();
 
   // Assert: the file holds the saved revision; the imported Flow opens with its own new Agent.
   assert.equal(download.suggestedFilename, `${name.toLowerCase().replaceAll(" ", "-")}.flow.json`);

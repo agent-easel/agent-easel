@@ -77,7 +77,7 @@ The durable record of one committed import: the client's request id, a versioned
 _Avoid_: import history, provenance.
 
 **Studio**:
-The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **AUTHOR** group), and Triggers (its **AUTOMATE** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
+The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **Author** group), and Triggers (its **Automate** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
 _Avoid_: Settings as the Agent editor or Trigger location; a Flows destination in the Run sidebar.
 
 **Factory server**:

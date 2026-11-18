@@ -46,12 +46,19 @@ import { Button } from "../components/ui/button.tsx";
 import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu.tsx";
-import { PickerMenuContent, PickerMenuSearch } from "../components/picker-menu-search.tsx";
+import { MenuName } from "../components/menu-name.tsx";
+import {
+  PickerMenuContent,
+  PickerMenuList,
+  PickerMenuSearch,
+  pickerShowsSearch,
+} from "../components/picker-menu-search.tsx";
 import { Label } from "../components/ui/label.tsx";
 import {
   AttachImagesButton,
@@ -281,16 +288,14 @@ export function RunComposer() {
 
 function flowFieldState({ draft, flows, flow }: Composer) {
   const empty = flows?.length === 0;
-  const choices = composerFlows(flows ?? [], draft.projectId, draft.flowId);
+  const choices = composerFlows(flows ?? [], draft.projectId);
   const notReady = !!flow && !flowCanLaunch(flow);
   return {
     empty,
     choices,
     notReady,
     placeholder: empty ? "No Flows yet" : "Choose a Flow",
-    value:
-      flow?.name ??
-      (empty ? undefined : flows && draft.flowId ? "Selected Flow unavailable" : undefined),
+    value: flow?.name,
   };
 }
 
@@ -317,50 +322,82 @@ function FlowFieldValue({
 const flowRadioItemClass =
   "my-0.5 rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring";
 
-function FlowChoice({ flow, busy }: { flow: FlowDraft; busy: boolean }) {
-  const label = `${flow.name}${flowCanLaunch(flow) ? "" : " · Not ready"}`;
+function FlowChoice({
+  flow,
+  busy,
+  peers,
+}: {
+  flow: FlowDraft;
+  busy: boolean;
+  peers: readonly string[];
+}) {
   return (
     <DropdownMenuRadioItem
       value={flow.id}
       data-flow-id={flow.id}
       indicatorPosition="right"
       disabled={busy}
-      aria-label={label}
+      aria-label={flow.name}
       className={flowRadioItemClass}
     >
-      <span className="min-w-0 flex-1 truncate">{flow.name}</span>
-      {!flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
+      <MenuName name={flow.name} peers={peers} />
     </DropdownMenuRadioItem>
   );
 }
 
-/** One heading and its Flows, or nothing when none match. */
+/** A not-ready Flow stays visible and cannot be chosen, hovered, or checked. */
+function FlowUnavailable({ flow, peers }: { flow: FlowDraft; peers: readonly string[] }) {
+  return (
+    <DropdownMenuItem
+      disabled
+      data-flow-id={flow.id}
+      aria-label={`${flow.name} · Not ready`}
+      className="my-0.5 rounded-md py-2 data-[disabled]:opacity-100"
+    >
+      <MenuName name={flow.name} peers={peers} className="text-muted-foreground" />
+      <StatusBadge kind="error">Not ready</StatusBadge>
+    </DropdownMenuItem>
+  );
+}
+
+/** One heading and its Flows, ready first, or nothing when none match. */
 function FlowGroup({
   title,
   flows,
   busy,
+  peers,
 }: {
   title: string;
   flows: readonly FlowDraft[];
   busy: boolean;
+  peers: readonly string[];
 }) {
   if (flows.length === 0) return null;
   return (
     <>
-      <DropdownMenuLabel>{title}</DropdownMenuLabel>
-      {flows.map((flow) => (
-        <FlowChoice key={flow.id} flow={flow} busy={busy} />
-      ))}
+      <DropdownMenuLabel className="normal-case">{title}</DropdownMenuLabel>
+      {flows.map((flow) =>
+        flowCanLaunch(flow) ? (
+          <FlowChoice key={flow.id} flow={flow} busy={busy} peers={peers} />
+        ) : (
+          <FlowUnavailable key={flow.id} flow={flow} peers={peers} />
+        ),
+      )}
     </>
   );
 }
 
-/** Why the menu lists no Flow, if it lists none. */
-function flowChoicesStatus(flows: readonly FlowDraft[] | null, offered: boolean, matched: boolean) {
+/** Why the menu lists no Flow, if it lists none. A menu of disabled rows adds no line of its own. */
+function flowChoicesStatus(
+  flows: readonly FlowDraft[] | null,
+  listed: number,
+  matched: number,
+  query: string,
+) {
   if (!flows) return "Loading Flows…";
-  if (flows.length === 0) return "No Flows yet";
-  if (!offered) return "No ready Flows for this project.";
-  return matched ? undefined : "No matching Flows.";
+  if (query && matched === 0) return "No matching Flows";
+  if (listed === 0) return "No Flows yet";
+  return undefined;
 }
 
 function FlowChoices({
@@ -380,16 +417,13 @@ function FlowChoices({
   const { choices } = flowFieldState(model);
   const query = search.trim().toLocaleLowerCase();
   const matches = (name: string) => name.toLocaleLowerCase().includes(query);
-  const globalFlows = choices.global.filter((f) => matches(f.name));
-  const projectFlows = choices.project.filter((f) => matches(f.name));
-  const offered = choices.global.length + choices.project.length > 0;
-  const showUnavailable =
-    !!flows?.length && !!draft.flowId && !flow && matches("Selected Flow unavailable");
-  const status = flowChoicesStatus(
-    flows,
-    offered,
-    showUnavailable || globalFlows.length + projectFlows.length > 0,
-  );
+  const globalFlows = choices.global.filter((item) => matches(item.name));
+  const projectFlows = choices.project.filter((item) => matches(item.name));
+  const visible = [...globalFlows, ...projectFlows];
+  const peers = visible.map((item) => item.name);
+  const listed = choices.global.length + choices.project.length;
+  const status = flowChoicesStatus(flows, listed, visible.length, query);
+  const checked = flow && flowCanLaunch(flow) ? draft.flowId : "";
   const positioned = useRef(false);
   useLayoutEffect(() => {
     if (positioned.current || !flows) return;
@@ -399,43 +433,15 @@ function FlowChoices({
     positioned.current = true;
   }, [flows, listRef]);
   return (
-    <div
-      ref={listRef}
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
-      role="group"
-      aria-label="Flows"
-    >
-      <DropdownMenuRadioGroup value={draft.flowId} onValueChange={onSelect}>
-        {showUnavailable && (
-          <DropdownMenuRadioItem
-            value={draft.flowId}
-            indicatorPosition="right"
-            disabled={busy}
-            aria-label="Selected Flow unavailable"
-            className={flowRadioItemClass}
-          >
-            <span className="truncate text-muted-foreground">Selected Flow unavailable</span>
-          </DropdownMenuRadioItem>
-        )}
-        {(offered || showUnavailable || !!flow) && (
-          <DropdownMenuRadioItem value="" indicatorPosition="right" disabled={busy}>
-            Choose a Flow
-          </DropdownMenuRadioItem>
-        )}
-        <FlowGroup title="Global" flows={globalFlows} busy={busy} />
-        <FlowGroup title={project?.title ?? ""} flows={projectFlows} busy={busy} />
-      </DropdownMenuRadioGroup>
+    <DropdownMenuRadioGroup value={checked} onValueChange={onSelect}>
+      <FlowGroup title="Global" flows={globalFlows} busy={busy} peers={peers} />
+      <FlowGroup title={project?.title ?? ""} flows={projectFlows} busy={busy} peers={peers} />
       {status && (
         <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
           {status}
         </p>
       )}
-      {!!flows?.length && (
-        <p className="px-3 pt-1 pb-2 text-2xs text-muted-foreground">
-          Only ready Flows are listed. Flows of other Projects run only there.
-        </p>
-      )}
-    </div>
+    </DropdownMenuRadioGroup>
   );
 }
 
@@ -451,7 +457,8 @@ function FlowField({ model }: { model: Composer }) {
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const triggerLabel = state.value ?? state.placeholder;
-  const showSearch = state.choices.global.length + state.choices.project.length > 0;
+  const choiceCount = state.choices.global.length + state.choices.project.length;
+  const showSearch = pickerShowsSearch(choiceCount);
   return (
     <>
       <Label htmlFor="launch-flow" className="sr-only">
@@ -502,7 +509,7 @@ function FlowField({ model }: { model: Composer }) {
           </Button>
         </DropdownMenuTrigger>
         <PickerMenuContent
-          className="flex max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0"
+          className="overflow-y-hidden"
           searchRef={searchRef}
           listRef={listRef}
           searchEnabled={showSearch}
@@ -510,25 +517,27 @@ function FlowField({ model }: { model: Composer }) {
           {showSearch && (
             <PickerMenuSearch
               ariaLabel="Search Flows"
-              placeholder="Search by Flow name…"
+              placeholder="Search Flows"
               value={search}
               onChange={setSearch}
               inputRef={searchRef}
               listRef={listRef}
-              firstChoiceSelector="[data-flow-id]"
+              firstChoiceSelector="[data-flow-id]:not([data-disabled])"
             />
           )}
-          <FlowChoices
-            model={model}
-            busy={busy}
-            search={search}
-            listRef={listRef}
-            onSelect={(flowId) => {
-              if (busy) return;
-              setMenuOpen(false);
-              if (flowId !== draft.flowId) edit({ flowId });
-            }}
-          />
+          <PickerMenuList listRef={listRef} label="Flows" watch={`${search}:${choiceCount}`}>
+            <FlowChoices
+              model={model}
+              busy={busy}
+              search={search}
+              listRef={listRef}
+              onSelect={(flowId) => {
+                if (busy || !flowId) return;
+                setMenuOpen(false);
+                if (flowId !== draft.flowId) edit({ flowId });
+              }}
+            />
+          </PickerMenuList>
         </PickerMenuContent>
       </DropdownMenu>
     </>
@@ -816,7 +825,7 @@ function setupLaunchNotice(model: Composer) {
         }
       >
         Choose an available project once T3 reports one. Factory uses the projects T3 knows about:
-        add a repository in T3 or in the Project picker, then refresh — your prompt is kept.
+        add a repository in T3, then refresh — your prompt is kept.
       </Notice>
     );
   if (card.kind === "choose-project")

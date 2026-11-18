@@ -18,20 +18,41 @@ export function BindingLink({ binding }: { binding: RunThreadBinding }) {
   );
 }
 
-export function CoordinatorActivations({ run, blockId }: { run: RunDetail; blockId?: string }) {
+export function CoordinatorActivations({
+  run,
+  blockId,
+  conciseResults = false,
+}: {
+  run: RunDetail;
+  blockId?: string;
+  conciseResults?: boolean;
+}) {
   const activations = run.activations.filter((a) => !blockId || a.blockId === blockId);
   if (!activations.length) return null;
   return (
     <section aria-label="Block activations" className="flex flex-col gap-2.5">
       <InspectorHeading title="Activations" />
       {activations.map((activation) => (
-        <Activation key={activation.id} run={run} activation={activation} />
+        <Activation
+          key={activation.id}
+          run={run}
+          activation={activation}
+          conciseResult={conciseResults}
+        />
       ))}
     </section>
   );
 }
 
-function Activation({ run, activation }: { run: RunDetail; activation: RunActivation }) {
+function Activation({
+  run,
+  activation,
+  conciseResult,
+}: {
+  run: RunDetail;
+  activation: RunActivation;
+  conciseResult: boolean;
+}) {
   const visit =
     run.activations
       .filter((a) => a.blockId === activation.blockId)
@@ -45,6 +66,18 @@ function Activation({ run, activation }: { run: RunDetail; activation: RunActiva
     run.lifecycle !== "archived" &&
     !run.attention.some((item) => item.blockId === activation.blockId && !item.settledAt) &&
     activation.problem;
+  if (report && conciseResult) {
+    const worker = run.threadBindings.find(
+      (binding) => binding.blockId === activation.blockId && binding.role === "worker",
+    );
+    return (
+      <ResultCard
+        run={run}
+        report={report}
+        titleOnly={{ workerLink: linked ? null : (worker?.link ?? null) }}
+      />
+    );
+  }
   const coordination = (
     <>
       {problem && <p className="text-xs text-attention">{problem}</p>}

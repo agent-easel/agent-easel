@@ -1,3 +1,4 @@
+import { RunTextReaderLink } from "./run-result.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -717,7 +718,16 @@ function HumanResponseForm({
   return (
     <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
       {occurrence.context && (
-        <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
+        <>
+          <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
+          <RunTextReaderLink
+            label="Read context"
+            title={`${blockName} · context`}
+            metadata={clockTime(occurrence.appearedAt)}
+            text={occurrence.context}
+            link={null}
+          />
+        </>
       )}
       <DecisionSelect
         value={exitId}

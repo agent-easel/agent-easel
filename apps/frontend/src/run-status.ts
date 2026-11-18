@@ -1,28 +1,26 @@
-import type { RunBlock, RunDetail } from "@t3-factory/contracts";
+import type { RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 
-const activeStates = new Set<RunBlock["state"]>(["working", "waiting", "sent"]);
-
-/**
- * What the Run header still states: a Settled or Archived lifecycle, or Idle for an Active Run with
- * no active Block and nothing pending. Work states live on the Run's sidebar row and its Blocks.
- */
-export type RunHeaderStatus =
-  /** `at` is null for Runs settled or archived by an upgrade, which recorded no such event. */
-  { readonly kind: "archived" | "settled"; readonly at: string | null } | { readonly kind: "idle" };
-
-/** When the Run last entered `kind`. */
-function lifecycleAt(run: RunDetail, kind: "run-settled" | "run-archived") {
+/** Null for history that predates the corresponding lifecycle event. */
+export function lifecycleAt(run: RunDetail, kind: "run-settled" | "run-archived") {
   return run.events.findLast((event) => event.kind === kind)?.observedAt ?? null;
 }
 
-/** Archived, then Settled; Idle only when no Block works or waits and nothing is pending. */
-export function runHeaderStatus(run: RunDetail): RunHeaderStatus | null {
-  if (run.lifecycle === "archived")
-    return { kind: "archived", at: lifecycleAt(run, "run-archived") };
-  if (run.lifecycle === "settled") return { kind: "settled", at: lifecycleAt(run, "run-settled") };
-  if (run.attention.some((item) => !item.settledAt)) return null;
-  if (run.blocks.some((block) => activeStates.has(block.state))) return null;
-  return { kind: "idle" };
+export function stoppedVisitAt(run: RunDetail, end: string | null | undefined) {
+  return end ?? lifecycleAt(run, run.lifecycle === "archived" ? "run-archived" : "run-settled");
+}
+
+export function waitsForWorkerConfirmation(run: RunNavigationEntry) {
+  return (
+    run.lifecycle === "active" &&
+    run.settlement === null &&
+    !run.attention.needsInput &&
+    !run.attention.problem &&
+    !run.pendingWork &&
+    run.blocks.some((block) => block.state === "finished") &&
+    run.blocks.every(
+      ({ state }) => state === "not-started" || state === "finished" || state === "pass-through",
+    )
+  );
 }
 
 /**

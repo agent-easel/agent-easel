@@ -8,10 +8,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export function InspectorHeading({ title, count }: { title: string; count?: string | undefined }) {
   return (
     <h3 className="flex min-w-0 items-baseline gap-1.5 text-sm leading-4 font-semibold text-foreground">
-      {title}
-      {count && (
-        <span className="truncate text-xs font-normal text-subtle-foreground">{count}</span>
-      )}
+      <span className={count ? "shrink-0" : undefined}>{title}</span>
+      {count && <span className="min-w-0 text-xs font-normal text-subtle-foreground">{count}</span>}
     </h3>
   );
 }

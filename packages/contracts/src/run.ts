@@ -376,6 +376,8 @@ export interface RunNavigationEntry {
   /** A confirmed manual settlement in progress; see `RunDetail.settlement`. */
   readonly settlement: RunSettlement["state"] | null;
   readonly blocks: readonly Pick<RunBlock, "state" | "freshness" | "workingMessage">[];
+  /** Factory still owes delivery, an answer, or another local operation. */
+  readonly pendingWork: boolean;
   /** Pending attention only. Reading this summary does not settle any matter. */
   readonly attention: RunAttentionSummary;
   readonly presentation: RunPresentation;

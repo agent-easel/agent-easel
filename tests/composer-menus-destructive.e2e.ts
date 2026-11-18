@@ -1,0 +1,98 @@
+import assert from "node:assert/strict";
+import type { FlowDraft } from "../packages/contracts/src/index.ts";
+import { expect } from "e2e";
+import { beforeEach, test } from "./support/test.ts";
+import { selectComposerProject } from "./support/composer.ts";
+import {
+  chooseComposerFlow,
+  openComposerMenus,
+  openFlowMenu,
+  pageString,
+  readFactoryJson,
+} from "./support/composer-menus.ts";
+import { removeFlowElsewhere } from "./support/flows.ts";
+
+/**
+ * Deletes seeded Flows. Run this file by itself, after the suites that start scenario Runs.
+ * A later reset in the same process cannot start those Runs once their Flows are gone.
+ */
+beforeEach(async ({ app, browser, screen }) => {
+  await openComposerMenus(app, browser, screen);
+});
+
+test("a deleted Flow clears, and a menu of only not-ready Flows adds no status line", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange — choose a ready Flow, then delete it.
+  await selectComposerProject(screen, "Northwind");
+  await chooseComposerFlow(screen, "Northwind release");
+  const flows = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
+  const selected = flows.find((flow) => flow.name === "Northwind release");
+  assert(selected);
+
+  // Act
+  await removeFlowElsewhere(app.baseUrl, selected.id);
+
+  // Assert
+  await expect(
+    screen.getByRole("button", "Select Flow: Choose a Flow", { exact: true }),
+  ).toBeVisible();
+  await expect(screen.getByText("Selected Flow unavailable", { exact: true })).toHaveCount(0);
+  await openFlowMenu(screen);
+  await expect(screen.getByRole("menuitemradio", "Northwind release", { exact: true })).toHaveCount(
+    0,
+  );
+  await app.screenshot("after-flow-deleted");
+  await browser.keyboard.press("Escape");
+
+  // Arrange — leave only the not-ready draft.
+  const remaining = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
+  for (const flow of remaining) {
+    if (flow.name !== "Demo · Release checklist (draft)")
+      await removeFlowElsewhere(app.baseUrl, flow.id);
+  }
+  await browser.reload();
+  await selectComposerProject(screen, "Northwind");
+
+  // Act
+  await openFlowMenu(screen);
+
+  // Assert
+  await expect(screen.getByRole("menuitemradio")).toHaveCount(0);
+  await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toHaveCount(0);
+  await expect(
+    screen.getByRole("menuitem", "Demo · Release checklist (draft) · Not ready", { exact: true }),
+  ).toBeDisabled();
+  await expect(
+    screen.getByRole("group", "Flows").getByText("No Flows yet", { exact: true }),
+  ).toHaveCount(0);
+  await expect(screen.getByText("No matching Flows", { exact: true })).toHaveCount(0);
+  await expect(screen.getByText("No ready Flows for Northwind", { exact: true })).toBeVisible();
+  await browser.keyboard.press("ArrowDown");
+  expect(
+    pageString(
+      await browser.evaluate(`document.activeElement?.getAttribute("aria-disabled") ?? ""`),
+    ),
+  ).not.toBe("true");
+  await app.screenshot("after-flow-all-disabled");
+  await browser.keyboard.press("Escape");
+
+  // Arrange — remove the last Flow. Nothing after this test may reset the fixture.
+  const left = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
+  for (const flow of left) await removeFlowElsewhere(app.baseUrl, flow.id);
+  await browser.reload();
+  await selectComposerProject(screen, "Northwind");
+
+  // Act
+  await openFlowMenu(screen);
+
+  // Assert
+  await expect(
+    screen.getByRole("group", "Flows").getByText("No Flows yet", { exact: true }),
+  ).toBeVisible();
+  await expect(screen.getByRole("menuitemradio")).toHaveCount(0);
+  await expect(screen.getByText("Create your first Flow", { exact: true })).toBeVisible();
+  await app.screenshot("after-flow-none");
+});

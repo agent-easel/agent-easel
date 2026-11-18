@@ -64,7 +64,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
   `factory_set_run_title` itself; it proves no title model or live T3 launch.
 - No seeded Run shows a Condition integrity Problem. Only missing or inconsistent stored Condition state records one, and public operations cannot produce that state.
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
-- A repository added through **Add repository** gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed.
+- A repository registered through the project API gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed. The composer does not add repositories.
 - The demo does not simulate connection loss, TLS or revocation; controlled transport and UI fixtures cover those boundaries.
 - Triggers read a GitHub stand-in, never the host's `gh`. Its repository and issues are saved in the demo home, so scheduled checks after a restart keep each Trigger's health. It proves no live
   GitHub access, search or labelling.

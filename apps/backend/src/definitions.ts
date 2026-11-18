@@ -628,8 +628,24 @@ export const makeDefinitions = (
         );
       },
       removeFlow(id) {
-        return provideSql<void>(
+        return transaction<void>(
           Effect.gen(function* () {
+            const [flow] = yield* readCurrentFlows(sql, id);
+            if (!flow) return { ok: true as const, value: undefined };
+            const triggers = yield* sql<{
+              id: string;
+              name: string;
+            }>`SELECT id, name FROM run_triggers WHERE flow_id=${id}`;
+            if (triggers.length > 0)
+              return failure(
+                "conflict",
+                `Can't remove "${flow.name}".`,
+                triggers.map((trigger) => ({
+                  code: "flow_in_use",
+                  path: "flowId",
+                  message: `Trigger "${trigger.name}" (${trigger.id}) starts this Flow.`,
+                })),
+              );
             yield* sql`UPDATE flows SET removed_at=${yield* currentTime} WHERE id=${id} AND removed_at IS NULL`;
             return { ok: true as const, value: undefined };
           }),

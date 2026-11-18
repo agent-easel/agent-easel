@@ -258,7 +258,11 @@ async function openSettledResultCard(app: App, screen: Screen, browser: Browser)
   const card = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("article", settledResultCard, { exact: true });
-  return { found, card, reader: screen.getByRole("dialog", settledResultCard, { exact: true }) };
+  return {
+    found,
+    card,
+    reader: screen.getByRole("dialog", "Implement change · result", { exact: true }),
+  };
 }
 
 async function openSettledResultReader(app: App, screen: Screen, browser: Browser) {
@@ -267,7 +271,7 @@ async function openSettledResultReader(app: App, screen: Screen, browser: Browse
   return opened;
 }
 
-test("a completed Run's Final result renders as collapsed Markdown in the inspector and never renders its raw HTML", async ({
+test("a Settled Run’s activation shows the result title and the reader action", async ({
   app,
   screen,
   browser,
@@ -286,20 +290,10 @@ test("a completed Run's Final result renders as collapsed Markdown in the inspec
   const card = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("article", settledResultCard, { exact: true });
-  await expect(card.getByRole("heading", "Welcome copy updated", { exact: true })).toBeVisible();
-  await expect(card.getByRole("listitem")).toHaveCount(4);
-  await expect(card.getByRole("table")).toBeAttached();
-  await expect(card.getByText('const body = t("welcome.recentProjects");')).toBeAttached();
-  await expect(card.getByRole("link", "Atlas copy guide", { exact: true })).toHaveAttribute(
-    "target",
-    "_blank",
-  );
-  await expect(card).toContainText('<b>Raw HTML stays text</b> <img src="missing.png"');
-  expect(
-    await browser.evaluate(
-      `[...document.querySelectorAll('[aria-label="${settledResultCard}"]')].every(card => !card.querySelector("img, b") && card.querySelector("[data-result-preview]").scrollHeight > card.querySelector("[data-result-preview]").clientHeight) && window.resultHtmlRan === undefined`,
-    ),
-  ).toBe(true);
+  await expect(card.getByText("Welcome copy updated", { exact: true })).toBeVisible();
+  await expect(card.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", "Read result", { exact: true })).toBeVisible();
+  await expect(card.getByRole("listitem")).toHaveCount(0);
   await app.screenshot("final-result-card");
 });
 
@@ -315,7 +309,7 @@ test("Read result opens the full rendered result with its block, exit and time i
   await card.getByRole("button", "Read result", { exact: true }).tap();
 
   // Assert
-  await expect(reader).toContainText(/Report accepted · exit Done · \d\d:\d\d/);
+  await expect(reader).toContainText(/Visit 1 · → Done · \d\d:\d\d/);
   await expect(reader.getByRole("heading", "Welcome copy updated", { exact: true })).toBeVisible();
   await expect(reader.getByRole("heading", "Changes", { exact: true })).toBeVisible();
   await expect(reader.getByRole("cell", "Your recent projects are in the sidebar.")).toBeVisible();

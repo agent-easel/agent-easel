@@ -95,7 +95,10 @@ Every control needs a visible label or accessible name. Icon-only buttons also n
 tooltip. Preserve meaningful accessible names used by the UI verification journeys.
 Unavailable choices in Agent execution settings stay visible and disabled, with their reason.
 Long menus must stay within the viewport and scroll their choices without hiding search
-or actions.
+or actions. Composer Flow and Project menus open downward from the field. Their height
+is capped by the space below the field, and a scrolling list shows a visible scrollbar
+and a bottom fade. Search is pinned and appears only when the menu lists more than
+seven choices.
 
 Use the shared key chip for shortcut hints. Each chord fits in one bordered chip in
 Inter Medium at 11 px so glyphs such as ⇧ and ⌫ stay legible. On macOS, use
@@ -127,6 +130,13 @@ the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
 Compare latest revision, Review and enable, and Import use the wide width
 `clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
 32 px.
+
+A primary action with a blank required name stays neutral and disabled, with no reason and without
+marking the field invalid. Any other cause that keeps it from running shows that one reason beside
+the action. The control stays neutral while disabled and uses the filled primary only when it can
+run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow it. Flow editor
+**Save Flow** keeps the filled primary while disabled until that editor is revised; the same rule
+still describes when it may run.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio uses `clamp(1200px, 50vw, 1680px)` by

@@ -400,7 +400,7 @@ export async function beforeUnusedAgent(fixtures: StudioFixtures, prefix: string
   })();
   const { screen, renamed, revision5 } = state;
   await screen.getByRole("link", "Agents", { exact: true }).tap();
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toContainText("1 Flow");
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toContainText("1 Flow");
   const empty = {
     ...revision5.graph,
     flowInput: { ...revision5.graph.flowInput, targetBlockIds: [] },
@@ -412,7 +412,7 @@ export async function beforeUnusedAgent(fixtures: StudioFixtures, prefix: string
 
 export async function expectUnusedAgent(state: Awaited<ReturnType<typeof beforeUnusedAgent>>) {
   const { screen, renamed } = state;
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toContainText("Unused");
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toContainText("Unused");
   return { ...state };
 }
 
@@ -427,7 +427,7 @@ export async function expectRemovedDependency(
   state: Awaited<ReturnType<typeof beforeRemovedDependency>>,
 ) {
   const { screen, renamed } = state;
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toHaveCount(0);
   return { ...state };
 }
 
@@ -542,7 +542,7 @@ export async function beforeCleanAgent(fixtures: StudioFixtures, prefix: string)
   await screen.getByRole("link", "Agents", { exact: true }).tap();
   await flowGuard.getByRole("button", "Discard", { exact: true }).tap();
   await screen
-    .getByRole("link", `Acceptance · ${prefix} · Gesture delivered`, { exact: true })
+    .getByRole("link", `Acceptance · ${prefix} · Gesture delivered`, { exact: false })
     .tap();
   const currentAgent = await readAgentDefinition(app.baseUrl, marker.id);
   return { ...state, currentAgent };
@@ -688,7 +688,7 @@ export async function expectRemovedAgent(state: Awaited<ReturnType<typeof before
     screen,
     "Agent",
     ["Save"],
-    ["Duplicate", "Change owner…", "Export JSON", "Delete"],
+    ["Duplicate", "Change owner…", "Export JSON", "Remove"],
   );
   return { ...state };
 }
