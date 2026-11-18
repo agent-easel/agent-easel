@@ -55,6 +55,8 @@ export function createCanvasGeometry(
   return {
     ports,
     flowInputBox,
+    /** The Flow input and every block, in graph coordinates. */
+    boxes: () => [flowInputBox, ...graph.blocks.map(blockBox)],
     blockHeight,
     bounds,
     incomingPorts,

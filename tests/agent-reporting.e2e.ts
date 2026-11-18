@@ -45,11 +45,11 @@ test("reporting problems are visible before Start and clear after repairing the 
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
     "Reporting needs attention",
   );
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).toContainText(
     "Reporting needs attention",
   );
   // The attention line replaces the summary but keeps a global Agent's override count.
-  const overriddenRow = screen.getByRole("link", overridden.name, { exact: true });
+  const overriddenRow = screen.getByRole("link", overridden.name, { exact: false });
   await expect(overriddenRow).toContainText("Reporting needs attention");
   await expect(overriddenRow).toContainText("+1 Project override");
   await expect(screen.getByRole("status", "Agent reporting status")).toContainText(
@@ -79,10 +79,10 @@ test("reporting problems are visible before Start and clear after repairing the 
 
   // Assert: Settings returns to the same editable draft, with healthy reporting.
   await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(draftName);
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).toContainText(
     "GPT 6.1 Sol",
   );
-  await expect(screen.getByRole("link", "Runtime worker", { exact: true })).not.toContainText(
+  await expect(screen.getByRole("link", "Runtime worker", { exact: false })).not.toContainText(
     "Reporting",
   );
   await expect(screen.getByRole("status", "Agent reporting status")).not.toBeVisible();

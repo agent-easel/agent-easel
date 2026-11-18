@@ -1,7 +1,7 @@
 import type { RunDetail } from "@t3-factory/contracts";
-import { CircleHelp, ExternalLink, MessageCircle, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CircleHelp, MessageCircle, TriangleAlert } from "lucide-react";
 import { Notice } from "./notice.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
 
 /** Public launch problems can contain protocol details; explain the actionable limit instead. */
 function launchProblem(problem: string) {
@@ -92,25 +92,5 @@ function preferredLink(run: RunDetail) {
 
 export function RunConversationAction({ run }: { run: RunDetail }) {
   const link = preferredLink(run);
-  if (!link) return null;
-  if (run.runCoordinator)
-    return (
-      <Button asChild>
-        <a href={link} target="_blank" rel="noreferrer">
-          Open Run conversation
-          <ExternalLink aria-hidden className="size-3" strokeWidth={1.75} />
-        </a>
-      </Button>
-    );
-  return (
-    <a
-      className="inline-flex items-center gap-1 rounded-sm text-sm font-medium whitespace-nowrap text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      href={link}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Open in T3
-      <ExternalLink aria-hidden className="size-3" strokeWidth={1.75} />
-    </a>
-  );
+  return link ? <OpenInT3 href={link} className="text-sm" /> : null;
 }

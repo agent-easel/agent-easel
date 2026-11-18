@@ -6,6 +6,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FiberHandle from "effect/FiberHandle";
 import * as FiberSet from "effect/FiberSet";
+import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/sql/SqlClient";
 import type {
   DiscordCommandSetup,
@@ -16,10 +17,13 @@ import type {
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
 import { sqliteChatState } from "./chat-state.ts";
+import { accessIds, recordNames } from "./access.ts";
+import { sendAccessTest } from "./access-test.ts";
 import { clearConversations, conversationGenerations } from "./conversations.ts";
 import type { ChatCredentials } from "./credentials.ts";
 import {
   closeResult,
+  lookupNames,
   type DiscordConnection,
   type DiscordGateway,
   type GatewayResult,
@@ -258,15 +262,15 @@ const RECONNECTING: Omit<DiscordConnectionProblem, "occurredAt"> = {
  * switching back later revives none. Owed messages stay owed; the deliveries of the serving
  * application retire the old application's edits and replace its cards.
  */
-const adoptApplication = (sql: SqlClient.SqlClient, applicationId: string) =>
+const adoptApplication = (sql: SqlClient.SqlClient, applicationId: string, botName: string) =>
   sql.withTransaction(
     Effect.gen(function* () {
       const [state] = yield* sql<{
         application_id: string | null;
       }>`SELECT application_id FROM chat_control_state WHERE singleton=1`;
       const recorded = state!.application_id;
+      yield* sql`UPDATE chat_control_state SET application_id=${applicationId},bot_name=${botName} WHERE singleton=1`;
       if (recorded === applicationId) return;
-      yield* sql`UPDATE chat_control_state SET application_id=${applicationId} WHERE singleton=1`;
       if (recorded === null) return;
       yield* clearConversations(sql, "all");
       yield* retireApplicationProposals(sql, recorded);
@@ -294,6 +298,9 @@ export const makeDiscordOperation = (
     const sql = yield* SqlClient.SqlClient;
     /** The serving session's interpretation, while one serves. */
     let interpreter: InterpretationEngine | undefined;
+    /** The serving session's Discord client, while one serves. */
+    let serving: { client: Client<true>; released: () => boolean } | undefined;
+    const testing = Semaphore.makeUnsafe(1);
     const supervisor = yield* FiberHandle.make<void>();
     const generations = conversationGenerations(sql);
     let current: Omit<OperationStatus, "connectionStatus"> & {
@@ -445,6 +452,13 @@ export const makeDiscordOperation = (
           if (removed_member_ids.length > 0 || added_members.length > 0) changed(guild_id);
         });
         adapter.listen(client, released);
+        const session = { client, released };
+        serving = session;
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            if (serving === session) serving = undefined;
+          }),
+        );
         const commandSetup = yield* registerCommands(client, applicationId);
         current = { connectionStatus: "connected", connectionProblem: null, commandSetup };
         interpreter = engine;
@@ -481,7 +495,20 @@ export const makeDiscordOperation = (
           state: sqliteChatState(sql, Effect.runPromise),
           adapter: (config) => new FactoryDiscordAdapter(config),
         },
-        (session) => Effect.andThen(adoptApplication(sql, session.applicationId), serve(session)),
+        (session) =>
+          adoptApplication(sql, session.applicationId, session.botName).pipe(
+            // Names are display only, so the lookup runs beside serving and never delays it.
+            Effect.andThen(
+              Effect.forkScoped(
+                accessIds(sql).pipe(
+                  Effect.flatMap((ids) => lookupNames(session.client, ids)),
+                  Effect.flatMap((names) => recordNames(sql, names)),
+                  Effect.ignore,
+                ),
+              ),
+            ),
+            Effect.andThen(serve(session)),
+          ),
       );
 
     const supervise = Effect.gen(function* () {
@@ -534,6 +561,20 @@ export const makeDiscordOperation = (
       start,
       /** A committed Language model save discards the serving session's unfinished interpretation. */
       modelSaved: Effect.suspend(() => interpreter?.discardAll ?? Effect.void),
+      /** Sends the access test from the serving session; one test at a time. */
+      sendAccessTest: testing.withPermits(1)(
+        Effect.suspend(() => {
+          const session = serving;
+          return session && !session.released()
+            ? sendAccessTest(sql, session.client)
+            : Effect.succeed(
+                failure(
+                  "conflict",
+                  "Chat control isn’t connected to Discord. Send the access test once it is connected.",
+                ),
+              );
+        }),
+      ),
       /** Stops the supervisor and waits until its Gateway session is released. */
       stop: FiberHandle.clear(supervisor),
       /** The operating connection now, for a persisted On state. */

@@ -1,7 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import { ChevronRight, ExternalLink, type LucideIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { SettingsLink, StudioLink } from "./app-link.tsx";
 import { cn } from "@/lib/utils";
 
@@ -94,19 +93,5 @@ export function NoticeStudioLink({ children, ...props }: ComponentProps<typeof S
       {children}
       <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
     </StudioLink>
-  );
-}
-
-/** A failed read with its explanation and a Retry that reads again. */
-export function ReadFailure({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <Alert variant="destructive">
-      <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
-        {message}
-        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
-          Retry
-        </Button>
-      </AlertDescription>
-    </Alert>
   );
 }

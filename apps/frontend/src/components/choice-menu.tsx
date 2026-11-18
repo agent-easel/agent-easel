@@ -7,6 +7,7 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { StatusBadge } from "./status-badge.tsx";
 import { selectFieldClass } from "@/components/page";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,7 @@ export function ChoiceMenu({
   placeholder,
   hint,
   className,
+  describedBy,
 }: {
   id: string;
   /** The field label; the trigger's accessible name adds the current value. */
@@ -47,6 +49,7 @@ export function ChoiceMenu({
   hint?: string;
   /** Trigger size where the form is denser than the composer, such as a Settings row. */
   className?: string;
+  describedBy?: string | undefined;
 }) {
   const selected = choices.find((choice) => choice.id === value);
   const shown = selected?.label ?? placeholder;
@@ -58,14 +61,19 @@ export function ChoiceMenu({
           id={id}
           variant="outline"
           aria-label={`${label}: ${selected ? `${shown}${selected.badge ? `, ${selected.badge}` : ""}` : shown}`}
-          className={cn(selectFieldClass, "disabled:opacity-50", className)}
+          aria-invalid={describedBy ? true : undefined}
+          aria-describedby={describedBy}
+          className={cn(
+            selectFieldClass,
+            "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
+            className,
+            describedBy && "aria-invalid:border-attention",
+          )}
         >
           <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>
             {shown}
           </span>
-          {selected?.badge && (
-            <span className="shrink-0 text-2xs font-medium text-attention">{selected.badge}</span>
-          )}
+          {selected?.badge && <StatusBadge kind="attention">{selected.badge}</StatusBadge>}
           <span className="flex-1" />
           {hint && (
             <span
@@ -98,11 +106,7 @@ export function ChoiceMenu({
               <span className="grid min-w-0 flex-1 gap-0.5">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{choice.label}</span>
-                  {choice.badge && (
-                    <span className="shrink-0 text-2xs font-medium text-attention">
-                      {choice.badge}
-                    </span>
-                  )}
+                  {choice.badge && <StatusBadge kind="attention">{choice.badge}</StatusBadge>}
                 </span>
                 {choice.description && (
                   <span className="text-2xs text-muted-foreground">{choice.description}</span>

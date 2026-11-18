@@ -91,10 +91,10 @@ environment identity and the default theme id, and, when that id names a publish
 It keeps only the environment id, the default theme id and that definition. Factory reads on startup, whenever the
 saved endpoint or its authorization context changes, and on every connection-check interval; a change made in T3
 appears by the next interval, since the tool pushes no updates. A T3 that lists no `t3_theme_read` (builds before
-November 2026) shows **Not supported** and Factory's colors. Factory once paired a separate `orchestration:read`
+November 2026) uses Factory’s colors and shows **Update T3 to follow its theme**. Factory once paired a separate `orchestration:read`
 session for theme colors; a backend deletes any token of that session it still stores, and T3 keeps the session
-until it expires or the owner revokes it (`t3 auth session revoke`). Host and approved clients see, under
-**Settings → Appearance**, what their mode shows and why; there are no theme-color actions.
+until it expires or the owner revokes it (`t3 auth session revoke`). Hosts and approved clients see
+the same read-only theme and color sources in [Appearance](desktop-and-clients.md#appearance).
 
 **Resolution.** Built-in T3 themes (`t3-chat`, `grove`, `ocean`, `ember`, `iris` and their legacy aliases) and
 published theme definitions resolve through one bounded resolver ported from T3 Code (MIT, © 2026 T3 Tools Inc.)
@@ -122,16 +122,16 @@ Support limits of published definitions:
 - **Color syntax.** `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` with channels in 0–255, and `oklch()`
   with numbers or percentages. T3 itself accepts more CSS color syntax (named colors, `hsl()`, `lab()` and others);
   Factory ignores such a color as T3 ignores an unparseable one, so the role keeps its seed-generated or T3 Chat
-  value, and Settings counts the ignored colors of mapped roles. No color text, declaration or URL from a definition
-  reaches a client: clients receive only values Factory formatted itself.
+  value. Clients receive color values formatted by Factory.
 - **Translucent colors.** A mapped role resolving to a color with alpha rejects that mode to Factory's colors.
 - **Parity.** Verified against upstream output for seeds in both appearances, overrides, partial and complete
   colors and variants, to the six decimals T3 writes; other inputs are not claimed.
 
 **Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
 `t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
-and a mismatched environment all show Factory's colors for the selected mode with
-the reason in Settings. During a transient outage the last presentation of the same endpoint and environment stays.
+and a mismatched environment all use Factory’s colors for the selected mode. Appearance explains
+an unreadable theme or a connection problem and identifies each mode’s color source when the theme is applied.
+During a transient outage the last presentation of the same endpoint and environment stays.
 A changed endpoint or connection environment discards it at once. Theme colors
 never change connection readiness, Start, execution or Run attention.
 

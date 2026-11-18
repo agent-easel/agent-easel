@@ -29,7 +29,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Save,
-  Trash2,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -93,6 +92,13 @@ import {
   type StudioOwner,
 } from "../studio-definitions.ts";
 import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
+import {
+  CantRemoveDialog,
+  RemoveMenuItem,
+  namedBlockers,
+  racedBlockers,
+  triggerBlockers,
+} from "../components/studio-removal.tsx";
 import { ChangeOwnerDialog, DuplicateFlowDialog } from "../components/studio-owner-dialogs.tsx";
 
 /** This editor's Flow draft, following the Flow through Studio's saved definitions. */
@@ -454,6 +460,7 @@ export function FlowDetail({
         fields={interactions.fields}
         invalidEntry={thresholds.invalid}
         onOwnerDialog={ownerDialogs.open}
+        definitions={definitions}
       />
       <ExportNotice notice={definitionExportNotice(exporter.state)} />
       <DraftProblems draft={draft} state={state} projects={projects} onSelect={selectIssue} />
@@ -593,11 +600,15 @@ function FlowMoreActions({
   state,
   exporter,
   onOwnerDialog,
+  definitions,
+  flowId,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
   exporter: ReturnType<typeof useDefinitionExport>;
   onOwnerDialog: (dialog: FlowOwnerDialog) => void;
+  definitions: StudioDefinitions;
+  flowId: string;
 }) {
   const { trigger, queue, onCloseAutoFocus } = useMenuActions();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -648,9 +659,7 @@ function FlowMoreActions({
             onSelect={() => queue(() => void exporter.model.request(state.dirty))}
           />
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            aria-label="Remove"
+          <RemoveMenuItem
             disabled={!writable || state.removing}
             description={reason}
             onSelect={() =>
@@ -660,10 +669,7 @@ function FlowMoreActions({
                 setConfirmingRemove(true);
               })
             }
-          >
-            <Trash2 aria-hidden />
-            Remove…
-          </DropdownMenuItem>
+          />
         </DropdownMenuContent>
       </DropdownMenu>
       <DefinitionExportDialog {...exporter} />
@@ -671,6 +677,8 @@ function FlowMoreActions({
         open={confirmingRemove}
         draft={draft}
         state={state}
+        definitions={definitions}
+        flowId={flowId}
         onClose={() => setConfirmingRemove(false)}
       />
     </>
@@ -743,6 +751,7 @@ function EditorToolbar({
   fields,
   invalidEntry,
   onOwnerDialog,
+  definitions,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
@@ -755,6 +764,7 @@ function EditorToolbar({
   /** A shown Condition arrival number is invalid, so neither the check nor a save would match it. */
   invalidEntry: boolean;
   onOwnerDialog: (dialog: FlowOwnerDialog) => void;
+  definitions: StudioDefinitions;
 }) {
   const invalidTitle = invalidEntry
     ? "Correct or clear the arrival number marked invalid first."
@@ -811,6 +821,8 @@ function EditorToolbar({
         state={state}
         exporter={exporter}
         onOwnerDialog={onOwnerDialog}
+        definitions={definitions}
+        flowId={flowId}
       />
     </div>
   );
@@ -936,25 +948,43 @@ function UpdatedNotice({ revision }: { revision: number | null }) {
   );
 }
 
-/** Remove… confirms; it closes on a removal elsewhere. */
+/** Remove… confirms, or lists the Triggers that still start this Flow. */
 function RemoveFlowDialog({
   open,
   draft,
   state,
+  definitions,
+  flowId,
   onClose,
 }: {
   open: boolean;
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
+  definitions: StudioDefinitions;
+  flowId: string;
   onClose: () => void;
 }) {
   const navigate = useStudioNavigation();
-  const { removing, removalError, dirty, content } = state;
+  const triggers = useStudioRead(definitions, "triggers").value ?? [];
+  const { projects } = useStudioOwners(definitions);
+  const { removing, removalError, removalIssues, dirty, content } = state;
+  const live = triggers.filter((trigger) => trigger.flowId === flowId);
+  const raced = namedBlockers(removalIssues, "flow_in_use").filter(
+    (blocker) => !live.some((trigger) => trigger.id === blocker.id),
+  );
   async function confirmRemove() {
     if (!(await draft.remove())) return;
     onClose();
     void navigate({ tab: "flows" });
   }
+  if (live.length > 0 || raced.length > 0)
+    return (
+      <CantRemoveDialog open={open} name={content.name} label="Triggers" onClose={onClose}>
+        {triggerBlockers(live, projects, (id) => void navigate({ tab: "triggers", triggerId: id }))}
+        {racedBlockers(raced, "Trigger", (id) => void navigate({ tab: "triggers", triggerId: id }))}
+      </CantRemoveDialog>
+    );
+  const inUse = removalIssues.some((issue) => issue.code === "flow_in_use");
   return (
     <Dialog
       open={open}
@@ -991,7 +1021,7 @@ function RemoveFlowDialog({
           if (event.key === "Escape" && !removing) event.stopPropagation();
         }}
       >
-        {removalError && (
+        {removalError && !inUse && (
           <p role="alert" className="text-sm text-destructive">
             {removalError}
           </p>

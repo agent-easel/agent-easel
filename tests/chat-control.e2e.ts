@@ -113,36 +113,34 @@ test("the host saves a keyed Language model, tests the saved connection and neve
 }) => {
   // Arrange
   await app.open("/settings/chat-control/model");
-  await expect(screen.getByText("Chat control is Off")).toBeVisible();
-  const connection = screen.getByRole("region", "Language model connection");
+  const connection = screen.getByRole("region", "Connection");
   await connection.getByRole("button", /^Provider: /).tap();
   await screen.getByRole("menuitemradio", /^OpenAI-compatible/).tap();
   await connection.getByLabel("Base URL").fill(provider.baseUrl);
   await connection.getByLabel("Model").fill("ui-model");
-  await connection.getByLabel("Key (optional)").fill("sk-ui-journey");
-  await connection.getByRole("button", "Save", { exact: true }).tap();
-  await expect(connection.getByText(/^Saved .* · revision \d+\.$/)).toBeVisible();
+  await connection.getByLabel("API key").fill("sk-ui-journey");
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(connection.getByText("Stored", { exact: true })).toBeVisible();
   await app.screenshot("chat-model-saved");
 
   // Act
-  await screen
-    .getByRole("region", "Language model test")
-    .getByRole("button", "Test saved connection")
-    .tap();
+  await screen.getByRole("button", "Test connection").tap();
 
   // Assert
-  await expect(screen.getByText(/^Latest Test succeeded · /)).toBeVisible();
+  await expect(screen.getByText("Test passed", { exact: true })).toBeVisible();
+  await expect(connection.getByText("Last tested")).toBeVisible();
   assert.deepStrictEqual(
     provider.requests.map((headers) => headers.authorization),
     ["Bearer sk-ui-journey"],
   );
-  await screen.getByText(/^A Test is dated evidence for one saved configuration/).scrollIntoView();
   await app.screenshot("chat-model-tested");
   await browser.reload();
-  await expect(screen.getByRole("radio", "Keep saved key")).toBeChecked();
   await expect(
-    screen.getByRole("region", "Language model connection").getByLabel("Base URL"),
-  ).toHaveValue(provider.baseUrl);
+    screen.getByRole("region", "Connection").getByRole("button", "Replace the API key"),
+  ).toBeVisible();
+  await expect(screen.getByRole("region", "Connection").getByLabel("Base URL")).toHaveValue(
+    provider.baseUrl,
+  );
   const settings = await chatModelSettings(app.baseUrl);
   expect(settings).toMatchObject({ ok: true, value: { configuration: { keyConfigured: true } } });
   assert(!JSON.stringify(settings).includes("sk-ui-journey"));
@@ -154,9 +152,9 @@ test("leaving the Language model page with unsaved edits asks before discarding 
 }) => {
   // Arrange
   await app.open("/settings/chat-control/model");
-  const connection = screen.getByRole("region", "Language model connection");
+  const connection = screen.getByRole("region", "Connection");
   await connection.getByLabel("Model").fill("unsaved-model");
-  await expect(connection.getByText("Unsaved changes.")).toBeVisible();
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toBeVisible();
 
   // Act
   await screen
@@ -181,7 +179,7 @@ async function discordSettings(baseUrl: string | undefined) {
   return (await response.json()) as Result<DiscordSettings>;
 }
 
-test("the host saves the Discord connection, checks it over the Gateway and never sees the token again", async ({
+test("the host saves the bot, checks it over the Gateway and never sees the token again", async ({
   app,
   screen,
   browser,
@@ -189,53 +187,54 @@ test("the host saves the Discord connection, checks it over the Gateway and neve
   // Arrange
   const { bot } = await controlledDiscord(app.baseUrl);
   await app.open("/settings/chat-control/discord");
-  await expect(screen.getByText("Chat control is Off")).toBeVisible();
-  const connection = screen.getByRole("region", "Discord connection");
-  await connection.getByLabel("Public Key").fill("ab".repeat(32));
-  await connection.getByLabel("Bot token").fill(bot.token);
-  await connection.getByRole("button", "Save", { exact: true }).tap();
-  await expect(connection.getByText(/^Saved .* · revision \d+\.$/)).toBeVisible();
+  await expect(screen.getByRole("switch", "Chat control")).toBeDisabled();
+  await expect(screen.getByRole("link", /^Setup guide/)).toBeVisible();
+  await app.screenshot("chat-discord-not-set-up");
+  const botCard = screen.getByRole("region", "Bot");
+  await botCard.getByLabel("Public key").fill("ab".repeat(32));
+  await botCard.getByLabel("Bot token").fill(bot.token);
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(botCard.getByText("Stored", { exact: true })).toBeVisible();
   await app.screenshot("chat-discord-saved");
 
   // Act
-  await screen
-    .getByRole("region", "Discord connection check")
-    .getByRole("button", "Check saved connection")
-    .tap();
+  await screen.getByRole("button", "Check connection").tap();
 
   // Assert
-  await expect(screen.getByText(/^Latest check verified · /)).toBeVisible();
-  await expect(
-    screen.getByText(`Discord accepted the token for application ${bot.applicationId}`, {
-      exact: false,
-    }),
-  ).toBeVisible();
+  await expect(botCard.getByText("Gateway verified")).toBeVisible();
+  await expect(botCard.getByText("Factory bot", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", /^Setup guide/)).toHaveCount(0);
   const discord = await controlledDiscord(app.baseUrl);
   assert.deepStrictEqual(discord.sessions, [{ token: bot.token, ready: true, closed: true }]);
-  await screen.getByText(/^A passing check shows that Discord accepted the token/).scrollIntoView();
   await app.screenshot("chat-discord-checked");
   await browser.reload();
-  await expect(screen.getByRole("radio", "Keep saved token")).toBeChecked();
+  await expect(
+    screen.getByRole("region", "Bot").getByRole("button", "Replace the bot token"),
+  ).toBeVisible();
   const settings = await discordSettings(app.baseUrl);
   expect(settings).toMatchObject({
     ok: true,
     value: {
       configuration: { tokenConfigured: true },
-      latestCheck: { outcome: "verified", applicationId: bot.applicationId },
+      latestCheck: {
+        outcome: "verified",
+        applicationId: bot.applicationId,
+        botName: "Factory bot",
+      },
     },
   });
   assert(!JSON.stringify(settings).includes(bot.token));
 });
 
-test("leaving the Discord page with unsaved connection edits asks before discarding them", async ({
+test("leaving the Discord page with unsaved bot edits asks before discarding them", async ({
   app,
   screen,
 }) => {
   // Arrange
   await app.open("/settings/chat-control/discord");
-  const connection = screen.getByRole("region", "Discord connection");
-  await connection.getByLabel("Public Key").fill("cd".repeat(32));
-  await expect(connection.getByText("Unsaved changes.")).toBeVisible();
+  const botCard = screen.getByRole("region", "Bot");
+  await botCard.getByLabel("Public key").fill("cd".repeat(32));
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toBeVisible();
 
   // Act
   await screen
@@ -244,14 +243,53 @@ test("leaving the Discord page with unsaved connection edits asks before discard
     .tap();
 
   // Assert
-  await expect(
-    screen.getByRole("dialog", "Discard unsaved Discord connection changes?"),
-  ).toBeVisible();
+  await expect(screen.getByRole("dialog", "Discard unsaved Bot changes?")).toBeVisible();
   // Hovering waits for the dialog's opening zoom to settle before the evidence frame.
   await screen.getByRole("button", "Keep editing").hover();
   await app.screenshot("chat-discord-discard-guard");
   await screen.getByRole("button", "Keep editing").tap();
-  await expect(connection.getByLabel("Public Key")).toHaveValue("cd".repeat(32));
+  await expect(botCard.getByLabel("Public key")).toHaveValue("cd".repeat(32));
+});
+
+test("the Discord page's language model link opens Language model, and Esc or ✕ returns with the bot edits kept", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const model = await chatModelSettings(app.baseUrl);
+  assert(model.ok);
+  // Without a saved model the switch's reason links it.
+  const cleared = await hostCall(app.baseUrl, "PUT", "/api/chat-control/model", {
+    revision: model.value.configuration.revision,
+    providerKind: null,
+    baseUrl: null,
+    model: null,
+    key: { kind: "remove" },
+  });
+  assert(cleared.ok, JSON.stringify(cleared));
+  await app.open("/settings/chat-control/discord");
+  const publicKey = screen.getByRole("region", "Bot").getByLabel("Public key");
+  await publicKey.fill("cd".repeat(32));
+  await app.screenshot("chat-discord-return-1-edited");
+  const languageModel = screen.getByRole("link", "a language model");
+
+  // Act
+  await languageModel.tap();
+  await expect(screen.getByRole("region", "Connection")).toBeVisible();
+  await app.screenshot("chat-discord-return-2-language-model");
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(publicKey).toHaveValue("cd".repeat(32));
+  await app.screenshot("chat-discord-return-3-back-after-esc");
+  await languageModel.tap();
+  await expect(screen.getByRole("region", "Connection")).toBeVisible();
+  await screen.getByRole("button", "Close", { exact: true }).tap();
+  await expect(publicKey).toHaveValue("cd".repeat(32));
+  await expect(screen.getByRole("dialog", /^Discard unsaved/)).toHaveCount(0);
+  await app.screenshot("chat-discord-return-4-back-after-close");
+  await screen.getByRole("button", "Discard", { exact: true }).tap();
 });
 
 /** The fixture's first Project, as the Access section lists it. */
@@ -293,71 +331,157 @@ async function completeChatControl(baseUrl: string | undefined) {
   assert(saved.ok, JSON.stringify(saved));
 }
 
-test("the host saves Access on its own while connection edits stay unsaved", async ({
+test("one Save writes the bot and then Access, and names the channel that got its first Project", async ({
   app,
   screen,
+  browser,
 }) => {
   // Arrange
   const project = await firstProject(app.baseUrl);
   const before = await discordSettings(app.baseUrl);
   assert(before.ok);
   await app.open("/settings/chat-control/discord");
-  await screen
-    .getByRole("region", "Discord connection")
-    .getByLabel("Public Key")
-    .fill("ef".repeat(32));
+  await screen.getByRole("region", "Bot").getByLabel("Public key").fill("ef".repeat(32));
   const access = screen.getByRole("region", "Access");
-  await expect(access.getByText("Nobody can use Chat control yet")).toBeVisible();
-  await access.getByLabel("Allowed user IDs").fill("200000000000000001");
+  await access.getByLabel("Users").fill("200000000000000001");
   await access.getByRole("button", "Add channel").tap();
-  const channel = access.getByRole("group", "Allowed channel 1");
-  await channel.getByLabel("Channel ID").fill("400000000000000002");
-  await channel.getByRole("checkbox", project.title).tap();
+  await access.getByLabel("Channel 1 ID").fill("400000000000000002");
+  await access.getByRole("button", /^Channel 1 Projects: /).tap();
+  await screen.getByRole("menuitemcheckbox", project.title).tap();
+  await browser.keyboard.press("Escape");
 
   // Act
-  await access.getByRole("button", "Save", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(
-    access.getByText(new RegExp(`^Saved .* · revision ${before.value.access.revision + 1}\\.$`)),
-  ).toBeVisible();
-  await expect(
-    screen.getByRole("region", "Discord connection").getByText("Unsaved changes."),
-  ).toBeVisible();
+  await expect(screen.getByText(/^Everyone who can read .* sees the bot’s replies$/)).toBeVisible();
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toHaveCount(0);
   const settings = await discordSettings(app.baseUrl);
   expect(settings).toMatchObject({
     ok: true,
     value: {
+      configuration: {
+        publicKey: "ef".repeat(32),
+        revision: before.value.configuration.revision + 1,
+      },
       access: {
+        revision: before.value.access.revision + 1,
         users: ["200000000000000001"],
         channels: [{ channelId: "400000000000000002", projectIds: [project.id] }],
       },
     },
   });
-  await access.getByText("Allowed user IDs").scrollIntoView();
   await app.screenshot("chat-discord-access-saved");
 });
 
-test("the host turns Chat control On and sees the Gateway connection and command setup separately", async ({
+test("the host turns Chat control On with the switch and sees the connection badge", async ({
   app,
   screen,
 }) => {
   // Arrange
   await completeChatControl(app.baseUrl);
   await app.open("/settings/chat-control/discord");
-  const state = screen.getByRole("region", "Chat control state");
-  await expect(state.getByText("Chat control is Off")).toBeVisible();
+  const toggle = screen.getByRole("switch", "Chat control");
+  await expect(toggle).toBeEnabled();
 
   // Act
-  await state.getByRole("button", "Turn On").tap();
+  await toggle.tap();
 
   // Assert
-  await expect(state.getByText("Chat control is On")).toBeVisible();
-  await expect(state.getByText("Connected", { exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(state.getByText("/factory reset registered")).toBeVisible();
+  await expect(toggle).toBeChecked();
+  await expect(screen.getByText("Connected", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await settingsWhen<DiscordSettings>(
+    app.baseUrl,
+    "/api/chat-control/discord",
+    (settings) => settings.commandSetup?.outcome === "registered",
+  );
   const { sessions } = await controlledDiscord(app.baseUrl);
   assert.strictEqual(sessions.filter((session) => !session.closed).length, 1);
   await app.screenshot("chat-discord-on");
+});
+
+const TEST_USERS = ["200000000000000001", "200000000000000002"];
+const TEST_CHANNEL = "400000000000000002";
+const REFUSING_CHANNEL = "400000000000000003";
+
+/**
+ * Operating Chat control whose Access allows two users in two channels, where the second channel's
+ * permissions refuse the bot's posts.
+ */
+async function accessTestReady(baseUrl: string | undefined) {
+  await discord(baseUrl).posting({ channelId: REFUSING_CHANNEL, denied: true });
+  await operatingChatControl(baseUrl, {
+    users: TEST_USERS,
+    channels: [TEST_CHANNEL, REFUSING_CHANNEL],
+  });
+}
+
+test("sending the access test asks each allowed user to reply and names the channel the bot can't post in", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await accessTestReady(app.baseUrl);
+  await app.open("/settings/chat-control/discord");
+  const accessCard = screen.getByRole("region", "Access");
+  await expect(accessCard.getByRole("button", "Send access test")).toBeEnabled();
+  await app.screenshot("chat-discord-access-test-1-not-sent");
+
+  // Act
+  await accessCard.getByRole("button", "Send access test").tap();
+
+  // Assert
+  await expect(accessCard.getByText("Waiting", { exact: true })).toHaveCount(2);
+  await expect(accessCard.getByText("Can’t post", { exact: true })).toBeVisible();
+  await expect(accessCard.getByRole("button", "Send again")).toBeEnabled();
+  await app.screenshot("chat-discord-access-test-2-sent");
+  const card = screen.getByText(/^Factory bot can’t post in /);
+  await expect(card).toBeVisible();
+  // The card sits below the fold; bring it fully into view for the screenshot.
+  await browser.evaluate(() => {
+    const alerts = Array.from(document.querySelectorAll('[role="status"]'));
+    alerts
+      .find((alert) => alert.textContent.includes("can’t post in"))
+      ?.scrollIntoView({ block: "end" });
+    return null;
+  });
+  await app.screenshot("chat-discord-access-test-3-cant-post");
+});
+
+test("a user who replied to the access test shows Reached, which stays while Chat control is Off", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await accessTestReady(app.baseUrl);
+  const sent = await hostCall(app.baseUrl, "POST", "/api/chat-control/discord/access-test", {});
+  assert(sent.ok, JSON.stringify(sent));
+  await discord(app.baseUrl).replyToAccessTest({ userId: TEST_USERS[0]!, channelId: TEST_CHANNEL });
+  await settingsWhen<DiscordSettings>(
+    app.baseUrl,
+    "/api/chat-control/discord",
+    (settings) => typeof settings.access.test?.users[TEST_USERS[0]!] === "string",
+  );
+  await app.open("/settings/chat-control/discord");
+  const accessCard = screen.getByRole("region", "Access");
+  await expect(accessCard.getByText(/^Reached · /)).toBeVisible();
+  await expect(accessCard.getByText("Waiting", { exact: true })).toHaveCount(1);
+  await app.screenshot("chat-discord-access-test-4-reached");
+  const toggle = screen.getByRole("switch", "Chat control");
+
+  // Act
+  await toggle.tap();
+
+  // Assert
+  await expect(toggle).not.toBeChecked();
+  await expect(accessCard.getByRole("button", "Send again")).toBeDisabled();
+  await expect(accessCard.getByText("Turn on Chat control to send", { exact: true })).toBeVisible();
+  await expect(accessCard.getByText(/^Reached · /)).toBeVisible();
+  await app.screenshot("chat-discord-access-test-5-off");
 });
 
 test("the host retries failed command setup while the Gateway is connected", async ({
@@ -376,20 +500,17 @@ test("the host retries failed command setup while the Gateway is connected", asy
       settings.connectionStatus === "connected" && settings.commandSetup?.outcome === "failed",
   );
   await app.open("/settings/chat-control/discord");
-  const state = screen.getByRole("region", "Chat control state");
-  await expect(state.getByText("Connected", { exact: true })).toBeVisible();
-  await expect(state.getByText(/Discord answered HTTP 403/)).toBeVisible();
-  const connection = screen.getByRole("region", "Discord connection check");
-  await connection.scrollIntoView();
+  const failure = screen.getByText("/factory reset isn’t registered");
+  await expect(failure).toBeVisible();
   await app.screenshot("chat-discord-command-failed");
   await discord(app.baseUrl).commands({ available: true });
 
   // Act
-  await connection.getByRole("button", "Retry connection").tap();
+  await screen.getByRole("button", "Retry connection").tap();
 
   // Assert
-  await expect(state.getByText("/factory reset registered")).toBeVisible();
-  await state.scrollIntoView();
+  await expect(failure).toHaveCount(0);
+  await expect(screen.getByRole("button", "Retry connection")).toHaveCount(0);
   await app.screenshot("chat-discord-command-retried");
 });
 
@@ -434,15 +555,18 @@ async function settingsWhen<Settings>(
 }
 
 /** Chat control On and serving, with the participant allowed in the fixture's channel. */
-async function operatingChatControl(baseUrl: string | undefined) {
+async function operatingChatControl(
+  baseUrl: string | undefined,
+  allowed = { users: ["200000000000000001"], channels: ["400000000000000002"] },
+) {
   const project = await firstProject(baseUrl);
   await completeChatControl(baseUrl);
   const discord = await discordSettings(baseUrl);
   assert(discord.ok);
   const access = await hostCall(baseUrl, "PUT", "/api/chat-control/discord/access", {
     revision: discord.value.access.revision,
-    users: ["200000000000000001"],
-    channels: [{ channelId: "400000000000000002", projectIds: [project.id] }],
+    users: allowed.users,
+    channels: allowed.channels.map((channelId) => ({ channelId, projectIds: [project.id] })),
   });
   assert(access.ok, JSON.stringify(access));
   const on = await hostCall(baseUrl, "PUT", "/api/chat-control/enabled", { enabled: true });
@@ -454,33 +578,23 @@ async function operatingChatControl(baseUrl: string | undefined) {
   );
 }
 
-test("replacing the bot token after Chat control operated warns that another application's token replaces the bot", async ({
+test("replacing the bot token after Chat control operated warns that another bot's token replaces it", async ({
   app,
   screen,
 }) => {
   // Arrange
   await operatingChatControl(app.baseUrl);
-  const { bot } = await controlledDiscord(app.baseUrl);
   await app.open("/settings/chat-control/discord");
-  const connection = screen.getByRole("region", "Discord connection");
-  await expect(
-    connection.getByText(`Factory currently operates as application ${bot.applicationId}.`, {
-      exact: false,
-    }),
-  ).toBeVisible();
+  const botCard = screen.getByRole("region", "Bot");
+  await expect(botCard.getByText("Factory bot", { exact: true })).toBeVisible();
 
   // Act
-  await connection.getByRole("radio", "Replace token").tap();
+  await botCard.getByRole("button", "Replace the bot token").tap();
+  await botCard.getByLabel("Bot token").fill("another-bot-token");
 
   // Assert
-  await expect(
-    connection.getByText("A token of another application replaces the bot"),
-  ).toBeVisible();
-  await expect(connection.getByLabel("Replacement token")).toBeVisible();
-  // The notice's last sentence brings the whole notice into the evidence frame.
-  await connection
-    .getByText("A new token of the same application keeps everything", { exact: false })
-    .scrollIntoView();
+  await expect(screen.getByText("A token from another bot replaces Factory bot")).toBeVisible();
+  await expect(botCard.getByRole("button", "Cancel")).toBeVisible();
   await app.screenshot("chat-discord-token-replacement");
 });
 
@@ -502,17 +616,15 @@ test("an actual conversation failure shows on the Language model page and marks 
   await app.open("/settings/chat-control/model");
 
   // Assert
-  const conversations = screen.getByRole("region", "Language model conversations");
-  await expect(
-    conversations.getByText(/^A conversation failed · .* · revision \d+$/),
-  ).toBeVisible();
-  await expect(conversations.getByText(/The provider answered HTTP 500\./)).toBeVisible();
+  await expect(screen.getByText("Not answering", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Chat replies are failing")).toBeVisible();
+  await screen.getByRole("button", /^Technical details/).tap();
+  await expect(screen.getByText(/The provider answered HTTP 500\./)).toBeVisible();
   await expect(
     screen
       .getByRole("navigation", "Settings sections")
-      .getByRole("link", "Language model, needs attention", { exact: true }),
+      .getByRole("link", "Language model, failing", { exact: true }),
   ).toBeVisible();
-  await conversations.scrollIntoView();
   await app.screenshot("chat-model-runtime-problem");
 });
 
@@ -603,21 +715,19 @@ async function unknownCard(baseUrl: string | undefined) {
 }
 
 /**
- * Opens Settings → Discord at the delivery problem `label` showing `message`, with the navigation
- * item marked, and returns the problem's list item.
+ * Opens Settings → Discord at the Delivery row whose Retry is named `retry`, with the navigation
+ * item marked, and returns that Retry button.
  */
-async function deliveryProblem(app: App, screen: Screen, label: string, message: string) {
+async function deliveryProblem(app: App, screen: Screen, retry: string, state: string) {
   await app.open("/settings/chat-control/discord");
-  const delivery = screen.getByRole("region", "Delivery and actions");
-  const problem = delivery.getByRole("listitem", label);
-  await expect(problem.getByText(message)).toBeVisible();
+  const delivery = screen.getByRole("region", "Delivery");
+  await expect(delivery.getByText(state, { exact: true })).toBeVisible();
   await expect(
     screen
       .getByRole("navigation", "Settings sections")
-      .getByRole("link", "Discord, needs attention", { exact: true }),
+      .getByRole("link", "Discord, failing", { exact: true }),
   ).toBeVisible();
-  await delivery.scrollIntoView();
-  return problem;
+  return delivery.getByRole("button", retry);
 }
 
 test("the host retries a status card Discord may already show only after a duplicate warning, and the Start is not repeated", async ({
@@ -628,16 +738,13 @@ test("the host retries a status card Discord may already show only after a dupli
   // Arrange
   const { before, runId } = await unknownCard(app.baseUrl);
   startedRuns.push(runId);
-  const card = await deliveryProblem(
-    app,
-    screen,
-    "Status card, Unknown",
-    "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
-  );
+  const retry = await deliveryProblem(app, screen, "Retry the status card", "Unknown");
   await app.screenshot("chat-discord-delivery-unknown");
-  await card.getByRole("button", "Retry").tap();
-  const warning = screen.getByRole("alertdialog", "Retry a message Discord may already show?");
-  await expect(warning.getByText(/retrying could post it twice/)).toBeVisible();
+  await retry.tap();
+  const warning = screen.getByRole("alertdialog", "Retry this message?");
+  await expect(
+    warning.getByText("Discord may already show it, so it could appear twice."),
+  ).toBeVisible();
   // The dialog fades in; the Run sidebar's progress indicators never settle.
   await browser.evaluate(
     "Promise.all([...document.querySelectorAll('[role=alertdialog]')].flatMap((element) => element.getAnimations()).map((animation) => animation.finished))",
@@ -645,10 +752,10 @@ test("the host retries a status card Discord may already show only after a dupli
   await app.screenshot("chat-discord-delivery-retry-warning");
 
   // Act
-  await warning.getByRole("button", "Retry anyway").tap();
+  await warning.getByRole("button", "Retry", { exact: true }).tap();
 
   // Assert
-  await expect(screen.getByRole("region", "Delivery and actions")).toHaveCount(0);
+  await expect(screen.getByRole("region", "Delivery")).toHaveCount(0);
   await messagesWhen(app.baseUrl, (created) => cards(created).length >= before + 2);
   const navigation = (await (
     await fetch(new URL("/api/run-navigation", app.baseUrl))
@@ -662,9 +769,6 @@ test("the host retries a status card Discord may already show only after a dupli
   );
   await app.screenshot("chat-discord-delivery-retried");
 });
-
-const LOCKED_CORRECTION =
-  "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.";
 
 test("the host retries the status card Discord refused in a locked thread once a moderator unlocked it", async ({
   app,
@@ -686,15 +790,15 @@ test("the host retries the status card Discord refused in a locked thread once a
       (problem) => problem.purpose === "status-card" && problem.state === "failed",
     ),
   );
-  const card = await deliveryProblem(app, screen, "Status card, Failed", LOCKED_CORRECTION);
+  const retry = await deliveryProblem(app, screen, "Retry the status card", "Failed");
   await app.screenshot("chat-discord-status-card-failed");
   await discord(app.baseUrl).thread({ thread, state: "unlocked" });
 
   // Act
-  await card.getByRole("button", "Retry").tap();
+  await retry.tap();
 
   // Assert
-  await expect(card).toHaveCount(0);
+  await expect(retry).toHaveCount(0);
   const messages = await messagesWhen(app.baseUrl, (created) =>
     created.some(
       (message) =>

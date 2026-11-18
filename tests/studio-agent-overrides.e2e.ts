@@ -105,12 +105,14 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
 
   // Act
   await stranded.getByRole("button", "Remove Project overrides from draft", { exact: true }).tap();
-  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
+  // The owner move is already saved. Dropping the unsaved override leaves nothing to save.
   await expect(stranded).toHaveCount(0);
-  await expectSavedAgentRevision(screen, 2);
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+  await expectSavedAgentRevision(screen, agent.revision);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
+  assert.equal(saved.revision, agent.revision);
   assert.equal(saved.projectId, northwind);
   assert.deepEqual(saved.projectOverrides, []);
 });

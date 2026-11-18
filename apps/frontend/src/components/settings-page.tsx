@@ -12,12 +12,14 @@ import { CopyButton } from "./copy-button.tsx";
  */
 export function SettingsPage({
   title,
+  leading,
   badge,
   hostManaged = false,
   action,
   children,
 }: {
   title: string;
+  leading?: ReactNode;
   /** A status badge shown after the title. */
   badge?: ReactNode;
   /** Shows the "Managed on the Factory host" chip on clients that cannot change the page. */
@@ -30,7 +32,10 @@ export function SettingsPage({
     <div className="grid gap-5">
       <header>
         <div className="flex min-h-8 flex-wrap items-center gap-2.5">
-          <h2 className="text-lg leading-tight font-semibold text-foreground">{title}</h2>
+          {leading}
+          <h2 className="min-w-0 truncate text-lg leading-tight font-semibold text-foreground">
+            {title}
+          </h2>
           {badge}
           {hostManaged && (
             <StatusBadge kind="neutral" icon={Lock}>
@@ -152,7 +157,7 @@ export function SettingsDetailRow({
 }
 
 /** Closed-by-default detail such as "How it works" or "Diagnostics", with a one-line hint. */
-export function SettingsDisclosure({
+function SettingsDisclosure({
   label,
   hint,
   children,
@@ -193,6 +198,7 @@ export function SettingsTechnicalDetails({ details }: { details: string }) {
 
 /** One explanation and next step for a Settings problem. */
 export function SettingsProblemCard({
+  id,
   tone,
   title,
   children,
@@ -200,17 +206,24 @@ export function SettingsProblemCard({
   action,
   icon,
 }: {
-  tone: "error" | "warning" | "info";
+  /** Lets a field tag point at this card with `aria-describedby`. */
+  id?: string;
+  tone: "error" | "warning" | "info" | "neutral";
   title: ReactNode;
   children?: ReactNode;
   details?: string | undefined;
   action?: ReactNode;
   icon?: LucideIcon;
 }) {
-  const Icon = icon ?? (tone === "info" ? Info : TriangleAlert);
-  const variant = tone === "error" ? "critical" : tone === "warning" ? "attention" : "info";
+  const variant = {
+    error: "critical",
+    warning: "attention",
+    info: "info",
+    neutral: "neutral",
+  } as const;
+  const Icon = icon ?? (tone === "error" || tone === "warning" ? TriangleAlert : Info);
   return (
-    <Alert variant={variant} role={tone === "info" ? "status" : "alert"}>
+    <Alert id={id} variant={variant[tone]} role={tone === "error" ? "alert" : "status"}>
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || details || action) && (

@@ -22,6 +22,35 @@ const workingTitle = "Demo · Working · Improve the project picker";
 // such a Run, so Settle journeys use the scenario copy started under the current authorization.
 const settleTitle = "UI worker · Snoozed · Navigation research";
 
+test("wheeling over the sidebar footer keeps the Run page pinned to the viewport", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 600 });
+  const title = "Demo · Parallel review from one prompt";
+  const run = await findRun(app.baseUrl, title);
+  await app.open(`/runs/${run.id}`);
+  await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
+  const footer = screen.getByRole("navigation", "Sidebar footer");
+  await footer.hover();
+
+  // Act
+  await browser.mouse.wheel(0, 220);
+
+  // Assert
+  expect(
+    await browser.evaluate(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+      return { scrollTop, overflow: scrollHeight - clientHeight };
+    }),
+  ).toEqual({ scrollTop: 0, overflow: 0 });
+  const bounds = await footer.boundingBox();
+  expect(bounds!.y + bounds!.height).toBe(600);
+});
+
 test("the Run preview opens to the right of its row", async ({ app, screen, browser }) => {
   // Arrange
   const { row, preview } = await prepareSidebarPreview({ app, screen, browser }, workingTitle);
@@ -390,22 +419,37 @@ test("cancelling Rename returns focus with Run state and attention available wit
   await expect(preview).toBeHidden();
 });
 
-/** Opens Run `id` by link and returns its header Run status, of which there is exactly one. */
-async function openRunStatus(app: App, screen: Screen, id: string) {
+/** Opens Run history by link and returns the lifecycle in its meta line. */
+async function openRunLifecycle(app: App, screen: Screen, id: string) {
   await app.open(`/runs/${id}`);
-  const status = screen.getByRole("status", "Run status");
+  const status = screen.getByLabel("Run lifecycle", { exact: true });
   await expect(status).toHaveCount(1);
   return status;
 }
 
-/** Opens the open Run titled `title` with its sidebar row, to compare their presentations. */
-async function openSidebarRun(app: App, screen: Screen, title: string) {
+test("an active Run's header states no work state while its row and Blocks show Needs input", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  // Other journeys answer or settle the Human review Run; this native question stays pending.
+  const title = "Demo · Woke · A question about keyboard shortcuts";
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
-  const status = await openRunStatus(app, screen, (await findRun(app.baseUrl, title)).id);
-  return { status, row };
-}
 
-test("a working Run's header shows one Working status naming its active block and no Not live", async ({
+  // Act
+  await app.open(`/runs/${(await findRun(app.baseUrl, title)).id}`);
+
+  // Assert
+  await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toHaveText(/^Started /);
+  await expect(row).toContainText("Needs input");
+  await expect(
+    screen.getByRole("region", "Execution canvas").getByText("Needs input", { exact: true }),
+  ).toBeVisible();
+  await app.screenshot("run-header-needs-input");
+});
+
+test("a working Run's header shows no Not live while its worker is freshly observed", async ({
   app,
   screen,
 }) => {
@@ -417,48 +461,15 @@ test("a working Run's header shows one Working status naming its active block an
   expect(run.blocks.find((block) => block.blockId === "worker")?.freshness).toBe("fresh");
 
   // Act
-  const status = await openRunStatus(app, screen, id);
+  await app.open(`/runs/${id}`);
 
   // Assert
-  await expect(status).toHaveText(/^Working · \S/);
+  await expect(screen.getByRole("region", "Execution canvas")).toBeVisible();
   await expect(screen.getByRole("status", "Observation freshness")).toHaveCount(0);
   await app.screenshot("run-header-working");
 });
 
-test("a Run waiting for an answer shows the sidebar's Needs input chip as its one header status", async ({
-  app,
-  screen,
-}) => {
-  // Arrange
-  // Other journeys answer or settle the Human review Run; this native question stays pending.
-  const title = "Demo · Woke · A question about keyboard shortcuts";
-
-  // Act
-  const { status, row } = await openSidebarRun(app, screen, title);
-
-  // Assert
-  await expect(status).toHaveText(/^Needs input · /);
-  await expect(row).toContainText("Needs input");
-  await app.screenshot("run-header-needs-input");
-});
-
-test("a Run with a Problem shows the sidebar's Problem chip as its one header status", async ({
-  app,
-  screen,
-}) => {
-  // Arrange
-  const title = "Demo · Problem · Search checks failed";
-
-  // Act
-  const { status, row } = await openSidebarRun(app, screen, title);
-
-  // Assert
-  await expect(status).toHaveText(/^Problem · /);
-  await expect(row).toContainText("Problem");
-  await app.screenshot("run-header-problem");
-});
-
-test("a Settled Run's header shows Settled instead of its finished block's state", async ({
+test("a Settled Run shows its lifecycle time and selects its grouped sidebar row", async ({
   app,
   screen,
 }) => {
@@ -467,15 +478,18 @@ test("a Settled Run's header shows Settled instead of its finished block's state
   const canvas = screen.getByRole("region", "Execution canvas");
 
   // Act
-  const status = await openRunStatus(app, screen, (await findRun(app.baseUrl, title)).id);
+  const status = await openRunLifecycle(app, screen, (await findRun(app.baseUrl, title)).id);
 
   // Assert
-  await expect(status).toHaveText(/^Settled/);
+  await expect(status).toHaveText(/^Settled .+\d{2}:\d{2}/);
+  await expect(
+    screen.getByRole("navigation", "Settled Runs").getByRole("link", new RegExp(title)),
+  ).toHaveAttribute("aria-current", "page");
   await expect(canvas.getByText("Finished", { exact: true })).toBeVisible();
   await app.screenshot("run-header-settled");
 });
 
-test("an Archived Run opened by link shows Archived as its one header status", async ({
+test("an Archived Run opened by link shows its lifecycle time and has no actions", async ({
   app,
   screen,
 }) => {
@@ -484,10 +498,11 @@ test("an Archived Run opened by link shows Archived as its one header status", a
   const found = await findArchivedRun(app.baseUrl, title);
 
   // Act
-  const status = await openRunStatus(app, screen, found.id);
+  const status = await openRunLifecycle(app, screen, found.id);
 
   // Assert
-  await expect(status).toHaveText(/^Archived/);
+  await expect(status).toHaveText(/^Archived .+\d{2}:\d{2}/);
+  await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
   await app.screenshot("run-header-archived");
 });
 
@@ -587,7 +602,7 @@ test("a route while Studio has unsaved edits asks first, and Keep editing keeps 
   // Arrange
   await openDesktopWindow({ app, screen, browser });
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   await screen.getByLabel("Flow name").fill("Launch ready Flow routed");
   const run = await findRun(app.baseUrl, nativeQuestionTitle);
   await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });

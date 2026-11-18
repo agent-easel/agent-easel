@@ -89,7 +89,7 @@ test("explicit palette search opens archived history without listing it in sugge
 
   // Assert
   await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Archived");
   await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
 });
 
@@ -133,7 +133,7 @@ test("Mod+, from dirty Studio opens Settings over it and Esc returns with the dr
   await app.open("/runs/new");
   await expectFactoryConnected(screen);
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   await screen.getByLabel("Flow name").fill("Launch ready Flow dirty");
 
   // Act
@@ -231,7 +231,7 @@ test("Settings Reset restores the desktop default for New Run", async ({
 }) => {
   // Arrange
   const newRunGroup = await recordDesktopNewRunCandidate(app, screen, browser);
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await expect(newRunGroup).toContainText(process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N");
 
   // Act
@@ -285,7 +285,7 @@ test("Settle from an editable field on open Run detail while Mod+ shortcuts stay
   await expect
     .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
     .toBe("settled");
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
 test("Settle is ignored while Settings is open", async ({ app, screen, browser }) => {
@@ -324,7 +324,7 @@ test("Mod+Backspace opens the existing Archive confirmation for the open Run", a
 
   // Assert
   const confirmation = screen.getByRole("dialog", `Archive “${title}”?`);
-  await expect(confirmation).toContainText("cannot be restored");
+  await expect(confirmation).toContainText("command palette");
   await confirmation.getByRole("button", "Cancel", { exact: true }).tap();
   await expect(confirmation).toBeHidden();
   expect((await readHistoryRun(app.baseUrl, found.id)).lifecycle).toBe("active");
@@ -340,7 +340,7 @@ test("Mod+Backspace in Studio over an open Run keeps the selected Flow wire", as
   await app.open(`/runs/${found.id}`);
   await expectFactoryConnected(screen);
   await browser.keyboard.press(`${shortcutMod}+Shift+s`);
-  await screen.getByRole("heading", "Launch ready Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Launch ready Flow", { exact: false }).tap();
   const wires = screen.getByRole("group", "Directed connections");
   await expect(wires).toHaveAttribute("data-flow-input-count", "1");
   await wires.getByRole("button", "Connection from Flow input to Entry worker").press("Enter");
@@ -466,7 +466,7 @@ test("a customized binding reaches the desktop menu", async ({ app, screen, brow
   await recordDesktopNewRunCandidate(app, screen, browser);
 
   // Act
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect
@@ -526,7 +526,7 @@ test("the canvas shortcuts popover lists a customized binding and opens the chea
   await openKeyboardSettings(screen, browser);
   await screen.getByRole("group", "Zoom in").getByRole("button", "Change Zoom in").tap();
   await browser.keyboard.press("i");
-  await screen.getByRole("button", "Save shortcut").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await browser.keyboard.press("Escape");
   await expect(screen.getByRole("heading", { name: "Keyboard shortcuts", level: 2 })).toBeHidden();
   await screen.getByRole("button", "Canvas shortcuts", { exact: true }).tap();

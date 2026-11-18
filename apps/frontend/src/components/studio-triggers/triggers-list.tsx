@@ -1,32 +1,33 @@
 import { useRef, useState } from "react";
-import { Ellipsis, Pencil, Play, Trash2, Zap } from "lucide-react";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronRight, Pencil, Play, Trash2, Zap } from "lucide-react";
+import type { FactoryProject, TriggerDefinition, TriggerStartedRun } from "@t3-factory/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { StudioLink } from "../app-link.tsx";
-import { SettingsGroup, StudioPage } from "../settings-page.tsx";
-import { useStudioNavigation } from "../../settings-navigation.ts";
-import type { StudioRead } from "../../studio-definitions.ts";
+import { StatusBadge } from "../status-badge.tsx";
 import { RemoveTriggerDialog } from "./remove-trigger-dialog.tsx";
-import { TriggerHealth } from "./trigger-health.tsx";
 import type { TriggerActions } from "./trigger-actions.ts";
 import { TriggerReviewDialog, type TriggerReview } from "./trigger-review-dialog.tsx";
+import { reviewSummary, scheduleText, triggerRoute, type TriggerNames } from "./trigger-text.ts";
+import { useStudioNavigation } from "../../settings-navigation.ts";
+import { ownerGroups, type StudioRead } from "../../studio-definitions.ts";
+import { OwnerGroupHeader } from "../studio-owner.tsx";
 import {
-  problemHeadline,
-  reviewSummary,
-  scheduleText,
-  triggerRoute,
-  type TriggerNames,
-} from "./trigger-text.ts";
+  StudioListBody,
+  StudioListHeader,
+  StudioListRow,
+  StudioRowIcon,
+  StudioRowMenu,
+  studioListClass,
+} from "../studio-list.tsx";
 
 /** Turning a Trigger on first shows what its first check would start. */
 const enableReview = (
@@ -83,18 +84,20 @@ export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   };
 }
 
-const description =
-  "Start a Flow automatically for issues a person marks ready in a Project's tracker.";
+/** The Runs a Check now started in this visit. An empty list is “Nothing ready to start”. */
+type Started = ReadonlyMap<string, readonly TriggerStartedRun[]>;
 
-/** Figma T01/T02: the Triggers list, or the empty state that explains Triggers. */
+/** Figma T01/T02: Triggers grouped by Project, with Search and Check now on every row. */
 export function TriggersList({
   triggers,
   names,
+  projects,
   actions,
   onEnable,
 }: {
   triggers: StudioRead<readonly TriggerDefinition[]>;
   names: TriggerNames;
+  projects: readonly FactoryProject[];
   actions: TriggerActions;
   /** Opens the review before enabling `trigger`. */
   onEnable: (trigger: TriggerDefinition) => void;
@@ -102,41 +105,79 @@ export function TriggersList({
   const openStudio = useStudioNavigation();
   const create = () => void openStudio({ tab: "triggers", triggerId: "new" });
   const items = triggers.value;
+  const [query, setQuery] = useState("");
   const [removing, setRemoving] = useState<TriggerDefinition | null>(null);
   const menuButton = useRef<HTMLElement | null>(null);
+  const [started, setStarted] = useState<Started>(() => new Map());
   const { failure, pending } = actions.state;
+  const needle = query.trim().toLocaleLowerCase();
+  const matching = items?.filter((trigger) => trigger.name.toLocaleLowerCase().includes(needle));
+  const groups = matching ? ownerGroups(matching, projects, { kind: "all" }) : [];
+  const loaded = items !== null;
+  const noMatch = loaded && items.length > 0 && groups.length === 0;
+  const checked = (trigger: TriggerDefinition) =>
+    void actions.run(trigger).then((reply) => rememberCheck(setStarted, trigger.id, reply));
   return (
-    <main className="grid content-start px-8 pt-6 pb-8 max-sm:px-4">
-      <StudioPage
+    <main className={studioListClass}>
+      <StudioListHeader
         title="Triggers"
-        description={description}
-        action={
-          items?.length ? (
-            <MutationGate>
-              <Button onClick={create}>New Trigger</Button>
-            </MutationGate>
-          ) : undefined
-        }
+        count={loaded ? items.length : null}
+        query={query}
+        onQueryChange={setQuery}
+        onCreate={create}
+        createLabel="New Trigger"
+      />
+      {failure && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {failure.name}: {failure.message}
+          </AlertDescription>
+        </Alert>
+      )}
+      <StudioListBody
+        error={Boolean(triggers.error)}
+        loaded={loaded}
+        noMatch={noMatch}
+        empty={groups.length === 0}
+        errorText="Couldn’t load Triggers."
+        loadingText="Loading Triggers…"
+        noMatchText="No matching Triggers"
+        emptyIcon={<Zap aria-hidden className="size-8" strokeWidth={1.5} />}
+        emptyTitle="No Triggers yet"
       >
-        {failure && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {failure.name}: {failure.message}
-            </AlertDescription>
-          </Alert>
-        )}
-        <TriggerItems
-          triggers={triggers}
-          names={names}
-          actions={actions}
-          onCreate={create}
-          onEnable={onEnable}
-          onRemove={(trigger, opener) => {
-            menuButton.current = opener;
-            setRemoving(trigger);
-          }}
-        />
-      </StudioPage>
+        <div className="flex flex-col gap-2">
+          {groups.map(({ owner, items: group }) => (
+            <section
+              key={owner.projectId ?? "global"}
+              aria-label={owner.title}
+              className="flex flex-col gap-2"
+            >
+              <OwnerGroupHeader
+                owner={owner}
+                count={`${group.length} ${group.length === 1 ? "Trigger" : "Triggers"}`}
+              />
+              {group.map((trigger) => (
+                <TriggerRow
+                  key={trigger.id}
+                  trigger={trigger}
+                  names={names}
+                  gone={owner.gone}
+                  busy={pending.has(trigger.id)}
+                  checking={pending.get(trigger.id) === "run"}
+                  started={started.get(trigger.id)}
+                  actions={actions}
+                  onEnable={() => onEnable(trigger)}
+                  onCheck={() => checked(trigger)}
+                  onRemove={(opener) => {
+                    menuButton.current = opener;
+                    setRemoving(trigger);
+                  }}
+                />
+              ))}
+            </section>
+          ))}
+        </div>
+      </StudioListBody>
       <RemoveTriggerDialog
         trigger={removing}
         removing={removing !== null && pending.get(removing.id) === "remove"}
@@ -152,169 +193,223 @@ export function TriggersList({
   );
 }
 
-/** The loaded Triggers as rows, the empty state, or why they cannot be shown. */
-function TriggerItems({
-  triggers,
-  names,
-  actions,
-  onCreate,
-  onEnable,
-  onRemove,
-}: {
-  triggers: StudioRead<readonly TriggerDefinition[]>;
-  names: TriggerNames;
-  actions: TriggerActions;
-  onCreate: () => void;
-  onEnable: (trigger: TriggerDefinition) => void;
-  onRemove: (trigger: TriggerDefinition, opener: HTMLElement | null) => void;
-}) {
-  const items = triggers.value;
-  return triggers.error ? (
-    <Alert variant="destructive">
-      <AlertDescription>Could not load Triggers. Check that Factory is running.</AlertDescription>
-    </Alert>
-  ) : items === null ? (
-    <p role="status" className="text-sm text-muted-foreground">
-      Loading Triggers…
-    </p>
-  ) : (
-    <SettingsGroup label={items.length ? `Triggers · ${items.length}` : "Triggers"}>
-      {items.length === 0 ? (
-        <EmptyTriggers onCreate={onCreate} />
-      ) : (
-        items.map((trigger) => (
-          <TriggerRow
-            key={trigger.id}
-            trigger={trigger}
-            names={names}
-            busy={actions.state.pending.has(trigger.id)}
-            actions={actions}
-            onEnable={() => onEnable(trigger)}
-            onRemove={(opener) => onRemove(trigger, opener)}
-          />
-        ))
-      )}
-    </SettingsGroup>
-  );
-}
-
-function EmptyTriggers({ onCreate }: { onCreate: () => void }) {
-  return (
-    <section className="flex flex-col items-center px-6 pt-10 pb-10 text-center">
-      <span className="grid size-9 place-items-center rounded-lg bg-muted text-muted-foreground">
-        <Zap aria-hidden className="size-4" strokeWidth={1.5} />
-      </span>
-      <h2 className="mt-3 text-sm font-semibold text-foreground">No Triggers yet</h2>
-      <p className="mt-3 max-w-108 text-sm leading-tight text-muted-foreground">
-        A Trigger checks one Project&apos;s GitHub repository for open issues labelled factory:ready
-        and starts a Flow for each one, on a schedule or when you choose Run.
-      </p>
-      <MutationGate>
-        <Button className="mt-3" onClick={onCreate}>
-          New Trigger
-        </Button>
-      </MutationGate>
-      <p className="mt-4 max-w-108 text-2xs leading-tight tracking-label text-subtle-foreground">
-        Tip: run setup-factory in the repository first. It creates the factory:ready label and tells
-        workers how to claim a ready issue.
-      </p>
-    </section>
-  );
+function rememberCheck(
+  setStarted: (update: (current: Started) => Started) => void,
+  triggerId: string,
+  reply:
+    | {
+        readonly error: TriggerDefinition["error"];
+        readonly startedRuns: readonly TriggerStartedRun[];
+      }
+    | undefined,
+) {
+  if (!reply) return;
+  setStarted((current) => {
+    const next = new Map(current);
+    if (reply.error) next.delete(triggerId);
+    else next.set(triggerId, reply.startedRuns);
+    return next;
+  });
 }
 
 function TriggerRow({
   trigger,
   names,
+  gone,
   busy,
+  checking,
+  started,
   actions,
   onEnable,
+  onCheck,
   onRemove,
 }: {
   trigger: TriggerDefinition;
   names: TriggerNames;
+  gone: boolean;
   busy: boolean;
+  checking: boolean;
+  started: readonly TriggerStartedRun[] | undefined;
   actions: TriggerActions;
   onEnable: () => void;
-  onRemove: (opener: HTMLElement | null) => void;
+  onCheck: () => void;
+  onRemove: (opener: HTMLButtonElement | null) => void;
 }) {
   const openStudio = useStudioNavigation();
   const mutationsAllowed = useMutationsAllowed();
-  const menuButton = useRef<HTMLButtonElement>(null);
-  const edit = { tab: "triggers", triggerId: trigger.id } as const;
+  const edit = { tab: "triggers" as const, triggerId: trigger.id };
+  const problem = !gone && trigger.error ? trigger.error.message : null;
   return (
-    <div className="relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
-      <span className="grid size-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-        <Zap aria-hidden className="size-4" strokeWidth={1.5} />
-      </span>
-      <div className="grid min-w-0 flex-1 gap-0.75">
-        <div className="flex min-w-0 items-center gap-2">
-          {/* The name's link covers the row, so clicking anywhere but the controls opens Edit. */}
-          <StudioLink
-            selection={edit}
-            className="truncate text-sm leading-tight font-medium text-foreground after:absolute after:inset-0 hover:no-underline"
-          >
-            {trigger.name}
-          </StudioLink>
-          <TriggerHealth trigger={trigger} />
-        </div>
-        <p className="truncate text-sm leading-tight text-subtle-foreground">
-          GitHub Issues · {triggerRoute(trigger, names)} · {scheduleText(trigger.schedule)}
-        </p>
-        {trigger.error && (
-          <p className="truncate text-2xs leading-tight tracking-label text-destructive">
-            {problemHeadline(trigger.error)}: {trigger.error.message}
-          </p>
-        )}
-      </div>
-      <MutationGate>
-        <Switch
-          className="relative"
-          aria-label={trigger.name}
-          checked={trigger.enabled}
-          disabled={busy}
-          onCheckedChange={(enabled) => (enabled ? onEnable() : void actions.disable(trigger))}
+    <StudioListRow
+      icon={
+        <StudioRowIcon>
+          <Zap aria-hidden className="size-4" strokeWidth={1.5} />
+        </StudioRowIcon>
+      }
+      name={trigger.name}
+      meta={<TriggerMeta trigger={trigger} names={names} checking={checking} started={started} />}
+      reason={problem}
+      badge={problem ? <StatusBadge kind="problem" /> : undefined}
+      leading={
+        gone ? undefined : (
+          <MutationGate>
+            <Switch
+              aria-label={trigger.name}
+              checked={trigger.enabled}
+              disabled={busy}
+              onCheckedChange={(enabled) => (enabled ? onEnable() : void actions.disable(trigger))}
+            />
+          </MutationGate>
+        )
+      }
+      menu={
+        <TriggerRowMenu
+          trigger={trigger}
+          gone={gone}
+          busy={busy}
+          mutationsAllowed={mutationsAllowed}
+          onCheck={onCheck}
+          onEdit={() => void openStudio(edit)}
+          onRemove={onRemove}
         />
-      </MutationGate>
+      }
+      selection={gone ? undefined : edit}
+      chevron={
+        gone ? null : (
+          <ChevronRight
+            aria-hidden
+            className="size-4 shrink-0 text-subtle-foreground"
+            strokeWidth={1.5}
+          />
+        )
+      }
+    />
+  );
+}
+
+function TriggerMeta({
+  trigger,
+  names,
+  checking,
+  started,
+}: {
+  trigger: TriggerDefinition;
+  names: TriggerNames;
+  checking: boolean;
+  started: readonly TriggerStartedRun[] | undefined;
+}) {
+  if (checking) return "Checking…";
+  if (started) {
+    if (started.length === 0) return "Nothing ready to start";
+    return <StartedRuns runs={started} />;
+  }
+  return `GitHub Issues · ${triggerRoute(trigger, names)} · ${scheduleText(trigger.schedule)}`;
+}
+
+/** “N Runs” opens the one Run, or a menu of them. The check itself stays on the list. */
+function StartedRuns({ runs }: { runs: readonly TriggerStartedRun[] }) {
+  const navigate = useNavigate();
+  const label = `${runs.length} ${runs.length === 1 ? "Run" : "Runs"}`;
+  const open = (id: string) =>
+    void navigate({ to: "/runs/$runId", params: { runId: id }, search: {} });
+  const className = "relative z-10 text-link hover:underline";
+  if (runs.length === 1) {
+    const run = runs[0]!;
+    return (
+      <>
+        Started{" "}
+        <button
+          type="button"
+          className={className}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            open(run.id);
+          }}
+        >
+          {label}
+        </button>
+      </>
+    );
+  }
+  return (
+    <>
+      Started{" "}
       <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={menuButton}
-                variant="ghost"
-                size="icon-sm"
-                className="relative size-7 text-muted-foreground"
-                aria-label={`${trigger.name} actions`}
-              >
-                <Ellipsis aria-hidden className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>Trigger actions</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="end" className="min-w-40">
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={className}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+          >
+            {label}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {runs.map((run) => (
+            <DropdownMenuItem key={run.id} onSelect={() => open(run.id)}>
+              {run.number === null ? run.title || "Run" : `#${run.number} ${run.title}`}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  );
+}
+
+function TriggerRowMenu({
+  trigger,
+  gone,
+  busy,
+  mutationsAllowed,
+  onCheck,
+  onEdit,
+  onRemove,
+}: {
+  trigger: TriggerDefinition;
+  gone: boolean;
+  busy: boolean;
+  mutationsAllowed: boolean;
+  onCheck: () => void;
+  onEdit: () => void;
+  onRemove: (opener: HTMLButtonElement | null) => void;
+}) {
+  const menuButton = useRef<HTMLButtonElement>(null);
+  return (
+    <StudioRowMenu
+      label={`${trigger.name} actions`}
+      tooltip="Trigger actions"
+      buttonRef={menuButton}
+    >
+      {!gone && (
+        <>
           <DropdownMenuItem
             disabled={!trigger.enabled || busy || !mutationsAllowed}
-            title={trigger.enabled ? undefined : "Turn the Trigger on to run it."}
-            onSelect={() => void actions.run(trigger)}
+            description={trigger.enabled ? undefined : "Turn the Trigger on to check it."}
+            onSelect={onCheck}
           >
             <Play aria-hidden strokeWidth={1.5} />
-            Run
+            Check now
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void openStudio(edit)}>
+          <DropdownMenuItem onSelect={onEdit}>
             <Pencil aria-hidden strokeWidth={1.5} />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem
-            variant="destructive"
-            disabled={busy || !mutationsAllowed}
-            onSelect={() => onRemove(menuButton.current)}
-          >
-            <Trash2 aria-hidden strokeWidth={1.5} />
-            Remove
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      <DropdownMenuItem
+        variant="destructive"
+        aria-label="Remove"
+        disabled={busy || !mutationsAllowed}
+        onSelect={() => onRemove(menuButton.current)}
+      >
+        <Trash2 aria-hidden strokeWidth={1.5} />
+        Remove…
+      </DropdownMenuItem>
+    </StudioRowMenu>
   );
 }

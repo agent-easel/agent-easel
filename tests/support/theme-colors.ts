@@ -43,7 +43,9 @@ export function themeColors(app: FixtureApp) {
     async openApprovedClient(screen: Screen) {
       await app.open(otherAddress(remoteBrowserPath));
       await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
-      await expect(screen.getByText("Colors follow T3’s default theme “Ocean”.")).toBeVisible();
+      await expect(
+        screen.getByRole("region", "T3 theme").getByText("Ocean", { exact: true }),
+      ).toBeVisible();
     },
     /**
      * The host follows the published "Nightfall", and an approved browser profile at the other

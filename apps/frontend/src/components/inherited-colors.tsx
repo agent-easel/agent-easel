@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import type { AppearancePresentation, T3Appearance } from "@t3-factory/contracts";
 import { applyInheritedColors } from "../appearance.ts";
 import { useAppearanceSource, useServerId } from "../client-scope.ts";
 import {
@@ -11,6 +12,13 @@ import {
 } from "../inherited-colors-cache.ts";
 import { useLiveAppearance } from "../live/live-connection.ts";
 
+const ThemeColorsContext = createContext<{
+  status: T3Appearance | null;
+  presentation: AppearancePresentation | null;
+}>({ status: null, presentation: null });
+
+export const useThemeColors = () => useContext(ThemeColorsContext);
+
 /**
  * Shows one server's theme colors while product screens are mounted: its cached snapshot of
  * the source the server declared at the access check until live delivery answers, then exactly
@@ -19,7 +27,7 @@ import { useLiveAppearance } from "../live/live-connection.ts";
  * delivery are dropped when a later access check declares another source, so a replaced server
  * or source cannot keep or bring back an old palette.
  */
-function FollowInheritedColors({ serverId }: { serverId: string }) {
+function FollowInheritedColors({ serverId, children }: { serverId: string; children: ReactNode }) {
   const live = useLiveAppearance();
   const source = useAppearanceSource();
   const [followed, setFollowed] = useState<FollowedColors>(() => ({
@@ -44,11 +52,21 @@ function FollowInheritedColors({ serverId }: { serverId: string }) {
     applyInheritedColors(presentation);
     return () => applyInheritedColors(null);
   }, [presentation]);
-  return null;
+  return (
+    <ThemeColorsContext.Provider value={{ status: published, presentation }}>
+      {children}
+    </ThemeColorsContext.Provider>
+  );
 }
 
 /** Approved product screens only: gates and unapproved screens never read or receive theme colors. */
-export function InheritedColors() {
+export function InheritedColors({ children }: { children: ReactNode }) {
   const serverId = useServerId();
-  return serverId ? <FollowInheritedColors key={serverId} serverId={serverId} /> : null;
+  return serverId ? (
+    <FollowInheritedColors key={serverId} serverId={serverId}>
+      {children}
+    </FollowInheritedColors>
+  ) : (
+    children
+  );
 }

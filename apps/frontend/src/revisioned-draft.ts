@@ -84,6 +84,8 @@ export interface RevisionedDraftState<D, C> {
   readonly removed: boolean;
   readonly removing: boolean;
   readonly removalError: string;
+  /** Issues behind a refused removal, such as a Flow or Trigger that still uses the definition. */
+  readonly removalIssues: readonly ValidationIssue[];
   /** Nothing in the shared protocol blocks a save; an editor may add its own conditions. */
   readonly canSave: boolean;
 }
@@ -172,6 +174,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** This draft's own removal was accepted; nothing is followed afterwards. */
   let removedHere = false;
   let removalError = "";
+  let removalIssues: readonly ValidationIssue[] = [];
   let dirty = { content, baseline, value: false };
   const listeners = new Set<() => void>();
 
@@ -198,6 +201,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       removed,
       removing,
       removalError,
+      removalIssues,
       canSave:
         !removed &&
         !saving &&
@@ -300,6 +304,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     updatedTo = null;
     showError("");
     removalError = "";
+    removalIssues = [];
     return true;
   }
   /** A save whose reply was lost reached Factory after all if `latest` holds its content. */
@@ -497,6 +502,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       if (!saved || removed || removing || lastSave?.outcome === "pending") return false;
       removing = true;
       removalError = "";
+      removalIssues = [];
       publish();
       try {
         await send(saved.id);
@@ -505,6 +511,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         return true;
       } catch (cause) {
         removalError = cause instanceof Error ? cause.message : fallback;
+        removalIssues = cause instanceof ApiError ? cause.detail.issues : [];
         return false;
       } finally {
         removing = false;
@@ -514,6 +521,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     },
     clearRemovalError() {
       removalError = "";
+      removalIssues = [];
       publish();
     },
     /** The transient "Updated to revision N" notice has been shown long enough. */

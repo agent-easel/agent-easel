@@ -1,3 +1,4 @@
+import { T3LinksAvailable } from "../components/open-in-t3.tsx";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
 import { RunSettlementSection } from "../components/settle-run.tsx";
@@ -7,23 +8,28 @@ import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
-import { Archive, Ellipsis, Info, PanelRight, TriangleAlert, Unplug, Workflow } from "lucide-react";
-import { RunAttentionDetails } from "../components/run-attention.tsx";
+import { Ellipsis, Info, Moon, PanelRight, TriangleAlert, Unplug, Workflow } from "lucide-react";
+import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
+import { StudioLink } from "../components/app-link.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
-import { NotLiveMarker, RunHeaderStatus } from "../components/run-header-status.tsx";
-import { runFreshness, runStatus, type RunFreshness } from "../run-status.ts";
+import { NotLiveMarker } from "../components/run-header-status.tsx";
+import {
+  lifecycleAt,
+  runFreshness,
+  waitsForWorkerConfirmation,
+  type RunFreshness,
+} from "../run-status.ts";
 import { GeneratingTitle } from "../components/run-title-generation.tsx";
 import { RunTimeline } from "../components/run-timeline.tsx";
 import { ExecutionCanvas } from "../components/execution-canvas.tsx";
 import { clockTime, dayAndTime } from "../components/execution-state.tsx";
 import { Notice, NoticeSettingsLink } from "../components/notice.tsx";
 import { useConnectionState } from "../connection-state.tsx";
-import { runActions, useRunActions } from "../components/run-actions.tsx";
+import { RunActionItems, runActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { useRunInspectorOpen, toggleRunInspector } from "../run-inspector-preference.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { shortcutAriaKeys } from "../keyboard-shortcuts.ts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
@@ -32,11 +38,9 @@ import { useLiveDelivery } from "../transport.ts";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -147,6 +151,7 @@ export function RunScreen({ id }: { id: string }) {
       {run ? (
         <RunDetailView
           observed={observed}
+          entry={navigationRun}
           run={run}
           seenError={seenError}
           inspected={inspected}
@@ -168,12 +173,14 @@ export function RunScreen({ id }: { id: string }) {
 
 function RunDetailView({
   observed,
+  entry,
   run,
   seenError,
   inspected,
   onInspect,
 }: {
   observed: RunObservation;
+  entry: RunNavigationEntry | undefined;
   run: RunDetail;
   seenError: string;
   inspected: Inspected;
@@ -187,11 +194,16 @@ function RunDetailView({
   const inspectedTitle = inspected === "run-title" ? run.titleGeneration : null;
   const unavailable = observed.unavailable;
   const freshness = runFreshness(run, unavailable);
+  const projectUnavailable = entry
+    ? entry.project.availability !== "available"
+    : projectIsUnavailable(observed.project, observed.projectsLoaded);
   return (
-    <>
+    <T3LinksAvailable value={!projectUnavailable}>
       <RunTopBar
         run={run}
-        observed={observed}
+        entry={entry}
+        project={entry?.project ?? observed.project}
+        projectUnavailable={projectUnavailable}
         freshness={freshness}
         inspectorOpen={inspectorOpen}
       />
@@ -218,9 +230,9 @@ function RunDetailView({
               }
             />
           </div>
-          {!inspectorOpen && run.attention.some((item) => !item.settledAt) && (
+          {!inspectorOpen && attentionPending(run) && (
             <div className="max-h-60 shrink-0 overflow-auto border-t px-4 py-3">
-              <RunAttentionDetails run={run} observationUnavailable={unavailable} />
+              <RunAttentionDetails run={run} />
             </div>
           )}
           {run.settlement && <RunSettlementSection id={run.id} settlement={run.settlement} />}
@@ -232,13 +244,14 @@ function RunDetailView({
             selected={selected}
             titleGeneration={inspectedTitle}
             project={observed.project}
-            projectUnavailable={projectIsUnavailable(observed.project, observed.projectsLoaded)}
+            projectUnavailable={projectUnavailable}
+            waitingForWorkers={entry !== undefined && waitsForWorkerConfirmation(entry)}
             observationUnavailable={unavailable}
             onSelect={onSelect}
           />
         )}
       </div>
-    </>
+    </T3LinksAvailable>
   );
 }
 
@@ -251,17 +264,19 @@ const metaClass = "text-2xs leading-3 text-subtle-foreground";
 /** Run top bar: title and meta, Run actions, state and the primary conversation. */
 function RunTopBar({
   run,
-  observed,
+  entry,
+  project,
+  projectUnavailable,
   freshness,
   inspectorOpen,
 }: {
   run: RunDetail;
-  observed: RunObservation;
+  entry: RunNavigationEntry | undefined;
+  project: RunNavigationEntry["project"] | undefined;
+  projectUnavailable: boolean;
   freshness: RunFreshness;
   inspectorOpen: boolean;
 }) {
-  const { project } = observed;
-  const unavailable = projectIsUnavailable(project, observed.projectsLoaded);
   const { hint } = useShortcutPreferences();
   const inspectorHint = hint("toggleInspector");
   return (
@@ -271,6 +286,12 @@ function RunTopBar({
           <h1 className="truncate text-base leading-4 font-semibold tracking-[-0.26px]">
             {run.title}
           </h1>
+          {run.lifecycle === "active" && entry?.presentation.snoozed && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded border bg-muted px-1.5 text-2xs leading-4 text-muted-foreground">
+              <Moon aria-hidden className="size-3" strokeWidth={1.5} />
+              Snoozed · until new attention
+            </span>
+          )}
           <GeneratingTitle generation={run.titleGeneration} />
         </div>
         <p className={cn(metaClass, "flex min-w-0 items-center gap-1.5 whitespace-nowrap")}>
@@ -281,19 +302,18 @@ function RunTopBar({
             </>
           )}
           <span className="truncate font-medium">{project?.title ?? "Project"}</span>
-          {unavailable && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+          {projectUnavailable && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
           <span aria-hidden>·</span>
           <Workflow aria-hidden className="size-2.75 shrink-0" strokeWidth={1.75} />
-          <span className="truncate font-medium">
-            <span className="sr-only">Flow for this Run: </span>
-            {run.flowName} · captured revision
+          <RunFlowName run={run} />
+          <span aria-hidden>·</span>
+          <span aria-label="Run lifecycle" className="tracking-label">
+            {lifecycleText(run)}
           </span>
-          <span className="tracking-label">· Started {dayAndTime(run.startedAt)}</span>
           {run.origin && <RunOriginMeta origin={run.origin} />}
         </p>
       </div>
       <NotLiveMarker freshness={freshness} />
-      <RunHeaderStatus status={runStatus(run)} />
       <RunConversationAction run={run} />
       <Tooltip>
         <TooltipTrigger asChild>
@@ -312,40 +332,49 @@ function RunTopBar({
           {inspectorOpen ? "Hide inspector" : "Show inspector"}
         </TooltipContent>
       </Tooltip>
-      {run.lifecycle !== "archived" && <RunActionsMenu run={run} />}
+      {run.lifecycle !== "archived" && <RunActionsMenu run={run} entry={entry} />}
     </header>
   );
 }
 
-/**
- * Archive is rare and final, so it waits in the ··· menu; its shortcut opens the same dialog.
- * Archive is the menu's only action, so an Archived Run shows no menu.
- */
-function RunActionsMenu({ run }: { run: RunDetail }) {
-  const { available } = useRunActions({ detail: run });
-  const { bindings, hint } = useShortcutPreferences();
-  const archiveHint = hint("archive");
+/** The Run's Flow, linking to it in Studio while the Flow exists. */
+function RunFlowName({ run }: { run: RunDetail }) {
+  const name = (
+    <>
+      <span className="sr-only">Flow for this Run: </span>
+      {run.flowName}
+    </>
+  );
+  if (run.currentFlowRevision === null) return <span className="truncate font-medium">{name}</span>;
+  return (
+    <StudioLink
+      selection={{ tab: "flows", flowId: run.flowId }}
+      className="truncate font-medium text-subtle-foreground hover:text-foreground"
+    >
+      {name}
+    </StudioLink>
+  );
+}
+
+function lifecycleText(run: RunDetail) {
+  if (run.lifecycle === "active") return `Started ${dayAndTime(run.startedAt)}`;
+  const archived = run.lifecycle === "archived";
+  const at = lifecycleAt(run, archived ? "run-archived" : "run-settled");
+  const label = archived ? "Archived" : "Settled";
+  return at ? `${label} ${dayAndTime(at)}` : label;
+}
+
+function RunActionsMenu({ run, entry }: { run: RunDetail; entry: RunNavigationEntry | undefined }) {
+  const trigger = `run-actions-${run.id}`;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
+        <Button id={trigger} type="button" variant="ghost" size="icon-sm" aria-label="Run actions">
           <Ellipsis aria-hidden className="size-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem
-          disabled={!available.archive}
-          onSelect={() => runActions.openDialog("archive", { detail: run })}
-          aria-keyshortcuts={shortcutAriaKeys(bindings.archive)}
-        >
-          <Archive aria-hidden strokeWidth={1.5} />
-          Archive…
-          {archiveHint && (
-            <KeyChip aria-hidden className="ml-auto">
-              {archiveHint}
-            </KeyChip>
-          )}
-        </DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-58">
+        <RunActionItems subject={{ entry, detail: run }} surface="header" returnFocusId={trigger} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -405,8 +434,6 @@ function CanvasOverlay({
 }) {
   // Start and live observation depend on readiness: keep it current while shown.
   const { presentation } = useConnectionState();
-  const unavailable = projectIsUnavailable(observed.project, observed.projectsLoaded);
-  const projectTitle = observed.project?.title ?? "This project";
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
@@ -434,18 +461,6 @@ function CanvasOverlay({
         >
           Showing what Factory last observed. Blocks won’t advance here until Factory reconnects;
           nothing is lost.
-        </Notice>
-      )}
-      {unavailable && (
-        <Notice
-          tone="attention"
-          icon={TriangleAlert}
-          title="Project unavailable in T3"
-          className="w-140"
-        >
-          {run.lifecycle === "archived"
-            ? `${projectTitle} is no longer available in T3. This history and its captured Flow revision stay readable; T3 thread links may not open.`
-            : `T3 no longer reports ${projectTitle}. Threads already running continue in T3; Factory can’t start new steps in this project until it’s available again.`}
         </Notice>
       )}
     </>

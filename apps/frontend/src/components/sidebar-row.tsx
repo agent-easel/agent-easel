@@ -54,13 +54,17 @@ export function ActivityAge({ at }: { at: string }) {
   );
 }
 
-function useRowInteractions(disabled: boolean) {
+function useRowInteractions(disabled: boolean, selected: boolean) {
   const { menuOpen, setMenuOpen } = useContext(SidebarRowsContext)!;
   const [ownMenuOpen, setOwnMenuOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [actionsTipOpen, setActionsTipOpen] = useState(false);
   const suppressPreview = useRef(false);
   const row = useRef<HTMLDivElement>(null);
+  // The open Run's row comes into view when it opens or the open Run changes.
+  useEffect(() => {
+    if (selected) row.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
   const link = useRef<HTMLAnchorElement>(null);
   const openAtRow = () => {
     if (disabled || !row.current) return;
@@ -152,7 +156,7 @@ export function SidebarRow({
   /** Overrides the draft row's accessible name. Pending Starts say Idle, not Draft. */
   label?: string;
 }) {
-  const interaction = useRowInteractions(disabled);
+  const interaction = useRowInteractions(disabled, selected);
   const destination =
     kind === "run"
       ? { to: "/runs/$runId" as const, params: { runId: id } }
@@ -164,7 +168,8 @@ export function SidebarRow({
           {...interaction.trigger}
           data-sidebar-row={id}
           className={cn(
-            "group/row flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
+            // Keep absolutely positioned screen-reader labels inside the list's scroll area.
+            "group/row relative flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
             (selected || interaction.ownMenuOpen) && "bg-accent",
             selected && "ring-1 ring-border-strong ring-inset",
           )}

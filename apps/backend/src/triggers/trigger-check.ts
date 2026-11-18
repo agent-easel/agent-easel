@@ -9,10 +9,12 @@ import type {
   Result,
   RunDetail,
   RunOrigin,
+  TriggerCheckReply,
   TriggerDefinition,
   TriggerMissedIssue,
   TriggerPreviewIssue,
   TriggerRepository,
+  TriggerStartedRun,
 } from "@t3-factory/contracts";
 import {
   gitHubRepairGuidance,
@@ -108,7 +110,7 @@ type AdmissionPlan =
  * changed or was removed under the check.
  */
 type Admission =
-  | { readonly kind: "started" }
+  | { readonly kind: "started"; readonly run: TriggerStartedRun }
   | { readonly kind: "missed"; readonly reason: string }
   | { readonly kind: "blocked"; readonly problem: Problem }
   | { readonly kind: "full" }
@@ -232,6 +234,18 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
     };
   };
 
+  /** The accepted Run's identity, when Start's reply omitted it but the guard recorded the id. */
+  const startedRun = (runId: string | null) =>
+    Effect.gen(function* (): Effect.fn.Return<TriggerStartedRun | null, unknown> {
+      if (!runId) return null;
+      const [row] = yield* sql<{
+        id: string;
+        number: number | null;
+        title: string;
+      }>`SELECT id, number, title FROM runs WHERE id = ${runId}`;
+      return row ?? { id: runId, number: null, title: "" };
+    });
+
   /** Persists the guard with a fixed request id and payload, then calls the shared Start. */
   const admit = (
     trigger: TriggerDefinition,
@@ -276,7 +290,18 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
         acceptance(trigger, checkId, requestId, origin),
       );
       // A failed reply can follow an accepted Run; the guard was admitted in the same transaction.
-      if (started.ok || (yield* admittedRun(sql, requestId)) !== null) return { kind: "started" };
+      if (started.ok) {
+        return {
+          kind: "started",
+          run: {
+            id: started.value.id,
+            number: started.value.number,
+            title: started.value.title,
+          },
+        };
+      }
+      const recorded = yield* startedRun(yield* admittedRun(sql, requestId));
+      if (recorded) return { kind: "started", run: recorded };
       yield* deleteAttempt(sql, requestId);
       const { error } = started;
       if (error.issues.some(({ code }) => code === TRIGGER_FULL)) return { kind: "full" };
@@ -296,23 +321,28 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
     Effect.gen(function* (): Effect.fn.Return<CheckOutcome, unknown> {
       const checkId = yield* newId;
       const notStarted: TriggerMissedIssue[] = [];
+      const runs: TriggerStartedRun[] = [];
       let started = 0;
       for (const [index, candidate] of candidates.entries()) {
         const waiting = candidates.length - index;
-        if (started >= free) return { started, waiting, notStarted, problem: null };
+        if (started >= free) return { started, waiting, notStarted, problem: null, runs };
         const admission = yield* admit(trigger, checkId, repository, candidate);
-        if (admission.kind === "started") started += 1;
+        if (admission.kind === "started") {
+          started += 1;
+          runs.push(admission.run);
+        }
         if (admission.kind === "missed")
           notStarted.push({
             issue: `${repository}#${candidate.issue.number}`,
             reason: admission.reason,
           });
-        if (admission.kind === "full") return { started, waiting, notStarted, problem: null };
-        if (admission.kind === "stopped") return { started, waiting: 0, notStarted, problem: null };
+        if (admission.kind === "full") return { started, waiting, notStarted, problem: null, runs };
+        if (admission.kind === "stopped")
+          return { started, waiting: 0, notStarted, problem: null, runs };
         if (admission.kind === "blocked")
-          return { started, waiting: 0, notStarted, problem: admission.problem };
+          return { started, waiting: 0, notStarted, problem: admission.problem, runs };
       }
-      return { started, waiting: 0, notStarted, problem: null };
+      return { started, waiting: 0, notStarted, problem: null, runs };
     });
 
   /**
@@ -451,7 +481,8 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
   const inspect = (trigger: TriggerDefinition) =>
     Effect.gen(function* (): Effect.fn.Return<CheckOutcome, unknown> {
       const plan = yield* admissionPlan(trigger);
-      if (!plan.ok) return { started: 0, waiting: 0, notStarted: [], problem: plan.problem };
+      if (!plan.ok)
+        return { started: 0, waiting: 0, notStarted: [], problem: plan.problem, runs: [] };
       // Reconciles attempts whose outcome a stopped or crashed check never learned, without
       // calling Start. The guard is Start's idempotency record for its requestId: acceptance sets
       // its run_id in the transaction that accepts the Run. Checks of a Trigger are serialized, so
@@ -486,7 +517,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
   const check = (triggerId: string) =>
     lane(triggerId)
       .withPermit(
-        Effect.gen(function* (): Effect.fn.Return<Result<TriggerDefinition>, unknown> {
+        Effect.gen(function* (): Effect.fn.Return<Result<TriggerCheckReply>, unknown> {
           const trigger = yield* deps.readTrigger(triggerId);
           if (!trigger) return failure("not_found", "This Trigger does not exist.");
           if (!trigger.enabled)
@@ -501,7 +532,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           yield* sql.withTransaction(writeCheckOutcome(sql, triggerId, outcome, yield* now));
           const checked = yield* deps.readTrigger(triggerId);
           return checked
-            ? { ok: true, value: checked }
+            ? { ok: true as const, value: { ...checked, startedRuns: outcome.runs } }
             : failure("not_found", "This Trigger was removed during the check.");
         }),
       )

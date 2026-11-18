@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunTitleGeneration } from "@t3-factory/contracts";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -101,11 +102,7 @@ export function RunTitleView({
       </div>
       <footer className="mx-4 flex shrink-0 items-center border-t py-3">
         {threadLink ? (
-          <Button asChild variant="outline" className="w-full">
-            <a href={threadLink} target="_blank" rel="noreferrer">
-              Open title thread in T3
-            </a>
-          </Button>
+          <OpenInT3 href={threadLink} className="text-sm" />
         ) : (
           <p className="text-xs text-subtle-foreground">
             {state === "skipped" ? "Nothing was launched" : "No T3 thread known"}

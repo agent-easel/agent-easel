@@ -1,6 +1,6 @@
 # Chat control
 
-Chat control is administered only on the Factory host, in the **Factory** group of Settings.
+Chat control is administered only on the Factory host, in the **Chat control** group of Settings.
 It is Off on every new and upgraded installation. This document describes what is implemented
 today: the **Language model** and **Discord** pages. Approved clients do not see these pages or their
 search entries, and the server refuses its operations on the approved-client listener with
@@ -10,15 +10,15 @@ server administer it through the same host operations.
 ## Language model
 
 Chat control has its own language-model connection. It does not configure Agents, T3 or Run title
-generation, and they do not configure it. The page saves four values as one section with its own
-**Save** and **Discard**:
+generation, and they do not configure it. The page saves four values as one section with **Save**
+and **Discard** in the page header (Discard appears only while there are unsaved edits):
 
 | Value | Rule |
 | --- | --- |
 | Provider | **OpenAI-compatible** (chat completions, through the AI SDK OpenAI-compatible provider) or **Anthropic** (messages) |
 | Base URL | A literal absolute `http://` or `https://` address, kept exactly as entered; proxy paths are preserved |
 | Model | Free text, as the provider names the model |
-| Key | Optional; without one, requests go out keyless |
+| API key | Optional; without one, requests go out keyless |
 
 Factory sends requests to the base URL followed by `/chat/completions` or `/messages`. It refuses
 a base URL with embedded credentials, a query or a fragment. Anthropic's messages API needs the
@@ -49,9 +49,10 @@ unsaved edits asks before discarding them.
 
 Reads report only whether a key is saved. The key never appears in host reads, browser storage,
 model content, logs or Test results; the browser holds a typed key only in memory until it is saved.
-Leaving the key field blank keeps a saved key; **Replace key** and **Remove key** are explicit.
-Changing the provider or base URL while a key is saved requires a choice before saving: reuse the
-saved key at the new destination, replace it, or go keyless.
+A saved key shows as **Stored** with **Replace** and **Remove**. Leaving the field blank keeps a saved
+key; Replace opens a masked field with **Cancel**, and Remove shows the key as None with **Undo**
+until Save. Changing the provider or base URL while a key is saved requires a choice before saving:
+**Use stored key** at the new destination, **Replace key** or **No key**.
 
 The key is stored outside SQLite in an owner-only file under `credentials/chat-control/` in the data
 home (directory 0700, file 0600). These files are protected by file permissions, not encrypted. A
@@ -62,21 +63,24 @@ and `credentials/` together so the committed configuration keeps its key file.
 
 ### Test
 
-**Test saved connection** sends one short synthetic request with fixed text to the saved
+**Test connection** in the page header sends one short synthetic request with fixed text to the saved
 configuration: no Run content, tools or retries. Providers may charge for it, and Factory never
 runs it automatically. Unsaved edits must be saved or discarded first, and the request names the
 saved revision being tested. The result is recorded with that revision and its time, with
 Factory's own description of a failure (an HTTP status category, unreachable or timed out), never a
 provider's response body or the request URL. A Test is dated evidence for one saved configuration:
-a later save leaves it as evidence for its own, earlier revision. It does not report whether Chat
-control conversations work, and a failed Test does not turn Chat control off.
+a later save leaves it as evidence for its own, earlier revision. The outcome for the saved revision
+is the page's header badge (**Testing**, **Test passed** or **Test failed**), and a **Last tested**
+row shows when the latest Test ran. A Test does not report whether Chat control conversations work,
+and a failed Test does not turn Chat control off.
 
 ### Conversation failures
 
 An actual conversation whose model request fails (an HTTP error, an unreachable provider, no answer
 within 60 seconds or an answer Factory cannot read) records a runtime problem with the configuration
-revision it used, its time and Factory's own description. The page shows it, and while Chat control
-is On the **Language model** navigation item shows an indicator. Only a later successful
+revision it used, its time and Factory's own description. While Chat control is On the page's header
+badge reads **Not answering**, one card explains the failure with its time, revision and description
+under Technical details, and the **Language model** navigation item shows a red indicator. Only a later successful
 conversational model request clears it. A Test neither sets nor clears it, and a later save leaves it
 dated to its earlier revision. Factory's own capacity and time limits are not provider failures and
 record nothing here.
@@ -90,42 +94,53 @@ a Factory MCP client. The bot works only while the Factory backend runs.
 
 ### Connection
 
-The **Connection** section saves two values with its own **Save** and **Discard**, independently
-of the Language model:
+The **Bot** section holds two values, independent of the Language model:
 
 | Value | Rule |
 | --- | --- |
-| Public Key | The application's non-secret Public Key, 64 hexadecimal characters, stored in lowercase |
+| Public key | The application's non-secret Public key, 64 hexadecimal characters, stored in lowercase |
 | Bot token | Secret; stored like the model key |
 
 While Chat control is Off the owner may save an incomplete section; malformed supplied values are
-always refused. While Chat control is On, removing the Public Key or token is refused. Saving never
+always refused. While Chat control is On, removing the Public key or token is refused. Saving never
 contacts Discord.
 
 The token follows the [key](#key) rules: reads report only whether one is saved, a blank field keeps
-it, **Replace token** and **Remove token** are explicit, and it is stored outside SQLite in an
-owner-only file under `credentials/chat-control/` that the committed section names. Saves name the
-revision their edits started from, conflicts keep the page's edits, a lost answer is resolved by
-reading the current settings, and unsaved edits are guarded as on the Language model page.
+it, Replace and Remove are explicit, and it is stored outside SQLite in an owner-only file under
+`credentials/chat-control/` that the committed section names.
+
+The page has one **Save** and one **Discard** in its header for Bot and [Access](#access). Save
+writes the changed sections in sequence, Bot first and then Access, and each keeps its own revision.
+When the Bot save fails, Access is not sent and every edit is kept; the page says that Access changes
+were not saved and the previous grants are still active. When Bot is saved and Access fails, the
+next Save sends only Access. Each save names the revision its edits started from, conflicts keep the
+page's edits, a lost answer is resolved by reading the current settings, and unsaved edits in either
+section are guarded as on the Language model page.
 
 No Application ID is configured. Factory's application is the one Discord reports for the
 authenticated Gateway session; Factory never reads it from the token itself. Factory records the
-application its operating connection authenticated as and shows it on the page. When a newly
+application its operating connection authenticated as, with the bot user's display name, when a
+session becomes ready; a check records the name with its result. The page's **Bot** row shows that
+name, with a **Gateway verified** tag after a passing check, or "—" until a session was ready. When a newly
 authenticated session reports another application, that is an **application replacement**: the
 shared conversations are cleared, the previous application's waiting consent ends for good, its
 messages are no longer edited and eligible Runs get new status cards from the new bot (see
 [Confirmation](#confirmation), [Status cards](#status-cards) and
 [Attention notices](#attention-notices)). A new token of the same
-application keeps everything. When the owner replaces the token, the page says that a token of
-another application is treated this way.
+application keeps everything. When the owner replaces the token, the page warns that a token from
+another bot replaces the current one.
 
 ### On and Off
 
-The Discord page holds Chat control's one persisted **On/Off** switch; the Language model has no
-switch of its own. Turning On needs the saved Public Key and bot token and the
-Language model's provider, base URL and model. A model key, a passed Test or check and any Access
-entry are not required; empty Access is explained on the page and admits nobody. Turning On uses
-only saved configuration.
+Chat control's one persisted **On/Off** switch is a row at the top of the Discord page; the Language
+model has no switch of its own. Turning On needs the saved Public key and bot token and the Language
+model's provider, base URL and model, and the latest check of the current connection revision must
+not have reported a rejected token or a missing Message Content intent; the server refuses On
+otherwise. A model key, a passed Test or check and any Access entry are not required; empty Access
+admits nobody, and while On the page says so in one card. Turning On uses only saved configuration.
+While the switch cannot turn On it is disabled and the missing requirement sits beside it, for
+example "Save the bot token and a language model first", where "a language model" opens the
+Language model page over Discord; Esc or ✕ returns to Discord with its unsaved edits kept.
 
 On is persisted: after a restart Factory reconnects by itself. While On, Factory runs exactly one
 Gateway connection. It logs in with the saved token and waits for a ready session; only once
@@ -145,31 +160,58 @@ Turning Off stops admitting messages and commands and disconnects; it returns on
 session is released. Configuration, Access, conversations and accepted Factory work are kept, and
 Off is not Archive, Settle or a worker interruption.
 
-The page reports the Gateway connection (**Connecting**, **Connected**, **Reconnecting**,
-**Rejected**) separately from command setup: a connected Gateway does not mean the command works.
-While On, the Discord item in the Settings navigation shows an indicator only for a current
-unresolved failure: a reconnecting or rejected connection or a failed command setup. Off shows none,
-and incomplete setup or empty Access is a notice, not an outage. Chat control failures never become
+The page header badge reports the connection (**Off**, **Checking**, **Connecting**, **Connected**,
+**Reconnecting**, **Rejected**); a failed command setup has its own card: a connected Gateway does not
+mean the command works. While On, the Discord item in the Settings navigation shows an indicator only
+for a current unresolved failure: amber while reconnecting, red for a rejected connection, a failed
+command setup or a message Factory could not deliver. Off shows none, and incomplete setup or empty
+Access is not an outage. Chat control failures never become
 Run Problems, Needs input, toasts or OS notifications.
 
 ### Access
 
-The **Access** section has its own **Save** and **Discard**, independent of the connection and the
-Language model, so revoking access never waits for other unsaved edits. A save is in effect for
-every later Discord event when it returns. It lists:
+The **Access** section is saved by the page's one Save, after Bot (see [Connection](#connection)),
+and keeps its own revision. A save is in effect for every later Discord event when it returns. It
+lists:
 
-- allowed Discord user IDs;
+- allowed Discord user IDs, as one comma-separated field; pasting one ID per line is accepted and
+  normalised;
 - allowed parent channels, each with the Factory Projects it grants. Threads inherit their parent
   channel's grant. A parent is a text, announcement or forum channel; a forum post is a thread of
   its forum.
 
 IDs are trimmed decimal strings of 17 to 20 digits, never numbers, and a repeated user, channel or
 Project grant is refused rather than merged. Names are not used to match anything. A channel without
-Projects grants nothing. A granted Project Factory no longer knows stays listed as unknown and grants
-nothing. Server membership, roles, administrator status and Factory client approval grant no chat
+Projects grants nothing. A granted Project Factory no longer knows grants nothing, is not listed and
+is dropped from the channel on the next save. Server membership, roles, administrator status and Factory client approval grant no chat
 authority, and Access grants no Factory UI access or client approval. Factory does not administer
 Discord permissions: everyone who can read an allowed channel or its threads sees what the bot posts
-there, including people Access does not list.
+there, including people Access does not list. When a save grants a channel its first Project, the
+page says once that everyone who can read that channel sees the bot's replies.
+
+When a check passes or an operating session becomes ready, Factory looks up each allowed user ID and
+channel ID through Discord and records the names it reports. The page shows them under the IDs. An
+ID Discord does not know shows an **Unknown user** or **Unknown channel** tag and one warning; saving
+stays allowed. Names are display only: matching always uses IDs, and IDs added after the latest
+lookup show no name until the next passing check or ready session.
+
+### Access test
+
+After the first Access save the section offers **Send access test** (**Send again** once a test was
+sent). It always tests the saved Access, so it is disabled with "Save first" while Users or Channels
+have unsaved edits, and with its reason while Chat control is Off; it needs the operating connection.
+The bot posts one message in each allowed channel that mentions every allowed user and asks them to
+reply; the message pings only those users. A list too long for one Discord message is split across
+several. Sending again replaces the previous test, so everyone it asks is **Waiting** again.
+
+A reply from an allowed user to one of the test's messages takes the normal admission path of an
+[invocation](#invocations) (an allowed user, in an allowed channel that grants a Project), but it
+opens no thread or conversation and never reaches the Language model: the bot reacts ✅ and Factory
+records the user as **Reached** with the time. One reply in any allowed channel is enough. Waiting
+has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
+channels; a channel Discord no longer knows shows **Unknown channel** and one warning to remove it.
+The latest results stay visible while Off, and an Access save drops the results of the channels and
+users it removes.
 
 ### Invocations
 
@@ -215,30 +257,34 @@ confirmed, it clears nothing and says so privately. There is no message-text fal
 
 ### Check
 
-While Chat control is Off, **Check saved connection** opens one bounded connection-only Gateway
+While Chat control is Off, **Check connection** in the page header opens one bounded connection-only Gateway
 session with the saved token at the saved revision. It waits at most 30 seconds for the session to
-become ready, reads the application Discord authenticated, and disconnects. It attaches no conversation handler: it answers no message, button or command,
+become ready, reads the application and bot name Discord authenticated, looks up the allowed IDs'
+names, and disconnects. It attaches no conversation handler: it answers no message, button or command,
 posts nothing, registers no command and makes no model request; messages arriving meanwhile are not
 serviced. Only one Gateway session exists at a time, so a check while another runs is refused, and
 closing Factory ends a running check's session. While Chat control is On there is no separate check:
-the page reports the running connection and offers **Retry connection** instead. A failed command
+the page reports the running connection and offers **Retry connection** in the header while it is
+reconnecting or rejected or command setup failed. A failed command
 setup can be retried here even while the Gateway is connected, after correcting its cause in Discord.
 
 The result is recorded with the checked revision and its time, using Factory's own description:
 verified with the authenticated application, a token Discord rejects, a missing Message Content
-intent, Discord unreachable, timed out, or another Gateway failure. Discord's error bodies and the
-token never appear in it. A failed check never tries another token or an earlier one. The check
+intent, Discord unreachable, timed out, or another Gateway failure. The page shows one card per
+failure, and a rejected token or missing intent also tags the Bot token row. Discord's error bodies
+and the token never appear in it. A failed check never tries another token or an earlier one. The check
 changes neither the configuration nor the recorded application; when the authenticated application
 differs from the recorded one, the page says that turning On with this token replaces it. A later
 save leaves the result as evidence for its earlier revision. A passing check shows only that Discord
 accepted the token and which application it belongs to; it does not show channel permissions,
-message delivery, command setup or that the Public Key is correct.
+message delivery, command setup or that the Public key is correct.
 
 ### Setting up the application
 
-The page explains the setup the owner performs in the Discord Developer Portal:
+The owner performs this setup in the Discord Developer Portal. The page does not repeat it: until
+the first passing check its header links here with **Setup guide ↗**.
 
-1. Create an application and copy its Public Key. No Application ID is entered.
+1. Create an application and copy its Public key. No Application ID is entered.
 2. On the Bot page, reset and copy the token and turn on **Message Content Intent**; the adapter
    requests it and Discord refuses a connection without it. Other privileged intents are not needed.
 3. Leave **Interactions Endpoint URL** empty. With a URL set, Discord sends interactions there
@@ -377,7 +423,7 @@ reports do not refresh retention, and the clocks continue while Chat control is 
 
 A Language model save that changes the provider kind or base URL clears every conversation, and so
 does an application replacement; switching back revives nothing. Changing the model
-name or key, rotating the same application's token or editing the Public Key keeps them. An Access
+name or key, rotating the same application's token or editing the Public key keeps them. An Access
 save that removes a channel or one of its Projects clears that channel's whole conversations; adding
 Projects keeps them and a regrant restores nothing. Removing a user stops their unfinished and later
 work but keeps what they contributed for the remaining participants.
@@ -450,6 +496,11 @@ nothing is proposed, so a broad request such as "approve this Run" never answers
 occurrences or picks one; the model is told to ask. Factory refuses an Archived Run, an occurrence
 the Run does not have or that no longer waits (answered, withdrawn or cancelled, or the Run accepts
 no answers) and an occurrence whose context Factory no longer has.
+
+While a review to answer an occurrence can still be confirmed, the Run's own decision form for that
+occurrence is disabled with **A Discord confirmation is waiting**, so the same occurrence is not answered
+in two places at once. It becomes available again when the review expires or fails; a review voided by
+an Access or application change leaves the form waiting until the review would have expired.
 
 ### Archive proposals
 

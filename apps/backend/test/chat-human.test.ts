@@ -55,6 +55,20 @@ it("a Human answer proposal reviews the Run, the exact occurrence with its compl
   ).toBe("pending");
 });
 
+it("a presented Human answer review makes its occurrence wait for the Discord confirmation until the review expires", async (c) => {
+  // Arrange
+  const world = await answeringWorld(c);
+  const before = Date.now();
+
+  // Act
+  await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+
+  // Assert
+  const { occurrence } = await occurrenceOf(world.factory, world.runId, world.occurrence.id);
+  assert(occurrence.chatConfirmationUntil);
+  expect(Date.parse(occurrence.chatConfirmationUntil)).toBeGreaterThan(before);
+});
+
 it("the requester's confirmation answers exactly the reviewed occurrence of a Run started in Factory and posts the receipt in the request thread without giving the Run an origin", async (c) => {
   // Arrange
   const world = await answeringWorld(c);

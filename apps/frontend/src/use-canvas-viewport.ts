@@ -22,8 +22,10 @@ type CanvasViewportOptions = {
   getBounds: () => GraphBounds;
   /** Whether this canvas is shown rather than covered by another screen. */
   shown: boolean;
-  /** Frames `focusTargets` on entry and while following; explicit Fit and accepted layouts still fit the whole graph. */
+  /** Frames `focusTargets` while following; explicit Fit and accepted layouts still fit the whole graph. */
   getFocusView?: ((width: number, height: number) => CanvasView) | undefined;
+  /** The view a new scope opens at; without it, entry fits the whole graph. */
+  getEntryView?: ((width: number, height: number) => CanvasView) | undefined;
   /** Ids the focus view frames, in a stable order. Providing them enables following. */
   focusTargets?: readonly string[] | undefined;
   padding: { x: number; top: number; bottom: number };
@@ -202,8 +204,8 @@ function useCanvasFit(
       if (!size) return;
       stopAnimation();
       setView(
-        entry && current.getFocusView
-          ? current.getFocusView(size.width, size.height)
+        entry && current.getEntryView
+          ? current.getEntryView(size.width, size.height)
           : fitGraphView(bounds ?? current.getBounds(), size.width, size.height, current.padding),
       );
       const rect = size.element.getBoundingClientRect();

@@ -1,23 +1,4 @@
-import type { RunAttention, RunBlock, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
-
-/** A pending attention matter of `kind` on `blockId`. */
-export const attention = (blockId: string, kind: RunAttention["kind"]): RunAttention => ({
-  id: `${blockId}-${kind}`,
-  runId: "run",
-  taskTitle: "Task",
-  blockId,
-  blockName: blockId,
-  executionId: "execution",
-  kind,
-  nativeRequestId: null,
-  occurrenceId: null,
-  link: null,
-  freshness: "fresh",
-  appearedAt: "2026-11-08T00:00:00Z",
-  settledAt: null,
-  settlementReason: null,
-  message: null,
-});
+import type { RunBlock, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
 
 export const block = (blockId: string): RunBlock => ({
   blockId,
@@ -139,6 +120,7 @@ export function runEntry(): RunNavigationEntry {
     },
     lifecycle: "active",
     settlement: null,
+    pendingWork: false,
     blocks: [],
     presentation: { snoozed: false, woke: false },
     attention: { needsInput: false, problem: false, matters: [] },

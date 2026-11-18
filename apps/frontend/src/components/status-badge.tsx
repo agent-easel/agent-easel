@@ -56,7 +56,8 @@ const icons: Record<StatusBadgeKind, LucideIcon> = {
   info: Info,
 };
 
-const runStateLabels: Record<RunStateKind, string> = {
+/** The canonical label of each Run and Block work state. */
+export const RUN_STATE_LABELS: Record<RunStateKind, string> = {
   working: "Working",
   waiting: "Waiting",
   "needs-input": "Needs input",
@@ -88,7 +89,7 @@ export function StatusBadge({ kind, icon, children, className, ...props }: Statu
       {...props}
     >
       <Icon aria-hidden strokeWidth={2} className="size-3 shrink-0" />
-      <span className="truncate">{children ?? runStateLabels[kind as RunStateKind]}</span>
+      <span className="truncate">{children ?? RUN_STATE_LABELS[kind as RunStateKind]}</span>
     </span>
   );
 }

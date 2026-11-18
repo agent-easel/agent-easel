@@ -211,13 +211,14 @@ function matchingSections(sections: readonly SettingsSection[], query: string) {
 export function SettingsModal() {
   const openSettings = useSettingsNavigation();
   const [query, setQuery] = useState("");
-  const selectedTab = useSettings()?.tab;
+  const selection = useSettings();
   const scope = useClientScope();
   const sections = settingsSections.filter((section) => sectionApplies(section, scope));
-  const current = sections.find((section) => section.tab === selectedTab) ?? defaultSection;
+  const current = sections.find((section) => section.tab === selection?.tab) ?? defaultSection;
+  const origin = sections.find((section) => section.tab === selection?.from);
   const content = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
-  const close = () => void openSettings(undefined);
+  const close = () => void openSettings(origin && { tab: origin.tab });
   const dialog = (
     <Dialog
       open
@@ -258,7 +259,12 @@ export function SettingsModal() {
             searchRef={search}
             onQueryChange={setQuery}
           />
-          <SettingsPanel key={current.tab}>{current.content()}</SettingsPanel>
+          {/* One keyed list, so the origin stays mounted beneath with its unsaved edits. */}
+          {(origin ? [origin, current] : [current]).map((section) => (
+            <SettingsPanel key={section.tab} hidden={section !== current}>
+              {section.content()}
+            </SettingsPanel>
+          ))}
         </div>
       </DialogSurface>
     </Dialog>
@@ -319,8 +325,10 @@ function useSectionAttention(tab: SettingsSection["tab"]) {
   const discordAttention = useDiscordAttention(tab === "chat-discord");
   const modelAttention = useChatModelAttention(tab === "chat-model");
   if (tab === "agent-reporting") return reportingMarker;
-  if ((tab === "chat-discord" && discordAttention) || (tab === "chat-model" && modelAttention))
-    return "needs attention";
+  const chatAttention =
+    tab === "chat-discord" ? discordAttention : tab === "chat-model" ? modelAttention : null;
+  if (chatAttention === "error") return "failing";
+  if (chatAttention === "attention") return "needs attention";
   if (tab === "devices" && pendingDevices > 0)
     return `${pendingDevices} ${pendingDevices === 1 ? "device" : "devices"} waiting for approval`;
   return undefined;
@@ -353,7 +361,15 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
       {section.tab === "connection" && (
         <ConnectionStateDot presentation={presentation} label={status} />
       )}
-      {attention && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />}
+      {attention && (
+        <span
+          aria-hidden
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            attention === "failing" ? "bg-destructive" : "bg-attention",
+          )}
+        />
+      )}
       {locked && (
         <Lock aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" strokeWidth={1.5} />
       )}

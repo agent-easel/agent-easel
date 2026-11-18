@@ -217,7 +217,10 @@ When the T3 connection shares [T3 theme colors](t3-integration.md#theme-colors),
 presentation with a Light and a Dark half to approved clients and the host panel through live
 delivery; each client shows the half of its own mode, so two clients of the same server can show the
 same T3 theme in different modes. A missing or rejected half shows Factory's colors for that mode,
-and the mode choice itself never changes. Connection and access gates and unapproved clients
+and the mode choice itself never changes. The **Appearance** header shows **Following T3** when
+at least one mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise.
+The **T3 theme** card shows the theme name and which modes use its colors. Connection and access
+gates and unapproved clients
 receive no theme colors and use Factory's colors.
 
 Each client caches the last presentation its server published: one snapshot with both halves, in the
