@@ -207,17 +207,22 @@ export function SettingsProblemCard({
   icon,
 }: {
   id?: string;
-  tone: "error" | "warning" | "info";
+  tone: "error" | "warning" | "info" | "neutral";
   title: ReactNode;
   children?: ReactNode;
   details?: string | undefined;
   action?: ReactNode;
   icon?: LucideIcon;
 }) {
-  const Icon = icon ?? (tone === "info" ? Info : TriangleAlert);
-  const variant = tone === "error" ? "critical" : tone === "warning" ? "attention" : "info";
+  const variant = {
+    error: "critical",
+    warning: "attention",
+    info: "info",
+    neutral: "neutral",
+  } as const;
+  const Icon = icon ?? (tone === "error" || tone === "warning" ? TriangleAlert : Info);
   return (
-    <Alert id={id} variant={variant} role={tone === "error" ? "alert" : "status"}>
+    <Alert id={id} variant={variant[tone]} role={tone === "error" ? "alert" : "status"}>
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || details || action) && (

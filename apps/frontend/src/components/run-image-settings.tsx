@@ -161,7 +161,7 @@ function RunImageProblems({
         </SettingsProblemCard>
       )}
       {skipped > 0 && (
-        <SettingsProblemCard tone="info" title={deletionResultTitle(kept, skipped)}>
+        <SettingsProblemCard tone="neutral" title={deletionResultTitle(kept, skipped)}>
           {kept > 0 &&
             `Active Runs still use ${kept === 1 ? "the retained image" : `${kept} retained images`}.`}
           {kept > 0 && other > 0 && " "}

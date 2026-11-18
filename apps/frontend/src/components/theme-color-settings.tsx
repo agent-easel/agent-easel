@@ -13,7 +13,7 @@ export function ThemeColorSettings({
 }) {
   if (status?.state === "unsupported")
     return (
-      <SettingsProblemCard tone="info" title="This T3 doesn’t share its theme">
+      <SettingsProblemCard tone="neutral" title="This T3 doesn’t share its theme">
         Update T3 to follow its theme.
       </SettingsProblemCard>
     );
@@ -35,7 +35,7 @@ export function ThemeColorSettings({
       </SettingsGroup>
       {details && (
         <SettingsProblemCard
-          tone="info"
+          tone="neutral"
           title={`Factory can’t use the “${name}” theme`}
           details={details}
         >
@@ -65,7 +65,7 @@ function ThemeConnectionProblem() {
   const openSettings = useSettingsNavigation();
   return (
     <SettingsProblemCard
-      tone="info"
+      tone="neutral"
       icon={Unplug}
       title="Theme colors wait for the T3 connection"
       action={

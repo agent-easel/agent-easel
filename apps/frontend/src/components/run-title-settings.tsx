@@ -344,7 +344,7 @@ function TitleConnectionProblem() {
   const openSettings = useSettingsNavigation();
   return (
     <SettingsProblemCard
-      tone="info"
+      tone="neutral"
       icon={Unplug}
       title="Factory can’t reach T3"
       action={
@@ -464,7 +464,7 @@ function LatestResult({ diagnostic }: { diagnostic: RunTitleDiagnostic }) {
   const run = diagnostic.runNumber === null ? "A Run" : `Run #${diagnostic.runNumber}`;
   return (
     <SettingsProblemCard
-      tone="info"
+      tone="neutral"
       title={`${run} kept its first-line title`}
       details={diagnostic.message}
     >
