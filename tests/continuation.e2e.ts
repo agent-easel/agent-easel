@@ -27,6 +27,8 @@ test("a Continuation added after an Agent names the thread it continues and keep
   await screen.getByRole("button", "Save Flow").tap();
 
   // Assert
+  // Reloading a Flow with unsaved changes opens the browser's leave prompt, so wait for the save.
+  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved");
   await expect(screen.getByRole("article", "Block Spec")).toContainText("Grill's thread");
   await expect(screen.getByRole("region", "Conversation")).toContainText(
     "Continues Grill's thread",
