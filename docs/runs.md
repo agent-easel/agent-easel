@@ -445,7 +445,10 @@ fixed Human exits their old exits were mapped to.
   or **when no rule matches**). Routing, Otherwise and an unwired selection raise no attention; only a Condition
   integrity Problem shows on the block.
 - **Needs input** and **Problem** use the same labels as the Run sidebar and are not cleared by selecting a block. A Human
-  step or Agent that asks shows Needs input in its badge; a Problem shows in a footer unless the block itself failed. Stale observations say **Not live** and **Last known**; an unknown observation on a started
+  step or Agent that asks shows Needs input in its badge. A Block still running in T3 shows **Working** even while the Run has
+  a Problem; a failed visit, or one with a missing or rejected report, shows **Problem** with a red outline and its cause on the
+  activity line (**Failed in T3 · 22:16**, **No report · 22:16**, **No accepted report**, **No valid report**). A selected
+  Block keeps its state outline with the selection ring outside it. Stale observations say **Not live** and **Last known**; an unknown observation on a started
   block differs from stale; a block that never ran says **Not visited**.
 - On entry, the view opens at 100% and is never fitted. It centers the combined bounds of the active Blocks (`working` or
   `waiting`, and a Continuation while its prompt is worked on, in place of the Agent whose thread works on it); with none, the
@@ -465,15 +468,20 @@ fixed Human exits their old exits were mapped to.
   keyboard hint.
 - One docked **inspector** beside the canvas shows the **Run overview** until a block is selected or the Run title is
   inspected: **Attention** while something is pending, **Progress** with each started block and its status on a second line
-  that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**), branches (wrapping only at
-  "/" or "-") and pull requests, the initial prompt and block activations (**Name · Visit N** and **Open in T3 ↗**), then a
+  that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**; a Problem row shows the error
+  glyph and a plain line such as **Failed in T3 · 22:16**), a worktree Run's **Branch** (its branch name and **Own worktree
+  from *base***, or **Preparing worktree** and **From *base*** until T3 reports it), worker branches (wrapping only at
+  "/" or "-") and pull requests, the initial prompt and block activations (**Name · Visit N** and **Open in T3 ↗**, which a
+  row leaves out when an Attention card already links to that thread), then a
   closed **Resolved attention · N** row and project, Flow revision, workspace and work periods under a closed
   **Workspace & observation** section. Section headings are in sentence case. Selecting a block shows it in the
-  same panel: its Needs input or Problem first (answers and Problem actions work here), its current visit and working report,
+  same panel under **‹ Overview Esc**, its icon, name, reference and state: its Attention card first, without a status row or
+  Technical details (answers and Problem actions work here), its working report,
   the results handed off to an Agent block (**Received**), activations, the Agent block's
   [Revisit instruction](../GLOSSARY.md#revisit-instruction) as captured at Start (read-only, and only when it is non-empty;
-  the execution canvas never shows it, and the exact composed turn stays in the worker thread), exits, **Open in T3 ↗**, and its T3 thread and
-  execution ids under a closed **Technical details** section. Pressing the Flow input's
+  the execution canvas never shows it, and the exact composed turn stays in the worker thread), exits with each one's
+  consequence (**ends branch** or **→ *Block***), and its T3 thread, execution, pending Problem reasons and observation under a
+  closed **Technical details** section at the bottom. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.
   **Esc** or the **Overview** breadcrumb returns from the block or the Run title to the overview. Selecting never answers
   or clears attention, and there is no editing here.
@@ -491,14 +499,16 @@ fixed Human exits their old exits were mapped to.
   sidebar) to resize it; with the edge focused, Left/Right step 16 px and Home/End jump to the bounds.
   Double-click restores the responsive default, which a saved width otherwise replaces. Widths are saved per browser profile
   on this device.
-- The top bar shows the title and the meta line **#N · Project · Flow · Started …** (with a Trigger-started Run's origin; the
+- The top bar shows the title and the meta line **#N · Project · Flow · Started …**, which reads **Settle requested …** while a
+  confirmed Settle waits for its workers (with a Trigger-started Run's origin; the
   Flow name opens it in Studio while it exists), then **Not live** while an Active Run's observations are stale or its live
   delivery is unavailable, with Factory's last observation time, **Open in T3 ↗** for the Run's conversation or its first
   worker (a pending launch says recovery is still searching and offers no replacement), the inspector toggle and, until the
   Run is archived, a ··· menu holding **Archive…**. The top bar carries no work state: it stays on the Run's sidebar row and
   its blocks. A Settled or Archived Run still names its lifecycle with its time, and an Active Run with nothing active or
-  pending reads **Idle**. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing workspace** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
-  **Workspace failed** with the reason; an unconfirmed creator launch shows its recovery note. Retained Runs that queued a
+  pending reads **Idle**. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing worktree** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
+  **Worktree not created**. A worktree T3 could not create is a Run-level Problem card, **T3 couldn’t create this Run’s
+  worktree**, whose action is **Settle…**; T3's reason is in its Technical details. Retained Runs that queued a
   first visit on an idle worker prepared under the earlier contract still show **entered · prepared idle T3 thread**.
 - Running worker work is ordinary progress; unavailable observations mark the Block **Not live**, preserving prior facts without creating a Problem.
 
@@ -515,7 +525,9 @@ A draft's creation key is its id, and its Start sends that id as the request key
 the draft's title and creation time, the Run therefore replaces the draft row in place, also among entries created at the same
 time. Runs created before drafts carried a creation time use their start time and Run id. Creation times come from the
 client's clock. Active rows show the project icon and name, execution indicator and time since the last
-Run activity, followed by the title. The [Run number](../GLOSSARY.md) appears as a `#N` pill after the project name in
+Run activity, followed by the title. The execution indicator shows activity, never state: a spinner while an Agent works, a
+pause while it waits, and the neutral **Idle** ring when nothing works but something is pending; it never becomes a Problem
+glyph, since the **Problem** or **Needs input** chip shows the state. Idle is an icon state only, not a Run status. The [Run number](../GLOSSARY.md) appears as a `#N` pill after the project name in
 active rows, before the title in compact rows and palette results, and first in the Run top bar meta line; Runs without a number show none.
 A third line appears for known worker branches, linked PRs or attention:
 one branch shows its name, several show a count, and a PR icon shows the number of distinct linked PRs.
@@ -546,8 +558,7 @@ menu items never opens a row preview.
 - When Runs exist but none are open, the open list shows **Nothing open** / **You're all caught up.**
   Snooze and Settle focus the destination group toggle after it appears. Restore focuses the restored row; during search, all three actions keep focus on that row.
   A Settle still stopping workers focuses the row; when the Run settles later, focus moves to the destination only if it is
-  still on that row, on that Run's detail settlement section, or was lost because the row left; focus the user moved elsewhere,
-  including to the page, stays. A detail **Retry** that starts stopping moves focus to the settlement section as the button disappears.
+  still on that row or was lost because the row left; focus the user moved elsewhere, including to the page, stays.
 - **Rename** changes that Run's or draft's title only (trimmed, non-empty, ≤500 characters) and makes its title provenance
   manual, dropping a pending [title generation](#run-title-generation); renaming never moves a row.
   The same shadcn/Radix row menu serves desktop and browser clients. Right click opens it at the pointer;
@@ -650,8 +661,17 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   Correct the reported issue without repeating work. Any accepted report on that Block or confirmed linked recovery settles
   the rejection while preserving its history; progress alone does not. Unknown or missing Block ids stay in MCP/T3.
 - **Attention** (per Run, optionally per block) lists pending matters only; resolved ones, with their reasons, chosen
-  decision and time, move to the closed **Resolved attention · N** row. Native questions and permissions link to **Open in
-  T3 ↗** and are answered there; Factory has no native answer controls. A fresh
+  decision and time, move to the closed **Resolved attention · N** row. Each matter is one card with one tone: a sentence
+  naming the Block and what happened (**Implement change failed in T3**), one sentence with the next action, and at most one
+  primary action. Raw ids, reason codes, observation freshness and agent-facing text appear only in its collapsed
+  **Technical details** (Reason, Execution, Thread, Observed and any recorded detail, with **Copy details**). A missing report
+  and the report rejections of the same execution are one card. **Open in T3 ↗** is a link everywhere and a filled button only
+  when it is the card's action: an execution failure, a native question or permission (**Implement change needs permission in
+  T3**, answered there; Factory has no native answer controls) and **Review *Block* in T3**. A missing or rejected report offers
+  **Request report** with Open in T3 as a link; until T3 confirms the Agent idle, Request report is disabled with **Waiting for
+  T3 to confirm the Agent is idle**; after a request the card reads **Report requested at HH:MM. The Agent is checking its
+  work.** with no button; and when that turn ends without a valid report it reads ***Block* finished without a valid report**
+  and offers Request report again. A Condition integrity Problem offers **Settle…**. A fresh
   read showing none records `withdrawn`; unavailable reads keep matters pending and mark the observation stale.
 - **Timeline** entries are plain sentences derived from recorded facts ("entered · new T3 thread", "handed off to Reviewer via
   Review", "finished → Approved", "result version 2 replaces the earlier result", "you answered → Approve", "settled by you",
@@ -729,7 +749,7 @@ A Condition's evidence is a separate bounded read of one Run and Condition
 (`GET /api/runs/:runId/conditions/:blockId/arrivals`, with optional `limit` and `cursor`), available to every client that can
 read the Run. It lists numbered arrivals in ascending arrival number, each with its acceptance time, source block and producing
 worker, matched captured rule (id and name) or Otherwise, selected output and each recipient of that output with its delivery's
-current disposition: `pending` until delivered, then `acknowledged` or `cancelled`. An unwired selection lists no recipients.
+current disposition: `pending` until delivered, then `acknowledged` or `cancelled`. An unwired selection, kept only by Runs captured before every Condition output had to be connected, lists no recipients.
 Decisions never change; dispositions are read again on every page, so they are current rather than a snapshot from selection
 time. A page holds 50 arrivals by default and `limit` accepts whole numbers from 1 to 100; any other value is a validation error.
 A first page fixes its window at the highest arrival number committed at that read (`highWater`), and its `nextCursor` continues
@@ -783,10 +803,10 @@ pending is accepted, but if the new authorization is not the Run's, it ends unre
 Confirming holds the Run at once: nothing new is launched, sent, released or delivered, no Wait forwards (at its deadline or
 through **Continue now**), and Human answers and **Request report** are refused. While settlement is stopping or unresolved,
 Human occurrences stay pending until settlement succeeds, but their answer forms are replaced by a settlement note and the Run
-shows settlement progress instead of **Needs input**. Refused answers explain that Factory is settling the Run and stopping its workers.
+shows no **Needs input**. Refused answers explain that Factory is settling the Run and stopping its workers.
 Factory then asks T3 to Stop each worker thread that is still unfinished, with its delegated and background work,
 and settles only once fresh reads confirm every worker finished; a Stop acknowledgement is not enough. Until then the Run stays
-Active and its settlement shows **stopping**, with each worker's progress. A worker shows **not resolved** when T3 does not
+Active, its sidebar row reads **Stopping** and its meta line **Settle requested …**. A worker shows **not resolved** when T3 does not
 support or accept Stop, cannot show the thread in the Run's project, workspace and authorization, or still shows it unfinished
 30 seconds after acknowledging Stop; the settlement then names the affected workers and what blocks them (a run in progress, a
 native request, delegated work or a queued run). A worker whose launch T3 may have accepted without Factory receiving the reply
@@ -799,8 +819,11 @@ that only queued work keeps unfinished.
 
 A settlement pass that ends unresolved raises the Run's **Settle could not stop workers** Problem; a settlement that is only
 stopping raises none. It is about the Run rather than one Block, so it appears in the Run's attention, not in a Block's. It
-names the workers shown not resolved, and any lost launch still searched for, with what blocks each, and the recovery options:
-**Settle** again, remove queued work in T3, or **Archive**. An unresolved episode has one such Problem: a retry keeps it pending,
+names the workers shown not resolved, **Settle couldn’t stop *Block***, with what blocks each in its Technical details. Its
+primary action depends on the reason: when T3 cannot stop worker threads, **Open in T3 ↗** is the filled button and **Retry
+settlement** a link; when a retry can succeed, **Retry settlement** leads and Open in T3 is a link. While retrying, the button
+reads **Retrying settlement…** and is disabled. This card's Retry settlement is the Run's only settlement retry; Run detail has
+no separate settlement panel, and **Archive** stays in the ··· menu. An unresolved episode has one such Problem: a retry keeps it pending,
 and when the retry ends unresolved again the same Problem shows the current workers, without a new appearance. It settles with
 the Run's other attention when settlement succeeds (`manual-settlement`) or the Run is Archived (`archived`). As ordinary
 attention it wakes a Snoozed Run and reaches [Chat control attention notices](chat-control.md#attention-notices).

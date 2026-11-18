@@ -389,7 +389,9 @@ it.
 **From arrival *N* onward → *output***, each with its own stably identified, named output, followed by the fixed, mandatory
 **Otherwise** output, which cannot be renamed, removed or reordered. The first rule the arrival number reaches selects its
 output; when none does, Otherwise is selected, as the normal route rather than an error. A Condition with no rules passes every
-arrival on through Otherwise, and a new Condition from the library starts that way, ready. A Condition has no Agent, prompt,
+arrival on through Otherwise, and a new Condition from the library starts that way. A Condition cannot end a branch: every output,
+Otherwise included, needs a wire before the Flow is ready, while an unconnected exit of an Agent or Human step, and an unconnected
+Wait or Continuation output, still ends its branch. A Condition has no Agent, prompt,
 execution settings, reports or worker, and the Flow input cannot connect to it. A Run routes through it as the [Runner](runner.md#condition-arrivals) describes.
 
 Its panel explains **Arrival numbers**: every message reaching the Condition gets the next number in the Run, counted together over
@@ -439,7 +441,7 @@ content, baseline revision, owner and placed Agent revisions it was requested fo
 discarded. A clean draft shows the readiness Studio received with its saved revision and the Agents shown, also after a placed Agent changes. A draft with unsaved changes then shows
 **Agents changed — check readiness again** and is not checked automatically. **Start Run** is enabled only by readiness for the graph and Agent revisions on screen, and only while the owning Project is available. The summary sits at the canvas's top-left and its issue list can cover the Flow input until collapsed. Actionable
 issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit sharing a name or ID with any current Agent exit, including hidden exits (also when
-the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a block whose Agent this Flow's owning Project may not place, a Continuation without a prompt, a Condition rule row that cannot run or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
+the Agent adds that exit later), a wire from an exit hidden in this Flow or no longer on the Agent, a block whose Agent Needs a model, a block whose Agent this Flow's owning Project may not place, a Continuation without a prompt, a Condition rule row that cannot run, an unconnected Condition output or a loop through only Conditions and Continuations, and unreachable blocks. Each names the block, the exit and the problem, and selecting one
 inspects its block; a Condition rule issue also scrolls to that rule and focuses its name or arrival number. These issues disable **Start Run**, never a save. The summary badge reads **Ready** or **Not ready**; Ready covers graph and saved-Agent requirements only; live connection, Agent settings availability, project and reporting installation
 are separate Start gates ([Runs](runs.md)).
 
@@ -809,12 +811,13 @@ Agents, blocks unreachable from the Flow input,
 a Condition rule without a name (`condition_rule_name_required`) or with the name of another of its outputs, Otherwise included
 (`condition_rule_name_duplicate`), without a threshold (`condition_threshold_required`), never selected because an earlier rule
 already matches from an equal or lower arrival (`condition_rule_shadowed`), or from arrival 1, which leaves Otherwise unreachable
-(`condition_threshold_first_arrival`), each at its rule row, and every directed cycle through a Condition made only of Conditions
+(`condition_threshold_first_arrival`), each at its rule row, every unconnected Condition output (`condition_output_unconnected`, at
+its rule row or, for Otherwise, at the Condition, naming the output), and every directed cycle through a Condition made only of Conditions
 and Continuations, whichever outputs its wires leave by (`condition_cycle`, at the Condition, naming the cycle): a Continuation may
 already pass messages straight through, so such a loop could circle without work. A ready Condition's thresholds therefore
-strictly descend and are at least 2; one with only Otherwise is ready. Readiness resolves each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
-they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. A
-terminal exit needs no edge; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
+strictly descend and are at least 2, and each of its outputs is wired; one with only a wired Otherwise is ready. Readiness resolves each block against the current saved Agents. Of an Agent's execution settings readiness learns only whether
+they are present, never their live availability, so one Agent never reports both `agent_model_required` and the `settings_unavailable` Start gate. Hide entries for exits the Agent no longer has are ignored. An
+Agent or Human step exit, a Wait output and a Continuation output need no edge: unconnected, they end the branch; other cycles, including loops through an Agent, Human step or Wait and loops of Continuations alone, self-loops and independent fan-out are allowed. Graph readiness does not claim T3 capability or live execution readiness.
 
 Readiness depends only on the graph, the Flow's owning Project and the saved revision and owning Project of each Agent it places, because an Agent's exits and former exit names
 are fixed per revision while its owner is not part of a revision. Validating unsaved content (`POST /api/flows/:id/validate`, Studio's **Check readiness**) resolves it under the saved
