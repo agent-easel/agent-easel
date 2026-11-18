@@ -84,24 +84,35 @@ export function launchFlow(id: string, projectId: string | null, ready = true): 
   };
 }
 
-const launchProject = (id: string): FactoryProject => ({
+const launchProject = (
+  id: string,
+  availability: FactoryProject["availability"] = "available",
+): FactoryProject => ({
   id,
   endpoint: "ws://127.0.0.1:3773",
   environmentId: "environment",
   projectId: `t3-${id}`,
   title: `Project ${id}`,
   workspaceRoot: `/repositories/${id}`,
-  availability: "available",
+  availability,
   observedAt: "2026-11-07T08:00:00.000Z",
 });
 
 /** A launch-choice delivery listing these Flows and Projects; current unless stated. */
 export function delivery(
   flows: readonly FlowDraft[],
-  { synchronized = true, projects = ["project", "other-project"] } = {},
+  {
+    synchronized = true,
+    projects = ["project", "other-project"],
+    availability = {},
+  }: {
+    synchronized?: boolean;
+    projects?: readonly string[];
+    availability?: Partial<Record<string, FactoryProject["availability"]>>;
+  } = {},
 ): { value: LaunchChoices; synchronized: boolean } {
   const catalog = {
-    projects: projects.map(launchProject),
+    projects: projects.map((id) => launchProject(id, availability[id] ?? "available")),
     selectedProjectId: null,
     problem: null,
   };
