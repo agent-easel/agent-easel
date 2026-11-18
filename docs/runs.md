@@ -342,6 +342,7 @@ Mutations also need `X-Factory-Request: 1` ([Configuration and storage](installa
 | HTTP | Purpose |
 | --- | --- |
 | `GET /api/runs?projectId=` | List Runs, optionally for one Project |
+| `GET /api/runs/archived-search?query=` | Find Archived Runs by title or exact Run number |
 | `GET /api/runs/:id` | Read one Run's detail, as the Run screen shows it |
 | `POST /api/runs` | Start a Run, as the composer does |
 | `PATCH /api/runs/:id` | Rename a Run |
@@ -808,8 +809,8 @@ as `archived` and shows activated blocks that had not finished, including waitin
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.
 
-An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer. All
-its data stays: its link still opens the read-only history with an **Archived** badge. Any later report from one of its Agents is
+An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer.
+Find an Archived Run by its number or title in the command palette. The **Archived** result opens its read-only history. Any later report from one of its Agents is
 acknowledged as a success that changes nothing and tells the Agent to stop work on the Block; Human answers and Request report are
 refused. Archive does not roll back edits or prevent new direct T3 chats; closing Factory or a browser tab is not Archive.
 An authorized participant can also archive a Run through [Chat control](chat-control.md#archive-proposals), where a request to

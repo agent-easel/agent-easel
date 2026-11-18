@@ -15,7 +15,7 @@ export const shortcutDefinitions = [
   { id: "palette", label: "Command palette", scope: "global", group: "application" },
   { id: "settings", label: "Settings", scope: "global", group: "application" },
   { id: "newRun", label: "New Run", scope: "global", group: "application" },
-  { id: "searchRuns", label: "Search Runs", scope: "global", group: "application" },
+  { id: "searchRuns", label: "Filter Run titles", scope: "global", group: "application" },
   { id: "studio", label: "Studio", scope: "global", group: "application" },
   { id: "shortcutsCheatSheet", label: "Keyboard shortcuts", scope: "global", group: "application" },
   { id: "back", label: "Back", scope: "global", group: "navigation" },
@@ -45,6 +45,18 @@ export const shortcutDefinitions = [
 export type ShortcutId = (typeof shortcutDefinitions)[number]["id"];
 export type ShortcutBinding = { key: string; mod: boolean; alt: boolean; shift: boolean };
 export type ShortcutBindings = Record<ShortcutId, ShortcutBinding | null>;
+
+export const openRowIds = [
+  "openRow1",
+  "openRow2",
+  "openRow3",
+  "openRow4",
+  "openRow5",
+  "openRow6",
+  "openRow7",
+  "openRow8",
+  "openRow9",
+] as const satisfies readonly ShortcutId[];
 
 /** The six commands and bindings persisted before storage version 2. */
 const legacyV1ShortcutDefaults: Record<

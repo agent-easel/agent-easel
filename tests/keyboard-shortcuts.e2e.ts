@@ -2,9 +2,9 @@ import { confirmSettlement } from "./support/run-history.ts";
 import type { Browser } from "@e2e-dev/web";
 import { test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
+import { findArchivedRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { matchingSidebarTitles } from "./support/sidebar.ts";
-import { elapse } from "./support/remote-access.ts";
+import { elapse, openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { browserRequests, liveRun, resetBrowserRequests } from "./support/live.ts";
 import {
   desktopNewRunHint,
@@ -48,7 +48,7 @@ test("a Run created while the palette is open appears in it without a list reque
   await resetBrowserRequests(app);
   await browser.keyboard.press(`${shortcutMod}+k`);
   await screen.getByLabel("Search commands and items").fill("Live palette");
-  await expect(screen.getByText(/^Loading items/)).toBeHidden();
+  await expect(screen.getByText(/^Loading Runs/)).toBeHidden();
   await expect(screen.getByRole("option", /Live palette/)).toHaveCount(0);
 
   // Act
@@ -62,6 +62,65 @@ test("a Run created while the palette is open appears in it without a list reque
     /^GET \/api\/(run-navigation|flows|agents)$/.test(request),
   );
   expect(listRequests).toEqual([]);
+});
+
+test("explicit palette search opens archived history without listing it in suggestions", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const title = "Demo · Archived · Earlier navigation experiment";
+  const run = await findArchivedRun(app.baseUrl, title);
+  await app.open("/runs/new");
+  await expectFactoryConnected(screen);
+  await browser.keyboard.press(`${shortcutMod}+k`);
+  const palette = screen.getByRole("dialog", "Command palette");
+  const search = palette.getByRole("combobox");
+  await expect(palette.getByRole("group", "Runs")).toBeVisible();
+  await expect(palette.getByRole("option", new RegExp(title))).toHaveCount(0);
+
+  // Act
+  await search.fill(`#${run.number}`);
+  const match = palette.getByRole("option", /Earlier navigation experiment/);
+  await expect(match).toContainText("Archived");
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  await expect(screen.getByRole("heading", title, { exact: true })).toBeVisible();
+  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
+  await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
+});
+
+test("offline New Run stays disabled and palette navigation skips it", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await openRemoteBrowser(app);
+  await openApproved(app, "/runs/new");
+  await expectFactoryConnected(screen);
+  await fixture.remoteAccess.offline();
+  await expect(screen.getByRole("status", "Offline")).toBeVisible();
+  await browser.keyboard.press(`${shortcutMod}+k`);
+  const palette = screen.getByRole("dialog", "Command palette");
+  const newRun = palette.getByRole("option", /New Run/);
+  const flows = palette.getByRole("option", /Studio · Flows/);
+  await expect(newRun).toBeDisabled();
+  await expect(newRun).toHaveText("New Run Offline");
+  await expect(flows).toHaveAttribute("aria-selected", "true");
+  await app.screenshot("R10h-palette-offline");
+
+  // Act
+  await browser.keyboard.press("ArrowUp");
+  await browser.keyboard.press("ArrowDown");
+
+  // Assert
+  await expect(flows).toHaveAttribute("aria-selected", "true");
+  await expect(newRun).toHaveAttribute("aria-selected", "false");
 });
 
 test("Mod+, from dirty Studio opens the unsaved-changes guard", async ({
@@ -369,10 +428,13 @@ test("Mod+/ opens the shortcuts cheat sheet with current hints and a Settings li
   await expect(sheet.getByText("New Run")).toBeVisible();
   await expect(sheet.getByText(desktopNewRunHint)).toBeVisible();
   await expect(sheet.getByText("Follow active", { exact: true })).toBeVisible();
-  await expect(sheet.getByText(".", { exact: true })).toBeVisible();
+  await expect(sheet).toContainText("Follow active .");
   await expect(sheet.getByText("Toggle inspector", { exact: true })).toBeVisible();
   await expect(sheet.getByText(inspectorHint, { exact: true })).toBeVisible();
-  await expect(sheet.getByRole("link", "Open Settings → Keyboard shortcuts")).toBeVisible();
+  await expect(sheet.getByText("Open row 1–9", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Open row 1", { exact: true })).toHaveCount(0);
+  await expect(sheet.getByText("Unbound", { exact: true })).toHaveCount(0);
+  await expect(sheet.getByRole("link", "Edit in Settings")).toBeVisible();
   await app.screenshot("shortcuts-cheat-sheet-desktop");
 });
 

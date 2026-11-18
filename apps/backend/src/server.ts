@@ -135,6 +135,9 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
     listRunNavigation: {
       handle: () => answer(() => factory.listRunNavigation()),
     },
+    searchArchivedRuns: {
+      handle: ({ parameters }) => answer(() => factory.searchArchivedRuns(parameters.query)),
+    },
     startRun: {
       body: { bytes: 131_072, message: "Send valid Start JSON up to 128 KiB." },
       handle: ({ input }) => answer(() => factory.startRun(input), 201),

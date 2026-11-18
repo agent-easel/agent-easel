@@ -309,7 +309,7 @@ function RunSearchField({
       <Input
         ref={ref}
         aria-label="Search Run titles"
-        title={searchHint ? `Search Runs · ${searchHint}` : "Search Runs"}
+        title={searchHint ? `Search Run titles · ${searchHint}` : "Search Run titles"}
         placeholder="Search Run titles"
         className={cn("bg-muted pl-8", value && "pr-8")}
         value={value}

@@ -16,7 +16,7 @@ desktop app can use.
 | Command palette | Mod+K | Mod+K |
 | Settings | Mod+, | Mod+, |
 | New Run | Mod+N | Mod+Alt+N |
-| Search Runs | Mod+F | Mod+Shift+F |
+| Filter Run titles | Mod+F | Mod+Shift+F |
 | Studio | Mod+Shift+S | Mod+Shift+S |
 | Keyboard shortcuts (cheat sheet) | Mod+/ | Mod+/ |
 | Back | Mod+[ | Unbound |
@@ -84,17 +84,18 @@ shortcuts could not be restored. Defaults are in use.**
 
 ## Discovery
 
-- **Cheat sheet:** Mod+/ opens a read-only overlay grouped like Settings, showing current
-  bindings and a link to **Settings → Keyboard shortcuts**. Its Canvas group also lists the fixed
-  arrow-key pan. Escape closes it; it does not edit bindings.
-- **Canvas shortcuts:** the keyboard button in the Run execution canvas toolbar opens that same
-  Canvas group with current bindings and an **All keyboard shortcuts** link to the cheat sheet.
-- **Settings → Keyboard shortcuts** is the place to change bindings.
-- **Hints:** current bindings appear on the command-palette search field, footer Settings
-  and Studio controls, selected palette actions (New Run, Settings, Studio), Rename in row
-  menus, and Snooze/Restore, Settle and Archive menu items, including Archive in the open Run's ··· menu.
-  A command without a binding shows no hint there; Settings, the cheat sheet and the canvas
-  shortcuts popover list it as **Unbound**.
+- **Cheat sheet:** Mod+/ opens a read-only overlay with bound commands and the fixed canvas
+  controls. Groups with no bound commands are hidden. When all nine Open row commands use
+  the default number chords, they appear on one line as **Open row 1–9**. **Edit in Settings**
+  in the header opens Settings → Keyboard shortcuts and closes the sheet.
+- **Canvas shortcuts:** the keyboard button in the Run execution canvas toolbar opens the
+  Canvas group, including **Unbound** commands, with an **All keyboard shortcuts** link to the sheet.
+- **Settings → Keyboard shortcuts** lists every command, including **Unbound** commands, and lets
+  you change bindings.
+- **Hints:** current bindings appear alongside Settings and Studio controls, on matching palette
+  actions (New Run, Settings and Studio · Flows), and on Run menu actions. On macOS, hints follow
+  Apple's modifier order ⌃⌥⇧⌘ with glyphs and no separators, as in ⌥⌘↑ and ⌘⌫. Windows and
+  Linux use forms such as Ctrl+Alt+Up. An unassigned command has no hint.
 - **Desktop menu:** the desktop app's native menu lists registry commands with the current
   bindings as accelerators; see [Application menu](desktop-and-clients.md#application-menu).
 
@@ -104,8 +105,7 @@ Run actions, sidebar navigation and the cheat sheet do not run over overlays or 
 Settings, New Run and Studio shortcuts can switch between the workspace dialogs using
 the unsaved-change guard; nested dialogs, menus, the palette and cheat sheet block them.
 The palette binding still toggles the palette. A bare Run number or `#` followed by
-that number finds the exact Run number (`13` and `#13` find Run #13, not #130);
-normal title and keyword matching still applies. Studio and Settings leave the underlying
+that number finds the exact Run number. Other searches match titles and keywords. Studio and Settings leave the underlying
 Run composer and detail **inert**; see
 [Studio keyboard shortcuts](studio.md#keyboard-shortcuts).
 
@@ -114,7 +114,7 @@ drafts in creation order, then rows from expanded **Snoozed** and **Settled** gr
 not searching. Title search replaces that list with matching Runs and drafts in creation
 order, without group headers. **Open row *n*** opens the *n*th visible row (Run or
 draft). **Previous Run** and **Next Run** move among visible rows from the current
-selection **without wrap-around**. If the current selection is not visible, stepping does nothing. **Search Runs** focuses the sidebar search field.
+selection **without wrap-around**. If the current selection is not visible, stepping does nothing. **Filter Run titles** focuses the sidebar search field.
 Back and Forward use browser history.
 
 **Toggle inspector** shows or hides the docked inspector of the Run open in detail, also
