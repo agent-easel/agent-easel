@@ -1,6 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
+import { KeyChip } from "./key-chip";
 
 function TooltipProvider({
   delayDuration = 0,
@@ -28,8 +29,12 @@ function TooltipContent({
   sideOffset = 0,
   children,
   showArrow = true,
+  shortcut,
   ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content> & { showArrow?: boolean }) {
+}: React.ComponentProps<typeof TooltipPrimitive.Content> & {
+  showArrow?: boolean;
+  shortcut?: string | undefined;
+}) {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
@@ -42,6 +47,12 @@ function TooltipContent({
         {...props}
       >
         {children}
+        {shortcut && (
+          <>
+            {" · "}
+            <KeyChip>{shortcut}</KeyChip>
+          </>
+        )}
         {showArrow && (
           <TooltipPrimitive.Arrow className="motion-reduce:animate-none z-50 size-2.5 translate-y-[calc(-50%_-_2px)] rotate-45 rounded-[2px] bg-popover fill-popover" />
         )}

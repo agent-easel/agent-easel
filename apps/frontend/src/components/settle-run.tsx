@@ -1,4 +1,3 @@
-import { DialogHeader, DialogFooter } from "./ui/dialog";
 import { useLayoutEffect, useRef, useState } from "react";
 import type {
   RunSettlement,
@@ -8,13 +7,7 @@ import type {
 import { api } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { Button } from "./ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-dialog";
 
 const WORKER_STATE_LABEL: Record<RunSettlementWorker["state"], string> = {
   executing: "still running",
@@ -117,33 +110,33 @@ export function useSettleRun() {
         }}
       >
         <AlertDialogContent
+          title="Stop the work and settle this Run?"
+          description={
+            "Factory cancels remaining automatic work and settles this Run once all workers and their delegated work have stopped."
+          }
+          actions={
+            <>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <MutationGate>
+                <Button disabled={busy} onClick={() => void confirm()}>
+                  {busy ? "Settling…" : "Settle"}
+                </Button>
+              </MutationGate>
+            </>
+          }
+          closeDisabled={busy}
           onCloseAutoFocus={(event) => {
             if (!returnFocus.current?.isConnected) return;
             event.preventDefault();
             returnFocus.current.focus();
           }}
         >
-          <DialogHeader>
-            <AlertDialogTitle>Stop the work and settle this Run?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Confirming stops every worker and its delegated work, cancels remaining automatic work
-              and ends this Run. Factory waits until every worker is confirmed finished.
-            </AlertDialogDescription>
-          </DialogHeader>
           {confirmation && <SettlementWorkers workers={confirmation.workers} />}
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <DialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
-            <MutationGate>
-              <Button disabled={busy} onClick={() => void confirm()}>
-                {busy ? "Settling…" : "Settle"}
-              </Button>
-            </MutationGate>
-          </DialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     ),

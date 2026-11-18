@@ -4,6 +4,7 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
@@ -228,6 +229,7 @@ function DeviceList({
   busy: boolean;
   onDecide: (id: string, decision: Decision) => void;
 }) {
+  const [revoking, setRevoking] = useState<FactoryClient | null>(null);
   const ordered = clients.toSorted((a, b) => listOrder[a.status] - listOrder[b.status]);
   return (
     <SettingsGroup label="Devices">
@@ -270,7 +272,7 @@ function DeviceList({
                     <Button
                       variant="destructive"
                       disabled={busy}
-                      onClick={() => onDecide(client.id, "revoke")}
+                      onClick={() => setRevoking(client)}
                     >
                       Revoke
                     </Button>
@@ -281,6 +283,33 @@ function DeviceList({
           </div>
         );
       })}
+      {revoking && (
+        <Dialog open onOpenChange={(open) => !open && setRevoking(null)}>
+          <DialogContent
+            title={<>Revoke “{revoking.label}”?</>}
+            description="This device loses access immediately, including in open windows."
+            actions={
+              <>
+                <Button variant="outline" onClick={() => setRevoking(null)}>
+                  Cancel
+                </Button>
+                <MutationGate>
+                  <Button
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => {
+                      onDecide(revoking.id, "revoke");
+                      setRevoking(null);
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                </MutationGate>
+              </>
+            }
+          />
+        </Dialog>
+      )}
     </SettingsGroup>
   );
 }

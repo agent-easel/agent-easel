@@ -4,13 +4,7 @@ import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
 import { ChevronsUpDownIcon, FolderPlusIcon, RefreshCwIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuItem,
@@ -205,51 +199,56 @@ function AddRepositoryDialog({
       }}
     >
       <DialogContent
+        title="Add repository"
+        description="Use an existing repository on the local T3 host."
+        closeDisabled={busy}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           triggerRef.current?.focus();
         }}
-      >
-        <DialogHeader>
-          <DialogTitle>Add repository</DialogTitle>
-          <DialogDescription>
-            Use an existing repository on the local T3 host. T3 owns its project and path.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (busy) return;
-            void onAdd(path).then((success) => {
-              if (success) setPath("");
-              else pathRef.current?.focus();
-            });
-          }}
-        >
-          <div className="grid gap-1.5">
-            <Label htmlFor="repository-path">Existing local repository path</Label>
-            <Input
-              ref={pathRef}
-              id="repository-path"
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder="/absolute/path/to/repository"
-              required
-              readOnly={busy}
-            />
-          </div>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <MutationGate>
-            <Button type="submit" disabled={busy || !path.trim()}>
-              Add existing repository
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (busy) return;
+          void onAdd(path).then((success) => {
+            if (success) setPath("");
+            else pathRef.current?.focus();
+          });
+        }}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
             </Button>
-          </MutationGate>
-        </form>
+            <MutationGate>
+              <Button type="submit" disabled={busy || !path.trim()}>
+                Add existing repository
+              </Button>
+            </MutationGate>
+          </>
+        }
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="repository-path">Existing local repository path</Label>
+          <Input
+            ref={pathRef}
+            id="repository-path"
+            value={path}
+            onChange={(event) => setPath(event.target.value)}
+            placeholder="/absolute/path/to/repository"
+            required
+            readOnly={busy}
+          />
+        </div>
+        {error && (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -402,7 +401,6 @@ function ProjectAvailability({
 }) {
   return (
     <>
-      {" "}
       {selected && selected.availability !== "available" && (
         <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
           {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another

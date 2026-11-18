@@ -342,6 +342,7 @@ Mutations also need `X-Factory-Request: 1` ([Configuration and storage](installa
 | HTTP | Purpose |
 | --- | --- |
 | `GET /api/runs?projectId=` | List Runs, optionally for one Project |
+| `GET /api/runs/archived-search?query=` | Find Archived Runs by title or exact Run number |
 | `GET /api/runs/:id` | Read one Run's detail, as the Run screen shows it |
 | `POST /api/runs` | Start a Run, as the composer does |
 | `PATCH /api/runs/:id` | Rename a Run |
@@ -407,9 +408,9 @@ fixed Human exits their old exits were mapped to.
     each with **Open Run**.
   - A card's delete icon or the preview's **Delete image** deletes one image. **Delete all** deletes every image the
     current filter lists.
-  - Each deletion first asks inline. It states the images' count, total size and Runs, that they cannot be restored, and
-    that history shows **Image unavailable**. A filtered **Delete all** also says whether the images are used by Runs in
-    other projects.
+  - A centred confirmation names the image or the number of images, the total size and the affected Runs.
+    It explains that history shows **Image unavailable**. A filtered **Delete all** also says whether the
+    images are used by Runs in other projects.
   - The server rechecks each image and deletes only its file. An image an Active Run now uses is kept and reported as not
     deleted.
   - Manifests, prompts and timelines stay. The image reads as missing everywhere, including Factory MCP reads and worker
@@ -809,8 +810,8 @@ as `archived` and shows activated blocks that had not finished, including waitin
 interrupt every worker thread, which also stops its delegated work, and does not wait for or confirm termination; in-flight or
 uncertain deliveries keep their recorded state and are not retried.
 
-An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer. All
-its data stays: its link still opens the read-only history with an **Archived** badge. Any later report from one of its Agents is
+An Archived Run leaves navigation and cannot be restored, settled or snoozed. Archiving the open Run returns to the composer.
+Find an Archived Run by its number or title in the command palette. The **Archived** result opens its read-only history. Any later report from one of its Agents is
 acknowledged as a success that changes nothing and tells the Agent to stop work on the Block; Human answers and Request report are
 refused. Archive does not roll back edits or prevent new direct T3 chats; closing Factory or a browser tab is not Archive.
 An authorized participant can also archive a Run through [Chat control](chat-control.md#archive-proposals), where a request to

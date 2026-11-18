@@ -84,6 +84,26 @@ it("an archived Run is left out of navigation and keeps its history", async (c) 
   expect(run.value.events.map((event) => event.kind)).toContain("report-accepted");
 });
 
+it("explicit Run search finds archived history by title or exact number", async (c) => {
+  // Arrange
+  const { world, input, f } = await prepared(c, handoffFlow);
+  const { runId } = await archived(world, await workerAtWork(world, input));
+  const renamed = await f.renameRun(runId, { title: "Earlier navigation experiment" });
+  assert(renamed.ok);
+  const { number, title } = renamed.value;
+
+  // Act
+  const byTitle = await f.searchArchivedRuns("NAVIGATION");
+  const byNumber = await f.searchArchivedRuns(`#${number}`);
+
+  // Assert
+  const result = { ok: true, value: [expect.objectContaining({ id: runId, number, title })] };
+  expect(byTitle).toStrictEqual(result);
+  expect(byNumber).toStrictEqual(result);
+  expect(await f.searchArchivedRuns("")).toStrictEqual({ ok: true, value: [] });
+  expect(await f.searchArchivedRuns(`${number}0`)).toStrictEqual({ ok: true, value: [] });
+});
+
 it("Factory launches nothing for an archived Run on later reconciliation", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);

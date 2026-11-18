@@ -1,8 +1,8 @@
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { canvasShortcutHelp, withShortcutHint } from "../keyboard-shortcuts.ts";
 import type { ReactNode } from "react";
 import { Crosshair, LocateFixed, Minus, Plus, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CanvasShortcutsButton } from "./canvas-shortcuts.tsx";
@@ -22,12 +22,12 @@ const separator = <span aria-hidden className="h-5 w-px bg-border" />;
 function ControlButton({
   label,
   onClick,
-  hint,
+  shortcut,
   children,
 }: {
   label: string;
   onClick: () => void;
-  hint: string;
+  shortcut: string | undefined;
   children: ReactNode;
 }) {
   return (
@@ -37,7 +37,7 @@ function ControlButton({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{hint}</TooltipContent>
+      <TooltipContent shortcut={shortcut}>{label}</TooltipContent>
     </Tooltip>
   );
 }
@@ -81,11 +81,8 @@ function FollowActiveButton({
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>
-        {withShortcutHint(
-          indicated ? "Active Blocks changed · follow them" : "Follow active Blocks",
-          shortcutHint("followActive"),
-        )}
+      <TooltipContent shortcut={shortcutHint("followActive")}>
+        {indicated ? "Active Blocks changed · follow them" : "Follow active Blocks"}
       </TooltipContent>
     </Tooltip>
   );
@@ -110,13 +107,12 @@ export function CanvasZoomControls({
 }) {
   const { hint: shortcutHint } = useShortcutPreferences();
   const iconOnly = presentation.kind === "icons";
+  const zoomIn = shortcutHint("zoomIn");
+  const zoomOut = shortcutHint("zoomOut");
+  const fit = shortcutHint("fit");
   const zoom = (
     <>
-      <ControlButton
-        label="Zoom out"
-        hint={withShortcutHint("Zoom out", shortcutHint("zoomOut"))}
-        onClick={() => onZoom(1 / 1.1)}
-      >
+      <ControlButton label="Zoom out" shortcut={zoomOut} onClick={() => onZoom(1 / 1.1)}>
         <Minus aria-hidden className="size-3.75" strokeWidth={1.5} />
       </ControlButton>
       <span
@@ -126,24 +122,19 @@ export function CanvasZoomControls({
       >
         {Math.round(scale * 100)}%
       </span>
-      <ControlButton
-        label="Zoom in"
-        hint={withShortcutHint("Zoom in", shortcutHint("zoomIn"))}
-        onClick={() => onZoom(1.1)}
-      >
+      <ControlButton label="Zoom in" shortcut={zoomIn} onClick={() => onZoom(1.1)}>
         <Plus aria-hidden className="size-3.75" strokeWidth={1.5} />
       </ControlButton>
       {separator}
     </>
   );
-  const fitHint = withShortcutHint("Fit Flow", shortcutHint("fit"));
   const followButton = follow && <FollowActiveButton {...follow} iconOnly={iconOnly} />;
   if (iconOnly)
     return (
       <div className="pointer-events-none flex items-center gap-2">
         <div className={toolbarClass}>
           {zoom}
-          <ControlButton label="Fit Flow" hint={fitHint} onClick={onFit}>
+          <ControlButton label="Fit Flow" shortcut={fit} onClick={onFit}>
             <Scan aria-hidden className="size-3.5" strokeWidth={1.5} />
           </ControlButton>
         </div>
@@ -172,13 +163,29 @@ export function CanvasZoomControls({
               Fit Flow
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{fitHint}</TooltipContent>
+          <TooltipContent shortcut={fit}>Fit Flow</TooltipContent>
         </Tooltip>
         {followButton}
         {separator}
         {arrange}
       </div>
-      <p className="text-2xs tracking-label text-subtle-foreground max-lg:hidden">{`Focus the canvas: ${canvasShortcutHelp({ zoomIn: shortcutHint("zoomIn"), zoomOut: shortcutHint("zoomOut"), fit: shortcutHint("fit") })}. ${presentation.hint}`}</p>
+      <p className="text-2xs tracking-label text-subtle-foreground max-lg:hidden">
+        Focus the canvas:{" "}
+        {(zoomIn || zoomOut) && (
+          <>
+            {zoomIn && <KeyChip>{zoomIn}</KeyChip>}
+            {zoomIn && zoomOut && " / "}
+            {zoomOut && <KeyChip>{zoomOut}</KeyChip>}
+            {fit ? " zoom, " : " zoom; "}
+          </>
+        )}
+        {fit && (
+          <>
+            <KeyChip>{fit}</KeyChip> fits;{" "}
+          </>
+        )}
+        arrows pan. {presentation.hint}
+      </p>
     </div>
   );
 }

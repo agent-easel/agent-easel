@@ -10,7 +10,7 @@ import type {
   NotificationPermission,
 } from "@t3-factory/contracts/desktop-bridge";
 import { desktopBridge } from "../desktop-bridge.ts";
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useDesktopState } from "../desktop-state.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
 import { SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
@@ -201,13 +201,14 @@ export function LocalApplicationControls() {
         Application settings
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[85dvh] overflow-y-auto">
-          <DialogTitle>Local application settings</DialogTitle>
-          <DialogDescription>
-            {desktopBridge()
+        <DialogContent
+          title="Local application settings"
+          description={
+            desktopBridge()
               ? "Settings and updates for this computer, available independently of the server."
-              : "Settings for this browser, available independently of the server."}
-          </DialogDescription>
+              : "Settings for this browser, available independently of the server."
+          }
+        >
           <div className="grid gap-5">
             {state && (
               <p className="text-sm text-muted-foreground">

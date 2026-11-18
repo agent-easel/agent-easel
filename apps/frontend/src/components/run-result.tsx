@@ -5,7 +5,7 @@ import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { isSingleOutput } from "../block-kind.ts";
@@ -289,15 +289,14 @@ function ResultReader({
   ];
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent
-        showCloseButton={false}
+      <DialogSurface
         // Start on the result itself: it scrolls from the keyboard, and Esc is not spent closing
         // the tooltip a focused header action would open.
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           body.current?.focus();
         }}
-        className="flex max-h-[85dvh] w-180 flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100%-2rem)]"
+        className="flex max-h-[85dvh] w-[min(calc(100vw-32px),45rem)] flex-col gap-0 overflow-hidden p-0"
       >
         <header className="flex min-w-0 shrink-0 items-center gap-2 border-b py-3.5 pr-3 pl-5">
           <div className="flex min-w-0 flex-1 flex-col gap-0.75">
@@ -326,7 +325,7 @@ function ResultReader({
                 <X aria-hidden />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close · Esc</TooltipContent>
+            <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
         <div
@@ -352,7 +351,7 @@ function ResultReader({
             </div>
           </InspectorDisclosure>
         </footer>
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }

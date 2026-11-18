@@ -56,7 +56,7 @@ first paint use the baseline until a client receives the presentation.
   owner badge and group icon mark an owning Project in brand cyan beside its name and an
   unavailable one in the attention color with its reason; Global stays neutral. The dot
   on **Follow active** marking unseen Run progress uses the working color.
-- Use Inter for interface text and Geist Mono for keys, exit names and zoom levels.
+- Use Inter for interface text and Geist Mono for exit names and zoom levels.
   Fonts are bundled; rendering must not require network font services.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
@@ -95,15 +95,36 @@ Unavailable choices in Agent execution settings stay visible and disabled, with 
 Long menus must stay within the viewport and scroll their choices without hiding search
 or actions.
 
+Use the shared key chip for shortcut hints. Each chord fits in one bordered chip in
+Inter Medium at 11 px so glyphs such as ⇧ and ⌫ stay legible. On macOS, use
+Apple modifier order (⌃⌥⇧⌘) followed by the key, as in ⌥⌘↑, ⇧⌘S, ⌘⌫ and ⌘↵.
+Windows and Linux use Ctrl-plus notation such as Ctrl+Alt+N. Show an unassigned
+binding as muted **Unbound** text in shortcut lists.
+
 Settings sections share one page template instead of styling their own headers and
 footnotes: a header with the title, a one-line description and optionally a status badge, the
 "Managed on the Factory host" badge and one primary action; then labelled cards of rows, each
 ending in one control; label/value rows for read-only facts; and closed disclosures for
 explanations and diagnostics. On/off settings use the switch, named by their row's title.
 
-Settings and Studio use the same dialog conventions. The Run shell stays mounted behind
-them, while hidden content is inert. Unsaved-change guards and keyboard behavior are
-specified in [Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
+Confirmations and forms open in a centred dialog over a dimmed backdrop, with a
+stronger scrim in Light mode. The header shows the title, Esc key chip and close
+button. Use at most one short introductory sentence in the body. Place any actions
+at the trailing edge, with Cancel or Keep editing before the primary or destructive
+action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between
+the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
+Compare latest revision, Review and enable, and Import use the wide width
+`clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
+32 px.
+
+Studio and Settings stay centred over the mounted Run shell, whose hidden content
+is inert. Studio uses `clamp(1200px, 50vw, 1680px)` by
+`clamp(800px, 80vh, 1200px)` at viewport sizes of at least 1600 × 1000 px.
+Settings uses `clamp(840px, 50vw, 1280px)` by
+`clamp(560px, 80vh, 960px)` at sizes of at least 1024 × 720 px.
+Below either threshold for each workspace, it fills the window with a 16 px inset
+on every side. Unsaved-change guards and keyboard behavior are specified in
+[Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
 
 Canvas blocks, ports and wires use the same tokens as the rest of the UI. Block rows and
 ports are sized from the canvas surface's block dimensions, not with height, size or offset

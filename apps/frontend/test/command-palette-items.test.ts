@@ -61,7 +61,7 @@ it("a hash-prefixed number does not find Runs with that number as a prefix", () 
   expect(matches).toBe(false);
 });
 
-it("a number query still finds matching title text on a different Run", () => {
+it("a Run-number query excludes other Runs with the digits in their titles", () => {
   // Arrange
   const other = { ...run, number: 31, label: "Fix issue 13" };
 
@@ -69,7 +69,7 @@ it("a number query still finds matching title text on a different Run", () => {
   const matches = paletteMatchesQuery(other, "13");
 
   // Assert
-  expect(matches).toBe(true);
+  expect(matches).toBe(false);
 });
 
 it("an absent Run number does not become searchable as null", () => {
@@ -83,7 +83,7 @@ it("an absent Run number does not become searchable as null", () => {
   expect(matches).toBe(false);
 });
 
-it("a Studio scope that is resynchronizing keeps its cached items and is shown as updating", () => {
+it("a Studio scope that is resynchronizing keeps its cached items without a loading message", () => {
   // Arrange
   const agent = { id: "agent", name: "Reviewer" } as AgentDefinition;
   const navigation = { value: [], synchronized: true, error: null };
@@ -97,7 +97,6 @@ it("a Studio scope that is resynchronizing keeps its cached items and is shown a
   const catalog = paletteCatalog(navigation, studio);
 
   // Assert
-  expect(catalog.synchronizing).toStrictEqual(["Flows", "Agents"]);
   expect(catalog.loading).toStrictEqual([]);
   expect(catalog.agents).toStrictEqual([agent]);
 });

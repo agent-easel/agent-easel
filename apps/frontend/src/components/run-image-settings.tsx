@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SectionLabel } from "@/components/page";
-import { cn } from "@/lib/utils";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { RUN_IMAGE_DELETION_LIMIT } from "@t3-factory/domain-validation";
 import { api } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
@@ -70,6 +70,7 @@ export function RunImageSettings() {
       deletion={deletion.pending}
       project={project}
       busy={deletion.busy}
+      error={deletion.error}
       onCancel={deletion.cancel}
       onConfirm={() => void deletion.confirm()}
     />
@@ -90,7 +91,7 @@ export function RunImageSettings() {
             </AlertDescription>
           </Alert>
         )}
-        {deletion.error && (
+        {deletion.error && !confirmation && (
           <Alert variant="destructive">
             <AlertDescription>{deletion.error}</AlertDescription>
           </Alert>
@@ -105,7 +106,6 @@ export function RunImageSettings() {
             images={images}
             index={index}
             project={project}
-            confirmation={confirmation}
             onIndexChange={(next) => preview(images[next]!.sha256)}
             onBack={() => preview(null)}
             onDelete={() => deletion.ask({ scope: "one", images: [images[index]!] })}
@@ -116,7 +116,6 @@ export function RunImageSettings() {
             failed={Boolean(listing.error)}
             projects={projects}
             project={project}
-            confirmation={confirmation}
             onProjectChange={(next) => {
               deletion.cancel();
               setProjectId(next);
@@ -126,6 +125,7 @@ export function RunImageSettings() {
             onDeleteAll={(listed) => deletion.ask({ scope: "all", images: listed })}
           />
         )}
+        {confirmation}
       </div>
     </SettingsPage>
   );
@@ -246,14 +246,14 @@ function deletionCopy({ scope, images }: Deletion, project: FactoryProject | nul
     const image = images[0]!;
     return {
       title: `Delete ${image.name} (${size})?`,
-      description: `Used by ${count(runs.size, "Run")} in ${projectsOf(image)}. The file is removed from the Factory server and cannot be restored; ${keepers(runs.size)} “Image unavailable” in its place.`,
+      description: `Used by ${count(runs.size, "Run")} in ${projectsOf(image)}, where ${keepers(runs.size)} “Image unavailable” in its place.`,
       action: "Delete image",
     };
   }
   const onlyProject = project && [...runs.values()].every((run) => run.project.id === project.id);
   return {
     title: `Delete ${count(images.length, "image")} (${size}) from ${count(runs.size, "Run")}${onlyProject ? ` in ${project.title}` : ""}?`,
-    description: `The files are removed from the Factory server and cannot be restored. Run history stays unchanged; ${images.length === 1 ? "this image shows" : "these images show"} as “Image unavailable”.${project ? otherProjectsNote(images, project) : ""}`,
+    description: `The files cannot be restored and Run history will show “Image unavailable”.${project ? otherProjectsNote(images, project) : ""}`,
     action: `Delete ${count(images.length, "image")}`,
   };
 }
@@ -263,35 +263,45 @@ function DeleteConfirmation({
   deletion,
   project,
   busy,
+  error,
   onCancel,
   onConfirm,
 }: {
   deletion: Deletion;
   project: FactoryProject | null;
   busy: boolean;
+  error: string;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   const { title, description, action } = deletionCopy(deletion, project);
   return (
-    <section
-      role="alertdialog"
-      aria-label={title}
-      className="grid gap-2 rounded-lg border bg-card p-3"
-    >
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <p className="text-xs text-muted-foreground">{description}</p>
-      <div className="mt-1 flex gap-2">
-        <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-        <MutationGate>
-          <Button type="button" variant="danger" disabled={busy} onClick={onConfirm}>
-            {busy ? "Deleting…" : action}
-          </Button>
-        </MutationGate>
-      </div>
-    </section>
+    <Dialog open onOpenChange={(open) => !open && !busy && onCancel()}>
+      <DialogContent
+        role="alertdialog"
+        title={title}
+        description={description}
+        closeDisabled={busy}
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={busy} onClick={onCancel}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button type="button" variant="danger" disabled={busy} onClick={onConfirm}>
+                {busy ? "Deleting…" : action}
+              </Button>
+            </MutationGate>
+          </>
+        }
+      >
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -300,7 +310,6 @@ function RunImageList({
   failed,
   projects,
   project,
-  confirmation,
   onProjectChange,
   onOpen,
   onDelete,
@@ -312,7 +321,6 @@ function RunImageList({
   failed: boolean;
   projects: readonly FactoryProject[];
   project: FactoryProject | null;
-  confirmation: ReactNode;
   onProjectChange: (projectId: string) => void;
   onOpen: (sha256: string) => void;
   onDelete: (image: EligibleRunImage) => void;
@@ -335,7 +343,7 @@ function RunImageList({
             </NativeSelectOption>
           ))}
         </NativeSelect>
-        {images && images.length > 0 && !confirmation && (
+        {images && images.length > 0 && (
           <MutationGate>
             <Button type="button" variant="destructive" onClick={() => onDeleteAll(images)}>
               Delete all {images.length}
@@ -343,7 +351,6 @@ function RunImageList({
           </MutationGate>
         )}
       </div>
-      {confirmation}
       {images === null ? null : images.length > 0 ? (
         <ul
           aria-label="Run images"
@@ -510,7 +517,6 @@ function RunImagePreview({
   images,
   index,
   project,
-  confirmation,
   onIndexChange,
   onBack,
   onDelete,
@@ -518,7 +524,6 @@ function RunImagePreview({
   images: readonly EligibleRunImage[];
   index: number;
   project: FactoryProject | null;
-  confirmation: ReactNode;
   onIndexChange: (index: number) => void;
   onBack: () => void;
   onDelete: () => void;
@@ -555,20 +560,15 @@ function RunImagePreview({
             </IconButton>
           </>
         )}
-        {!confirmation && (
-          <MutationGate>
-            <Button type="button" variant="destructive" onClick={onDelete}>
-              Delete image
-            </Button>
-          </MutationGate>
-        )}
+        <MutationGate>
+          <Button type="button" variant="destructive" onClick={onDelete}>
+            Delete image
+          </Button>
+        </MutationGate>
       </div>
-      <div
-        className={cn("overflow-hidden rounded-md border bg-card", confirmation ? "h-45" : "h-75")}
-      >
+      <div className="h-75 overflow-hidden rounded-md border bg-card">
         <StoredImage key={image.sha256} image={image} preview />
       </div>
-      {confirmation}
       <div className="grid gap-2">
         <SectionLabel>Used by</SectionLabel>
         <ul aria-label="Used by" className="grid gap-1.5">

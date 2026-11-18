@@ -104,21 +104,36 @@ test("a new browser profile waits for host approval, then operates the server's 
   await app.screenshot("remote-approved-studio");
 });
 
-test("revoking an approved browser profile replaces the product with the revoked screen", async ({
+test("confirming revocation in Settings removes access from an approved browser profile", async ({
   fixture,
   app,
   screen,
+  browser,
 }) => {
   // Arrange
-  await approvedBrowser(app, screen);
+  const label = "Revocation journey browser";
+  await app.open("/runs/new");
+  await screen.getByLabel("Device name shown to the owner").fill(label);
+  await screen.getByRole("button", "Request access").tap();
+  await expect(screen.getByLabel("Verification code")).toBeVisible();
+  await fixture.remoteAccess.approve();
   await expect(screen.getByRole("button", "New Run (+)")).toBeVisible();
+  await browser.clearCookies({ name: "fixture_remote" });
+  await app.open("/settings/devices");
+  await screen
+    .getByRole("group", `${label}, Approved`, { exact: true })
+    .getByRole("button", "Revoke", { exact: true })
+    .tap();
+  const confirmation = screen.getByRole("dialog", `Revoke “${label}”?`);
+  await expect(confirmation).toBeVisible();
 
   // Act
-  await fixture.remoteAccess.revoke();
+  await confirmation.getByRole("button", "Revoke", { exact: true }).tap();
 
   // Assert
+  await expect(screen.getByRole("group", `${label}, Revoked`, { exact: true })).toBeVisible();
+  await openRemoteBrowser(app);
   await expect(screen.getByRole("heading", "Access was revoked")).toBeVisible();
-  await expect(screen.getByRole("button", "New Run (+)")).toHaveCount(0);
   await app.screenshot("remote-revoked");
 });
 

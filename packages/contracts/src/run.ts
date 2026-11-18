@@ -754,10 +754,22 @@ export interface ConditionArrivalPage {
   readonly nextCursor: string | null;
 }
 
+export interface ArchivedRunMatch {
+  readonly id: string;
+  readonly number: number | null;
+  readonly title: string;
+  readonly projectTitle: string;
+}
+
 export const runOperations = {
   listRunNavigation: operation<never, readonly RunNavigationEntry[]>()({
     method: "GET",
     path: "/api/run-navigation",
+  }),
+  searchArchivedRuns: operation<never, readonly ArchivedRunMatch[]>()({
+    method: "GET",
+    path: "/api/runs/archived-search",
+    query: ["query"],
   }),
   startRun: operation<StartRunInput, RunDetail>()({
     method: "POST",

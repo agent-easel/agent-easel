@@ -1,5 +1,6 @@
 import {
   attentionPresentation,
+  type ArchivedRunMatch,
   type Result,
   type RunAttention,
   type RunNavigationEntry,
@@ -156,6 +157,26 @@ export function openRunNavigation(database: RunnerDatabase) {
             }),
           };
         }),
+      );
+    },
+    searchArchivedRuns(query: string): Effect.Effect<Result<readonly ArchivedRunMatch[]>, unknown> {
+      const search = query.trim().toLowerCase();
+      if (!search || search.startsWith(">")) return Effect.succeed({ ok: true, value: [] });
+      const number = /^#?(\d+)$/.exec(search)?.[1];
+      return database.transaction((sql) =>
+        Effect.map(
+          sql<ArchivedRunMatch>`SELECT r.id,r.number,r.title,p.title AS projectTitle
+            FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
+            WHERE r.archived_at IS NOT NULL ${number === undefined ? sql`` : sql`AND CAST(r.number AS TEXT)=${number}`}
+            ORDER BY r.created_at DESC,r.creation_key`,
+          (rows) => ({
+            ok: true as const,
+            value:
+              number === undefined
+                ? rows.filter((row) => row.title.toLowerCase().includes(search))
+                : rows,
+          }),
+        ),
       );
     },
     renameRun(id: string, title: string): Effect.Effect<Result<void>, unknown> {

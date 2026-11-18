@@ -14,14 +14,7 @@ import { StatusBadge } from "./status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceMenu } from "@/components/choice-menu";
 import {
   importModelChoices,
@@ -110,19 +103,17 @@ export function DefinitionImportDialog({
           if (!open) model.cancel();
         }}
       >
-        <DialogContent className="max-h-[90vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
-          {state.review ? (
-            <ImportReviewContent
-              model={model}
-              state={state}
-              review={state.review}
-              projects={projects}
-              onConfirm={() => void confirm()}
-            />
-          ) : (
-            <ImportFileContent model={model} state={state} />
-          )}
-        </DialogContent>
+        {state.review ? (
+          <ImportReviewContent
+            model={model}
+            state={state}
+            review={state.review}
+            projects={projects}
+            onConfirm={() => void confirm()}
+          />
+        ) : (
+          <ImportFileContent model={model} state={state} />
+        )}
       </Dialog>
     </>
   );
@@ -153,23 +144,23 @@ function ImportFileContent({
   state: DefinitionImportSnapshot;
 }) {
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Import {state.file?.name}</DialogTitle>
-        <DialogDescription>
-          {state.reviewing ? "Reading the file…" : "Factory could not import this file."}
-        </DialogDescription>
-      </DialogHeader>
+    <DialogContent
+      size="wide"
+      title={<>Import {state.file?.name}</>}
+      description={state.reviewing ? "Reading the file…" : "Factory could not import this file."}
+      actions={
+        <>
+          <Button type="button" variant="outline" onClick={model.cancel}>
+            Cancel
+          </Button>
+          <Button type="button" disabled={state.reviewing} onClick={() => void model.retry()}>
+            Try again
+          </Button>
+        </>
+      }
+    >
       <ImportProblem state={state} />
-      <DialogFooter>
-        <Button type="button" variant="outline" onClick={model.cancel}>
-          Cancel
-        </Button>
-        <Button type="button" disabled={state.reviewing} onClick={() => void model.retry()}>
-          Try again
-        </Button>
-      </DialogFooter>
-    </>
+    </DialogContent>
   );
 }
 
@@ -190,98 +181,17 @@ function ImportReviewContent({
   const blocked = ownerPicker(state.target, projects).blocked;
   const agentCount = rows.length === 1 ? "one new Agent" : `${rows.length} new Agents`;
   return (
-    <>
-      <DialogHeader>
-        <DialogTitle>Review the import</DialogTitle>
-        <DialogDescription>
-          {flow
-            ? `A new Flow “${flow.name}” and ${agentCount} will be created with the graph, names, prompts and exits in ${state.file?.name}.`
-            : `${rows.length === 1 ? "One new Agent" : `${rows.length} new Agents`} will be created with the names, prompts and exits in ${state.file?.name}.`}{" "}
-          Only model choices can change here.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="grid min-h-0 content-start gap-4 overflow-y-auto">
-        <div className="grid gap-1.5">
-          <OwnerTargetMenu
-            label="Target owner"
-            chosen={state.target}
-            from={null}
-            projects={projects}
-            disabled={state.committing}
-            onChange={model.setTarget}
-            unavailableReason=" — can’t own imported definitions"
-          />
-          <p className="text-2xs tracking-label text-subtle-foreground">
-            {state.target === null
-              ? "Every imported Flow and Agent is created as a global definition."
-              : `Every imported Flow and Agent is created owned by ${studioOwner(state.target, projects).title}.`}
-          </p>
-        </div>
-        <Alert variant="attention">
-          <ShieldAlert aria-hidden />
-          <AlertTitle>Imported instructions run with your T3 capabilities</AlertTitle>
-          <AlertDescription>
-            When you start a Run, its workers follow these{" "}
-            {flow
-              ? "Agent prompts, Continuation prompts and Revisit instructions"
-              : "Agent prompts"}{" "}
-            with everything your T3 environment allows. Importing does not start a Run; read them in
-            Studio first.
-          </AlertDescription>
-        </Alert>
-        {flow && <ImportFlowWorkspace flow={flow} />}
-        <section aria-labelledby="import-inventory" className="grid gap-2">
-          <h3 id="import-inventory" className="text-sm font-semibold">
-            Instructions in this file
-          </h3>
-          <ul className="grid gap-1 text-sm">
-            {rows.map((row) => (
-              <li key={row.key} className="flex flex-wrap gap-x-2">
-                <span className="font-medium">{row.name}</span>
-                <span className="text-muted-foreground">
-                  prompt {row.promptLength.toLocaleString()} characters · {row.exitCount}{" "}
-                  {row.exitCount === 1 ? "exit" : "exits"}
-                </span>
-              </li>
-            ))}
-            {flow?.continuations.map((continuation, index) => (
-              <li key={`continuation-${index}`} className="flex flex-wrap gap-x-2">
-                <span className="font-medium">{continuation.blockName}</span>
-                <span className="text-muted-foreground">
-                  Continuation prompt {continuation.promptLength.toLocaleString()} characters
-                </span>
-              </li>
-            ))}
-            {flow?.revisitInstructions.map((revisit, index) => (
-              <li key={`revisit-${index}`} className="flex flex-wrap gap-x-2">
-                <span className="font-medium">{revisit.blockName}</span>
-                <span className="text-muted-foreground">
-                  Revisit instruction {revisit.length.toLocaleString()} characters
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-        {rows.length > 0 && (
-          <section aria-labelledby="import-models" className="grid gap-3">
-            <h3 id="import-models" className="text-sm font-semibold">
-              Models
-            </h3>
-            {rows.map((row) => (
-              <ImportModelRow
-                key={row.key}
-                model={model}
-                row={row}
-                capabilities={capabilities}
-                disabled={state.committing}
-              />
-            ))}
-          </section>
-        )}
-      </div>
-      <div className="grid gap-3">
-        <ImportProblem state={state} />
-        <DialogFooter>
+    <DialogContent
+      size="wide"
+      closeDisabled={state.committing}
+      title="Review the import"
+      description={
+        flow
+          ? `Import creates a new Flow “${flow.name}” and ${agentCount} from ${state.file?.name}.`
+          : `Import creates ${agentCount} from ${state.file?.name}.`
+      }
+      actions={
+        <>
           <Button
             type="button"
             variant="outline"
@@ -293,9 +203,86 @@ function ImportReviewContent({
           <Button type="button" disabled={Boolean(blocked)} onClick={onConfirm}>
             {state.committing ? "Importing…" : "Confirm import"}
           </Button>
-        </DialogFooter>
+        </>
+      }
+    >
+      <div className="grid gap-1.5">
+        <OwnerTargetMenu
+          label="Target owner"
+          chosen={state.target}
+          from={null}
+          projects={projects}
+          disabled={state.committing}
+          onChange={model.setTarget}
+          unavailableReason=" — can’t own imported definitions"
+        />
+        <p className="text-2xs tracking-label text-subtle-foreground">
+          {state.target === null
+            ? "Every imported Flow and Agent is created as a global definition."
+            : `Every imported Flow and Agent is created owned by ${studioOwner(state.target, projects).title}.`}
+        </p>
       </div>
-    </>
+      <Alert variant="attention">
+        <ShieldAlert aria-hidden />
+        <AlertTitle>Imported instructions run with your T3 capabilities</AlertTitle>
+        <AlertDescription>
+          When you start a Run, its workers follow these{" "}
+          {flow ? "Agent prompts, Continuation prompts and Revisit instructions" : "Agent prompts"}{" "}
+          with everything your T3 environment allows. Importing does not start a Run; read them in
+          Studio first.
+        </AlertDescription>
+      </Alert>
+      {flow && <ImportFlowWorkspace flow={flow} />}
+      <section aria-labelledby="import-inventory" className="grid gap-2">
+        <h3 id="import-inventory" className="text-sm font-semibold">
+          Instructions in this file
+        </h3>
+        <ul className="grid gap-1 text-sm">
+          {rows.map((row) => (
+            <li key={row.key} className="flex flex-wrap gap-x-2">
+              <span className="font-medium">{row.name}</span>
+              <span className="text-muted-foreground">
+                prompt {row.promptLength.toLocaleString()} characters · {row.exitCount}{" "}
+                {row.exitCount === 1 ? "exit" : "exits"}
+              </span>
+            </li>
+          ))}
+          {flow?.continuations.map((continuation, index) => (
+            <li key={`continuation-${index}`} className="flex flex-wrap gap-x-2">
+              <span className="font-medium">{continuation.blockName}</span>
+              <span className="text-muted-foreground">
+                Continuation prompt {continuation.promptLength.toLocaleString()} characters
+              </span>
+            </li>
+          ))}
+          {flow?.revisitInstructions.map((revisit, index) => (
+            <li key={`revisit-${index}`} className="flex flex-wrap gap-x-2">
+              <span className="font-medium">{revisit.blockName}</span>
+              <span className="text-muted-foreground">
+                Revisit instruction {revisit.length.toLocaleString()} characters
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+      {rows.length > 0 && (
+        <section aria-labelledby="import-models" className="grid gap-3">
+          <h3 id="import-models" className="text-sm font-semibold">
+            Models
+          </h3>
+          {rows.map((row) => (
+            <ImportModelRow
+              key={row.key}
+              model={model}
+              row={row}
+              capabilities={capabilities}
+              disabled={state.committing}
+            />
+          ))}
+        </section>
+      )}
+      <ImportProblem state={state} />
+    </DialogContent>
   );
 }
 

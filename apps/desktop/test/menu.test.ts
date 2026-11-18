@@ -27,7 +27,7 @@ const published = {
   forward: { label: "Forward", binding: binding("]"), enabled: true },
   previousRun: { label: "Previous Run", binding: binding("ArrowUp", { alt: true }), enabled: true },
   nextRun: { label: "Next Run", binding: binding("ArrowDown", { alt: true }), enabled: true },
-  searchRuns: { label: "Search Runs", binding: null, enabled: true },
+  searchRuns: { label: "Filter Run titles", binding: null, enabled: true },
   snoozeRestore: {
     label: "Snooze or restore Run",
     binding: binding("z", { shift: true }),
@@ -77,7 +77,7 @@ it("an unbound command shows no accelerator", () => {
   const template = buildApplicationMenu(state, production, noActions);
 
   // Assert
-  expect(item(template, "Go", "Search Runs")?.accelerator).toBeUndefined();
+  expect(item(template, "Go", "Filter Run titles")?.accelerator).toBeUndefined();
 });
 
 it("an unavailable Run action is disabled in the Run menu", () => {
