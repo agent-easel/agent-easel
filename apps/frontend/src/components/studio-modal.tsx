@@ -79,28 +79,46 @@ function useReportedDraft(kind: StudioDraft["kind"]) {
 const headerParentClass =
   "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
 
-/** The header's breadcrumb: the destination, and for Triggers the opened page within it. */
-function studioSection(selection: StudioSelection, triggers: readonly TriggerDefinition[] | null) {
-  if (selection.tab === "flows") return { section: "Flows" };
-  if (selection.tab === "agents") return { section: "Agents" };
-  const opened = triggers?.find((trigger) => trigger.id === selection.triggerId);
-  const section = selection.kind
-    ? "GitHub Issues"
-    : selection.triggerId === "new"
-      ? "New"
-      : opened?.name;
-  if (!section) return { section: "Triggers" };
-  const parent = (label: string, link: StudioSelection) => ({
+function breadcrumbParent(label: string, selection: StudioSelection) {
+  return {
     label,
     link: (
-      <StudioLink selection={link} className={headerParentClass}>
+      <StudioLink selection={selection} className={headerParentClass}>
         {label}
       </StudioLink>
     ),
-  });
-  const parents = [parent("Triggers", { tab: "triggers" })];
-  if (selection.kind) parents.push(parent("New", { tab: "triggers", triggerId: "new" }));
-  return { parents, section };
+  };
+}
+
+function triggerTitle(id: string, triggers: readonly TriggerDefinition[] | null) {
+  return id === "new"
+    ? "New GitHub Issues Trigger"
+    : (triggers?.find((trigger) => trigger.id === id)?.name ?? "Trigger");
+}
+
+/** The header links the parents of the editor or list currently shown. */
+function studioSection(
+  selection: StudioSelection,
+  triggers: readonly TriggerDefinition[] | null,
+  flowName: string | undefined,
+) {
+  if (selection.tab === "flows") {
+    if (!selection.fromTrigger) return { section: "Flows" };
+    const trigger = { tab: "triggers" as const, triggerId: selection.fromTrigger };
+    return {
+      parents: [
+        breadcrumbParent("Triggers", { tab: "triggers" }),
+        breadcrumbParent(triggerTitle(selection.fromTrigger, triggers), trigger),
+      ],
+      section: flowName ?? "Flow",
+    };
+  }
+  if (selection.tab === "agents") return { section: "Agents" };
+  if (!selection.triggerId) return { section: "Triggers" };
+  return {
+    parents: [breadcrumbParent("Triggers", { tab: "triggers" })],
+    section: triggerTitle(selection.triggerId, triggers),
+  };
 }
 
 export function StudioModal({ selection }: { selection: StudioSelection }) {
@@ -121,7 +139,14 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
   });
   const triggers = useStudioRead(definitions, "triggers").value;
   const { escapeHandler, registerEscape } = useEscapeHandler();
-  const close = () => void navigate(undefined);
+  const returnToTrigger = selection.tab === "flows" ? selection.fromTrigger : undefined;
+  const flows = useStudioRead(definitions, "flows").value;
+  const flowName =
+    selection.tab === "flows" && returnToTrigger
+      ? flows?.find((entry) => entry.id === selection.flowId)?.name
+      : undefined;
+  const close = () =>
+    void navigate(returnToTrigger ? { tab: "triggers", triggerId: returnToTrigger } : undefined);
   return (
     <Dialog
       open
@@ -150,11 +175,15 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
         }}
       >
         <WorkspaceDialogHeader
-          title="Studio"
-          {...studioSection(selection, triggers)}
+          title={
+            selection.tab === "triggers" || returnToTrigger
+              ? breadcrumbParent("Studio", { tab: "flows" }).link
+              : "Studio"
+          }
+          {...studioSection(selection, triggers, flowName)}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
-          closeLabel="Back to Runs"
+          closeLabel={returnToTrigger ? "Back to Trigger" : "Back to Runs"}
           closeDisabled={creating}
         />
         <div className="flex min-h-0 flex-1">
@@ -348,12 +377,14 @@ function StudioPage({
   definitions,
   reportAgentDraft,
   reportTriggerDraft,
+  covered,
   onCreateFlow,
 }: {
   selection: StudioSelection;
   definitions: StudioDefinitions;
   reportAgentDraft: ReportDraft;
   reportTriggerDraft: ReportDraft;
+  covered: boolean;
   onCreateFlow: () => void;
 }) {
   if (selection.tab === "agents")
@@ -367,7 +398,7 @@ function StudioPage({
     );
   if (selection.tab === "flows" && selection.flowId) return null;
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div hidden={covered} className="min-h-0 flex-1 overflow-auto">
       {selection.tab === "triggers" ? (
         <StudioTriggersPage
           selection={selection}
@@ -410,6 +441,10 @@ function StudioContent({
     }
   }, [selection]);
   const flowId = selection.tab === "flows" ? selection.flowId : undefined;
+  const returnToTrigger = selection.tab === "flows" ? selection.fromTrigger : undefined;
+  const underlay = returnToTrigger
+    ? { tab: "triggers" as const, triggerId: returnToTrigger }
+    : selection;
   return (
     <div
       ref={content}
@@ -417,10 +452,11 @@ function StudioContent({
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden outline-none"
     >
       <StudioPage
-        selection={selection}
+        selection={underlay}
         definitions={definitions}
         reportAgentDraft={reportAgentDraft}
         reportTriggerDraft={reportTriggerDraft}
+        covered={Boolean(returnToTrigger)}
         onCreateFlow={creation.start}
       />
       {flowId && (

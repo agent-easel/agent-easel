@@ -1,8 +1,9 @@
 import { expect, it } from "vite-plus/test";
-import { triggerFlows } from "../src/trigger-draft.ts";
-import { savedFlow } from "./support/studio-definitions.ts";
+import type { TriggerDefinition } from "@t3-factory/contracts";
+import { createTriggerDraft, triggerFlows } from "../src/trigger-draft.ts";
+import { deliveredStudio, savedFlow } from "./support/studio-definitions.ts";
 
-it("the Trigger form offers global Flows and the chosen Project's Flows, keeping the chosen Flow", () => {
+it("the Trigger form offers global Flows and the chosen Project's Flows", () => {
   // Arrange
   const flows = [
     savedFlow("Global", { id: "global", projectId: null }),
@@ -12,8 +13,28 @@ it("the Trigger form offers global Flows and the chosen Project's Flows, keeping
   ];
 
   // Act
-  const offered = triggerFlows(flows, "atlas", "docs");
+  const offered = triggerFlows(flows, "atlas");
 
   // Assert
-  expect(offered.map((flow) => flow.id)).toStrictEqual(["global", "atlas", "docs"]);
+  expect(offered.map((flow) => flow.id)).toStrictEqual(["global", "atlas"]);
+});
+
+it("a case-insensitive Trigger name already in Studio disables saving the draft", () => {
+  // Arrange
+  const { definitions, close } = deliveredStudio({
+    flows: [],
+    agents: [],
+    triggers: [{ id: "other", name: "Ready Issues" } as TriggerDefinition],
+  });
+  const draft = createTriggerDraft(null, definitions);
+  const disconnect = draft.connect();
+
+  // Act
+  draft.edit({ name: " ready issues " });
+
+  // Assert
+  expect(draft.getSnapshot().nameTaken).toBe(true);
+  expect(draft.getSnapshot().canSave).toBe(false);
+  disconnect();
+  close();
 });

@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import type { TriggerDefinition } from "@t3-factory/contracts";
+import type {
+  TriggerCheckReply,
+  TriggerDefinition,
+  TriggerRepository,
+} from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { useStudioNavigation, type StudioSelection } from "../settings-navigation.ts";
 import { useStudioOwners, useStudioRead, type StudioDefinitions } from "../studio-definitions.ts";
-import { triggerDraftId } from "../use-studio-draft-guard.ts";
 import { useActiveView } from "../use-active-view.ts";
 import { useServerId } from "../client-scope.ts";
 import {
@@ -15,14 +18,11 @@ import {
   type TriggerDraftModel,
   type TriggerDraftSnapshot,
 } from "../trigger-draft.ts";
-import { StudioBackLink } from "../components/app-link.tsx";
-import { StudioPage } from "../components/settings-page.tsx";
 import { TriggersList, useEnableReview } from "../components/studio-triggers/triggers-list.tsx";
-import { TriggerTypePicker } from "../components/studio-triggers/trigger-type-picker.tsx";
 import {
   TriggerFields,
-  TriggerReadinessList,
-  type ReadinessRead,
+  chosenFlowProblem,
+  queryWarning,
 } from "../components/studio-triggers/trigger-form.tsx";
 import { TriggerStatusStrip } from "../components/studio-triggers/trigger-status-strip.tsx";
 import {
@@ -34,19 +34,20 @@ import {
   TriggerReviewDialog,
   type TriggerReview,
 } from "../components/studio-triggers/trigger-review-dialog.tsx";
+import { reviewSummary, type TriggerNames } from "../components/studio-triggers/trigger-text.ts";
 import {
-  reviewSummary,
-  scheduleText,
-  triggerRoute,
-  type TriggerNames,
-} from "../components/studio-triggers/trigger-text.ts";
+  EditorNotices,
+  otherRepositoryWatchers,
+  SharedRepositoryCard,
+  TriggerFieldNotices,
+} from "../components/studio-triggers/trigger-notices.tsx";
 import { widensAdmission } from "../trigger-review.ts";
 
 type TriggersSelection = Extract<StudioSelection, { tab: "triggers" }>;
 /** This window's Create was accepted; `enable` asks to enable it as the review showed. */
 type OnCreated = (trigger: TriggerDefinition, enable: boolean) => Promise<void> | undefined;
 
-/** Studio → Automate → Triggers: the list, the type picker, and the create and edit forms. */
+/** Studio → Automate → Triggers: the list and the create and edit forms. */
 export function StudioTriggersPage({
   selection,
   definitions,
@@ -64,11 +65,11 @@ export function StudioTriggersPage({
   };
   const actions = useTriggerActions(definitions);
   // Shared by the list's switches and Create, and kept open when Create opens the new Trigger.
-  const enabling = useEnableReview(names, actions);
+  const enabling = useEnableReview(names, actions, triggers.value);
   const serverId = useServerId();
   // This window's own Create, answered before Studio may have delivered it.
   const [created, setCreated] = useState<TriggerDefinition | null>(null);
-  const draftId = triggerDraftId(selection);
+  const draftId = selection.triggerId;
   return (
     <>
       {!draftId ? (
@@ -79,8 +80,6 @@ export function StudioTriggersPage({
           actions={actions}
           onEnable={enabling.open}
         />
-      ) : draftId === "new" ? (
-        <TriggerTypePicker />
       ) : (
         <TriggerEditor
           // An editor never outlives its server, so a pending reply from another one is discarded.
@@ -90,6 +89,7 @@ export function StudioTriggersPage({
           names={names}
           actions={actions}
           created={created?.id === draftId ? created : null}
+          onEnable={enabling.open}
           onCreated={(trigger, enable) => {
             setCreated(trigger);
             // The created revision holds exactly the settings the review showed.
@@ -113,7 +113,7 @@ function useOpenedTrigger(
   created: TriggerDefinition | null,
 ) {
   const triggers = useStudioRead(definitions, "triggers");
-  const creating = draftId.startsWith("new:");
+  const creating = draftId === "new";
   const pending = definitions.hasObserved("triggers", draftId) ? null : created;
   const listed = triggers.value?.find((entry) => entry.id === draftId) ?? pending;
   const [opened, setOpened] = useState<TriggerDefinition | null>(null);
@@ -134,6 +134,7 @@ function TriggerEditor({
   actions,
   created,
   onCreated,
+  onEnable,
   reportDraft,
 }: {
   draftId: string;
@@ -142,9 +143,9 @@ function TriggerEditor({
   actions: TriggerActions;
   created: TriggerDefinition | null;
   onCreated: OnCreated;
+  onEnable: (trigger: TriggerDefinition) => void;
   reportDraft: ReportDraft;
 }) {
-  const openStudio = useStudioNavigation();
   const { trigger, live, unavailable } = useOpenedTrigger(draftId, definitions, created);
   if (unavailable)
     return (
@@ -152,9 +153,6 @@ function TriggerEditor({
         <p role="alert" className="text-sm text-destructive">
           Trigger not found
         </p>
-        <Button variant="outline" onClick={() => void openStudio({ tab: "triggers" })}>
-          Back to Triggers
-        </Button>
       </main>
     );
   if (trigger === undefined)
@@ -172,6 +170,7 @@ function TriggerEditor({
       names={names}
       actions={actions}
       onCreated={onCreated}
+      onEnable={onEnable}
       reportDraft={reportDraft}
     />
   );
@@ -188,33 +187,21 @@ function useOpenedTriggerDraft(
   useEffect(() => draft.connect(), [draft]);
   useDraftGuard(draft, draftId, reportDraft);
   const state = useTriggerDraftSnapshot(draft);
-  // Readiness is listed on create only, but edit also reads it for the repository and `@me`.
-  const readiness = useTriggerReadiness(
-    state.content.projectId,
-    trigger ? "" : state.content.flowId,
-  );
+  const { read, retry } = useTriggerReadiness(state.content.projectId);
+  const readiness = read.status === "answered" ? read.readiness : undefined;
+  const answer = readiness?.repository;
   useEffect(() => {
-    if (readiness.status !== "answered" || !readiness.readiness.repository?.ready) return;
-    draft.detectRepository(state.content.projectId, readiness.readiness.repository.repository);
-  }, [draft, readiness, state.content.projectId]);
+    if (answer?.ready) draft.detectRepository(state.content.projectId, answer.repository);
+  }, [draft, answer, state.content.projectId]);
   useEffect(() => {
     if (state.updatedTo === null) return;
     const timer = setTimeout(draft.dismissUpdate, 4000);
     return () => clearTimeout(timer);
   }, [draft, state.updatedTo]);
-  return { draft, state, readiness };
+  return { draft, state, readiness, read, retry };
 }
 
-function OpenedTriggerEditor({
-  draftId,
-  trigger,
-  live,
-  definitions,
-  names,
-  actions,
-  onCreated,
-  reportDraft,
-}: {
+type OpenedTriggerEditorProps = {
   draftId: string;
   trigger: TriggerDefinition | null;
   /** The Trigger as Studio currently lists it, for its status. */
@@ -223,273 +210,374 @@ function OpenedTriggerEditor({
   names: TriggerNames;
   actions: TriggerActions;
   onCreated: OnCreated;
+  onEnable: (trigger: TriggerDefinition) => void;
   reportDraft: ReportDraft;
-}) {
+};
+
+function useTriggerEditor({
+  draftId,
+  trigger,
+  live,
+  definitions,
+  names,
+  actions,
+  onCreated,
+  reportDraft,
+}: OpenedTriggerEditorProps) {
   const openStudio = useStudioNavigation();
   const active = useActiveView();
-  const { draft, state, readiness } = useOpenedTriggerDraft(
-    trigger,
-    definitions,
-    draftId,
-    reportDraft,
-  );
+  const host = useOpenedTriggerDraft(trigger, definitions, draftId, reportDraft);
+  const { draft, state } = host;
+  const creating = !trigger;
   const shown = live ?? state.saved;
-  const [review, setReview] = useState<TriggerReview | null>(null);
+  const [checked, setChecked] = useState<TriggerCheckReply>();
   const pending = shown ? actions.state.pending.get(shown.id) : undefined;
-  async function create(enable: boolean) {
+  const { content } = state;
+  const triggers = useStudioRead(definitions, "triggers").value;
+  const validation = triggerFormReadiness(state, names, host);
+  const { canSave } = validation;
+  const ghProblem = readinessNotice(validation.ghProblem, shown?.error?.code);
+  const repositoryName = content.repository?.nameWithOwner ?? "";
+  const watchers = otherRepositoryWatchers(triggers, content.repository, shown?.id);
+
+  async function finishSave(enable: boolean) {
     const saved = await draft.save();
-    setReview(null);
+    closeReview();
     if (!saved || !active.current) return;
+    if (!creating) {
+      await check(saved);
+      return;
+    }
     await onCreated(saved, enable);
     void openStudio({ tab: "triggers", triggerId: saved.id });
   }
-  async function applyAndCheck() {
-    const saved = await draft.save();
-    setReview(null);
-    if (saved) await actions.run(saved);
+
+  async function check(target: TriggerDefinition) {
+    const result = await actions.run(target);
+    if (result) setChecked(result);
   }
-  /** Opens the review of what the draft's settings would start, as `confirmLabel` commits them. */
-  function reviewDraft(confirmLabel: TriggerReview["confirmLabel"]) {
-    const proposal = draft.proposal();
-    if (!proposal || "error" in state.query) return undefined;
-    const saved = state.saved;
-    const { input } = proposal;
-    const reviewed = {
-      summary: reviewSummary(input, state.content.repository?.nameWithOwner ?? "", names),
-      query: input.github.query ?? "",
-      readyLabel: state.query.readyLabel,
-      confirmLabel,
-    };
-    if (proposal.kind === "create")
-      return setReview({
-        ...reviewed,
-        title: `Enable “${input.name}”?`,
-        load: () => definitions.previewNewTrigger(proposal.input),
-        saveDisabled: () => void create(false),
-      });
-    // Harmless edits, and any edit of a Trigger that is off, save without a review.
-    if (!saved || !shown?.enabled || !widensAdmission(saved, proposal.input))
-      return void draft.save();
-    setReview({
-      ...reviewed,
-      title: `Apply changes to “${input.name}”?`,
-      load: () => definitions.previewTrigger(proposal.id, proposal.input),
-    });
+
+  const saveOff = () => void finishSave(false);
+  const { review, reviewDraft, closeReview } = useDraftReview({
+    draft,
+    definitions,
+    names,
+    repositoryName,
+    watchers,
+    enabled: shown?.enabled === true,
+    saveOff,
+  });
+
+  const currentCheck = visibleCheck(checked, shown);
+  const canSubmit = canSave && !pending;
+  const closeBlocked = state.saving || pending === "enable" || pending === "run";
+  const fieldsLocked = state.saving || (state.saveOutcome === "unknown" && creating);
+  function openRecovered(found: TriggerDefinition) {
+    draft.openRecovered(found);
+    void onCreated(found, false);
+    void openStudio({ tab: "triggers", triggerId: found.id });
   }
+  return {
+    host,
+    validation,
+    creating,
+    shown,
+    pending,
+    ghProblem,
+    currentCheck,
+    canSubmit,
+    closeBlocked,
+    fieldsLocked,
+    sharedRepository: { watchers, repository: repositoryName },
+    reviewActions: { review, reviewDraft, closeReview, finishSave },
+    check,
+    saveOff,
+    openRecovered,
+  };
+}
+
+function OpenedTriggerEditor(props: OpenedTriggerEditorProps) {
+  const { names, actions, onEnable } = props;
+  const editor = useTriggerEditor(props);
+  const { draft, state, readiness, retry } = editor.host;
+  const { flowProblem, repositoryProblem, moved, canSave, canReview } = editor.validation;
+  const { review, reviewDraft, closeReview, finishSave } = editor.reviewActions;
+  const { creating, shown, pending } = editor;
   return (
-    <main className="grid content-start gap-4 px-8 pt-6 pb-8 max-sm:px-4">
-      <EditorBackLink creating={!trigger} />
-      <StudioPage
-        title={shown ? shown.name : "New Trigger · GitHub Issues"}
-        description={
-          shown
-            ? `${triggerRoute(shown, names)} · ${shown.github.repository.nameWithOwner} · ${scheduleText(shown.schedule)}`
-            : "Factory checks one Project's tracker and starts the Flow for each new ready issue. It never writes to the tracker."
-        }
-      >
-        {shown && (
-          <TriggerStatusStrip
-            trigger={shown}
-            running={actions.state.pending.get(shown.id) === "run"}
-            onRun={() => void actions.run(shown)}
+    <main className="flex h-full min-h-0 flex-col bg-background">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 pt-6 pb-4 max-sm:px-4">
+        <TriggerEditorHeader
+          trigger={creating ? null : shown}
+          checked={editor.currentCheck}
+          checking={pending === "run"}
+          disabled={state.removed || state.saving || Boolean(pending)}
+          dirty={state.dirty}
+          moved={moved}
+          onEnable={onEnable}
+          onDisable={(target) => void actions.disable(target)}
+          onCheck={(target) => void editor.check(target)}
+        />
+        <fieldset className="grid min-w-0 gap-5" disabled={editor.fieldsLocked}>
+          <TriggerFields
+            draft={draft}
+            state={state}
+            projects={names.projects ?? []}
+            flows={names.flows}
+            readiness={readiness}
+            flowProblem={flowProblem}
+            repositoryProblem={repositoryProblem}
+            movedRepository={moved}
           />
-        )}
-        <EditorNotices draft={draft} state={state} actions={actions} />
-        <TriggerFields
-          draft={draft}
+        </fieldset>
+      </div>
+      <footer className="flex max-h-[50%] shrink-0 flex-col gap-3 border-t px-8 py-3 max-sm:px-4">
+        <div className="grid min-h-0 gap-3 overflow-y-auto empty:hidden">
+          <EditorNotices
+            draft={draft}
+            state={state}
+            failure={actions.state.failure}
+            recovered={editor.openRecovered}
+          />
+          <TriggerFieldNotices
+            state={state}
+            repositoryProblem={repositoryProblem}
+            flowProblem={flowProblem}
+            publicQueryWarning={queryWarning(state, readiness)}
+            ghProblem={editor.ghProblem}
+            retry={retry}
+          />
+          <SharedRepositoryCard {...editor.sharedRepository} />
+        </div>
+        <EditorActions
+          creating={creating}
           state={state}
-          projects={names.projects}
-          flows={names.flows}
-          readiness={readiness}
+          canSave={editor.canSubmit}
+          canReview={Boolean(canReview)}
+          onSave={creating ? editor.saveOff : reviewDraft}
+          onReview={reviewDraft}
         />
-        {!trigger && (
-          <TriggerReadinessList readiness={readiness} state={state} flows={names.flows} />
-        )}
-        <EditorFooter
-          creating={!trigger}
-          state={state}
-          readiness={readiness}
-          onSaveDisabled={() => void create(false)}
-          onReview={() => reviewDraft(trigger ? "Apply and check" : "Enable and check")}
-          onCancel={() => void openStudio({ tab: "triggers" })}
-        />
-      </StudioPage>
+      </footer>
       <TriggerReviewDialog
         review={review}
-        busy={state.saving || pending === "enable" || pending === "run"}
-        onCancel={() => setReview(null)}
-        onConfirm={() => void (trigger ? applyAndCheck() : create(true))}
+        busy={editor.closeBlocked}
+        blocked={creating ? !canReview : !canSave}
+        saveBlocked={!canSave}
+        onCancel={closeReview}
+        onConfirm={() => void finishSave(true)}
       />
     </main>
   );
 }
 
-/** An opened Trigger goes back to the list; the create form goes back to the type picker. */
-function EditorBackLink({ creating }: { creating: boolean }) {
-  return creating ? (
-    <StudioBackLink selection={{ tab: "triggers", triggerId: "new" }}>Trigger types</StudioBackLink>
-  ) : (
-    <StudioBackLink selection={{ tab: "triggers" }}>All Triggers</StudioBackLink>
+function triggerFormReadiness(
+  state: TriggerDraftSnapshot,
+  names: TriggerNames,
+  { read, readiness }: ReturnType<typeof useOpenedTriggerDraft>,
+) {
+  const { content } = state;
+  const ghProblem =
+    read.status === "failed"
+      ? read.message
+      : readiness && !readiness.gitHub.ready
+        ? readiness.gitHub.problem
+        : undefined;
+  const repository = readiness?.repository;
+  const { repositoryProblem, moved } = repositoryState(
+    state.content.repository,
+    repository,
+    ghProblem,
   );
+  const flowProblem = chosenFlowProblem(content, names.flows);
+  const projectAvailable = names.projects?.some(
+    (entry) => entry.id === content.projectId && entry.availability === "available",
+  );
+  const canSave =
+    state.canSave && !flowProblem && !repositoryProblem && !moved && projectAvailable === true;
+  const canReview = canSave && readiness?.gitHub.ready && repository?.ready;
+  return { ghProblem, repositoryProblem, moved, flowProblem, canSave, canReview };
 }
 
-function EditorNotices({
+function repositoryState(
+  confirmed: TriggerRepository | null,
+  repository:
+    | NonNullable<ReturnType<typeof useOpenedTriggerDraft>["readiness"]>["repository"]
+    | undefined,
+  ghProblem: string | undefined,
+) {
+  if (!repository) return { moved: null };
+  if (!repository.ready)
+    return { moved: null, repositoryProblem: ghProblem ? undefined : repository.problem };
+  const moved =
+    confirmed && repository.repository.nodeId !== confirmed.nodeId ? repository.repository : null;
+  return { moved };
+}
+
+function readinessNotice(problem: string | undefined, recordedCode: string | undefined) {
+  return recordedCode === "github_signed_out" || recordedCode === "github_gh_missing"
+    ? undefined
+    : problem;
+}
+
+function visibleCheck(checked: TriggerCheckReply | undefined, shown: TriggerDefinition | null) {
+  if (!checked?.latestCheck) return undefined;
+  if (shown?.latestCheck && shown.latestCheck.checkedAt > checked.latestCheck.checkedAt)
+    return undefined;
+  return checked;
+}
+
+/** A review captures the proposal to preview, while the repository warning follows Studio. */
+function useDraftReview({
   draft,
-  state,
-  actions,
+  definitions,
+  names,
+  repositoryName,
+  watchers,
+  enabled,
+  saveOff,
 }: {
   draft: TriggerDraftModel;
-  state: TriggerDraftSnapshot;
-  actions: TriggerActions;
+  definitions: StudioDefinitions;
+  names: TriggerNames;
+  repositoryName: string;
+  watchers: readonly TriggerDefinition[];
+  enabled: boolean;
+  saveOff: () => void;
 }) {
-  const openStudio = useStudioNavigation();
-  const { conflict } = state;
-  const failure = actions.state.failure;
+  const [review, setReview] = useState<Omit<TriggerReview, "watchers"> | null>(null);
+  function reviewDraft() {
+    const proposal = draft.proposal();
+    const { query, saved } = draft.getSnapshot();
+    if (!proposal || "error" in query) return;
+    const { input } = proposal;
+    const reviewed = {
+      summary: reviewSummary(input, repositoryName, names),
+      repository: repositoryName,
+      readyLabel: query.readyLabel,
+    };
+    if (proposal.kind === "create") {
+      setReview({
+        ...reviewed,
+        title: `Enable “${input.name}”?`,
+        confirmLabel: "Enable and check",
+        load: () => definitions.previewNewTrigger(proposal.input),
+        saveOff,
+      });
+      return;
+    }
+    // Edits that do not widen admission and edits to an off Trigger save directly.
+    if (!saved || !enabled || !widensAdmission(saved, proposal.input)) {
+      void draft.save();
+      return;
+    }
+    setReview({
+      ...reviewed,
+      title: `Enable “${input.name}”?`,
+      confirmLabel: "Apply and check",
+      load: () => definitions.previewTrigger(proposal.id, proposal.input),
+    });
+  }
+
+  return {
+    review: review && { ...review, watchers },
+    reviewDraft,
+    closeReview: () => setReview(null),
+  };
+}
+
+function TriggerEditorHeader({
+  trigger,
+  checked,
+  checking,
+  disabled,
+  dirty,
+  moved,
+  onEnable,
+  onDisable,
+  onCheck,
+}: {
+  trigger: TriggerDefinition | null;
+  checked: TriggerCheckReply | undefined;
+  checking: boolean;
+  disabled: boolean;
+  dirty: boolean;
+  moved: TriggerRepository | null;
+  onEnable: (trigger: TriggerDefinition) => void;
+  onDisable: (trigger: TriggerDefinition) => void;
+  onCheck: (trigger: TriggerDefinition) => void;
+}) {
   return (
-    <>
-      {state.removed && (
-        <Alert variant="attention" role="status">
-          <AlertDescription>
-            This Trigger was removed elsewhere. Your edits are kept here, but they can no longer be
-            saved.
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void openStudio({ tab: "triggers" })}
-            >
-              Back to Triggers
-            </Button>
-          </AlertDescription>
-        </Alert>
+    <header className="mb-5 grid gap-5">
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xl leading-tight font-semibold">
+          {trigger?.name ?? "New GitHub Issues Trigger"}
+        </h2>
+        {trigger && (
+          <MutationGate>
+            <Switch
+              aria-label="Trigger enabled"
+              checked={trigger.enabled}
+              disabled={disabled}
+              onCheckedChange={(enabled) => (enabled ? onEnable(trigger) : onDisable(trigger))}
+            />
+          </MutationGate>
+        )}
+      </div>
+      {trigger && (
+        <TriggerStatusStrip
+          trigger={trigger}
+          checked={checked}
+          checking={checking}
+          disabled={disabled || dirty}
+          moved={moved}
+          onCheck={() => onCheck(trigger)}
+        />
       )}
-      {state.updatedTo !== null && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Updated to revision {state.updatedTo}
-        </p>
-      )}
-      {conflict.status === "detected" && (
-        <Alert variant="attention" role="status">
-          <AlertDescription>
-            {conflict.revision === null
-              ? "A newer revision was saved elsewhere."
-              : `Revision ${conflict.revision} was saved elsewhere.`}
-            <Button variant="outline" size="sm" onClick={draft.compare}>
-              Compare latest revision
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-      {conflict.status === "comparing" && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Loading the latest revision…
-        </p>
-      )}
-      {conflict.status === "compared" && (
-        <Alert variant="attention" role="status">
-          <AlertDescription>
-            Revision {conflict.latest.revision} is “{conflict.latest.name}”, checking{" "}
-            {conflict.latest.github.query} {scheduleText(conflict.latest.schedule)} with up to{" "}
-            {conflict.latest.maxActiveRuns} active Runs.
-            <span className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => draft.loadLatest(conflict.latest.revision)}
-              >
-                Load revision {conflict.latest.revision}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => draft.keepEdits(conflict.latest.revision)}
-              >
-                Keep my edits
-              </Button>
-            </span>
-          </AlertDescription>
-        </Alert>
-      )}
-      {state.error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {state.error}
-            {!state.saved && state.saveOutcome === "unknown" && (
-              <Button variant="outline" size="sm" onClick={draft.allowCreateAgain}>
-                Create again
-              </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
-      {state.warnings.length > 0 && (
-        <Alert variant="attention" role="status">
-          <AlertDescription>
-            {state.warnings.map((warning) => (
-              <p key={warning.code}>{warning.message}</p>
-            ))}
-          </AlertDescription>
-        </Alert>
-      )}
-      {failure && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {failure.name}: {failure.message}
-          </AlertDescription>
-        </Alert>
-      )}
-    </>
+    </header>
   );
 }
 
-function EditorFooter({
+function EditorActions({
   creating,
   state,
-  readiness,
-  onSaveDisabled,
+  canSave,
+  canReview,
+  onSave,
   onReview,
-  onCancel,
 }: {
   creating: boolean;
   state: TriggerDraftSnapshot;
-  readiness: ReadinessRead;
-  onSaveDisabled: () => void;
-  /** Saves, or first reviews what the settings would start when they can widen it. */
+  canSave: boolean;
+  canReview: boolean;
+  onSave: () => void;
   onReview: () => void;
-  onCancel: () => void;
 }) {
-  const busy = !state.canSave;
-  if (creating) {
-    const blocked = readiness.status !== "answered" || !readiness.readiness.gitHub.ready;
-    return (
-      <footer className="flex flex-wrap items-center gap-2">
-        <p className="min-w-48 flex-1 text-2xs leading-tight tracking-label text-subtle-foreground">
-          Nothing starts until you review the issues that would start.
-        </p>
-        <MutationGate>
-          <Button variant="outline" disabled={busy} onClick={onSaveDisabled}>
-            {state.saving ? "Saving…" : "Save disabled"}
-          </Button>
-          <Button disabled={busy || blocked} onClick={onReview}>
-            Review and enable
-          </Button>
-        </MutationGate>
-      </footer>
-    );
-  }
+  const { name, projectId, flowId } = state.content;
+  const missing = !name.trim() || !projectId || !flowId;
+  const saveDisabled = !canSave || (!creating && !state.dirty);
   return (
-    <footer className="flex flex-wrap items-center gap-2">
-      <p className="min-w-48 flex-1 text-2xs leading-tight tracking-label text-subtle-foreground">
-        Changes that widen what starts (repository, label, filter, Flow, higher limit) are reviewed
-        before saving.
-      </p>
-      <Button variant="outline" onClick={onCancel}>
-        Cancel
-      </Button>
+    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+      {creating && missing && (
+        <p className="mr-auto text-xs text-muted-foreground">Name, Project and Flow are required</p>
+      )}
       <MutationGate>
-        <Button disabled={busy || !state.dirty} onClick={onReview}>
+        <Button
+          variant={creating && !canSave ? "secondary" : "outline"}
+          disabled={saveDisabled}
+          onClick={onSave}
+        >
           {state.saving ? "Saving…" : "Save"}
         </Button>
+        {creating && (
+          <Button
+            variant={canReview ? "default" : "outline"}
+            className={!canReview ? "bg-muted" : undefined}
+            disabled={!canReview}
+            onClick={onReview}
+          >
+            Review and enable
+          </Button>
+        )}
       </MutationGate>
-    </footer>
+    </div>
   );
 }

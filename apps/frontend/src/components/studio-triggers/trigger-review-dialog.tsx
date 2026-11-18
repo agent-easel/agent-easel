@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { CirclePause, CircleX, Info, TriangleAlert } from "lucide-react";
-import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
+import { CirclePause, CircleX, TriangleAlert } from "lucide-react";
+import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { sectionLabelClass } from "../page.tsx";
+import { SharedRepositoryCard } from "./trigger-notices.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
 /** What one review shows and how it commits. */
@@ -15,13 +15,14 @@ export interface TriggerReview {
   readonly title: string;
   /** Project · repository · Flow · schedule · limit. */
   readonly summary: string;
-  readonly query: string;
+  readonly repository: string;
+  readonly watchers: readonly TriggerDefinition[];
   readonly readyLabel: string;
   readonly confirmLabel: "Enable and check" | "Apply and check";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
   /** Create offers saving without enabling instead. */
-  readonly saveDisabled?: () => void;
+  readonly saveOff?: () => void;
   /** Why the review opened again, such as settings saved elsewhere after the last one. */
   readonly notice?: string;
 }
@@ -41,11 +42,15 @@ const captionClass = "text-2xs leading-tight tracking-label text-subtle-foregrou
 export function TriggerReviewDialog({
   review,
   busy,
+  blocked = false,
+  saveBlocked = false,
   onConfirm,
   onCancel,
 }: {
   review: TriggerReview | null;
   busy: boolean;
+  blocked?: boolean;
+  saveBlocked?: boolean;
   /** Commits the review; `preview` is what it showed. */
   onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
@@ -58,7 +63,14 @@ export function TriggerReviewDialog({
       }}
     >
       {review && (
-        <ReviewBody review={review} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
+        <ReviewBody
+          review={review}
+          busy={busy}
+          blocked={blocked}
+          saveBlocked={saveBlocked}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
       )}
     </Dialog>
   );
@@ -67,11 +79,15 @@ export function TriggerReviewDialog({
 function ReviewBody({
   review,
   busy,
+  blocked,
+  saveBlocked,
   onConfirm,
   onCancel,
 }: {
   review: TriggerReview;
   busy: boolean;
+  blocked: boolean;
+  saveBlocked: boolean;
   onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
 }) {
@@ -88,13 +104,13 @@ function ReviewBody({
             Cancel
           </Button>
           <MutationGate>
-            {review.saveDisabled && (
-              <Button variant="outline" disabled={busy} onClick={review.saveDisabled}>
-                Save disabled
+            {review.saveOff && (
+              <Button variant="outline" disabled={busy || saveBlocked} onClick={review.saveOff}>
+                {busy ? "Saving…" : "Save"}
               </Button>
             )}
             <Button
-              disabled={busy || read.status !== "answered"}
+              disabled={busy || blocked || read.status !== "answered"}
               onClick={() => read.status === "answered" && onConfirm(read.preview)}
             >
               {busy ? "Checking…" : review.confirmLabel}
@@ -109,10 +125,11 @@ function ReviewBody({
           <AlertDescription className="text-foreground">{review.notice}</AlertDescription>
         </Alert>
       )}
+      <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
       {read.status === "loading" && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Checking which issues would start…
-        </p>
+        <div role="status">
+          <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
+        </div>
       )}
       {read.status === "failed" && (
         <Alert variant="critical">
@@ -154,7 +171,6 @@ function PreviewResult({ review, preview }: { review: TriggerReview; preview: Tr
   const { problem, issues } = preview;
   return (
     <>
-      <AuthorFilterNotice review={review} preview={preview} />
       {problem ? (
         <Alert variant="critical">
           <CircleX aria-hidden />
@@ -165,16 +181,16 @@ function PreviewResult({ review, preview }: { review: TriggerReview; preview: Tr
         </Alert>
       ) : (
         <section aria-labelledby="trigger-review-issues" className="grid gap-3.5">
-          <h3 id="trigger-review-issues" className={sectionLabelClass}>
+          <h3 id="trigger-review-issues" className="text-xs text-muted-foreground">
             {issues.length === 0
               ? "No issues ready"
-              : `${issues.length} ${issues.length === 1 ? "issue" : "issues"} ready · oldest first`}
+              : `${issues.length} ${issues.length === 1 ? "issue" : "issues"} ready`}
           </h3>
           <ul className="divide-y overflow-hidden rounded-lg border bg-background">
             {issues.length === 0 ? (
               <li className="px-3.5 py-3 text-sm text-muted-foreground">
-                No open issue matches right now. Issues that get {review.readyLabel} later start at
-                the next check.
+                No open issue matches right now. Issues that get <code>{review.readyLabel}</code>{" "}
+                later start at the next check.
               </li>
             ) : (
               issues.map((issue) => <PreviewIssue key={issue.issue} issue={issue} />)
@@ -183,42 +199,6 @@ function PreviewResult({ review, preview }: { review: TriggerReview; preview: Tr
         </section>
       )}
     </>
-  );
-}
-
-/** The query's author filter, or the warning that it is missing on a public repository. */
-function AuthorFilterNotice({
-  review,
-  preview,
-}: {
-  review: TriggerReview;
-  preview: TriggerPreview;
-}) {
-  const title = (
-    <AlertTitle>
-      Only issues matching <span className="font-mono text-label">{review.query}</span> can start
-    </AlertTitle>
-  );
-  const [warning] = preview.warnings;
-  if (warning)
-    return (
-      <Alert variant="attention">
-        <TriangleAlert aria-hidden />
-        {title}
-        <AlertDescription className="text-muted-foreground">{warning.message}</AlertDescription>
-      </Alert>
-    );
-  const me =
-    preview.login && review.query.includes("@me") ? `Right now @me is ${preview.login}. ` : "";
-  return (
-    <Alert variant="info">
-      <Info aria-hidden />
-      {title}
-      <AlertDescription className="text-muted-foreground">
-        {me}Without an author filter, anyone whose issue gets {review.readyLabel} could start Runs
-        on this host — on a public repository that includes issue templates.
-      </AlertDescription>
-    </Alert>
   );
 }
 

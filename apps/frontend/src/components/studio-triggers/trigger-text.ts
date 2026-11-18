@@ -52,7 +52,7 @@ export function reviewSummary(settings: ReviewedSettings, repository: string, na
   return [
     project ?? "Project",
     repository,
-    `Flow ${flow ?? ""}`.trim(),
+    flow ?? "Flow",
     scheduleText(settings.schedule),
     `max ${settings.maxActiveRuns} active`,
   ].join(" · ");

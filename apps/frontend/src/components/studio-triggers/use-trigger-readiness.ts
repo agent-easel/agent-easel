@@ -8,11 +8,12 @@ type ReadinessRead =
   | { readonly status: "failed"; readonly message: string };
 
 /**
- * What a GitHub Issues Trigger needs on the Factory host for the chosen Project and Flow (either
- * may be empty), read again whenever they change; an answer for an earlier choice is dropped.
+ * What a GitHub Issues Trigger needs on the Factory host for the chosen Project (which
+ * may be empty), read again whenever it changes; an answer for an earlier choice is dropped.
  */
-export function useTriggerReadiness(projectId: string, flowId: string) {
-  const key = `${projectId}\n${flowId}`;
+export function useTriggerReadiness(projectId: string) {
+  const [attempt, setAttempt] = useState(0);
+  const key = `${projectId}\n${attempt}`;
   const [read, setRead] = useState<{ key: string; value: ReadinessRead }>({
     key,
     value: { status: "checking" },
@@ -20,7 +21,7 @@ export function useTriggerReadiness(projectId: string, flowId: string) {
   if (read.key !== key) setRead({ key, value: { status: "checking" } });
   useEffect(() => {
     let active = true;
-    void api.getTriggerReadiness(projectId, flowId).then(
+    void api.getTriggerReadiness(projectId, "").then(
       (readiness) => {
         if (active) setRead({ key, value: { status: "answered", readiness } });
       },
@@ -39,6 +40,9 @@ export function useTriggerReadiness(projectId: string, flowId: string) {
     return () => {
       active = false;
     };
-  }, [key, projectId, flowId]);
-  return read.key === key ? read.value : ({ status: "checking" } as const);
+  }, [key, projectId]);
+  return {
+    read: read.key === key ? read.value : ({ status: "checking" } as const),
+    retry: () => setAttempt((previous) => previous + 1),
+  };
 }
