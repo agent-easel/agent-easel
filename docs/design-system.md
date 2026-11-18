@@ -25,9 +25,9 @@ system palette in either mode; meaning stays carried by labels and icons.
 
 With [theme colors](t3-integration.md#theme-colors), every color token can come
 from the T3 environment's default theme instead of the baseline, separately per mode: the local
-mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline. Appearance shows **Following T3** when either
-mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise. Only
-colors change; typography, geometry, radii, shadows and motion stay Factory's.
+mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline.
+Appearance shows **Following T3** when either mode uses T3 colors, **Checking** during the read,
+and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and motion.
 
 The backend maps T3 roles by meaning: canvas to the background, raised surfaces to cards and
 popovers, text and muted text to the foregrounds, sidebar roles to the sidebar, borders and
@@ -39,7 +39,8 @@ mode's baseline. A mode must keep its own polarity (a dark canvas in Dark, a lig
 Contrast policy: text, secondary text, action labels, links and status colors need 4.5:1 on
 every surface they appear on, and focus rings and section labels 3:1. A color that misses is moved
 in lightness only, toward black or white, until it passes; if a required pair cannot pass, that
-whole mode is rejected to its baseline with the reason in Settings, never partially applied.
+whole mode uses its Factory baseline. Appearance identifies which colors each mode uses and
+shows **Technical details** when Factory cannot use the theme at all.
 The primary action darkens on hover as in the baselines; an accent of middle lightness, on which
 only a dark label is readable, lightens on hover instead so the label stays readable. The same
 mapping and policy apply to built-in, seed-generated, overridden and variant palettes.
