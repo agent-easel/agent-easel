@@ -169,7 +169,7 @@ _Avoid_: bridge (the retired stdio copy installed per harness).
 One accepted task at a Flow block, from its launch or visit message until its result is completed. Reports naming the Block id apply to the Block's current activation, whichever turn of the worker thread sends them.
 
 **Needs input**:
-Pending questions or decisions on a Run. This covers Human occurrences answered in Factory and native T3 questions or permissions, which stay Open in T3. An Agent's question in chat is ordinary conversation, not Needs input. It is not an execution state.
+Pending questions or decisions on a Run. This covers Human occurrences answered in Factory and native T3 questions or permissions, which stay Open in T3, and an Agent idle with its visit's report still `working`, which the owner reviews in T3 without an attention matter (Factory never parses chat). On a block it replaces Working or Waiting in the status badge.
 
 **Conversation waiting**:
 A retired, non-final `waiting` report with which an Agent once asked the user in chat. Factory now refuses it; recorded ones stay readable as history, and an upgrade turned pending ones into Working reports.
@@ -244,7 +244,7 @@ The one panel docked beside the Execution canvas. It shows the **Run overview** 
 _Avoid_: Run context, block details card
 
 **Run status**:
-The one status the Run detail header shows for the whole Run: Archived, Settled, Problem, Needs input, Working or Idle, the first that applies. Block execution states stay on the execution canvas.
+A Run's work state as its sidebar row and blocks show it: Needs input and Problem on the row, Working, Waiting, Needs input, Problem, Finished or Stopped on each block. The Run detail header carries no work state; it names only a Settled or Archived lifecycle, or Idle.
 _Avoid_: header pills, Run state badges.
 
 **Not live**:

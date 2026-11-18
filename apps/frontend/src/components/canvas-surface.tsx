@@ -16,7 +16,7 @@ import {
 } from "react";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
-import { fitGraphView } from "../canvas-fit.ts";
+import { entryView, fitGraphView, mergeGraphBounds } from "../canvas-fit.ts";
 import { clampGraphPosition, clientToGraphPoint, type CanvasView } from "../canvas-viewport.ts";
 import { createCanvasGeometry } from "../flow-geometry.ts";
 import {
@@ -667,6 +667,23 @@ function SurfaceControls({
 }
 
 /**
+ * What a canvas with focus targets opens on: the targets; without any, the whole graph while it
+ * fits at 100 %, otherwise the Flow input.
+ */
+function entryTarget(
+  geometry: ReturnType<typeof useSurfaceGraph>["geometry"],
+  targets: readonly string[],
+  width: number,
+  height: number,
+) {
+  if (targets.length) return geometry.focusBounds(targets);
+  const graph = geometry.bounds();
+  return graph.width <= width && graph.height <= height
+    ? graph
+    : mergeGraphBounds(geometry.flowInputBox, []);
+}
+
+/**
  * The transformed canvas a Flow graph is drawn on. It owns block geometry, the drawn frames,
  * wires, the viewport with following, the arrangement and the zoom controls; the adapter
  * supplies the graph, its block dimensions, what each block shows and its policies.
@@ -688,6 +705,15 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     getFocusView:
       focusTargets &&
       ((width, height) => fitGraphView(geometry.focusBounds(focusTargets), width, height, padding)),
+    getEntryView:
+      focusTargets &&
+      ((width, height) =>
+        entryView(
+          entryTarget(geometry, focusTargets, width, height),
+          geometry.boxes(),
+          { width, height },
+          padding,
+        )),
     focusTargets,
     padding,
     reservedRight: covered.right,

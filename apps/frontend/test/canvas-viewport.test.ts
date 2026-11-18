@@ -1,5 +1,5 @@
 import { decideAutoFollow, selectExecutionTargets } from "../src/execution-focus.ts";
-import { fitGraphView } from "../src/canvas-fit.ts";
+import { entryView, fitGraphView } from "../src/canvas-fit.ts";
 import { expect, it } from "vite-plus/test";
 import {
   canvasWheelZoomFactor,
@@ -101,7 +101,7 @@ it("a working Block takes precedence over an error Block", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["active"]);
@@ -155,6 +155,70 @@ it("parallel target bounds fit together inside the padded viewport", () => {
   expect(view.y + 600 * view.scale).toBeCloseTo(392);
 });
 
+const withoutContinuations = <Blocks>(blocks: Blocks) => ({
+  blocks,
+  continuationVisits: [],
+  threadBindings: [],
+});
+
+it("a sent Continuation is the target instead of the Agent whose thread works on its prompt", () => {
+  // Arrange
+  const run = {
+    blocks: [
+      { blockId: "grill", state: "working" as const },
+      { blockId: "tickets", state: "sent" as const },
+    ],
+    continuationVisits: [
+      { blockId: "tickets", kind: "prompt" as const, bindingId: "grill-thread" },
+    ],
+    threadBindings: [{ id: "grill-thread", blockId: "grill" }],
+  };
+
+  // Act
+  const targets = selectExecutionTargets(run);
+
+  // Assert
+  expect(targets).toStrictEqual(["tickets"]);
+});
+
+const surface = { width: 1000, height: 600 };
+const noCover = { top: 0, bottom: 0 };
+const targetBox = { x: 0, y: 0, width: 200, height: 100 };
+const targetBounds = { minX: 0, minY: 0, width: 200, height: 100 };
+
+it("the entry view centres the active Blocks at 100 percent when no Block is cut", () => {
+  // Arrange
+  const boxes = [targetBox, { x: 300, y: 0, width: 200, height: 100 }];
+
+  // Act
+  const view = entryView(targetBounds, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400, y: 250 });
+});
+
+it("a Block cut at the canvas edge moves the entry view by the smallest shift that clears it", () => {
+  // Arrange
+  const cut = { x: -450, y: 0, width: 200, height: 100 };
+
+  // Act
+  const view = entryView(targetBounds, [targetBox, cut], surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 450, y: 250 });
+});
+
+it("of two equally small entry shifts the one showing more Blocks wins", () => {
+  // Arrange
+  const cut = { x: -500, y: 0, width: 200, height: 100 };
+
+  // Act
+  const view = entryView(targetBounds, [targetBox, cut], surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 500, y: 250 });
+});
+
 it("waiting and parallel working Blocks are all targets", () => {
   // Arrange
   const blocks = [
@@ -163,18 +227,18 @@ it("waiting and parallel working Blocks are all targets", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["human", "worker"]);
 });
 
-it("no active Block selects the whole-graph overview", () => {
+it("no active Block selects no target", () => {
   // Arrange
   const blocks = [{ blockId: "done", state: "finished" as const }];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual([]);
@@ -188,7 +252,7 @@ it("a failed Run targets its error-state Blocks", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["failed"]);
@@ -332,7 +396,7 @@ it("a Run that fails while following animates to its error Block", () => {
   // Act
   const action = decideAutoFollow({
     seen: ["worker"],
-    targets: selectExecutionTargets(blocks),
+    targets: selectExecutionTargets(withoutContinuations(blocks)),
     following: true,
     visibility: "visible",
     reducedMotion: false,
@@ -349,7 +413,7 @@ it("a Run that succeeds while following keeps the view on its last Block", () =>
   // Act
   const action = decideAutoFollow({
     seen: ["worker"],
-    targets: selectExecutionTargets(blocks),
+    targets: selectExecutionTargets(withoutContinuations(blocks)),
     following: true,
     visibility: "visible",
     reducedMotion: false,

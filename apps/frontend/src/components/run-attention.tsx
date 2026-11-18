@@ -1,23 +1,28 @@
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { bindingRole } from "./run-coordination.tsx";
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   attentionPresentation,
+  awaitsReviewInT3,
   type HumanOccurrence,
   type RunAttention,
   type RunBlock,
   type RunDetail,
 } from "@t3-factory/contracts";
-import { HUMAN_EXITS } from "@t3-factory/domain-validation";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { TriangleAlert } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
+import { capturedExits, exitRecipients } from "../flow-graph.ts";
 import { cn } from "../lib/utils.ts";
-import { fieldLabelClass, sectionLabelClass } from "./page.tsx";
+import { dayAndTime } from "./execution-state.tsx";
+import { exitDisplayName } from "./flow-block.tsx";
+import { InspectorDisclosure, InspectorHeading } from "./inspector-section.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
+import { fieldLabelClass } from "./page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 const attentionLabel = (kind: RunAttention["kind"]) =>
@@ -35,7 +40,7 @@ const attentionLabel = (kind: RunAttention["kind"]) =>
 function attentionExplanation(kind: RunAttention["kind"]) {
   switch (kind) {
     case "human":
-      return "Respond to this occurrence in Factory.";
+      return null;
     case "native-request":
       return "Respond in T3. Factory cannot answer or approve this request.";
     case "conversation-waiting":
@@ -53,34 +58,6 @@ function attentionExplanation(kind: RunAttention["kind"]) {
   }
 }
 
-/** Figma secondary card action: an outline button that leaves Factory for the T3 thread. */
-function OpenInT3({ href }: { href: string }) {
-  return (
-    <a
-      className="inline-flex h-8 w-fit items-center rounded-md border bg-background px-3 text-sm font-medium text-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Open in T3
-    </a>
-  );
-}
-
-function ObservationLine({
-  freshness,
-  unavailable,
-}: {
-  freshness: RunAttention["freshness"];
-  unavailable: boolean;
-}) {
-  return (
-    <p className="text-2xs tracking-label text-subtle-foreground">
-      Observation: {unavailable ? "stale" : freshness}
-    </p>
-  );
-}
-
 /** What a matter is about: its Block, or the Run for a Run-level matter. */
 const attentionSubject = (item: RunAttention) => item.blockName ?? "Run";
 
@@ -95,7 +72,7 @@ function BlockedWorkers({ run }: { run: RunDetail }) {
         <li key={worker.threadId ?? worker.blockId} className="flex min-w-0 flex-col gap-1">
           <p className="text-sm font-medium text-foreground">{worker.blockName}</p>
           {worker.problem && <p className="text-sm text-muted-foreground">{worker.problem}</p>}
-          {worker.link && <OpenInT3 href={worker.link} />}
+          {worker.link && <OpenInT3 href={worker.link} className="text-sm" />}
         </li>
       ))}
     </ul>
@@ -116,7 +93,9 @@ function recordedProblem(run: RunDetail, item: RunAttention) {
 function selectedExit(run: RunDetail, item: RunAttention) {
   const occurrence = run.humanOccurrences.find((entry) => entry.id === item.occurrenceId);
   if (!occurrence?.exitId) return;
-  return HUMAN_EXITS.find((exit) => exit.id === occurrence.exitId)?.name;
+  return capturedExits(run.definitions, occurrence.blockId).find(
+    (exit) => exit.id === occurrence.exitId,
+  )?.name;
 }
 
 /**
@@ -126,130 +105,156 @@ function selectedExit(run: RunDetail, item: RunAttention) {
 type AttentionDetailsProps = {
   run: RunDetail;
   blockId?: string;
-  observationUnavailable?: boolean;
 };
 
 export function RunAttentionDetails(props: AttentionDetailsProps) {
   return <AttentionDetails key={JSON.stringify([props.run.id, props.blockId])} {...props} />;
 }
 
-function AttentionDetails({ run, blockId, observationUnavailable = false }: AttentionDetailsProps) {
-  const items = run.attention.filter((item) => blockId === undefined || item.blockId === blockId);
-  const [tab, setTab] = useState<"pending" | "settled">("pending");
-  if (!items.length) return null;
-  const shown = items.filter((item) => (tab === "pending" ? !item.settledAt : !!item.settledAt));
-  const forBlock = blockId !== undefined;
+/** Agent Blocks to review in T3, which ask without an attention matter; none while settling. */
+function reviewsInT3(run: RunDetail, blockId: string | undefined) {
+  if (run.settlement) return [];
+  return run.blocks.filter(
+    (block) => awaitsReviewInT3(block) && (blockId === undefined || block.blockId === blockId),
+  );
+}
+
+/** Whether anything is pending in `run`'s attention, so the Attention section shows. */
+export function attentionPending(run: RunDetail) {
+  return run.attention.some((item) => !item.settledAt) || reviewsInT3(run, undefined).length > 0;
+}
+
+/** Pending attention only; resolved matters wait in their own closed row below. */
+function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
+  const pending = run.attention.filter(
+    (item) => !item.settledAt && (blockId === undefined || item.blockId === blockId),
+  );
+  const reviews = reviewsInT3(run, blockId);
+  const count = pending.length + reviews.length;
+  if (!count) return null;
+  const questions = pending.filter((item) => attentionPresentation(item.kind) === "needs-input");
   return (
     <section className="flex min-w-0 flex-col gap-3 wrap-anywhere" aria-label="Run attention">
-      {!forBlock && <h2 className={cn(sectionLabelClass, "px-2 pt-1.5 pb-1")}>Attention</h2>}
-      {(!forBlock || items.some((item) => item.settledAt)) && (
-        <Tabs value={tab} onValueChange={(value) => setTab(value as "pending" | "settled")}>
-          <TabsList aria-label="Attention history" className="w-full">
-            <TabsTrigger value="pending" className="flex-1">
-              Pending
-            </TabsTrigger>
-            <TabsTrigger value="settled" className="flex-1">
-              Settled
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {blockId === undefined && <InspectorHeading title="Attention" count={`${count} pending`} />}
+      {(questions.length > 0 || reviews.length > 0) && (
+        <section aria-label="Needs input" className="space-y-3">
+          {reviews.map((block) => (
+            <ReviewInT3 key={block.blockId} block={block} />
+          ))}
+          {questions.map((item) => (
+            <PendingMatter key={item.id} run={run} item={item} />
+          ))}
+        </section>
       )}
-      {!shown.length && (
-        <p className="text-sm text-muted-foreground">
-          {tab === "pending" ? "No matters need attention." : "No settled matters."}
+      <ProblemGroup
+        items={pending.filter((item) => attentionPresentation(item.kind) === "problem")}
+        run={run}
+      />
+    </section>
+  );
+}
+
+/**
+ * Figma RD19: an Agent idle with a working report. It may be asking in chat or have stopped
+ * without reporting, so the card never says it waits for a reply; the owner reviews in T3.
+ */
+function ReviewInT3({ block }: { block: RunBlock }) {
+  return (
+    <article
+      aria-label={`Review ${block.name} in T3`}
+      className="flex min-w-0 flex-col gap-2 rounded-lg border border-attention/60 bg-card p-4"
+    >
+      <StatusBadge kind="needs-input" />
+      <h3 className="text-sm font-medium text-foreground">Review {block.name} in T3</h3>
+      {block.workingMessage && (
+        <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
+          {block.workingMessage}
         </p>
       )}
-      <AttentionGroup
-        presentation="needs-input"
-        items={shown.filter((item) => attentionPresentation(item.kind) === "needs-input")}
-        run={run}
-        pending={tab === "pending"}
-        observationUnavailable={observationUnavailable}
-      />
-      <AttentionGroup
-        presentation="problem"
-        items={shown.filter((item) => attentionPresentation(item.kind) === "problem")}
-        run={run}
-        pending={tab === "pending"}
-        observationUnavailable={observationUnavailable}
-      />
-    </section>
+      {block.link && <OpenInT3 href={block.link} variant="button" />}
+    </article>
   );
 }
 
-function AttentionGroup({
-  presentation,
-  items,
-  run,
-  pending,
-  observationUnavailable,
-}: {
-  presentation: "needs-input" | "problem";
-  items: readonly RunAttention[];
-  run: RunDetail;
-  pending: boolean;
-  observationUnavailable: boolean;
-}) {
+/** Resolved matters of the Run, or of one Block, in a closed row at the bottom. */
+export function ResolvedAttention({ run, blockId }: { run: RunDetail; blockId?: string }) {
+  const settled = run.attention.filter(
+    (item) => !!item.settledAt && (blockId === undefined || item.blockId === blockId),
+  );
+  if (!settled.length) return null;
+  return (
+    <InspectorDisclosure label={`Resolved attention · ${settled.length}`}>
+      <div aria-label="Resolved attention" role="group" className="flex flex-col gap-3">
+        {settled.map((item) => (
+          <SettledMatter key={item.id} run={run} item={item} />
+        ))}
+      </div>
+    </InspectorDisclosure>
+  );
+}
+
+function ProblemGroup({ items, run }: { items: readonly RunAttention[]; run: RunDetail }) {
   if (!items.length) return null;
   return (
-    <section
-      aria-label={presentation === "needs-input" ? "Needs input" : "Problem"}
-      className="space-y-3"
-    >
-      {items.map((item) =>
-        pending ? (
-          <PendingMatter
-            key={item.id}
-            run={run}
-            item={item}
-            observationUnavailable={observationUnavailable}
-          />
-        ) : (
-          <SettledMatter key={item.id} run={run} item={item} />
-        ),
-      )}
+    <section aria-label="Problem" className="space-y-3">
+      {items.map((item) => (
+        <PendingMatter key={item.id} run={run} item={item} />
+      ))}
     </section>
   );
 }
 
-function PendingMatter({
-  run,
-  item,
-  observationUnavailable,
-}: {
-  run: RunDetail;
-  item: RunAttention;
-  observationUnavailable: boolean;
-}) {
+/** Figma RD50: where a pending Human occurrence came from, when its step has several pending. */
+function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence | undefined) {
+  if (!occurrence) return null;
+  const parallel = run.humanOccurrences.filter(
+    (item) => item.blockId === occurrence.blockId && item.state === "pending",
+  );
+  if (parallel.length < 2) return null;
+  const intent = run.intents.find((item) => item.id === occurrence.incomingIntentId);
+  if (!intent?.sourceBlockId) return null;
+  const source = run.blocks.find((block) => block.blockId === intent.sourceBlockId);
+  const activationId = run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const visit =
+    run.activations
+      .filter((activation) => activation.blockId === intent.sourceBlockId)
+      .findIndex((activation) => activation.id === activationId) + 1;
+  return `From ${source?.name ?? intent.sourceBlockId}${visit ? ` · Visit ${visit}` : ""}`;
+}
+
+function PendingMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
   const presentation = attentionPresentation(item.kind);
   // A settling Run accepts no answers, so it shows no Needs input chip or explanation.
   const answerable = presentation !== "needs-input" || !run.settlement;
   const binding = run.threadBindings.find((b) => b.id === item.bindingId);
+  const explanation = answerable && attentionExplanation(item.kind);
+  const source = occurrenceSource(
+    run,
+    run.humanOccurrences.find((entry) => entry.id === item.occurrenceId),
+  );
+  const subject = attentionSubject(item);
   return (
     <article
+      aria-label={[presentation === "needs-input" ? "Needs input" : "Problem", subject, source]
+        .filter(Boolean)
+        .join(" · ")}
       className={cn(
         "flex min-w-0 flex-col gap-2 rounded-lg border p-4",
         presentation === "needs-input"
-          ? "border-status-waiting/40 bg-status-waiting/6"
+          ? "border-attention/60 bg-card"
           : "border-destructive/40 bg-destructive/8",
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
         {answerable && <StatusBadge kind={presentation} />}
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">
-          {attentionSubject(item)}
-        </h3>
+        <h3 className="truncate text-xs text-muted-foreground">{subject}</h3>
       </div>
-      {answerable && (
-        <p className="text-sm font-medium text-foreground">{attentionExplanation(item.kind)}</p>
-      )}
+      {source && <p className="text-xs text-muted-foreground">{source}</p>}
+      {explanation && <p className="text-sm font-medium text-foreground">{explanation}</p>}
       <MatterKindDetail run={run} item={item} binding={binding} />
       {binding && <BindingDetail binding={binding} executionId={item.executionId} />}
-      {item.blockId !== null && (
-        <ObservationLine freshness={item.freshness} unavailable={observationUnavailable} />
-      )}
       {item.kind === "human" && <PendingHuman run={run} item={item} />}
-      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} />}
+      {item.kind !== "human" && item.link && <OpenInT3 href={item.link} className="text-sm" />}
     </article>
   );
 }
@@ -361,18 +366,17 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
         </h3>
       </div>
       {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
-      {exit && <p>Selected exit: {exit}</p>}
-      <p>Settled: {item.settlementReason}</p>
+      {exit && <p>Decision: {exit}</p>}
+      <p>Resolved: {item.settlementReason}</p>
       {reply && (
         <p className="whitespace-pre-wrap">
           Recorded answer: {reply.message} · {reply.state}
         </p>
       )}
-      <p className="text-2xs tracking-label text-subtle-foreground">
-        Occurrence {item.occurrenceId ?? item.id}
-        {item.settledAt ? ` · observed ${new Date(item.settledAt).toLocaleString()}` : ""}
-      </p>
-      {item.link && <OpenInT3 href={item.link} />}
+      {item.settledAt && (
+        <p className="text-xs text-subtle-foreground">{dayAndTime(item.settledAt)}</p>
+      )}
+      {item.link && <OpenInT3 href={item.link} className="text-sm" />}
     </article>
   );
 }
@@ -387,42 +391,60 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
         Factory is settling this Run and stopping its workers, so it accepts no answers.
       </p>
     );
-  return (
-    <HumanResponseForm
-      blockName={attentionSubject(item)}
-      occurrence={occurrence}
-      link={item.link}
-    />
-  );
+  return <HumanResponseForm run={run} blockName={attentionSubject(item)} occurrence={occurrence} />;
 }
 
-/** A Human step answers with one of its fixed exits: Approve, or Request changes with a message. */
-function HumanResponseForm({
-  blockName,
-  occurrence,
-  link,
+/** Figma RD18: each decision names where it leads, or that it ends the branch. */
+function decisionLabel(run: RunDetail, blockId: string, exit: { id: string; name: string }) {
+  const recipients = exitRecipients(run.definitions.flow.graph, blockId, exit.id).filter(Boolean);
+  return recipients.length
+    ? `${exit.name} → ${recipients.join(", ")}`
+    : `${exit.name} — ends this branch`;
+}
+
+/** Why Submit answer is unavailable, or null while it can be sent. */
+function submitBlocker({
+  online,
+  confirming,
+  decided,
+  messageMissing,
 }: {
-  blockName: string;
-  occurrence: HumanOccurrence;
-  link: string | null;
+  online: boolean;
+  confirming: boolean;
+  decided: boolean;
+  messageMissing: boolean;
 }) {
-  const [exitId, setExitId] = useState("");
-  const [message, setMessage] = useState("");
+  if (!online) return "Factory offline";
+  if (confirming) return "A Discord confirmation is waiting";
+  if (!decided) return "Choose a decision first";
+  if (messageMissing) return "Add your changes";
+  return null;
+}
+
+/** Whether `until` has not passed yet; it turns false at that moment without another Run update. */
+function useStillBefore(until: string | null) {
+  const [passed, setPassed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!until) return;
+    const timer = window.setTimeout(
+      () => setPassed(until),
+      Math.max(0, Date.parse(until) - Date.now()),
+    );
+    return () => window.clearTimeout(timer);
+  }, [until]);
+  return until !== null && passed !== until;
+}
+
+/** Sends one answer; a refusal keeps the chosen decision and the typed text for another try. */
+function useHumanAnswer(occurrenceId: string) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const selected = HUMAN_EXITS.find((exit) => exit.id === exitId);
-  const messageRequired = !!selected?.messageRequired;
-  const ready = !!selected && (!messageRequired || message.trim().length > 0);
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!selected) return;
+  async function send(exitId: string, message: string, onSent: () => void) {
     setBusy(true);
     setError("");
     return await api
-      .answerHumanOccurrence(occurrence.id, { exitId: selected.id, message })
-      .then(() => {
-        setMessage("");
-      })
+      .answerHumanOccurrence(occurrenceId, { exitId, message })
+      .then(onSent)
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : "Could not submit this answer.");
       })
@@ -430,51 +452,127 @@ function HumanResponseForm({
         setBusy(false);
       });
   }
+  return { error, busy, send };
+}
+
+/** A Human step answers with one of its exits; an exit with Message required needs a message. */
+function HumanResponseForm({
+  run,
+  blockName,
+  occurrence,
+}: {
+  run: RunDetail;
+  blockName: string;
+  occurrence: HumanOccurrence;
+}) {
+  const [exitId, setExitId] = useState("");
+  const [message, setMessage] = useState("");
+  const { error, busy, send } = useHumanAnswer(occurrence.id);
+  const online = useMutationsAllowed();
+  const confirming = useStillBefore(occurrence.chatConfirmationUntil);
+  const exits = capturedExits(run.definitions, occurrence.blockId);
+  const selected = exits.find((exit) => exit.id === exitId);
+  const messageRequired = !!selected?.messageRequired;
+  const blocker = submitBlocker({
+    online,
+    confirming,
+    decided: !!selected,
+    messageMissing: messageRequired && !message.trim(),
+  });
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    if (selected && !blocker) void send(selected.id, message, () => setMessage(""));
+  }
+  const locked = busy || !online || confirming;
   return (
-    <form
-      aria-label={`Answer ${blockName}`}
-      className="flex flex-col gap-3"
-      onSubmit={(event) => void submit(event)}
-    >
-      {occurrence.context && <p className="text-sm text-muted-foreground">{occurrence.context}</p>}
-      <p className="text-2xs tracking-label text-subtle-foreground">Occurrence {occurrence.id}</p>
-      <ExitSelect value={exitId} onChange={setExitId} />
-      <ResponseField messageRequired={messageRequired} value={message} onChange={setMessage} />
+    <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
+      {occurrence.context && (
+        <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
+      )}
+      <DecisionSelect
+        value={exitId}
+        disabled={locked}
+        options={exits.map((exit) => ({
+          id: exit.id,
+          label: decisionLabel(run, occurrence.blockId, {
+            id: exit.id,
+            name: exitDisplayName(exit),
+          }),
+        }))}
+        onChange={setExitId}
+      />
+      <ResponseField
+        messageRequired={messageRequired}
+        disabled={locked}
+        value={message}
+        onChange={setMessage}
+      />
       {error && (
         <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>Couldn’t submit your answer</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      <div className="flex flex-wrap items-center gap-2">
-        <MutationGate>
-          <Button type="submit" disabled={busy || !ready}>
-            {busy ? "Submitting…" : "Submit answer"}
-          </Button>
-        </MutationGate>
-        {link && <OpenInT3 href={link} />}
-      </div>
+      <SubmitAnswer busy={busy} blocker={blocker} />
     </form>
   );
 }
 
-function ExitSelect({ value, onChange }: { value: string; onChange: (exitId: string) => void }) {
+/** Submit answer: filled only when it can be sent, otherwise neutral with the reason beside it;
+ * while sending it reads Submitting… with no reason. */
+function SubmitAnswer({ busy, blocker }: { busy: boolean; blocker: string | null }) {
+  const reasonId = useId();
+  const reason = busy ? null : blocker;
+  return (
+    <div className="flex flex-wrap items-center gap-2.5">
+      <Button
+        type="submit"
+        variant={busy || blocker ? "outline" : "default"}
+        disabled={busy || !!blocker}
+        aria-describedby={reason ? reasonId : undefined}
+      >
+        {busy ? "Submitting…" : "Submit answer"}
+      </Button>
+      {reason && (
+        <p id={reasonId} className="text-xs text-muted-foreground">
+          {reason}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function DecisionSelect({
+  value,
+  disabled,
+  options,
+  onChange,
+}: {
+  value: string;
+  disabled: boolean;
+  options: readonly { id: string; label: string }[];
+  onChange: (exitId: string) => void;
+}) {
   const id = useId();
   return (
     <div className="grid gap-1.5">
       <Label htmlFor={id} className={fieldLabelClass}>
-        Exit
+        Decision
       </Label>
       <NativeSelect
         id={id}
-        aria-label="Exit"
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         required
       >
-        <NativeSelectOption value="">Select an exit</NativeSelectOption>
-        {HUMAN_EXITS.map((exit) => (
-          <NativeSelectOption key={exit.id} value={exit.id}>
-            {exit.name}
+        <NativeSelectOption value="" disabled>
+          Choose a decision
+        </NativeSelectOption>
+        {options.map((option) => (
+          <NativeSelectOption key={option.id} value={option.id}>
+            {option.label}
           </NativeSelectOption>
         ))}
       </NativeSelect>
@@ -484,10 +582,12 @@ function ExitSelect({ value, onChange }: { value: string; onChange: (exitId: str
 
 function ResponseField({
   messageRequired,
+  disabled,
   value,
   onChange,
 }: {
   messageRequired: boolean;
+  disabled: boolean;
   value: string;
   onChange: (message: string) => void;
 }) {
@@ -504,6 +604,7 @@ function ResponseField({
         placeholder="Type your response…"
         aria-label={ariaLabel}
         required={messageRequired}
+        disabled={disabled}
         maxLength={100000}
         value={value}
         onChange={(event) => onChange(event.target.value)}

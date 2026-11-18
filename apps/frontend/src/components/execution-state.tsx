@@ -1,14 +1,15 @@
 import { StatusBadge, type StatusBadgeKind } from "./status-badge.tsx";
 
-/** Recorded execution states in their canonical words; "error" reads as Problem. */
+/** Recorded execution states in their canonical words: "error" reads as Problem, a sent
+ * Continuation as Working and one that passed its response on as Finished. */
 const states: Record<string, { readonly kind: StatusBadgeKind; readonly label: string }> = {
   working: { kind: "working", label: "Working" },
   waiting: { kind: "waiting", label: "Waiting" },
   queued: { kind: "waiting", label: "Queued" },
   pending: { kind: "waiting", label: "Pending" },
-  sent: { kind: "info", label: "Sent" },
+  sent: { kind: "working", label: "Working" },
   finished: { kind: "finished", label: "Finished" },
-  "pass-through": { kind: "finished", label: "Pass-through" },
+  "pass-through": { kind: "finished", label: "Finished" },
   settled: { kind: "finished", label: "Settled" },
   forwarded: { kind: "finished", label: "Forwarded" },
   acknowledged: { kind: "finished", label: "Acknowledged" },

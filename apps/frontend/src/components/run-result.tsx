@@ -1,4 +1,5 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunDetail } from "@t3-factory/contracts";
 import { Maximize2, X } from "lucide-react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
@@ -306,13 +307,7 @@ function ResultReader({
             </DialogDescription>
           </div>
           <CopyButton text={report.resultMessage ?? ""} label="Copy Markdown" />
-          {link && (
-            <Button asChild variant="outline">
-              <a href={link} target="_blank" rel="noreferrer">
-                Open thread in T3
-              </a>
-            </Button>
-          )}
+          {link && <OpenInT3 href={link} className="text-sm" />}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

@@ -1,4 +1,5 @@
 import { ResultCard, resultVersion } from "./run-result.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
 import {
   CONDITION_TIMELINE_ARRIVALS,
@@ -6,15 +7,7 @@ import {
   type RunDetail,
 } from "@t3-factory/contracts";
 import { capturedExits } from "../flow-graph.ts";
-import {
-  ArrowRight,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  ExternalLink,
-  Flag,
-  History,
-} from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
 import { clockTime, dayAndTime } from "./execution-state.tsx";
 import { BLOCK_KINDS } from "../block-kind.ts";
 import { conditionOutputName, countText } from "../condition-arrivals.ts";
@@ -106,13 +99,16 @@ function reported(run: RunDetail, event: RunEvent): EventPhrase {
       actorId: event.blockId,
       text: `result version ${version} replaces the earlier result`,
     };
-  return { actorId: event.blockId, text: "final result accepted · engine completion is separate" };
+  return {
+    actorId: event.blockId,
+    text: `finished → ${exitLabel(run, report.blockId, report.exitId)}`,
+  };
 }
 
 function answered(run: RunDetail, event: RunEvent): EventPhrase {
   const occurrence = run.humanOccurrences.find((item) => item.id === event.causeId);
   const exit = occurrence?.exitId
-    ? ` · exit ${exitLabel(run, occurrence.blockId, occurrence.exitId)}`
+    ? ` → ${exitLabel(run, occurrence.blockId, occurrence.exitId)}`
     : "";
   return { actorId: event.blockId, text: `you answered${exit}` };
 }
@@ -325,11 +321,6 @@ function ActorIcon({
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }
 
-function latestLine(run: RunDetail, event: RunEvent) {
-  const { actorId, text } = phrase(run, event);
-  return `Latest · ${clockTime(event.observedAt)} ${nameOf(run, actorId)} ${text}`;
-}
-
 const timelineOpenKey = "factory.runTimelineOpen";
 
 /** Collapsed by default (Figma RD01b); the choice is remembered for this browser session. */
@@ -392,11 +383,8 @@ export function RunTimeline({
   const rows = timelineRows(run.events, filter);
   const total = run.events.length;
   const keyEvents = rows.flatMap((row) => (row.kind === "event" ? [row.event] : []));
-  const latest = filter === "key" ? keyEvents.at(-1) : run.events.at(-1);
-  const count =
-    filter === "all"
-      ? `${total} events`
-      : `${keyEvents.length} key events${expanded ? ` · ${total} total` : ""}`;
+  // Collapsed, the bar names only the event count; the details open with the list.
+  const count = expanded && filter === "key" ? `${keyEvents.length} key events` : `${total} events`;
   return (
     <section className="flex min-h-10 flex-col bg-sidebar" aria-label="Timeline">
       <Tabs
@@ -407,12 +395,9 @@ export function RunTimeline({
         <div className="flex h-10 shrink-0 items-center gap-2.5 border-t pr-2.5 pl-4">
           <History aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
           <h2 className="text-sm font-semibold whitespace-nowrap">Timeline</h2>
-          <span className="text-2xs font-medium whitespace-nowrap text-subtle-foreground">
+          <span className="min-w-0 flex-1 truncate text-2xs font-medium whitespace-nowrap text-subtle-foreground">
             {count}
           </span>
-          <p className="min-w-0 flex-1 truncate text-2xs tracking-label text-subtle-foreground">
-            {!expanded && latest ? latestLine(run, latest) : null}
-          </p>
           {expanded && (
             <TabsList variant="segmented" aria-label="Timeline events">
               <TabsTrigger value="key">Key events</TabsTrigger>
@@ -598,18 +583,7 @@ function TimelineEvent({
           <ResultCard run={run} report={report} />
         </div>
       )}
-      {route && <RouteChip {...route} />}{" "}
-      {link && (
-        <a
-          className="inline-flex shrink-0 items-center gap-1 rounded-sm text-2xs font-medium text-link outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          href={link}
-          target="_blank"
-          rel="noreferrer"
-        >
-          T3 thread
-          <ExternalLink aria-hidden className="size-2.75" />
-        </a>
-      )}
+      {route && <RouteChip {...route} />} {link && <OpenInT3 href={link} className="text-2xs" />}
     </li>
   );
 }

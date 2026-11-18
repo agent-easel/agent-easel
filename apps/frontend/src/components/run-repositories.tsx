@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { RunPullRequest, RunWorkerRepository } from "@t3-factory/contracts";
 import { GitBranch, GitPullRequest } from "lucide-react";
 
@@ -15,6 +16,21 @@ export function repositorySummary(workers: readonly RunWorkerRepository[]) {
   };
 }
 
+/** A branch name that wraps only after "/" or "-", never inside a word, unless one word alone is
+ * wider than its line. */
+function BranchName({ branch }: { branch: string }) {
+  return (
+    <p className="font-mono text-xs break-words text-foreground">
+      {branch.split(/(?<=[/-])/).map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 && <wbr />}
+          {part}
+        </Fragment>
+      ))}
+    </p>
+  );
+}
+
 export function RunRepositories({
   workers,
   links = false,
@@ -30,7 +46,7 @@ export function RunRepositories({
         <div key={branch} className="flex items-start gap-2">
           <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
-            <p className="break-all text-foreground">{branch}</p>
+            <BranchName branch={branch} />
             <p className="text-2xs text-muted-foreground">{names.join(", ")}</p>
           </div>
         </div>

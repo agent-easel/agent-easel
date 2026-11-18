@@ -273,8 +273,9 @@ worker reports.
   until its next report; it withdraws neither the result nor its handoffs, but it keeps the Run
   from settling automatically. A later accepted report settles earlier missing-report and
   execution-failed attention on the Block.
-- A question in chat is ordinary conversation: it creates no Needs input and wakes no Snoozed
-  Run. Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
+- A question in chat is ordinary conversation: it creates no attention matter and wakes no
+  Snoozed Run. While the worker thread is idle and the report is still `working`, the Run shows
+  the Block as Needs input to review in T3 ([Runs](runs.md#reports-and-attention)). Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
   unanswered questions. Native T3 questions and permissions and Human steps keep their own
   attention.
 - `waiting` is retired: `factory_update_block` answers it with `WAITING_RETIRED` and guidance to

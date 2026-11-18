@@ -596,6 +596,8 @@ export interface RunAttentionMatter {
 }
 
 export interface RunAttentionSummary {
+  /** A pending Needs input matter, or an Agent Block that {@link awaitsReviewInT3}; never during
+   * a confirmed Settle. */
   readonly needsInput: boolean;
   readonly problem: boolean;
   readonly matters: readonly RunAttentionMatter[];
@@ -614,6 +616,22 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "settlement-unresolved":
       return "problem";
   }
+}
+
+/**
+ * An Agent visit whose worker thread is idle while its current report is still `working`: the
+ * Agent ended its turn, usually with a question in chat, or stopped without reporting. Both leave
+ * the same evidence and Factory never parses chat, so the owner reviews the thread in T3. It is
+ * Needs input on the Block and the Run without being an attention matter.
+ */
+export function awaitsReviewInT3(
+  block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus">,
+): boolean {
+  return (
+    block.state === "working" &&
+    block.reportStatus === "working" &&
+    block.engineStatus === "completed"
+  );
 }
 
 /**
@@ -660,6 +678,11 @@ export interface HumanOccurrence {
   readonly appearedAt: string;
   readonly settledAt: string | null;
   readonly exitId: string | null;
+  /**
+   * When the latest Discord review proposing an answer to this pending occurrence stops being
+   * confirmable; null when there is none. While it lasts, the Run's own answer form waits.
+   */
+  readonly chatConfirmationUntil: string | null;
 }
 
 /**

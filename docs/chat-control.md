@@ -479,6 +479,11 @@ occurrences or picks one; the model is told to ask. Factory refuses an Archived 
 the Run does not have or that no longer waits (answered, withdrawn or cancelled, or the Run accepts
 no answers) and an occurrence whose context Factory no longer has.
 
+While a review to answer an occurrence can still be confirmed, the Run's own decision form for that
+occurrence is disabled with **A Discord confirmation is waiting**, so the same occurrence is not answered
+in two places at once. It becomes available again when the review expires or fails; a review voided by
+an Access or application change leaves the form waiting until the review would have expired.
+
 ### Archive proposals
 
 Archive Run takes one Run (ID or number) in a permitted Project, whoever started it and wherever;

@@ -118,7 +118,7 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
   );
   await app.open(`/runs/${held.id}`);
   const block = screen.getByRole("article", "Block Hold for the morning sync");
-  await expect(block).toContainText("2 waiting · next until");
+  await expect(block).toContainText("2 held · next until");
   await expect(screen.getByRole("button", "Continue Hold for the morning sync now")).toHaveCount(0);
   await screen.getByRole("button", /^Wait Hold for the morning sync, Waiting/).tap();
   await expect(screen.getByRole("button", "Continue arrival 1 now")).toBeVisible();

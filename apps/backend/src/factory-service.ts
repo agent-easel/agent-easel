@@ -190,6 +190,7 @@ export const makeFactoryService = (
       [chatStart.operation, chatHumanAnswer.operation, chatArchive.operation],
       chatDeliveries,
       reportCapture.changed,
+      changes.runChanged,
     );
     const discordOperation = yield* makeDiscordOperation(discordGateway, chatCredentials, {
       model: conversationalModel(sql, chatCredentials),
