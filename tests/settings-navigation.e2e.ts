@@ -117,3 +117,40 @@ test("searching for notifications finds Desktop app and keeps the open page", as
   await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
   await app.screenshot("settings-search-notifications");
 });
+
+test("a not-allowed T3 address names the card that explains it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await app.open("/settings/connection");
+  await screen.getByRole("button", "Edit address", { exact: true }).tap();
+
+  // Act
+  await screen.getByLabel("Address", { exact: true }).fill("ftp://t3.example/mcp");
+
+  // Assert
+  const address = screen.getByLabel("Address", { exact: true });
+  await expect(address).toHaveAttribute("aria-invalid", "true");
+  await expect(address).toHaveAttribute("aria-describedby", "connection-address-problem");
+  await expect
+    .poll(() =>
+      browser.evaluate(
+        `(() => { const card = document.getElementById("connection-address-problem"); return card ? card.getAttribute("role") + " " + card.textContent : null; })()`,
+      ),
+    )
+    .toContain("alert Use HTTPS, or HTTP on this computer");
+});
+
+test("searching for a visible row label such as Mode finds Appearance", async ({ app, screen }) => {
+  // Arrange
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("mode");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Appearance", { exact: true })).toBeVisible();
+  await expect(sections(screen).getByRole("link", "T3 connection", { exact: true })).toHaveCount(0);
+});
