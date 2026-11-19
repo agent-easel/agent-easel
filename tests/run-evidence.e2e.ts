@@ -4,8 +4,7 @@ import { beforeEach, test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
-import { liveRun } from "./support/live.ts";
+import { prepareScenarios } from "./support/scenarios.ts";
 
 beforeEach(async ({ app }) => {
   await prepareScenarios(app);
@@ -367,14 +366,18 @@ test("a short result shows whole on its card, and its Technical details link ope
   app,
   screen,
 }) => {
-  // Arrange
-  const id = await liveRun(app, "short-result");
-  await applyRunState(app, id, "result reported", "Ready for review.");
-  await app.open(`/runs/${id}`);
+  // Arrange: a Run waiting in its Human review, so it never settles into its title-only overview.
+  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+  await app.open(`/runs/${found.id}`);
   const card = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("article", "Implement change · Visit 1 · result", { exact: true });
-  await expect(card.getByText("Ready for review.", { exact: true })).toBeVisible();
+  await expect(
+    card.getByText(
+      "The empty state now preserves the query and offers Reset filters. Ready for a review.",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await expect(card.getByRole("button", "Read result", { exact: true })).toHaveCount(0);
 
   // Act

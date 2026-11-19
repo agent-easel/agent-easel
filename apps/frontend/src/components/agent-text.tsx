@@ -65,10 +65,7 @@ function markdownComponents(density: Density): Components {
     p: styled("p", text),
     ul: styled(
       "ul",
-      cn(
-        text,
-        "flex list-disc flex-col gap-1.5 pl-5 marker:text-subtle-foreground [&.contains-task-list]:list-none [&.contains-task-list]:pl-1",
-      ),
+      cn(text, "flex list-disc flex-col gap-1.5 pl-5 marker:text-subtle-foreground"),
     ),
     ol: styled(
       "ol",
@@ -76,9 +73,9 @@ function markdownComponents(density: Density): Components {
     ),
     li: styled(
       "li",
-      // A task item's text and links are flex items, which `break-words` cannot shrink below
-      // their longest word; `wrap-anywhere` lets a long unbroken link wrap.
-      "pl-0.5 [&.task-list-item]:flex [&.task-list-item]:items-center [&.task-list-item]:gap-2 [&.task-list-item]:wrap-anywhere [&>ol]:mt-1.5 [&>ul]:mt-1.5",
+      // A task item stays a block with its checkbox inline, so its text and a long unbroken link
+      // wrap like any list item; only task items drop the bullet in a mixed list.
+      "pl-0.5 [&.task-list-item]:-ml-4 [&.task-list-item]:list-none [&>ol]:mt-1.5 [&>ul]:mt-1.5",
     ),
     blockquote: styled("blockquote", "flex flex-col gap-2 border-l-2 pl-3"),
     hr: styled("hr", "border-border"),
@@ -105,7 +102,12 @@ function markdownComponents(density: Density): Components {
         </a>
       ) : null,
     input: ({ checked }) => (
-      <Checkbox checked={!!checked} disabled aria-label={checked ? "Done" : "Not done"} />
+      <Checkbox
+        checked={!!checked}
+        disabled
+        aria-label={checked ? "Done" : "Not done"}
+        className="mr-2 align-[-0.1875rem]"
+      />
     ),
   };
 }
