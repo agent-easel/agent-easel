@@ -352,7 +352,19 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           thread?.type === ChannelType.PrivateThread,
         ),
       };
-      pending.set(message.id, { invocation, reservation: yield* interpreter.reserve(invocation) });
+      yield* Effect.acquireRelease(
+        Effect.map(interpreter.reserve(invocation), (reservation) => {
+          pending.set(message.id, { invocation, reservation });
+          return reservation;
+        }),
+        (reservation) =>
+          Effect.suspend(() =>
+            // Only an invocation still waiting for Chat SDK to hand it back owns this slot.
+            pending.delete(message.id) && reservation !== "busy"
+              ? Effect.orDie(reservation.cancel)
+              : Effect.void,
+          ),
+      );
       return invocation;
     });
 
@@ -486,21 +498,19 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   return {
     /** A Discord message; only explicit authorized invocations go further. */
     message: (message: Message) =>
-      Effect.gen(function* () {
-        if (!session.operating() || !message.inGuild()) return;
-        const place = explicitInvocation(message, botUserId);
-        if (!place) return;
-        const { thread, parentId } = place;
-        const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
-        if (!invocation) return;
-        yield* Effect.promise(() =>
-          session.handOff(session.encodeThreadId(invocation.conversation), message),
-        );
-        const handled = pending.get(message.id);
-        pending.delete(message.id);
-        // Chat SDK did not hand the message to Factory's handler; its queue place is released.
-        if (handled && handled.reservation !== "busy") yield* handled.reservation.cancel;
-      }),
+      Effect.scoped(
+        Effect.gen(function* () {
+          if (!session.operating() || !message.inGuild()) return;
+          const place = explicitInvocation(message, botUserId);
+          if (!place) return;
+          const { thread, parentId } = place;
+          const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
+          if (!invocation) return;
+          yield* Effect.promise(() =>
+            session.handOff(session.encodeThreadId(invocation.conversation), message),
+          );
+        }),
+      ),
     /**
      * A Discord interaction; only `/factory reset` and confirmation buttons of this application
      * are handled.

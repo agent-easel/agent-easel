@@ -807,6 +807,7 @@ export async function startServer(config: Configuration, options: ServerOptions 
       handlerFor("host", config.allowedHosts ?? [])(nodeServer),
     );
   } catch (error) {
+    limiter.close();
     await live.close();
     await factory.close();
     throw error;
@@ -823,6 +824,7 @@ export async function startServer(config: Configuration, options: ServerOptions 
     remoteAccess: remote,
     close() {
       return (closing ??= Promise.allSettled([remote.close(), host.close()])
+        .then(() => limiter.close())
         .then(() => live.close())
         .then(() => factory.close()));
     },

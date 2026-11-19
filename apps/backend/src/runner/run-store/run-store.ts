@@ -4,7 +4,7 @@ import { openRunNavigation } from "./navigation.ts";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { LiveChanges } from "../../live-changes.ts";
-import { makeRunLanes } from "../runner-lanes.ts";
+import { makeOperationLanes } from "../../operation-lanes.ts";
 import { now } from "../../time.ts";
 import { openRunActivations } from "./activations.ts";
 import { openRunArchive } from "./archive.ts";
@@ -50,7 +50,7 @@ export const openRunStore = Effect.fn("RunStore.open")(function* (
 ) {
   const sqlClient = yield* SqlClient.SqlClient;
   // The one mutation lane per Run. Only store transitions enter it.
-  const lanes = makeRunLanes();
+  const lanes = makeOperationLanes();
   const database = openRunnerDatabase(sqlClient, owner, changes, lanes.serial);
 
   /** Taking ownership at startup applies to every Run at once, outside any Run's lane: a

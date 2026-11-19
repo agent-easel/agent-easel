@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 
 /** Queued work owns a lane until every earlier operation has left it. */
-export function makeRunLanes() {
+export function makeOperationLanes() {
   const lanes = new Map<string, { semaphore: Semaphore.Semaphore; users: number }>();
   const serial = <A, E>(id: string, action: () => Effect.Effect<A, E>): Effect.Effect<A, E> =>
     Effect.suspend(() => {

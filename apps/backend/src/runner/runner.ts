@@ -18,7 +18,7 @@ import { openRunnerStart, type StartAuthorization } from "./runner-start.ts";
 import { openRunnerSettle } from "./runner-settle.ts";
 import { openRunActions } from "./run-actions.ts";
 import { openOwnedThreads } from "./owned-thread.ts";
-import { makeRunLanes } from "./runner-lanes.ts";
+import { makeOperationLanes } from "../operation-lanes.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { bindRunWorkspace } from "./run-workspace-binding.ts";
 import { readWorkerThread } from "./worker-thread.ts";
@@ -49,7 +49,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   const starts = Semaphore.makeUnsafe(1);
   const sweeps = Semaphore.makeUnsafe(1);
   const closing = Semaphore.makeUnsafe(1);
-  const drives = makeRunLanes();
+  const drives = makeOperationLanes();
   const detached = new Set<Fiber.Fiber<unknown, unknown>>();
   let timer: Fiber.Fiber<never, unknown> | undefined;
   const fork = Effect.fn("Runner.fork")(function* (work: Effect.Effect<unknown, unknown>) {

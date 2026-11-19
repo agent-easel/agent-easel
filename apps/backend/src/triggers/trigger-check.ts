@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import * as Semaphore from "effect/Semaphore";
+import { makeOperationLanes } from "../operation-lanes.ts";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type {
   FactoryOperations,
@@ -177,14 +177,7 @@ function triggerPrompt(repository: string, issue: GitHubIssue, readyLabel: strin
  */
 export function makeTriggerCheck(deps: TriggerCheckDeps) {
   const { sql, github } = deps;
-  const lanes = new Map<string, Semaphore.Semaphore>();
-  const lane = (triggerId: string) => {
-    const existing = lanes.get(triggerId);
-    if (existing) return existing;
-    const created = Semaphore.makeUnsafe(1);
-    lanes.set(triggerId, created);
-    return created;
-  };
+  const lanes = makeOperationLanes();
 
   /**
    * Start's acceptance re-check: the Trigger is unchanged and enabled, this check still owns the
@@ -484,8 +477,8 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
 
   /** Checks an enabled Trigger once and records what the check did. */
   const check = (triggerId: string) =>
-    lane(triggerId)
-      .withPermit(
+    lanes
+      .serial(triggerId, () =>
         Effect.gen(function* (): Effect.fn.Return<Result<TriggerDefinition>, unknown> {
           const trigger = yield* deps.readTrigger(triggerId);
           if (!trigger) return failure("not_found", "This Trigger does not exist.");
@@ -507,10 +500,5 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       )
       .pipe(Effect.uninterruptible);
 
-  return {
-    check,
-    preview,
-    /** Drops a removed Trigger's lane; its ids are never reused, so a later check finds it gone. */
-    forget: (triggerId: string) => Effect.sync(() => lanes.delete(triggerId)),
-  };
+  return { check, preview };
 }
