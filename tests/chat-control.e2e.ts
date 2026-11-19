@@ -194,7 +194,10 @@ test("the host saves the bot, checks it over the Gateway and never sees the toke
   const { bot } = await controlledDiscord(app.baseUrl);
   await app.open("/settings/chat-control/discord");
   await expect(screen.getByRole("switch", "Chat control")).toBeDisabled();
-  await expect(screen.getByRole("link", /^Setup guide/)).toBeVisible();
+  const setupGuide = screen.getByRole("link", /^Setup guide/);
+  await expect(setupGuide).toBeVisible();
+  // The Setup guide is Discord's page, so it opens in a new tab.
+  await expect(setupGuide).toHaveAttribute("target", "_blank");
   await app.screenshot("chat-discord-not-set-up");
   const botCard = screen.getByRole("region", "Bot");
   await botCard.getByLabel("Public key").fill("ab".repeat(32));
