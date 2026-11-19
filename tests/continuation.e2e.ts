@@ -2,6 +2,8 @@ import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow } from "./support/flows.ts";
 import { findRun } from "./support/run-history.ts";
+import { prepareScenarios } from "./support/scenarios.ts";
+import { readerScreenshot } from "./support/human-answers.ts";
 
 test("a Continuation added after an Agent names the thread it continues and keeps its prompt after Save and reload", async ({
   app,
@@ -61,4 +63,37 @@ test("a Continuation whose response went on passes through while the next Contin
   await screen.getByRole("button", "Fit Flow").tap();
   await spec.getByRole("button", "Continuation Spec", { exact: false }).tap();
   await app.screenshot("continuation-run");
+});
+
+test("a later review a Continuation passes through to a Human step names the reviewer and visit, not the Continuation", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await prepareScenarios(app);
+  const run = await findRun(app.baseUrl, "UI worker · Code review passed through the spec");
+  await app.open(`/runs/${run.id}`);
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await expect(
+    inspector.getByRole("article", "Needs input · Final sign-off · From Write the spec · Visit 1", {
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  // Act
+  await inspector
+    .getByRole("article", "Needs input · Final sign-off · From Code review · Visit 1", {
+      exact: true,
+    })
+    .getByRole("button", "Read full context", { exact: true })
+    .tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Final sign-off · context", { exact: true });
+  await expect(reader).toContainText(/From Code review · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Code review", { exact: true })).toBeVisible();
+  await expect(reader).not.toContainText("Write the spec");
+  await readerScreenshot(app, browser, "continuation-passed-review-provenance");
 });

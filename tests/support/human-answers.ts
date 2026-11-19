@@ -4,23 +4,19 @@ import { liveRun } from "./live.ts";
 import { applyRunState } from "./scenarios.ts";
 
 /**
- * Journey Run `key` of `flow`, whose Implement change result reached First review, where a person
+ * Journey Run `key` of `flow`, whose Implement change `result` reached First review, where a person
  * approved it with a long Markdown answer by `decision`; open on its Run page.
  */
 export async function approveFirstReviewAtLength(
   { app, screen, browser }: { app: App; screen: Screen; browser: Browser },
   key: string,
-  flow: "answerRelay" | "answerCondition",
+  flow: "answerRelay" | "answerCondition" | "answerBesideResult",
   decision: string,
+  result = "The picker spacing is tidy; ready for review.",
 ) {
   await browser.setViewport({ width: 1600, height: 1000 });
   const runId = await liveRun(app, key, flow);
-  await applyRunState(
-    app,
-    runId,
-    "result reported",
-    "The picker spacing is tidy; ready for review.",
-  );
+  await applyRunState(app, runId, "result reported", result);
   await app.open(`/runs/${runId}`);
   const review = screen
     .getByRole("complementary", "Run inspector")
@@ -61,4 +57,12 @@ export async function expectWrittenByFirstReview(screen: Screen) {
   await expect(reader.getByRole("heading", "First review notes", { exact: true })).toBeVisible();
   await expect(reader).not.toContainText("Implement change");
   await expect(reader).not.toContainText("Visit");
+}
+
+/** Captures `name` once the open reader's entrance animation has finished. */
+export async function readerScreenshot(app: App, browser: Browser, name: string) {
+  await browser.evaluate(
+    "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
+  );
+  await app.screenshot(name);
 }

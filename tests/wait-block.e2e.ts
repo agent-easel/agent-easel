@@ -12,6 +12,7 @@ import {
   approveFirstReviewAtLength,
   expectWrittenByFirstReview,
   finalSignoff,
+  readerScreenshot,
 } from "./support/human-answers.ts";
 
 test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
@@ -258,5 +259,5 @@ test("a person's answer a Wait passes on to the next Human step names the step t
 
   // Assert
   await expectWrittenByFirstReview(screen);
-  await app.screenshot("wait-relayed-answer-provenance");
+  await readerScreenshot(app, browser, "wait-relayed-answer-provenance");
 });

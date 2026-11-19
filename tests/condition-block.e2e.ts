@@ -14,6 +14,7 @@ import {
   approveFirstReviewAtLength,
   expectWrittenByFirstReview,
   finalSignoff,
+  readerScreenshot,
 } from "./support/human-answers.ts";
 import { chooseFlowAction, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 
@@ -628,5 +629,51 @@ test("a person's answer a Condition routes to the next Human step names the step
 
   // Assert
   await expectWrittenByFirstReview(screen);
-  await app.screenshot("condition-routed-answer-provenance");
+  await readerScreenshot(app, browser, "condition-routed-answer-provenance");
+});
+
+test("a result and a person's answer about it that one Condition routes on each name their own author", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const runId = await approveFirstReviewAtLength(
+    { app, screen, browser },
+    "answer-beside-result",
+    "answerBesideResult",
+    "Approve → Route the answer",
+    [
+      "## Implementation notes",
+      "",
+      "The project picker spacing now follows the sidebar grid.",
+      "",
+      "- Rows use the shared 32px height.",
+      "- Long names truncate with an ellipsis.",
+      "- The popover keeps focus inside while open.",
+      "",
+      "### Checked",
+      "",
+      "Both themes and the narrow window were checked by hand.",
+      "No other screen uses the changed spacing tokens.",
+    ].join("\n"),
+  );
+  const signoff = (source: string) =>
+    screen
+      .getByRole("complementary", "Run inspector")
+      .getByRole("article", `Needs input · Final sign-off · From ${source}`, { exact: true })
+      .getByRole("button", "Read full context", { exact: true });
+
+  // Act
+  await signoff("Implement change · Visit 1").tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Final sign-off · context", { exact: true });
+  await expect(reader).toContainText(/From Implement change · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Implementation notes", { exact: true })).toBeVisible();
+  await readerScreenshot(app, browser, "condition-routed-result-beside-answer-provenance");
+  await app.open(`/runs/${runId}`);
+  await signoff("First review").tap();
+  await expectWrittenByFirstReview(screen);
+  await readerScreenshot(app, browser, "condition-routed-answer-beside-result-provenance");
 });

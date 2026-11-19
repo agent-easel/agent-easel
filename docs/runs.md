@@ -514,10 +514,11 @@ fixed Human exits their old exits were mapped to.
     place of **Read result**; it opens the reader with those facts expanded.
   - **Human step context.** The decision card shows short context whole and previews long context with **Read full
     context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the Agent
-    visit that wrote the context also when a Wait or Condition passed it on. Context a person wrote as an earlier Human
-    step's answer names that step without a visit. When the deliveries a Condition received with the same worker
-    provenance came from different authors, or a relayed delivery's record is gone, it names the Wait or Condition that
-    sent the context. The reader has no decision
+    visit that wrote the context also when a Wait, Condition or Continuation passing messages through forwarded it.
+    Context a person wrote as an earlier Human step's answer names that step without a visit, and a Continuation's own
+    response names the Continuation and its visit. Through a Condition or pass-through the line follows the forwarded
+    message: when the deliveries the relay received with that message came from different authors, or a relayed
+    delivery's record is gone, it names the relay that sent the context. The reader has no decision
     controls: **Decision**, **Response** and **Submit answer** follow the preview directly, so the answer is always given
     on the card. Parallel occurrences each have their own preview and reader.
   - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full
