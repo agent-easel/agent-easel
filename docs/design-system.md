@@ -63,6 +63,8 @@ first paint use the baseline until a client receives the presentation.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
   substitute for readable helper text.
+- Feature components take font sizes only from the type-scale tokens in
+  `apps/frontend/src/styles.css`, never arbitrary sizes such as `text-[13px]`.
 - Focus must stay visible. Respect reduced motion: remove spatial transitions and keep
   modal changes short; programmatic canvas viewport moves jump instead of animating.
   Interactive controls must remain outside desktop drag regions.
