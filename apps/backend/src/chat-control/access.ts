@@ -81,11 +81,11 @@ const STALE_EDIT = "Access changed since these edits began. Review the saved Acc
 /**
  * Commits the whole Access section as one revision. Authorization reads the committed rows on every
  * event, so a save, including a revocation, is in effect for all later admission and publication
- * by the time it returns.
+ * by the time it returns. Returns the proposals the save ended.
  */
 export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAccessInput) =>
   sql.withTransaction(
-    Effect.gen(function* (): Effect.fn.Return<Result<undefined>, unknown> {
+    Effect.gen(function* (): Effect.fn.Return<Result<readonly string[]>, unknown> {
       const [row] =
         yield* sql<AccessRow>`SELECT revision,saved_at FROM chat_access_settings WHERE singleton=1`;
       if (row!.revision !== input.revision) return failure("conflict", STALE_EDIT);
@@ -123,7 +123,7 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
         }),
       });
       // Revoked consent never returns, and a revoked destination's owed messages are cancelled.
-      yield* applyAccessRevocation(sql, input);
+      const ended = yield* applyAccessRevocation(sql, input);
       const savedAt = yield* now;
       yield* sql`DELETE FROM chat_access_channel_projects`;
       yield* sql`DELETE FROM chat_access_channels`;
@@ -137,7 +137,7 @@ export const updateAccess = (sql: SqlClient.SqlClient, input: UpdateDiscordAcces
       }
       yield* forgetRemovedFromTest(sql);
       yield* sql`UPDATE chat_access_settings SET revision=revision+1,saved_at=${savedAt} WHERE singleton=1`;
-      return { ok: true, value: undefined };
+      return { ok: true, value: ended };
     }),
   );
 

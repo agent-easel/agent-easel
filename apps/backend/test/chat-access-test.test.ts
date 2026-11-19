@@ -246,3 +246,44 @@ it("an Access save drops the access test results of the channels and users it re
   expect(Object.keys(saved.value.access.test!.channels)).toHaveLength(1);
   expect(Object.keys(saved.value.access.test!.users)).toHaveLength(1);
 });
+
+it("an Access save while the access test is posting applies to the later posts and the recorded results", async (c) => {
+  // Arrange
+  const { factory, discord, project } = await operating(c);
+  const before = await factory.getDiscordSettings();
+  assert(before.ok, JSON.stringify(before));
+  // The allowed channel's post waits for Discord.
+  discord.faultMessages("paused");
+  const sending = factory.sendDiscordAccessTest();
+  await discord.request("POST", POSTS, 1);
+
+  // Act
+  const saved = await factory.updateDiscordAccess({
+    revision: before.value.access.revision,
+    users: [PARTICIPANT_ID],
+    channels: [DELETED_CHANNEL, FORUM_CHANNEL].map((channelId) => ({
+      channelId,
+      projectIds: [project.id],
+    })),
+  });
+  discord.releaseMessages();
+  const sent = await sending;
+
+  // Assert
+  assert(saved.ok, JSON.stringify(saved));
+  assert(sent.ok, JSON.stringify(sent));
+  // The revoked channels' results stay dropped; only the revoked user's mention is gone later.
+  expect(sent.value.access.test).toEqual({
+    sentAt: expect.any(String),
+    channels: { [DELETED_CHANNEL]: "unknown-channel", [FORUM_CHANNEL]: "posted" },
+    users: { [PARTICIPANT_ID]: null },
+  });
+  expect(
+    discord.requests.filter(
+      (request) => request.method === "POST" && request.path.includes(OTHER_CHANNEL),
+    ),
+  ).toEqual([]);
+  expect(discord.requested("POST", FORUM_POSTS).map((request) => request.body)).toMatchObject([
+    { message: { allowed_mentions: { parse: [], users: [PARTICIPANT_ID] } } },
+  ]);
+});

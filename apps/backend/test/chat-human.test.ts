@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { assert, expect, it } from "@effect/vitest";
 import {
   answerCall,
@@ -12,6 +13,7 @@ import {
 import { servingAgain } from "./support/chat-control.ts";
 import { invocation, toolResults } from "./support/chat-conversation.ts";
 import { addedProject, startedRun } from "./support/chat-runs.ts";
+import { appliedRun, subscribe, watchRun } from "./support/live.ts";
 
 const ACCEPTED = "✅ Confirmed (disabled)";
 const REJECTED = "🚫 No longer valid (disabled)";
@@ -67,6 +69,35 @@ it("a presented Human answer review makes its occurrence wait for the Discord co
   const { occurrence } = await occurrenceOf(world.factory, world.runId, world.occurrence.id);
   assert(occurrence.chatConfirmationUntil);
   expect(Date.parse(occurrence.chatConfirmationUntil)).toBeGreaterThan(before);
+});
+
+it("revoking the requester's Access ends the waiting Discord confirmation on an open Run page at once", async (c) => {
+  // Arrange
+  const world = await answeringWorld(c);
+  const live = subscribe(c, watchRun(world.factory.live, world.runId));
+  await proposed(world, "600000000000000001", 2, answerCall(world), "approve #1");
+  const confirmationOnPage = (messages: Parameters<typeof appliedRun>[0]) =>
+    appliedRun(messages)?.humanOccurrences.find((entry) => entry.id === world.occurrence.id)
+      ?.chatConfirmationUntil;
+  await live.until((messages) => !!confirmationOnPage(messages));
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok, JSON.stringify(settings));
+
+  // Act
+  const revoked = await world.factory.updateDiscordAccess({
+    revision: settings.value.access.revision,
+    users: [],
+    channels: settings.value.access.channels,
+  });
+
+  // Assert
+  assert(revoked.ok, JSON.stringify(revoked));
+  // The page must not wait for an unrelated Run change, which this world makes only after a minute.
+  const messages = await Promise.race([
+    live.until((received) => !confirmationOnPage(received)),
+    delay(10_000, []),
+  ]);
+  expect(confirmationOnPage(messages)).toBeNull();
 });
 
 it("the requester's confirmation answers exactly the reviewed occurrence of a Run started in Factory and posts the receipt in the request thread without giving the Run an origin", async (c) => {

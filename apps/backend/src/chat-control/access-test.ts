@@ -68,9 +68,32 @@ const postInChannel = (
       // A forum post's later messages go into its thread, which alone identifies the test there.
       if (forum && !startsPost) continue;
       if (startsPost) target = posted.success.id;
-      yield* sql`INSERT INTO chat_access_test_messages (message_id,channel_id) VALUES (${posted.success.id},${channelId})`;
+      yield* sql`INSERT INTO chat_access_test_messages (message_id,channel_id)
+        SELECT ${posted.success.id},${channelId}
+        WHERE EXISTS (SELECT 1 FROM chat_access_channels WHERE channel_id=${channelId})`;
     }
     return "posted";
+  });
+
+/**
+ * The test's users the committed Access still allows, or none when `channelId` no longer grants a
+ * Project: an Access save while the test is being posted applies to every later post.
+ */
+const committedRecipients = (
+  sql: SqlClient.SqlClient,
+  channelId: string,
+  users: readonly string[],
+) =>
+  Effect.gen(function* () {
+    const granting = yield* sql`SELECT 1 FROM chat_access_channel_projects g
+      JOIN projects p ON p.id=g.project_id WHERE g.channel_id=${channelId}`;
+    if (granting.length === 0) return [];
+    const allowed = new Set(
+      (yield* sql<{ user_id: string }>`SELECT user_id FROM chat_access_users`).map(
+        (row) => row.user_id,
+      ),
+    );
+    return users.filter((userId) => allowed.has(userId));
   });
 
 /**
@@ -78,40 +101,49 @@ const postInChannel = (
  * saved allowed user, and replaces the previous test: everyone it asks is Waiting again. Only the
  * mentioned users are pinged; the message mentions no role or everyone. Earlier tests' messages
  * stay recognised, so a late reply to them still answers instead of reaching ordinary admission.
+ * Each post and recorded result honours the Access committed at that moment, so an Access save
+ * during the test neither reaches revoked recipients nor restores the results it dropped.
  */
 export const sendAccessTest = (sql: SqlClient.SqlClient, client: Client<true>) =>
   Effect.gen(function* (): Effect.fn.Return<Result<undefined>, unknown> {
-    const users = (yield* sql<{
-      user_id: string;
-    }>`SELECT user_id FROM chat_access_users ORDER BY position`).map((row) => row.user_id);
-    // A channel granting no Project Factory knows admits no reply, so it is not asked.
-    const channels = (yield* sql<{
-      channel_id: string;
-    }>`SELECT c.channel_id FROM chat_access_channels c
-      WHERE EXISTS (SELECT 1 FROM chat_access_channel_projects g JOIN projects p ON p.id=g.project_id
-        WHERE g.channel_id=c.channel_id)
-      ORDER BY c.position`).map((row) => row.channel_id);
-    if (users.length === 0 || channels.length === 0)
+    const asked = yield* sql.withTransaction(
+      Effect.gen(function* () {
+        const users = (yield* sql<{
+          user_id: string;
+        }>`SELECT user_id FROM chat_access_users ORDER BY position`).map((row) => row.user_id);
+        // A channel granting no Project Factory knows admits no reply, so it is not asked.
+        const channels = (yield* sql<{
+          channel_id: string;
+        }>`SELECT c.channel_id FROM chat_access_channels c
+          WHERE EXISTS (SELECT 1 FROM chat_access_channel_projects g JOIN projects p ON p.id=g.project_id
+            WHERE g.channel_id=c.channel_id)
+          ORDER BY c.position`).map((row) => row.channel_id);
+        if (users.length === 0 || channels.length === 0) return null;
+        yield* sql`DELETE FROM chat_access_test_users`;
+        for (const userId of users)
+          yield* sql`INSERT INTO chat_access_test_users (user_id) VALUES (${userId})`;
+        return { users, channels };
+      }),
+    );
+    if (asked === null)
       return failure(
         "validation",
         "Save an allowed user and a channel that grants a Project, then send the access test.",
       );
-    yield* sql.withTransaction(
-      Effect.gen(function* () {
-        yield* sql`DELETE FROM chat_access_test_users`;
-        for (const userId of users)
-          yield* sql`INSERT INTO chat_access_test_users (user_id) VALUES (${userId})`;
-      }),
-    );
     const posts: { channelId: string; outcome: DiscordAccessTestPost }[] = [];
-    for (const channelId of channels)
-      posts.push({ channelId, outcome: yield* postInChannel(sql, client, channelId, users) });
+    for (const channelId of asked.channels) {
+      const recipients = yield* committedRecipients(sql, channelId, asked.users);
+      if (recipients.length === 0) continue;
+      posts.push({ channelId, outcome: yield* postInChannel(sql, client, channelId, recipients) });
+    }
     const sentAt = yield* now;
     yield* sql.withTransaction(
       Effect.gen(function* () {
         yield* sql`DELETE FROM chat_access_test_channels`;
         for (const post of posts)
-          yield* sql`INSERT INTO chat_access_test_channels (channel_id,outcome,sent_at) VALUES (${post.channelId},${post.outcome},${sentAt})`;
+          yield* sql`INSERT INTO chat_access_test_channels (channel_id,outcome,sent_at)
+            SELECT ${post.channelId},${post.outcome},${sentAt}
+            WHERE EXISTS (SELECT 1 FROM chat_access_channels WHERE channel_id=${post.channelId})`;
       }),
     );
     return { ok: true, value: undefined };
