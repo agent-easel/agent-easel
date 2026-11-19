@@ -414,7 +414,7 @@ test("a hidden inspector stays hidden through block selection, another Run and r
   await expect(screen.getByRole("complementary", "Run inspector")).toHaveCount(0);
 });
 
-test("Mod+/ opens the shortcuts cheat sheet with current hints and a Settings link", async ({
+test("Mod+/ opens the shortcuts cheat sheet at the wide dialog size with current hints and a Settings link", async ({
   app,
   screen,
   browser,
@@ -428,6 +428,8 @@ test("Mod+/ opens the shortcuts cheat sheet with current hints and a Settings li
   // Assert
   const sheet = screen.getByRole("dialog", "Keyboard shortcuts");
   await expect(sheet).toBeVisible();
+  // The shared wide size, clamp(560px, 60vw, 960px), at the 1440 px desktop viewport.
+  await expect.poll(async () => (await sheet.boundingBox())?.width).toBe(864);
   await expect(sheet.getByText("New Run")).toBeVisible();
   await expect(sheet.getByText(desktopNewRunHint)).toBeVisible();
   await expect(sheet.getByText("Follow active", { exact: true })).toBeVisible();

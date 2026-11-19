@@ -124,9 +124,9 @@ button. Use at most one short introductory sentence in the body. Place any actio
 at the trailing edge, with Cancel or Keep editing before the primary or destructive
 action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between
 the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
-Compare latest revision, Review and enable, and Import use the wide width
-`clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
-32 px.
+Compare latest revision, Review and enable, Import and the keyboard shortcuts
+sheet use the wide width `clamp(560px, 60vw, 960px)`. Below 640 px wide, both use
+the viewport width minus 32 px.
 
 A primary action with a blank required name stays neutral and disabled, with no reason and without
 marking the field invalid. Any other cause that keeps it from running shows that one reason beside

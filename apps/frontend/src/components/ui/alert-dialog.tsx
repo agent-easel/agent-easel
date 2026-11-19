@@ -7,6 +7,7 @@ import {
   centeredDialogClass,
   dialogDescriptionClass,
   dialogOverlayClass,
+  dialogSizeClass,
   dialogSurfaceClass,
   dialogTitleClass,
 } from "./dialog";
@@ -31,7 +32,10 @@ function AlertDialogContent({
   return (
     <Primitive.Portal>
       <Primitive.Overlay className={cn(dialogOverlayClass, "backdrop-blur-[2px]")} />
-      <Primitive.Content className={cn(dialogSurfaceClass, centeredDialogClass)} {...props}>
+      <Primitive.Content
+        className={cn(dialogSurfaceClass, dialogSizeClass.standard, centeredDialogClass)}
+        {...props}
+      >
         <DialogLayout
           heading={<Primitive.Title className={dialogTitleClass}>{title}</Primitive.Title>}
           description={
