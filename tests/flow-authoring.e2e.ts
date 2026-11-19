@@ -766,13 +766,16 @@ test("a saved Agent with a retired model cannot be placed from the library or pi
   await app.open(`/studio/flows/${flowId}`);
 
   // Assert
-  const retired = browser.locator(`[aria-label=${JSON.stringify(name)}]`);
+  const retired = browser.locator(`#block-library [aria-label=${JSON.stringify(name)}]`);
   await retired.scrollIntoView();
   await expect(retired).toHaveAttribute("aria-disabled", "true");
   await expect(retired).toContainText("Needs a model");
   await app.screenshot("after-flow-library-retired-model");
   await screen.getByRole("button", "Agent Worker").tap();
-  await screen.getByRole("button", "Sample worker", { exact: true }).tap();
+  await screen
+    .getByRole("complementary", "Block settings")
+    .getByRole("button", "Agent", { exact: true })
+    .tap();
   const option = screen.getByRole("menuitemradio", new RegExp(name));
   await expect(option).toBeDisabled();
   await expect(option).toContainText("Needs a model");

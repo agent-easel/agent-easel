@@ -236,6 +236,7 @@ test("Import reviews a Flow file whose Agent needs a model, and rejects a file i
 
   await app.open("/studio/flows");
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("button", "Import", { exact: true })).toBeEnabled();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([needsModel]);
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText("Imported prompts run with your T3 permissions");
