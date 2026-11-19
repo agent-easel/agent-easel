@@ -24,13 +24,13 @@ export function runImagesAndTitlesFixture(
       },
       /** Each worker launch of Run `number` with its attachment names and uploaded digests. */
       launches: ({ number }: { number: number }) =>
-        [...t3.launches.values()]
+        [...t3.threads.launches.values()]
           .filter(({ payload }) => payload.title.startsWith(`Factory #${number} · `))
           .map(({ payload }) => ({
             title: payload.title,
             attachments: (payload.attachments ?? []).map((attachment) => ({
               name: attachment.name,
-              sha256: sha256Hex(t3.uploads.get(attachment.id)!.data),
+              sha256: sha256Hex(t3.threads.uploads.get(attachment.id)!.data),
             })),
           })),
       /**

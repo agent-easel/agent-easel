@@ -43,7 +43,7 @@ it("an empty launch search does not launch another worker", async (c) => {
   // Arrange
   const setup = await prepared(c);
   const fixture = { ...setup, ...(await launchUncertain(setup.world, setup.input)) };
-  fixture.t3.discoverAvailable = false;
+  fixture.t3.threads.discoverAvailable = false;
 
   // Act
   await fixture.f.reconcileRuns();
@@ -51,7 +51,7 @@ it("an empty launch search does not launch another worker", async (c) => {
   // Assert
   const run = await fixture.f.getRun(fixture.runId);
   assert(run.ok);
-  expect(fixture.t3.launches.size).toBe(1);
+  expect(fixture.t3.threads.launches.size).toBe(1);
   expect(run.value.blocks[0]?.threadId).toBeNull();
   expect(run.value.blocks[0]?.recovery).toBe("pending");
 });
@@ -60,8 +60,8 @@ it("two candidates with the expected title stay unresolved", async (c) => {
   // Arrange
   const setup = await prepared(c);
   const fixture = { ...setup, ...(await launchUncertain(setup.world, setup.input)) };
-  const launch = [...fixture.t3.launches.values()][0]!;
-  fixture.t3.extraCandidates.push(foreignCandidate(launch, fixture.project.workspaceRoot));
+  const launch = [...fixture.t3.threads.launches.values()][0]!;
+  fixture.t3.threads.extraCandidates.push(foreignCandidate(launch, fixture.project.workspaceRoot));
 
   // Act
   await fixture.f.reconcileRuns();
@@ -69,7 +69,7 @@ it("two candidates with the expected title stay unresolved", async (c) => {
   // Assert
   const run = await fixture.f.getRun(fixture.runId);
   assert(run.ok);
-  expect(fixture.t3.launches.size).toBe(1);
+  expect(fixture.t3.threads.launches.size).toBe(1);
   expect(run.value.blocks[0]?.threadId).toBeNull();
   expect(run.value.blocks[0]?.recovery).toBe("pending");
 });
@@ -78,9 +78,9 @@ it("a root-strategy worker reported on the project checkout is recovered", async
   // Arrange
   const setup = await prepared(c);
   const fixture = { ...setup, ...(await launchUncertain(setup.world, setup.input)) };
-  const launch = [...fixture.t3.launches.values()][0]!;
-  fixture.t3.launches.clear();
-  fixture.t3.extraCandidates.push({
+  const launch = [...fixture.t3.threads.launches.values()][0]!;
+  fixture.t3.threads.launches.clear();
+  fixture.t3.threads.extraCandidates.push({
     ...foreignCandidate(launch, fixture.project.workspaceRoot),
     workspaceRoot: null,
     threadId: launch.reference.threadId,
@@ -101,7 +101,7 @@ it("a root-strategy worker reported on the project checkout is recovered", async
   // Assert
   const run = await fixture.f.getRun(fixture.runId);
   assert(run.ok);
-  expect(fixture.t3.launches.size).toBe(0);
+  expect(fixture.t3.threads.launches.size).toBe(0);
   expect(run.value.blocks[0]?.threadId).toBe(launch.reference.threadId);
   expect(run.value.blocks[0]?.executionId).toBe(launch.reference.runId);
   expect(run.value.blocks[0]?.recovery).toBeNull();
@@ -111,9 +111,9 @@ it("a mismatched worker is not bound and is not replaced with another launch", a
   // Arrange
   const setup = await prepared(c);
   const fixture = { ...setup, ...(await launchUncertain(setup.world, setup.input)) };
-  const launch = [...fixture.t3.launches.values()][0]!;
-  fixture.t3.launches.clear();
-  fixture.t3.extraCandidates.push(foreignCandidate(launch, "/other-workspace"));
+  const launch = [...fixture.t3.threads.launches.values()][0]!;
+  fixture.t3.threads.launches.clear();
+  fixture.t3.threads.extraCandidates.push(foreignCandidate(launch, "/other-workspace"));
 
   // Act
   await fixture.f.reconcileRuns();
@@ -121,7 +121,7 @@ it("a mismatched worker is not bound and is not replaced with another launch", a
   // Assert
   const run = await fixture.f.getRun(fixture.runId);
   assert(run.ok);
-  expect(fixture.t3.launches.size).toBe(0);
+  expect(fixture.t3.threads.launches.size).toBe(0);
   expect(run.value.blocks[0]?.threadId).toBeNull();
   expect(run.value.blocks[0]?.recovery).toBe("pending");
 });
@@ -129,7 +129,7 @@ it("a mismatched worker is not bound and is not replaced with another launch", a
 it("a rejected worker launch is an error and later reconciliation does not search it into service", async (c) => {
   // Arrange
   const fixture = await prepared(c);
-  fixture.t3.rejectLaunch = true;
+  fixture.t3.threads.rejectLaunch = true;
   const started = await fixture.f.startRun(fixture.input);
   assert(started.ok);
   assert((await fixture.f.reconcileRuns()).ok);
@@ -146,5 +146,5 @@ it("a rejected worker launch is an error and later reconciliation does not searc
     recovery: null,
     problem: "T3 rejected the worker launch.",
   });
-  expect(fixture.t3.launches.size).toBe(1);
+  expect(fixture.t3.threads.launches.size).toBe(1);
 });

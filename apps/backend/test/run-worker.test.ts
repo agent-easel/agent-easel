@@ -33,7 +33,6 @@ import {
   workingReportedIdle,
 } from "./support/scenarios.ts";
 import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
-import { answerDelegatedWait } from "./support/controlled-thread.ts";
 import { prepared } from "./support/prepared-runner.ts";
 
 it("a Flow with two entry Agents launches an independent top-level worker for each", async (c) => {
@@ -81,8 +80,8 @@ it("a Flow with two entry Agents launches an independent top-level worker for ea
   assert(result.ok);
   expect(result.value.number).toBe(1);
   expect(result.value.runCoordinator).toBeNull();
-  expect(f.t3.launches.size).toBe(2);
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  expect(f.t3.threads.launches.size).toBe(2);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
     "Factory #1 · 1 Review",
     "Factory #1 · 2 Draft",
@@ -135,7 +134,7 @@ it("two Blocks that share one Agent still launch separate workers", async (c) =>
   // Assert
   const result = await f.f.getRun(started.value.id);
   assert(result.ok);
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
     "Factory #1 · 1 Review",
     "Factory #1 · 2 Second review",
@@ -165,8 +164,8 @@ it("normal Start launches the entry worker with its own Agent settings and no Ru
   assert(result.ok);
   expect(result.value.runCoordinator).toBeNull();
   expect(result.value.number).toBe(1);
-  expect(f.t3.launches.size).toBe(1);
-  const payload = [...f.t3.launches.values()][0]!.payload;
+  expect(f.t3.threads.launches.size).toBe(1);
+  const payload = [...f.t3.threads.launches.values()][0]!.payload;
   expect(payload.title).toBe("Factory #1 · 1 Entry worker");
   expect(payload.message).toMatch(workerMessage("Follow repository instructions."));
   expect(payload.modelSelection.model).toBe(f.agent.execution.modelId);
@@ -213,7 +212,7 @@ it("a downstream worker launch whose replay proof T3 cannot establish stays pend
       "T3 launch capabilities are unavailable. Factory will retry this launch.",
     ],
   ]);
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("a worker that fails after reporting cannot release downstream work", async (c) => {
   // Arrange
@@ -228,14 +227,14 @@ it("a worker that fails after reporting cannot release downstream work", async (
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 it("an accepted result stays held while T3 has not settled the worker's delegated work", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  answerDelegatedWait(f.t3, "thread-1", "execution-1", "pending", "running");
+  f.t3.threads.answerDelegatedWait("thread-1", "execution-1", "pending", "running");
 
   // Act
   await f.f.reconcileRuns();
@@ -245,7 +244,7 @@ it("an accepted result stays held while T3 has not settled the worker's delegate
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
   expect(run.value.blocks[0]?.state).toBe("working");
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("a worker rolled back after reporting shows a Problem and holds its prior result", async (c) => {
@@ -266,7 +265,7 @@ it("a worker rolled back after reporting shows a Problem and holds its prior res
     settledAt: null,
   });
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
   expect(run.value.lifecycle).toBe("active");
 });
 it("an accepted result stays held while the worker thread has a pending native request", async (c) => {
@@ -274,8 +273,8 @@ it("an accepted result stays held while the worker thread has a pending native r
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
-  const thread = f.t3.executionObservations.get("thread-1")!;
-  f.t3.executionObservations.set("thread-1", { ...thread, pendingRequestCount: 1 });
+  const thread = f.t3.threads.executionObservations.get("thread-1")!;
+  f.t3.threads.executionObservations.set("thread-1", { ...thread, pendingRequestCount: 1 });
 
   // Act
   await f.f.reconcileRuns();
@@ -284,14 +283,14 @@ it("an accepted result stays held while the worker thread has a pending native r
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("an accepted result stays held while the worker thread still has an active run", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await resultHeld(setup.world, atWork)) };
-  answerDelegatedWait(f.t3, "thread-1", "execution-1", "settled", "completed");
+  f.t3.threads.answerDelegatedWait("thread-1", "execution-1", "settled", "completed");
 
   // Act
   await f.f.reconcileRuns();
@@ -300,7 +299,7 @@ it("an accepted result stays held while the worker thread still has an active ru
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("a worker waiting on unsettled background work stays working without a missing-report Problem", async (c) => {
   // Arrange
@@ -308,7 +307,7 @@ it("a worker waiting on unsettled background work stays working without a missin
   const worker = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...worker };
   allTurnsEnd(f.world, worker);
-  answerDelegatedWait(f.t3, "thread-1", "execution-1", "pending", "completed");
+  f.t3.threads.answerDelegatedWait("thread-1", "execution-1", "pending", "completed");
 
   // Act
   await f.f.reconcileRuns();
@@ -347,7 +346,7 @@ it("a reportless turn resumed by a notification shows a missing report once T3 s
   const worker = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...worker };
   allTurnsEnd(f.world, worker);
-  answerDelegatedWait(f.t3, "thread-1", "execution-1", "pending", "completed");
+  f.t3.threads.answerDelegatedWait("thread-1", "execution-1", "pending", "completed");
   assert((await f.f.reconcileRuns()).ok);
   turnBegins(f.world, worker, "notification-execution");
   allTurnsEnd(f.world, worker);
@@ -482,14 +481,16 @@ it("missing-report recovery targets the original worker and retains its activati
 
   // Assert
   assert(result.ok, JSON.stringify(result));
-  expect([...f.t3.sends.values()][0]?.payload.threadId).toBe("thread-1");
-  expect([...f.t3.sends.values()][0]?.payload.message).toContain(`Factory Block id: ${f.blockId}.`);
+  expect([...f.t3.threads.sends.values()][0]?.payload.threadId).toBe("thread-1");
+  expect([...f.t3.threads.sends.values()][0]?.payload.message).toContain(
+    `Factory Block id: ${f.blockId}.`,
+  );
   expect(
     result.value.executions.find(
-      (e) => e.executionId === [...f.t3.sends.values()][0]?.reference.runId,
+      (e) => e.executionId === [...f.t3.threads.sends.values()][0]?.reference.runId,
     )?.activationId,
   ).toBe(result.value.activations[0]?.id);
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("Request report on a worker idle in working queues an assessment turn on its thread", async (c) => {
   // Arrange
@@ -502,7 +503,7 @@ it("Request report on a worker idle in working queues an assessment turn on its 
 
   // Assert
   assert(result.ok, JSON.stringify(result));
-  const sent = [...f.t3.sends.values()];
+  const sent = [...f.t3.threads.sends.values()];
   expect(sent).toHaveLength(1);
   expect(sent[0]?.payload.threadId).toBe("thread-1");
   expect(sent[0]?.payload.message).toContain(`Factory Block id: ${f.blockId}.`);
@@ -512,7 +513,7 @@ it("Request report on a worker idle in working queues an assessment turn on its 
   expect(result.value.recoveries).toMatchObject([
     { blockId: "worker", attentionId: null, sourceExecutionId: "execution-1" },
   ]);
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("Request report sends its assessment turn when T3 drops report support after its dispatch pass's snapshot", async (c) => {
   // Arrange
@@ -526,7 +527,9 @@ it("Request report sends its assessment turn when T3 drops report support after 
 
   // Assert
   assert(result.ok, JSON.stringify(result));
-  expect([...f.t3.sends.values()].map((send) => send.payload.threadId)).toStrictEqual(["thread-1"]);
+  expect([...f.t3.threads.sends.values()].map((send) => send.payload.threadId)).toStrictEqual([
+    "thread-1",
+  ]);
 });
 it("Request report leaves its assessment turn unsent as uncertain when T3's send replay proof cannot be established", async (c) => {
   // Arrange
@@ -552,7 +555,7 @@ it("Request report leaves its assessment turn unsent as uncertain when T3's send
       "Operation response is uncertain. Only supported same-key reconciliation may recover it.",
     ],
   ]);
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 it("Request report on a later visit asks for an assessment without the Revisit instruction", async (c) => {
   // Arrange
@@ -570,8 +573,8 @@ it("Request report on a later visit asks for an assessment without the Revisit i
 
   // Assert
   assert(result.ok, JSON.stringify(result));
-  const request = [...f.t3.sends.values()].at(-1)?.payload.message;
-  expect(f.t3.sends.size).toBe(2);
+  const request = [...f.t3.threads.sends.values()].at(-1)?.payload.message;
+  expect(f.t3.threads.sends.size).toBe(2);
   expect(request).toContain("Factory Request report: assess the existing work");
   expect(request).not.toContain("Revisit instruction");
   expect(request).not.toContain(REVISIT_INSTRUCTION);
@@ -591,12 +594,13 @@ it("a revisit reuses the direct worker with distinct activation ownership", asyn
   assert(run.ok);
   expect(run.value.activations).toHaveLength(2);
   expect(run.value.threadBindings.map((b) => b.threadId)).toStrictEqual(["thread-1"]);
-  expect([...f.t3.sends.values()][0]?.payload.threadId).toBe("thread-1");
+  expect([...f.t3.threads.sends.values()][0]?.payload.threadId).toBe("thread-1");
   expect(
-    run.value.executions.find((e) => e.executionId === [...f.t3.sends.values()][0]?.reference.runId)
-      ?.activationId,
+    run.value.executions.find(
+      (e) => e.executionId === [...f.t3.threads.sends.values()][0]?.reference.runId,
+    )?.activationId,
   ).toBe(run.value.activations[1]?.id);
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 it("a prepared revisit is not sent while its worker thread has started another run", async (c) => {
   // Arrange
@@ -616,7 +620,7 @@ it("a prepared revisit is not sent while its worker thread has started another r
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.intents.find((intent) => intent.kind === "send")?.state).toBe("pending");
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 it("restart preserves the worker binding without replaying accepted work", async (c) => {
   // Arrange
@@ -632,8 +636,8 @@ it("restart preserves the worker binding without replaying accepted work", async
   assert(run.ok);
   expect(run.value.threadBindings.map((b) => b.role)).toStrictEqual(["worker"]);
   expect(run.value.executions[0]?.activationId).toBe(run.value.activations[0]?.id);
-  expect(f.t3.launches.size).toBe(1);
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.launches.size).toBe(1);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 it("after a lost acknowledgement and a restart, recovery resends the identical revisit with its Revisit instruction", async (c) => {
   // Arrange
@@ -641,11 +645,11 @@ it("after a lost acknowledgement and a restart, recovery resends the identical r
   const atWork = await workerAtWork(setup.world, setup.input);
   const reported = await resultReported(setup.world, atWork);
   const attempts: unknown[] = [];
-  setup.t3.beforeSend = async (payload) => void attempts.push(payload);
-  setup.t3.loseSendReply = true;
+  setup.t3.threads.beforeSend = async (payload) => void attempts.push(payload);
+  setup.t3.threads.loseSendReply = true;
   const f = { ...setup, ...(await resultReleasedToSameWorker(setup.world, reported)) };
   await f.f.close();
-  f.t3.loseSendReply = false;
+  f.t3.threads.loseSendReply = false;
   const reopened = await f.h.open({ t3: f.t3 });
   c.onTestFinished(() => reopened.close());
 
@@ -661,7 +665,7 @@ it("after a lost acknowledgement and a restart, recovery resends the identical r
   ]);
   expect(attempts.length).toBeGreaterThan(1);
   expect(attempts.at(-1)).toStrictEqual(attempts[0]);
-  expect([...f.t3.sends.values()].map((send) => send.payload.message)).toStrictEqual([
+  expect([...f.t3.threads.sends.values()].map((send) => send.payload.message)).toStrictEqual([
     expect.stringContaining(`\n${REVISIT_INSTRUCTION}\n\nIncoming message:\n`),
   ]);
 });
@@ -917,7 +921,7 @@ it("a held worker handoff launches exactly one next worker after a backend resta
       state: "acknowledged",
     }),
   );
-  expect(f.t3.launches.size).toBe(2);
+  expect(f.t3.threads.launches.size).toBe(2);
 });
 
 it("after its Agent is saved without a model, a Run's held handoff launches the next worker on restart with the model it captured", async (c) => {
@@ -969,5 +973,5 @@ it("a Run whose captured Agent revision lost its model refuses to recover after 
     `Run ${f.runId} captured an Agent revision without a model`,
   );
   expect(blockLaunch(f.t3, "Parallel work")).toBeUndefined();
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });

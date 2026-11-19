@@ -71,6 +71,7 @@ export async function authorizedLiveOAuth(
     factory,
     live,
     adapter: live.adapter,
+    threads: live.threads,
     external,
     endpoint: external.endpoint,
     /** The consent page the latest authorization opened. */

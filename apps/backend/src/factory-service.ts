@@ -158,7 +158,7 @@ export const makeFactoryService = (
     );
     const setup = Context.get(setupContext, RuntimeSetup.RuntimeSetup);
     const runTitles = yield* makeRunTitles(
-      t3.adapter,
+      t3.threads,
       {
         getAgentCapabilities: definitions.getAgentCapabilities,
         getReportingInstallations: reporting.getReportingInstallations,
@@ -361,7 +361,7 @@ export const makeFactoryService = (
       factory,
       connection.snapshots.fresh,
       projects.refreshProjects,
-      t3.adapter,
+      t3.threads,
       git,
       owner,
       intervalMs,

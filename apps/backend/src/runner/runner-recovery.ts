@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
 import type { Delivery, RunStore } from "./run-store/run-store.ts";
 import type { RunRow } from "./runner-types.ts";
 import { readWorkerThread } from "./worker-thread.ts";
 /** Request report assesses a finished worker thread whose latest run is the one it was asked for. */
-export function recoveryReady(t3: T3Adapter, run: RunRow, threadId: string, executionId: string) {
+export function recoveryReady(t3: T3Threads, run: RunRow, threadId: string, executionId: string) {
   return Effect.tryPromise(async () => {
     const worker = await readWorkerThread(t3, run, threadId);
     return (
@@ -16,7 +16,7 @@ export function recoveryReady(t3: T3Adapter, run: RunRow, threadId: string, exec
 }
 export function recoveryDispatchGeneration(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   runRow: RunRow,
   intent: Delivery,
 ) {

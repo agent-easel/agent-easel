@@ -54,7 +54,7 @@ export async function startHost(
   t3.connection.approve();
   let advancing: Promise<void> | undefined;
   const timer = setInterval(() => {
-    advancing ??= t3.advance().finally(() => {
+    advancing ??= t3.threads.advance().finally(() => {
       advancing = undefined;
     });
   }, 100);

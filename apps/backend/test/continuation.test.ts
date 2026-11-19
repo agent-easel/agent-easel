@@ -23,7 +23,6 @@ import {
   workerAtWork,
   workerHandle,
 } from "./support/scenarios.ts";
-import { recordLaunchedThread } from "./support/controlled-thread.ts";
 
 const blockState = (run: { blocks: readonly { blockId: string; state: string }[] }, id: string) =>
   run.blocks.find((block) => block.blockId === id)?.state;
@@ -94,13 +93,13 @@ it("the first message reaching a Continuation queues its prompt once on the sour
   );
 
   // Assert
-  expect([...f.t3.sends.values()].map((send) => send.payload.threadId)).toStrictEqual([
+  expect([...f.t3.threads.sends.values()].map((send) => send.payload.threadId)).toStrictEqual([
     worker.threadId,
   ]);
   const prompt = promptOn(f.world, worker);
   expect(prompt.blockId).not.toBe(worker.blockId);
   expect(prompt.message).toContain("Write the spec from what we agreed.");
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
   expect(run.continuationVisits).toMatchObject([
     { blockId: "spec", kind: "prompt", sourceBlockId: "worker", state: "sent" },
   ]);
@@ -130,7 +129,7 @@ it("a Continuation's response is forwarded on its output once its thread finishe
     ["worker", "Implemented the requested result."],
     ["spec", "Spec written: docs/spec.md."],
   ]);
-  expect(f.t3.launches.size).toBe(2);
+  expect(f.t3.threads.launches.size).toBe(2);
 });
 
 it("a message reaching a Continuation after its response passes through unchanged without another prompt", async (c) => {
@@ -144,7 +143,7 @@ it("a message reaching a Continuation after its response passes through unchange
     detail.blocks.some((block) => block.blockId === "follow-up" && block.threadId),
   );
   const followUp = workerHandle(f.world, launched, "follow-up");
-  await recordLaunchedThread(f.t3, followUp.threadId);
+  await f.t3.threads.recordLaunchedThread(followUp.threadId);
   assert(
     (await report(f.world, followUp, {
       to: "finished",
@@ -156,7 +155,7 @@ it("a message reaching a Continuation after its response passes through unchange
 
   // Act
   const run = await observeFor("observe the pass-through", f.world, worker.runId, () =>
-    [...f.t3.sends.values()].some((send) => send.payload.threadId === followUp.threadId),
+    [...f.t3.threads.sends.values()].some((send) => send.payload.threadId === followUp.threadId),
   );
 
   // Assert
@@ -166,11 +165,11 @@ it("a message reaching a Continuation after its response passes through unchange
     ["pass-through", "forwarded"],
   ]);
   expect(
-    [...f.t3.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
+    [...f.t3.threads.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
   ).toHaveLength(1);
   expect(
-    [...f.t3.sends.values()].find((send) => send.payload.threadId === followUp.threadId)?.payload
-      .message,
+    [...f.t3.threads.sends.values()].find((send) => send.payload.threadId === followUp.threadId)
+      ?.payload.message,
   ).toContain("Reviewed the spec.");
 });
 
@@ -184,7 +183,7 @@ it("a message arriving while the prompt is pending waits and passes through afte
     detail.blocks.some((block) => block.blockId === "parallel-block" && block.threadId),
   );
   const parallel = workerHandle(f.world, parallelRun, "parallel-block");
-  await recordLaunchedThread(f.t3, parallel.threadId);
+  await f.t3.threads.recordLaunchedThread(parallel.threadId);
   assert(
     (await report(f.world, parallel, {
       to: "finished",
@@ -217,7 +216,7 @@ it("a message arriving while the prompt is pending waits and passes through afte
     ["spec", false],
   ]);
   expect(
-    [...f.t3.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
+    [...f.t3.threads.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
   ).toHaveLength(1);
 });
 
@@ -232,7 +231,7 @@ it("a revisit is not sent into a finished thread while a Continuation prompt the
     detail.blocks.some((block) => block.blockId === "parallel-block" && block.threadId),
   );
   const parallel = workerHandle(f.world, parallelRun, "parallel-block");
-  await recordLaunchedThread(f.t3, parallel.threadId);
+  await f.t3.threads.recordLaunchedThread(parallel.threadId);
   assert(
     (await report(f.world, parallel, {
       to: "finished",
@@ -257,7 +256,7 @@ it("a revisit is not sent into a finished thread while a Continuation prompt the
       .map((intent) => intent.state),
   ).toStrictEqual(["pending"]);
   expect(
-    [...f.t3.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
+    [...f.t3.threads.sends.values()].filter((send) => send.payload.threadId === worker.threadId),
   ).toHaveLength(1);
 });
 
@@ -278,7 +277,7 @@ it("a chained Continuation sends its prompt to the original worker's thread", as
   );
 
   // Assert
-  const sends = [...f.t3.sends.values()];
+  const sends = [...f.t3.threads.sends.values()];
   expect(sends.map((send) => send.payload.threadId)).toStrictEqual([
     worker.threadId,
     worker.threadId,
@@ -357,7 +356,7 @@ it("restart neither resends a sent prompt nor forgets it", async (c) => {
   const run = await reopened.getRun(worker.runId);
   assert(run.ok);
   expect(blockState(run.value, "spec")).toBe("sent");
-  expect(f.t3.sends.size).toBe(1);
+  expect(f.t3.threads.sends.size).toBe(1);
 });
 
 it("a prompt turn that ends without a report is a missing report on the Continuation", async (c) => {
@@ -436,7 +435,7 @@ it("Request report on a Continuation asks the worker's thread once, under the Co
 
   // Assert
   assert(requested.ok);
-  const sends = [...f.t3.sends.values()].filter(
+  const sends = [...f.t3.threads.sends.values()].filter(
     (send) => send.payload.threadId === worker.threadId,
   );
   expect(sends).toHaveLength(2);

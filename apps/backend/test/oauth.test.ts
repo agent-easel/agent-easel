@@ -226,14 +226,14 @@ it("a T3 call's transient failure is not reported on a concurrent inspection who
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
   const readFails = new Promise<void>((resolve) => (failRead = resolve));
   const rejectionAnswered = new Promise<void>((resolve) => (answerRejection = resolve));
-  const { live, adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, threads, external, endpoint } = await authorizedLiveOAuth(context, {
     runtimeActivity: async () => {
       readReached();
       await readFails;
       throw new Error("The connection of this read drops.");
     },
   });
-  const read = adapter.readExecution({ endpoint }, "thread-1");
+  const read = threads.readExecution({ endpoint }, "thread-1");
   await readStarted;
   external.revoke();
   const rejectionHeld = external.holdAuthorizationRejections(rejectionAnswered);

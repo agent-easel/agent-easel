@@ -258,7 +258,7 @@ it("completing Start preflight after access revocation accepts no Run", async (c
   // Assert
   expect(await pending.answer).toBe(ANSWERS.rejected);
   expect(await runsOf(world.factory)).toStrictEqual([]);
-  expect(world.t3.launchCalls).toBe(0);
+  expect(world.t3.threads.launchCalls).toBe(0);
 });
 
 it("completing Start preflight after a Gateway gap refreshes the requester's lost guild access", async (c) => {
@@ -277,7 +277,7 @@ it("completing Start preflight after a Gateway gap refreshes the requester's los
   // Assert
   expect(await pending.answer).toContain("Try again before the review expires");
   expect(await runsOf(world.factory)).toStrictEqual([]);
-  expect(world.t3.launchCalls).toBe(0);
+  expect(world.t3.threads.launchCalls).toBe(0);
   expect(world.discord.requested("GET", /guilds\/\d+\/members\//).length).toBeGreaterThan(lookups);
 });
 
@@ -294,7 +294,7 @@ it("completing Start preflight refreshes a public thread's current parent-channe
   // Assert
   expect(await pending.answer).toContain("Try again before the review expires");
   expect(await runsOf(world.factory)).toStrictEqual([]);
-  expect(world.t3.launchCalls).toBe(0);
+  expect(world.t3.threads.launchCalls).toBe(0);
 });
 
 it("a Discord denial after Start preflight leaves the same consent usable when membership returns", async (c) => {
@@ -347,7 +347,7 @@ it("restoring Discord membership cannot revive a consent revoked by Factory duri
   // Assert
   expect(answer).not.toBe(ANSWERS.accepted);
   expect(await runsOf(world.factory)).toStrictEqual([]);
-  expect(world.t3.launchCalls).toBe(0);
+  expect(world.t3.threads.launchCalls).toBe(0);
 });
 
 it("completing Start preflight after revocation and regrant starts nothing", async (c) => {
@@ -364,7 +364,7 @@ it("completing Start preflight after revocation and regrant starts nothing", asy
   // Assert
   expect(await pending.answer).toBe(ANSWERS.rejected);
   expect(await runsOf(world.factory)).toStrictEqual([]);
-  expect(world.t3.launchCalls).toBe(0);
+  expect(world.t3.threads.launchCalls).toBe(0);
 });
 
 it("a Start of a Flow that another permitted Project owns gets no review, and the model is told to use a Flow of this Project", async (c) => {
@@ -518,7 +518,7 @@ it.effect("a Start first reaching acceptance after its review expires starts not
     const navigation = yield* world.factory.listRunNavigation();
     assert(navigation.ok);
     expect(navigation.value).toStrictEqual([]);
-    expect(world.t3.launchCalls).toBe(0);
+    expect(world.t3.threads.launchCalls).toBe(0);
   }),
 );
 

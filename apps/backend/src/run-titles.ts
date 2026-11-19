@@ -16,7 +16,7 @@ import {
   validateUpdateRunTitleSetting,
 } from "@t3-factory/domain-validation";
 import type { StartPrompt } from "@t3-factory/domain-validation";
-import type { LaunchPayload, T3Adapter } from "./adapters/t3.ts";
+import type { LaunchPayload, T3Threads } from "./t3/threads.ts";
 import type { T3ContractSnapshot } from "./t3/contract.ts";
 import { isT3Refusal } from "./t3/connection.ts";
 import type { ContractSnapshots } from "./connection.ts";
@@ -101,7 +101,7 @@ type EligibilityOperations = EffectOperations<
 >;
 
 export const makeRunTitles = (
-  t3: T3Adapter,
+  t3: T3Threads,
   ops: EligibilityOperations,
   snapshots: ContractSnapshots,
   changes: LiveChanges,

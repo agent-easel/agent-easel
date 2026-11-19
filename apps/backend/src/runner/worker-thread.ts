@@ -1,4 +1,4 @@
-import type { ExecutionObservation, T3Adapter } from "../adapters/t3.ts";
+import type { ExecutionObservation, T3Threads } from "../t3/threads.ts";
 import { runTarget, type RunRow } from "./runner-types.ts";
 import { inRunWorkspace } from "./run-workspace.ts";
 
@@ -24,7 +24,7 @@ export interface WorkerThread {
  * individual executions.
  */
 export async function readWorkerThread(
-  t3: T3Adapter,
+  t3: T3Threads,
   run: ThreadRun,
   threadId: string,
 ): Promise<WorkerThread> {

@@ -62,7 +62,7 @@ try {
     let advancing: Promise<void> | undefined;
     const simulation = setInterval(() => {
       if (advancing) return;
-      advancing = t3
+      advancing = t3.threads
         .advance()
         .catch(console.error)
         .finally(() => {

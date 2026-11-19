@@ -346,16 +346,16 @@ it.effect("live subscribers neither multiply Runner observations nor own handoff
     const f = { ...setup, ...worker };
     yield* Effect.promise(() => f.f.close());
     const factory = yield* f.h.service({ t3: f.t3, connectionRetryMs: 1000 });
-    const beforeZero = f.t3.executionReads;
+    const beforeZero = f.t3.threads.executionReads;
     yield* TestClock.adjust(1000);
-    const zeroSubscriberReads = f.t3.executionReads - beforeZero;
+    const zeroSubscriberReads = f.t3.threads.executionReads - beforeZero;
     const first = subscribe(c, watchRun(factory.live, f.runId));
     const second = subscribe(c, watchRun(factory.live, f.runId));
     yield* Effect.promise(() => first.until((messages) => messages.length > 0));
     yield* Effect.promise(() => second.until((messages) => messages.length > 0));
-    const beforeTwo = f.t3.executionReads;
+    const beforeTwo = f.t3.threads.executionReads;
     yield* TestClock.adjust(1000);
-    const twoSubscriberReads = f.t3.executionReads - beforeTwo;
+    const twoSubscriberReads = f.t3.threads.executionReads - beforeTwo;
     yield* Effect.promise(() => first.stop());
     yield* Effect.promise(() => second.stop());
     const report = yield* factory.runtime.submit(workerFinal(f.blockId));
@@ -364,7 +364,7 @@ it.effect("live subscribers neither multiply Runner observations nor own handoff
     const beforeHandoff = yield* factory.getRun(f.runId);
     assert(beforeHandoff.ok);
     expect(beforeHandoff.value.reports[0]?.completionEligibleAt).toBeNull();
-    expect(f.t3.launches.size).toBe(1);
+    expect(f.t3.threads.launches.size).toBe(1);
 
     // Act
     yield* TestClock.adjust(1000);
@@ -379,7 +379,7 @@ it.effect("live subscribers neither multiply Runner observations nor own handoff
       "worker",
       "parallel-block",
     ]);
-    expect(f.t3.launches.size).toBe(2);
+    expect(f.t3.threads.launches.size).toBe(2);
     expect(run.value.blocks.find((block) => block.blockId === "parallel-block")).toMatchObject({
       threadId: "thread-2",
     });

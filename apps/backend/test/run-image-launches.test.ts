@@ -26,7 +26,7 @@ it("every Flow-input worker receives the same original images, uploaded anew for
   assert((await f.f.reconcileRuns()).ok);
 
   // Assert
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
     "Factory #1 · 1 Entry worker",
     "Factory #1 · 2 Second entry",
@@ -36,7 +36,7 @@ it("every Flow-input worker receives the same original images, uploaded anew for
     attachmentNames,
   ]);
   const uploadedDigests = launches.map((launch) =>
-    launch.attachments?.map((a) => sha256Hex(f.t3.uploads.get(a.id)!.data)),
+    launch.attachments?.map((a) => sha256Hex(f.t3.threads.uploads.get(a.id)!.data)),
   );
   expect(uploadedDigests).toStrictEqual([digests, digests]);
   expect(new Set(launches.flatMap((launch) => launch.attachments!.map((a) => a.id))).size).toBe(6);
@@ -49,7 +49,7 @@ it("a failed image upload leaves the launch pending with the upload problem and 
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const f = { ...setup, ...(await imageDispatchHeld(setup.world, await imageRequest(setup))) };
-  f.t3.failUploads = true;
+  f.t3.threads.failUploads = true;
   f.release();
 
   // Act
@@ -58,7 +58,7 @@ it("a failed image upload leaves the launch pending with the upload problem and 
   // Assert
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
-  expect(f.t3.launchCalls).toBe(0);
+  expect(f.t3.threads.launchCalls).toBe(0);
   expect(run.value.intents.map((intent) => [intent.state, intent.problem])).toStrictEqual([
     ["pending", "Image upload to T3 failed: T3 answered the upload with HTTP 500."],
     ["pending", "Image upload to T3 failed: T3 answered the upload with HTTP 500."],
@@ -86,12 +86,12 @@ it("a pending image launch uploads its images again after restart once T3 accept
   assert((await reopened.reconcileRuns()).ok);
 
   // Assert
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.attachments?.map((a) => a.name))).toStrictEqual([
     attachmentNames,
     attachmentNames,
   ]);
-  expect(f.t3.uploadCalls).toBe(6);
+  expect(f.t3.threads.uploadCalls).toBe(6);
 });
 
 it("Run image bytes missing from Factory storage cancel the launch with a Block error", async (c) => {
@@ -107,7 +107,7 @@ it("Run image bytes missing from Factory storage cancel the launch with a Block 
   // Assert
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
-  expect(f.t3.launchCalls).toBe(0);
+  expect(f.t3.threads.launchCalls).toBe(0);
   expect(run.value.intents.map((intent) => intent.state)).toStrictEqual(["cancelled", "cancelled"]);
   expect(run.value.blocks.slice(0, 2).map((block) => [block.state, block.problem])).toStrictEqual([
     ["error", "Run image missing from Factory storage"],
@@ -119,10 +119,10 @@ it("an image launch with a lost acknowledgement is searched for, never uploaded 
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const f = { ...setup, ...(await imageDispatchHeld(setup.world, await imageRequest(setup))) };
-  f.t3.loseLaunchReply = true;
+  f.t3.threads.loseLaunchReply = true;
   f.release();
   assert((await f.f.reconcileRuns()).ok);
-  f.t3.loseLaunchReply = false;
+  f.t3.threads.loseLaunchReply = false;
 
   // Act
   assert((await f.f.reconcileRuns()).ok);
@@ -130,8 +130,8 @@ it("an image launch with a lost acknowledgement is searched for, never uploaded 
   // Assert
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
-  expect(f.t3.launchCalls).toBe(2);
-  expect(f.t3.uploadCalls).toBe(6);
+  expect(f.t3.threads.launchCalls).toBe(2);
+  expect(f.t3.threads.uploadCalls).toBe(6);
   expect(run.value.blocks.slice(0, 2).map((block) => block.threadId)).toStrictEqual([
     "thread-1",
     "thread-2",
@@ -148,12 +148,12 @@ it("a downstream worker launches with a text-only message and no attachments", a
   assert((await f.f.reconcileRuns()).ok);
 
   // Assert
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual([
     "Factory #1 · 1 Entry worker",
     "Factory #1 · 2 Parallel work",
   ]);
   expect(launches[1]!.attachments).toBeUndefined();
   expect(launches[1]!.message).not.toContain("Initial prompt images");
-  expect(f.t3.uploadCalls).toBe(3);
+  expect(f.t3.threads.uploadCalls).toBe(3);
 });

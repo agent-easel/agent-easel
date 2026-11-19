@@ -7,7 +7,7 @@ import type {
 } from "@t3-factory/contracts";
 import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { RuntimeReply, RuntimeReport } from "../runtime-types.ts";
@@ -59,7 +59,7 @@ export function openRunActions({
   reconcileTitleGeneration,
 }: {
   store: RunStore;
-  t3: T3Adapter;
+  t3: T3Threads;
   ownedThreads: OwnedThreads;
   lifecycle: RunnerLifecycle;
   freshSnapshot: ContractSnapshots["fresh"];

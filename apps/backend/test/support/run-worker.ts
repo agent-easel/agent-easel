@@ -38,7 +38,9 @@ export function clearStoredExecution(databasePath: string, agentId: string) {
 
 /** The worker launch T3 received for the named Block. */
 export function blockLaunch(t3: ControlledT3, blockName: string) {
-  return [...t3.launches.values()].find((entry) => entry.payload.title.endsWith(` ${blockName}`));
+  return [...t3.threads.launches.values()].find((entry) =>
+    entry.payload.title.endsWith(` ${blockName}`),
+  );
 }
 
 /** The Block id Factory stated in a worker's launch message, as an Agent reads it. */
@@ -49,9 +51,9 @@ export function launchedBlockId(t3: ControlledT3, blockName = "Entry worker") {
 /** Resolves once T3 receives the next thread settlement, which Factory sends in the background
  * after a manual Settle. */
 export function nextSettlement(t3: ControlledT3) {
-  const settle = t3.settleThread.bind(t3);
+  const settle = t3.threads.settleThread.bind(t3.threads);
   return new Promise<void>((resolve) => {
-    t3.settleThread = async (target, payload) => {
+    t3.threads.settleThread = async (target, payload) => {
       await settle(target, payload);
       resolve();
     };
@@ -61,9 +63,9 @@ export function nextSettlement(t3: ControlledT3) {
 /** Resolves once T3 receives the next thread interrupt, which Factory sends in the background
  * after Archive. */
 export function nextThreadInterrupt(t3: ControlledT3) {
-  const interrupt = t3.stopThread.bind(t3);
+  const interrupt = t3.threads.stopThread.bind(t3.threads);
   return new Promise<void>((resolve) => {
-    t3.stopThread = async (target, payload) => {
+    t3.threads.stopThread = async (target, payload) => {
       await interrupt(target, payload);
       resolve();
     };
@@ -73,9 +75,9 @@ export function nextThreadInterrupt(t3: ControlledT3) {
 /** The next worker thread read, such as Request report's preflight, waits for a complete
  * background sweep that observes the unchanged worker; reads during that sweep pass through. */
 export function sweepDuringNextThreadRead({ factory, t3 }: ScenarioWorld) {
-  const read = t3.readExecution.bind(t3);
+  const read = t3.threads.readExecution.bind(t3.threads);
   let sweep: Promise<unknown> | undefined;
-  t3.readExecution = (...args) => {
+  t3.threads.readExecution = (...args) => {
     if (sweep) return read(...args);
     sweep = factory.reconcileRuns();
     return sweep.then(() => read(...args));
@@ -87,13 +89,13 @@ export function sweepDuringNextThreadRead({ factory, t3 }: ScenarioWorld) {
  * takes the first, the per-Block sweep the second. */
 export function reopenDuringSettlement(world: ScenarioWorld, worker: WorkerHandle) {
   const { t3 } = world;
-  const read = t3.readDelegatedSettlement.bind(t3);
+  const read = t3.threads.readDelegatedSettlement.bind(t3.threads);
   let inspections = 0;
   t3.contract.beforeInspection = () => {
     if (++inspections < 2) return;
     delete t3.contract.beforeInspection;
-    t3.readDelegatedSettlement = async (...args) => {
-      t3.readDelegatedSettlement = read;
+    t3.threads.readDelegatedSettlement = async (...args) => {
+      t3.threads.readDelegatedSettlement = read;
       assert((await report(world, worker, workingReport())) === "ACCEPTED");
       return read(...args);
     };
@@ -102,8 +104,8 @@ export function reopenDuringSettlement(world: ScenarioWorld, worker: WorkerHandl
 
 /** The user confirms Settle while T3 receives the next worker launch, before Factory has its reply. */
 export function settleDuringNextLaunch({ factory, t3 }: ScenarioWorld, runId: string) {
-  t3.beforeLaunch = async () => {
-    delete t3.beforeLaunch;
+  t3.threads.beforeLaunch = async () => {
+    delete t3.threads.beforeLaunch;
     assert((await factory.settleRun(runId, { stopWorkers: true })).ok);
   };
 }
@@ -111,9 +113,9 @@ export function settleDuringNextLaunch({ factory, t3 }: ScenarioWorld, runId: st
 /** T3 authorization changes to another grant right after T3 answers the next worker thread
  * read, such as a settlement pass's read under its snapshot. */
 export function changeAuthorizationAfterNextRead(t3: ControlledT3) {
-  const read = t3.readExecution.bind(t3);
-  t3.readExecution = async (target, threadId) => {
-    t3.readExecution = read;
+  const read = t3.threads.readExecution.bind(t3.threads);
+  t3.threads.readExecution = async (target, threadId) => {
+    t3.threads.readExecution = read;
     const thread = await read(target, threadId);
     t3.connection.approve("different-grant");
     return thread;
@@ -123,10 +125,10 @@ export function changeAuthorizationAfterNextRead(t3: ControlledT3) {
 /** T3 cannot answer the first inspection after it answers the next worker thread read, such as a
  * settlement pass's recheck before its Stop; resolves once that inspection was asked. */
 export function failInspectionAfterNextRead(t3: ControlledT3) {
-  const read = t3.readExecution.bind(t3);
+  const read = t3.threads.readExecution.bind(t3.threads);
   return new Promise<void>((resolve) => {
-    t3.readExecution = async (target, threadId) => {
-      t3.readExecution = read;
+    t3.threads.readExecution = async (target, threadId) => {
+      t3.threads.readExecution = read;
       const thread = await read(target, threadId);
       void failNextInspection(t3).then(resolve);
       return thread;
@@ -148,10 +150,10 @@ export function failNextInspection(t3: ControlledT3) {
 
 /** T3 cannot read this worker until the caller restores its reads. */
 export function pauseWorkerReads(t3: ControlledT3, threadId: string) {
-  const read = t3.readExecution.bind(t3);
-  t3.readExecution = (target, id) =>
+  const read = t3.threads.readExecution.bind(t3.threads);
+  t3.threads.readExecution = (target, id) =>
     id === threadId ? Promise.reject(Error("Temporary thread read failure")) : read(target, id);
   return () => {
-    t3.readExecution = read;
+    t3.threads.readExecution = read;
   };
 }

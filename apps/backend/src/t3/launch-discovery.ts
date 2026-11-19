@@ -1,4 +1,4 @@
-import type { LaunchCandidate, LaunchDiscovery, ThreadIdentityRead } from "./adapters/t3.ts";
+import type { LaunchCandidate, LaunchDiscovery, ThreadIdentityRead } from "./threads.ts";
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<unknown>;
 

@@ -69,7 +69,7 @@ it("a Stop the demo simulator holds stays held after the simulator restarts", as
   const threadId = "held-stop-thread";
   const runId = `run:thread:${threadId}:ordinal:1`;
   const t3 = new PersistentT3(processHome, false);
-  t3.executionObservations.set(threadId, {
+  t3.threads.executionObservations.set(threadId, {
     threadId,
     projectId: "demo-project",
     workspaceRoot: processHome,
@@ -79,14 +79,17 @@ it("a Stop the demo simulator holds stays held after the simulator restarts", as
     pendingRequestCount: 0,
     recentRuns: [{ runId, status: "running", ordinal: 1 }],
   });
-  t3.holdStops([threadId]);
+  t3.threads.holdStops([threadId]);
   const restarted = new PersistentT3(processHome, true);
 
   // Act
-  await restarted.stopThread({ endpoint: "" }, { threadId, clientRequestId: "settle-stop" });
+  await restarted.threads.stopThread(
+    { endpoint: "" },
+    { threadId, clientRequestId: "settle-stop" },
+  );
 
   // Assert
-  expect(restarted.executionObservations.get(threadId)?.activeRunId).toBe(runId);
+  expect(restarted.threads.executionObservations.get(threadId)?.activeRunId).toBe(runId);
 });
 
 it("a demo launch T3 accepted but could not save reports T3 unavailable, not a file error", async (c) => {
@@ -97,7 +100,7 @@ it("a demo launch T3 accepted but could not save reports T3 unavailable, not a f
   await writeFile(join(processHome, "demo-engine.json.next"), "");
 
   // Act
-  const launched = t3.launchThread(
+  const launched = t3.threads.launchThread(
     { endpoint: "" },
     {
       environmentId: "demo-environment",

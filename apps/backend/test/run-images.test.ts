@@ -161,7 +161,7 @@ it("an image Start whose image is not uploaded reports the missing digest and cr
     `images.${sha256Hex(screenshots.blue.data)}`,
   ]);
   expect(await f.f.listRuns(f.project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(f.t3.launches.size).toBe(0);
+  expect(f.t3.threads.launches.size).toBe(0);
 });
 
 it("an image Start whose declared size differs from its upload is rejected", async (c) => {

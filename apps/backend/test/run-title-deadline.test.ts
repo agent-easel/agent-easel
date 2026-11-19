@@ -108,7 +108,7 @@ it.effect(
         deadlineAt: before.value.titleGeneration?.deadlineAt,
         threadLink: before.value.titleGeneration?.threadLink,
       });
-      expect(f.t3.launchCalls).toBe(2);
+      expect(f.t3.threads.launchCalls).toBe(2);
     }),
 );
 

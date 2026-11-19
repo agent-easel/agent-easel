@@ -14,14 +14,14 @@ import {
 it("a default-base worktree Start asks T3 to fetch origin for its single creator", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   assert((await f.startRun(input)).ok);
 
   // Act
   await f.reconcileRuns();
 
   // Assert
-  const launches = [...t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.title)).toStrictEqual(["Factory #1 · 1 Entry worker"]);
   expect(launches[0]!.workspaceStrategy).toStrictEqual({
     type: "worktree",
@@ -43,7 +43,7 @@ it("a custom local worktree base asks T3 to preserve the local ref", async (c) =
   await f.reconcileRuns();
 
   // Assert
-  const [creator] = [...t3.launches.values()].map((launch) => launch.payload);
+  const [creator] = [...t3.threads.launches.values()].map((launch) => launch.payload);
   expect(creator!.workspaceStrategy).toStrictEqual({
     type: "worktree",
     baseRef: "main",
@@ -55,17 +55,17 @@ it("a custom local worktree base asks T3 to preserve the local ref", async (c) =
 it("once T3 shows the worktree path and branch, the other Flow-input worker launches once on that worktree", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   assert((await f.startRun(input)).ok);
   await f.reconcileRuns();
-  t3.worktreeMetadataPending = false;
+  t3.threads.worktreeMetadataPending = false;
 
   // Act
   await f.reconcileRuns();
 
   // Assert
-  const [creator, second] = [...t3.launches.values()].map((launch) => launch.payload);
-  expect(t3.launches.size).toBe(2);
+  const [creator, second] = [...t3.threads.launches.values()].map((launch) => launch.payload);
+  expect(t3.threads.launches.size).toBe(2);
   expect(second!.title).toBe("Factory #1 · 2 Second entry");
   expect(second!.workspaceStrategy).toStrictEqual({
     type: "existing_worktree",
@@ -78,16 +78,16 @@ it("the Flow-input worker joining a bound worktree receives the Run images too",
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
   await stageImages(f, Object.values(screenshots));
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   assert((await f.startRun(imageStart(input))).ok);
   await f.reconcileRuns();
-  t3.worktreeMetadataPending = false;
+  t3.threads.worktreeMetadataPending = false;
 
   // Act
   await f.reconcileRuns();
 
   // Assert
-  const launches = [...t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches.map((launch) => launch.attachments?.map((a) => a.name))).toStrictEqual([
     ["image-1-screenshot.png", "image-2-screenshot.png", "image-3-mockup.png"],
     ["image-1-screenshot.png", "image-2-screenshot.png", "image-3-mockup.png"],
@@ -97,7 +97,7 @@ it("the Flow-input worker joining a bound worktree receives the Run images too",
 it("a creator thread that shows its worktree path before its branch is observed without a scope change", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.worktreeBranchPending = true;
+  t3.threads.worktreeBranchPending = true;
   const started = await f.startRun(input);
   assert(started.ok);
 
@@ -109,20 +109,20 @@ it("a creator thread that shows its worktree path before its branch is observed 
   assert(run.ok);
   expect(run.value.blocks[0]).toMatchObject({ freshness: "fresh", problem: null });
   expect(run.value.workspace).toMatchObject({ state: "preparing", path: null });
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("a lost creator reply is recovered by search without a second worktree, and the other worker waits for it", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.loseLaunchReply = true;
-  t3.discoverAvailable = false;
+  t3.threads.loseLaunchReply = true;
+  t3.threads.discoverAvailable = false;
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();
-  t3.loseLaunchReply = false;
-  t3.discoverAvailable = true;
-  const waiting = t3.launches.size;
+  t3.threads.loseLaunchReply = false;
+  t3.threads.discoverAvailable = true;
+  const waiting = t3.threads.launches.size;
 
   // Act
   await f.reconcileRuns();
@@ -130,9 +130,11 @@ it("a lost creator reply is recovered by search without a second worktree, and t
   // Assert
   const run = await f.getRun(started.value.id);
   assert(run.ok);
-  const strategies = [...t3.launches.values()].map((launch) => launch.payload.workspaceStrategy);
+  const strategies = [...t3.threads.launches.values()].map(
+    (launch) => launch.payload.workspaceStrategy,
+  );
   expect(waiting).toBe(1);
-  expect(t3.launchCalls).toBe(2);
+  expect(t3.threads.launchCalls).toBe(2);
   expect(strategies.map((strategy) => strategy.type)).toStrictEqual([
     "worktree",
     "existing_worktree",
@@ -143,19 +145,21 @@ it("a lost creator reply is recovered by search without a second worktree, and t
 it("restart before the worktree is bound binds it and launches the other worker once", async (c) => {
   // Arrange
   const { h, f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();
   await f.close();
-  t3.worktreeMetadataPending = false;
+  t3.threads.worktreeMetadataPending = false;
 
   // Act
   const reopened = await h.open({ t3, connectionRetryMs: 60_000 });
 
   // Assert
-  expect(t3.launchCalls).toBe(2);
-  const strategies = [...t3.launches.values()].map((launch) => launch.payload.workspaceStrategy);
+  expect(t3.threads.launchCalls).toBe(2);
+  const strategies = [...t3.threads.launches.values()].map(
+    (launch) => launch.payload.workspaceStrategy,
+  );
   expect(strategies).toMatchObject([
     { type: "worktree" },
     { type: "existing_worktree", worktreePath: "/t3-worktrees/thread-1" },
@@ -168,24 +172,24 @@ it("restart before the worktree is bound binds it and launches the other worker 
 it("restart with a joining launch unresolved recovers it by search without another launch", async (c) => {
   // Arrange
   const { h, f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();
-  t3.worktreeMetadataPending = false;
-  t3.loseLaunchReply = true;
-  t3.discoverAvailable = false;
+  t3.threads.worktreeMetadataPending = false;
+  t3.threads.loseLaunchReply = true;
+  t3.threads.discoverAvailable = false;
   await f.reconcileRuns();
-  assert(t3.launches.size === 2);
+  assert(t3.threads.launches.size === 2);
   await f.close();
-  t3.loseLaunchReply = false;
-  t3.discoverAvailable = true;
+  t3.threads.loseLaunchReply = false;
+  t3.threads.discoverAvailable = true;
 
   // Act
   const reopened = await h.open({ t3, connectionRetryMs: 60_000 });
 
   // Assert
-  expect(t3.launchCalls).toBe(2);
+  expect(t3.threads.launchCalls).toBe(2);
   const run = await reopened.getRun(started.value.id);
   assert(run.ok);
   expect(run.value.blocks[1]).toMatchObject({ threadId: "thread-2", recovery: null });
@@ -197,8 +201,11 @@ it("a worker thread that reports a worktree other than the Run's is a scope chan
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();
-  const moved = await t3.readExecution(project, "thread-2");
-  t3.executionObservations.set("thread-2", { ...moved, workspaceRoot: "/t3-worktrees/other" });
+  const moved = await t3.threads.readExecution(project, "thread-2");
+  t3.threads.executionObservations.set("thread-2", {
+    ...moved,
+    workspaceRoot: "/t3-worktrees/other",
+  });
 
   // Act
   await f.reconcileRuns();
@@ -215,7 +222,7 @@ it("a worker thread that reports a worktree other than the Run's is a scope chan
 it("a rejected worktree-creating launch is a Block error and launches no other worker into the project root", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.rejectLaunch = true;
+  t3.threads.rejectLaunch = true;
   const started = await f.startRun(input);
   assert(started.ok);
 
@@ -225,7 +232,7 @@ it("a rejected worktree-creating launch is a Block error and launches no other w
   // Assert
   const run = await f.getRun(started.value.id);
   assert(run.ok);
-  expect(t3.launchCalls).toBe(1);
+  expect(t3.threads.launchCalls).toBe(1);
   expect(run.value.blocks.map(({ state, problem }) => ({ state, problem }))).toStrictEqual([
     { state: "error", problem: "T3 rejected the worker launch." },
     {
@@ -245,18 +252,18 @@ it("a rejected worktree-creating launch is a Block error and launches no other w
 it("binding the worktree launches no worker for a Block whose turn has not come", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeReviewFlow);
-  t3.worktreeMetadataPending = true;
+  t3.threads.worktreeMetadataPending = true;
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();
-  t3.worktreeMetadataPending = false;
+  t3.threads.worktreeMetadataPending = false;
 
   // Act
   await f.reconcileRuns();
   await f.reconcileRuns();
 
   // Assert
-  expect(t3.launchCalls).toBe(1);
+  expect(t3.threads.launchCalls).toBe(1);
   const run = await f.getRun(started.value.id);
   assert(run.ok);
   expect(run.value.workspace).toMatchObject({ state: "bound", path: "/t3-worktrees/thread-1" });
@@ -281,9 +288,9 @@ it("after a Human step, the first arrival at a later Block launches its worker w
   await f.reconcileRuns();
 
   // Assert
-  const [creator, parallel] = [...t3.launches.values()].map(({ payload }) => payload);
-  expect(t3.launchCalls).toBe(2);
-  expect(t3.sends.size).toBe(0);
+  const [creator, parallel] = [...t3.threads.launches.values()].map(({ payload }) => payload);
+  expect(t3.threads.launchCalls).toBe(2);
+  expect(t3.threads.sends.size).toBe(0);
   expect(parallel).toMatchObject({
     title: "Factory #1 · 3 Parallel work",
     workspaceStrategy: {
@@ -320,9 +327,9 @@ it("a Flow that returns to an earlier Block revisits its thread in the same work
   await f.reconcileRuns();
 
   // Assert
-  const sends = [...t3.sends.values()].map(({ payload }) => payload.threadId);
+  const sends = [...t3.threads.sends.values()].map(({ payload }) => payload.threadId);
   expect(sends).toStrictEqual(["thread-1"]);
-  expect(t3.launchCalls).toBe(2);
+  expect(t3.threads.launchCalls).toBe(2);
   const run = await f.getRun(runId);
   assert(run.ok);
   expect(run.value.workspace).toMatchObject({
@@ -348,9 +355,9 @@ it("a send that fails while the worker's worktree is missing stays unresolved an
     ...setup,
     ...(await laterResultReturning(setup.world, approved, entry)),
   };
-  t3.beforeSend = () => Promise.reject(Error("Worktree directory does not exist"));
+  t3.threads.beforeSend = () => Promise.reject(Error("Worktree directory does not exist"));
   await f.reconcileRuns();
-  delete t3.beforeSend;
+  delete t3.threads.beforeSend;
 
   // Act
   await f.reconcileRuns();
@@ -358,7 +365,9 @@ it("a send that fails while the worker's worktree is missing stays unresolved an
   // Assert
   const run = await f.getRun(runId);
   assert(run.ok);
-  expect([...t3.sends.values()].map(({ payload }) => payload.threadId)).toStrictEqual(["thread-1"]);
+  expect([...t3.threads.sends.values()].map(({ payload }) => payload.threadId)).toStrictEqual([
+    "thread-1",
+  ]);
   expect(run.value.blocks[0]).toMatchObject({ threadId: "thread-1", state: "working" });
 });
 
@@ -376,7 +385,7 @@ it("a worktree Run settles once its visited Block finishes, with no worker for i
   const run = await f.getRun(runId);
   assert(run.ok);
   expect(run.value.lifecycle).toBe("settled");
-  expect(t3.launchCalls).toBe(1);
+  expect(t3.threads.launchCalls).toBe(1);
 });
 
 it("a rejected launch for a later Block keeps the worktree Run from settling without that Block's result", async (c) => {
@@ -386,7 +395,7 @@ it("a rejected launch for a later Block keeps the worktree Run from settling wit
   const reported = await resultReported(setup.world, entry);
   const review = await resultReleasedToHumanReview(setup.world, reported);
   const { f, t3, runId } = { ...setup, ...(await reviewApproved(setup.world, review)) };
-  t3.rejectLaunch = true;
+  t3.threads.rejectLaunch = true;
 
   // Act
   await f.reconcileRuns();

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { RunDetail } from "@t3-factory/contracts";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
 import type { RequestReportSettlement, RunStore } from "./run-store/run-store.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { readWorkerThread } from "./worker-thread.ts";
@@ -72,7 +72,7 @@ function recoveryChain(
 export function settleRecoveries(
   store: RunStore,
   lifecycle: RunnerLifecycle,
-  t3: T3Adapter,
+  t3: T3Threads,
   id: string,
 ) {
   return Effect.gen(function* () {

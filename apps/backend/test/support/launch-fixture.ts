@@ -1,5 +1,5 @@
 import { expect, type TestContext } from "@effect/vitest";
-import type { LaunchPayload } from "../../src/adapters/t3.ts";
+import type { LaunchPayload } from "../../src/t3/threads.ts";
 import { authorizedLiveOAuth } from "./boundaries-setup.ts";
 
 export async function launchFixture(c: TestContext) {
@@ -34,7 +34,7 @@ export async function launchFixture(c: TestContext) {
   const exactReads: string[] = [];
   let proof: string | null = null;
   let proofFails = false;
-  const { live, adapter, external } = await authorizedLiveOAuth(
+  const { live, threads, external } = await authorizedLiveOAuth(
     c,
     {
       attachments: true,
@@ -116,7 +116,7 @@ export async function launchFixture(c: TestContext) {
   };
   return {
     live,
-    adapter,
+    threads,
     external,
     schema,
     payload,

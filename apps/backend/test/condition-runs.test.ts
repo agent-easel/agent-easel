@@ -105,7 +105,7 @@ it("arrivals from two workers share one count, and each selection forwards its o
     threadId: null,
   });
   expect(run.attention.filter((matter) => matter.blockId === "gate")).toStrictEqual([]);
-  expect(f.t3.launches.size).toBe(3);
+  expect(f.t3.threads.launches.size).toBe(3);
   const followUp = await f.f.runtime.block({
     arguments: { blockId: launchedBlockId(f.t3, "Follow-up") },
   });
@@ -237,7 +237,7 @@ it.effect(
         ["review", "handoff"],
       ]);
       expect(run.value.humanOccurrences).toMatchObject([{ context: "For both." }]);
-      expect(f.t3.launches.size).toBe(2);
+      expect(f.t3.threads.launches.size).toBe(2);
     }),
 );
 
@@ -298,7 +298,7 @@ it("Archive after a committed selection keeps it as history and cancels its unse
       .map((intent) => intent.state),
   ).toStrictEqual(["cancelled"]);
   expect(archived.value.blocks.find((block) => block.blockId === "gate")?.state).toBe("finished");
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("Archive racing acceptance leaves a count matching its recorded selections and nothing to deliver", async (c) => {
@@ -326,7 +326,7 @@ it("Archive racing acceptance leaves a count matching its recorded selections an
         intent.state !== "acknowledged",
     ),
   ).toStrictEqual([]);
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("a confirmed Settle that closes the gate before a result reaches the Condition accepts no decision", async (c) => {
@@ -351,7 +351,7 @@ it("a confirmed Settle that closes the gate before a result reaches the Conditio
   ]);
   expect(run.value.intents.find((intent) => intent.blockId === "gate")?.state).toBe("cancelled");
   expect(run.value.blocks.find((block) => block.blockId === "gate")?.state).toBe("not-started");
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("an empty Human approval passes through the Condition unchanged with the reviewed worker", async (c) => {

@@ -134,9 +134,9 @@ function runTransitions(context: Context) {
       return generatedTitleApplied(context, run.id, title);
     },
     "Stop taken while the turn continues": (run: RunDetail) =>
-      t3.holdStops(run.threadBindings.map((binding) => binding.threadId)),
+      t3.threads.holdStops(run.threadBindings.map((binding) => binding.threadId)),
     "stopped turns ended": (run: RunDetail) =>
-      t3.finishHeldStops(run.threadBindings.map((binding) => binding.threadId)),
+      t3.threads.finishHeldStops(run.threadBindings.map((binding) => binding.threadId)),
   };
 }
 

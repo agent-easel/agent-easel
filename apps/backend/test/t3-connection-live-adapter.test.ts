@@ -24,7 +24,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
   // Arrange
   let readReached!: () => void;
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
-  const { live, adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, adapter, threads, external, endpoint } = await authorizedLiveOAuth(context, {
     projects: true,
     runtimeActivity: () => {
       readReached();
@@ -41,8 +41,8 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
   // Act
   const answers = await Promise.all([
     live.contract.inspect({ endpoint }),
-    adapter.sendMessage({ endpoint }, queuedSend),
-    adapter.readExecution({ endpoint }, "thread-1"),
+    threads.sendMessage({ endpoint }, queuedSend),
+    threads.readExecution({ endpoint }, "thread-1"),
     adapter.listProjects({ endpoint, environmentId: "fixture-environment" }),
   ]);
 
@@ -58,11 +58,11 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
 
 it("after T3 forgets its sessions, the next call succeeds on a new connection", async (context) => {
   // Arrange
-  const { adapter, external, endpoint } = await connectedLiveT3(context);
+  const { threads, external, endpoint } = await connectedLiveT3(context);
   external.dropSessions();
 
   // Act
-  const observation = await adapter.readExecution({ endpoint }, "thread-1");
+  const observation = await threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   expect(observation.threadId).toBe("thread-1");
@@ -94,7 +94,7 @@ it("after T3 changes a tool's output schema, the shared connection checks the ne
 it("a send whose request may have reached T3 is not resent and reports T3 unavailable", async (context) => {
   // Arrange
   const sends: unknown[] = [];
-  const { adapter, external, endpoint } = await connectedLiveT3(context, {
+  const { threads, external, endpoint } = await connectedLiveT3(context, {
     send: (args) => {
       sends.push(args);
       external.dropSessions();
@@ -103,7 +103,7 @@ it("a send whose request may have reached T3 is not resent and reports T3 unavai
   });
 
   // Act
-  const sent = adapter.sendMessage({ endpoint }, queuedSend);
+  const sent = threads.sendMessage({ endpoint }, queuedSend);
 
   // Assert
   await expect(sent).rejects.toMatchObject({ kind: "unavailable" });
@@ -112,11 +112,11 @@ it("a send whose request may have reached T3 is not resent and reports T3 unavai
 
 it("a reply lost after T3's 200 headers reports T3 unavailable, not an invalid answer", async (context) => {
   // Arrange
-  const { adapter, external, endpoint } = await connectedLiveT3(context);
+  const { threads, external, endpoint } = await connectedLiveT3(context);
   external.cutNextToolReply();
 
   // Act
-  const sent = adapter.sendMessage({ endpoint }, queuedSend);
+  const sent = threads.sendMessage({ endpoint }, queuedSend);
 
   // Assert
   await expect(sent).rejects.toMatchObject({ kind: "unavailable" });
@@ -124,14 +124,14 @@ it("a reply lost after T3's 200 headers reports T3 unavailable, not an invalid a
 
 it("after re-authorization, calls use a new connection and never the previous grant's", async (context) => {
   // Arrange
-  const { factory, adapter, external, endpoint, authorizationUrl } = await connectedLiveT3(context);
-  await adapter.readExecution({ endpoint }, "thread-1");
+  const { factory, threads, external, endpoint, authorizationUrl } = await connectedLiveT3(context);
+  await threads.readExecution({ endpoint }, "thread-1");
   const previous = threadReadSession(external.sessionRequests);
   await factory.authorizeConnection();
   expect((await fetch(external.approvalUrl(authorizationUrl()))).status).toBe(200);
 
   // Act
-  const observation = await adapter.readExecution({ endpoint }, "thread-1");
+  const observation = await threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   expect(observation.threadId).toBe("thread-1");
@@ -155,15 +155,15 @@ it.for([
   ["closing T3", (live: T3Modules) => live.close()],
 ] as const)("after %s, the next call opens a new connection", async ([, change], context) => {
   // Arrange
-  const { live, adapter, external, endpoint } = await connectedLiveT3(context);
+  const { live, threads, external, endpoint } = await connectedLiveT3(context);
   const other = await oauthT3();
   context.onTestFinished(() => other.close());
-  await adapter.readExecution({ endpoint }, "thread-1");
+  await threads.readExecution({ endpoint }, "thread-1");
   const previous = threadReadSession(external.sessionRequests);
   await change(live, endpoint, other.endpoint);
 
   // Act
-  const observation = await adapter.readExecution({ endpoint }, "thread-1");
+  const observation = await threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   expect(observation.threadId).toBe("thread-1");

@@ -19,7 +19,7 @@ const continuation = (run: RunDetail, blockId: string) =>
 
 /** The prompt Factory queued on `worker`'s thread for a Continuation, and the Block id it states. */
 export function promptOn(world: ScenarioWorld, worker: WorkerHandle) {
-  const send = [...world.t3.sends.values()]
+  const send = [...world.t3.threads.sends.values()]
     .filter((entry) => entry.payload.threadId === worker.threadId)
     .at(-1);
   if (!send) throw Error(`T3 received no prompt on ${worker.threadId}.`);

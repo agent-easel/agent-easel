@@ -3,13 +3,9 @@ import { readFileSync } from "node:fs";
 import { writeState } from "./write-state.ts";
 import { join } from "node:path";
 import { ControlledT3 } from "../../apps/backend/test/support/controlled-t3.ts";
-import {
-  answerDelegatedWait,
-  endThreadRun,
-  recordLaunchedThread,
-  startQueuedSend,
-} from "../../apps/backend/test/support/controlled-thread.ts";
-import type { LaunchPayload, SendPayload } from "../../apps/backend/src/adapters/t3.ts";
+import type { ControlledT3Connection } from "../../apps/backend/test/support/controlled-t3-connection.ts";
+import { ControlledT3Threads } from "../../apps/backend/test/support/controlled-t3-threads.ts";
+import type { LaunchPayload, SendPayload } from "../../apps/backend/src/t3/threads.ts";
 import {
   T3Failure,
   type T3Endpoint,
@@ -25,10 +21,11 @@ type SavedState = Omit<Snapshot, "version" | "settledThreads" | "unendedStops"> 
 /** A local simulated engine. Its accepted keys outlive the Factory process. */
 export class PersistentT3 extends ControlledT3 {
   private readonly statePath: string;
-  /** Simulated subagent threads each worker delegated to; Factory never reads them. */
-  private readonly subagents = new Map<string, string[]>();
-  /** Threads whose Stop T3 acknowledges while their runs keep going, until a journey ends them. */
-  private readonly unendedStops = new Set<string>();
+  declare readonly threads: PersistentT3Threads;
+
+  protected override makeThreads(projectWorkspace: (projectId: string) => string | null) {
+    return new PersistentT3Threads(this.connection, projectWorkspace, () => this.save());
+  }
 
   constructor(home: string, restore: boolean) {
     super();
@@ -36,7 +33,7 @@ export class PersistentT3 extends ControlledT3 {
     this.connection.authorized = true;
     this.connection.authorize = async () => {
       this.connection.authorized = true;
-      this.saveAccepted();
+      saveAccepted(() => this.save());
     };
     this.contract.serverVersion = "local-development-simulator";
     // A provider T3 offers but Factory cannot correlate reports from yet.
@@ -49,28 +46,24 @@ export class PersistentT3 extends ControlledT3 {
     if (restore) this.restore();
   }
 
-  protected override launchIds(_n: number) {
-    const threadId = randomUUID();
-    return { threadId, runId: `run:thread:${threadId}:ordinal:1` };
-  }
-
   private restore() {
     try {
       const saved = JSON.parse(readFileSync(this.statePath, "utf8")) as SavedState;
       if (saved.version < 3 || saved.version > 5)
         throw new Error("Unsupported demo engine state; run pnpm db:reset.");
       this.connection.identity = saved.identity;
-      for (const [key, value] of saved.subagents) this.subagents.set(key, value);
+      for (const [key, value] of saved.subagents) this.threads.subagents.set(key, value);
       for (const [key, value] of saved.delegatedSettlements)
-        this.delegatedSettlements.set(key, value);
+        this.threads.delegatedSettlements.set(key, value);
 
       this.projects = saved.projects;
       this.projectCreates = saved.projectCreates;
-      for (const [key, value] of saved.launches) this.launches.set(key, value);
-      for (const [key, value] of saved.sends) this.sends.set(key, value);
-      for (const [key, value] of saved.executions) this.executionObservations.set(key, value);
-      for (const threadId of saved.settledThreads ?? []) this.settledThreads.add(threadId);
-      for (const threadId of saved.unendedStops ?? []) this.unendedStops.add(threadId);
+      for (const [key, value] of saved.launches) this.threads.launches.set(key, value);
+      for (const [key, value] of saved.sends) this.threads.sends.set(key, value);
+      for (const [key, value] of saved.executions)
+        this.threads.executionObservations.set(key, value);
+      for (const threadId of saved.settledThreads ?? []) this.threads.settledThreads.add(threadId);
+      for (const threadId of saved.unendedStops ?? []) this.threads.unendedStops.add(threadId);
     } catch (cause) {
       throw new Error(
         "Demo engine state is missing, damaged or incompatible. Run pnpm db:reset to restore scenarios.",
@@ -83,16 +76,16 @@ export class PersistentT3 extends ControlledT3 {
     return {
       version: 5,
       identity: this.connection.identity,
-      subagents: [...this.subagents],
-      delegatedSettlements: [...this.delegatedSettlements],
+      subagents: [...this.threads.subagents],
+      delegatedSettlements: [...this.threads.delegatedSettlements],
 
       projects: this.projects,
       projectCreates: this.projectCreates,
-      launches: [...this.launches],
-      sends: [...this.sends],
-      executions: [...this.executionObservations],
-      settledThreads: [...this.settledThreads],
-      unendedStops: [...this.unendedStops],
+      launches: [...this.threads.launches],
+      sends: [...this.threads.sends],
+      executions: [...this.threads.executionObservations],
+      settledThreads: [...this.threads.settledThreads],
+      unendedStops: [...this.threads.unendedStops],
     };
   }
 
@@ -100,14 +93,33 @@ export class PersistentT3 extends ControlledT3 {
     writeState(this.statePath, this.snapshot());
   }
 
-  /** Saves after T3 accepted an adapter call. A failed save leaves that call's outcome uncertain,
-   * which callers handle as an unavailable T3, never as a raw file error. */
-  private saveAccepted() {
-    try {
-      this.save();
-    } catch {
-      throw new T3Failure("unavailable", "The demo T3 could not save its state.");
-    }
+  override async createProject(target: T3ProjectTarget) {
+    const project = await super.createProject(target);
+    saveAccepted(() => this.save());
+    return project;
+  }
+}
+
+class PersistentT3Threads extends ControlledT3Threads {
+  private readonly save: () => void;
+
+  constructor(
+    connection: ControlledT3Connection,
+    projectWorkspace: (projectId: string) => string | null,
+    save: () => void,
+  ) {
+    super(connection, projectWorkspace);
+    this.save = save;
+  }
+
+  /** Simulated subagent threads each worker delegated to; Factory never reads them. */
+  readonly subagents = new Map<string, string[]>();
+  /** Threads whose Stop T3 acknowledges while their runs keep going, until a journey ends them. */
+  readonly unendedStops = new Set<string>();
+
+  protected override launchIds(_n: number) {
+    const threadId = randomUUID();
+    return { threadId, runId: `run:thread:${threadId}:ordinal:1` };
   }
 
   private delegatedWorkActive(threadId: string): boolean {
@@ -134,9 +146,9 @@ export class PersistentT3 extends ControlledT3 {
       pendingRequestCount: 0,
       recentRuns: [{ runId, status: "running", ordinal: 1 }],
     });
-    answerDelegatedWait(this, threadId, runId, "pending", "running");
+    this.answerDelegatedWait(threadId, runId, "pending", "running");
     this.subagents.set(parentThreadId, [...(this.subagents.get(parentThreadId) ?? []), threadId]);
-    endThreadRun(this, parentThreadId, parentRunId);
+    this.endThreadRun(parentThreadId, parentRunId);
     this.save();
   }
 
@@ -149,7 +161,7 @@ export class PersistentT3 extends ControlledT3 {
 
   async advance() {
     for (const { payload, reference } of this.sends.values())
-      startQueuedSend(this, payload.threadId, reference.runId);
+      this.startQueuedSend(payload.threadId, reference.runId);
     this.save();
   }
 
@@ -159,7 +171,7 @@ export class PersistentT3 extends ControlledT3 {
   ) {
     await super.stopThread(target, payload);
     if (!this.unendedStops.has(payload.threadId)) this.interrupt(payload.threadId);
-    this.saveAccepted();
+    saveAccepted(this.save);
   }
 
   /** T3 acknowledges each later Stop of `threadIds` but keeps their runs going. */
@@ -180,15 +192,15 @@ export class PersistentT3 extends ControlledT3 {
     const observation = this.executionObservations.get(threadId);
     for (const run of observation?.recentRuns ?? []) {
       if (!["completed", "failed", "interrupted", "cancelled", "rolled_back"].includes(run.status))
-        endThreadRun(this, threadId, run.runId, "interrupted");
+        this.endThreadRun(threadId, run.runId, "interrupted");
     }
     for (const child of this.subagents.get(threadId) ?? []) this.interrupt(child);
   }
 
   override async launchThread(target: T3Endpoint, payload: LaunchPayload) {
     const reference = await super.launchThread(target, payload);
-    await recordLaunchedThread(this, reference.threadId);
-    this.saveAccepted();
+    await this.recordLaunchedThread(reference.threadId);
+    saveAccepted(this.save);
     return reference;
   }
 
@@ -214,18 +226,22 @@ export class PersistentT3 extends ControlledT3 {
         ],
       });
     }
-    this.saveAccepted();
+    saveAccepted(this.save);
     return reference;
   }
 
   override async settleThread(target: T3Endpoint, payload: { threadId: string }) {
     await super.settleThread(target, payload);
-    this.saveAccepted();
+    saveAccepted(this.save);
   }
+}
 
-  override async createProject(target: T3ProjectTarget) {
-    const project = await super.createProject(target);
-    this.saveAccepted();
-    return project;
+/** Saves after T3 accepted an adapter call. A failed save leaves that call's outcome uncertain,
+ * which callers handle as an unavailable T3, never as a raw file error. */
+function saveAccepted(save: () => void) {
+  try {
+    save();
+  } catch {
+    throw new T3Failure("unavailable", "The demo T3 could not save its state.");
   }
 }

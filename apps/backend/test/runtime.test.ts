@@ -16,8 +16,8 @@ it("missing user installation blocks readiness without launching setup work", as
   expect(readiness.value.ready).toBe(false);
   assert(readiness.value.issues.some((issue) => issue.code === "reporting_installation"));
   expect(await readdir(root)).toStrictEqual([".git"]);
-  expect(t3.launches.size).toBe(0);
-  expect(t3.sends.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
+  expect(t3.threads.sends.size).toBe(0);
   expect(t3.connection.authorizationStarts).toBe(0);
 });
 

@@ -74,7 +74,7 @@ export async function restoreCapturedAdapter(
 ) {
   const t3 = new ControlledT3();
   // Older captures record the controlled engine's fields as one flat object.
-  const parts = [t3, t3.connection, t3.contract];
+  const parts = [t3, t3.connection, t3.contract, t3.threads];
   for (const [key, value] of Object.entries(observations)) {
     if (retired.has(key)) continue;
     const part = parts.find((candidate) => Object.hasOwn(candidate, key));

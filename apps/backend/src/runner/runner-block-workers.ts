@@ -1,6 +1,6 @@
 import type { RunDefinitions, RunImage } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
-import type { LaunchAttachment, LaunchPayload, T3Adapter } from "../adapters/t3.ts";
+import type { LaunchAttachment, LaunchPayload, T3Threads } from "../t3/threads.ts";
 import { isT3Refusal, type T3Target } from "../t3/connection.ts";
 import { attachmentSupport, type T3Support } from "../t3/contract.ts";
 import { recoverOperation } from "./runner-effects.ts";
@@ -40,7 +40,7 @@ function blockAgent(definitions: RunDefinitions, blockId: string) {
 /** Pending launches are sent once. Reserved and uncertain ones are only searched. */
 export function dispatchBlockLaunch(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   images: RunImages,
   runRow: RunRow,
   launch: Delivery,
@@ -138,7 +138,7 @@ function verifiedStoredLaunch(run: RunRow, launch: Delivery) {
 /** A launch matches by its one execution. */
 function searchLaunchedWorker(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   runRow: RunRow,
   launch: Delivery,
   payload: LaunchPayload,
@@ -166,7 +166,7 @@ function retryNotBefore(current: string, attempt: number) {
 
 type LaunchContext = {
   store: RunStore;
-  t3: T3Adapter;
+  t3: T3Threads;
   images: RunImages;
   runRow: RunRow;
   launch: Delivery;
