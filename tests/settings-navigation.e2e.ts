@@ -179,23 +179,29 @@ test("searching for a Worker option or a fixed shortcut finds its section", asyn
   await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
 });
 
-test("a Worker option search after T3 reconnects finds Run titles again", async ({
-  fixture,
-  app,
-  screen,
-}) => {
-  // Arrange: the first search runs while T3 is away, so it has no Worker options to match.
-  await app.open("/settings/connection");
-  await fixture.remoteAccess.t3Unavailable();
-  const search = screen.getByLabel("Search settings");
-  await search.fill("fast mode");
-  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
-  await search.fill("");
-  await fixture.remoteAccess.t3Available();
+/**
+ * Two T3 recovery paths for a Worker option search: the field is cleared before T3 returns, or a
+ * query stays filled through the reconnect and is then replaced directly.
+ */
+for (const { name, whileAway, clearFirst } of [
+  { name: "a search started after T3 reconnects", whileAway: "fast mode", clearFirst: true },
+  { name: "a search kept open while T3 reconnects", whileAway: "run", clearFirst: false },
+]) {
+  test(`${name} finds a Worker option in Run titles`, async ({ fixture, app, screen }) => {
+    // Arrange: the first search runs while T3 is away, so it has no Worker options to match.
+    await app.open("/settings/connection");
+    await fixture.remoteAccess.t3Unavailable();
+    const search = screen.getByLabel("Search settings");
+    await search.fill(whileAway);
+    if (clearFirst) await search.fill("");
+    await fixture.remoteAccess.t3Available();
+    // The open T3 connection page shows the recovered state even when the search hides its row.
+    await expect(screen.getByText("Connected", { exact: true })).toBeVisible();
 
-  // Act
-  await search.fill("fast mode");
+    // Act: type or directly replace the query.
+    await search.fill("fast mode");
 
-  // Assert
-  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
-});
+    // Assert
+    await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
+  });
+}

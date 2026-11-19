@@ -230,10 +230,12 @@ function matchingSections(
 
 /**
  * Run titles shows one row per option of the chosen Worker, and those labels come from T3's
- * capabilities. Each search reads them again, so a search after T3 recovers matches the rows the
- * Run titles pane shows; until a read answers, the last labels stay.
+ * capabilities. They are read again when a search starts and whenever the T3 connection changes
+ * during one, so a search that stays open while T3 recovers matches the rows the Run titles pane
+ * shows. Until a read answers, the last labels stay.
  */
 function useWorkerOptionLabels(searching: boolean) {
+  const { presentation } = useConnectionState();
   const [labels, setLabels] = useState<readonly string[]>([]);
   useEffect(() => {
     if (!searching) return;
@@ -251,7 +253,7 @@ function useWorkerOptionLabels(searching: boolean) {
     return () => {
       active = false;
     };
-  }, [searching]);
+  }, [searching, presentation]);
   return labels;
 }
 
