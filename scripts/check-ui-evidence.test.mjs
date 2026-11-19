@@ -5,10 +5,9 @@ import { checkUiEvidence } from "./check-ui-evidence.mjs";
 await test("evidence images with nested brackets in their labels are accepted", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
-![state [open] view](https://example.com/before.png)
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| ![state [open] view](https://example.com/before.png) | ![after](https://example.com/after.png) |
 `;
 
   // Act
@@ -21,10 +20,9 @@ await test("evidence images with nested brackets in their labels are accepted", 
 await test("evidence images with escaped brackets in their labels are accepted", () => {
   // Arrange
   const body = String.raw`## UI screenshots
-### Before
-![a \] b](https://example.com/before.png)
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| ![a \] b](https://example.com/before.png) | ![after](https://example.com/after.png) |
 `;
 
   // Act
@@ -37,10 +35,9 @@ await test("evidence images with escaped brackets in their labels are accepted",
 await test("evidence images with a title after the HTTPS URL are accepted", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
-![before](https://example.com/before.png "Before view")
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| ![before](https://example.com/before.png "Before view") | ![after](https://example.com/after.png) |
 `;
 
   // Act
@@ -53,10 +50,9 @@ await test("evidence images with a title after the HTTPS URL are accepted", () =
 await test("a missing After image is reported", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
-![before](https://example.com/before.png)
-### After
-Pending capture.
+| Before | After |
+| --- | --- |
+| ![before](https://example.com/before.png) | Pending capture. |
 `;
 
   // Act
@@ -69,10 +65,9 @@ Pending capture.
 await test("an image inside an HTML comment does not satisfy Before evidence", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
-<!-- ![before](https://example.com/before.png) -->
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| <!-- ![before](https://example.com/before.png) --> | ![after](https://example.com/after.png) |
 `;
 
   // Act
@@ -85,12 +80,14 @@ await test("an image inside an HTML comment does not satisfy Before evidence", (
 await test("an image inside a fenced code block does not satisfy Before evidence", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
 \`\`\`markdown
-![before](https://example.com/before.png)
+| Before | After |
+| --- | --- |
+| ![before](https://example.com/before.png) | |
 \`\`\`
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| | ![after](https://example.com/after.png) |
 `;
 
   // Act
@@ -108,10 +105,9 @@ await test("CRLF evidence after a fenced block is accepted", () => {
     "pnpm check",
     "```",
     "## UI screenshots",
-    "### Before",
-    "![before](https://example.com/before.png)",
-    "### After",
-    "![after](https://example.com/after.png)",
+    "| Before | After |",
+    "| --- | --- |",
+    "| ![before](https://example.com/before.png) | ![after](https://example.com/after.png) |",
   ].join("\r\n");
 
   // Act
@@ -127,10 +123,9 @@ await test("an unmatched backtick does not hide later evidence", () => {
 Run \`pnpm dev to see it.
 
 ## UI screenshots
-### Before
-![before](https://example.com/before.png)
-### After
-![after](https://example.com/after.png) uses \`code\`.
+| Before | After |
+| --- | --- |
+| ![before](https://example.com/before.png) | ![after](https://example.com/after.png) uses \`code\`. |
 `;
 
   // Act
@@ -143,10 +138,9 @@ Run \`pnpm dev to see it.
 await test("an image inside an inline code span does not satisfy Before evidence", () => {
   // Arrange
   const body = `## UI screenshots
-### Before
-\`![before](https://example.com/before.png)\`
-### After
-![after](https://example.com/after.png)
+| Before | After |
+| --- | --- |
+| \`![before](https://example.com/before.png)\` | ![after](https://example.com/after.png) |
 `;
 
   // Act

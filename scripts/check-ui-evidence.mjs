@@ -68,11 +68,41 @@ function subsection(section, label) {
   );
 }
 
+function tableCells(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim());
+}
+
+const delimiterRow = /^ {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+
+// Joins every cell under each "Before" and "After" table header, so one row per view still counts.
+function evidenceColumns(section) {
+  const lines = section.split("\n");
+  const columns = { Before: "", After: "" };
+  for (let index = 0; index + 1 < lines.length; index++) {
+    const header = tableCells(lines[index]);
+    if (!header.includes("Before") || !header.includes("After")) continue;
+    if (!delimiterRow.test(lines[index + 1])) continue;
+    for (let row = index + 2; row < lines.length && lines[row].includes("|"); row++) {
+      const cells = tableCells(lines[row]);
+      for (const label of ["Before", "After"]) {
+        columns[label] += `${cells[header.indexOf(label)] ?? ""}\n`;
+      }
+    }
+  }
+  return columns;
+}
+
 export function checkUiEvidence(body) {
   const section =
     stripCode(body).match(/^## UI screenshots\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)?.[1] ?? "";
   if (subsection(section, "No UI evidence").trim()) return [];
-  return ["Before", "After"].filter((label) => !hasHttpsImage(subsection(section, label)));
+  const columns = evidenceColumns(section);
+  return ["Before", "After"].filter((label) => !hasHttpsImage(columns[label]));
 }
 
 function readBody(args) {
@@ -94,7 +124,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     for (const label of checkUiEvidence(readBody(process.argv.slice(2)))) {
       console.error(
-        `::error::UI changes require an embedded HTTPS image under "### ${label}" in "## UI screenshots"; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
+        `::error::UI changes require an embedded HTTPS image in the "${label}" column of the "| Before | After |" table in "## UI screenshots"; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
       );
       process.exitCode = 1;
     }

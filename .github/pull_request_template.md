@@ -8,12 +8,18 @@
 
 ## UI screenshots
 
-<!-- Required for UI changes: embed Before and After screenshots of the affected views.
-Use ### Before and ### After headings with embedded HTTPS images; the UI evidence check
-only verifies their presence. Reference local images under those headings, upload with
-`gh pr edit --body-file <file> --attach <image>`, then run `pnpm check:ui-evidence --pr <number>`.
-Follow .agents/skills/verify-t3-factory/SKILL.md#evidence.
-When the change has no visible UI impact, replace the screenshots with a ### No UI evidence
+<!-- Required for UI changes: a table with Before on the left and After on the right, one row
+per affected view, so each pair compares without scrolling. GitHub scales each image to its
+column; a click opens it full size.
+
+| Before | After |
+| --- | --- |
+| ![Before: <view>](./before-<view>.png) | ![After: <view>](./after-<view>.png) |
+
+Upload the local images with `gh pr edit --body-file <file> --attach <image>`, then run
+`pnpm check:ui-evidence --pr <number>`; the UI evidence check only verifies an embedded HTTPS
+image in each column. Follow .agents/skills/verify-t3-factory/SKILL.md#evidence.
+When the change has no visible UI impact, replace the table with a ### No UI evidence
 heading followed by the reason; the check accepts any stated reason in place of images. -->
 
 ## Scope and contracts
