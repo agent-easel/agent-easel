@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
-import { expect } from "e2e";
+import type { Browser } from "@e2e-dev/web";
+import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
+import { liveRun } from "./support/live.ts";
 
 test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
   app,
@@ -63,28 +65,33 @@ test("a Wait added from the library saves with a missing duration as a readiness
   });
 });
 
+/** The one-minute Wait's journey Run `key` holding `message` as its first arrival, Wait selected. */
+async function openHeldPause(
+  { app, screen, browser }: { app: App; screen: Screen; browser: Browser },
+  key: string,
+  message: string,
+) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await prepareScenarios(app);
+  const runId = await liveRun(app, key, "pause");
+  await applyRunState(app, runId, "result reported", message);
+  await applyRunState(app, runId, "result released to a Wait");
+  await app.open(`/runs/${runId}`);
+  await screen.getByRole("button", /^Wait Pause a minute, Waiting/).tap();
+  return runId;
+}
+
 test("a waiting arrival is held with its message and forwarded by the backend once its minute elapses", async ({
-  fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app);
-  const { id: runId } = await fixture.scenarios.ensure({
-    key: "wait",
-    flow: "pause",
-  });
-  await applyRunState(
-    app,
-    runId,
-    "result reported",
+  const runId = await openHeldPause(
+    { app, screen, browser },
+    "wait",
     "## Ready after a short pause\n\n- Release notes checked",
   );
-  await applyRunState(app, runId, "result released to a Wait");
-  await app.open(`/runs/${runId}`);
-  await screen.getByRole("button", /^Wait Pause a minute, Waiting/).tap();
   const held = screen.getByRole("listitem", "Arrival 1, waiting");
   await expect(held.getByRole("heading", "Ready after a short pause")).toBeVisible();
   await app.screenshot("wait-one-arrival-pending");
@@ -110,12 +117,37 @@ test("a waiting arrival is held with its message and forwarded by the backend on
   await app.screenshot("wait-one-arrival-forwarded");
 });
 
-test("Continue now forwards the selected one of two waiting arrivals early; the block then offers it for the last one", async ({
+test("a held message's task-list link with a long unbroken label wraps inside the narrowest inspector", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
+  await openHeldPause(
+    { app, screen, browser },
+    "wait-long-link",
+    `- [x] [${"ReleaseNotesChecklist".repeat(10)}](https://example.com/atlas/release-notes)`,
+  );
+  const resize = screen.getByRole("separator", "Resize Run inspector");
+  await expect(
+    screen.getByRole("listitem", "Arrival 1, waiting").getByRole("checkbox", "Done"),
+  ).toBeVisible();
+
+  // Act
+  await resize.press("Home");
+
+  // Assert
+  await expect(resize).toHaveAttribute("aria-valuenow", "280");
+  expect(
+    await browser.evaluate(
+      `(() => { const arrival = document.querySelector('[aria-label="Arrival 1, waiting"]'); return arrival.scrollWidth <= arrival.clientWidth; })()`,
+    ),
+  ).toBe(true);
+  await app.screenshot("wait-long-task-link-narrow");
+});
+
+/** The seeded Run whose Wait holds two reviews for the morning sync, open on its Run page. */
+async function openMorningSyncRun(app: App, browser: Browser) {
   await browser.setViewport({ width: 1600, height: 1000 });
   await prepareScenarios(app);
   const held = await findRun(
@@ -123,6 +155,16 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
     "UI worker · Waiting · Two reviews held for the morning sync",
   );
   await app.open(`/runs/${held.id}`);
+  return held;
+}
+
+test("Continue now forwards the selected one of two waiting arrivals early; the block then offers it for the last one", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const held = await openMorningSyncRun(app, browser);
   const block = screen.getByRole("article", "Block Hold for the morning sync");
   await expect(block).toContainText("2 held · next until");
   await expect(screen.getByRole("button", "Continue Hold for the morning sync now")).toHaveCount(0);
@@ -151,4 +193,37 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
     ["forwarded", "user"],
     ["pending", null],
   ]);
+});
+
+test("Human occurrences a Wait forwarded name the reviewer and visit that wrote each message", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const held = await openMorningSyncRun(app, browser);
+  await screen.getByRole("button", /^Wait Hold for the morning sync, Waiting/).tap();
+  await screen.getByRole("button", "Continue arrival 1 now").tap();
+  await expect(screen.getByRole("listitem", "Arrival 1, forwarded")).toBeVisible();
+  await screen.getByRole("button", "Continue arrival 2 now").tap();
+  await expect(screen.getByRole("listitem", "Arrival 2, forwarded")).toBeVisible();
+
+  // Act
+  await app.open(`/runs/${held.id}`);
+
+  // Assert
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await expect(
+    inspector.getByRole("article", "Needs input · Your decision · From Code review · Visit 1", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    inspector.getByRole(
+      "article",
+      "Needs input · Your decision · From Accessibility review · Visit 1",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await app.screenshot("wait-forwarded-human-provenance");
 });

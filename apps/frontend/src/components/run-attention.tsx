@@ -574,17 +574,26 @@ function parallelSource(run: RunDetail, occurrence: HumanOccurrence | undefined)
   return parallel.length < 2 ? null : occurrenceSource(run, occurrence);
 }
 
-/** "From Review implementation · Visit 1": the Block and visit whose result reached the occurrence. */
+/**
+ * "From Review implementation · Visit 1": the Block and visit whose result the occurrence's message
+ * is. A Wait or Condition passes the message on with its worker provenance, so the delivery's
+ * origin names it; a person's answer, or a delivery without a known origin, names its sender.
+ */
 function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence) {
   const intent = run.intents.find((item) => item.id === occurrence.incomingIntentId);
   if (!intent?.sourceBlockId) return null;
-  const source = run.blocks.find((block) => block.blockId === intent.sourceBlockId);
-  const activationId = run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const activationId =
+    (!intent.occurrenceId && intent.origin?.activationId) ||
+    run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const blockId =
+    run.activations.find((activation) => activation.id === activationId)?.blockId ??
+    intent.sourceBlockId;
+  const source = run.blocks.find((block) => block.blockId === blockId);
   const visit =
     run.activations
-      .filter((activation) => activation.blockId === intent.sourceBlockId)
+      .filter((activation) => activation.blockId === blockId)
       .findIndex((activation) => activation.id === activationId) + 1;
-  return `From ${source?.name ?? intent.sourceBlockId}${visit ? ` · Visit ${visit}` : ""}`;
+  return `From ${source?.name ?? blockId}${visit ? ` · Visit ${visit}` : ""}`;
 }
 
 function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {

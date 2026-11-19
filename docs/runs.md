@@ -502,7 +502,7 @@ fixed Human exits their old exits were mapped to.
   integrity and errors.
 - A card that previews Agent-written text clamps it to its rendered beginning and fades it out when it continues. The
   link under the preview opens the full text in the **reader**, and appears only when the text is longer than the
-  preview or, for a result, when it has Technical details. While the preview is clamped, links and scrolling code or
+  preview. While the preview is clamped, links and scrolling code or
   tables that reach into its fade or below it are inert and left out of the tab order; the reader shows them all. The reader states where the text
   came from and has **Copy Markdown**, which copies the unmodified text, **Esc** and close; **Esc** returns focus to
   the link that opened it. Copying needs a secure context (Factory's own window, loopback or HTTPS); over a plain-HTTP
@@ -510,9 +510,11 @@ fixed Human exits their old exits were mapped to.
   - **Results.** The Overview of a Settled Run shows each activation's result title and **Read result**. Other result
     cards in the inspector and timeline preview the result with its exit, deliveries and acceptance time. The reader
     header shows the Block, visit, exit and time, with **Open in T3 ↗**; execution, completion, version and delivery
-    facts live under **Technical details**.
+    facts live under **Technical details**. When the result fits its preview, the card offers **Technical details** in
+    place of **Read result**; it opens the reader with those facts expanded.
   - **Human step context.** The decision card shows short context whole and previews long context with **Read full
-    context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time*** and has no decision
+    context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the visit
+    that wrote the context also when a Wait or Condition passed it on, and has no decision
     controls: **Decision**, **Response** and **Submit answer** follow the preview directly, so the answer is always given
     on the card. Parallel occurrences each have their own preview and reader.
   - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full

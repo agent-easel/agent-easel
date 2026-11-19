@@ -340,6 +340,48 @@ test("Read full report opens the Agent's whole Working report with its visit and
   await app.screenshot("worker-conversation-working-report-reader");
 });
 
+/** Twelve links, one per line, so the clamped preview shows the first ones and fades the rest. */
+const reportLinks = [
+  "- [Link 1](https://example.com/atlas/1)",
+  "- [Link 2](https://example.com/atlas/2)",
+  "- [Link 3](https://example.com/atlas/3)",
+  "- [Link 4](https://example.com/atlas/4)",
+  "- [Link 5](https://example.com/atlas/5)",
+  "- [Link 6](https://example.com/atlas/6)",
+  "- [Link 7](https://example.com/atlas/7)",
+  "- [Link 8](https://example.com/atlas/8)",
+  "- [Link 9](https://example.com/atlas/9)",
+  "- [Link 10](https://example.com/atlas/10)",
+  "- [Link 11](https://example.com/atlas/11)",
+  "- [Link 12](https://example.com/atlas/12)",
+].join("\n");
+
+test("at a 10 px browser font size, Tab skips the Working report links the clamped preview fades out or hides", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const id = await liveRun(app, "report-links-small-font");
+  await applyRunState(app, id, "working reported and idle", reportLinks);
+  await app.open(`/runs/${id}`);
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
+  // The preview re-measures on the resize the smaller root font causes, by the second frame.
+  await browser.evaluate(
+    `(document.documentElement.style.fontSize = "10px", new Promise((settle) => requestAnimationFrame(() => requestAnimationFrame(settle))))`,
+  );
+  await review.getByRole("link", "Link 4", { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Tab");
+
+  // Assert
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeFocused();
+});
+
 test("a worker idle in working shows its message on the canvas and in its Run preview", async ({
   app,
   screen,

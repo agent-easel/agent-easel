@@ -76,7 +76,9 @@ function markdownComponents(density: Density): Components {
     ),
     li: styled(
       "li",
-      "pl-0.5 [&.task-list-item]:flex [&.task-list-item]:items-center [&.task-list-item]:gap-2 [&>ol]:mt-1.5 [&>ul]:mt-1.5",
+      // A task item's text and links are flex items, which `break-words` cannot shrink below
+      // their longest word; `wrap-anywhere` lets a long unbroken link wrap.
+      "pl-0.5 [&.task-list-item]:flex [&.task-list-item]:items-center [&.task-list-item]:gap-2 [&.task-list-item]:wrap-anywhere [&>ol]:mt-1.5 [&>ul]:mt-1.5",
     ),
     blockquote: styled("blockquote", "flex flex-col gap-2 border-l-2 pl-3"),
     hr: styled("hr", "border-border"),
@@ -149,12 +151,15 @@ function TextReader({
   provenance,
   t3Link,
   technicalDetails,
+  detailsOpen,
   text,
   onClose,
   children,
 }: ReaderHeading & {
   /** The raw text **Copy Markdown** copies. */
   text: string;
+  /** Opens with Technical details expanded. */
+  detailsOpen?: boolean | undefined;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -195,7 +200,7 @@ function TextReader({
         </div>
         {technicalDetails && (
           <footer className="shrink-0 border-t px-5 pt-1.5 pb-2.5">
-            <TechnicalDetails details={technicalDetails} />
+            <TechnicalDetails details={technicalDetails} defaultOpen={detailsOpen} />
           </footer>
         )}
       </DialogSurface>
@@ -208,15 +213,17 @@ export function AgentTextReader({
   text,
   heading,
   empty,
+  detailsOpen,
   onClose,
 }: {
   text: string;
   heading: ReaderHeading;
   empty?: string | undefined;
+  detailsOpen?: boolean | undefined;
   onClose: () => void;
 }) {
   return (
-    <TextReader {...heading} text={text} onClose={onClose}>
+    <TextReader {...heading} text={text} detailsOpen={detailsOpen} onClose={onClose}>
       {text ? (
         <AgentMarkdown text={text} density="reader" />
       ) : (
@@ -230,7 +237,8 @@ export function AgentTextReader({
  * Collapsed previews fade out only when the text is longer than the preview. While clamped, a
  * link or scrolling block (code, table) reaching into the fade or below it is inert, so focus never
  * lands on what is barely visible or scrolls the preview; the reader keeps every one of them.
- * `fadeStart` is where the fade begins, in pixels from the preview's top.
+ * `fadeStart` is where the fade begins as a share of the preview's maximum height; both scale with
+ * the root font size, so the cutoff is measured from the rendered maximum height.
  */
 function useClampedPreview(text: string, fadeStart: number) {
   const ref = useRef<HTMLDivElement>(null);
@@ -243,7 +251,9 @@ function useClampedPreview(text: string, fadeStart: number) {
     }
     const measure = () => {
       const clamped = element.scrollHeight > element.clientHeight + 1;
-      const fade = element.getBoundingClientRect().top + fadeStart;
+      const fade =
+        element.getBoundingClientRect().top +
+        parseFloat(getComputedStyle(element).maxHeight) * fadeStart;
       for (const stop of element.querySelectorAll<HTMLElement>("a, pre, div:has(> table)"))
         stop.inert = clamped && stop.getBoundingClientRect().bottom > fade;
       setOverflowing(clamped);
@@ -256,13 +266,13 @@ function useClampedPreview(text: string, fadeStart: number) {
   return [ref, overflowing] as const;
 }
 
-/** Each preview size; `fadeStart` repeats in pixels where its `fade` class begins. */
+/** Each preview size; `fadeStart` repeats where its `fade` class begins, over its `clamp` height. */
 const previews = {
   result: {
     density: "card",
     clamp: "max-h-16",
     fade: "mask-b-from-8",
-    fadeStart: 32,
+    fadeStart: 8 / 16,
     gap: "gap-2.5",
   },
   // Figma RD42: the 64 px fade ends a 198 px preview, and the decision follows it.
@@ -270,7 +280,7 @@ const previews = {
     density: "primary",
     clamp: "max-h-49.5",
     fade: "mask-b-from-33.5",
-    fadeStart: 134,
+    fadeStart: 33.5 / 49.5,
     gap: "gap-1.5",
   },
 } as const;
@@ -279,8 +289,9 @@ type PreviewSize = keyof typeof previews;
 
 /**
  * Agent-written Markdown clamped to its rendered beginning, faded when it continues, with a link
- * that opens it in full in the reader. The link appears when the reader shows more than the card:
- * text beyond the preview, or Technical details. `footer` shares the link's row.
+ * that opens it in full in the reader when it continues. Text that fits offers its Technical
+ * details, when it has them, as a link opening the reader with them expanded instead. `footer`
+ * shares the link's row.
  */
 export function AgentTextPreview({
   text,
@@ -299,10 +310,10 @@ export function AgentTextPreview({
   /** A Needs input card previews more of its text, in the card's own text colour. */
   variant?: PreviewSize;
 }) {
-  const [reading, setReading] = useState(false);
+  const [reading, setReading] = useState<"text" | "details" | null>(null);
   const { density, clamp, fade, fadeStart } = previews[variant];
   const [preview, overflowing] = useClampedPreview(text, fadeStart);
-  const readable = overflowing || !!heading.technicalDetails;
+  const opens = overflowing ? "text" : heading.technicalDetails ? "details" : null;
   return (
     <>
       {text && (
@@ -314,19 +325,19 @@ export function AgentTextPreview({
           <AgentMarkdown text={text} density={density} />
         </div>
       )}
-      {(footer || readable) && (
+      {(footer || opens) && (
         <footer className="flex min-w-0 items-center gap-1.5">
           {footer}
-          {readable && (
+          {opens && (
             <Button
               type="button"
               variant="link"
               size="xs"
               // Figma RD42: alone on its row, the link lines up with the text above it.
               className={cn("text-label", !footer && "h-auto py-0.5 has-[>svg]:px-0")}
-              onClick={() => setReading(true)}
+              onClick={() => setReading(opens)}
             >
-              {readLabel}
+              {opens === "text" ? readLabel : "Technical details"}
               <Maximize2 aria-hidden />
             </Button>
           )}
@@ -337,7 +348,8 @@ export function AgentTextPreview({
           text={text}
           heading={heading}
           empty={empty}
-          onClose={() => setReading(false)}
+          detailsOpen={reading === "details"}
+          onClose={() => setReading(null)}
         />
       )}
     </>

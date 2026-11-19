@@ -16,6 +16,7 @@ import {
   connection,
   waitBlock,
   workingReported,
+  workingReportedIdle,
   report,
   workingReport,
   replyTurnObserved,
@@ -114,6 +115,8 @@ function runTransitions(context: Context) {
       resultReleasedToWait(context, workerOf(context, run)),
     "working reported": (run: RunDetail, message?: string) =>
       workingReported(context, workerOf(context, run), message),
+    "working reported and idle": (run: RunDetail, message?: string) =>
+      workingReportedIdle(context, workerOf(context, run), message),
     "reply turn observed": (run: RunDetail) =>
       replyTurnObserved(context, workerOf(context, run), "ui-worker-reply"),
     settled: (run: RunDetail) => settled(context, workerOf(context, run)),
