@@ -21,6 +21,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/sql/SqlClient";
+import { isSqlError } from "effect/sql/SqlError";
 import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
@@ -63,7 +64,7 @@ interface IngressSession {
   readonly operating: () => boolean;
   /** Creates the public thread for a parent-channel invocation; returns its ID. */
   readonly startThread: (channelId: string, messageId: string) => Promise<string>;
-  /** Hands an admitted message to Chat SDK, which calls `admitted` with its thread. */
+  /** Hands a message to Chat SDK and waits for its admission callback, if invoked, to finish. */
   readonly handOff: (threadId: string, message: Message) => Promise<void>;
   readonly encodeThreadId: (key: ConversationKey) => string;
   /** Publishes one Factory message in the conversation's thread, mentioning nobody. */
@@ -386,9 +387,10 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           Effect.suspend(() =>
             // Only an invocation still waiting for Chat SDK to hand it back owns this slot.
             pending.delete(message.id) && reservation !== "busy"
-              ? Effect.catch(reservation.cancel, () =>
+              ? Effect.catch(reservation.cancel, (error) =>
                   Effect.logWarning(
                     "Chat control could not clear an unclaimed message reservation.",
+                    { reason: isSqlError(error) ? error.reason._tag : "Unknown" },
                   ),
                 )
               : Effect.void,
