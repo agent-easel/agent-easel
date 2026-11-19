@@ -12,7 +12,7 @@ type ThreadRunRead = WorkerThread["thread"]["recentRuns"][number];
 
 /** A run T3 cancelled before it started. Only an explicit null start counts: a read without start
  * evidence does not show that the run did no work. */
-const cancelledBeforeStart = (run: ThreadRunRead) =>
+export const cancelledBeforeStart = (run: ThreadRunRead) =>
   run.status === "cancelled" && run.startedAt === null;
 
 /** The run whose status decides the Block's execution failure. After a finished report, a later

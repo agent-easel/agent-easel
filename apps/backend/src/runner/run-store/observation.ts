@@ -2,7 +2,13 @@ import type { RunAttention, RunPullRequest } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { blockState, decidingRun, failedRun, missingReport } from "../observation-rules.ts";
+import {
+  blockState,
+  cancelledBeforeStart,
+  decidingRun,
+  failedRun,
+  missingReport,
+} from "../observation-rules.ts";
 import type { BlockRow, RunRow } from "../runner-types.ts";
 import { now } from "../../time.ts";
 import type { WorkerThread } from "../worker-thread.ts";
@@ -92,13 +98,18 @@ export function recordExecution(
   });
 }
 
+/** A run T3 cancelled before it started did no work: it is an execution failure only while it
+ * decides the Block's failure. */
+const failedWork = (execution: ExecutionRead, deciding: ExecutionRead | null) =>
+  !cancelledBeforeStart(execution) || execution.runId === deciding?.runId;
+
 function recordExecutions(
   sql: SqlClient.SqlClient,
   run: RunRow,
   block: BlockRow,
   bindingId: string,
   { thread }: WorkerThread,
-  noWork: string | null,
+  deciding: ExecutionRead | null,
   time: string,
 ) {
   return Effect.gen(function* () {
@@ -114,7 +125,7 @@ function recordExecutions(
         scope,
         execution,
         thread.pendingRequestCount,
-        failedRun(execution.status) && execution.runId !== noWork ? "execution-failed" : null,
+        failedRun(execution.status) && failedWork(execution, deciding) ? "execution-failed" : null,
         time,
       );
   });
@@ -264,8 +275,7 @@ function recordWorkerThread(
       (entry) => entry.blockId === block.block_id,
     )?.report?.status;
     const deciding = decidingRun(worker, current, (runId) => ownerOf(runId) === block.block_id);
-    const noWork = latest && deciding !== latest ? latest.runId : null;
-    yield* recordExecutions(sql, run, block, binding.id, worker, noWork, time);
+    yield* recordExecutions(sql, run, block, binding.id, worker, deciding, time);
     const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
     if (deciding && failedRun(deciding.status))
       yield* observeAttention(
