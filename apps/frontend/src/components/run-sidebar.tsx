@@ -42,6 +42,7 @@ import { Button } from "./ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
 import { Input } from "./ui/input";
 import { ContextMenuItem as RowMenuItem } from "./ui/context-menu";
+import { EmptyState } from "./ui/empty-state";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { ActivityAge, SidebarRow, SidebarRowsProvider } from "./sidebar-row.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
@@ -392,17 +393,7 @@ function NavigationEmptyState({ state }: { state: ReturnType<typeof navigationEm
         {state.title}
       </p>
     );
-  return (
-    <div
-      role="status"
-      className="grid gap-1 rounded-md border border-dashed border-border-strong px-2.5 py-3.5"
-    >
-      <p className="truncate text-sm leading-tight font-medium text-emphasis-foreground">
-        {state.title}
-      </p>
-      <p className="text-2xs leading-tight tracking-label text-muted-foreground">{state.body}</p>
-    </div>
-  );
+  return <EmptyState size="compact" title={state.title} body={state.body} />;
 }
 
 function RunGroup({

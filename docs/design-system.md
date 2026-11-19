@@ -182,6 +182,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Dialog**: the shared dialog in its standard or wide size, with the shared header.
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
+- **Empty state**: EmptyState, always in a dashed frame. Large is for a whole list or preview
+  that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
+  title, an optional body and an optional action. Compact is for a panel list that is empty for a
+  reason worth explaining, such as a Run sidebar title search with no match: a left-aligned title
+  and a short body. A one-line hint without an explanation stays plain status text, not an
+  EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and list loading,
+  no-match and error lines.
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
   stays visible.

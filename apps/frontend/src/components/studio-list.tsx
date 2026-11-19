@@ -1,5 +1,5 @@
 import { MutationGate } from "@/client-gate";
-import { Ellipsis, Search } from "lucide-react";
+import { Ellipsis, Search, type LucideIcon } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import type { StudioSelection } from "../settings-navigation.ts";
@@ -7,6 +7,7 @@ import { relativeDay } from "../time-format.ts";
 import { StudioLink } from "./app-link.tsx";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { EmptyState } from "./ui/empty-state";
 import { Input } from "./ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -118,25 +119,15 @@ export function StudioListBody({
   errorText: string;
   loadingText: string;
   noMatchText: string;
-  emptyIcon: ReactNode;
+  emptyIcon: LucideIcon;
   emptyTitle: string;
   children: ReactNode;
 }) {
   if (error) return <StudioListMessage tone="error">{errorText}</StudioListMessage>;
   if (!loaded) return <StudioListMessage tone="muted">{loadingText}</StudioListMessage>;
   if (noMatch) return <StudioListMessage tone="muted">{noMatchText}</StudioListMessage>;
-  if (empty) return <StudioListEmpty icon={emptyIcon} title={emptyTitle} />;
+  if (empty) return <EmptyState size="large" icon={emptyIcon} title={emptyTitle} />;
   return children;
-}
-
-/** An empty list: the icon and the title, across the full width. */
-export function StudioListEmpty({ icon, title }: { icon: ReactNode; title: string }) {
-  return (
-    <section className="flex min-h-80 flex-col items-center justify-center px-6 py-16 text-center">
-      <span className="mb-4 text-subtle-foreground">{icon}</span>
-      <h2 className="text-title font-semibold">{title}</h2>
-    </section>
-  );
 }
 
 type StudioRowContentProps = {
