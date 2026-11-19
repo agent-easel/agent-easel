@@ -101,7 +101,8 @@ export function ShortcutsCheatSheet({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogSurface
         presentation="workspace"
-        className="flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-[720px] flex-col overflow-hidden"
+        size="wide"
+        className="flex flex-col overflow-hidden"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           titleRef.current?.focus();
