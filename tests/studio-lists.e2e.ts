@@ -241,7 +241,7 @@ test("Import reviews a Flow file whose Agent needs a model, and rejects a file i
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText("Imported prompts run with your T3 permissions");
   await expect(review).toContainText("Read them in Studio before you start a Run.");
-  const model = review.getByRole("button", /^Model for Northwind QA/);
+  const model = review.getByRole("combobox", /^Model for Northwind QA/);
   await expect(model).toHaveAttribute("aria-invalid", "true");
   const cardId = await model.getAttribute("aria-describedby");
   await expect(browser.locator(`[id=${JSON.stringify(cardId)}]`)).toContainText(

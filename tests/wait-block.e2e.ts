@@ -38,14 +38,15 @@ test("a Wait added from the library saves with a missing duration as a readiness
   // Act
   await screen.getByRole("button", "Wait Cool down").tap();
   await screen.getByLabel("Wait for").fill("90");
-  await screen.getByRole("button", "Unit: minutes", { exact: true }).press("Enter");
-  const minutes = screen.getByRole("menuitemradio", "minutes", { exact: true });
+  await screen.getByRole("combobox", "Unit: minutes", { exact: true }).press("Enter");
+  const units = screen.getByRole("listbox", "Unit", { exact: true });
+  const minutes = units.getByRole("option", "minutes", { exact: true });
   await expect(minutes).toBeFocused();
   await minutes.press("ArrowDown");
-  const hours = screen.getByRole("menuitemradio", "hours", { exact: true });
+  const hours = units.getByRole("option", "hours", { exact: true });
   await expect(hours).toBeFocused();
   await hours.press("Enter");
-  await expect(screen.getByRole("button", "Unit: hours", { exact: true })).toBeFocused();
+  await expect(screen.getByRole("combobox", "Unit: hours", { exact: true })).toBeFocused();
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
@@ -55,7 +56,7 @@ test("a Wait added from the library saves with a missing duration as a readiness
   await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 hours");
   await screen.getByRole("button", "Wait Cool down").tap();
   await expect(screen.getByLabel("Wait for")).toHaveValue("90");
-  await expect(screen.getByRole("button", "Unit: hours", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("combobox", "Unit: hours", { exact: true })).toBeVisible();
   await expect(
     screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
   ).toBeVisible();

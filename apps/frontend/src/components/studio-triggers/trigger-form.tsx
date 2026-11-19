@@ -1,20 +1,14 @@
 import type { ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
+import { Workflow } from "lucide-react";
 import type { FactoryProject, FlowDraft, TriggerReadiness } from "@t3-factory/contracts";
 import { mayStartFlow } from "@t3-factory/domain-validation";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ChoiceMenu } from "../choice-menu.tsx";
-import { FlowGroup, ProjectOption } from "../launch-picker-options.tsx";
-import { fieldLabelClass, selectFieldClass } from "../page.tsx";
+import { ChoiceMenu, type MenuChoice } from "../choice-menu.tsx";
+import { ProjectIcon } from "../project-icon.tsx";
+import { fieldLabelClass } from "../page.tsx";
 import { SettingsRow } from "../settings-page.tsx";
 import { fieldAria } from "../field-state.ts";
 import { cn } from "@/lib/utils";
@@ -27,6 +21,7 @@ import {
 
 const inputClass = "h-7.5 border-border bg-muted";
 const rowClass = "[&>div]:min-h-13.5 [&>div]:py-3";
+const pickerClass = cn(inputClass, "w-50");
 const INTERVAL_UNITS = (["minutes", "hours"] satisfies IntervalUnit[]).map((unit) => ({
   id: unit,
   label: unit,
@@ -192,24 +187,28 @@ function ProjectRow({
   onChange: (id: string) => void;
 }) {
   const available = projects.filter((entry) => entry.availability === "available");
-  const projectNames = available.map((entry) => entry.title);
   return (
     <SettingsRow
       title="Project"
       control={(text) => (
-        <GroupedChoiceMenu
+        <ChoiceMenu
+          id="trigger-project"
           labelledBy={text.title}
           value={projectId}
-          label={project?.title ?? (projectId ? "Project unavailable" : undefined)}
+          choices={available.map((entry) => ({
+            id: entry.id,
+            label: entry.title,
+            description: entry.workspaceRoot,
+            icon: <ProjectIcon inline icon={entry.projectIcon} faviconUrl={entry.faviconUrl} />,
+          }))}
+          unlistedLabel={project?.title ?? "Project unavailable"}
+          disabled={false}
           placeholder="Choose a Project"
-          width="w-80"
+          empty="No available Projects"
+          className={pickerClass}
+          popupClassName="w-80"
           onChange={onChange}
-        >
-          {available.map((entry) => (
-            <ProjectOption key={entry.id} project={entry} busy={false} peers={projectNames} />
-          ))}
-          {!available.length && <EmptyChoices>No available Projects</EmptyChoices>}
-        </GroupedChoiceMenu>
+        />
       )}
     />
   );
@@ -261,6 +260,17 @@ function RepositoryValue({
   );
 }
 
+/** A Trigger's Flow choice; a not-ready Flow stays listed and can't be chosen. */
+const flowChoice =
+  (group: string) =>
+  (flow: FlowDraft): MenuChoice => ({
+    id: flow.id,
+    label: flow.name,
+    group,
+    icon: <Workflow aria-hidden strokeWidth={1.5} className="text-muted-foreground" />,
+    ...(flow.readiness.ready ? {} : { badge: "Not ready", badgeKind: "error", disabled: true }),
+  });
+
 function FlowRow({
   content,
   project,
@@ -276,42 +286,37 @@ function FlowRow({
 }) {
   const flow = flows?.find((entry) => entry.id === content.flowId);
   const offered = flows ? triggerFlows(flows, content.projectId) : [];
-  const flowNames = offered.map((entry) => entry.name);
   const ordered = (group: readonly FlowDraft[]) =>
     group.toSorted((a, b) => Number(b.readiness.ready) - Number(a.readiness.ready));
+  const choices = [
+    ...ordered(offered.filter((entry) => !entry.projectId)).map(flowChoice("Global")),
+    ...(project
+      ? ordered(offered.filter((entry) => entry.projectId === project.id)).map(
+          flowChoice(project.title),
+        )
+      : []),
+  ];
   return (
     <SettingsRow
       title="Flow"
       control={(text) => (
         <>
           {problem && <StatusBadge kind="error">Not ready</StatusBadge>}
-          <GroupedChoiceMenu
+          <ChoiceMenu
+            id="trigger-flow"
             labelledBy={text.title}
             value={content.flowId}
-            label={flow?.name ?? (content.flowId ? "Flow unavailable" : undefined)}
+            choices={choices}
+            unlistedLabel={flow?.name ?? "Flow unavailable"}
+            disabled={false}
             placeholder="Choose a Flow"
-            width="w-75"
-            problemId={problem ? triggerProblemIds.flow : undefined}
+            empty={flows ? "No Flows available" : "Loading Flows…"}
+            describedBy={problem ? triggerProblemIds.flow : undefined}
+            problemTone="error"
+            className={pickerClass}
+            popupClassName="w-75"
             onChange={onChange}
-          >
-            <FlowGroup
-              title="Global"
-              flows={ordered(offered.filter((entry) => !entry.projectId))}
-              busy={false}
-              peers={flowNames}
-            />
-            {project && (
-              <FlowGroup
-                title={project.title}
-                flows={ordered(offered.filter((entry) => entry.projectId === project.id))}
-                busy={false}
-                peers={flowNames}
-              />
-            )}
-            {!offered.length && (
-              <EmptyChoices>{flows ? "No Flows available" : "Loading Flows…"}</EmptyChoices>
-            )}
-          </GroupedChoiceMenu>
+          />
         </>
       )}
     />
@@ -326,64 +331,6 @@ function TriggerGroup({ label, id, children }: { label: string; id: string; chil
       </h3>
       <div className={cn("divide-y rounded-lg border", rowClass)}>{children}</div>
     </section>
-  );
-}
-
-function EmptyChoices({ children }: { children: ReactNode }) {
-  return (
-    <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-      {children}
-    </p>
-  );
-}
-
-function GroupedChoiceMenu({
-  labelledBy,
-  value,
-  label,
-  placeholder,
-  width,
-  problemId,
-  onChange,
-  children,
-}: {
-  labelledBy: string;
-  value: string;
-  label: string | undefined;
-  placeholder: string;
-  width: string;
-  problemId?: string | undefined;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          aria-labelledby={labelledBy}
-          {...fieldAria(problemId)}
-          className={cn(selectFieldClass, "h-7.5 w-50 justify-between border-border")}
-        >
-          <span className={cn("truncate", !label && "text-subtle-foreground")}>
-            {label ?? placeholder}
-          </span>
-          <ChevronDown aria-hidden className="size-4 text-muted-foreground" strokeWidth={1.5} />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        className={cn(
-          width,
-          "max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[calc(100vw-2rem)] overflow-y-auto",
-        )}
-      >
-        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          {children}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 

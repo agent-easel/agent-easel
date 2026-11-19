@@ -29,11 +29,17 @@ async function runFromMenu(screen: Screen, trigger: string) {
 
 async function fillTrigger(screen: Screen, name: string, flow = "Demo · Focused change") {
   await screen.getByRole("textbox", "Name", { exact: true }).fill(name);
-  await screen.getByRole("button", "Project", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", /^Atlas demo · /).tap();
+  await screen.getByRole("combobox", "Project", { exact: true }).tap();
+  await screen
+    .getByRole("listbox", "Project", { exact: true })
+    .getByRole("option", "Atlas demo", { exact: true })
+    .tap();
   await expect(screen.getByText("factory-demo/atlas", { exact: true })).toBeVisible();
-  await screen.getByRole("button", "Flow", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", flow, { exact: true }).tap();
+  await screen.getByRole("combobox", "Flow", { exact: true }).tap();
+  await screen
+    .getByRole("listbox", "Flow", { exact: true })
+    .getByRole("option", flow, { exact: true })
+    .tap();
 }
 
 async function expectEditorOff(screen: Screen, name: string) {
@@ -244,7 +250,7 @@ test("a Trigger and its Flow retain their drafts when an Agent opens over them",
   await saveFlowElsewhere(app.baseUrl, flow, {
     graph: { ...flow.graph, flowInput: { ...flow.graph.flowInput, targetBlockIds: [] } },
   });
-  const flowPicker = screen.getByRole("button", "Flow", { exact: true });
+  const flowPicker = screen.getByRole("combobox", "Flow", { exact: true });
   await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
   await expect(screen.getByRole("button", "Review and enable", { exact: true })).toBeDisabled();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();

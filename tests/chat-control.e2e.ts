@@ -113,8 +113,8 @@ async function chatModelSettings(baseUrl: string | undefined) {
 /** Fills the Language model's provider, base URL and model for the controlled provider. */
 async function fillChatModel(screen: Screen) {
   const connection = screen.getByRole("region", "Connection");
-  await connection.getByRole("button", /^Provider: /).tap();
-  await screen.getByRole("menuitemradio", /^OpenAI-compatible/).tap();
+  await connection.getByRole("combobox", /^Provider: /).tap();
+  await screen.getByRole("option", /^OpenAI-compatible/).tap();
   await connection.getByLabel("Base URL").fill(provider.baseUrl);
   await connection.getByLabel("Model").fill("ui-model");
   return connection;

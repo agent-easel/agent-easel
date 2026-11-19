@@ -406,8 +406,11 @@ test("choosing another Agent for a block keeps its Revisit instruction and canva
   const panel = screen.getByRole("complementary", "Block settings");
 
   // Act
-  await panel.getByRole("button", "Agent", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", /^Demo · Product engineer/).tap();
+  await panel.getByRole("combobox", /^Agent: /).tap();
+  await screen
+    .getByRole("listbox", "Agent", { exact: true })
+    .getByRole("option", "Demo · Product engineer", { exact: true })
+    .tap();
 
   // Assert
   await expect(panel.getByRole("textbox", "Revisit instruction (optional)")).toHaveValue(
@@ -809,9 +812,9 @@ test("a saved Agent with a retired model cannot be placed from the library or pi
   await screen.getByRole("button", "Agent Worker").tap();
   await screen
     .getByRole("complementary", "Block settings")
-    .getByRole("button", "Agent", { exact: true })
+    .getByRole("combobox", /^Agent: /)
     .tap();
-  const option = screen.getByRole("menuitemradio", new RegExp(name));
+  const option = screen.getByRole("option", new RegExp(name));
   await expect(option).toBeDisabled();
   await expect(option).toContainText("Needs a model");
   await app.screenshot("after-block-picker-retired-model");

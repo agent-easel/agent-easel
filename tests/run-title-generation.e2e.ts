@@ -42,7 +42,7 @@ test("Run title generation enables locally and saves when the host chooses a pro
   await app.open("/settings/run-titles");
   const generation = screen.getByRole("region", "Generation");
   const toggle = generation.getByRole("switch", "Generate Run titles");
-  await expect(generation.getByRole("button", /^Provider: /)).toHaveCount(0);
+  await expect(generation.getByRole("combobox", /^Provider: /)).toHaveCount(0);
 
   // Act
   await toggle.tap();
@@ -51,8 +51,8 @@ test("Run title generation enables locally and saves when the host chooses a pro
   await expect(toggle).toBeChecked();
   await expect(screen.getByText("Not saved yet")).toBeVisible();
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
-  await generation.getByRole("button", /^Provider: /).tap();
-  await screen.getByRole("menuitemradio", "Codex", { exact: true }).tap();
+  await generation.getByRole("combobox", /^Provider: /).tap();
+  await screen.getByRole("option", "Codex", { exact: true }).tap();
   await expect(screen.getByText("Not saved yet")).toHaveCount(0);
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({
     enabled: true,
@@ -60,7 +60,7 @@ test("Run title generation enables locally and saves when the host chooses a pro
   });
   await browser.reload();
   await expect(toggle).toBeChecked();
-  await expect(generation.getByRole("button", /^Model: GPT /)).toBeVisible();
+  await expect(generation.getByRole("combobox", /^Model: GPT /)).toBeVisible();
   await app.screenshot("run-titles-host-on");
 });
 

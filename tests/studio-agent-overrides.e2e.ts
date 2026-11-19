@@ -35,8 +35,8 @@ async function overrideDialogForNorthwind(
   await screen.getByRole("button", /^Worker: /).tap();
   await screen.getByRole("button", "Override for a Project…", { exact: true }).tap();
   const dialog = screen.getByRole("dialog", "Override for a Project");
-  await dialog.getByRole("button", /^Project:/).tap();
-  await screen.getByRole("menuitemradio", "Northwind", { exact: true }).tap();
+  await dialog.getByRole("combobox", /^Project:/).tap();
+  await screen.getByRole("option", "Northwind", { exact: true }).tap();
   return { northwind, agent, dialog };
 }
 
@@ -50,8 +50,8 @@ test("a global Agent saved with a Project override keeps it in its editor and li
     { app, screen, browser },
     "Override",
   );
-  await dialog.getByRole("button", /^Model:/).tap();
-  await screen.getByRole("menuitemradio", "GPT 6 Astra", { exact: true }).tap();
+  await dialog.getByRole("combobox", /^Model:/).tap();
+  await screen.getByRole("option", "GPT 6 Astra", { exact: true }).tap();
   await browser.evaluate(settled);
   await app.screenshot("override-dialog");
   await dialog.getByRole("button", "Apply", { exact: true }).tap();
