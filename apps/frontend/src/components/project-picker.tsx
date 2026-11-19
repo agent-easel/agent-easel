@@ -1,72 +1,33 @@
-import { MutationGate, useMutationsAllowed } from "@/client-gate";
+import { ProjectOption } from "./launch-picker-options.tsx";
+import { useMutationsAllowed } from "@/client-gate";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
-import { ChevronsUpDownIcon, FolderPlusIcon, RefreshCwIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ChevronsUpDownIcon, RefreshCwIcon } from "lucide-react";
+import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { PickerMenuContent, PickerMenuSearch } from "./picker-menu-search.tsx";
-import { Label } from "@/components/ui/label";
+import {
+  PickerMenuContent,
+  PickerMenuList,
+  PickerMenuSearch,
+  pickerShowsSearch,
+} from "./picker-menu-search.tsx";
 import { api } from "../api.ts";
 import { useLiveLaunchChoices } from "../live/launch-choices.ts";
 import { cn } from "../lib/utils.ts";
 import { selectFieldClass, toolbarPillClass, toolbarStatusClass } from "./page.tsx";
 import { ProjectIcon } from "./project-icon.tsx";
-import { projectAvailabilityLabels } from "../use-projects.ts";
 
-function ProjectOption({ project, busy }: { project: FactoryProject; busy: boolean }) {
-  const available = project.availability === "available";
-  const availability = projectAvailabilityLabels[project.availability];
-  return (
-    <DropdownMenuRadioItem
-      value={project.id}
-      data-project-id={project.id}
-      indicatorPosition="right"
-      disabled={busy}
-      aria-label={`${project.title} · ${project.workspaceRoot} · ${availability}`}
-      className="my-0.5 items-start rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring"
-    >
-      <span className="mt-px">
-        <ProjectIcon
-          inline
-          icon={project.projectIcon}
-          faviconUrl={project.availability === "available" ? project.faviconUrl : null}
-        />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium" title={project.title}>
-          {project.title}
-        </span>
-        <span
-          className="mt-0.5 block truncate text-left text-2xs tracking-label text-subtle-foreground"
-          title={project.workspaceRoot}
-          dir="rtl"
-        >
-          <bdi dir="ltr">{project.workspaceRoot}</bdi>
-        </span>
-        {!available && (
-          <span className="mt-1 block text-xs text-attention">
-            {availability} · New Runs blocked
-          </span>
-        )}
-      </span>
-    </DropdownMenuRadioItem>
-  );
+function projectListStatus(catalog: ProjectCatalog | null, matched: number, query: string) {
+  if (catalog === null) return "Loading projects…";
+  if (query && matched === 0) return "No matching projects";
+  return undefined;
 }
 
 function ProjectChoices({
@@ -88,6 +49,8 @@ function ProjectChoices({
   const projects = (catalog?.projects ?? []).filter((project) =>
     `${project.title} ${project.workspaceRoot}`.toLocaleLowerCase().includes(query),
   );
+  const titles = projects.map((project) => project.title);
+  const status = projectListStatus(catalog, projects.length, query);
   const positioned = useRef(false);
   useLayoutEffect(() => {
     if (positioned.current || !catalog) return;
@@ -96,41 +59,30 @@ function ProjectChoices({
       ?.scrollIntoView({ block: "nearest" });
     positioned.current = true;
   }, [catalog, listRef]);
+  const selected = projects.some((project) => project.id === catalog?.selectedProjectId)
+    ? (catalog?.selectedProjectId ?? "")
+    : "";
   return (
-    <div
-      ref={listRef}
-      className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
-      role="group"
-      aria-label="Projects"
-    >
-      <DropdownMenuRadioGroup value={catalog?.selectedProjectId ?? ""} onValueChange={onSelect}>
-        <DropdownMenuRadioItem
-          value=""
-          disabled={selectionDisabled}
-          aria-label="No project selected"
-          indicatorPosition="right"
-          className="my-0.5 rounded-md py-2.5 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring"
-        >
-          <span className="text-sm text-muted-foreground">No project selected</span>
-        </DropdownMenuRadioItem>
-        {projects.map((project) => (
-          <ProjectOption key={project.id} project={project} busy={selectionDisabled} />
-        ))}
-      </DropdownMenuRadioGroup>
-      {projects.length === 0 && (
+    <DropdownMenuRadioGroup value={selected} onValueChange={onSelect}>
+      {projects.map((project) => (
+        <ProjectOption key={project.id} project={project} busy={selectionDisabled} peers={titles} />
+      ))}
+      {status && (
         <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
-          {catalog === null
-            ? "Loading projects…"
-            : query
-              ? "No matching projects."
-              : "No projects found. Add an existing repository to get started."}
+          {status}
         </p>
       )}
-    </div>
+    </DropdownMenuRadioGroup>
   );
 }
 
-function ProjectTriggerSummary({ selected }: { selected: FactoryProject | undefined }) {
+function ProjectTriggerSummary({
+  selected,
+  placeholder,
+}: {
+  selected: FactoryProject | undefined;
+  placeholder: string;
+}) {
   const available = selected?.availability === "available";
   return (
     <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
@@ -140,14 +92,9 @@ function ProjectTriggerSummary({ selected }: { selected: FactoryProject | undefi
         faviconUrl={available ? (selected?.faviconUrl ?? null) : null}
       />
       {selected ? (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate font-medium">{selected.title}</span>
-          {!available && (
-            <span className="shrink-0 text-2xs tracking-label text-destructive">Unavailable</span>
-          )}
-        </span>
+        <span className="min-w-0 flex-1 truncate font-medium">{selected.title}</span>
       ) : (
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">No project selected</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">{placeholder}</span>
       )}
     </span>
   );
@@ -178,88 +125,7 @@ export function useProjectCatalog() {
       });
   }
 
-  return { catalog, error, busy, act, clearError: () => setError("") };
-}
-
-function AddRepositoryDialog({
-  open,
-  onOpenChange,
-  busy,
-  error,
-  onAdd,
-  triggerRef,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  busy: boolean;
-  error: string;
-  onAdd: (path: string) => Promise<boolean>;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-}) {
-  const [path, setPath] = useState("");
-  const pathRef = useRef<HTMLInputElement>(null);
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!busy) onOpenChange(next);
-      }}
-    >
-      <DialogContent
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          triggerRef.current?.focus();
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Add repository</DialogTitle>
-          <DialogDescription>
-            Use an existing repository on the local T3 host. T3 owns its project and path.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="grid gap-2"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (busy) return;
-            void onAdd(path).then((success) => {
-              if (success) setPath("");
-              else pathRef.current?.focus();
-            });
-          }}
-        >
-          <div className="grid gap-1.5">
-            <Label htmlFor="repository-path">Existing local repository path</Label>
-            <Input
-              ref={pathRef}
-              id="repository-path"
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder="/absolute/path/to/repository"
-              required
-              readOnly={busy}
-            />
-          </div>
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-          <MutationGate>
-            <Button type="submit" disabled={busy || !path.trim()}>
-              Add existing repository
-            </Button>
-          </MutationGate>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** A selected-but-unavailable project or an empty catalog marks the field invalid (Figma L02/L04). */
-function selectionBlocked(selected: FactoryProject | undefined, catalog: ProjectCatalog | null) {
-  if (selected) return selected.availability !== "available";
-  return catalog?.projects.length === 0;
+  return { catalog, error, busy, act };
 }
 
 /**
@@ -271,28 +137,29 @@ export function ProjectPicker({
   selectedId,
   onSelect,
   disabled = false,
+  placeholder = "No project selected",
 }: {
   state: ReturnType<typeof useProjectCatalog>;
   selectedId: string;
   onSelect: (id: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }) {
-  const { catalog, error, act, clearError } = state;
+  const { catalog, error, act } = state;
   const busy = state.busy || disabled;
   const choices = catalog && {
     ...catalog,
     selectedProjectId: selectedId,
-    projects: catalog.projects.filter((p) => p.availability === "available"),
+    projects: catalog.projects.filter((project) => project.availability === "available"),
   };
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const projectCount = choices?.projects.length ?? 0;
+  const showSearch = pickerShowsSearch(projectCount);
 
-  const selected = catalog?.projects.find((p) => p.id === selectedId);
-  const invalid = selectionBlocked(selected, catalog);
+  const selected = catalog?.projects.find((project) => project.id === selectedId);
   return (
     <>
       <DropdownMenu
@@ -304,18 +171,17 @@ export function ProjectPicker({
       >
         <DropdownMenuTrigger asChild>
           <Button
-            ref={triggerRef}
             type="button"
             variant="outline"
+            disabled={disabled}
             aria-disabled={busy}
             aria-busy={busy}
-            aria-label={`Select project: ${selected?.title ?? "No project selected"}`}
-            aria-invalid={invalid || undefined}
+            aria-label={`Select project: ${selected?.title ?? placeholder}`}
             // The pill can truncate the title, so the tooltip carries it along with the path.
             title={selected && `${selected.title}\n${selected.workspaceRoot}`}
             className={cn(selectFieldClass, toolbarPillClass, "w-45")}
           >
-            <ProjectTriggerSummary selected={selected} />
+            <ProjectTriggerSummary selected={selected} placeholder={placeholder} />
             <ChevronsUpDownIcon
               className="size-4 shrink-0 text-muted-foreground"
               strokeWidth={1.5}
@@ -324,124 +190,65 @@ export function ProjectPicker({
           </Button>
         </DropdownMenuTrigger>
         <PickerMenuContent
-          className="flex max-h-[min(30rem,var(--radix-dropdown-menu-content-available-height))] w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0"
+          className="overflow-y-hidden"
           searchRef={searchRef}
           listRef={listRef}
-          searchEnabled
+          searchEnabled={showSearch}
         >
-          <PickerMenuSearch
-            ariaLabel="Search projects"
-            placeholder="Search by name or repository path…"
-            value={search}
-            onChange={setSearch}
-            inputRef={searchRef}
+          {showSearch && (
+            <PickerMenuSearch
+              ariaLabel="Search projects"
+              placeholder="Search projects"
+              value={search}
+              onChange={setSearch}
+              inputRef={searchRef}
+              listRef={listRef}
+              firstChoiceSelector="[data-project-id]:not([data-disabled])"
+            />
+          )}
+          <PickerMenuList
             listRef={listRef}
-            firstChoiceSelector="[data-project-id]"
-          />
-          <ProjectChoices
-            catalog={choices}
-            busy={busy}
-            search={search}
-            listRef={listRef}
-            onSelect={(value) => {
-              if (busy) return;
-              setMenuOpen(false);
-              const id = value || null;
-              void act(() => api.selectProject({ id })).then((success) => {
-                if (!success) return;
-                onSelect(value);
-              });
-            }}
-          />
+            label="Projects"
+            watch={`${search}:${projectCount}:${catalog === null}`}
+          >
+            <ProjectChoices
+              catalog={choices}
+              busy={busy}
+              search={search}
+              listRef={listRef}
+              onSelect={(value) => {
+                if (busy || !value) return;
+                setMenuOpen(false);
+                void act(() => api.selectProject({ id: value })).then((success) => {
+                  if (!success) return;
+                  onSelect(value);
+                });
+              }}
+            />
+          </PickerMenuList>
           <DropdownMenuSeparator className="m-0 shrink-0" />
-          <ProjectMutationItems
+          <ProjectRefresh
             busy={busy}
-            onRecheck={() => {
+            onRefresh={() => {
               void act(api.recheckProjects);
-            }}
-            onAdd={() => {
-              clearError();
-              setAddDialogOpen(true);
             }}
           />
         </PickerMenuContent>
       </DropdownMenu>
-      <ProjectAvailability selected={selected} catalog={catalog} />
-      <AddRepositoryDialog
-        open={addDialogOpen}
-        busy={busy}
-        error={error}
-        triggerRef={triggerRef}
-        onOpenChange={(open) => {
-          clearError();
-          setAddDialogOpen(open);
-        }}
-        onAdd={(path) =>
-          act(async () => {
-            const project = await api.addRepository({ path });
-            await api.selectProject({ id: project.id });
-            setAddDialogOpen(false);
-            onSelect(project.id);
-          })
-        }
-      />
-      {error && !addDialogOpen && (
-        <Alert variant="destructive" className={toolbarStatusClass}>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+      {error && (
+        <ProblemCard tone="error" density="compact" title={error} className={toolbarStatusClass} />
       )}
     </>
   );
 }
 
-function ProjectAvailability({
-  selected,
-  catalog,
-}: {
-  selected: FactoryProject | undefined;
-  catalog: ProjectCatalog | null;
-}) {
-  return (
-    <>
-      {" "}
-      {selected && selected.availability !== "available" && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          {projectAvailabilityLabels[selected.availability]} · New Runs blocked. Choose another
-          project.
-        </p>
-      )}
-      {catalog && catalog.projects.length === 0 && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-destructive")} role="status">
-          T3 doesn’t report any projects yet.
-        </p>
-      )}
-      {catalog?.problem && (
-        <p className={cn(toolbarStatusClass, "text-2xs text-muted-foreground")} role="status">
-          {catalog.problem}
-        </p>
-      )}
-    </>
-  );
-}
-
-function ProjectMutationItems({
-  busy,
-  onRecheck,
-  onAdd,
-}: {
-  busy: boolean;
-  onRecheck: () => void;
-  onAdd: () => void;
-}) {
+function ProjectRefresh({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
   const mutationsAllowed = useMutationsAllowed();
   const disabled = busy || !mutationsAllowed;
   return (
     <div className="shrink-0 p-1">
-      <DropdownMenuItem disabled={disabled} onSelect={onRecheck}>
-        <RefreshCwIcon aria-hidden /> Recheck projects
-      </DropdownMenuItem>
-      <DropdownMenuItem disabled={disabled} onSelect={onAdd}>
-        <FolderPlusIcon aria-hidden /> Add repository
+      <DropdownMenuItem disabled={disabled} onSelect={onRefresh}>
+        <RefreshCwIcon aria-hidden /> Refresh projects
       </DropdownMenuItem>
     </div>
   );

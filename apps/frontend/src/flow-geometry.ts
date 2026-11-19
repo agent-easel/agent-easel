@@ -1,7 +1,7 @@
 import {
   createNodeGeometry,
+  exitRows,
   incomingPortY,
-  incomingWires,
   type CanvasDimensions,
   type GeometryFacts,
 } from "@t3-factory/flow-layout";
@@ -18,11 +18,9 @@ export function createCanvasGeometry(
 ) {
   const rows = dimensions.block;
   const input = dimensions.flowInput;
-  const { ports, flowInputBox, blockHeight, reservedHeight, incomingGrowth } = createNodeGeometry(
-    graph,
-    dimensions,
-    facts,
-  );
+  const { ports, incoming, flowInputBox, blockHeight, reservedHeight, incomingGrowth } =
+    createNodeGeometry(graph, dimensions, facts);
+  const rowOf = exitRows(graph.blocks);
   const blockBox = (block: CanvasBlock) => ({
     ...block.position,
     width: rows.width,
@@ -43,7 +41,7 @@ export function createCanvasGeometry(
     y: block.position.y + incomingPortY(index, ports),
   });
   const incomingPorts = (block: CanvasBlock) =>
-    incomingWires(graph, block.id).map((source, index) => ({
+    incoming.wires(block.id).map((source, index) => ({
       source,
       ...inputPoint(block, index),
     }));
@@ -55,17 +53,23 @@ export function createCanvasGeometry(
   return {
     ports,
     flowInputBox,
+    /** The Flow input and every block, in graph coordinates. */
+    boxes: () => [flowInputBox, ...graph.blocks.map(blockBox)],
     blockHeight,
     bounds,
     incomingPorts,
+    /** The input port a wire from `source` attaches to on the target block. */
+    incomingPortIndex: incoming.portIndex,
     reservedHeight,
     focusBounds,
     inputPoint,
+    /** A block's drawn exit by id; undefined when the block draws no such exit. */
+    exit: (block: CanvasBlock, exitId: string) => {
+      const row = rowOf(block.id, exitId);
+      return row === undefined ? undefined : block.exits[row];
+    },
     exitPoint: (block: CanvasBlock, exitId: string): Point => {
-      const index = Math.max(
-        0,
-        block.exits.findIndex((exit) => exit.id === exitId),
-      );
+      const index = rowOf(block.id, exitId) ?? 0;
       return {
         x: block.position.x + rows.width,
         y: block.position.y + ports.firstExitY + index * ports.exitRow,

@@ -7,6 +7,8 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { StatusBadge } from "./status-badge.tsx";
+import { fieldAria, fieldBorder } from "./field-state.ts";
 import { selectFieldClass } from "@/components/page";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +17,8 @@ export interface MenuChoice {
   readonly label: string;
   /** Short marker shown next to the label, in the menu and on the trigger. */
   readonly badge?: string;
+  /** The badge's tone; attention unless the marker only explains a disabled choice. */
+  readonly badgeKind?: "attention" | "neutral";
   /** Why the choice is limited; shown under the label in the menu. */
   readonly description?: string;
   readonly disabled?: boolean;
@@ -32,8 +36,8 @@ export function ChoiceMenu({
   onChange,
   disabled,
   placeholder,
-  hint,
   className,
+  describedBy,
 }: {
   id: string;
   /** The field label; the trigger's accessible name adds the current value. */
@@ -43,10 +47,9 @@ export function ChoiceMenu({
   onChange: (value: string) => void;
   disabled: boolean;
   placeholder: string;
-  /** Where the choices come from, shown inside the trigger on wide forms. */
-  hint?: string;
   /** Trigger size where the form is denser than the composer, such as a Settings row. */
   className?: string;
+  describedBy?: string | undefined;
 }) {
   const selected = choices.find((choice) => choice.id === value);
   const shown = selected?.label ?? placeholder;
@@ -58,23 +61,21 @@ export function ChoiceMenu({
           id={id}
           variant="outline"
           aria-label={`${label}: ${selected ? `${shown}${selected.badge ? `, ${selected.badge}` : ""}` : shown}`}
-          className={cn(selectFieldClass, "disabled:opacity-50", className)}
+          {...fieldAria(describedBy)}
+          className={cn(
+            selectFieldClass,
+            "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
+            className,
+            fieldBorder(describedBy ? "attention" : undefined),
+          )}
         >
           <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>
             {shown}
           </span>
           {selected?.badge && (
-            <span className="shrink-0 text-2xs font-medium text-attention">{selected.badge}</span>
+            <StatusBadge kind={selected.badgeKind ?? "attention"}>{selected.badge}</StatusBadge>
           )}
           <span className="flex-1" />
-          {hint && (
-            <span
-              aria-hidden
-              className="hidden shrink-0 text-2xs font-medium text-subtle-foreground @xl/agent-form:inline"
-            >
-              {hint}
-            </span>
-          )}
           <ChevronsUpDown
             aria-hidden
             className="size-4 shrink-0 text-muted-foreground"
@@ -99,9 +100,7 @@ export function ChoiceMenu({
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{choice.label}</span>
                   {choice.badge && (
-                    <span className="shrink-0 text-2xs font-medium text-attention">
-                      {choice.badge}
-                    </span>
+                    <StatusBadge kind={choice.badgeKind ?? "attention"}>{choice.badge}</StatusBadge>
                   )}
                 </span>
                 {choice.description && (

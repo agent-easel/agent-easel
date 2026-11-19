@@ -1,5 +1,6 @@
 import { beforeEach, test } from "./support/test.ts";
 import { removeFlowElsewhere } from "./support/flows.ts";
+import { flowsBreadcrumb } from "./support/studio.ts";
 import {
   expectRetainedCleanFlow,
   beforeRetainedCleanFlow,
@@ -59,7 +60,7 @@ test("leaving a retained Flow for its list asks for discard", async ({ app, scre
   const state = await beforeLeftRetainedFlow({ app, screen, browser }, "leftRetainedFlow");
 
   // Act
-  await screen.getByRole("link", "All Flows", { exact: true }).tap();
+  await flowsBreadcrumb(screen).tap();
 
   // Assert
   await expectLeftRetainedFlow({ ...state });

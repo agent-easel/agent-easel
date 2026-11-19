@@ -90,7 +90,7 @@ test("Start launches a top-level Block worker and no Run conversation", async ({
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open worker in T3", { exact: true }),
+      .getByRole("link", "Open in T3", { exact: true }),
   ).toHaveAttribute("href", run.threadBindings[0]!.link!);
   await app.screenshot("direct-root-worker-after-reload");
 });
@@ -114,6 +114,9 @@ test("a worktree Run shows the worktree its workers share and creates no worker 
     .toMatchObject({ state: "bound" });
   const run = await readHistoryRun(app.baseUrl, created.id);
   assert(run.workspace.mode === "worktree");
+  await expect(screen.getByRole("region", "Run branch")).toContainText(
+    `${run.workspace.branch} Own worktree from ${run.workspace.baseRef}`,
+  );
   await screen.getByRole("button", "Workspace & observation", { exact: false }).tap();
   await expect(screen.getByRole("region", "Run workspace")).toContainText(
     `Worktree · ${run.workspace.branch} · ${run.workspace.path}`,
@@ -123,7 +126,7 @@ test("a worktree Run shows the worktree its workers share and creates no worker 
   await screen.getByRole("button", "Agent Review implementation", { exact: false }).tap();
   const inspector = screen.getByRole("complementary", "Run inspector");
   await inspector.getByRole("button", "Technical details", { exact: false }).tap();
-  await expect(inspector).toContainText("Thread: unresolved");
+  await expect(inspector).toContainText(/Thread\s*unresolved/);
   await app.screenshot("worktree-run-unvisited-block");
 });
 
@@ -209,6 +212,9 @@ test("a Draft opened by keyboard from a focused prompt with the same text contin
   await app.open("/runs/new");
   await screen.getByRole("button", "New Run (+)").tap();
   await prompt.fill(text);
+  // Runs that need you lead the open list, so the search leaves only the two Drafts as rows.
+  await screen.getByRole("textbox", "Search Run titles").fill(text);
+  await prompt.tap();
   await browser.keyboard.press("Home");
   await browser.keyboard.press(`${shortcutMod}+1`);
   await expect(listedDrafts).toHaveCount(2);
@@ -253,7 +259,7 @@ test("a Start whose response was lost is recovered after reload without a duplic
   await archiveJourneyRun(app.baseUrl, recovered[0]!.id);
 });
 
-test("a worker discussing in T3 stays working without Needs input after reload", async ({
+test("a worker idle in its working report asks for review in T3 as Needs input after reload", async ({
   app,
   screen,
   browser,
@@ -270,12 +276,17 @@ test("a worker discussing in T3 stays working without Needs input after reload",
   await browser.reload();
 
   // Assert
-  await expect(screen.getByRole("article", "Block Implement change")).toContainText(
-    "Discussing the empty-state wording",
-  );
-  await expect(screen.getByRole("region", "Needs input")).toHaveCount(0);
+  const block = screen.getByRole("article", "Block Implement change");
+  await expect(block).toContainText("Discussing the empty-state wording");
+  await expect(block).toContainText("Needs input");
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
-  expect((await readHistoryRun(app.baseUrl, run.id)).activations).toEqual(run.activations);
+  const after = await readHistoryRun(app.baseUrl, run.id);
+  expect(after.activations).toEqual(run.activations);
+  expect(after.attention).toEqual(run.attention);
   await app.screenshot("worker-conversation-after-reload");
   await screen.getByRole("button", "Workspace & observation", { exact: false }).tap();
   await screen.getByRole("heading", "Work periods", { exact: true }).scrollIntoView();
@@ -325,14 +336,14 @@ test("Request report asks a worker idle in working to assess its existing work",
   await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
   const details = screen.getByRole("complementary", "Run inspector");
   await expect(details).toContainText("Opened pull request #42");
-  await expect(details.getByText("working", { exact: true })).toBeVisible();
+  await expect(details.getByText("Needs input", { exact: true })).toBeVisible();
   await app.screenshot("worker-working-visit");
 
   // Act
   await details.getByRole("button", "Request report", { exact: true }).tap();
 
   // Assert
-  await expect(details.getByText("Report requested ·", { exact: false })).toBeVisible();
+  await expect(details.getByText("Report requested at", { exact: false })).toBeVisible();
   const saved = await readHistoryRun(app.baseUrl, found.id);
   expect(saved.recoveries).toMatchObject([{ blockId: "worker", attentionId: null }]);
   expect(saved.attention.filter((a) => a.kind === "missing-report")).toEqual([]);
@@ -423,7 +434,7 @@ test("a worker's replaced report releases only its newest result to review work"
   await expect(
     screen
       .getByRole("region", "Block activations")
-      .getByRole("link", "Open worker in T3", { exact: true }),
+      .getByRole("link", "Open in T3", { exact: true }),
   ).toHaveCount(2);
   await app.screenshot("worker-report-released-to-reviewer");
 });
@@ -493,8 +504,8 @@ test("Settle confirmation cancels without changes, then stops workers and settle
 
   // Act
   await screen.getByRole("menuitem", "Settle", { exact: true }).tap();
-  const dialog = screen.getByRole("alertdialog", "Stop the work and settle this Run?");
-  await expect(dialog).toContainText("Implement change · still running");
+  const dialog = screen.getByRole("alertdialog", `Settle “${title}”?`);
+  await expect(dialog).toContainText("Factory asks T3 to stop the working Agent");
   await expect(dialog.getByRole("button", "Cancel", { exact: true })).toBeFocused();
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
@@ -515,12 +526,11 @@ test("Settle confirmation cancels without changes, then stops workers and settle
     .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
     .toBe("settled");
   await browser.reload();
-  await screen.getByRole("button", /^Settled/).tap();
   await expect(
     screen.getByRole("navigation", "Settled Runs").getByRole("link", new RegExp(title)),
   ).toBeVisible();
   await expect(row).toHaveCount(0);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
   await app.screenshot("run-settled-from-row-menu");
 });
 
@@ -548,10 +558,10 @@ test("a late report cannot revive a manually Settled Run", async ({ app, screen 
   expect(after.lifecycle).toBe("settled");
   expect(after.reports).toEqual(before.reports);
   expect(after.activations).toEqual(before.activations);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
 });
 
-test("Retry of an unresolved settlement keeps focus on the settlement section while stopping", async ({
+test("an unresolved settlement is one Run card whose Retry settlement asks T3 to stop again", async ({
   app,
   screen,
 }) => {
@@ -561,58 +571,35 @@ test("Retry of an unresolved settlement keeps focus on the settlement section wh
     "UI worker · Settlement unresolved · Stop support unavailable",
   );
   await app.open(`/runs/${found.id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  await expect(progress).toContainText("Settlement unresolved");
-  await expect(progress).toContainText("not resolved");
-  await expect(
-    screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(found.title)),
-  ).toContainText("Settle unresolved");
+  const card = screen.getByRole("article", "Problem · Run");
+  await expect(card).toContainText("Settle couldn’t stop Implement change");
+  await expect(card).toContainText("This T3 version can’t stop worker threads.");
+  await expect(card.getByRole("link", "Open in T3", { exact: false })).toBeVisible();
+  await expect(screen.getByText("Settle requested", { exact: false })).toBeVisible();
+  const row = screen
+    .getByRole("navigation", "Open Runs")
+    .getByRole("link", new RegExp(found.title));
+  await expect(row).not.toContainText("Settle unresolved");
+  await expect(row).toContainText("Problem");
   const before = await readHistoryRun(app.baseUrl, found.id);
   assert(before.settlement?.workers[0]?.problem);
-  await expect(progress).toContainText(before.settlement.workers[0].problem);
-  await screen.getByRole("textbox", "Search Run titles", { exact: true }).fill("no matching Run");
-  await expect(
-    screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(found.title)),
-  ).toHaveCount(0);
+  await card.getByRole("button", "Technical details").tap();
+  await expect(card).toContainText(before.settlement.workers[0].problem);
   await app.screenshot("settlement-unresolved");
   await applyRunState(app, found.id, "Stop taken while the turn continues");
 
   // Act
-  await progress.getByRole("button", "Retry", { exact: true }).tap();
+  await card.getByRole("button", "Retry settlement", { exact: true }).tap();
 
   // Assert
-  await expect(progress).toContainText("Stopping workers…");
-  await expect(progress).toBeFocused();
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).settlement?.state)
+    .toBe("stopping");
+  await expect(screen.getByRole("region", "Run settlement")).toHaveCount(0);
   await app.screenshot("settlement-retry-stopping");
 });
 
-test("a Retry the user left does not pull focus to the settlement section once it is stopping", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const id = await liveRun(app, "settle-left-retry");
-  await applyRunState(app, id, "settlement unresolved");
-  await app.open(`/runs/${id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  const retry = progress.getByRole("button", "Retry", { exact: true });
-  await retry.focus();
-  await expect(retry).toBeFocused();
-  // Focus falls to the page, as when the user clicks content outside any focusable container.
-  await browser.evaluate("document.activeElement.blur()");
-  expect(await browser.evaluate("document.activeElement === document.body")).toBe(true);
-  await applyRunState(app, id, "Stop taken while the turn continues");
-
-  // Act
-  await settleStoppingWorkers(app.baseUrl, id);
-
-  // Assert
-  await expect(progress).toContainText("Stopping workers…");
-  await expect(progress).not.toBeFocused();
-});
-
-test("a held Stop that ends settles the Run and removes its settlement progress", async ({
+test("a held Stop that ends settles the Run and its meta line stops saying Settle requested", async ({
   app,
   screen,
 }) => {
@@ -621,16 +608,16 @@ test("a held Stop that ends settles the Run and removes its settlement progress"
   await applyRunState(app, id, "Stop taken while the turn continues");
   await settleStoppingWorkers(app.baseUrl, id);
   await app.open(`/runs/${id}`);
-  const progress = screen.getByRole("region", "Run settlement");
-  await expect(progress).toContainText("Stopping workers…");
+  const requested = screen.getByText("Settle requested", { exact: false });
+  await expect(requested).toBeVisible();
 
   // Act
   await applyRunState(app, id, "stopped turns ended");
 
   // Assert
   await expect.poll(async () => (await readHistoryRun(app.baseUrl, id)).lifecycle).toBe("settled");
-  await expect(progress).toHaveCount(0);
-  await expect(screen.getByRole("status", "Run status")).toContainText("Settled");
+  await expect(requested).toHaveCount(0);
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
   await app.screenshot("settlement-stop-finished");
 });
 
@@ -651,7 +638,7 @@ async function confirmSettleStillStopping(
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
   await row.secondaryTap();
   await screen.getByRole("menuitem", "Settle", { exact: true }).tap();
-  const confirmation = screen.getByRole("alertdialog", "Stop the work and settle this Run?");
+  const confirmation = screen.getByRole("alertdialog", `Settle “${title}”?`);
   await expect(confirmation.getByRole("button", "Cancel", { exact: true })).toBeFocused();
   await browser.keyboard.press("Tab");
   await browser.keyboard.press("Enter");
@@ -740,7 +727,7 @@ test("Archive from the Run page's ··· menu asks for confirmation and archives
   await screen.getByRole("button", "Run actions", { exact: true }).tap();
   await screen.getByRole("menuitem", "Archive…", { exact: true }).tap();
   const confirmation = screen.getByRole("dialog", `Archive “${title}”?`);
-  await expect(confirmation).toContainText("cannot be restored");
+  await expect(confirmation).toContainText("command palette");
   await app.screenshot("run-page-archive-confirmation");
 
   // Act
@@ -756,8 +743,7 @@ test("Archive from the Run page's ··· menu asks for confirmation and archives
   expect(await runsTitled(app.baseUrl, title)).toHaveLength(0);
   await app.open(`/runs/${found.id}`);
   await browser.reload();
-  await expect(screen.getByRole("status", "Run status")).toContainText("Archived");
-  // Archive is the only Run action, so archived history offers no actions menu.
+  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Archived");
   await expect(screen.getByRole("button", "Run actions", { exact: true })).toHaveCount(0);
   await app.screenshot("archived-run-history-by-link");
 });

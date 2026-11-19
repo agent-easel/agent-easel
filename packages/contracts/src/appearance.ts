@@ -96,6 +96,8 @@ export type T3AppearanceState = "connecting" | "following" | "unavailable" | "un
 export interface T3Appearance {
   readonly state: T3AppearanceState;
   readonly explanation: string;
+  /** The name or id of a configured default whose definition cannot be loaded or read. */
+  readonly unreadableTheme?: string;
   /** The last valid presentation of this session; kept through a transient outage only. */
   readonly presentation: AppearancePresentation | null;
 }

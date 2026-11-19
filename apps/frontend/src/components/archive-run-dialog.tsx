@@ -1,16 +1,10 @@
+import type { RunNavigationEntry } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { api } from "../api.ts";
 import { Button } from "./ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
+import { Dialog, DialogContent } from "./ui/dialog";
 
 /**
  * Archive is final, so every entry point confirms it here. An archived Run leaves navigation, so
@@ -18,12 +12,14 @@ import {
  */
 export function ArchiveRunDialog({
   run,
+  entry,
   open,
   onOpenChange,
   onArchived,
   returnFocusId,
 }: {
   run: { readonly id: string; readonly title: string };
+  entry: RunNavigationEntry | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onArchived?: () => void;
@@ -32,6 +28,18 @@ export function ArchiveRunDialog({
 }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const decisionNames = [
+    ...new Set(
+      entry?.attention.matters.flatMap((matter) =>
+        matter.kind === "human" && matter.blockName ? [`“${matter.blockName}”`] : [],
+      ),
+    ),
+  ];
+  const findAgain =
+    typeof entry?.number === "number" ? `#${entry.number} or its title` : "its title";
+  const description = decisionNames.length
+    ? `Archiving cancels the pending ${decisionNames.join(", ")} ${decisionNames.length === 1 ? "decision" : "decisions"}; find the Run again in the command palette by ${findAgain}.`
+    : `Find this Run again in the command palette by ${findAgain}.`;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function archive() {
@@ -62,6 +70,26 @@ export function ArchiveRunDialog({
       }}
     >
       <DialogContent
+        title={<>Archive “{run.title}”?</>}
+        description={description}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button type="button" variant="danger" disabled={busy} onClick={() => void archive()}>
+                {busy ? "Archiving…" : "Archive Run"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+        closeDisabled={busy}
         onCloseAutoFocus={(event) => {
           const target = returnFocusId && document.getElementById(returnFocusId);
           if (!target) return;
@@ -69,39 +97,11 @@ export function ArchiveRunDialog({
           target.focus();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>Archive “{run.title}”?</DialogTitle>
-          <DialogDescription>
-            Archiving ends this Run for good: Factory hands off nothing more, cancels work it has
-            not sent and asks T3 to interrupt the Run’s worker threads without waiting for them. The
-            Run leaves the sidebar and cannot be restored; its history is kept.
-          </DialogDescription>
-        </DialogHeader>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
           </p>
         )}
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <MutationGate>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy}
-              onClick={() => void archive()}
-            >
-              {busy ? "Archiving…" : "Archive Run"}
-            </Button>
-          </MutationGate>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,3 +1,4 @@
+import { timeAgo } from "../../time-format.ts";
 import type {
   FactoryProject,
   FlowDraft,
@@ -51,7 +52,7 @@ export function reviewSummary(settings: ReviewedSettings, repository: string, na
   return [
     project ?? "Project",
     repository,
-    `Flow ${flow ?? ""}`.trim(),
+    flow ?? "Flow",
     scheduleText(settings.schedule),
     `max ${settings.maxActiveRuns} active`,
   ].join(" · ");
@@ -59,9 +60,5 @@ export function reviewSummary(settings: ReviewedSettings, repository: string, na
 
 /** "opened 12 d ago", rounded down to minutes, hours or days. */
 export function openedAgo(createdAt: string, now = Date.now()) {
-  const minutes = Math.max(0, Math.floor((now - Date.parse(createdAt)) / 60_000));
-  if (minutes < 60) return `opened ${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `opened ${hours} h ago`;
-  return `opened ${Math.floor(hours / 24)} d ago`;
+  return `opened ${timeAgo(createdAt, now)}`;
 }

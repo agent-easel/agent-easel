@@ -1,4 +1,5 @@
 import type { RunDetail } from "@t3-factory/contracts";
+import { fullDateTime } from "../time-format.ts";
 import { sectionLabelClass } from "./page.tsx";
 
 export function RootWork({ run }: { run: RunDetail }) {
@@ -9,7 +10,7 @@ export function RootWork({ run }: { run: RunDetail }) {
       <h2 className={sectionLabelClass}>Run conversation operations</h2>
       <p>
         Observation {root.freshness} ·{" "}
-        {root.observedAt ? new Date(root.observedAt).toLocaleString() : "observed time unknown"}
+        {root.observedAt ? fullDateTime(root.observedAt) : "observed time unknown"}
       </p>
       <p>
         Engine {root.engineStatus ?? "unknown"} · queue {root.queuedCount ?? "unknown"} · native
@@ -28,11 +29,11 @@ export function RootWork({ run }: { run: RunDetail }) {
           </p>
           <p>
             First observed working:{" "}
-            {work.observedStartedAt ? new Date(work.observedStartedAt).toLocaleString() : "unknown"}
+            {work.observedStartedAt ? fullDateTime(work.observedStartedAt) : "unknown"}
           </p>
           <p>
             First observed terminal:{" "}
-            {work.observedEndedAt ? new Date(work.observedEndedAt).toLocaleString() : "unknown"}
+            {work.observedEndedAt ? fullDateTime(work.observedEndedAt) : "unknown"}
           </p>
         </article>
       ))}

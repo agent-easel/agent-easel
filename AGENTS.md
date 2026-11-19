@@ -9,6 +9,7 @@
 - For T3 integrations, inspect T3 Code's advertised tools and relevant implementation before adding Factory-side behavior. Reuse a supported T3 capability when it meets the requested behavior; explain the concrete capability gap in the PR when Factory must implement it.
 - Validate untrusted input at boundaries. Within those boundaries, use established types and invariants instead of redundant guards, silent defaults or catch-and-continue paths. Preserve required security, recovery and error handling.
 - Comments explain a non-obvious constraint or decision; names and code explain the steps.
+- Assemble UI from the components in [which component for which pattern](docs/design-system.md#which-component-for-which-pattern). A pattern with no component joins the design system and the Figma 🧩 Components page first, then reaches the screen.
 
 ### One current contract
 

@@ -1,5 +1,15 @@
-import { decideAutoFollow, selectExecutionTargets } from "../src/execution-focus.ts";
-import { fitGraphView } from "../src/canvas-fit.ts";
+import { block, event, runDetail } from "./support/run.ts";
+import {
+  decideAutoFollow,
+  selectEntryTargets,
+  selectExecutionTargets,
+} from "../src/execution-focus.ts";
+import { authoringEntryView, entryView, fitGraphView } from "../src/canvas-fit.ts";
+import {
+  boundaryDenseEntryGraph,
+  cutEntryGraph,
+  distantAuthoringGraph,
+} from "./support/entry-graphs.ts";
 import { expect, it } from "vite-plus/test";
 import {
   canvasWheelZoomFactor,
@@ -101,7 +111,7 @@ it("a working Block takes precedence over an error Block", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["active"]);
@@ -155,6 +165,70 @@ it("parallel target bounds fit together inside the padded viewport", () => {
   expect(view.y + 600 * view.scale).toBeCloseTo(392);
 });
 
+const withoutContinuations = <Blocks>(blocks: Blocks) => ({
+  blocks,
+  continuationVisits: [],
+  threadBindings: [],
+});
+
+it("a sent Continuation is the target instead of the Agent whose thread works on its prompt", () => {
+  // Arrange
+  const run = {
+    blocks: [
+      { blockId: "grill", state: "working" as const },
+      { blockId: "tickets", state: "sent" as const },
+    ],
+    continuationVisits: [
+      { blockId: "tickets", kind: "prompt" as const, bindingId: "grill-thread" },
+    ],
+    threadBindings: [{ id: "grill-thread", blockId: "grill" }],
+  };
+
+  // Act
+  const targets = selectExecutionTargets(run);
+
+  // Assert
+  expect(targets).toStrictEqual(["tickets"]);
+});
+
+const surface = { width: 1000, height: 600 };
+const noCover = { top: 0, bottom: 0 };
+const targetBox = { x: 0, y: 0, width: 200, height: 100 };
+const targetBounds = { minX: 0, minY: 0, width: 200, height: 100 };
+
+it("the entry view centres the active Blocks at 100 percent when no Block is cut", () => {
+  // Arrange
+  const boxes = [targetBox, { x: 300, y: 0, width: 200, height: 100 }];
+
+  // Act
+  const view = entryView(targetBounds, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400, y: 250 });
+});
+
+it("a Block cut at the canvas edge moves the entry view by the smallest shift that clears it", () => {
+  // Arrange
+  const cut = { x: -450, y: 0, width: 200, height: 100 };
+
+  // Act
+  const view = entryView(targetBounds, [targetBox, cut], surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 450, y: 250 });
+});
+
+it("of two equally small entry shifts the one showing more Blocks wins", () => {
+  // Arrange
+  const cut = { x: -500, y: 0, width: 200, height: 100 };
+
+  // Act
+  const view = entryView(targetBounds, [targetBox, cut], surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 500, y: 250 });
+});
+
 it("waiting and parallel working Blocks are all targets", () => {
   // Arrange
   const blocks = [
@@ -163,18 +237,18 @@ it("waiting and parallel working Blocks are all targets", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["human", "worker"]);
 });
 
-it("no active Block selects the whole-graph overview", () => {
+it("no active Block selects no target", () => {
   // Arrange
   const blocks = [{ blockId: "done", state: "finished" as const }];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual([]);
@@ -188,7 +262,7 @@ it("a failed Run targets its error-state Blocks", () => {
   ];
 
   // Act
-  const targets = selectExecutionTargets(blocks);
+  const targets = selectExecutionTargets(withoutContinuations(blocks));
 
   // Assert
   expect(targets).toStrictEqual(["failed"]);
@@ -332,7 +406,7 @@ it("a Run that fails while following animates to its error Block", () => {
   // Act
   const action = decideAutoFollow({
     seen: ["worker"],
-    targets: selectExecutionTargets(blocks),
+    targets: selectExecutionTargets(withoutContinuations(blocks)),
     following: true,
     visibility: "visible",
     reducedMotion: false,
@@ -349,7 +423,7 @@ it("a Run that succeeds while following keeps the view on its last Block", () =>
   // Act
   const action = decideAutoFollow({
     seen: ["worker"],
-    targets: selectExecutionTargets(blocks),
+    targets: selectExecutionTargets(withoutContinuations(blocks)),
     following: true,
     visibility: "visible",
     reducedMotion: false,
@@ -357,4 +431,221 @@ it("a Run that succeeds while following keeps the view on its last Block", () =>
 
   // Assert
   expect(action).toBe("nothing");
+});
+
+it("a Run without active work opens on the most recently changed finished Block", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "finished" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "human-answered" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
+});
+
+it("a later attention resolution on an earlier finished Block does not displace the last visit", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "finished" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "report-accepted" as const },
+      { ...event(3), blockId: "implement", kind: "attention-settled" as const },
+      { ...event(4), blockId: "implement", kind: "execution-observed" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
+});
+
+it("entry focus uses the latest stopped visit when it is newer than an earlier finish", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "stopped" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "worker-stopped" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
+});
+
+it("the Flow editor opens at 100 percent with the Flow input at the left margin and no Block cut", () => {
+  // Arrange
+  const flowInput = { x: 40, y: 50, width: 180, height: 70 };
+  const blocks = [
+    { x: 300, y: 40, width: 224, height: 100 },
+    { x: 600, y: 40, width: 224, height: 100 },
+    { x: 900, y: 40, width: 224, height: 100 },
+  ];
+  const graph = { minX: 40, minY: 40, width: 1084, height: 100 };
+  const padding = { x: 48, top: 0, bottom: 0 };
+
+  // Act
+  const view = authoringEntryView(flowInput, graph, [flowInput, ...blocks], surface, padding);
+
+  // Assert
+  const shown = (box: { x: number; width: number }): [number, number] => [
+    box.x + view.x,
+    box.x + box.width + view.x,
+  ];
+  expect(view.scale).toBe(1);
+  expect(shown(flowInput)[0]).toBeGreaterThanOrEqual(0);
+  expect(shown(flowInput)[1]).toBeLessThanOrEqual(surface.width);
+  for (const box of blocks) {
+    const [left, right] = shown(box);
+    expect(left >= surface.width || right <= surface.width).toBe(true);
+  }
+});
+
+it("a diagonal clearance keeps the minimal shift with every Block wholly in or out", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 200, height: 100 };
+  const boxes = [
+    { x: 0, y: 0, width: 200, height: 100 },
+    { x: 390, y: 20, width: 220, height: 80 },
+    { x: 40, y: 210, width: 180, height: 120 },
+  ];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 390, y: 250 });
+});
+
+it("a subpixel shift reveals a Block that was just outside the centred view", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 200, height: 100 };
+  const boxes = [
+    { x: 0, y: 0, width: 200, height: 100 },
+    { x: -400.0012, y: -240, width: 0.001, height: 20 },
+  ];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400.0002, y: 250 });
+});
+
+it("an oversized target keeps the centred view when no shift can contain it", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 2000, height: 100 };
+  const boxes = [{ x: 0, y: 0, width: 2000, height: 100 }];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: -500, y: 250 });
+});
+
+it("the Flow editor shifts on both axes to clear a cut Block and keep the input visible", () => {
+  // Arrange
+  const flowInput = { x: 16, y: 0, width: 180, height: 100 };
+  const cut = { x: 200, y: 180, width: 240, height: 140 };
+  const boxes = [flowInput, cut];
+  const graph = { minX: 16, minY: 0, width: 424, height: 320 };
+  const padding = { x: 16, top: 24, bottom: 16 };
+
+  // Act
+  const view = authoringEntryView(flowInput, graph, boxes, { width: 800, height: 600 }, padding);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 0, y: 144 });
+});
+
+it("a 500-block entry view keeps the minimal shift and resolves quickly", () => {
+  // Arrange
+  const graph = cutEntryGraph(500);
+  const started = performance.now();
+
+  // Act
+  const view = entryView(graph.focus, graph.boxes, graph.surface, graph.padding);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 330, y: 250 });
+  expect(performance.now() - started).toBeLessThan(100);
+});
+
+it("a 500-block Flow editor keeps the open placement and resolves quickly", () => {
+  // Arrange
+  const graph = distantAuthoringGraph(500);
+  const started = performance.now();
+
+  // Act
+  const view = authoringEntryView(
+    graph.flowInput,
+    graph.graph,
+    graph.boxes,
+    graph.surface,
+    graph.padding,
+  );
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 8, y: -50 });
+  expect(performance.now() - started).toBeLessThan(100);
+});
+
+it("a clear 500-block view opens promptly with fractional positions at the canvas corner", () => {
+  // Arrange
+  const graph = boundaryDenseEntryGraph();
+  const started = performance.now();
+
+  // Act
+  const view = entryView(graph.focus, graph.boxes, graph.surface, graph.padding);
+  const elapsed = performance.now() - started;
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400, y: 250 });
+  expect(elapsed).toBeLessThan(100);
+});
+
+it("the Flow editor can shift farther than a quarter width to clear a cut Block while keeping the input visible", () => {
+  // Arrange
+  const flowInput = { x: 16, y: 0, width: 180, height: 100 };
+  const cut = { x: 585, y: 0, width: 240, height: 100 };
+  const graph = { minX: 16, minY: 0, width: 809, height: 100 };
+  const padding = { x: 16, top: 0, bottom: 0 };
+
+  // Act
+  const view = authoringEntryView(
+    flowInput,
+    graph,
+    [flowInput, cut],
+    { width: 800, height: 600 },
+    padding,
+  );
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 215, y: 250 });
 });

@@ -59,7 +59,7 @@ export async function archiveJourneyRun(baseUrl: string | undefined, id: string)
 }
 
 export async function confirmSettlement(screen: Screen) {
-  await screen.getByRole("alertdialog").getByRole("button", "Settle", { exact: true }).tap();
+  await screen.getByRole("alertdialog").getByRole("button", "Settle Run", { exact: true }).tap();
 }
 
 /** The user's confirmed Settle, sent as the dialog sends it. */

@@ -1,6 +1,5 @@
 import {
   createFlowLayoutDimensions,
-  incomingPortIndex,
   type CanvasDimensions,
   type WireSource,
 } from "@t3-factory/flow-layout";
@@ -16,7 +15,13 @@ import {
 } from "react";
 import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
-import { fitGraphView } from "../canvas-fit.ts";
+import {
+  authoringEntryView,
+  entryView,
+  fitGraphView,
+  mergeGraphBounds,
+  type GraphBounds,
+} from "../canvas-fit.ts";
 import { clampGraphPosition, clientToGraphPoint, type CanvasView } from "../canvas-viewport.ts";
 import { createCanvasGeometry } from "../flow-geometry.ts";
 import {
@@ -29,7 +34,7 @@ import {
 } from "../flow-graph.ts";
 import { useCanvasViewport } from "../use-canvas-viewport.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
-import { CanvasZoomControls, type CanvasControlsPresentation } from "./canvas-zoom-controls.tsx";
+import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
 import { flowInputIdentity } from "./flow-block.tsx";
 import { ConnectionPreview, FlowWires, type WirePresentation } from "./flow-wires.tsx";
@@ -124,6 +129,9 @@ export type CanvasPoints = {
 
 type Dimensions = CanvasDimensions;
 type Geometry = ReturnType<typeof createCanvasGeometry>;
+
+/** Space kept around Blocks a selection reveals. */
+const REVEAL_MARGIN = 24;
 
 /** Fit keeps this margin at the sides and room for the zoom controls at the bottom. */
 const FIT_MARGIN = { x: 48, bottom: 80 };
@@ -381,21 +389,15 @@ function GesturePreview({
   if (!from) return null;
   const target = graph.blocks.find((b) => b.id === targetBlockId);
   const to = target
-    ? geometry.inputPoint(target, incomingPortIndex(graph, target.id, source))
+    ? geometry.inputPoint(target, geometry.incomingPortIndex(target.id, source))
     : gesture.pointer;
   return <ConnectionPreview from={from} to={to} />;
 }
 
 /**
  * The transformed layer covers every node with a margin, so empty canvas around the graph pans.
- * It extends by the width a floating panel covers, so scrolling a block into view can move it
- * out from under the panel.
  */
-function layerSize(
-  dimensions: Dimensions,
-  coveredRight: number,
-  shapes: readonly [CanvasGraph, Geometry][],
-) {
+function layerSize(dimensions: Dimensions, shapes: readonly [CanvasGraph, Geometry][]) {
   const boxes = shapes.flatMap(([graph, geometry]) => [
     geometry.flowInputBox,
     ...graph.blocks.map((item) => ({
@@ -405,7 +407,7 @@ function layerSize(
     })),
   ]);
   return {
-    width: Math.max(960, ...boxes.map((box) => box.x + box.width + 80)) + coveredRight,
+    width: Math.max(960, ...boxes.map((box) => box.x + box.width + 80)),
     height: Math.max(640, ...boxes.map((box) => box.y + box.height + 120)),
   };
 }
@@ -440,8 +442,6 @@ type CanvasSurfaceProps = {
   ref?: RefObject<HTMLElement | null>;
   /** The canvas region's accessible name. */
   label: string;
-  /** The region's background. */
-  className?: string;
   /** What the canvas shows, such as a Flow or a Run, once its graph is ready; a new scope fits and arranges afresh. */
   scope: string | null;
   graph: FlowGraph;
@@ -453,14 +453,19 @@ type CanvasSurfaceProps = {
   flowInput: CanvasFlowInputContent;
   block: (block: CanvasBlock) => CanvasBlockContent;
   wires: WirePresentation;
-  /** Whether a container resize refits the view or preserves it. */
-  resize: "refit" | "preserve";
-  /** Space floating panels cover at the top and at the right; fit frames the graph beside them. */
-  covered: { readonly top: number; readonly right: number };
+  /** Space floating badges cover at the top; fit frames the graph below them. */
+  covered: { readonly top: number };
   /** Without blocks, fit frames this area from the Flow input instead of the input alone. */
   emptyGraphSize?: { readonly width: number; readonly height: number };
   /** Blocks the entry view frames and following tracks, in a stable order; without them nothing follows. */
   focusTargets?: readonly string[];
+  /** Entry targets when the opening view differs from live following. */
+  entryTargets?: readonly string[];
+  /**
+   * Blocks to keep in view, such as a selected Block and the next one; a change pans the least
+   * distance that shows them whole.
+   */
+  reveal?: readonly string[];
   /** Whether the canvas is shown rather than covered by another screen. */
   shown?: boolean;
   /** Where an explicit arrangement is committed; without it an arrangement stays local. */
@@ -481,9 +486,6 @@ type CanvasSurfaceProps = {
   children?: ReactNode;
   /** Top-left badges and notices; they never block panning. */
   overlay?: ReactNode;
-  /** A line below the zoom controls. */
-  note?: string;
-  controls: CanvasControlsPresentation;
 };
 
 /**
@@ -560,14 +562,12 @@ function SurfaceLayer({
   wires,
   gesture,
   flowInput,
-  coveredRight,
   startPan,
   children,
 }: {
   view: CanvasView;
   surfaceGraph: SurfaceGraph;
   dimensions: Dimensions;
-  coveredRight: number;
   wires: WirePresentation;
   gesture: CanvasGesture | null;
   flowInput: CanvasFlowInputContent;
@@ -581,7 +581,7 @@ function SurfaceLayer({
       className="absolute top-0 left-0 origin-top-left"
       style={{
         transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
-        ...layerSize(dimensions, coveredRight, [
+        ...layerSize(dimensions, [
           [arranged, geometry],
           [graph, drawn],
         ]),
@@ -612,7 +612,7 @@ function SurfaceLayer({
           content={content(item)}
           pendingInput={
             pending?.targetBlockId === item.id
-              ? incomingPortIndex(graph, item.id, pending.source)
+              ? drawn.incomingPortIndex(item.id, pending.source)
               : null
           }
         />
@@ -627,15 +627,11 @@ function SurfaceControls({
   layout,
   focusTargets,
   busy,
-  note,
-  controls,
 }: {
   viewport: ReturnType<typeof useCanvasViewport>;
   layout: SurfaceGraph["layout"];
   focusTargets: readonly string[] | undefined;
   busy: boolean;
-  note: string | undefined;
-  controls: CanvasControlsPresentation;
 }) {
   return (
     <div className="pointer-events-none absolute bottom-4 left-4 flex flex-col items-start gap-2">
@@ -654,16 +650,30 @@ function SurfaceControls({
           <AutoArrangeButton
             pending={layout.pending}
             disabled={busy}
-            iconOnly={controls.kind === "icons"}
             onClick={() => void layout.autoArrange()}
           />
         }
-        presentation={controls}
       />
       <AutoArrangeStatus error={layout.error} onDismiss={layout.dismissError} />
-      {note && <p className="text-2xs tracking-label text-muted-foreground">{note}</p>}
     </div>
   );
+}
+
+/**
+ * What a canvas with focus targets opens on: the targets; without any, the whole graph while it
+ * fits at 100 %, otherwise the Flow input.
+ */
+function entryTarget(
+  geometry: ReturnType<typeof useSurfaceGraph>["geometry"],
+  targets: readonly string[],
+  width: number,
+  height: number,
+) {
+  if (targets.length) return geometry.focusBounds(targets);
+  const graph = geometry.bounds();
+  return graph.width <= width && graph.height <= height
+    ? graph
+    : mergeGraphBounds(geometry.flowInputBox, []);
 }
 
 /**
@@ -674,7 +684,7 @@ function SurfaceControls({
  * the surface only through `arrangement.commit`.
  */
 export function CanvasSurface(props: CanvasSurfaceProps) {
-  const { ref, label, className, scope, dimensions, focusTargets, shown = true, covered } = props;
+  const { ref, label, scope, dimensions, focusTargets, shown = true, covered } = props;
   const own = useRef<HTMLElement>(null);
   const surface = ref ?? own;
   const surfaceGraph = useSurfaceGraph(props);
@@ -688,15 +698,42 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     getFocusView:
       focusTargets &&
       ((width, height) => fitGraphView(geometry.focusBounds(focusTargets), width, height, padding)),
+    getEntryView: (width, height) =>
+      focusTargets
+        ? entryView(
+            entryTarget(geometry, props.entryTargets ?? focusTargets, width, height),
+            geometry.boxes(),
+            { width, height },
+            padding,
+          )
+        : authoringEntryView(
+            geometry.flowInputBox,
+            geometry.bounds(),
+            geometry.boxes(),
+            { width, height },
+            padding,
+          ),
     focusTargets,
     padding,
-    reservedRight: covered.right,
-    resize: props.resize,
     fitRevision: layout.arranged,
     onTap: props.onTap,
   });
-  const { view } = viewport;
+  const { view, reveal } = viewport;
   useImperativeHandle(props.points, () => canvasPoints(surface, view), [surface, view]);
+  const revealed = props.reveal?.join("\n") ?? "";
+  const revealBounds = revealed ? geometry.focusBounds(revealed.split("\n")) : null;
+  const revealKey = revealBounds && JSON.stringify(revealBounds);
+  useLayoutEffect(() => {
+    if (!revealKey) return;
+    const bounds = JSON.parse(revealKey) as GraphBounds;
+    // Keeps a margin, and the covered top, around the revealed Blocks.
+    reveal({
+      minX: bounds.minX - REVEAL_MARGIN,
+      minY: bounds.minY - covered.top,
+      width: bounds.width + REVEAL_MARGIN * 2,
+      height: bounds.height + covered.top + REVEAL_MARGIN,
+    });
+  }, [revealKey, reveal, covered.top]);
   return (
     <section
       ref={surface}
@@ -705,10 +742,7 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
       data-following={focusTargets ? viewport.following : undefined}
       tabIndex={0}
       onKeyDown={viewport.onKeyDown}
-      className={cn(
-        "relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
-        className,
-      )}
+      className="relative h-full min-h-0 w-full min-w-0 overflow-hidden bg-background bg-[radial-gradient(var(--border)_1px,transparent_1px)] bg-size-[22px_22px] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer
@@ -718,7 +752,6 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         wires={props.wires}
         gesture={props.gesture ?? null}
         flowInput={props.flowInput}
-        coveredRight={covered.right}
         startPan={viewport.startPan}
       >
         {props.children}
@@ -733,8 +766,6 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
         layout={layout}
         focusTargets={focusTargets}
         busy={props.arrangement?.busy === true}
-        note={props.note}
-        controls={props.controls}
       />
     </section>
   );

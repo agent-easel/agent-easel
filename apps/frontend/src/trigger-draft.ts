@@ -4,9 +4,7 @@ import type {
   FlowDraft,
   TriggerDefinition,
   TriggerRepository,
-  TriggerSave,
   UpdateTriggerInput,
-  ValidationIssue,
 } from "@t3-factory/contracts";
 import {
   mayStartFlow,
@@ -14,6 +12,8 @@ import {
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
   validateUpdateTrigger,
+  validateTriggerSchedule,
+  validateTriggerLimit,
 } from "@t3-factory/domain-validation";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import {
@@ -102,11 +102,24 @@ function settingsOf(content: TriggerContent) {
 
 /**
  * The Flows a Trigger of `projectId` may start, as New Run offers them: global Flows and the
- * Project's own. The chosen Flow stays listed, so one moved to another Project is still named
- * while readiness explains why it cannot start. Without a Project only global Flows are offered.
+ * Project's own. Without a Project only global Flows are offered.
  */
-export function triggerFlows(flows: readonly FlowDraft[], projectId: string, flowId: string) {
-  return flows.filter((flow) => flow.id === flowId || mayStartFlow(flow.projectId, projectId));
+export function triggerFlows(flows: readonly FlowDraft[], projectId: string) {
+  return flows.filter((flow) => mayStartFlow(flow.projectId, projectId));
+}
+
+/** SQLite's NOCASE collation folds ASCII letters, as does the Trigger name constraint. */
+const triggerNameKey = (name: string) =>
+  name.trim().replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+
+/** Finds the saved Trigger that would hold this name at the unique index. */
+export function matchingTriggerName(
+  triggers: readonly TriggerDefinition[] | null,
+  name: string,
+  exceptId?: string,
+) {
+  const wanted = triggerNameKey(name);
+  return triggers?.find((entry) => entry.id !== exceptId && triggerNameKey(entry.name) === wanted);
 }
 
 /** The settings a save would send, validated, or why they cannot be sent. */
@@ -137,7 +150,6 @@ function saveRequest(
   trigger: TriggerDefinition | null,
   content: TriggerContent,
   source: TriggerDraftSource,
-  received: (save: TriggerSave) => TriggerDefinition,
 ): { error: string } | SaveRequest<TriggerDefinition, TriggerContent> {
   const proposal = proposalOf(trigger, content);
   if ("error" in proposal) return proposal;
@@ -145,17 +157,16 @@ function saveRequest(
   if (proposal.kind === "update")
     return {
       submitted: content,
-      send: () => source.updateTrigger(proposal.id, proposal.input).then(received),
+      send: () => source.updateTrigger(proposal.id, proposal.input).then((save) => save.trigger),
       unknownMessage:
         "Save outcome unknown. Factory may have saved this Trigger; your edits are kept and nothing is retried.",
       fallback,
     };
   return {
     submitted: content,
-    send: () => source.createTrigger(proposal.input).then(received),
-    unknownMessage:
-      "Save outcome unknown. Factory may have created this Trigger; check the Trigger list before creating it again.",
-    fallback,
+    send: () => source.createTrigger(proposal.input).then((save) => save.trigger),
+    unknownMessage: "Factory may have created this Trigger. Your settings are still here.",
+    fallback: "Factory could not create this Trigger. Your settings are still here.",
   };
 }
 
@@ -166,9 +177,10 @@ export interface TriggerDraftSnapshot extends RevisionedDraftState<
   /** The query's ready label, or why the query cannot be saved. */
   readonly query:
     | { readonly readyLabel: string; readonly authorFilter: boolean }
-    | { error: string };
-  /** What the last accepted save asked its author to be aware of. */
-  readonly warnings: readonly ValidationIssue[];
+    | { error: string; code: string };
+  readonly nameTaken: boolean;
+  readonly intervalError: string | undefined;
+  readonly limitError: string | undefined;
 }
 
 /**
@@ -178,27 +190,39 @@ export interface TriggerDraftSnapshot extends RevisionedDraftState<
  * confirmed one.
  */
 export function createTriggerDraft(trigger: TriggerDefinition | null, source: TriggerDraftSource) {
-  let warnings: readonly ValidationIssue[] = [];
+  let listed = source.getSnapshot().triggers;
   const draft = createRevisionedDraft({
     saved: trigger,
     content: trigger ? contentOf(trigger) : newContent,
     contentOf,
     list: () => source.getSnapshot().triggers,
     read: source.getTrigger,
+    isRevisionConflict: (cause) =>
+      cause.detail.issues.some((issue) => issue.code === "stale_revision"),
     view(state): TriggerDraftSnapshot {
       const query = parseTriggerQuery(state.content.query);
+      const settings = settingsOf(state.content);
+      const interval = validateTriggerSchedule(settings.schedule);
+      const limit = validateTriggerLimit(settings.maxActiveRuns);
+      const nameTaken =
+        !!matchingTriggerName(listed.value, settings.name, state.saved?.id) ||
+        state.issues.some((entry) => entry.code === "trigger_name_taken");
       return {
         ...state,
-        canSave: state.canSave && !(!state.saved && state.saveOutcome === "unknown"),
-        query: query.ok ? query.value : { error: query.error.message },
-        warnings,
+        canSave:
+          state.canSave &&
+          !nameTaken &&
+          !(!state.saved && state.saveOutcome === "unknown") &&
+          !("error" in proposalOf(state.saved, state.content)),
+        query: query.ok
+          ? query.value
+          : { error: query.error.message, code: query.error.issues[0]!.code },
+        nameTaken,
+        intervalError: interval.ok ? undefined : interval.error.message,
+        limitError: limit.ok ? undefined : limit.error.message,
       };
     },
   });
-  function received(save: TriggerSave) {
-    warnings = save.warnings;
-    return save.trigger;
-  }
   /**
    * A Trigger's Project is a saved setting, not an owner: another client's Project change is a new
    * revision the draft already shows as saved elsewhere, so it never waits for an acknowledgement.
@@ -208,9 +232,14 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     if (ownerChange.status === "changed") draft.acknowledgeOwner(ownerChange.to);
   }
   function edit(change: Partial<TriggerContent>) {
-    const { saving, removed, removing } = draft.getSnapshot();
-    if ((saving && !removed) || removing) return;
-    warnings = [];
+    const { saving, removed, removing, saved, saveOutcome, content, issues } = draft.getSnapshot();
+    if ((saving && !removed) || removing || (!saved && saveOutcome === "unknown")) return;
+    if (
+      change.name !== undefined &&
+      triggerNameKey(change.name) !== triggerNameKey(content.name) &&
+      issues.some((issue) => issue.code === "trigger_name_taken")
+    )
+      draft.report("");
     draft.edit(change);
   }
   return {
@@ -219,7 +248,12 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     /** Follows Studio's saved Triggers until the returned function is called. */
     connect() {
       const reconcile = () => {
+        const next = source.getSnapshot().triggers;
+        const changed = next !== listed;
+        listed = next;
+        const current = draft.getSnapshot();
         draft.reconcile();
+        if (changed && current === draft.getSnapshot()) draft.publish();
         acceptProject();
       };
       const unsubscribe = source.subscribe(reconcile);
@@ -266,7 +300,7 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     async save() {
       const { saved, content, canSave } = draft.getSnapshot();
       if (!canSave) return undefined;
-      const request = saveRequest(saved, content, source, received);
+      const request = saveRequest(saved, content, source);
       if (!("error" in request)) return draft.save(request);
       draft.report(request.error);
       return undefined;
@@ -278,7 +312,11 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
       draft.keep(revision);
       acceptProject();
     },
-    /** The user checked the Trigger list after an unknown Create, so Create may be sent again. */
+    /** Ends this draft after the author opens a Trigger found by the recovery read. */
+    openRecovered(trigger: TriggerDefinition) {
+      draft.load(trigger);
+    },
+    /** The recovery read found no Trigger, and the author acknowledged the unknown outcome. */
     allowCreateAgain() {
       if (draft.getSnapshot().saved) return;
       draft.acknowledgeUnknownSave();

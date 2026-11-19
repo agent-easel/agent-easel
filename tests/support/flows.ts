@@ -118,17 +118,21 @@ export async function saveSingleAgentFlow(
 }
 
 /**
- * Saves a new ready checkout Flow at the definition size limit: the Flow input starts one block of
- * the named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate holding as many rules as a save
- * request can carry while staying 1,000 bytes under the limit, so a short rename still saves. Rules
- * have ID-length IDs, short names (`Route N`) and strictly descending thresholds down to 2; the
- * last rule and Otherwise reach Human step Review.
+ * Saves a new checkout Flow at the definition size limit: the Flow input starts one block of the
+ * named saved Agent (`worker`, named Coder), whose `exitId` reaches Condition Escalate, and
+ * Otherwise reaches Human step Review. With `wiring: "last"`, Escalate holds as many rules as a
+ * save request carries 1,000 bytes under the limit, so a short rename still saves, and only its
+ * last rule reaches Review: the Flow is not ready, since every Condition output needs a wire. With
+ * `wiring: "every"`, every rule reaches Review, so the Flow is ready and the connection limit
+ * bounds the rules, each padded to stay at the size limit. Rules are named `Route N`, have
+ * ID-length IDs and strictly descending thresholds down to 2.
  */
 export async function saveConditionAtSizeLimit(
   baseUrl: string | undefined,
   name: string,
   agentName: string,
   exitId: string,
+  wiring: "last" | "every",
 ) {
   const agents = (await flowRequest(baseUrl, "/api/agents")) as AgentDefinition[];
   const agent = agents.find((item) => item.name === agentName);
@@ -164,27 +168,37 @@ export async function saveConditionAtSizeLimit(
   };
   const body = { name, workspace: { mode: "checkout" }, graph };
   const budget = DEFINITION_REQUEST_LIMIT_BYTES - 1_000;
-  const withRules = (count: number) => {
+  const withRules = (count: number, padding: number) => {
     condition.rules = Array.from({ length: count }, (_, index) => ({
       id: `rule-${String(index).padStart(31, "0")}`,
-      name: `Route ${index + 1}`,
+      name: `Route ${index + 1}${padding ? ` ${"·".repeat(padding)}` : ""}`,
       fromArrival: count - index + 1,
     }));
-    graph.connections[2] = {
-      sourceBlockId: condition.id,
-      exitId: condition.rules.at(-1)!.id,
-      targetBlockId: "review",
-    };
+    const wired = wiring === "every" ? condition.rules : condition.rules.slice(-1);
+    graph.connections.splice(
+      2,
+      Infinity,
+      ...wired.map((rule) => ({
+        sourceBlockId: condition.id,
+        exitId: rule.id,
+        targetBlockId: "review",
+      })),
+    );
     return saveBytes(body);
   };
-  // The largest rule count that still fits the budget.
-  let [fits, overflows] = [1, 100_000];
+  // The largest rule count, or with every rule wired the longest padding, that fits the budget.
+  // The Agent's wire and Otherwise's take two of the connection limit.
+  const fill =
+    wiring === "every"
+      ? (size: number) => withRules(CONNECTION_LIMIT - 2, size)
+      : (size: number) => withRules(size, 0);
+  let [fits, overflows] = wiring === "every" ? [0, 10_000] : [1, 100_000];
   while (overflows - fits > 1) {
-    const count = Math.floor((fits + overflows) / 2);
-    if (withRules(count) <= budget) fits = count;
-    else overflows = count;
+    const size = Math.floor((fits + overflows) / 2);
+    if (fill(size) <= budget) fits = size;
+    else overflows = size;
   }
-  const bytes = withRules(fits);
+  const bytes = fill(fits);
   assert(definitionSaveFits(body) && bytes <= budget);
   const created = (await flowRequest(baseUrl, "/api/flows", {
     method: "POST",
@@ -194,14 +208,19 @@ export async function saveConditionAtSizeLimit(
   return { id: created.id, rules: condition.rules, bytes };
 }
 
+/** Every Flow graph holds at most this many connections. */
+const CONNECTION_LIMIT = 5000;
+
 /** A save request's size, measured like `definitionSaveFits` at the largest revision and owner. */
 const saveBytes = (body: object) =>
   new TextEncoder().encode(JSON.stringify(saveRequestBound(body))).byteLength;
 
-/** A repairable graph issue names its cause and prevents opening the Run composer. */
+/** The Flow is not ready, and its expanded readiness issues name the repairable cause. */
 export async function expectFlowBlocked(screen: Screen, message: RegExp) {
-  await expect(screen.getByRole("button", message)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await screen.getByRole("button", /^Not ready/).tap();
+  await expect(
+    screen.getByRole("list", "Readiness issues").getByRole("button", message),
+  ).toBeVisible();
 }
 
 /** Opens Studio on a wide canvas and creates the named Flow through New Flow. */

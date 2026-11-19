@@ -339,6 +339,16 @@ function validateAgentContent(input: unknown): Result<AgentContent> {
 }
 
 export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
+  const requestId =
+    typeof input === "object" && input !== null && "requestId" in input
+      ? input.requestId
+      : undefined;
+  if (requestId !== undefined && typeof requestId !== "string")
+    return invalid(
+      "invalid_create_request",
+      "requestId",
+      "The Agent Create request id is invalid.",
+    );
   const content = validateAgentContent(input);
   if (!content.ok) return content;
   const projectId = parseOwningProject(input);
@@ -351,6 +361,7 @@ export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
       ...content.value,
       projectId: projectId.value,
       projectOverrides: projectOverrides.value,
+      ...(requestId === undefined ? {} : { requestId }),
     },
   };
 }

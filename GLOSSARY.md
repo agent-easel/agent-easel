@@ -65,7 +65,7 @@ A reusable worker definition consisting of a prompt, optional execution settings
 One immutable saved version of an Agent's name, prompt, execution settings (complete or none), Project overrides and exits. Every successful create or save appends the next revision; Studio shows the latest, and removing an Agent keeps its revisions. A Run captures only revisions with execution settings.
 
 **Needs a model**:
-The state of an Agent saved without execution settings (`execution: null`). It can be edited, placed and duplicated, but it cannot run until a save chooses an environment, provider and model. It describes a missing choice, not the availability of a saved one.
+The state of an Agent saved without execution settings (`execution: null`). It can be edited, placed and duplicated, but it cannot run until a save chooses an environment, provider and model. Studio also shows it for a saved selection T3 no longer offers, which the Agent editor clears from its draft; the stored Agent changes only on Save.
 _Avoid_: unavailable, unknown.
 
 **Definition export**:
@@ -77,7 +77,7 @@ The durable record of one committed import: the client's request id, a versioned
 _Avoid_: import history, provenance.
 
 **Studio**:
-The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **AUTHOR** group), and Triggers (its **AUTOMATE** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
+The modal authoring surface for Flows and reusable Agent definitions, global and Project-owned alike (its **Author** group), and Triggers (its **Automate** group). It opens over the current Run or composer from the sidebar icon beside Settings, and closing it returns to that underlying screen. Settings holds the T3 connection and does not edit Agents, Flows or Triggers.
 _Avoid_: Settings as the Agent editor or Trigger location; a Flows destination in the Run sidebar.
 
 **Factory server**:
@@ -169,7 +169,7 @@ _Avoid_: bridge (the retired stdio copy installed per harness).
 One accepted task at a Flow block, from its launch or visit message until its result is completed. Reports naming the Block id apply to the Block's current activation, whichever turn of the worker thread sends them.
 
 **Needs input**:
-Pending questions or decisions on a Run. This covers Human occurrences answered in Factory and native T3 questions or permissions, which stay Open in T3. An Agent's question in chat is ordinary conversation, not Needs input. It is not an execution state.
+Pending questions or decisions on a Run. This covers Human occurrences answered in Factory and native T3 questions or permissions, which stay Open in T3, and an Agent idle with its visit's report still `working`, which the owner reviews in T3 without an attention matter (Factory never parses chat). On a block it replaces Working or Waiting in the status badge.
 
 **Conversation waiting**:
 A retired, non-final `waiting` report with which an Agent once asked the user in chat. Factory now refuses it; recorded ones stay readable as history, and an upgrade turned pending ones into Working reports.
@@ -244,7 +244,7 @@ The one panel docked beside the Execution canvas. It shows the **Run overview** 
 _Avoid_: Run context, block details card
 
 **Run status**:
-The one status the Run detail header shows for the whole Run: Archived, Settled, Problem, Needs input, Working or Idle, the first that applies. Block execution states stay on the execution canvas.
+A Run's work state as its sidebar row and blocks show it: Needs input and Problem on the row, Working, Waiting, Needs input, Problem, Finished or Stopped on each block. The Run detail header carries no work state; it names only a Settled or Archived lifecycle, or Idle.
 _Avoid_: header pills, Run state badges.
 
 **Not live**:
@@ -342,7 +342,7 @@ The full-page launch surface for choosing a Project, a Flow that may start there
 global Flow or a Flow owned by that Project) and the required initial prompt, with optional attached images. Its Flow
 picker offers no Flow until a Project is chosen, and a Flow that no longer fits the Project is cleared silently, keeping
 the prompt and images. It edits one Run draft at a time and opens a fresh composition from
-New Run or a Flow's Start Run; opening it does not start execution. Start always uses
+New Run only; opening it does not start execution. Start always uses
 the current saved Flow and Agent definitions.
 
 **Run draft**:

@@ -11,17 +11,20 @@ export function SegmentedChoice<Value extends string>({
   options,
   onChange,
   size,
+  disabled,
 }: {
   labelledBy: string;
   value: Value;
   options: readonly (readonly [Value, string])[];
   onChange: (value: Value) => void;
   size?: "sm";
+  disabled?: boolean;
 }) {
   return (
     <RadioGroup.Root
       aria-labelledby={labelledBy}
       value={value}
+      disabled={disabled}
       onValueChange={(next) => {
         const option = options.find(([candidate]) => candidate === next);
         if (option) onChange(option[0]);

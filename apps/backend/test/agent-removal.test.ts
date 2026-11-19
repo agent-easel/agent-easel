@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { assertOk, discoveredClones, sampleAgentInput } from "./support/domain-setup.ts";
 import { agentBlock, flowInput } from "./support/scenarios.ts";
 import { prepared } from "./support/prepared-runner.ts";
+import { triggerWorld } from "./support/triggers.ts";
 
 it("removing an unused Agent deletes the definition", async (c) => {
   // Arrange
@@ -72,6 +73,32 @@ it("removing a Flow preserves its active Run definitions and shared Agent", asyn
   expect(run.value.gateOpen).toBe(true);
   expect(run.value.definitions).toStrictEqual(started.value.definitions);
   assert((await f.getAgent(agent.id)).ok);
+});
+
+it("removing a Flow a Trigger starts is refused until that Trigger is removed", async (c) => {
+  // Arrange
+  const { f, flow, triggerInput } = await triggerWorld(c);
+  const saved = await f.createTrigger(triggerInput);
+  assert(saved.ok);
+
+  // Act
+  const refused = await f.removeFlow(flow.id);
+
+  // Assert
+  assert(!refused.ok);
+  expect(refused.error).toMatchObject({
+    code: "conflict",
+    issues: [
+      {
+        code: "flow_in_use",
+        path: "flowId",
+        message: `Trigger "Ready issues" (${saved.value.trigger.id}) starts this Flow.`,
+      },
+    ],
+  });
+  assert((await f.getFlow(flow.id)).ok);
+  assert((await f.removeTrigger(saved.value.trigger.id)).ok);
+  expect(await f.removeFlow(flow.id)).toStrictEqual({ ok: true, value: undefined });
 });
 
 it("a removed Flow rejects saves without being recreated and removing it again succeeds", async (c) => {

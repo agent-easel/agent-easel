@@ -6,12 +6,14 @@ import {
 import type {
   AgentCapabilities,
   AgentExecutionSettings,
-  AgentModelCapability,
+  AgentModelOptionDescriptor,
+  AgentModelOptionValue,
   FlowDraft,
 } from "@t3-factory/contracts";
 
-export function flowUsageCount(flows: readonly FlowDraft[], agentId: string): number {
-  return flows.filter((flow) => flowGraphReferencesAgent(flow.graph, agentId)).length;
+/** Saved Flows whose graph places `agentId`, in the list's order. */
+export function placingFlows(flows: readonly FlowDraft[], agentId: string): FlowDraft[] {
+  return flows.filter((flow) => flowGraphReferencesAgent(flow.graph, agentId));
 }
 
 export function flowUsageLabel(count: number): string {
@@ -26,97 +28,80 @@ export function projectOverridesLabel(count: number): string {
   return count === 1 ? "+1 Project override" : `+${count} Project overrides`;
 }
 
-/** What the Agent editor's model picker shows for the draft Worker. */
-export type WorkerTrigger = {
-  readonly state: "ok" | "needs-model" | "unavailable" | "unknown";
-  /** The provider's initial; empty without a model. */
-  readonly glyph: string;
-  readonly model: string;
-  /** The chosen thinking levels; empty for none. */
-  readonly effort: string;
-  /** The picker's accessible text, naming Needs a model, Unavailable or Unknown. */
-  readonly label: string;
-  /** Why the selection is Unavailable or Unknown; null otherwise. */
-  readonly reason: string | null;
-};
+/** A select option's choices by display label; published values are keyed as JSON. */
+export function modelOptionChoices(
+  descriptor: AgentModelOptionDescriptor,
+): readonly { readonly id: string; readonly label: string }[] {
+  return (
+    descriptor.values?.map((entry) => ({
+      id: JSON.stringify(entry),
+      label:
+        typeof entry === "boolean"
+          ? entry
+            ? "On"
+            : "Off"
+          : entry.charAt(0).toUpperCase() + entry.slice(1),
+    })) ??
+    descriptor.choices ??
+    []
+  );
+}
 
+/** The display label of a select option's value, such as “High” for `high`. */
+export function modelOptionLabel(
+  descriptor: AgentModelOptionDescriptor,
+  value: AgentModelOptionValue["value"],
+): string {
+  if (typeof value === "boolean") return value ? "On" : "Off";
+  const key = descriptor.values ? JSON.stringify(value) : String(value);
+  return modelOptionChoices(descriptor).find((choice) => choice.id === key)?.label ?? String(value);
+}
+
+/** What the Agent editor's Worker picker shows for the draft Worker. */
+export type WorkerTrigger =
+  | { readonly state: "needs-model"; readonly label: "Needs a model" }
+  /** `unknown`: T3 has not supplied the display names. */
+  | { readonly state: "ok" | "unknown"; readonly label: string };
+
+/**
+ * The Worker's display summary, “Provider · Model · Effort”. The draft never holds a selection T3
+ * no longer offers (it is cleared on open), so a complete selection always resolves while T3's
+ * capabilities are known.
+ */
 export function workerTrigger(
   execution: AgentExecutionSettings,
   capabilities: AgentCapabilities | null,
 ): WorkerTrigger {
   if (!execution.environmentId || !execution.providerInstanceId || !execution.modelId)
-    return {
-      state: "needs-model",
-      glyph: "",
-      model: "",
-      effort: "",
-      label: "Needs a model",
-      reason: null,
-    };
-  const { provider, model } = resolveAgentModel(execution, capabilities);
-  const providerLabel = provider?.displayName ?? execution.providerInstanceId;
-  const shown = {
-    glyph: providerLabel.charAt(0).toUpperCase(),
-    model: model?.label ?? execution.modelId,
-    effort: workerEffort(execution, model),
-  };
-  const label = [shown.model, shown.effort].filter(Boolean).join(" · ");
+    return { state: "needs-model", label: "Needs a model" };
   if (capabilities?.state !== "ready")
-    return {
-      state: "unknown",
-      ...shown,
-      label: `${label} · Unknown`,
-      reason: capabilities?.explanation ?? "Connect to T3 to load environments and capabilities.",
-    };
-  const missing = !capabilities.environments.some(
-    (entry) => entry.environmentId === execution.environmentId,
-  )
-    ? `environment ${execution.environmentId}`
-    : !provider
-      ? `provider ${execution.providerInstanceId}`
-      : !model
-        ? `model ${execution.modelId}`
-        : null;
-  if (missing)
-    return {
-      state: "unavailable",
-      ...shown,
-      label: `${label} · Unavailable`,
-      reason: `Saved ${missing} is unavailable in T3.`,
-    };
-  return { state: "ok", ...shown, label, reason: null };
-}
-
-/**
- * The model's first option, the effort the Worker settings show at step 4, defaults included; the
- * saved text options when T3 does not offer the model.
- */
-function workerEffort(
-  execution: AgentExecutionSettings,
-  model: AgentModelCapability | undefined,
-): string {
-  if (!model)
-    return execution.modelOptions
-      .filter((entry) => typeof entry.value === "string" && entry.value.length > 0)
-      .map((entry) => entry.value)
-      .join(", ");
+    return { state: "unknown", label: "Worker details unavailable" };
+  const { provider, model } = resolveAgentModel(execution, capabilities);
+  const environment = capabilities.environments.find(
+    (item) => item.environmentId === execution.environmentId,
+  );
+  if (!model || !environment) return { state: "needs-model", label: "Needs a model" };
   const descriptor = model.options?.[0];
-  if (descriptor?.type !== "select") return "";
-  const value = optionValue(execution.modelOptions, descriptor);
-  return descriptor.choices?.find((choice) => choice.id === value)?.label ?? String(value);
+  const effort =
+    descriptor?.type === "select"
+      ? modelOptionLabel(descriptor, optionValue(execution.modelOptions, descriptor))
+      : "";
+  const label = [
+    provider?.displayName ?? "Unknown provider",
+    model.label ?? "Unknown model",
+    effort,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return { state: "ok", label };
 }
 
-/** The provider, model and thinking options of saved execution settings. */
+/** The provider, model and effort of saved execution settings in display names; empty for none. */
 export function agentRuntimeMeta(
-  execution: AgentExecutionSettings,
+  execution: AgentExecutionSettings | null,
   capabilities: AgentCapabilities | null,
 ): string {
-  const { provider, model } = resolveAgentModel(execution, capabilities);
-  const providerLabel = provider?.displayName ?? execution.providerInstanceId;
-  const modelLabel = model?.label ?? execution.modelId;
-  const thinking = execution.modelOptions
-    .map((entry) => String(entry.value))
-    .filter((value) => value.length > 0)
-    .join(", ");
-  return [providerLabel, modelLabel, thinking].filter(Boolean).join(" · ");
+  if (!execution) return "";
+  const shown = workerTrigger(execution, capabilities);
+  return shown.state === "needs-model" ? "" : shown.label;
 }

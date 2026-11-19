@@ -6,12 +6,12 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { Image as ImageIcon, X } from "lucide-react";
 import type { RunImage } from "@t3-factory/contracts";
 import { RUN_IMAGE_LIMIT, RUN_IMAGE_MIME_TYPES } from "@t3-factory/domain-validation";
 import type { ImageRejection } from "../run-draft.ts";
 import { Button } from "./ui/button.tsx";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog.tsx";
+import { Dialog, DialogSurface, DialogDescription, DialogTitle } from "./ui/dialog.tsx";
 import { Input } from "./ui/input.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip.tsx";
 
@@ -100,13 +100,17 @@ export function ImagePreviewDialog({
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-3xl" onKeyDown={onKeyDown}>
+      <DialogSurface
+        showCloseButton
+        className="grid w-[calc(100%-2rem)] max-w-3xl gap-4 p-6"
+        onKeyDown={onKeyDown}
+      >
         <DialogTitle className="truncate pr-6">{title}</DialogTitle>
         <DialogDescription className="sr-only">
           Full-size preview of an attached image.
         </DialogDescription>
         {children}
-      </DialogContent>
+      </DialogSurface>
     </Dialog>
   );
 }
@@ -225,13 +229,13 @@ export function AttachImagesButton({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label="Attach images"
             className="shrink-0 text-muted-foreground"
             disabled={disabled}
             onClick={() => input.current?.click()}
           >
-            <ImagePlus aria-hidden strokeWidth={1.5} />
+            <ImageIcon aria-hidden strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Attach images</TooltipContent>

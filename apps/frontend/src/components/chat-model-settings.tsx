@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { CircleAlert, CircleCheck, CircleX, Info, Power } from "lucide-react";
 import type {
   ChatModelKeyChange,
   ChatModelProviderKind,
@@ -7,39 +6,41 @@ import type {
   UpdateChatModelInput,
 } from "@t3-factory/contracts";
 import { validateChatModelBaseUrl } from "@t3-factory/domain-validation";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ChoiceMenu } from "@/components/choice-menu";
-import { fieldLabelClass } from "@/components/page";
+import { StatusBadge } from "@/components/status-badge";
+import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { reportChatModelSettings } from "../chat-control-attention.ts";
-import { dayAndTime } from "./execution-state.tsx";
-import { Notice } from "./notice.tsx";
-import { SegmentedChoice } from "./segmented-choice.tsx";
+import { dayAndTime } from "../time-format.ts";
 import { useSettingsDraftGuard } from "./settings-draft-guard.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup, SettingsDetailRow } from "./settings-page.tsx";
 import {
   ChatControlPage,
   chatControlError,
-  SectionSaveBar,
+  FieldRow,
+  SaveActions,
+  SecretField,
   useChatControlSection,
+  type SaveFailure,
 } from "./chat-control-form.tsx";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 
 const providerChoices = [
-  { id: "openai-compatible", label: "OpenAI-compatible", description: "Chat completions" },
-  { id: "anthropic", label: "Anthropic", description: "Messages" },
+  { id: "openai-compatible", label: "OpenAI-compatible" },
+  { id: "anthropic", label: "Anthropic" },
 ];
 
-/** What happens to a saved key: kept, reused at a changed destination, replaced or removed. */
+/** What happens to a stored key: kept, reused at a changed destination, replaced or removed. */
 type KeyChoice = "keep" | "reuse" | "replace" | "remove";
 
 interface Draft {
   readonly providerKind: ChatModelProviderKind | null;
   readonly baseUrl: string;
   readonly model: string;
-  /** Null when the destination changed and the owner has not decided about the saved key. */
-  readonly keyChoice: KeyChoice | null;
+  readonly keyChoice: KeyChoice;
   /** A new key; blank keeps whatever the key choice says. Held only in memory. */
   readonly keyValue: string;
 }
@@ -56,16 +57,19 @@ const destinationChanged = (draft: Draft, { configuration }: ChatModelSettings) 
   draft.providerKind !== configuration.providerKind ||
   (draft.baseUrl.trim() || null) !== configuration.baseUrl;
 
+/** Whether the destination changed while a key is stored, so the owner must decide about it. */
+const keyDecisionNeeded = (draft: Draft, settings: ChatModelSettings) =>
+  settings.configuration.keyConfigured && destinationChanged(draft, settings);
+
 /** The key change this draft asks for, or null while a required decision is missing. */
 function keyChange(draft: Draft, settings: ChatModelSettings): ChatModelKeyChange | null {
   const value = draft.keyValue.trim();
   if (!settings.configuration.keyConfigured)
     return value ? { kind: "replace", value } : { kind: "keep" };
   if (draft.keyChoice === "replace") return value ? { kind: "replace", value } : null;
-  if (draft.keyChoice === "remove" || draft.keyChoice === "reuse") return { kind: draft.keyChoice };
-  return draft.keyChoice === "keep" && !destinationChanged(draft, settings)
-    ? { kind: "keep" }
-    : null;
+  if (keyDecisionNeeded(draft, settings))
+    return draft.keyChoice === "keep" ? null : { kind: draft.keyChoice };
+  return draft.keyChoice === "reuse" ? { kind: "keep" } : { kind: draft.keyChoice };
 }
 
 function isDirty(draft: Draft, settings: ChatModelSettings) {
@@ -74,7 +78,7 @@ function isDirty(draft: Draft, settings: ChatModelSettings) {
     destinationChanged(draft, settings) ||
     draft.model.trim() !== saved.model ||
     draft.keyValue.trim() !== "" ||
-    (draft.keyChoice !== "keep" && draft.keyChoice !== null)
+    draft.keyChoice === "remove"
   );
 }
 
@@ -96,6 +100,16 @@ const committed = (input: UpdateChatModelInput, current: ChatModelSettings) =>
   current.configuration.providerKind === input.providerKind &&
   current.configuration.baseUrl === input.baseUrl &&
   current.configuration.model === input.model;
+
+const complete = ({ configuration }: ChatModelSettings) =>
+  Boolean(configuration.providerKind && configuration.baseUrl && configuration.model);
+
+/** The latest Test, when it is evidence for the saved revision. */
+const currentTest = ({ latestTest, configuration }: ChatModelSettings) =>
+  latestTest?.revision === configuration.revision ? latestTest : null;
+
+// The provider refused the request because of the key (HTTP 401 or 403).
+const keyRefused = (message: string) => /HTTP 40[13]\b/.test(message);
 
 /** The page's saved settings and draft, with its save, Test and Discard actions. */
 function useChatModelPage() {
@@ -134,360 +148,385 @@ function useChatModelPage() {
   };
 }
 
+/** The header badge: a current conversation failure first, then the Test, then setup. */
+function ModelBadge({ settings, testing }: { settings: ChatModelSettings; testing: boolean }) {
+  if (settings.needsAttention) return <StatusBadge kind="error">Not answering</StatusBadge>;
+  if (testing) return <StatusBadge kind="checking">Testing</StatusBadge>;
+  if (!complete(settings)) return <StatusBadge kind="neutral">Not set up</StatusBadge>;
+  const test = currentTest(settings);
+  if (!test) return null;
+  return test.outcome === "succeeded" ? (
+    <StatusBadge kind="success">Test passed</StatusBadge>
+  ) : (
+    <StatusBadge kind="error">Test failed</StatusBadge>
+  );
+}
+
+// Field paths a refused save names, as the host reports them.
+const REQUIRED_PATHS = ["providerKind", "baseUrl", "model"] as const;
+type RequiredPath = (typeof REQUIRED_PATHS)[number];
+
+const CARD = {
+  baseUrl: "chat-model-base-url-problem",
+  key: "chat-model-key-problem",
+  test: "chat-model-test-problem",
+  save: "chat-model-save-problem",
+} as const;
+
 /**
- * Settings → Chat control → Language model, host only. Chat control's own connection with its
- * own Save and Discard; Test runs against the saved configuration only.
+ * Settings → Chat control → Language model, host only. Save and Discard sit in the page header
+ * with Test connection, which tests only the saved configuration.
  */
 export function ChatModelSettings() {
   const page = useChatModelPage();
-  const { settings, draft, loadError } = page;
+  const { settings, draft } = page;
   const decision = useSettingsDraftGuard("chat-model", page.dirty ? ["Language model"] : []);
   return (
     <ChatControlPage
       title="Language model"
-      intro="The model connection Chat control uses to understand chat requests. It is separate from Agents, T3 and Run title generation, and only this Factory host can see or change it."
-      loadError={loadError}
+      badge={settings && <ModelBadge settings={settings} testing={page.testing} />}
+      actions={settings && draft && <ModelActions page={page} settings={settings} draft={draft} />}
+      loadError={page.loadError}
       onRetry={page.reload}
       decision={decision}
     >
       {settings && draft ? (
-        <>
-          <ChatControlState enabled={settings.chatControlEnabled} />
-          <ModelForm
-            settings={settings}
-            draft={draft}
-            dirty={page.dirty}
-            saving={page.saving}
-            saveError={page.saveError}
-            onChange={page.setDraft}
-            onSave={(input) => void page.save(input)}
-            onDiscard={page.discard}
-          />
-          <ConversationHealth settings={settings} />
-          <ModelTest
-            settings={settings}
-            dirty={page.dirty}
-            testing={page.testing}
-            testError={page.testError}
-            onTest={(revision) => void page.test(revision)}
-          />
-        </>
+        <ModelForm
+          settings={settings}
+          draft={draft}
+          saving={page.saving}
+          saveFailure={page.saveFailure}
+          testError={page.testError}
+          onChange={page.setDraft}
+        />
       ) : null}
     </ChatControlPage>
   );
 }
 
-function ChatControlState({ enabled }: { enabled: boolean }) {
-  return enabled ? (
-    <Notice tone="info" icon={Power} title="Chat control is On">
-      The provider, base URL and model are required while Chat control is On.
-    </Notice>
-  ) : (
-    <Notice tone="neutral" icon={Power} title="Chat control is Off">
-      You can save an incomplete configuration while Chat control is Off. Saving never sends a
-      request to the provider.
-    </Notice>
+const baseUrlProblemOf = (draft: Draft) => {
+  if (!draft.baseUrl.trim()) return "";
+  const validated = validateChatModelBaseUrl(draft.baseUrl, draft.providerKind);
+  return validated.ok ? "" : validated.error.message;
+};
+
+/** Discard, Test connection on the saved configuration only, then Save. */
+function ModelActions({
+  page,
+  settings,
+  draft,
+}: {
+  page: ReturnType<typeof useChatModelPage>;
+  settings: ChatModelSettings;
+  draft: Draft;
+}) {
+  const key = keyChange(draft, settings);
+  const save =
+    page.dirty && !baseUrlProblemOf(draft) && key !== null
+      ? () => void page.save(saveInput(draft, settings, key))
+      : undefined;
+  return (
+    <SaveActions dirty={page.dirty} saving={page.saving} onSave={save} onDiscard={page.discard}>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={page.dirty || !complete(settings) || page.testing}
+        onClick={() => void page.test(settings.configuration.revision)}
+      >
+        Test connection
+      </Button>
+    </SaveActions>
   );
 }
 
-const baseUrlHints: Record<ChatModelProviderKind | "none", string> = {
-  "openai-compatible":
-    "Requests go to this address followed by /chat/completions, for example http://localhost:11434/v1.",
-  anthropic:
-    "Include the API version segment, for example https://api.anthropic.com/v1. Requests go to this address followed by /messages.",
-  none: "An absolute http:// or https:// address, including any proxy path.",
-};
+/** Each field's problem state, wired to the card that explains it. */
+function fieldStates(draft: Draft, settings: ChatModelSettings, saveFailure: SaveFailure | null) {
+  const required = (path: RequiredPath): FieldState | undefined =>
+    saveFailure?.paths.includes(path) ? { tone: "error", cardId: CARD.save } : undefined;
+  const test = currentTest(settings);
+  const decide = keyDecisionNeeded(draft, settings);
+  const keyState = (): FieldState | undefined => {
+    if (decide)
+      return draft.keyChoice === "keep" ? { tone: "attention", cardId: CARD.key } : undefined;
+    return test?.outcome === "failed" && keyRefused(test.message)
+      ? { tone: "error", cardId: CARD.test }
+      : undefined;
+  };
+  return {
+    providerKind: required("providerKind"),
+    baseUrl: baseUrlProblemOf(draft)
+      ? ({ tone: "error", cardId: CARD.baseUrl } satisfies FieldState)
+      : required("baseUrl"),
+    model: required("model"),
+    key: keyState(),
+  };
+}
+
+const requiredTag = (state: FieldState | undefined) =>
+  state && <StatusBadge kind="error">Required</StatusBadge>;
 
 function ModelForm({
   settings,
   draft,
-  dirty,
   saving,
-  saveError,
+  saveFailure,
+  testError,
   onChange,
-  onSave,
-  onDiscard,
 }: {
   settings: ChatModelSettings;
   draft: Draft;
-  dirty: boolean;
   saving: boolean;
-  saveError: string;
+  saveFailure: SaveFailure | null;
+  testError: string;
   onChange: (draft: Draft) => void;
-  onSave: (input: UpdateChatModelInput) => void;
-  onDiscard: () => void;
 }) {
-  const baseUrl = draft.baseUrl.trim()
-    ? validateChatModelBaseUrl(draft.baseUrl, draft.providerKind)
-    : null;
-  const baseUrlProblem = baseUrl && !baseUrl.ok ? baseUrl.error.message : "";
-  const key = keyChange(draft, settings);
+  const states = fieldStates(draft, settings, saveFailure);
+  const baseUrlProblem = baseUrlProblemOf(draft);
   return (
-    <section aria-label="Language model connection" className="grid gap-4">
-      <ProviderAndModelFields draft={draft} disabled={saving} onChange={onChange} />
-      <BaseUrlField draft={draft} problem={baseUrlProblem} disabled={saving} onChange={onChange} />
-      <KeyField settings={settings} draft={draft} disabled={saving} onChange={onChange} />
-      {saveError && (
-        <Alert variant="destructive">
-          <AlertDescription>{saveError}</AlertDescription>
-        </Alert>
-      )}
-      <SectionSaveBar
-        saved={settings.configuration}
-        dirty={dirty}
-        saving={saving}
-        onSave={
-          dirty && !baseUrlProblem && key !== null
-            ? () => onSave(saveInput(draft, settings, key))
-            : undefined
-        }
-        onDiscard={onDiscard}
+    <>
+      <SettingsGroup label="Connection">
+        <FieldRow
+          label="Provider"
+          htmlFor="chat-model-provider"
+          tag={requiredTag(states.providerKind)}
+        >
+          <ChoiceMenu
+            id="chat-model-provider"
+            label="Provider"
+            value={draft.providerKind ?? ""}
+            choices={providerChoices}
+            onChange={(id) => onChange({ ...draft, providerKind: id as ChatModelProviderKind })}
+            disabled={saving}
+            placeholder="Choose a provider"
+            className="h-8 flex-1"
+          />
+        </FieldRow>
+        <FieldRow
+          label="Base URL"
+          htmlFor="chat-model-base-url"
+          tag={
+            baseUrlProblem ? (
+              <StatusBadge kind="error">Invalid</StatusBadge>
+            ) : (
+              requiredTag(states.baseUrl)
+            )
+          }
+        >
+          <Input
+            id="chat-model-base-url"
+            value={draft.baseUrl}
+            placeholder="https://api.example.com/v1"
+            autoComplete="off"
+            spellCheck={false}
+            inputMode="url"
+            disabled={saving}
+            className="flex-1 bg-muted font-mono text-label"
+            {...fieldAria(states.baseUrl?.cardId)}
+            onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })}
+          />
+        </FieldRow>
+        <FieldRow label="Model" htmlFor="chat-model-name" tag={requiredTag(states.model)}>
+          <Input
+            id="chat-model-name"
+            value={draft.model}
+            placeholder="Model name"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={saving}
+            className="flex-1 bg-muted font-mono text-label"
+            {...fieldAria(states.model?.cardId)}
+            onChange={(event) => onChange({ ...draft, model: event.target.value })}
+          />
+        </FieldRow>
+        <KeyRow
+          settings={settings}
+          draft={draft}
+          state={states.key}
+          disabled={saving}
+          onChange={onChange}
+        />
+        {settings.latestTest && (
+          <SettingsDetailRow label="Last tested" value={dayAndTime(settings.latestTest.testedAt)} />
+        )}
+      </SettingsGroup>
+      <ModelProblems
+        settings={settings}
+        draft={draft}
+        baseUrlProblem={baseUrlProblem}
+        saveFailure={saveFailure}
+        testError={testError}
       />
-    </section>
+    </>
   );
 }
 
-function ProviderAndModelFields({
+/** The API key: the stored-key controls, or the destination choice after an address change. */
+function KeyRow({
+  settings,
   draft,
+  state,
+  disabled,
+  onChange,
+}: {
+  settings: ChatModelSettings;
+  draft: Draft;
+  state: FieldState | undefined;
+  disabled: boolean;
+  onChange: (draft: Draft) => void;
+}) {
+  const tag =
+    state?.tone === "attention" ? (
+      <StatusBadge kind="attention">Choose</StatusBadge>
+    ) : (
+      state && <StatusBadge kind="error">Refused</StatusBadge>
+    );
+  return (
+    <FieldRow
+      label="API key"
+      htmlFor="chat-model-key"
+      tag={keyDecisionNeeded(draft, settings) && tag}
+    >
+      {keyDecisionNeeded(draft, settings) ? (
+        <KeyDestinationChoice draft={draft} state={state} disabled={disabled} onChange={onChange} />
+      ) : (
+        <SecretField
+          id="chat-model-key"
+          label="API key"
+          stored={settings.configuration.keyConfigured}
+          choice={draft.keyChoice === "reuse" ? "keep" : draft.keyChoice}
+          value={draft.keyValue}
+          placeholder="Optional"
+          state={state}
+          tag={tag}
+          disabled={disabled}
+          onChoice={(choice) => onChange({ ...draft, keyChoice: choice, keyValue: "" })}
+          onValue={(value) => onChange({ ...draft, keyValue: value })}
+        />
+      )}
+    </FieldRow>
+  );
+}
+
+const keyChoices = [
+  { id: "reuse", label: "Use stored key" },
+  { id: "replace", label: "Replace key" },
+  { id: "remove", label: "No key" },
+];
+
+/** The provider or base URL changed while a key is stored: the owner decides where it goes. */
+function KeyDestinationChoice({
+  draft,
+  state,
   disabled,
   onChange,
 }: {
   draft: Draft;
+  state: FieldState | undefined;
   disabled: boolean;
   onChange: (draft: Draft) => void;
 }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="grid gap-1.5">
-        <Label htmlFor="chat-model-provider" className={fieldLabelClass}>
-          Provider
-        </Label>
-        <ChoiceMenu
-          id="chat-model-provider"
-          label="Provider"
-          value={draft.providerKind ?? ""}
-          choices={providerChoices}
-          onChange={(id) => onChange({ ...draft, providerKind: id as ChatModelProviderKind })}
-          disabled={disabled}
-          placeholder="Choose a provider"
-        />
-      </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="chat-model-name" className={fieldLabelClass}>
-          Model
-        </Label>
+    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <ChoiceMenu
+        id="chat-model-key"
+        label="API key"
+        value={draft.keyChoice === "keep" ? "" : draft.keyChoice}
+        choices={keyChoices}
+        onChange={(id) => onChange({ ...draft, keyChoice: id as KeyChoice, keyValue: "" })}
+        disabled={disabled}
+        placeholder="Choose for the new address"
+        className={cn("h-8 flex-1", fieldBorder(state?.tone))}
+      />
+      {draft.keyChoice === "replace" && (
         <Input
-          id="chat-model-name"
-          value={draft.model}
-          placeholder="As the provider names it"
+          aria-label="New API key"
+          type="password"
+          value={draft.keyValue}
+          placeholder="Paste the new key"
           autoComplete="off"
           spellCheck={false}
+          autoFocus
           disabled={disabled}
-          onChange={(event) => onChange({ ...draft, model: event.target.value })}
+          className="flex-1 bg-muted font-mono text-label"
+          onChange={(event) => onChange({ ...draft, keyValue: event.target.value })}
         />
-      </div>
-    </div>
-  );
-}
-
-function BaseUrlField({
-  draft,
-  problem,
-  disabled,
-  onChange,
-}: {
-  draft: Draft;
-  problem: string;
-  disabled: boolean;
-  onChange: (draft: Draft) => void;
-}) {
-  return (
-    <div className="grid gap-1.5">
-      <Label htmlFor="chat-model-base-url" className={fieldLabelClass}>
-        Base URL
-      </Label>
-      <Input
-        id="chat-model-base-url"
-        value={draft.baseUrl}
-        placeholder="https://api.example.com/v1"
-        autoComplete="off"
-        spellCheck={false}
-        inputMode="url"
-        disabled={disabled}
-        aria-invalid={problem ? true : undefined}
-        aria-describedby="chat-model-base-url-hint"
-        onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })}
-      />
-      <p
-        id="chat-model-base-url-hint"
-        className={problem ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
-      >
-        {problem || baseUrlHints[draft.providerKind ?? "none"]}
-      </p>
-    </div>
-  );
-}
-
-/** Blank never clears a saved key: Replace and Remove are explicit choices. */
-function KeyField({
-  settings,
-  draft,
-  disabled,
-  onChange,
-}: {
-  settings: ChatModelSettings;
-  draft: Draft;
-  disabled: boolean;
-  onChange: (draft: Draft) => void;
-}) {
-  const keyInput = (label: string, placeholder: string) => (
-    <div className="grid gap-1.5">
-      <Label htmlFor="chat-model-key" className={fieldLabelClass}>
-        {label}
-      </Label>
-      <Input
-        id="chat-model-key"
-        type="password"
-        value={draft.keyValue}
-        placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        disabled={disabled}
-        onChange={(event) => onChange({ ...draft, keyValue: event.target.value })}
-      />
-    </div>
-  );
-  if (!settings.configuration.keyConfigured)
-    return keyInput("Key (optional)", "Leave blank for a server that needs no key");
-  const moved = destinationChanged(draft, settings);
-  const choice = draft.keyChoice === "keep" && moved ? null : draft.keyChoice;
-  const options: readonly (readonly [KeyChoice, string])[] = moved
-    ? [
-        ["reuse", "Reuse saved key here"],
-        ["replace", "Replace key"],
-        ["remove", "Go keyless"],
-      ]
-    : [
-        ["keep", "Keep saved key"],
-        ["replace", "Replace key"],
-        ["remove", "Remove key"],
-      ];
-  return (
-    <div className="grid gap-2">
-      <p id="chat-model-key-label" className={fieldLabelClass}>
-        Key · saved on this host
-      </p>
-      {moved && choice === null && (
-        <p className="text-sm text-attention">
-          The provider or base URL changed. Choose whether the saved key may be sent to the new
-          destination before saving.
-        </p>
-      )}
-      <SegmentedChoice
-        labelledBy="chat-model-key-label"
-        value={(choice ?? "") as KeyChoice}
-        options={options}
-        onChange={(next) => onChange({ ...draft, keyChoice: next, keyValue: "" })}
-      />
-      {choice === "replace" && keyInput("Replacement key", "Paste the new key")}
-      {choice === "remove" && (
-        <p className="text-sm text-muted-foreground">
-          Saving removes the key; requests then go out without one.
-        </p>
       )}
     </div>
   );
 }
 
-/**
- * The latest actual conversational failure. Only a later successful conversation clears it; a
- * Test is separate evidence and never does.
- */
-function ConversationHealth({ settings }: { settings: ChatModelSettings }) {
-  const { runtimeProblem, configuration } = settings;
-  if (!runtimeProblem) return null;
-  return (
-    <section aria-label="Language model conversations" className="grid gap-3 border-t pt-5">
-      <Notice
-        tone={settings.needsAttention ? "critical" : "neutral"}
-        icon={CircleAlert}
-        title={`A conversation failed · ${dayAndTime(runtimeProblem.occurredAt)} · revision ${runtimeProblem.revision}`}
-      >
-        {runtimeProblem.message} Factory clears this after the next successful conversation; a Test
-        does not clear it.
-        {runtimeProblem.revision !== configuration.revision &&
-          ` It happened with an earlier configuration; revision ${configuration.revision} has not answered a conversation yet.`}
-      </Notice>
-    </section>
-  );
-}
-
-function ModelTest({
+/** One card per current problem, each with its next step. */
+function ModelProblems({
   settings,
-  dirty,
-  testing,
+  draft,
+  baseUrlProblem,
+  saveFailure,
   testError,
-  onTest,
 }: {
   settings: ChatModelSettings;
-  dirty: boolean;
-  testing: boolean;
+  draft: Draft;
+  baseUrlProblem: string;
+  saveFailure: SaveFailure | null;
   testError: string;
-  onTest: (revision: number) => void;
 }) {
-  const { configuration, latestTest } = settings;
-  const complete = Boolean(
-    configuration.providerKind && configuration.baseUrl && configuration.model,
-  );
+  const test = currentTest(settings);
+  const { runtimeProblem } = settings;
+  const requiredWhileOn = REQUIRED_PATHS.some((path) => saveFailure?.paths.includes(path));
   return (
-    <section aria-label="Language model test" className="grid gap-3 border-t pt-5">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold text-foreground">Test the saved connection</h3>
-        <p className="text-sm text-muted-foreground">
-          Sends one short synthetic request with fixed text to the saved provider: no Run content,
-          tools or retries. Your provider may charge for it. Factory never tests on its own.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={dirty || !complete || testing}
-          onClick={() => onTest(configuration.revision)}
+    <>
+      {baseUrlProblem && (
+        <ProblemCard id={CARD.baseUrl} tone="error" title="Base URL isn’t valid">
+          {baseUrlProblem}
+        </ProblemCard>
+      )}
+      {keyDecisionNeeded(draft, settings) && draft.keyChoice === "keep" && (
+        <ProblemCard id={CARD.key} tone="attention" title="Send the stored key to the new address?">
+          Use the stored key there, replace it, or send no key.
+        </ProblemCard>
+      )}
+      {saveFailure && (
+        <ProblemCard
+          id={CARD.save}
+          tone="error"
+          title="Couldn’t save"
+          details={requiredWhileOn ? undefined : saveFailure.message}
         >
-          {testing ? "Testing…" : "Test saved connection"}
-        </Button>
-        {(dirty || !complete) && (
-          <p className="text-sm text-muted-foreground">
-            {dirty
-              ? "Save or discard your edits to test."
-              : "Save a provider, base URL and model to test."}
-          </p>
-        )}
-      </div>
+          {requiredWhileOn
+            ? "Chat control is On, so the provider, base URL and model are required. Turn it off first to remove them."
+            : "Your edits are kept. Save again."}
+        </ProblemCard>
+      )}
+      {test?.outcome === "failed" && (
+        <ProblemCard
+          id={CARD.test}
+          tone="error"
+          title="The test failed"
+          details={[
+            ["When", dayAndTime(test.testedAt)],
+            ["Revision", String(test.revision)],
+          ]}
+        >
+          {test.message}
+        </ProblemCard>
+      )}
       {testError && (
-        <Alert variant="destructive">
-          <AlertDescription>{testError}</AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" title="Couldn’t run the test" details={testError}>
+          Try again.
+        </ProblemCard>
       )}
-      {latestTest && (
-        <Notice
-          tone="neutral"
-          icon={latestTest.outcome === "succeeded" ? CircleCheck : CircleX}
-          title={`Latest Test ${latestTest.outcome} · ${dayAndTime(latestTest.testedAt)} · revision ${latestTest.revision}`}
+      {settings.needsAttention && runtimeProblem && (
+        <ProblemCard
+          tone="error"
+          title="Chat replies are failing"
+          details={[
+            ["When", dayAndTime(runtimeProblem.occurredAt)],
+            ["Revision", String(runtimeProblem.revision)],
+            ["Error", runtimeProblem.message],
+          ]}
         >
-          {latestTest.message}
-          {latestTest.revision !== configuration.revision &&
-            ` This Test was for an earlier configuration; revision ${configuration.revision} is untested.`}
-        </Notice>
+          The provider didn’t answer. This clears after the next reply.
+        </ProblemCard>
       )}
-      <p className="flex items-start gap-2 text-sm text-muted-foreground">
-        <Info aria-hidden className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
-        <span>
-          A Test is dated evidence for one saved configuration. It does not show whether Chat
-          control conversations are working, and a failed Test does not turn Chat control off.
-        </span>
-      </p>
-    </section>
+    </>
   );
 }

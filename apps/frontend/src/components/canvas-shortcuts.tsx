@@ -4,23 +4,9 @@ import { executeAppCommand } from "../app-keyboard-commands.ts";
 import { formatShortcut, shortcutGroupEntries } from "../keyboard-shortcuts.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-
-function Keys({ keys }: { keys: readonly string[] }) {
-  return (
-    <span className="flex shrink-0 gap-1">
-      {keys.map((key) => (
-        <kbd
-          key={key}
-          className="rounded-sm border bg-muted px-1.5 py-0.5 font-mono text-xs leading-3.5 font-medium text-muted-foreground"
-        >
-          {key}
-        </kbd>
-      ))}
-    </span>
-  );
-}
 
 /**
  * Figma RD15: the canvas group of the shortcut cheat sheet, with current bindings, one click
@@ -62,8 +48,10 @@ export function CanvasShortcutsButton() {
           {shortcutGroupEntries("canvas", bindings).map((entry) => (
             <div key={entry.id} className="flex items-center gap-1">
               <dt className="min-w-0 flex-1 text-sm text-muted-foreground">{entry.label}</dt>
-              <dd>
-                <Keys keys={entry.keys} />
+              <dd className="flex shrink-0 gap-1">
+                {entry.keys.map((key) => (
+                  <KeyChip key={key}>{key}</KeyChip>
+                ))}
               </dd>
             </div>
           ))}
@@ -81,7 +69,7 @@ export function CanvasShortcutsButton() {
           >
             All keyboard shortcuts
           </Button>
-          <Keys keys={[formatShortcut(bindings.shortcutsCheatSheet)]} />
+          <KeyChip>{formatShortcut(bindings.shortcutsCheatSheet)}</KeyChip>
         </div>
       </PopoverContent>
     </Popover>

@@ -24,6 +24,7 @@ it("navigation changes replace rows, remove archived Runs and retain backend cre
     },
     lifecycle: "active",
     settlement: null,
+    pendingWork: false,
     blocks: [],
     presentation: { snoozed: false, woke: false },
     attention: { needsInput: false, problem: false, matters: [] },

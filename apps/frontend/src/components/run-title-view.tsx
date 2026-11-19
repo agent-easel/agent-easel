@@ -1,20 +1,13 @@
 import { useEffect, useRef } from "react";
+import { clockTimeWithSeconds } from "../time-format.ts";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunTitleGeneration } from "@t3-factory/contracts";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
-import { TitleMark, TitleStatePill, titleStateLabel } from "./run-title-generation.tsx";
-
-/** A deadline is 30 seconds after Start, so it reads to the second. */
-function secondsTime(at: string) {
-  return new Date(at).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  });
-}
+import { TitleMark, TitleStateBadge, titleStateLabel } from "./run-title-generation.tsx";
 
 /**
  * The Run title in the docked inspector: how its generation went. It is not a Block selection, so
@@ -49,7 +42,7 @@ export function RunTitleView({
         >
           <ChevronLeft aria-hidden />
           Overview
-          <kbd className="ml-1 font-mono text-overline font-normal text-subtle-foreground">Esc</kbd>
+          <KeyChip className="ml-1">Esc</KeyChip>
         </Button>
         <header className="flex min-w-0 items-center gap-2">
           <TitleMark className="size-4 shrink-0 text-muted-foreground" />
@@ -59,7 +52,7 @@ export function RunTitleView({
               Beside the Flow · not a Block
             </p>
           </div>
-          <TitleStatePill state={state} />
+          <TitleStateBadge state={state} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -72,7 +65,7 @@ export function RunTitleView({
                 <X aria-hidden />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close · Esc</TooltipContent>
+            <TooltipContent shortcut="Esc">Close</TooltipContent>
           </Tooltip>
         </header>
         <InspectorSection title="Generation">
@@ -82,7 +75,7 @@ export function RunTitleView({
               {reason && <span className="block text-muted-foreground">{reason}</span>}
             </DetailRow>
             <DetailRow label="Model">{generation.modelLabel}</DetailRow>
-            <DetailRow label="Deadline">{secondsTime(generation.deadlineAt)}</DetailRow>
+            <DetailRow label="Deadline">{clockTimeWithSeconds(generation.deadlineAt)}</DetailRow>
           </dl>
         </InspectorSection>
         <InspectorSection title="Titles">
@@ -100,11 +93,7 @@ export function RunTitleView({
       </div>
       <footer className="mx-4 flex shrink-0 items-center border-t py-3">
         {threadLink ? (
-          <Button asChild variant="outline" className="w-full">
-            <a href={threadLink} target="_blank" rel="noreferrer">
-              Open title thread in T3
-            </a>
-          </Button>
+          <OpenInT3 href={threadLink} className="text-sm" />
         ) : (
           <p className="text-xs text-subtle-foreground">
             {state === "skipped" ? "Nothing was launched" : "No T3 thread known"}

@@ -23,7 +23,11 @@ const workerOrigin = (runId: string, threadId: string) => ({
 it("a Condition's evidence lists its arrivals in order with source, worker, matched rule or Otherwise and recipients", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first, second] = await chainedConditionArrivals(f.world, f.input);
+  const [first, second] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
 
   // Act
   const page = await f.f.listConditionArrivals(first.runId, "gate", "", "");
@@ -61,7 +65,11 @@ it("a Condition's evidence lists its arrivals in order with source, worker, matc
 it("an unwired selection appears in the evidence with no recipients and its worker unchanged", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first, second] = await chainedConditionArrivals(f.world, f.input);
+  const [first, second] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
 
   // Act
   const page = await f.f.listConditionArrivals(first.runId, "final", "", "");
@@ -173,7 +181,11 @@ it.for([
 it("a cursor from another Condition of the same Run is rejected", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first] = await chainedConditionArrivals(f.world, f.input);
+  const [first] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
   const gatePage = await f.f.listConditionArrivals(first.runId, "gate", "1", "");
   assert(gatePage.ok && gatePage.value.nextCursor);
 
@@ -195,7 +207,11 @@ it("a cursor from another Condition of the same Run is rejected", async (c) => {
 it("an altered cursor is rejected", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first] = await chainedConditionArrivals(f.world, f.input);
+  const [first] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
   const gatePage = await f.f.listConditionArrivals(first.runId, "gate", "1", "");
   assert(gatePage.ok && gatePage.value.nextCursor);
 
@@ -271,7 +287,11 @@ it("each evidence read shows a recipient's current disposition, not the one at s
 it("factory_get_condition_arrivals returns the same page as the HTTP read for the caller's Run", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first] = await chainedConditionArrivals(f.world, f.input);
+  const [first] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
 
   // Act
   const reply = await f.f.runtime.conditionArrivals({
@@ -288,7 +308,11 @@ it("factory_get_condition_arrivals returns the same page as the HTTP read for th
 it("factory_get_run includes each Condition's summary", async (c) => {
   // Arrange
   const f = await prepared(c, chainedConditionFlow);
-  const [first] = await chainedConditionArrivals(f.world, f.input);
+  const [first] = await chainedConditionArrivals(
+    f.world,
+    f.input,
+    f.reopenWithCapturedOutputUnwired,
+  );
 
   // Act
   const reply = await f.f.runtime.run({ arguments: { blockId: first.blockId } });

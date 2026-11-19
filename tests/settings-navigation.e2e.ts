@@ -1,11 +1,12 @@
 import { test } from "./support/test.ts";
+import type { Fixture } from "./support/fixture/handle.ts";
 import { expect, type Screen } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 const sections = (screen: Screen) => screen.getByRole("navigation", "Settings sections");
 
-test("the desktop host lists every Settings section under Factory, Runs and This device", async ({
+test("the desktop host lists every Settings section under Factory, Chat control, Runs and This device", async ({
   app,
   screen,
   browser,
@@ -21,8 +22,9 @@ test("the desktop host lists every Settings section under Factory, Runs and This
   await expect(factory.getByRole("link", /^T3 connection, /)).toBeVisible();
   await expect(factory.getByRole("link", /^Agent reporting/)).toBeVisible();
   await expect(factory.getByRole("link", /^Devices & access/)).toBeVisible();
-  await expect(factory.getByRole("link", /^Language model/)).toBeVisible();
-  await expect(factory.getByRole("link", /^Discord/)).toBeVisible();
+  const chat = sections(screen).getByRole("group", "Chat control");
+  await expect(chat.getByRole("link", /^Language model/)).toBeVisible();
+  await expect(chat.getByRole("link", /^Discord/)).toBeVisible();
   const runs = sections(screen).getByRole("group", "Runs");
   await expect(runs.getByRole("link", "Run titles", { exact: true })).toBeVisible();
   await expect(runs.getByRole("link", "Run images", { exact: true })).toBeVisible();
@@ -95,4 +97,145 @@ test("Esc with a filled Settings search clears it and keeps Settings open", asyn
   await expect(screen.getByLabel("Search settings")).toHaveValue("");
   await expect(sections(screen).getByRole("link", "Appearance")).toBeVisible();
   await expect(screen.getByRole("dialog", "Settings", { exact: true })).toBeVisible();
+});
+
+test("searching for notifications finds Desktop app and keeps the open page", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("notifications");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Desktop app", { exact: true })).toBeVisible();
+  await expect(sections(screen).getByRole("group", "Factory", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("heading", "T3 connection", { exact: true })).toBeVisible();
+  await app.screenshot("settings-search-notifications");
+});
+
+test("a not-allowed T3 address names the card that explains it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await app.open("/settings/connection");
+  await screen.getByRole("button", "Edit address", { exact: true }).tap();
+
+  // Act
+  await screen.getByLabel("Address", { exact: true }).fill("ftp://t3.example/mcp");
+
+  // Assert
+  const address = screen.getByLabel("Address", { exact: true });
+  await expect(address).toHaveAttribute("aria-invalid", "true");
+  await expect(address).toHaveAttribute("aria-describedby", "connection-address-problem");
+  await expect
+    .poll(() =>
+      browser.evaluate(
+        `(() => { const card = document.getElementById("connection-address-problem"); return card ? card.getAttribute("role") + " " + card.textContent : null; })()`,
+      ),
+    )
+    .toContain("alert Use HTTPS, or HTTP on this computer");
+});
+
+test("searching for a visible row label such as Mode finds Appearance", async ({ app, screen }) => {
+  // Arrange
+  await app.open("/settings/connection");
+
+  // Act
+  await screen.getByLabel("Search settings").fill("mode");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Appearance", { exact: true })).toBeVisible();
+  await expect(sections(screen).getByRole("link", "T3 connection", { exact: true })).toHaveCount(0);
+});
+
+test("searching for a Worker option or a fixed shortcut finds its section", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await app.open("/settings/connection");
+  const search = screen.getByLabel("Search settings");
+
+  // Act: a Run titles Worker option from T3's capabilities
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
+
+  // Act: a fixed Keyboard shortcuts row
+  await search.fill("undo flow edit");
+
+  // Assert
+  await expect(
+    sections(screen).getByRole("link", "Keyboard shortcuts", { exact: true }),
+  ).toBeVisible();
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
+});
+
+/**
+ * Opens T3 connection Settings with T3 away and searches `query`, so the search has no Worker
+ * options from T3 to match yet. Returns the search field.
+ */
+async function searchWhileT3Away(
+  fixture: Fixture,
+  app: { open(path: string): Promise<unknown> },
+  screen: Screen,
+  query: string,
+) {
+  await app.open("/settings/connection");
+  await fixture.remoteAccess.t3Unavailable();
+  const search = screen.getByLabel("Search settings");
+  await search.fill(query);
+  return search;
+}
+
+/** The Run titles row of the Settings navigation. */
+const runTitlesRow = (screen: Screen) =>
+  sections(screen).getByRole("link", "Run titles", { exact: true });
+
+/** T3 returns; the open T3 connection page shows it even when the search hides that nav row. */
+async function reconnectT3(fixture: Fixture, screen: Screen) {
+  await fixture.remoteAccess.t3Available();
+  await expect(screen.getByText("Connected", { exact: true })).toBeVisible();
+}
+
+test("a Worker option search started after T3 reconnects finds Run titles", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange: a search while T3 is away, cleared before T3 returns.
+  const search = await searchWhileT3Away(fixture, app, screen, "fast mode");
+  await search.fill("");
+  await reconnectT3(fixture, screen);
+
+  // Act
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(runTitlesRow(screen)).toBeVisible();
+});
+
+test("a search kept open while T3 reconnects finds a Worker option after the query is replaced", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange: "run" stays filled through the reconnect.
+  const search = await searchWhileT3Away(fixture, app, screen, "run");
+  await reconnectT3(fixture, screen);
+
+  // Act: replace the filled query directly, without clearing it first.
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(runTitlesRow(screen)).toBeVisible();
 });

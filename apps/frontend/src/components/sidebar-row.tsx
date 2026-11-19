@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { compactAge, fullDateTime } from "../time-format.ts";
 import { AppLink as Link } from "./app-link.tsx";
 import { Button } from "./ui/button.tsx";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from "./ui/context-menu.tsx";
@@ -34,33 +35,28 @@ export function SidebarRowsProvider({ children }: { children: ReactNode }) {
 
 export function ActivityAge({ at }: { at: string }) {
   const { now } = useContext(SidebarRowsContext)!;
-  const minutes = Math.max(0, Math.floor((now - Date.parse(at)) / 60_000));
-  const age =
-    minutes < 1
-      ? "now"
-      : minutes < 60
-        ? `${minutes}m`
-        : minutes < 1440
-          ? `${Math.floor(minutes / 60)}h`
-          : `${Math.floor(minutes / 1440)}d`;
   return (
     <time
       dateTime={at}
-      aria-label={`Last activity ${new Date(at).toLocaleString()}`}
+      aria-label={`Last activity ${fullDateTime(at)}`}
       className="shrink-0 text-2xs tabular-nums text-muted-foreground"
     >
-      {age}
+      {compactAge(at, now)}
     </time>
   );
 }
 
-function useRowInteractions(disabled: boolean) {
+function useRowInteractions(disabled: boolean, selected: boolean) {
   const { menuOpen, setMenuOpen } = useContext(SidebarRowsContext)!;
   const [ownMenuOpen, setOwnMenuOpen] = useState(false);
   const [tipOpen, setTipOpen] = useState(false);
   const [actionsTipOpen, setActionsTipOpen] = useState(false);
   const suppressPreview = useRef(false);
   const row = useRef<HTMLDivElement>(null);
+  // The open Run's row comes into view when it opens or the open Run changes.
+  useEffect(() => {
+    if (selected) row.current?.scrollIntoView({ block: "nearest" });
+  }, [selected]);
   const link = useRef<HTMLAnchorElement>(null);
   const openAtRow = () => {
     if (disabled || !row.current) return;
@@ -137,6 +133,7 @@ export function SidebarRow({
   preview,
   actions,
   children,
+  label,
 }: {
   id: string;
   title: string;
@@ -148,8 +145,10 @@ export function SidebarRow({
   preview: ReactNode;
   actions: ReactNode;
   children: ReactNode;
+  /** Overrides the draft row's accessible name. A draft awaiting Start has no status name. */
+  label?: string;
 }) {
-  const interaction = useRowInteractions(disabled);
+  const interaction = useRowInteractions(disabled, selected);
   const destination =
     kind === "run"
       ? { to: "/runs/$runId" as const, params: { runId: id } }
@@ -161,7 +160,8 @@ export function SidebarRow({
           {...interaction.trigger}
           data-sidebar-row={id}
           className={cn(
-            "group/row flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
+            // Keep absolutely positioned screen-reader labels inside the list's scroll area.
+            "group/row relative flex min-w-0 items-start rounded-md hover:bg-accent has-[a:focus-visible]:bg-accent",
             (selected || interaction.ownMenuOpen) && "bg-accent",
             selected && "ring-1 ring-border-strong ring-inset",
           )}
@@ -173,7 +173,7 @@ export function SidebarRow({
                 {...interaction.link}
                 id={`run-row-${id}`}
                 onClick={onClick}
-                aria-label={kind === "draft" ? `${title} Draft` : undefined}
+                aria-label={kind === "draft" ? label : undefined}
                 aria-current={selected ? "page" : undefined}
                 className={cn(
                   "flex min-w-0 flex-1 rounded-md px-2.5 text-foreground no-underline hover:no-underline",

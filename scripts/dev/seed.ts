@@ -11,6 +11,7 @@ import {
   repliesDiscussed,
   archived,
   arrivalsNumbered,
+  blockWorkerLaunched,
   changesRequested,
   controlledTitleModel,
   enableRunTitles,
@@ -85,7 +86,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
 }
 
 async function createDemoAgents(factory: Factory, t3: PersistentT3) {
-  const agents: DemoAgents = { worker: "", reviewer: "", accessibility: "" };
+  const agents: DemoAgents = { worker: "", reviewer: "", accessibility: "", releaseNotes: "" };
   for (const [key, name, prompt, exits] of [
     [
       "worker",
@@ -104,6 +105,12 @@ async function createDemoAgents(factory: Factory, t3: PersistentT3) {
       "Demo · Accessibility reviewer",
       "Review Atlas keyboard navigation, focus behavior and accessible labels. Report concrete findings independently.",
       [blockExit("approved", "Approved", "Approved")],
+    ],
+    [
+      "releaseNotes",
+      "Demo · Release notes",
+      "Record each change and approval in the Atlas release notes in one short line.",
+      [blockExit("done", "Done", "Done")],
     ],
   ] as const) {
     const agent = requireSuccess(
@@ -227,6 +234,11 @@ export async function seedScenario(
     );
     await resultReported(context, second, scenario.results[1]);
     await arrivalsNumbered(context, first.runId, 2);
+    await resultReported(
+      context,
+      await blockWorkerLaunched(context, first.runId, "notes"),
+      scenario.extraApproval,
+    );
     return first.runId;
   }
   if (scenario.state === "Run worktree bound") return (await worktreeBound(context, start)).runId;

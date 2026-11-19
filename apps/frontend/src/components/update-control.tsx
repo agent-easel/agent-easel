@@ -27,7 +27,7 @@ const icons: Record<UpgradePhase, LucideIcon> = {
   error: TriangleAlert,
 };
 
-function downloadPercent(targets: readonly UpgradeTarget[]) {
+export function downloadPercent(targets: readonly UpgradeTarget[]) {
   const downloading = targets.filter((target) => target.update.state === "downloading");
   const done = downloading.reduce((sum, t) => sum + (t.update.downloadedBytes ?? 0), 0);
   const total = downloading.reduce((sum, t) => sum + (t.update.totalBytes ?? 0), 0);
@@ -36,8 +36,10 @@ function downloadPercent(targets: readonly UpgradeTarget[]) {
     : Math.round(downloading[0]?.update.progress ?? 0);
 }
 
-const versionIn = (targets: readonly UpgradeTarget[], state: UpgradeTarget["update"]["state"]) =>
-  targets.find((target) => target.update.state === state)?.update.version ?? "Update";
+export const versionIn = (
+  targets: readonly UpgradeTarget[],
+  state: UpgradeTarget["update"]["state"],
+) => targets.find((target) => target.update.state === state)?.update.version ?? "Update";
 
 /** The control's name and its tooltip, per the update lifecycle. */
 function describe(
@@ -90,65 +92,9 @@ function ControlFace({
   );
 }
 
-const inlineLabels: Record<UpgradePhase, string> = {
-  idle: "Check for updates",
-  checking: "Checking…",
-  "up-to-date": "Check for updates",
-  available: "Download update",
-  downloading: "Downloading…",
-  ready: "Review upgrade",
-  upgrading: "Upgrading…",
-  error: "Review error",
-};
-
-/** The upgrade review or the failure, anchored to the control and named for assistive tech. */
-function UpgradePanel({
-  panel,
-  upgrade,
-  onClose,
-  onUpgrade,
-  onRetry,
-}: {
-  panel: "review" | "error" | null;
-  upgrade: ReturnType<typeof useUpgrade>;
-  onClose: () => void;
-  onUpgrade: () => void;
-  onRetry: () => void;
-}) {
-  return (
-    <PopoverContent
-      side="top"
-      collisionPadding={8}
-      aria-label={panel === "error" ? "Update error" : "Upgrade review"}
-      className="p-4"
-    >
-      {panel === "review" && (
-        <UpgradeReview targets={upgrade.targets} onCancel={onClose} onConfirm={onUpgrade} />
-      )}
-      {panel === "error" && (
-        <UpgradeError
-          failure={upgrade.failure}
-          targets={upgrade.targets}
-          onClose={onClose}
-          onRetry={onRetry}
-        />
-      )}
-    </PopoverContent>
-  );
-}
-
-/**
- * One update control for this app and its server: the footer icon, or the labelled button in
- * Desktop app settings. Without `includeServer` only this desktop app is updated.
- */
-export function UpdateControl({
-  inline = false,
-  includeServer = true,
-}: {
-  inline?: boolean;
-  includeServer?: boolean;
-}) {
-  const upgrade = useUpgrade({ includeServer });
+/** Sidebar control for updates to this app and its server. */
+export function UpdateControl() {
+  const upgrade = useUpgrade();
   const { targets, phase, check, download } = upgrade;
   const [panel, setPanel] = useState<"review" | "error" | null>(null);
   if (targets.length === 0) return null;
@@ -163,24 +109,23 @@ export function UpdateControl({
   };
   const close = () => setPanel(null);
   return (
-    <Popover open={panel !== null} onOpenChange={(open) => !open && close()}>
+    <Popover open={panel === "error"} onOpenChange={(open) => !open && close()}>
       <Tooltip>
         <PopoverAnchor asChild>
           <TooltipTrigger asChild>
             <Button
               type="button"
-              variant={inline ? "secondary" : "ghost"}
-              size={inline ? "default" : "icon"}
-              aria-label={inline ? inlineLabels[phase] : label}
+              variant="ghost"
+              size="icon"
+              aria-label={label}
               aria-disabled={busy}
               onClick={act}
               className={cn(
-                !inline && "border border-transparent text-muted-foreground",
-                !inline && highlighted && "border-border bg-sidebar-accent text-primary",
+                "border border-transparent text-muted-foreground",
+                highlighted && "border-border bg-sidebar-accent text-primary",
               )}
             >
               <ControlFace phase={phase} targets={targets} />
-              {inline && inlineLabels[phase]}
             </Button>
           </TooltipTrigger>
         </PopoverAnchor>
@@ -191,19 +136,29 @@ export function UpdateControl({
           </TooltipContent>
         )}
       </Tooltip>
-      <UpgradePanel
-        panel={panel}
-        upgrade={upgrade}
-        onClose={close}
-        onUpgrade={() => {
-          close();
-          void upgrade.upgrade();
-        }}
-        onRetry={() => {
-          close();
-          void upgrade.check();
-        }}
-      />
+      {panel === "review" && (
+        <UpgradeReview
+          targets={targets}
+          onCancel={close}
+          onConfirm={() => {
+            close();
+            void upgrade.upgrade();
+          }}
+        />
+      )}
+      {panel === "error" && (
+        <PopoverContent side="top" collisionPadding={8} aria-label="Update error" className="p-4">
+          <UpgradeError
+            failure={upgrade.failure}
+            targets={targets}
+            onClose={close}
+            onRetry={() => {
+              close();
+              void check();
+            }}
+          />
+        </PopoverContent>
+      )}
     </Popover>
   );
 }

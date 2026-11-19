@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import { CommandPalette } from "./components/command-palette.tsx";
-import { shouldHandleShortcut, type ShortcutId } from "./keyboard-shortcuts.ts";
+import { openRowIds, shouldHandleShortcut, type ShortcutId } from "./keyboard-shortcuts.ts";
 import { getShortcutPreferences } from "./shortcut-preferences.ts";
 import {
   useOpenStudio,
@@ -22,18 +22,6 @@ import { runActions } from "./components/run-actions.tsx";
 import { getSidebarNavigation } from "./sidebar-navigation.ts";
 import { toggleRunInspector } from "./run-inspector-preference.ts";
 import { useDesktopMenu } from "./desktop-menu.ts";
-
-const openRowIds = [
-  "openRow1",
-  "openRow2",
-  "openRow3",
-  "openRow4",
-  "openRow5",
-  "openRow6",
-  "openRow7",
-  "openRow8",
-  "openRow9",
-] as const satisfies readonly ShortcutId[];
 
 export function KeyboardCommandsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();

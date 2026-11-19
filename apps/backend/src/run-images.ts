@@ -259,6 +259,17 @@ export const makeRunImages = (directory: string) =>
         value,
       }));
 
+    function imagesKeptForActiveRuns(digests: readonly string[]) {
+      return Effect.gen(function* () {
+        if (!digests.length) return [];
+        const active = yield* sql<{ sha256: string }>`
+          SELECT DISTINCT ri.sha256 FROM run_images ri JOIN runs r ON r.id=ri.run_id
+          WHERE ri.sha256 IN ${sql.in(digests)} AND r.settled_at IS NULL AND r.archived_at IS NULL`;
+        const stored = yield* Effect.forEach(active, ({ sha256 }) => hasFile(sha256));
+        return active.filter((_, index) => stored[index]).map(({ sha256 }) => sha256);
+      });
+    }
+
     /**
      * Removes the bytes of each eligible digest and skips the rest; staging rows, Run manifests
      * and history stay. The permit excludes uploads and the sweep. A Start takes no permit, so the
@@ -278,25 +289,30 @@ export const makeRunImages = (directory: string) =>
       return permit.withPermits(1)(
         Effect.gen(function* () {
           const candidates = (yield* eligibleRunImages({ digests })).map((image) => image.sha256);
-          const deleted = candidates.length
-            ? yield* sql.withTransaction(
-                Effect.gen(function* () {
-                  const still = new Set(
+          return yield* sql.withTransaction(
+            Effect.gen(function* () {
+              const still = candidates.length
+                ? new Set(
                     (yield* referencedOnlyByClosedRuns({ digests: candidates })).map(
                       (image) => image.sha256,
                     ),
-                  );
-                  const removable = candidates.filter((sha256) => still.has(sha256));
-                  for (const sha256 of removable)
-                    yield* Effect.tryPromise(() => rm(file(sha256), { force: true }));
-                  return removable;
-                }),
-              )
-            : [];
-          return {
-            ok: true as const,
-            value: { deleted, skipped: digests.filter((sha256) => !deleted.includes(sha256)) },
-          };
+                  )
+                : new Set<string>();
+              const deleted = candidates.filter((sha256) => still.has(sha256));
+              const skipped = digests.filter((sha256) => !still.has(sha256));
+              const keptForActiveRuns = yield* imagesKeptForActiveRuns(skipped);
+              for (const sha256 of deleted)
+                yield* Effect.tryPromise(() => rm(file(sha256), { force: true }));
+              return {
+                ok: true as const,
+                value: {
+                  deleted,
+                  skipped,
+                  ...(keptForActiveRuns.length ? { keptForActiveRuns } : {}),
+                },
+              };
+            }),
+          );
         }),
       );
     }

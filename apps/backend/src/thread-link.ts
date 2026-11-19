@@ -1,3 +1,5 @@
+import { T3_APP_URL } from "@t3-factory/contracts";
+
 /** Native v2 pointers become browser links; stored receipts remain unchanged. */
 export function threadHref(link: string | null) {
   const href = link?.replace(/^<(t3-thread:\/\/v[12]\/[^\s<>]+)>$/, "$1") ?? null;
@@ -14,5 +16,5 @@ function hostedSegment(id: string) {
 
 /** T3's hosted route opens the exact environment/thread from an external client. */
 export function scopedThreadHref(environmentId: string, threadId: string) {
-  return `https://app.t3.codes/threads/${hostedSegment(environmentId)}/${hostedSegment(threadId)}`;
+  return `${T3_APP_URL}/threads/${hostedSegment(environmentId)}/${hostedSegment(threadId)}`;
 }

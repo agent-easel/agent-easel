@@ -153,13 +153,17 @@ export async function afterEarlierEvents(discord: ControlledDiscord, id: string)
 export const openSessions = (discord: ControlledDiscord): GatewaySession[] =>
   discord.sessions.filter((session) => !session.closed);
 
-/** Requests besides command registration, Gateway discovery and the sentinel invocation's. */
+// A ready session looks up the allowed IDs by name; that is not a response to any event.
+const NAME_LOOKUP = /^\/api\/v10\/users\/\d+$/;
+
+/** Requests besides command registration, Gateway discovery, name lookups and the sentinel's. */
 export const requestsBesides = (discord: ControlledDiscord, sentinelId: string) =>
   discord.requests
     .filter(
       (request: DiscordRestRequest) =>
         !request.path.includes(sentinelId) &&
         !COMMANDS.test(request.path) &&
+        !NAME_LOOKUP.test(request.path) &&
         request.path !== "/api/v10/gateway/bot",
     )
     .map((request) => `${request.method} ${request.path}`);

@@ -645,7 +645,7 @@ it("a save whose reply is lost reports an unknown outcome, keeps the draft and i
     dirty: true,
     saving: false,
     saveOutcome: "unknown",
-    error: expect.stringMatching(/^Save outcome unknown\./),
+    error: expect.stringContaining("nothing is retried"),
   });
   expect(factory.updateAgent).toHaveBeenCalledTimes(1);
 });

@@ -440,6 +440,7 @@ export function openRunnerSettle(
                   // cannot read, or one that only queued work keeps unfinished.
                   state: read.finished ? "finished" : read.stoppable ? "executing" : "unresolved",
                   stopRequestedAt: null,
+                  stopOutcome: null,
                   problem: read.finished ? null : read.problem,
                 };
               }),

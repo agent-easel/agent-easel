@@ -28,7 +28,12 @@ export const serverUpdateActions = (app: FixtureApp) => remoteAccess(app).server
 export async function openUpgradeReview(app: FixtureApp, screen: Screen, scope: string) {
   await openApproved(app, "/runs/new");
   await screen.getByRole("button", `Update downloaded · Click to upgrade ${scope}`).tap();
-  await expect(screen.getByRole("heading", `Upgrade ${scope}?`)).toBeVisible();
+  await expect(
+    screen.getByRole(
+      "heading",
+      scope === "server" ? "Upgrade to 0.1.1-beta.3?" : "Upgrade client + server?",
+    ),
+  ).toBeVisible();
 }
 
 /** The review's confirmation started the upgrade and the fixture server received one install. */
@@ -54,9 +59,9 @@ export async function openWaitingConnection(app: FixtureApp, screen: Screen) {
   await remoteAccess(app).t3Endpoint();
   await openApproved(app, "/settings/connection");
   await expect(screen.getByText("Managed on the Factory host")).toBeVisible();
-  await screen.getByRole("button", "Open authorization on server").tap();
+  await screen.getByRole("button", "Authorize").tap();
   await expect(
-    screen.getByText("Waiting for approval in the host’s browser").first(),
+    screen.getByText("Approve in the browser on the Factory host").first(),
   ).toBeVisible();
 }
 

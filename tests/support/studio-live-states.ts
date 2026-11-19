@@ -15,6 +15,7 @@ import {
   expectRetainedDefinition,
   expectBrokenAgentWire,
   expectSavedAgentRevision,
+  readinessSummary,
 } from "./studio.ts";
 import { fixtureHandles } from "./fixture/handle.ts";
 import { openApproved, openRemoteBrowser } from "./remote-access.ts";
@@ -98,10 +99,7 @@ export async function beforeRenamedDependency(fixtures: StudioFixtures, prefix: 
   const library = screen.getByRole("region", "Block library");
   const canvas = screen.getByRole("region", "Flow canvas");
   await expect(library.getByRole("button", `Add ${agent.name}`, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await screen.getByRole("button", "Human step Review", { exact: true }).tap();
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await canvas.press("ArrowRight");
@@ -117,11 +115,12 @@ export async function expectRenamedDependency(
     renamed: Awaited<ReturnType<typeof saveAgentElsewhere>>;
   },
 ) {
-  const { library, canvas, renamed } = state;
+  const { library, canvas, browser, renamed } = state;
   await expect(canvas.getByText(renamed.name, { exact: true })).toBeVisible();
-  await expect(library.getByRole("button", `Add ${renamed.name}`, { exact: true })).toContainText(
-    "acceptance-unavailable-model",
-  );
+  await expect(library.getByRole("button", `Add ${renamed.name}`, { exact: true })).toHaveCount(0);
+  const row = browser.locator(`#block-library [aria-label=${JSON.stringify(renamed.name)}]`);
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(row).toContainText("Needs a model");
   await expect(
     canvas.getByRole("button", "Connect exit delivered of Worker", { exact: true }),
   ).toBeVisible();
@@ -147,7 +146,7 @@ export async function expectBrokenDependency(
   const { app, screen, agent, id, canvas, layer, view, zoom, flow } = state;
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, agent.exits[0]!.id);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 1");
   expect(await layer.getAttribute("style")).toContain(view);
   await expect(canvas).toHaveAttribute("data-zoom", zoom!);
@@ -172,8 +171,7 @@ export async function expectRestoredReadiness(
   state: Awaited<ReturnType<typeof beforeRestoredReadiness>>,
 ) {
   const { screen } = state;
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   return { ...state };
 }
 
@@ -208,7 +206,7 @@ export async function expectReleasedTyping(
 ) {
   const { screen, canvas, layer, view, zoom, revision2 } = state;
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(revision2.name);
-  await expect(screen.getByRole("complementary", "Block configuration")).toHaveCount(0);
+  await expect(screen.getByRole("complementary", "Block settings")).toHaveCount(0);
   expect(await layer.getAttribute("style")).toContain(view);
   await expect(canvas).toHaveAttribute("data-zoom", zoom!);
   const worker = (await screen.getByRole("button", "Agent Worker", { exact: true }).boundingBox())!;
@@ -256,7 +254,7 @@ export async function beforeOfflineFlow(fixtures: StudioFixtures, prefix: string
 
 export async function expectOfflineFlow(state: Awaited<ReturnType<typeof beforeOfflineFlow>>) {
   const { screen } = state;
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeDisabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   return { ...state };
 }
 
@@ -279,7 +277,7 @@ export async function expectReconnectedFlow(
   state: Awaited<ReturnType<typeof beforeReconnectedFlow>>,
 ) {
   const { screen, prefix, layer, view } = state;
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeEnabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(
     `Acceptance · ${prefix} · Offline draft`,
   );
@@ -306,7 +304,7 @@ export async function expectDirtyFlow(
   },
 ) {
   const { screen } = state;
-  const flowPanel = screen.getByRole("region", "Reconcile Flow");
+  const flowPanel = screen.getByRole("status").filter({ hasText: "was saved elsewhere" });
   await expect(flowPanel).toContainText("Revision 4 was saved elsewhere");
   return { ...state, flowPanel };
 }
@@ -330,12 +328,11 @@ export async function expectNewestFlowComparison(
     revision5: Awaited<ReturnType<typeof saveFlowElsewhere>>;
   },
 ) {
-  const { flowPanel, revision5 } = state;
-  await expect(flowPanel.getByRole("heading", "Saved revision 5", { exact: true })).toBeVisible();
-  await expect(flowPanel).toContainText(revision5.name);
-  await expect(
-    flowPanel.getByRole("button", "Keep local draft against revision 4", { exact: true }),
-  ).toHaveCount(0);
+  const { screen } = state;
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
+  await expect(comparison.getByRole("heading", "Revision 5", { exact: true })).toBeVisible();
+  await expect(comparison.getByRole("button", "Load revision 5", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("dialog", "Compare with revision 4")).toHaveCount(0);
   return { ...state };
 }
 
@@ -359,8 +356,11 @@ export async function expectReboundFlow(state: Awaited<ReturnType<typeof beforeR
 
 export async function beforeSavedFlow(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeReboundFlow(fixtures, prefix);
-  const { flowPanel } = previous;
-  await flowPanel.getByRole("button", "Keep local draft against revision 5", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare with revision 5")
+    .getByRole("button", "Keep my edits", { exact: true })
+    .tap();
   return expectReboundFlow({ ...previous });
 }
 
@@ -377,7 +377,7 @@ export async function expectSavedFlow(state: Awaited<ReturnType<typeof beforeSav
 export async function beforeReloadedFlow(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeSavedFlow(fixtures, prefix);
   const { screen } = previous;
-  await screen.getByRole("button", "Save Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   return expectSavedFlow({ ...previous });
 }
 
@@ -396,7 +396,7 @@ export async function beforeUnusedAgent(fixtures: StudioFixtures, prefix: string
   })();
   const { screen, renamed, revision5 } = state;
   await screen.getByRole("link", "Agents", { exact: true }).tap();
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toContainText("1 Flow");
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toContainText("1 Flow");
   const empty = {
     ...revision5.graph,
     flowInput: { ...revision5.graph.flowInput, targetBlockIds: [] },
@@ -408,7 +408,7 @@ export async function beforeUnusedAgent(fixtures: StudioFixtures, prefix: string
 
 export async function expectUnusedAgent(state: Awaited<ReturnType<typeof beforeUnusedAgent>>) {
   const { screen, renamed } = state;
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toContainText("Unused");
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toContainText("Unused");
   return { ...state };
 }
 
@@ -423,7 +423,7 @@ export async function expectRemovedDependency(
   state: Awaited<ReturnType<typeof beforeRemovedDependency>>,
 ) {
   const { screen, renamed } = state;
-  await expect(screen.getByRole("link", renamed.name, { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("link", renamed.name, { exact: false })).toHaveCount(0);
   return { ...state };
 }
 
@@ -477,7 +477,7 @@ export async function expectRemovedFlow(state: Awaited<ReturnType<typeof beforeR
   await expectRetainedDefinition(
     screen,
     "Flow",
-    ["Save Flow", "Start Run"],
+    ["Save"],
     ["Duplicate…", "Change owner…", "Export JSON", "Remove"],
   );
   return { ...state };
@@ -538,7 +538,7 @@ export async function beforeCleanAgent(fixtures: StudioFixtures, prefix: string)
   await screen.getByRole("link", "Agents", { exact: true }).tap();
   await flowGuard.getByRole("button", "Discard", { exact: true }).tap();
   await screen
-    .getByRole("link", `Acceptance · ${prefix} · Gesture delivered`, { exact: true })
+    .getByRole("link", `Acceptance · ${prefix} · Gesture delivered`, { exact: false })
     .tap();
   const currentAgent = await readAgentDefinition(app.baseUrl, marker.id);
   return { ...state, currentAgent };
@@ -571,13 +571,14 @@ export async function beforeComparedAgent(fixtures: StudioFixtures, prefix: stri
   const agent4 = await saveAgentElsewhere(app.baseUrl, cleanAgent, {
     prompt: `Acceptance · ${prefix} · Saved prompt 4`,
   });
-  const agentPanel = screen.getByRole("region", "Reconcile Agent");
+  const agentPanel = screen.getByText(/^Revision \d+ was saved elsewhere$/);
   return { ...state, agent4, agentPanel };
 }
 
 export async function expectComparedAgent(state: Awaited<ReturnType<typeof beforeComparedAgent>>) {
-  const { agentPanel } = state;
-  await expect(agentPanel.getByLabel("Your local draft", { exact: true })).toContainText(
+  const { screen } = state;
+  const comparison = screen.getByRole("dialog", "Compare with revision 4");
+  await expect(comparison.getByLabel("Your draft", { exact: true })).toContainText(
     "My retained prompt",
   );
   return { ...state };
@@ -586,24 +587,23 @@ export async function expectComparedAgent(state: Awaited<ReturnType<typeof befor
 export async function beforeInvalidatedAgentConfirmation(fixtures: StudioFixtures, prefix: string) {
   const state = await (async () => {
     const previous = await beforeComparedAgent(fixtures, prefix);
-    const { agentPanel } = previous;
-    await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+    const { screen } = previous;
+    await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
     return expectComparedAgent({ ...previous });
   })();
-  const { screen, agentPanel } = state;
-  await agentPanel.getByRole("button", "Load latest revision", { exact: true }).tap();
-  await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toBeVisible();
   return { ...state };
 }
 
 export async function expectInvalidatedAgentConfirmation(
   state: Awaited<ReturnType<typeof beforeInvalidatedAgentConfirmation>>,
 ) {
-  const { screen, agentPanel } = state;
-  await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toHaveCount(0);
-  await expect(agentPanel.getByLabel("Saved revision 5", { exact: true })).toContainText(
+  const { screen } = state;
+  // The open comparison moves to the newer revision, so Load can never apply an unseen one.
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
+  await expect(comparison.getByLabel("Revision 5", { exact: true })).toContainText(
     "Saved prompt 5",
   );
+  await expect(comparison.getByRole("button", "Load revision 4", { exact: true })).toHaveCount(0);
   return { ...state };
 }
 
@@ -624,8 +624,11 @@ export async function expectReboundAgent(state: Awaited<ReturnType<typeof before
 
 export async function beforeSavedAgent(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeReboundAgent(fixtures, prefix);
-  const { agentPanel } = previous;
-  await agentPanel.getByRole("button", "Keep my edits against revision 5", { exact: true }).tap();
+  const { screen } = previous;
+  await screen
+    .getByRole("dialog", "Compare with revision 5")
+    .getByRole("button", "Keep my edits", { exact: true })
+    .tap();
   return expectReboundAgent({ ...previous });
 }
 
@@ -657,14 +660,14 @@ export async function beforeRemovedAgent(fixtures: StudioFixtures, prefix: strin
     await browser.reload();
     return expectReloadedAgent({ ...previous });
   })();
-  const { app, screen, agentPanel, savedAgent } = state;
+  const { app, screen, savedAgent } = state;
   await screen
     .getByLabel("Prompt", { exact: true })
     .fill(`Acceptance · ${prefix} · Recovery prompt`);
   await saveAgentElsewhere(app.baseUrl, savedAgent, {
     prompt: `Acceptance · ${prefix} · Saved prompt 7`,
   });
-  await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
   return { ...state };
 }
 
@@ -672,12 +675,8 @@ export async function expectRemovedAgent(state: Awaited<ReturnType<typeof before
   const { screen, studio, agentsBefore, agentPanel } = state;
   await expect(agentPanel).toHaveCount(0);
   await expect(studio.getByRole("link", "Agents")).toContainText(String(agentsBefore.length));
-  await expectRetainedDefinition(
-    screen,
-    "Agent",
-    ["Save"],
-    ["Duplicate", "Change owner…", "Export JSON", "Delete"],
-  );
+  // Save and More actions are disabled as a whole while the Agent no longer exists.
+  await expectRetainedDefinition(screen, "Agent", ["Save", "More actions"]);
   return { ...state };
 }
 
@@ -777,8 +776,7 @@ export async function beforeChangedDirtyDependency(fixtures: StudioFixtures, pre
   );
   await app.open(`/studio/flows/${flow}`);
   await screen.getByLabel("Flow name").fill(`Live · ${prefix} · Canvas Flow edited`);
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /Graph ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   const handoff = { id: "handoff", name: "handoff", description: "", messageRequired: false };
   return {
     app: fixtures.app,
@@ -797,14 +795,13 @@ export async function expectChangedDirtyDependency(
 ) {
   const { app, screen, prefix, wired } = state;
   const canvas = screen.getByRole("region", "Flow canvas");
-  await expect(screen.getByRole("button", /Agents changed — check readiness again/)).toBeVisible();
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, wired.id);
   await expect(screen.getByRole("status", "Flow save status")).toContainText(
     "Unsaved changes · Revision 1",
   );
   await expect(screen.getByLabel("Flow name")).toHaveValue(`Live · ${prefix} · Canvas Flow edited`);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await app.screenshot("studio-live-agent-changed-on-canvas");
   return { ...state, canvas };
 }
@@ -820,7 +817,11 @@ export async function expectCheckedBrokenDependency(
   state: Awaited<ReturnType<typeof beforeCheckedBrokenDependency>>,
 ) {
   const { app, screen } = state;
-  await expect(screen.getByText(/Worker: its Agent no longer has exit/)).toBeVisible();
+  await expect(
+    screen
+      .getByRole("list", "Readiness issues")
+      .getByRole("button", /Worker: its Agent no longer has exit/),
+  ).toBeVisible();
   await app.screenshot("studio-live-agent-changed-checked");
   return { ...state };
 }

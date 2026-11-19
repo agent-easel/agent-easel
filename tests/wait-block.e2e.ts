@@ -3,6 +3,7 @@ import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
+import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 
@@ -21,35 +22,35 @@ test("a Wait added from the library saves with a missing duration as a readiness
   });
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Add Wait").tap();
-  await screen.getByLabel("Block name").fill("Cool down");
-  await screen.getByLabel("X position").fill("680");
-  await screen.getByLabel("Y position").fill("60");
+  await screen.getByLabel("Name", { exact: true }).fill("Cool down");
   const wait = screen.getByRole("article", "Block Cool down");
-  await screen.getByRole("button", "Agent Coder").tap();
+  await screen.getByRole("button", "Close block settings").tap();
+  await screen.getByRole("button", "Fit Flow").tap();
   await screen.getByRole("button", "Connect exit finish of Coder").dragTo(wait);
-  await screen
-    .getByRole("button", "Connect Flow input")
-    .dragTo(screen.getByRole("article", "Block Coder"));
-  await screen.getByRole("button", "Save Flow").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
-  await expect(screen.getByRole("button", /Not execution-ready · 1 issue/)).toBeVisible();
-  await expect(screen.getByText("Enter how long Cool down waits.", { exact: false })).toBeVisible();
+  await saveFlowWithReadiness(screen, /^Not ready\s*1 issue$/);
+  await expect(wait).toContainText("No duration");
+  await screen.getByRole("button", /^Not ready/).tap();
+  await expect(screen.getByRole("list", "Readiness issues")).toContainText(
+    "Enter how long Cool down waits.",
+  );
   await app.screenshot("wait-readiness-missing-duration");
 
   // Act
   await screen.getByRole("button", "Wait Cool down").tap();
   await screen.getByLabel("Wait for").fill("90");
   await screen.getByLabel("Unit").selectOption("minutes");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
-  await expect(screen.getByText("Graph ready")).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
   await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 minutes");
   await screen.getByRole("button", "Wait Cool down").tap();
   await expect(screen.getByLabel("Wait for")).toHaveValue("90");
-  await expect(screen.getByRole("region", "Output")).toContainText("finish here");
+  await expect(
+    screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
+  ).toBeVisible();
   await app.screenshot("wait-configured-after-reload");
   const saved = (await (
     await fetch(new URL(`/api/flows/${flowId}`, app.baseUrl))
@@ -78,14 +79,14 @@ test("a waiting arrival is held with its message and forwarded by the backend on
   await applyRunState(app, runId, "result reported", "Ready after a short pause.");
   await applyRunState(app, runId, "result released to a Wait");
   await app.open(`/runs/${runId}`);
-  await screen.getByRole("button", /^Wait Pause a minute, waiting/).tap();
+  await screen.getByRole("button", /^Wait Pause a minute, Waiting/).tap();
   await expect(screen.getByRole("listitem", "Arrival 1, waiting")).toContainText(
     "Ready after a short pause.",
   );
   await app.screenshot("wait-one-arrival-pending");
 
   // Act
-  const forwarded = screen.getByRole("button", /^Wait Pause a minute, finished/);
+  const forwarded = screen.getByRole("button", /^Wait Pause a minute, Finished/);
   await expect(forwarded).toBeVisible({ timeout: 90_000 });
 
   // Assert
@@ -93,7 +94,7 @@ test("a waiting arrival is held with its message and forwarded by the backend on
     "elapsed, forwarded",
   );
   await browser.reload();
-  await expect(screen.getByRole("button", /^Wait Pause a minute, finished/)).toBeVisible();
+  await expect(screen.getByRole("button", /^Wait Pause a minute, Finished/)).toBeVisible();
   const run = await readHistoryRun(app.baseUrl, runId);
   expect(run.waitArrivals.map((arrival) => [arrival.state, arrival.forwardedBy])).toEqual([
     ["forwarded", "timer"],
@@ -119,9 +120,9 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
   );
   await app.open(`/runs/${held.id}`);
   const block = screen.getByRole("article", "Block Hold for the morning sync");
-  await expect(block).toContainText("2 waiting · next until");
+  await expect(block).toContainText("2 held · next until");
   await expect(screen.getByRole("button", "Continue Hold for the morning sync now")).toHaveCount(0);
-  await screen.getByRole("button", /^Wait Hold for the morning sync, waiting/).tap();
+  await screen.getByRole("button", /^Wait Hold for the morning sync, Waiting/).tap();
   await expect(screen.getByRole("button", "Continue arrival 1 now")).toBeVisible();
   await expect(screen.getByRole("button", "Continue arrival 2 now")).toBeVisible();
   await app.screenshot("wait-two-arrivals");

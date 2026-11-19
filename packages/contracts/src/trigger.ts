@@ -38,7 +38,7 @@ export interface TriggerLatestCheck {
   readonly notStarted: readonly TriggerMissedIssue[];
 }
 
-/** A problem every check currently hits; it puts the Trigger in Error until a check succeeds. */
+/** A problem every check currently hits; it stops checks until one succeeds. */
 export interface TriggerProblem {
   readonly code: string;
   readonly message: string;
@@ -56,7 +56,7 @@ export interface GitHubIssuesSettings {
   readonly readyLabel: string;
 }
 
-/** One saved Trigger. Health is derived: Error while `error` is set, none before a check. */
+/** One saved Trigger. A problem stops checks while `error` is set; none before a check. */
 export interface TriggerDefinition {
   readonly id: string;
   readonly kind: "github_issues";
@@ -180,6 +180,19 @@ export interface TriggerPreview {
   readonly revision: number | null;
 }
 
+/** A Run this check started, so the list can open it without storing the check. */
+export interface TriggerStartedRun {
+  readonly id: string;
+  /** The Run's number once Factory has assigned one. */
+  readonly number: number | null;
+  readonly title: string;
+}
+
+/** The Trigger after a check, plus the Runs that check started. */
+export interface TriggerCheckReply extends TriggerDefinition {
+  readonly startedRuns: readonly TriggerStartedRun[];
+}
+
 /** The Trigger operations the Factory facade implements; any approved client may call them. */
 export const triggerOperations = {
   /** Query parameters may be empty: readiness then covers only what was chosen. */
@@ -210,9 +223,10 @@ export const triggerOperations = {
   }),
   /**
    * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
-   * check's summary. Every limit of a scheduled check applies.
+   * check's summary and the Runs it started. Every limit of a scheduled check applies. Those Runs
+   * are not stored on the Trigger.
    */
-  runTrigger: operation<never, TriggerDefinition>()({
+  runTrigger: operation<never, TriggerCheckReply>()({
     method: "POST",
     path: "/api/triggers/:id/run",
   }),

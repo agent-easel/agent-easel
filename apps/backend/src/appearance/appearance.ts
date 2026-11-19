@@ -124,10 +124,15 @@ export const makeAppearance = (
           : null;
       }).pipe(Effect.orDie);
 
-    const publish = (state: T3Appearance["state"], explanation: string) =>
+    const publish = (state: T3Appearance["state"], explanation: string, unreadableTheme?: string) =>
       Effect.gen(function* () {
         yield* store;
-        status = { state, explanation, presentation };
+        status = {
+          state,
+          explanation,
+          presentation,
+          ...(unreadableTheme ? { unreadableTheme } : {}),
+        };
         changes.appearanceChanged();
       });
 
@@ -180,7 +185,13 @@ export const makeAppearance = (
       const next = present(environment, followed);
       // An unchanged theme keeps its presentation object, so live delivery sends nothing.
       if (next?.revision !== presentation?.revision) presentation = next;
-      yield* publish("following", followingExplanation(followed));
+      const unreadableTheme =
+        followed?.lookup.kind === "unsupported"
+          ? followed.lookup.name
+          : followed?.lookup.kind === "missing"
+            ? followed.themeId
+            : undefined;
+      yield* publish("following", followingExplanation(followed), unreadableTheme);
     });
 
     /** Connection checks publish often; only a changed endpoint or environment matters here. */

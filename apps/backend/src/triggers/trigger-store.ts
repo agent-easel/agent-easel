@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
-import type { TriggerDefinition, TriggerMissedIssue } from "@t3-factory/contracts";
+import type {
+  TriggerDefinition,
+  TriggerMissedIssue,
+  TriggerStartedRun,
+} from "@t3-factory/contracts";
 
 type TriggerRow = {
   id: string;
@@ -255,6 +259,8 @@ export interface CheckOutcome {
   readonly waiting: number;
   readonly notStarted: readonly TriggerMissedIssue[];
   readonly problem: { readonly code: string; readonly message: string } | null;
+  /** Runs this check started. The summary above is what gets stored. */
+  readonly runs: readonly TriggerStartedRun[];
 }
 
 /**

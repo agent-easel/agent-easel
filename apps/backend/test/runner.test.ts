@@ -3,12 +3,19 @@ import { assert, expect, it } from "@effect/vitest";
 import { once } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
 import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
-import { blockedLaterFlow, modelLessLaterFlow, projectWorkerFlow } from "./support/scenarios.ts";
+import {
+  blockedLaterFlow,
+  divergingLaterAgentsFlow,
+  modelLessLaterFlow,
+  projectWorkerFlow,
+} from "./support/scenarios.ts";
 import { assertOk, ownerChangedInStorage } from "./support/domain-setup.ts";
+import { clearStoredExecution } from "./support/run-worker.ts";
 
 it("Start atomically deduplicates concurrent requests for the same Run", async (c) => {
   // Arrange
@@ -306,6 +313,42 @@ it("Start refuses a Flow whose later-branch Agent Needs a model through readines
   expect(t3.launches.size).toBe(0);
 });
 
+it("Start reports a model-less Agent and an Agent that cannot be read, and creates no Run", async (c) => {
+  // Arrange
+  // The saved Flow is ready. Start's Flow read therefore passes, and only the Agent re-read can
+  // see Reviewer lose its model and Missing disappear. That is the pass which used to stop at the
+  // first Agent it could not read.
+  const { h, f, t3, input, project } = await prepared(c, divergingLaterAgentsFlow);
+  const listed = await f.listAgents();
+  assert(listed.ok);
+  const reviewer = listed.value.find((agent) => agent.name === "Reviewer");
+  const missing = listed.value.find((agent) => agent.name === "Missing");
+  assert(reviewer && missing);
+  const diverge = divergeAgentsAfterFlowRead(h.databasePath, reviewer.id, missing.id);
+  c.onTestFinished(diverge.restore);
+
+  // Act
+  const result = await f.startRun(input);
+
+  // Assert
+  assert(diverge.fired(), diverge.seen().join("\n"));
+  assert(!result.ok);
+  expect(result.error.issues).toStrictEqual([
+    {
+      code: "agent_unavailable",
+      path: `agents.${missing.id}`,
+      message: `Agent ${missing.id}: This Agent does not exist.`,
+    },
+    {
+      code: "agent_model_required",
+      path: "graph.blocks.1.agentId",
+      message: "Review: Reviewer needs a model.",
+    },
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
+  expect(t3.launches.size).toBe(0);
+});
+
 it("a Project Flow starts in its owning Project and its Run shows no owner", async (c) => {
   // Arrange
   const { f, input, project } = await prepared(c, projectWorkerFlow);
@@ -485,3 +528,43 @@ it("an Agent owner change while Start validates is caught at acceptance and crea
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
   expect(t3.launches.size).toBe(0);
 });
+
+/**
+ * After the next unfiltered saved-Agent read (Start's Flow readiness snapshot), stores Reviewer
+ * without a model and marks Missing removed. Start's later per-Agent read then sees both.
+ */
+function divergeAgentsAfterFlowRead(databasePath: string, reviewerId: string, missingId: string) {
+  // `all` has two overloads, so the wrapper is stored as the same callable the prototype uses.
+  const statements = StatementSync.prototype as unknown as { all: Function };
+  const original = statements.all;
+  const seen: string[] = [];
+  let fired = false;
+  const restore = () => {
+    statements.all = original;
+  };
+  statements.all = function all(this: StatementSync, ...params: readonly unknown[]) {
+    const sql = this.sourceSQL;
+    if (sql.includes("agents")) seen.push(sql);
+    const rows = original.apply(this, params) as readonly Record<string, unknown>[];
+    if (
+      !fired &&
+      sql.includes("FROM agents") &&
+      sql.includes("removed_at IS NULL") &&
+      sql.includes("agent_revisions") &&
+      !sql.includes("AND a.id")
+    ) {
+      fired = true;
+      restore();
+      clearStoredExecution(databasePath, reviewerId);
+      const database = new DatabaseSync(databasePath);
+      database.exec("PRAGMA busy_timeout = 5000");
+      const updated = database
+        .prepare("UPDATE agents SET removed_at = ? WHERE id = ?")
+        .run("2026-11-07T08:00:00.000Z", missingId);
+      database.close();
+      if (updated.changes !== 1) throw new Error(`removed ${updated.changes} Agents`);
+    }
+    return rows;
+  };
+  return { restore, fired: () => fired, seen: () => seen };
+}

@@ -113,6 +113,62 @@ it("Chat control does not turn On without a complete Language model", async (c) 
   expect(read.value.chatControlEnabled).toBe(false);
 });
 
+it("Chat control does not turn On while the latest check of the saved connection reported a rejected token", async (c) => {
+  // Arrange
+  const { factory } = await chatControlWorld(c);
+  const replaced = await factory.updateDiscordConnection(
+    discordConnectionSave({ revision: 1, token: { kind: "replace", value: "revoked-token" } }),
+  );
+  assert(replaced.ok);
+  const checked = await factory.checkDiscordConnection({ revision: 2 });
+  assert(checked.ok);
+  expect(checked.value.latestCheck?.outcome).toBe("token-rejected");
+
+  // Act
+  const on = await factory.setChatControlEnabled({ enabled: true });
+
+  // Assert
+  assert(!on.ok);
+  expect(on.error.issues).toStrictEqual([
+    {
+      code: "chat_control_check_failed",
+      path: "discord.token",
+      message: "Replace the rejected bot token.",
+    },
+  ]);
+});
+
+it("a passing check records the bot's display name and the names Discord knows for allowed IDs", async (c) => {
+  // Arrange
+  const { discord, factory, project } = await chatControlWorld(c);
+  const unknownUser = "200000000000000099";
+  const unknownChannel = "400000000000000099";
+  discord.removeGuildMember(unknownUser);
+  assert(
+    (
+      await factory.updateDiscordAccess({
+        revision: 1,
+        users: [PARTICIPANT_ID, unknownUser],
+        channels: [
+          { channelId: ALLOWED_CHANNEL, projectIds: [project.id] },
+          { channelId: unknownChannel, projectIds: [] },
+        ],
+      })
+    ).ok,
+  );
+
+  // Act
+  const checked = await factory.checkDiscordConnection({ revision: 1 });
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({ outcome: "verified", botName: "Factory bot" });
+  expect(checked.value.access).toMatchObject({
+    userNames: { [PARTICIPANT_ID]: "participant", [unknownUser]: null },
+    channelNames: { [ALLOWED_CHANNEL]: "factory", [unknownChannel]: null },
+  });
+});
+
 it("Chat control turns On with a keyless model, no passed tests and empty Access", async (c) => {
   // Arrange
   const { discord, factory } = await chatControlWorld(c);

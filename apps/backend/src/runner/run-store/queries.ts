@@ -150,7 +150,9 @@ function runExecution(execution: ExecutionRow): RunDetail["executions"][number] 
   };
 }
 
-function humanOccurrence(occurrence: HumanRow): RunDetail["humanOccurrences"][number] {
+function humanOccurrence(
+  occurrence: HumanRow & { chat_confirmation_until: string | null },
+): RunDetail["humanOccurrences"][number] {
   return {
     id: occurrence.id,
     blockId: occurrence.block_id,
@@ -160,6 +162,8 @@ function humanOccurrence(occurrence: HumanRow): RunDetail["humanOccurrences"][nu
     appearedAt: occurrence.appeared_at,
     settledAt: occurrence.settled_at,
     exitId: occurrence.exit_id,
+    chatConfirmationUntil:
+      occurrence.state === "pending" ? occurrence.chat_confirmation_until : null,
   };
 }
 
@@ -279,8 +283,11 @@ export function openRunQueries(database: RunnerDatabase) {
           (SELECT MIN(e.observed_at) FROM run_events e WHERE e.run_id=x.run_id AND e.block_id=x.block_id AND e.execution_id=x.execution_id AND (e.binding_id=x.binding_id OR (e.binding_id IS NULL AND x.thread_id=(SELECT b.thread_id FROM run_blocks b WHERE b.run_id=x.run_id AND b.block_id=x.block_id))) AND e.engine_status IN ('preparing','starting','running','waiting')) AS first_work_at,
           (SELECT MIN(e.observed_at) FROM run_events e WHERE e.run_id=x.run_id AND e.block_id=x.block_id AND e.execution_id=x.execution_id AND (e.binding_id=x.binding_id OR (e.binding_id IS NULL AND x.thread_id=(SELECT b.thread_id FROM run_blocks b WHERE b.run_id=x.run_id AND b.block_id=x.block_id))) AND e.engine_status IN ('completed','failed','cancelled','interrupted','rolled_back')) AS end_work_at
           FROM run_executions x WHERE run_id=${id} ORDER BY rowid`;
-        const humans =
-          yield* sql<HumanRow>`SELECT * FROM human_occurrences WHERE run_id=${id} ORDER BY rowid`;
+        const humans = yield* sql<HumanRow & { chat_confirmation_until: string | null }>`SELECT h.*,
+          (SELECT MAX(p.expires_at) FROM chat_proposals p WHERE p.operation='human-answer'
+            AND p.state IN ('presented','accepting')
+            AND json_extract(p.parameters_json,'$.occurrenceId')=h.id) AS chat_confirmation_until
+          FROM human_occurrences h WHERE h.run_id=${id} ORDER BY h.rowid`;
         const waits = yield* sql<
           WaitArrivalRow & { origin_thread_id: string | null }
         >`SELECT w.*,t.thread_id AS origin_thread_id FROM wait_arrivals w LEFT JOIN run_thread_bindings t ON t.id=w.binding_id WHERE w.run_id=${id} ORDER BY w.rowid`;

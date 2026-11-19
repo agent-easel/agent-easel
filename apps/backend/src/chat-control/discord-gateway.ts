@@ -2,6 +2,7 @@ import type { DiscordAdapter, DiscordAdapterConfig } from "@chat-adapter/discord
 import { Chat, ConsoleLogger, type StateAdapter } from "chat";
 import {
   Client,
+  DiscordAPIError,
   DiscordjsErrorCodes,
   Events,
   GatewayCloseCodes,
@@ -40,14 +41,28 @@ export interface GatewayResult {
  * why there is none.
  */
 type Readiness =
-  | { readonly ready: true; readonly applicationId: string }
+  | { readonly ready: true; readonly applicationId: string; readonly botName: string }
   | { readonly ready: false; readonly result: GatewayResult };
 
-/** The latest connection-only check's evidence. */
+/** Allowed Discord IDs to look up by name. */
+export interface DiscordIds {
+  readonly users: readonly string[];
+  readonly channels: readonly string[];
+}
+
+/** Names Discord reported per ID; `null` when Discord does not know the ID. */
+export interface DiscordNames {
+  readonly users: ReadonlyMap<string, string | null>;
+  readonly channels: ReadonlyMap<string, string | null>;
+}
+
+/** The latest connection-only check's evidence, with the names a verified session looked up. */
 interface CheckResult {
   readonly outcome: DiscordCheckOutcome;
   readonly applicationId: string | null;
+  readonly botName: string | null;
   readonly message: string;
+  readonly names: DiscordNames | null;
 }
 
 // The intents the adapter's own Gateway listener requests. The check asks for the same ones, so a
@@ -102,6 +117,45 @@ function loginResult(error: unknown): GatewayResult {
     );
   return result("unreachable", "Factory could not reach Discord.");
 }
+
+// Unknown User, Unknown Channel and Missing Access: the bot cannot know that ID.
+const UNKNOWN_ID_CODES = new Set([10003, 10013, 50001]);
+
+/**
+ * Looks up each ID through the ready session. An ID Discord does not know maps to null; a lookup
+ * that fails for another reason is left out, so the ID stays unresolved instead of reading as unknown.
+ */
+export const lookupNames = (client: Client<true>, ids: DiscordIds) =>
+  Effect.promise(async (): Promise<DiscordNames> => {
+    const lookup = async (id: string, fetch: (id: string) => Promise<string | null>) => {
+      try {
+        return [[id, await fetch(id)] as const];
+      } catch (error) {
+        return error instanceof DiscordAPIError &&
+          typeof error.code === "number" &&
+          UNKNOWN_ID_CODES.has(error.code)
+          ? [[id, null] as const]
+          : [];
+      }
+    };
+    const users = await Promise.all(
+      ids.users.map((id) =>
+        lookup(id, async (userId) => {
+          const user = await client.users.fetch(userId);
+          return user.globalName ?? user.username;
+        }),
+      ),
+    );
+    const channels = await Promise.all(
+      ids.channels.map((id) =>
+        lookup(id, async (channelId) => {
+          const channel = await client.channels.fetch(channelId);
+          return channel && "name" in channel && channel.name ? channel.name : null;
+        }),
+      ),
+    );
+    return { users: new Map(users.flat()), channels: new Map(channels.flat()) };
+  });
 
 const failed = (gatewayResult: GatewayResult): Readiness => ({
   ready: false,
@@ -158,7 +212,13 @@ const gatewayClient = (apiUrl: string) =>
 const establish = (client: Client, token: string) =>
   Effect.callback<Readiness>((resume) => {
     client.once(Events.ClientReady, (ready) =>
-      resume(Effect.succeed({ ready: true, applicationId: ready.application.id })),
+      resume(
+        Effect.succeed({
+          ready: true,
+          applicationId: ready.application.id,
+          botName: ready.user.globalName ?? ready.user.username,
+        }),
+      ),
     );
     client.once(Events.ShardDisconnect, ({ code }) =>
       resume(Effect.succeed(failed(closeResult(code)))),
@@ -216,6 +276,7 @@ const chatFor = async <Adapter extends DiscordAdapter>(
 /** An operating session whose application Discord authenticated, before any handler is attached. */
 export interface OperatingSession<Adapter extends DiscordAdapter> {
   readonly applicationId: string;
+  readonly botName: string;
   readonly adapter: Adapter;
   readonly chat: Chat;
   readonly client: Client<true>;
@@ -242,10 +303,10 @@ export const makeDiscordGateway = (apiUrl: string) =>
 
     /**
      * A bounded connection-only session: it verifies readiness and reports the authenticated
-     * application, then disconnects. It has no Chat SDK instance or handler, so it handles no
-     * message, interaction or command and sends nothing to Discord beyond the login itself.
+     * application and bot, looks up the allowed IDs by name, then disconnects. It has no Chat SDK
+     * instance or handler, so it handles no message, interaction or command and posts nothing.
      */
-    const runCheck = (connection: DiscordConnection) =>
+    const runCheck = (connection: DiscordConnection, ids: DiscordIds) =>
       Effect.scoped(
         Effect.gen(function* (): Effect.fn.Return<CheckResult, never, Scope.Scope> {
           const { client } = yield* gatewayClient(apiUrl);
@@ -254,11 +315,15 @@ export const makeDiscordGateway = (apiUrl: string) =>
             return {
               outcome: readiness.result.outcome,
               applicationId: null,
+              botName: null,
               message: readiness.result.message,
+              names: null,
             };
           return {
             outcome: "verified",
             applicationId: readiness.applicationId,
+            botName: readiness.botName,
+            names: yield* lookupNames(client as Client<true>, ids),
             message: `Discord accepted the token for application ${readiness.applicationId} and the Gateway session became ready. Factory disconnected after the check.`,
           };
         }),
@@ -268,13 +333,13 @@ export const makeDiscordGateway = (apiUrl: string) =>
      * None when another session holds the listener. The session fiber itself holds the listener,
      * so a caller that stops waiting cannot let a second session start while this one runs.
      */
-    const check = (connection: DiscordConnection) =>
+    const check = (connection: DiscordConnection, ids: DiscordIds) =>
       Effect.gen(function* () {
         const fiber = yield* FiberSet.run(
           sessions,
           listener.withPermitsIfAvailable(1)(
             Effect.sync(() => (checking = true)).pipe(
-              Effect.andThen(runCheck(connection)),
+              Effect.andThen(runCheck(connection, ids)),
               Effect.ensuring(Effect.sync(() => (checking = false))),
             ),
           ),
@@ -311,6 +376,7 @@ export const makeDiscordGateway = (apiUrl: string) =>
             );
             const result = yield* use({
               applicationId: readiness.applicationId,
+              botName: readiness.botName,
               adapter,
               chat,
               client: session.client as Client<true>,

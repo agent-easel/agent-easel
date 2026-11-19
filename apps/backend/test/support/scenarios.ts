@@ -1019,13 +1019,22 @@ export const conditionFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "follow-up")],
   }));
 
-/** Entry worker's "Done" and Flow-local "Revise" both go to the Gate, whose Otherwise ends the
- * branch. */
+/** Entry worker's "Done" and Flow-local "Revise" both go to the Gate, whose Otherwise hands to
+ * Follow-up. A Condition output cannot end a branch at Start; tests that need one unwire it from
+ * the captured revision with `capturedConditionOutputUnwired`, as a Run captured earlier keeps it. */
 export const terminalConditionFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Terminal condition", (agentId) => ({
     flowInput: flowInput("worker"),
-    blocks: [entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]), gate()],
-    connections: [connection("worker", "done", "gate"), connection("worker", "revise", "gate")],
+    blocks: [
+      entryWorker(agentId, [blockExit("revise", "Revise", "Needs another pass")]),
+      gate(),
+      followUp(agentId),
+    ],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("worker", "revise", "gate"),
+      connection("gate", OTHERWISE, "follow-up"),
+    ],
   }));
 
 /** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, which
@@ -1048,7 +1057,7 @@ export const parallelConditionFlow: ReadyFlowShape = (world) =>
     ],
   }));
 
-/** Entry worker's "Done" and Flow-local "Revise" go to the Gate, whose Otherwise ends the branch;
+/** Entry worker's "Done" and Flow-local "Revise" go to the Gate, whose Otherwise hands to Follow-up;
  * Second entry, also started from the Flow input, hands "Done" to a Human Review. */
 export const besideConditionFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Beside condition", (agentId) => ({
@@ -1058,11 +1067,13 @@ export const besideConditionFlow: ReadyFlowShape = (world) =>
       agentBlock("second", "Second entry", agentId),
       gate(),
       reviewStep,
+      followUp(agentId),
     ],
     connections: [
       connection("worker", "done", "gate"),
       connection("worker", "revise", "gate"),
       connection("second", "done", "review"),
+      connection("gate", OTHERWISE, "follow-up"),
     ],
   }));
 
@@ -1107,8 +1118,8 @@ export const reviewConditionFlow: ReadyFlowShape = (world) =>
   }));
 
 /** Entry worker and Second entry both start from the Flow input and hand "Done" to the Gate, whose
- * Escalate (from arrival 2) and Otherwise both go to the Final Condition, whose Otherwise is
- * unwired. */
+ * Escalate (from arrival 2) and Otherwise both go to the Final Condition, whose Otherwise hands to
+ * Follow-up. */
 export const chainedConditionFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Chained conditions", (agentId) => ({
     flowInput: flowInput("worker", "second"),
@@ -1117,12 +1128,14 @@ export const chainedConditionFlow: ReadyFlowShape = (world) =>
       agentBlock("second", "Second entry", agentId),
       gate(escalateFromSecond),
       conditionBlock("final", "Final", [], { x: 800, y: 0 }),
+      followUp(agentId),
     ],
     connections: [
       connection("worker", "done", "gate"),
       connection("second", "done", "gate"),
       connection("gate", "escalate", "final"),
       connection("gate", OTHERWISE, "final"),
+      connection("final", OTHERWISE, "follow-up"),
     ],
   }));
 
@@ -1242,6 +1255,36 @@ export async function modelLessLaterFlow(world: ScenarioWorld): Promise<ReadyFlo
     flowInput: flowInput("worker"),
     blocks: [entryWorker(agent.id), agentBlock("review", "Review", reviewer.id)],
     connections: [connection("worker", "done", "review")],
+  });
+  return { agent, flow };
+}
+
+/**
+ * Entry worker hands "Done" to Reviewer and to Missing. Both Agents have a model, so the saved
+ * Flow is ready. A Start test removes Missing and Reviewer's model after that readiness read.
+ */
+export async function divergingLaterAgentsFlow(world: ScenarioWorld): Promise<ReadyFlow> {
+  const agent = await workerAgent(world, "create the entry Agent");
+  const saved = async (name: string) =>
+    stepResult(
+      `create the ${name} Agent`,
+      await world.factory.createAgent({
+        name,
+        prompt: agent.prompt,
+        execution: agent.execution,
+        exits: agent.exits,
+      }),
+    );
+  const reviewer = await saved("Reviewer");
+  const missing = await saved("Missing");
+  const flow = await saveFlow(world, "Diverging later Agents", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      entryWorker(agent.id),
+      agentBlock("review", "Review", reviewer.id),
+      agentBlock("missing", "Missing", missing.id),
+    ],
+    connections: [connection("worker", "done", "review"), connection("worker", "done", "missing")],
   });
   return { agent, flow };
 }
@@ -1643,6 +1686,20 @@ async function nextWorkerLaunched(step: string, world: ScenarioWorld, worker: Wo
   return launchedWorker(world, run, next[0]!.blockId);
 }
 
+/** Observes until Flow block `flowBlockId` has a launched worker, whose handle is returned; T3
+ * shows its first turn running. */
+export function blockWorkerLaunched(world: ScenarioWorld, runId: string, flowBlockId: string) {
+  return reach(`${flowBlockId} worker launched`, async () => {
+    const run = await observeFor(`observe the ${flowBlockId} worker`, world, runId, (detail) =>
+      detail.blocks.some(
+        (block) =>
+          block.blockId === flowBlockId && block.threadId !== null && block.executionId !== null,
+      ),
+    );
+    return launchedWorker(world, run, flowBlockId);
+  });
+}
+
 /** From a result reported on an exit that hands to a second worker, or from a review approved
  * towards one: Factory observed it, released the result and launched the second worker, whose
  * handle is returned; T3 shows the second worker's first turn running. */
@@ -1736,11 +1793,17 @@ export function arrivalsNumbered(world: ScenarioWorld, runId: string, count: num
   );
 }
 
-/** On the chained Condition Flow: Entry worker's result, then Second entry's, reached the Gate and
- * then the Final Condition, so each has numbered two arrivals. */
-export function chainedConditionArrivals(world: ScenarioWorld, start: unknown) {
+/** On the chained Condition Flow, with the Final Condition's Otherwise unwired from the captured
+ * revision: Entry worker's result, then Second entry's, reached the Gate and then the Final
+ * Condition, so each has numbered two arrivals. */
+export function chainedConditionArrivals(
+  world: ScenarioWorld,
+  start: unknown,
+  unwireFinal: (blockId: string, exitId: string) => Promise<void>,
+) {
   return reach("two arrivals at both chained Conditions", async () => {
     const [first, second] = await twoWorkersStarted(world, start);
+    await unwireFinal("final", OTHERWISE);
     await resultReported(world, first, { message: "First branch." });
     await arrivalsNumbered(world, first.runId, 1);
     await resultReported(world, second, { message: "Second branch." });

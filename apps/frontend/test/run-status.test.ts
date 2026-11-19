@@ -1,121 +1,59 @@
 import { expect, it } from "vite-plus/test";
-import { runFreshness, runStatus } from "../src/run-status.ts";
-import { attention, block, event, runDetail } from "./support/run.ts";
+import {
+  lifecycleAt,
+  runActivity,
+  runFreshness,
+  waitsForWorkerConfirmation,
+} from "../src/run-status.ts";
+import { block, event, runDetail, runEntry } from "./support/run.ts";
 
-it("a pending Problem outranks Needs input in the Run status", () => {
+it("a reopened Run shows the time of its latest settlement", () => {
   // Arrange
   const run = {
     ...runDetail(),
-    attention: [attention("review", "human"), attention("worker", "missing-report")],
-  };
-
-  // Act
-  const status = runStatus(run);
-
-  // Assert
-  expect(status).toStrictEqual({ kind: "problem", blocks: ["worker"] });
-});
-
-it("a Settle that could not stop workers names its blocked workers as the Run's Problem", () => {
-  // Arrange
-  const worker = {
-    threadId: "thread",
-    link: null,
-    stopRequestedAt: null,
-    problem: "T3 cannot stop worker threads.",
-  };
-  const run = {
-    ...runDetail(),
-    blocks: [block("worker"), block("second")],
-    attention: [
-      { ...attention("worker", "settlement-unresolved"), blockId: null, blockName: null },
+    events: [
+      { ...event(1), kind: "run-settled", observedAt: "2026-11-08T09:00:00Z" },
+      { ...event(2), kind: "run-activated", observedAt: "2026-11-08T09:30:00Z" },
+      { ...event(3), kind: "run-settled", observedAt: "2026-11-08T10:15:00Z" },
     ],
-    settlement: {
-      state: "unresolved" as const,
-      requestedAt: "2026-11-08T10:00:00Z",
-      attempt: 1,
-      attemptedAt: "2026-11-08T10:00:00Z",
-      workers: [
-        { ...worker, blockId: "worker", blockName: "Entry worker", state: "finished" as const },
-        { ...worker, blockId: "second", blockName: "Second entry", state: "unresolved" as const },
-      ],
-    },
   };
 
   // Act
-  const status = runStatus(run);
+  const at = lifecycleAt(run, "run-settled");
 
   // Assert
-  expect(status).toStrictEqual({ kind: "problem", blocks: ["Second entry"] });
+  expect(at).toBe("2026-11-08T10:15:00Z");
 });
 
-it("a Settled Run shows Settled with its settle time instead of its block states", () => {
+it("a finished Block with a pending handoff is idle and not yet waiting for worker confirmation", () => {
   // Arrange
   const run = {
-    ...runDetail(),
-    lifecycle: "settled" as const,
-    blocks: [{ ...block("worker"), state: "error" as const }],
-    events: [{ ...event(1), kind: "run-settled", observedAt: "2026-11-08T10:15:00Z" }],
+    ...runEntry(),
+    pendingWork: true,
+    blocks: [{ ...block("worker"), state: "finished" as const }],
   };
 
   // Act
-  const status = runStatus(run);
+  const waiting = waitsForWorkerConfirmation(run);
+  const activity = runActivity(run);
 
   // Assert
-  expect(status).toStrictEqual({ kind: "settled", at: "2026-11-08T10:15:00Z" });
+  expect(waiting).toBe(false);
+  expect(activity).toBe("idle");
 });
 
-it("an Archived Run shows Archived although a block still asks for input", () => {
+it("a Block that is waiting is the Waiting activity", () => {
   // Arrange
   const run = {
-    ...runDetail(),
-    lifecycle: "archived" as const,
-    attention: [attention("worker", "human")],
-    events: [{ ...event(1), kind: "run-archived", observedAt: "2026-11-08T11:00:00Z" }],
+    ...runEntry(),
+    blocks: [{ ...block("worker"), state: "waiting" as const }],
   };
 
   // Act
-  const status = runStatus(run);
+  const activity = runActivity(run);
 
   // Assert
-  expect(status).toStrictEqual({ kind: "archived", at: "2026-11-08T11:00:00Z" });
-});
-
-it("Needs input outranks working blocks in the Run status", () => {
-  // Arrange
-  const run = {
-    ...runDetail(),
-    blocks: [block("worker"), { ...block("review"), state: "waiting" as const }],
-    attention: [attention("review", "human")],
-  };
-
-  // Act
-  const status = runStatus(run);
-
-  // Assert
-  expect(status).toStrictEqual({ kind: "needs-input", blocks: ["review"] });
-});
-
-it("a Run stopping its workers for Settle shows its active blocks instead of Needs input", () => {
-  // Arrange
-  const run = {
-    ...runDetail(),
-    blocks: [block("worker"), { ...block("untouched"), state: "not-started" as const }],
-    attention: [attention("worker", "native-request")],
-    settlement: {
-      state: "stopping" as const,
-      requestedAt: "2026-11-08T10:00:00Z",
-      attempt: 1,
-      attemptedAt: "2026-11-08T10:00:00Z",
-      workers: [],
-    },
-  };
-
-  // Act
-  const status = runStatus(run);
-
-  // Assert
-  expect(status).toStrictEqual({ kind: "working", blocks: ["worker"] });
+  expect(activity).toBe("waiting");
 });
 
 it("a stale started block makes an active Run Not live since its latest observation", () => {

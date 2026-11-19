@@ -9,6 +9,6 @@ test("Factory serves the built UI and seeded Flows", async ({ app, screen }) => 
   // Assert
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await expect(screen.getByRole("button", "New Flow")).toBeVisible();
-  await expect(screen.getByRole("heading", "Launch ready Flow", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", /Launch ready Flow/)).toBeVisible();
   await app.screenshot("flows-smoke");
 });

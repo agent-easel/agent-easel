@@ -18,7 +18,6 @@ import {
   TASK_TITLE_LIMIT,
 } from "@t3-factory/domain-validation";
 import { randomId } from "./lib/ids.ts";
-import { useNavigate } from "@tanstack/react-router";
 import { admittedStart, api, ApiError } from "./api.ts";
 import { transport } from "./transport.ts";
 import type { LiveScopeView } from "./live/owner.ts";
@@ -120,16 +119,19 @@ const unsavedUnknownOutcome =
   "Start outcome unknown, and this browser could not save the request for recovery after a reload. Keep this window open and check the same request again to recover its Run without creating a duplicate.";
 
 /**
- * The Flows the composer's picker offers: ready global Flows, then ready Flows of the selected
- * Project, keeping the selected Flow listed if it stopped being ready. Without a Project the
- * picker is disabled and offers none.
+ * The Flows the composer's picker offers: every global Flow, then every Flow of the selected
+ * Project. Ready Flows come first and not-ready Flows follow, in each group. Without a Project
+ * the picker is disabled and offers none.
  */
-export function composerFlows(flows: readonly FlowDraft[], projectId: string, flowId: string) {
-  const listed = (flow: FlowDraft) => flow.readiness.ready || flow.id === flowId;
+export function composerFlows(flows: readonly FlowDraft[], projectId: string) {
+  const ordered = (matched: readonly FlowDraft[]) => [
+    ...matched.filter((flow) => flow.readiness.ready),
+    ...matched.filter((flow) => !flow.readiness.ready),
+  ];
   return {
     disabled: !projectId,
-    global: projectId ? flows.filter((flow) => flow.projectId === null && listed(flow)) : [],
-    project: projectId ? flows.filter((flow) => flow.projectId === projectId && listed(flow)) : [],
+    global: projectId ? ordered(flows.filter((flow) => flow.projectId === null)) : [],
+    project: projectId ? ordered(flows.filter((flow) => flow.projectId === projectId)) : [],
   };
 }
 
@@ -518,21 +520,14 @@ export function createRunDraft(
     // A stale tab's save keeps another tab's unresolved Start instead.
     return !find(currentId)?.submission;
   }
-  /**
-   * Opens a saved draft, or a fresh composition with the remembered choices or a Flow's Start Run:
-   * a Project Flow selects its owning Project, and a global Flow without a remembered Project is
-   * held until one is chosen.
-   */
-  function openComposition(
-    next: SavedRunDraft | undefined,
-    flow?: Pick<FlowDraft, "id" | "projectId">,
-  ) {
+  /** Opens a saved draft, or a fresh composition with the remembered choices. */
+  function openComposition(next: SavedRunDraft | undefined) {
     leaveComposition();
     show(next);
     if (!next)
       current = {
-        projectId: flow?.projectId ?? (remembered("project") || current.projectId),
-        flowId: flow?.id ?? (remembered("flow") || current.flowId),
+        projectId: remembered("project") || current.projectId,
+        flowId: remembered("flow") || current.flowId,
         segments: [],
         images: [],
       };
@@ -542,9 +537,11 @@ export function createRunDraft(
     publish();
   }
   /**
-   * Applies a launch-choice delivery. A current one clears a Project or Flow it no longer lists
-   * and a Flow that doesn't fit the Project, silently and keeping the prompt; a non-current one
-   * changes nothing. A draft awaiting a Start outcome keeps its submitted choices.
+   * Applies a launch-choice delivery. A current one clears a Project it no longer lists or that
+   * is unavailable for a reason other than the connection, and a Flow it no longer lists or that
+   * doesn't fit, silently and keeping the prompt. A connection outage keeps the last known
+   * Project. A non-current delivery changes nothing. A draft awaiting a Start outcome keeps its
+   * submitted choices.
    */
   function receiveChoices({
     value,
@@ -555,9 +552,11 @@ export function createRunDraft(
         ? new Map(value.flows.map((flow) => [flow.id, flow.projectId]))
         : undefined;
     if (!value || !currentOwners || find(currentId)?.submission) return;
-    const projectId = value.catalog.projects.some((project) => project.id === current.projectId)
-      ? current.projectId
-      : "";
+    const listed = value.catalog.projects.find((project) => project.id === current.projectId);
+    const projectId =
+      listed?.availability === "available" || listed?.availability === "connection-unavailable"
+        ? current.projectId
+        : "";
     const flowId =
       currentOwners.has(current.flowId) && fits(current.flowId, projectId) ? current.flowId : "";
     if (projectId === current.projectId && flowId === current.flowId) return;
@@ -633,6 +632,8 @@ export function createRunDraft(
     const recoverable = commit(requestServer, id, (latest = saved) => ({
       ...latest,
       submission: request,
+      // The unresolved Start is the sidebar's Idle row while this composer stays open.
+      listed: true,
     }));
     error = "";
     issues = [];
@@ -837,8 +838,6 @@ export function createRunDraft(
     edit,
     /** New Run: an empty prompt with remembered choices; the previous draft stays saved. */
     openFresh: () => openComposition(undefined),
-    /** Start Run from a Flow: a fresh composition with that Flow. */
-    openFlow: (flow: Pick<FlowDraft, "id" | "projectId">) => openComposition(undefined, flow),
     openDraft(id: string) {
       const saved = find(id);
       if (saved && saved.id !== currentId) openComposition(saved);
@@ -865,13 +864,4 @@ export function useRunDraft() {
 
 export function useRunDrafts() {
   return useSyncExternalStore(runDraft.subscribe, runDraft.getDrafts);
-}
-
-export function useComposerNavigation() {
-  const navigate = useNavigate();
-  function openFlowComposer(flow: Pick<FlowDraft, "id" | "projectId">) {
-    runDraft.openFlow(flow);
-    void navigate({ to: "/runs/new" });
-  }
-  return { openFlowComposer };
 }

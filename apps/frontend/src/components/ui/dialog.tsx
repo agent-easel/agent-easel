@@ -4,41 +4,31 @@ import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "./key-chip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogPortal({ ...props }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
-  return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
+const dialogOverlayClass =
+  "fixed inset-0 z-50 bg-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
+const dialogSurfaceClass =
+  "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-strong bg-card shadow-panel outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
+const centeredDialogClass =
+  "flex max-h-[85vh] w-[clamp(440px,33.333vw,560px)] flex-col gap-4 p-5 [@media(width<640px)]:w-[calc(100vw-32px)]";
+const dialogTitleClass = "pt-1 text-base leading-5 font-semibold wrap-anywhere";
+const dialogDescriptionClass = "text-sm text-muted-foreground";
+const wideDialogClass = "w-[clamp(560px,60vw,960px)]";
 
-function DialogOverlay({
-  className,
-  blur = true,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay> & { blur?: boolean }) {
-  return (
-    <DialogPrimitive.Overlay
-      data-slot="dialog-overlay"
-      className={cn(
-        "fixed inset-0 z-50 bg-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
-        blur && "backdrop-blur-[2px]",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-/** The opener of a dialog that unmounted in the render now committing; see DialogContent. */
+/** The opener of a dialog that unmounted in the render now committing; see DialogSurface. */
 let replacedOpener: HTMLElement | null = null;
 
-function DialogContent({
+function DialogSurface({
   className,
   children,
-  showCloseButton = true,
   presentation = "dialog",
+  showCloseButton = false,
   onOpenAutoFocus,
   onCloseAutoFocus,
   ...props
@@ -63,13 +53,18 @@ function DialogContent({
     [],
   );
   return (
-    <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay blur={presentation !== "workspace"} />
+    <DialogPrimitive.Portal>
+      <DialogPrimitive.Overlay
+        data-slot="dialog-overlay"
+        className={cn(dialogOverlayClass, presentation !== "workspace" && "backdrop-blur-[2px]")}
+      />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         data-presentation={presentation}
         className={cn(
-          "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-xl border border-border-strong bg-card p-6 shadow-panel duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          dialogSurfaceClass,
+          presentation !== "workspace" &&
+            "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
         )}
         onOpenAutoFocus={(event) => {
@@ -87,52 +82,151 @@ function DialogContent({
         }}
         {...props}
       >
-        {children}
-        {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
-          >
-            <XIcon />
-            <span className="sr-only">Close</span>
-          </DialogPrimitive.Close>
+        {showCloseButton ? (
+          <>
+            {children}
+            <DialogPrimitive.Close asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Close"
+                className="absolute top-3 right-3"
+              >
+                <XIcon aria-hidden />
+              </Button>
+            </DialogPrimitive.Close>
+          </>
+        ) : (
+          children
         )}
       </DialogPrimitive.Content>
-    </DialogPortal>
+    </DialogPrimitive.Portal>
   );
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
-      {...props}
-    />
-  );
-}
-
-function DialogFooter({
-  className,
-  showCloseButton = false,
-  children,
-  ...props
-}: React.ComponentProps<"div"> & {
-  showCloseButton?: boolean;
+/** Place the shared Esc hint and close control in a custom dialog header. */
+function DialogDismiss({
+  Close = DialogPrimitive.Close,
+  disabled,
+  label,
+}: {
+  Close?: typeof DialogPrimitive.Close;
+  disabled?: boolean | undefined;
+  label?: string;
 }) {
   return (
-    <div
-      data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
-      {...props}
+    <>
+      <KeyChip aria-hidden>Esc</KeyChip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Close asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 text-muted-foreground"
+              aria-label={label ?? "Close dialog"}
+              disabled={disabled}
+            >
+              <XIcon aria-hidden className="size-4" strokeWidth={1.5} />
+            </Button>
+          </Close>
+        </TooltipTrigger>
+        <TooltipContent>{label ?? "Close"} (Esc)</TooltipContent>
+      </Tooltip>
+    </>
+  );
+}
+
+type DialogLayoutProps = {
+  heading: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+  children?: React.ReactNode;
+  closeDisabled?: boolean | undefined;
+};
+
+function DialogLayout({
+  heading,
+  description,
+  actions,
+  children,
+  closeDisabled,
+  Close,
+}: DialogLayoutProps & { Close: typeof DialogPrimitive.Close }) {
+  return (
+    <>
+      <header className="flex shrink-0 items-start justify-between gap-3">
+        {heading}
+        <div className="flex shrink-0 items-center gap-2">
+          <DialogDismiss Close={Close} disabled={closeDisabled} />
+        </div>
+      </header>
+      {(description || children) && (
+        <div
+          data-slot="dialog-body"
+          className="flex min-h-0 flex-col gap-4 overflow-y-auto [&>*]:shrink-0"
+        >
+          {description}
+          {children}
+        </div>
+      )}
+      {actions && <footer className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</footer>}
+    </>
+  );
+}
+
+type CenteredDialogProps = Omit<
+  React.ComponentProps<typeof DialogSurface>,
+  "asChild" | "className" | "presentation" | "showCloseButton" | "title" | "onSubmit"
+> &
+  Omit<DialogLayoutProps, "heading"> & {
+    title: React.ReactNode;
+    size?: "standard" | "wide";
+    onSubmit?: React.FormEventHandler<HTMLFormElement>;
+  };
+
+function DialogContent({
+  title,
+  size = "standard",
+  description,
+  actions,
+  closeDisabled,
+  children,
+  onSubmit,
+  onOpenAutoFocus,
+  ...props
+}: CenteredDialogProps) {
+  const layout = (
+    <DialogLayout
+      heading={<DialogTitle className={dialogTitleClass}>{title}</DialogTitle>}
+      description={description && <DialogDescription>{description}</DialogDescription>}
+      actions={actions}
+      closeDisabled={closeDisabled}
+      Close={DialogPrimitive.Close}
     >
       {children}
-      {showCloseButton && (
-        <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
-        </DialogPrimitive.Close>
-      )}
-    </div>
+    </DialogLayout>
+  );
+  return (
+    <DialogSurface
+      asChild={Boolean(onSubmit)}
+      className={cn(centeredDialogClass, size === "wide" && wideDialogClass)}
+      onOpenAutoFocus={(event) => {
+        onOpenAutoFocus?.(event);
+        if (event.defaultPrevented || !(event.target instanceof HTMLElement)) return;
+        const content = event.target;
+        const initial = content.querySelector<HTMLElement>(
+          '[data-slot="dialog-body"] :is(input:not([type="hidden"]), select, textarea, button):enabled, footer button:enabled',
+        );
+        event.preventDefault();
+        (initial ?? content).focus({ preventScroll: true });
+      }}
+      {...(!description && { "aria-describedby": undefined })}
+      {...props}
+    >
+      {onSubmit ? <form onSubmit={onSubmit}>{layout}</form> : layout}
+    </DialogSurface>
   );
 }
 
@@ -153,10 +247,23 @@ function DialogDescription({
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn(dialogDescriptionClass, className)}
       {...props}
     />
   );
 }
 
-export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };
+export {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogDismiss,
+  DialogLayout,
+  DialogSurface,
+  DialogTitle,
+  centeredDialogClass,
+  dialogDescriptionClass,
+  dialogTitleClass,
+  dialogOverlayClass,
+  dialogSurfaceClass,
+};

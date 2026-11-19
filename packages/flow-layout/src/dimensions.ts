@@ -1,4 +1,5 @@
 import type { FlowLayoutDimensions, LayoutBlock, LayoutGraph } from "./index.ts";
+import { incomingIndex } from "./graph.ts";
 
 type BlockPorts = { inputY: number; firstExitY: number; exitRow: number };
 export type CanvasDimensions = {
@@ -101,8 +102,9 @@ export function createNodeGeometry<B extends LayoutBlock>(
     rows.exitPaddingTop +
     rows.exitPaddingBottom +
     block.exits.length * rows.exitRow;
+  const incoming = incomingIndex(graph);
   const bodyHeight = (block: B) =>
-    blockHeightForIncomingFanIn(incomingFanIn(graph, block.id), ports, baseHeight(block));
+    blockHeightForIncomingFanIn(incoming.wires(block.id).length, ports, baseHeight(block));
   const blockHeight = (block: B) =>
     bodyHeight(block) + (facts.footerCount?.(block) ?? 0) * rows.footer;
   const flowInputBox = {
@@ -126,6 +128,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
     );
   return {
     ports,
+    incoming,
     flowInputBox,
     blockHeight,
     reservedHeight,
@@ -157,14 +160,6 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
 
 /** Minimum vertical gap between incoming port anchors on the same block (world px). */
 const INCOMING_PORT_SPACING = 18;
-
-function incomingFanIn(graph: LayoutGraph, targetBlockId: string) {
-  let count = graph.flowInput.targetBlockIds.includes(targetBlockId) ? 1 : 0;
-  count += graph.connections.filter(
-    (connection) => connection.targetBlockId === targetBlockId,
-  ).length;
-  return count;
-}
 
 export function incomingPortY(index: number, ports: BlockPorts) {
   return ports.inputY + index * INCOMING_PORT_SPACING;

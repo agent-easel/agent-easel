@@ -81,6 +81,42 @@ test("a global Agent saved with a Project override keeps it in its editor and li
   await app.screenshot("override-saved-after-reload");
 });
 
+test("removing a Global Worker explicitly removes its dependent Project overrides on Save", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
+  assert(northwind);
+  const sample = (await listAgentDefinitions(app.baseUrl)).find(
+    (agent) => agent.name === "Sample worker",
+  );
+  assert(sample?.execution);
+  const agent = await copyAgentDefinition(app.baseUrl, sample.name, "Remove Global Worker", {
+    projectOverrides: [{ projectId: northwind, execution: sample.execution }],
+  });
+  await app.open(`/studio/agents/${agent.id}`);
+  const actions = screen.getByRole("button", "More actions", { exact: true });
+  await actions.tap();
+  await screen.getByRole("menuitem", "Remove worker", { exact: true }).tap();
+  const confirmation = screen.getByRole("alertdialog", "Remove worker and Project overrides?");
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText("Project overrides");
+  await app.screenshot("remove-worker-and-project-overrides");
+  await confirmation.getByRole("button", "Remove worker", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectSavedAgentRevision(screen, agent.revision + 1);
+  const saved = await readAgentDefinition(app.baseUrl, agent.id);
+  assert.equal(saved.execution, null);
+  assert.deepEqual(saved.projectOverrides, []);
+});
+
 test("unsaved Project overrides of an Agent moved to a Project elsewhere stay visible and block Save until removed", async ({
   app,
   screen,
@@ -93,24 +129,23 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
   );
   await dialog.getByRole("button", "Apply", { exact: true }).tap();
   await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
-  await screen
-    .getByRole("status", "Owner changed elsewhere")
-    .getByRole("button", "Acknowledge new owner", { exact: true })
-    .tap();
-  const stranded = screen.getByRole("alert", "Project overrides this Agent cannot keep");
-  await expect(stranded).toContainText("Northwind");
+  await screen.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
+  const stranded = screen.getByText("Project overrides can’t be kept", { exact: true });
+  await expect(screen.getByText(/owned by Northwind now/)).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await browser.evaluate(settled);
   await app.screenshot("stranded-overrides");
 
   // Act
-  await stranded.getByRole("button", "Remove Project overrides from draft", { exact: true }).tap();
-  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await screen.getByRole("button", "Remove override", { exact: true }).tap();
 
   // Assert
+  // The owner move is already saved. Dropping the unsaved override leaves nothing to save.
   await expect(stranded).toHaveCount(0);
-  await expectSavedAgentRevision(screen, 2);
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+  await expectSavedAgentRevision(screen, agent.revision);
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
+  assert.equal(saved.revision, agent.revision);
   assert.equal(saved.projectId, northwind);
   assert.deepEqual(saved.projectOverrides, []);
 });

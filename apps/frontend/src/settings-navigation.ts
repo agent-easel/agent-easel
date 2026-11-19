@@ -1,5 +1,4 @@
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
-import type { TriggerKind } from "@t3-factory/contracts";
 
 const settingsTabs = [
   "connection",
@@ -13,17 +12,23 @@ const settingsTabs = [
   "chat-model",
   "chat-discord",
 ] as const;
-export type SettingsSelection = { tab: (typeof settingsTabs)[number] };
+type SettingsTab = (typeof settingsTabs)[number];
+/**
+ * `from`: the section a cross-section link opened this one over. It stays open underneath with its
+ * unsaved edits, and Esc or ✕ returns to it.
+ */
+export type SettingsSelection = { tab: SettingsTab; from?: SettingsTab };
 /** A known Settings section, or undefined for removed and unknown ones. */
-function settingsTab(value: unknown): SettingsSelection["tab"] | undefined {
+function settingsTab(value: unknown): SettingsTab | undefined {
   return settingsTabs.find((tab) => tab === value);
 }
+type TriggerSelection = { tab: "triggers"; triggerId?: string };
+
 export type StudioSelection =
-  | { tab: "flows"; flowId?: string }
-  /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
-  | { tab: "agents"; agentId?: string; fromFlow?: string }
-  /** `triggerId: "new"` picks the type; adding `kind` opens that type's create form. */
-  | { tab: "triggers"; triggerId?: string; kind?: TriggerKind };
+  | { tab: "flows"; flowId?: string; fromTrigger?: string }
+  /** A Flow and its optional Trigger stay open beneath the Agent. */
+  | { tab: "agents"; agentId?: string; fromFlow?: string; fromTrigger?: string }
+  | TriggerSelection;
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
 
 function searchRecord(value: unknown): Record<string, unknown> {
@@ -34,27 +39,37 @@ function studioSelection(value: unknown): StudioSelection | undefined {
   if (selection.tab === "flows")
     return {
       tab: "flows",
-      ...(typeof selection.flowId === "string" ? { flowId: selection.flowId } : {}),
+      ...(typeof selection.flowId === "string" && {
+        flowId: selection.flowId,
+        ...(typeof selection.fromTrigger === "string" && { fromTrigger: selection.fromTrigger }),
+      }),
     };
   if (selection.tab === "agents")
     return {
       tab: "agents",
       ...(typeof selection.agentId === "string" ? { agentId: selection.agentId } : {}),
-      ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
+      ...(typeof selection.fromFlow === "string" && {
+        fromFlow: selection.fromFlow,
+        ...(typeof selection.fromTrigger === "string" && { fromTrigger: selection.fromTrigger }),
+      }),
     };
   if (selection.tab === "triggers") {
-    if (typeof selection.triggerId !== "string") return { tab: "triggers" };
-    return selection.triggerId === "new" && selection.kind === "github_issues"
-      ? { tab: "triggers", triggerId: "new", kind: "github_issues" }
-      : { tab: "triggers", triggerId: selection.triggerId };
+    return {
+      tab: "triggers",
+      ...(typeof selection.triggerId === "string" && { triggerId: selection.triggerId }),
+    };
   }
   return undefined;
 }
 export function validateAppSearch(search: Record<string, unknown>): AppSearch {
   const studio = studioSelection(search.studio);
-  if (studio) return { studio };
-  const tab = settingsTab(searchRecord(search.settings).tab);
-  return tab ? { settings: { tab } } : {};
+  const settings = searchRecord(search.settings);
+  const tab = settingsTab(settings.tab);
+  const from = settingsTab(settings.from);
+  return {
+    ...(studio && { studio }),
+    ...(tab && { settings: { tab, ...(from && from !== tab && { from }) } }),
+  };
 }
 
 export function studioMask(selection: StudioSelection) {
@@ -66,7 +81,7 @@ export function studioMask(selection: StudioSelection) {
     return selection.agentId
       ? { to: "/studio/agents/$agentId" as const, params: { agentId: selection.agentId } }
       : { to: "/studio/agents" as const };
-  if (selection.kind) return { to: "/studio/triggers/new/github-issues" as const };
+  if (selection.triggerId === "new") return { to: "/studio/triggers/new/github-issues" as const };
   return selection.triggerId
     ? { to: "/studio/triggers/$triggerId" as const, params: { triggerId: selection.triggerId } }
     : { to: "/studio/triggers" as const };
@@ -93,6 +108,14 @@ export function settingsTabAt(location: { pathname: string; search: unknown }) {
     )
   );
 }
+/** Whether the Settings section `tab` stays open at a location: shown, or open beneath it. */
+export function settingsKeepsTab(
+  location: { pathname: string; search: unknown },
+  tab: SettingsTab,
+) {
+  const from = validateAppSearch(searchRecord(location.search)).settings?.from;
+  return settingsTabAt(location) === tab || from === tab;
+}
 export function useSettings() {
   return useSearch({ from: "__root__", select: (search) => search.settings });
 }
@@ -101,9 +124,10 @@ export function useStudio() {
 }
 export function useSettingsOptions(selection: SettingsSelection) {
   const pathname = useLocation({ select: (location) => location.pathname });
+  const studio = useStudio();
   return {
     to: pathname,
-    search: { settings: selection },
+    search: { ...(studio && { studio }), settings: selection },
     mask: settingsMask(selection),
     resetScroll: false,
   };
@@ -149,11 +173,16 @@ export function useOpenStudio() {
 export function useSettingsNavigation() {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const studio = useStudio();
   return (selection: SettingsSelection | undefined) =>
     navigate({
       to: pathname,
-      search: selection ? { settings: selection } : {},
-      ...(selection ? { mask: settingsMask(selection) } : {}),
+      search: { ...(studio && { studio }), ...(selection && { settings: selection }) },
+      ...(selection
+        ? { mask: settingsMask(selection) }
+        : studio
+          ? { mask: studioMask(studio) }
+          : {}),
       resetScroll: false,
     });
 }

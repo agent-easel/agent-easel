@@ -1,26 +1,29 @@
-import { useClientScope } from "../client-scope.ts";
-import { desktopBridge } from "../desktop-bridge.ts";
+import { useThemeColors } from "./inherited-colors.tsx";
 import { AppearanceChoice } from "./appearance-choice.tsx";
 import { SettingsPage } from "./settings-page.tsx";
-import { ThemeColorSettings, ThemeColorsNote } from "./theme-color-settings.tsx";
+import { StatusBadge } from "./status-badge.tsx";
+import { ThemeColorSettings } from "./theme-color-settings.tsx";
 
-/**
- * Settings → Appearance: this device's Light or Dark choice, then T3 theme colors (detailed on
- * the host; explained on other clients).
- */
 export function AppearanceSettings() {
-  const host = useClientScope() === "host";
+  const { status, presentation } = useThemeColors();
+  const modes = presentation?.modes;
+  const following = modes?.light.kind === "inherited" || modes?.dark.kind === "inherited";
+  const checking = !status || status.state === "connecting";
   return (
     <SettingsPage
       title="Appearance"
-      description={
-        desktopBridge()
-          ? "Saved for this desktop installation. Other devices and browsers keep their own choice."
-          : "Saved in this browser profile for this Factory address. Other browsers and devices keep their own choice."
+      badge={
+        checking ? (
+          <StatusBadge kind="checking">Checking</StatusBadge>
+        ) : following ? (
+          <StatusBadge kind="success">Following T3</StatusBadge>
+        ) : (
+          <StatusBadge kind="neutral">Factory colors</StatusBadge>
+        )
       }
     >
       <AppearanceChoice />
-      {host ? <ThemeColorSettings /> : <ThemeColorsNote />}
+      <ThemeColorSettings status={status} presentation={presentation} />
     </SettingsPage>
   );
 }

@@ -15,7 +15,7 @@ export const shortcutDefinitions = [
   { id: "palette", label: "Command palette", scope: "global", group: "application" },
   { id: "settings", label: "Settings", scope: "global", group: "application" },
   { id: "newRun", label: "New Run", scope: "global", group: "application" },
-  { id: "searchRuns", label: "Search Runs", scope: "global", group: "application" },
+  { id: "searchRuns", label: "Filter Run titles", scope: "global", group: "application" },
   { id: "studio", label: "Studio", scope: "global", group: "application" },
   { id: "shortcutsCheatSheet", label: "Keyboard shortcuts", scope: "global", group: "application" },
   { id: "back", label: "Back", scope: "global", group: "navigation" },
@@ -45,6 +45,18 @@ export const shortcutDefinitions = [
 export type ShortcutId = (typeof shortcutDefinitions)[number]["id"];
 export type ShortcutBinding = { key: string; mod: boolean; alt: boolean; shift: boolean };
 export type ShortcutBindings = Record<ShortcutId, ShortcutBinding | null>;
+
+export const openRowIds = [
+  "openRow1",
+  "openRow2",
+  "openRow3",
+  "openRow4",
+  "openRow5",
+  "openRow6",
+  "openRow7",
+  "openRow8",
+  "openRow9",
+] as const satisfies readonly ShortcutId[];
 
 /** The six commands and bindings persisted before storage version 2. */
 const legacyV1ShortcutDefaults: Record<
@@ -170,11 +182,25 @@ export function shouldHandleShortcut(event: KeyboardEvent) {
   );
 }
 
-export function shortcutModifierError(event: KeyboardEvent) {
+export type ShortcutProblem = {
+  tag: string;
+  title: string;
+  message: string;
+};
+
+export function shortcutModifierError(event: KeyboardEvent): ShortcutProblem | undefined {
   if (event.getModifierState("AltGraph"))
-    return "AltGr is used for typing characters. Choose a combination without AltGr.";
+    return {
+      tag: "Reserved",
+      title: "AltGr is used for typing characters",
+      message: "Choose a combination without AltGr.",
+    };
   if (isMacPlatform() ? event.ctrlKey : event.metaKey)
-    return "Use Command on macOS or Control on Windows/Linux, without the other modifier.";
+    return {
+      tag: isMacPlatform() ? "Needs ⌘" : "Needs Ctrl",
+      title: isMacPlatform() ? "Use ⌘ for this shortcut" : "Use Ctrl for this shortcut",
+      message: isMacPlatform() ? "Press ⌘ without ⌃." : "Press Ctrl without Meta.",
+    };
   return undefined;
 }
 
@@ -192,7 +218,8 @@ export function shortcutFromEvent(event: KeyboardEvent): ShortcutBinding | undef
   };
 }
 
-function sameShortcutBinding(left: ShortcutBinding, right: ShortcutBinding) {
+export function sameShortcutBinding(left: ShortcutBinding | null, right: ShortcutBinding | null) {
+  if (!left || !right) return left === right;
   return (
     left.key === right.key &&
     left.mod === right.mod &&
@@ -290,8 +317,8 @@ const browserFunctionKeys = new Set([
 
 function isShortcutPlatformReserved(binding: ShortcutBinding, platform: ShortcutPlatform) {
   if (
-    Object.values(getDefaultShortcutBindings(platform)).some(
-      (candidate) => candidate && sameShortcutBinding(candidate, binding),
+    Object.values(getDefaultShortcutBindings(platform)).some((candidate) =>
+      sameShortcutBinding(candidate, binding),
     )
   )
     return false;
@@ -318,87 +345,147 @@ function bindingKeyError(binding: ShortcutBinding) {
   return undefined;
 }
 
+export function conflictingShortcut(
+  id: ShortcutId,
+  binding: ShortcutBinding,
+  bindings: ShortcutBindings,
+) {
+  return shortcutDefinitions.find(
+    (other) => other.id !== id && sameShortcutBinding(binding, bindings[other.id]),
+  );
+}
+
 export function validateShortcutBinding(
   id: ShortcutId,
   binding: ShortcutBinding,
   bindings: ShortcutBindings,
   platform = getShortcutPlatform(),
-): string | undefined {
+): ShortcutProblem | undefined {
   const keyError = bindingKeyError(binding);
-  if (keyError) return keyError;
+  if (keyError) return { tag: "Reserved", title: "Choose another key", message: keyError };
   const definition = shortcutDefinitions.find((item) => item.id === id)!;
+  const modifier = isMacPlatform() ? "⌘" : "Ctrl";
   if (definition.scope === "global" && !binding.mod)
-    return "Global shortcuts need Command on macOS or Control elsewhere. Hold that modifier and press another key.";
+    return {
+      tag: `Needs ${modifier}`,
+      title: `Global shortcuts need ${modifier}`,
+      message: `Hold ${modifier} and press another key.`,
+    };
   if (definition.scope === "canvas" && !binding.mod && binding.alt)
-    return "Canvas shortcuts need a bare key or Command/Control. Remove Alt or add Command/Control.";
+    return {
+      tag: `Needs ${modifier}`,
+      title: "Choose a canvas shortcut",
+      message: `Use a bare key or hold ${modifier}.`,
+    };
   if (isShortcutPlatformReserved(binding, platform))
-    return platform === "browser"
-      ? "This combination is reserved by the browser. Choose another key."
-      : "This combination is reserved for browser navigation or text editing. Add Alt or choose another key.";
-  const conflict = shortcutDefinitions.find(
-    (other) =>
-      other.id !== id && bindings[other.id] && sameShortcutBinding(binding, bindings[other.id]!),
-  );
+    return {
+      tag: "Reserved",
+      title:
+        platform === "browser"
+          ? "The browser reserves this shortcut"
+          : "Navigation or text editing uses this shortcut",
+      message: "Press another shortcut.",
+    };
+  const conflict = conflictingShortcut(id, binding, bindings);
   return conflict
-    ? `Already used by ${conflict.label}. Change that shortcut first or choose another combination.`
+    ? {
+        tag: "In use",
+        title: `${conflict.label} uses ${formatShortcut(binding)}`,
+        message: `Press another shortcut, or change ${conflict.label} first.`,
+      }
     : undefined;
 }
 
-/** The hint a menu or tooltip shows for a command: its binding, or none while unbound. */
-export function shortcutHint(binding: ShortcutBinding | null | undefined) {
-  return binding ? formatShortcut(binding) : undefined;
+const macKeyGlyphs = new Map([
+  ["ArrowLeft", "←"],
+  ["ArrowUp", "↑"],
+  ["ArrowRight", "→"],
+  ["ArrowDown", "↓"],
+  ["Backspace", "⌫"],
+  ["Delete", "⌦"],
+  ["Enter", "↵"],
+  ["Escape", "Esc"],
+  ["Tab", "⇥"],
+  [" ", "␣"],
+  ["Home", "↖"],
+  ["End", "↘"],
+  ["PageUp", "⇞"],
+  ["PageDown", "⇟"],
+  ["Insert", "Ins"],
+  ["ContextMenu", "☰"],
+]);
+
+// The binding model reserves Control on Mac. The remaining modifiers follow Apple order.
+const macModifierGlyphs = [
+  ["alt", "⌥"],
+  ["shift", "⇧"],
+  ["mod", "⌘"],
+] as const;
+
+const pcModifierLabels = [
+  ["mod", "Ctrl"],
+  ["alt", "Alt"],
+  ["shift", "Shift"],
+] as const;
+
+export function formatShortcut(binding: ShortcutBinding | null | undefined): string | undefined {
+  if (!binding) return undefined;
+  const mac = isMacPlatform();
+  const modifiers = (mac ? macModifierGlyphs : pcModifierLabels)
+    .filter(([modifier]) => binding[modifier])
+    .map(([, label]) => label);
+  const key = binding.key;
+  const platformKey = mac ? macKeyGlyphs.get(key) : key === " " ? "Space" : undefined;
+  const sharedKey = key === "=" ? "+ / =" : key.length === 1 ? key.toUpperCase() : key;
+  return [...modifiers, platformKey ?? sharedKey].join(mac ? "" : "+");
 }
 
-/** A tooltip text followed by the command's hint, when it has one. */
-export function withShortcutHint(text: string, hint: string | undefined) {
-  return hint ? `${text} · ${hint}` : text;
-}
-
-/** The canvas helper line's key list, naming only bound canvas commands; arrow pan is fixed. */
-export function canvasShortcutHelp(hints: {
-  zoomIn: string | undefined;
-  zoomOut: string | undefined;
-  fit: string | undefined;
-}) {
-  const zoom = [hints.zoomIn, hints.zoomOut].filter(Boolean).join(" / ");
-  const keys = [zoom && `${zoom} zoom`, hints.fit && `${hints.fit} fits`]
-    .filter(Boolean)
-    .join(", ");
-  return keys ? `${keys}; arrows pan` : "arrows pan";
-}
-
-/** A binding as lists of bindings show it, including Unbound. */
-export function formatShortcut(binding: ShortcutBinding | null | undefined) {
-  if (!binding) return "Unbound";
-  const key =
-    binding.key === "="
-      ? "+ / ="
-      : binding.key === " "
-        ? "Space"
-        : binding.key.length === 1
-          ? binding.key.toUpperCase()
-          : binding.key;
+/** ARIA uses UI Events key names and plus separators on every platform. */
+export function shortcutAriaKeys(binding: ShortcutBinding | null) {
+  if (!binding) return undefined;
   return [
-    binding.mod ? (isMacPlatform() ? "⌘" : "Ctrl") : "",
+    binding.mod ? (isMacPlatform() ? "Meta" : "Control") : "",
     binding.alt ? "Alt" : "",
     binding.shift ? "Shift" : "",
-    key,
+    binding.key === " " ? "Space" : binding.key,
   ]
     .filter(Boolean)
-    .join(isMacPlatform() ? "" : "+");
+    .join("+");
 }
 
 /** One line of a shortcut group as the cheat sheet and the canvas shortcuts popover list it. */
 export type ShortcutEntry = {
   readonly id: string;
   readonly label: string;
-  readonly keys: readonly string[];
+  readonly keys: readonly (string | undefined)[];
 };
 
 /** Fixed contextual controls listed with a registry group; they cannot be rebound. */
+const canvasPanKeys = ["←", "↑", "→", "↓"];
 const fixedGroupEntries: Partial<Record<ShortcutGroup, readonly ShortcutEntry[]>> = {
-  canvas: [{ id: "pan", label: "Pan", keys: ["←", "↑", "→", "↓"] }],
+  canvas: [{ id: "pan", label: "Pan", keys: canvasPanKeys }],
 };
+
+export const fixedShortcuts = {
+  deleteConnection: binding("Backspace"),
+  openRowMenu: binding("F10", { shift: true }),
+  startRun: binding("Enter", { mod: true }),
+  undoFlowEdit: binding("z", { mod: true }),
+};
+
+export function fixedShortcutRows() {
+  return [
+    { label: "Close dialog or cancel", keys: ["Esc"] },
+    { label: "Start Run from the composer", keys: [formatShortcut(fixedShortcuts.startRun)] },
+    { label: "Pan canvas", keys: canvasPanKeys },
+    {
+      label: "Remove selected connection",
+      keys: [formatShortcut(fixedShortcuts.deleteConnection)],
+    },
+    { label: "Open Run row menu", keys: [formatShortcut(fixedShortcuts.openRowMenu)] },
+    { label: "Undo Flow edit", keys: [formatShortcut(fixedShortcuts.undoFlowEdit)] },
+  ];
+}
 
 /** A group's registry commands with their current bindings, then its fixed controls. */
 export function shortcutGroupEntries(

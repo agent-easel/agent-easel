@@ -1,4 +1,6 @@
+import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
+import { OpenInT3 } from "./open-in-t3.tsx";
 import type {
   FactoryProject,
   FlowBlock,
@@ -7,29 +9,37 @@ import type {
   RunTitleGeneration,
 } from "@t3-factory/contracts";
 import {
-  CircleAlert,
   CircleCheck,
   CirclePause,
   CircleStop,
   GitBranch,
   LoaderCircle,
+  MessageCircleQuestionMark,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { capturedExits } from "../flow-graph.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
-import { blockVisits } from "./execution-canvas.tsx";
-import { clockTime, executionStateLabel, StatePill } from "./execution-state.tsx";
-import { exitDisplayName } from "./flow-block.tsx";
+import {
+  attentionActivityText,
+  blockActivityText,
+  blockVisits,
+  continuationPromptVisit,
+  threadOwnerName,
+} from "./execution-canvas.tsx";
+import { ExecutionStateBadge } from "./execution-state.tsx";
+import { clockTime, fullDateTime } from "../time-format.ts";
+import { RUN_STATE_LABELS, type RunStateKind } from "./status-badge.tsx";
+import { blockStateKind } from "../run-block-state.ts";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
-import { RunAttentionDetails } from "./run-attention.tsx";
+import { ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { RootWork } from "./run-coordination-controls.tsx";
 import { BindingLink, bindingRole, CoordinatorActivations } from "./run-coordination.tsx";
 import { RunInitialPrompt } from "./run-prompt.tsx";
-import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
-import { InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
+import { BranchName, repositorySummary, RunRepositories } from "./run-repositories.tsx";
+import { Disclosure } from "./disclosure.tsx";
+import { InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
 import { RunOriginSection } from "./run-origin.tsx";
@@ -44,67 +54,132 @@ const inspectorBounds: PanelBounds = {
 
 const secondaryTextClass = "text-xs text-muted-foreground";
 
-const stateIcon: Record<RunBlock["state"], { Icon: LucideIcon; className: string } | undefined> = {
-  "not-started": undefined,
+const stateIcon: Record<RunStateKind, { Icon: LucideIcon; className: string }> = {
   working: { Icon: LoaderCircle, className: "text-status-working motion-safe:animate-spin" },
   waiting: { Icon: CirclePause, className: "text-status-waiting" },
-  sent: { Icon: LoaderCircle, className: "text-link motion-safe:animate-spin" },
+  "needs-input": { Icon: MessageCircleQuestionMark, className: "text-attention" },
   finished: { Icon: CircleCheck, className: "text-success" },
-  "pass-through": { Icon: CircleCheck, className: "text-success" },
-  error: { Icon: CircleAlert, className: "text-destructive" },
+  problem: { Icon: TriangleAlert, className: "text-destructive" },
   stopped: { Icon: CircleStop, className: "text-status-stopped" },
 };
 
-/** An active block's current visit; a settled one's exit and when it was accepted; a Condition's
- * routing summary. */
-function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock) {
-  if (block.kind === "condition") return conditionActivityText(run, block.id);
-  if (activeStates.includes(recorded.state))
-    return currentVisitText(run, block, blockVisits(run, block));
-  const report = run.reports.findLast(
-    (item) => item.blockId === block.id && item.status === "finished",
+/** Progress counts in this order, as "2 finished · 1 needs input". */
+const countOrder: readonly RunStateKind[] = [
+  "finished",
+  "working",
+  "waiting",
+  "needs-input",
+  "problem",
+  "stopped",
+];
+
+const since = (at: string | null | undefined) => (at ? ` · since ${clockTime(at)}` : "");
+
+/** The Continuation whose prompt `block`'s thread works on, while one is sent. */
+function sentContinuation(run: RunDetail, blockId: string) {
+  const ownBindings = new Set(
+    run.threadBindings.filter((binding) => binding.blockId === blockId).map((b) => b.id),
   );
-  const exit = capturedExits(run.definitions, block.id).find((item) => item.id === report?.exitId);
-  if (recorded.state === "finished" && report && exit)
-    return `${exitDisplayName(exit, "Output")} · ${clockTime(report.acceptedAt)}`;
-  return executionStateLabel(recorded.state);
+  const prompt = run.continuationVisits.find(
+    (visit) =>
+      visit.kind === "prompt" &&
+      visit.bindingId !== null &&
+      ownBindings.has(visit.bindingId) &&
+      run.blocks.find((item) => item.blockId === visit.blockId)?.state === "sent",
+  );
+  return prompt && run.definitions.flow.graph.blocks.find((item) => item.id === prompt.blockId);
 }
 
-/** Figma RD13 Progress: started blocks in Flow order; the canvas still shows the whole graph. */
-function RunProgress({ run }: { run: RunDetail }) {
-  const blocks = run.definitions.flow.graph.blocks;
-  const started = blocks.flatMap((block) => {
+function stoppedProgress(run: RunDetail, end: string | null | undefined) {
+  const at = stoppedVisitAt(run, end);
+  return at ? `Stopped · ${clockTime(at)}` : "Stopped";
+}
+
+/** A Continuation's prompt in its worker's thread, or the Agent whose thread works on one. */
+function continuationProgress(run: RunDetail, block: FlowBlock, recorded: RunBlock) {
+  if (block.kind === "continuation" && recorded.state === "sent") {
+    const prompt = continuationPromptVisit(run, block.id);
+    const owner = threadOwnerName(run, prompt?.bindingId ?? null);
+    return `Sent to ${owner ? `${owner}’s` : "its worker’s"} thread${prompt ? ` · ${clockTime(prompt.arrivedAt)}` : ""}`;
+  }
+  const continuation = recorded.state === "working" && sentContinuation(run, block.id);
+  return continuation
+    ? `Working on ${continuation.name}${since(continuationPromptVisit(run, continuation.id)?.arrivedAt)}`
+    : null;
+}
+
+/** A started Block's status line: what it is doing now, or the exit it took and when. */
+function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind: RunStateKind) {
+  const visits = blockVisits(run, block);
+  const latest = visits.at(-1);
+  const attention = attentionActivityText(run, block, recorded);
+  if (attention) return attention;
+  if (recorded.state === "stopped") return stoppedProgress(run, latest?.end);
+  if (block.kind === "condition") return conditionActivityText(run, block.id);
+  if (kind === "needs-input")
+    return block.kind === "human"
+      ? `Waiting for your decision${since(latest?.start)}`
+      : `Review in T3${since(recorded.observedAt)}`;
+  const continuation = continuationProgress(run, block, recorded);
+  if (continuation) return continuation;
+  if (activeStates.includes(recorded.state)) return currentVisitText(run, block, visits);
+  return blockActivityText(run, block, recorded);
+}
+
+/** Figma RD13 Progress: started blocks in Flow order, each with its status on a second line that
+ * wraps rather than truncates; the canvas still shows the whole graph. */
+function RunProgress({ run, waitingForWorkers }: { run: RunDetail; waitingForWorkers: boolean }) {
+  const started = run.definitions.flow.graph.blocks.flatMap((block) => {
     const recorded = run.blocks.find((item) => item.blockId === block.id);
-    return recorded && recorded.state !== "not-started" ? [{ block, recorded }] : [];
+    const kind = blockStateKind(run, recorded);
+    return recorded && kind ? [{ block, recorded, kind }] : [];
   });
   if (!started.length) return null;
+  const count = countOrder
+    .map((kind) => [kind, started.filter((item) => item.kind === kind).length] as const)
+    .filter(([, total]) => total > 0)
+    .map(([kind, total]) => `${total} ${RUN_STATE_LABELS[kind].toLowerCase()}`)
+    .join(" · ");
   return (
-    <InspectorSection title={`Progress · ${started.length} of ${blocks.length}`} label="Progress">
-      <ul className="flex flex-col gap-2.5">
-        {started.map(({ block, recorded }) => {
-          const icon = stateIcon[recorded.state];
+    <InspectorSection
+      title="Progress"
+      count={waitingForWorkers ? `${count} · waiting for T3 to confirm workers finished` : count}
+      label="Progress"
+    >
+      <ul className="-mt-1 flex flex-col gap-1">
+        {started.map(({ block, recorded, kind }) => {
+          const icon = stateIcon[kind];
+          const status = progressLine(run, block, recorded, kind);
+          const outcome =
+            status.startsWith("→ ") ||
+            (recorded.state === "stopped" && status.startsWith("Stopped"));
           return (
             <li
               key={block.id}
               className={cn(
-                "flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5",
-                recorded.state === "working" && "bg-muted",
+                "flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5",
+                kind !== "finished" && kind !== "stopped" && "bg-muted",
               )}
             >
-              {icon && (
-                <icon.Icon
-                  aria-hidden
-                  strokeWidth={1.75}
-                  className={cn("size-3.5 shrink-0", icon.className)}
-                />
-              )}
-              <span className="sr-only">{executionStateLabel(recorded.state)}:</span>
-              <span className="min-w-0 shrink truncate text-sm font-medium text-foreground">
-                {block.name}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-right text-label text-subtle-foreground">
-                {progressLine(run, block, recorded)}
-              </span>
+              <icon.Icon
+                aria-hidden
+                strokeWidth={1.75}
+                className={cn("mt-0.5 size-3.5 shrink-0", icon.className)}
+              />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-sm font-medium break-words text-foreground">
+                  <span className="sr-only">{RUN_STATE_LABELS[kind]}: </span>
+                  {block.name}
+                </span>
+                <span
+                  className={cn(
+                    "text-xs break-words",
+                    outcome ? "text-foreground" : "text-subtle-foreground",
+                  )}
+                >
+                  {status}
+                </span>
+              </div>
             </li>
           );
         })}
@@ -113,14 +188,46 @@ function RunProgress({ run }: { run: RunDetail }) {
   );
 }
 
+/** Figma RD39 and RD41: the branch of a worktree Run, or that T3 is still preparing it. */
+function RunBranch({ run }: { run: RunDetail }) {
+  const { workspace } = run;
+  if (workspace.mode !== "worktree" || workspace.state === "failed") return null;
+  const bound = workspace.state === "bound" ? workspace.branch : null;
+  return (
+    <InspectorSection title="Branch" label="Run branch">
+      <div className="flex min-w-0 items-start gap-2">
+        <GitBranch aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 flex-col gap-0.5">
+          {bound ? (
+            <BranchName branch={bound} />
+          ) : (
+            <p className="text-sm text-foreground">Preparing worktree</p>
+          )}
+          <p className="text-xs text-subtle-foreground">
+            {bound ? `Own worktree from ${workspace.baseRef}` : `From ${workspace.baseRef}`}
+          </p>
+        </div>
+      </div>
+    </InspectorSection>
+  );
+}
+
+/** Worker repositories besides the Run's own worktree branch, which its Branch section shows. */
+function otherRepositories(run: RunDetail) {
+  const own = run.workspace.mode === "worktree" ? run.workspace.branch : null;
+  return run.repositories.map((worker) =>
+    own && worker.branch === own ? { ...worker, branch: null } : worker,
+  );
+}
+
 function repositoriesTitle(run: RunDetail) {
-  const { branches, pullRequests } = repositorySummary(run.repositories);
+  const { branches, pullRequests } = repositorySummary(otherRepositories(run));
   const title = [
     branches.length && (branches.length > 1 ? "branches" : "branch"),
     pullRequests.length && (pullRequests.length > 1 ? "pull requests" : "pull request"),
   ]
     .filter(Boolean)
-    .join(" & ");
+    .join(" and ");
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
@@ -155,7 +262,8 @@ const worktreeNote = {
   failed: ". No worker falls back to the project checkout.",
 };
 
-/** The workspace every worker of the Run shares, as T3 reported it. */
+/** The workspace every worker of the Run shares, as T3 reported it. A worktree T3 could not create
+ * is the Run's Attention card, not a fact here. */
 function RunWorkspace({ run }: { run: RunDetail }) {
   const { workspace } = run;
   if (workspace.mode === "checkout")
@@ -176,31 +284,15 @@ function RunWorkspace({ run }: { run: RunDetail }) {
         </p>
       )}
       {workspace.state === "preparing" && (
-        <p className="text-sm text-emphasis-foreground">Preparing workspace</p>
+        <p className="text-sm text-emphasis-foreground">Preparing worktree</p>
       )}
       {workspace.state === "failed" && (
-        <p className="flex items-center gap-1.5 text-sm text-destructive">
-          <TriangleAlert aria-hidden className="size-3.5 shrink-0" strokeWidth={1.75} />
-          Workspace failed
-        </p>
+        <p className="text-sm text-emphasis-foreground">Worktree not created</p>
       )}
       <p className={secondaryTextClass}>
         New worktree from {workspace.baseRef}
         {worktreeNote[workspace.state]}
       </p>
-      {workspace.problem && (
-        <p
-          role="status"
-          className={cn(
-            "rounded-md border p-3 text-xs text-emphasis-foreground",
-            workspace.state === "failed"
-              ? "border-destructive/40 bg-destructive/8"
-              : "border-attention/40 bg-attention/8",
-          )}
-        >
-          {workspace.problem}
-        </p>
-      )}
     </InspectorSection>
   );
 }
@@ -233,7 +325,7 @@ function elapsedSeconds(from: string, to: string) {
 }
 
 function observedTime(at: string | null | undefined) {
-  return at ? new Date(at).toLocaleString() : "not yet observed";
+  return at ? fullDateTime(at) : "not yet observed";
 }
 
 function WorkPeriods({ run }: { run: RunDetail }) {
@@ -255,7 +347,8 @@ function WorkPeriods({ run }: { run: RunDetail }) {
               {execution.executionId}
             </h4>
             <p className="flex flex-wrap items-center gap-1">
-              T3 execution: <StatePill state={execution.engineStatus ?? "unknown"} /> · Report:{" "}
+              T3 execution: <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> ·
+              Report:{" "}
               {execution.reportStatus
                 ? `accepted ${execution.reportStatus}`
                 : binding?.role === "descendant"
@@ -289,16 +382,7 @@ function WorkPeriods({ run }: { run: RunDetail }) {
                 <BindingLink binding={binding} />
               </>
             ) : (
-              block?.link && (
-                <a
-                  className="w-fit text-link hover:underline"
-                  href={block.link}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open in T3
-                </a>
-              )
+              block?.link && <OpenInT3 href={block.link} className="text-xs" />
             )}
           </article>
         );
@@ -312,39 +396,40 @@ function RunOverview({
   run,
   project,
   projectUnavailable,
-  observationUnavailable,
+  waitingForWorkers,
 }: {
   run: RunDetail;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
-  observationUnavailable: boolean;
+  waitingForWorkers: boolean;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5.5 overflow-auto px-4 pt-4 pb-3">
-      <header className="flex flex-col gap-0.75">
-        <h2 className="text-base leading-4 font-semibold">Overview</h2>
-        <p className="text-label leading-3.5 text-subtle-foreground">
-          Select a block on the canvas to see its details here.
-        </p>
-      </header>
-      <RunAttentionDetails run={run} observationUnavailable={observationUnavailable} />
+      <h2 className="text-base leading-4 font-semibold">Overview</h2>
+      <RunAttentionDetails run={run} />
       <PendingIntents run={run} />
-      <RunProgress run={run} />
-      {run.repositories.some((worker) => worker.branch || worker.pullRequests.length > 0) && (
+      <RunProgress run={run} waitingForWorkers={waitingForWorkers} />
+      <RunBranch run={run} />
+      {otherRepositories(run).some((worker) => worker.branch || worker.pullRequests.length > 0) && (
         <InspectorSection title={repositoriesTitle(run)} label="Run repositories">
-          <RunRepositories workers={run.repositories} links />
+          <RunRepositories
+            workers={otherRepositories(run)}
+            links
+            historical={run.lifecycle === "settled"}
+          />
         </InspectorSection>
       )}
       {run.origin && <RunOriginSection origin={run.origin} />}
       <InitialPrompt run={run} />
-      <CoordinatorActivations run={run} />
+      <CoordinatorActivations run={run} conciseResults={run.lifecycle === "settled"} />
       <RootWork run={run} />
       <div aria-hidden className="flex-1" />
-      <InspectorDisclosure label="Workspace & observation" hint="worktree · ids · freshness">
+      <ResolvedAttention run={run} />
+      <Disclosure label="Workspace & observation">
         <InspectorSection title="Project">
           <p className="text-sm text-emphasis-foreground">
             {project?.title ?? "Project"}
-            {projectUnavailable ? " · unavailable in T3" : ""}
+            {projectUnavailable ? " · Not in T3" : ""}
           </p>
         </InspectorSection>
         <InspectorSection title="Flow revision">
@@ -354,7 +439,7 @@ function RunOverview({
         </InspectorSection>
         <RunWorkspace run={run} />
         <WorkPeriods run={run} />
-      </InspectorDisclosure>
+      </Disclosure>
     </div>
   );
 }
@@ -370,6 +455,7 @@ export function RunInspector({
   titleGeneration,
   project,
   projectUnavailable,
+  waitingForWorkers,
   observationUnavailable,
   onSelect,
 }: {
@@ -379,6 +465,7 @@ export function RunInspector({
   titleGeneration: RunTitleGeneration | null;
   project: FactoryProject | undefined;
   projectUnavailable: boolean;
+  waitingForWorkers: boolean;
   observationUnavailable: boolean;
   onSelect: (blockId: string | null) => void;
 }) {
@@ -405,7 +492,7 @@ export function RunInspector({
           run={run}
           project={project}
           projectUnavailable={projectUnavailable}
-          observationUnavailable={observationUnavailable}
+          waitingForWorkers={waitingForWorkers}
         />
       )}
     </aside>
