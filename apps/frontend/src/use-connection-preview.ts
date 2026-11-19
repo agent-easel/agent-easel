@@ -39,27 +39,32 @@ export function useConnectionPreview({
   });
   if (state.owner !== owner) setState({ owner, preview: null });
   const preview = state.owner === owner ? state.preview : null;
-  /** The resting mouse position, and the layer it last moved over. */
-  const pointer = useRef<{ x: number; y: number; layer: HTMLElement } | null>(null);
+  /** The layer the handlers last ran on, and the resting mouse position over it. */
+  const layer = useRef<HTMLElement | null>(null);
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   const update = (next: (current: Preview | null) => Preview | null) =>
     setState((current) => {
       const preview = next(current.preview);
       return samePreview(preview, current.preview) ? current : { owner: current.owner, preview };
     });
 
-  // Pan, zoom and Follow active move the layer without pointer events, so hit-test the resting
-  // pointer after each render.
+  // Neither source is guaranteed an event when it ends: pan, zoom and Follow active move the
+  // layer under a resting pointer, and a live update can remove the focused control without a
+  // blur. So after each render, check the source still holds the pointer or the focus.
   useLayoutEffect(() => {
-    if (preview?.via !== "pointer" || !pointer.current) return;
-    const { x, y, layer } = pointer.current;
-    const under = cardOf(layer, document.elementFromPoint(x, y));
-    if (!sameNode(under, preview.source)) update(() => null);
+    if (!preview || !layer.current) return;
+    const holder =
+      preview.via === "keyboard"
+        ? document.activeElement
+        : pointer.current && document.elementFromPoint(pointer.current.x, pointer.current.y);
+    if (!sameNode(cardOf(layer.current, holder), preview.source)) update(() => null);
   });
 
   const releasePointer = (current: Preview | null) => (current?.via === "pointer" ? null : current);
   const point = (event: PointerEvent<HTMLElement>) => {
     if (event.pointerType !== "mouse") return;
-    pointer.current = { x: event.clientX, y: event.clientY, layer: event.currentTarget };
+    layer.current = event.currentTarget;
+    pointer.current = { x: event.clientX, y: event.clientY };
     const source = cardOf(event.currentTarget, event.target);
     update((current) => (source ? { source, via: "pointer" } : releasePointer(current)));
   };
@@ -70,6 +75,7 @@ export function useConnectionPreview({
     onPointerDownCapture: point,
     onPointerLeave: () => update(releasePointer),
     onFocus: (event: FocusEvent<HTMLElement>) => {
+      layer.current = event.currentTarget;
       const source = cardOf(event.currentTarget, event.target);
       if (source && event.target.matches(":focus-visible"))
         update(() => ({ source, via: "keyboard" }));
