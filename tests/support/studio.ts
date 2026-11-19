@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import { copyAgentDefinition } from "./agents.ts";
@@ -30,12 +31,19 @@ const saveHoldMs = 20_000;
 /**
  * Starts the open Studio editor's Save while its request to `path` is held, and returns the release.
  * Something else, such as a removal elsewhere, can then reach the editor before the save replies.
+ * The release fails the journey when the hold already ended on its own: the save may then have
+ * replied before the journey's assertions, so they no longer prove the pending-save state.
  */
 export async function startHeldSave(browser: Browser, screen: Screen, path: string) {
+  let expired = false;
   let release = () => {};
   const held = new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, saveHoldMs);
+    const timer = setTimeout(() => {
+      expired = true;
+      resolve();
+    }, saveHoldMs);
     release = () => {
+      assert.equal(expired, false, `the held save ended on its own after ${saveHoldMs} ms`);
       clearTimeout(timer);
       resolve();
     };
