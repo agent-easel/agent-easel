@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Monitor,
@@ -16,7 +16,8 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { shortcutDefinitions } from "../keyboard-shortcuts.ts";
+import { fixedShortcutRows, shortcutDefinitions } from "../keyboard-shortcuts.ts";
+import { api } from "../api.ts";
 import { KeyboardSettings } from "./keyboard-settings.tsx";
 import { AccessSettings, DeviceAccessProvider, usePendingDeviceCount } from "./access-settings.tsx";
 import { AppearanceSettings } from "./appearance-settings.tsx";
@@ -171,7 +172,11 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "keyboard",
-    rowLabels: ["Fixed", ...shortcutDefinitions.map((command) => command.label)],
+    rowLabels: [
+      "Fixed",
+      ...shortcutDefinitions.map((command) => command.label),
+      ...fixedShortcutRows().map((row) => row.label),
+    ],
     label: "Keyboard shortcuts",
     icon: Keyboard,
     group: "device",
@@ -209,12 +214,44 @@ function sectionApplies(section: SettingsSection, scope: ClientScope) {
   return true;
 }
 
-function matchingSections(sections: readonly SettingsSection[], query: string) {
+function matchingSections(
+  sections: readonly SettingsSection[],
+  query: string,
+  extraLabels: Partial<Record<SettingsSection["tab"], readonly string[]>>,
+) {
   const needle = query.trim().toLowerCase();
   if (!needle) return sections;
   return sections.filter((section) =>
-    [section.label, ...section.rowLabels].some((label) => label.toLowerCase().includes(needle)),
+    [section.label, ...section.rowLabels, ...(extraLabels[section.tab] ?? [])].some((label) =>
+      label.toLowerCase().includes(needle),
+    ),
   );
+}
+
+/**
+ * Run titles shows one row per option of the chosen Worker, and those labels come from T3's
+ * capabilities. They are read once, when a search starts, so the index matches the visible rows.
+ */
+function useWorkerOptionLabels(searching: boolean) {
+  const [labels, setLabels] = useState<readonly string[] | null>(null);
+  useEffect(() => {
+    if (!searching || labels) return;
+    let active = true;
+    api.getAgentCapabilities().then(
+      (capabilities) => {
+        if (!active) return;
+        const names = capabilities.providers.flatMap((provider) =>
+          provider.models.flatMap((model) => model.options?.map((option) => option.label) ?? []),
+        );
+        setLabels([...new Set(names)]);
+      },
+      () => active && setLabels([]),
+    );
+    return () => {
+      active = false;
+    };
+  }, [searching, labels]);
+  return labels ?? [];
 }
 
 /** Figma Settings/ModalShell: breadcrumb header, section nav and the selected section's pane. */
@@ -295,7 +332,8 @@ function SettingsNav({
   searchRef: RefObject<HTMLInputElement | null>;
   onQueryChange: (query: string) => void;
 }) {
-  const visible = matchingSections(sections, query);
+  const workerOptionLabels = useWorkerOptionLabels(query.trim() !== "");
+  const visible = matchingSections(sections, query, { "run-titles": workerOptionLabels });
   return (
     <aside className="flex w-60 shrink-0 flex-col gap-0.5 overflow-y-auto border-r bg-sidebar px-2 py-3 max-sm:max-h-[40%] max-sm:w-full max-sm:border-r-0 max-sm:border-b">
       <SettingsSearchField inputRef={searchRef} value={query} onChange={onQueryChange} />

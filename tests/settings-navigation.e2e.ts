@@ -154,3 +154,27 @@ test("searching for a visible row label such as Mode finds Appearance", async ({
   await expect(sections(screen).getByRole("link", "Appearance", { exact: true })).toBeVisible();
   await expect(sections(screen).getByRole("link", "T3 connection", { exact: true })).toHaveCount(0);
 });
+
+test("searching for a Worker option or a fixed shortcut finds its section", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await app.open("/settings/connection");
+  const search = screen.getByLabel("Search settings");
+
+  // Act: a Run titles Worker option from T3's capabilities
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
+
+  // Act: a fixed Keyboard shortcuts row
+  await search.fill("undo flow edit");
+
+  // Assert
+  await expect(
+    sections(screen).getByRole("link", "Keyboard shortcuts", { exact: true }),
+  ).toBeVisible();
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
+});
