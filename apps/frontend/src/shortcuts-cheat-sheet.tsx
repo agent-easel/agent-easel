@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { useRef } from "react";
 import {
   formatShortcut,
@@ -19,6 +18,7 @@ import {
   DialogDismiss,
   DialogTitle,
 } from "./components/ui/dialog";
+import { AppLink } from "./components/app-link.tsx";
 import { KeyChip } from "./components/ui/key-chip";
 import { TextLink } from "./components/ui/text-link";
 
@@ -112,7 +112,7 @@ export function ShortcutsCheatSheet({
             Keyboard shortcuts
           </DialogTitle>
           <TextLink asChild className="ml-auto text-[13px]">
-            <Link
+            <AppLink
               to={pathname}
               search={{ settings: { tab: "keyboard" } }}
               mask={settingsMask({ tab: "keyboard" })}
@@ -120,7 +120,7 @@ export function ShortcutsCheatSheet({
               onClick={() => onOpenChange(false)}
             >
               Edit in Settings
-            </Link>
+            </AppLink>
           </TextLink>
           <DialogDismiss label="Close keyboard shortcuts" />
         </header>

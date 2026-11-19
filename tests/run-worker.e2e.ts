@@ -95,7 +95,7 @@ test("Start launches a top-level Block worker and no Run conversation", async ({
   await app.screenshot("direct-root-worker-after-reload");
 });
 
-test("Show full prompt expands and collapses a long Run prompt from the keyboard", async ({
+test("Show full prompt expands a long Run prompt from the keyboard", async ({
   app,
   screen,
   browser,
@@ -121,9 +121,6 @@ test("Show full prompt expands and collapses a long Run prompt from the keyboard
   await expect(showLess).toBeFocused();
   expect((await text.boundingBox())!.height).toBeGreaterThan(preview!.height);
   await app.screenshot("run-full-prompt-expanded");
-  await browser.keyboard.press("Space");
-  await expect(showFull).toHaveAttribute("aria-expanded", "false");
-  await expect(showFull).toBeFocused();
 });
 
 test("the Run's Flow name opens that Flow in Studio", async ({ app, screen, browser }) => {

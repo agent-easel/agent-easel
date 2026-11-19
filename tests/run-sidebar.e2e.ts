@@ -298,11 +298,12 @@ test("Run repository details retain branch ownership and PR links after reload",
   await expect(repositories).toContainText("Code review");
   await expect(repositories).toContainText("review/keyboard-accessibility");
   await expect(repositories).toContainText("Accessibility review");
-  for (const number of [42, 43]) {
-    const link = repositories.getByRole("link", `example/atlas #${number}`, { exact: true });
-    await expect(link).toHaveAttribute("href", `https://github.com/example/atlas/pull/${number}`);
-    await expect(link).toHaveAttribute("target", "_blank");
-  }
+  const first = repositories.getByRole("link", "example/atlas #42", { exact: true });
+  await expect(first).toHaveAttribute("href", "https://github.com/example/atlas/pull/42");
+  await expect(first).toHaveAttribute("target", "_blank");
+  const second = repositories.getByRole("link", "example/atlas #43", { exact: true });
+  await expect(second).toHaveAttribute("href", "https://github.com/example/atlas/pull/43");
+  await expect(second).toHaveAttribute("target", "_blank");
   await expect(repositories.getByRole("link")).toHaveCount(2);
   await app.screenshot("run-branches-and-pull-requests");
 });
