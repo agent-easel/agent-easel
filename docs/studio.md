@@ -353,7 +353,7 @@ request for changes escalates to you instead of looping again ([Condition](#canv
 ### Canvas and block configuration
 
 The editor's toolbar holds the owner badge (Global or the owning Project), the Flow name as an inline field, the save status
-(**Saved · Revision N**, **Unsaved changes · Revision N**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
+(**Saved**, **Unsaved changes**, **Saving…**), then **Workspace**, ⋯ **More Flow actions** and **Save**.
 
 The editor has a block library on the left (**Human step**, **Wait**, **Continuation**, **Condition** and saved Agent definitions) and the canvas. The library's
 **Search steps and Agents** field and its **Collapse library** icon (collapsed, **Expand library**) share one row and stay pinned while the library scrolls; the

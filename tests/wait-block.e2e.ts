@@ -3,7 +3,7 @@ import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
-import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
+import { expectFlowSaved, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 
@@ -42,7 +42,7 @@ test("a Wait added from the library saves with a missing duration as a readiness
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
   await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 minutes");

@@ -524,7 +524,6 @@ export function FlowDetail({
       <EditorToolbar
         draft={draft}
         state={state}
-        revision={saved.revision}
         flowId={id}
         owner={owner}
         readOnly={readOnly}
@@ -995,7 +994,6 @@ function FlowLoadState({ error }: { error: string }) {
 function EditorToolbar({
   draft,
   state,
-  revision,
   flowId,
   owner,
   readOnly,
@@ -1007,7 +1005,6 @@ function EditorToolbar({
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
-  revision: number;
   flowId: string;
   owner: StudioOwner;
   /** The owning Project left T3: nothing can be edited or saved. */
@@ -1032,7 +1029,7 @@ function EditorToolbar({
         disabled={state.busy || readOnly}
         onChange={(e) => draft.edit({ name: e.target.value })}
       />
-      <FlowSaveStatus state={state} revision={revision} />
+      <FlowSaveStatus state={state} />
       <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
       <span className="flex-1" />
       <FlowWorkspaceControl
@@ -1062,7 +1059,7 @@ function EditorToolbar({
 }
 
 /** Whether the draft matches its saved revision, or was removed elsewhere. */
-function FlowSaveStatus({ state, revision }: { state: FlowDraftSnapshot; revision: number }) {
+function FlowSaveStatus({ state }: { state: FlowDraftSnapshot }) {
   const attention = state.dirty || state.removed;
   return (
     <span
@@ -1079,7 +1076,9 @@ function FlowSaveStatus({ state, revision }: { state: FlowDraftSnapshot; revisio
         ? "Saving…"
         : state.removed
           ? "Removed elsewhere · draft kept"
-          : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${revision}`}
+          : state.dirty
+            ? "Unsaved changes"
+            : "Saved"}
     </span>
   );
 }

@@ -51,16 +51,16 @@ export const readinessSummary = (screen: Screen, readiness: "Ready" | RegExp) =>
     ? screen.getByText("Ready", { exact: true })
     : screen.getByRole("button", readiness);
 
-/** Saves the open Flow as revision 2 and expects its readiness summary, Ready or Not ready. */
-export async function saveFlowWithReadiness(
-  screen: Screen,
-  readiness: "Ready" | RegExp,
-  revision = 2,
-) {
+/** The open Flow has no unsaved changes: its save status reads Saved and Save is disabled. */
+export async function expectFlowSaved(screen: Screen) {
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Saved");
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+}
+
+/** Saves the open Flow and expects its readiness summary, Ready or Not ready. */
+export async function saveFlowWithReadiness(screen: Screen, readiness: "Ready" | RegExp) {
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText(
-    `Saved · Revision ${revision}`,
-  );
+  await expectFlowSaved(screen);
   await expect(readinessSummary(screen, readiness)).toBeVisible();
 }
 

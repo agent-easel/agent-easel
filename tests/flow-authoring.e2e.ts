@@ -17,6 +17,7 @@ import {
 } from "./support/canvas.ts";
 import {
   chooseFlowAction,
+  expectFlowSaved,
   expectSavedAgentRevision,
   flowsBreadcrumb,
   openEditedStudioFlow,
@@ -148,7 +149,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await expect(screen.getByRole("button", "Workspace: New worktree · develop")).toBeVisible();
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
 
   // Assert
   const path = new URL(await browser.url()).pathname;
@@ -175,7 +176,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await app.screenshot("after-flow-revision-comparison");
   await browser.setViewport({ width: 1920, height: 1000 });
   await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
-  await saveFlowWithReadiness(screen, "Ready", 5);
+  await saveFlowWithReadiness(screen, "Ready");
   await browser.reload();
   await expect(screen.getByLabel("Flow name")).toHaveValue("My preserved draft");
   await expect(screen.getByRole("button", "Workspace: New worktree · develop")).toBeVisible();
@@ -184,7 +185,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await renameFlow(app.baseUrl, saved.id, "Renamed elsewhere");
   await expect(screen.getByText("Updated to revision 6")).toBeVisible();
   await expect(screen.getByLabel("Flow name")).toHaveValue("Renamed elsewhere");
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 6");
+  await expectFlowSaved(screen);
 });
 
 test("Undo restores a wire disconnected from the Block target menu", async ({
@@ -258,7 +259,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     screen.getByRole("button", "Connection finish from Implement to Human step", { exact: true }),
   ).toBeVisible();
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await expectFlowBlocked(screen, /Implement: exit "finish" is hidden/);
   await app.screenshot("wired-inherited-exit-hidden");
   await browser.reload();
@@ -285,7 +286,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await app.screenshot("local-exit-name-conflict");
   await panel.getByLabel("Exit name", { exact: true }).fill("github-url");
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 5");
+  await expectFlowSaved(screen);
   await browser.reload();
   await screen.getByRole("button", "Agent Implement").tap();
   await expect(panel.getByLabel("Exit name", { exact: true })).toHaveValue("github-url");
@@ -346,7 +347,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     "1",
   );
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
   await browser.reload();
   await expect(screen.getByRole("group", "Directed connections")).toHaveAttribute(
     "data-connection-count",
@@ -378,7 +379,7 @@ test("a saved Agent block's Revisit instruction is shown again after reload and 
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await browser.reload();
   await expect(reviewer).toContainText("Revisit instruction");
   await expect(reviewer).not.toContainText(revisitInstruction);
