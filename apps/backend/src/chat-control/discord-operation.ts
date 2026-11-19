@@ -264,16 +264,15 @@ const RECONNECTING: Omit<DiscordConnectionProblem, "occurredAt"> = {
  */
 const adoptApplication = (sql: SqlClient.SqlClient, applicationId: string, botName: string) =>
   sql.withTransaction(
-    Effect.gen(function* () {
+    Effect.gen(function* (): Effect.fn.Return<readonly string[], unknown> {
       const [state] = yield* sql<{
         application_id: string | null;
       }>`SELECT application_id FROM chat_control_state WHERE singleton=1`;
       const recorded = state!.application_id;
       yield* sql`UPDATE chat_control_state SET application_id=${applicationId},bot_name=${botName} WHERE singleton=1`;
-      if (recorded === applicationId) return;
-      if (recorded === null) return;
+      if (recorded === applicationId || recorded === null) return [];
       yield* clearConversations(sql, "all");
-      yield* retireApplicationProposals(sql, recorded);
+      return yield* retireApplicationProposals(sql, recorded);
     }),
   );
 
@@ -497,6 +496,7 @@ export const makeDiscordOperation = (
         },
         (session) =>
           adoptApplication(sql, session.applicationId, session.botName).pipe(
+            Effect.flatMap(conversation.actions.proposalsEnded),
             // Names are display only, so the lookup runs beside serving and never delays it.
             Effect.andThen(
               Effect.forkScoped(

@@ -356,6 +356,7 @@ test("Triggers with none yet, and Check now reports nothing ready, one Run, or s
   await screen.getByRole("button", `${name} actions`, { exact: true }).tap();
   await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
   await expect(screen.getByRole("button", "1 Run", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", new RegExp(name)).getByRole("button")).toHaveCount(0);
   await shot(app, browser, "triggers-started-one");
 
   // A second Trigger, with three free slots, so the Run already started does not consume them.
@@ -368,6 +369,8 @@ test("Triggers with none yet, and Check now reports nothing ready, one Run, or s
   await app.open("/studio/triggers");
   await screen.getByRole("button", `${many} actions`, { exact: true }).tap();
   await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
+  await expect(screen.getByRole("button", "3 Runs", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", new RegExp(many)).getByRole("button")).toHaveCount(0);
   await screen.getByRole("button", "3 Runs", { exact: true }).tap();
   await expect(screen.getByRole("menuitem")).toHaveCount(3);
   await shot(app, browser, "triggers-started-three");

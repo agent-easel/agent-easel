@@ -34,15 +34,7 @@ export function StartedRuns({
     return (
       <>
         Started{" "}
-        <button
-          type="button"
-          className={className}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            open(run.id);
-          }}
-        >
+        <button type="button" className={className} onClick={() => open(run.id)}>
           {label}
         </button>
       </>
@@ -53,14 +45,7 @@ export function StartedRuns({
       Started{" "}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={className}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-          >
+          <button type="button" className={className}>
             {label}
           </button>
         </DropdownMenuTrigger>

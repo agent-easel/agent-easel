@@ -187,6 +187,41 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 6");
 });
 
+test("Undo restores a wire disconnected from the Block target menu", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await app.open("/studio/flows");
+  await screen.getByRole("button", "New Flow").tap();
+  await screen.getByLabel("Flow name").fill("Undo a target disconnection");
+  await screen.getByRole("button", "Create Flow").tap();
+  await screen.getByRole("button", "Add Sample worker").tap();
+  await screen.getByRole("button", "Add Human step").tap();
+  await screen.getByRole("button", "Agent Sample worker").tap();
+  const target = screen.getByRole("button", /^Targets of exit finish:/);
+  await target.tap();
+  await screen.getByRole("menuitemcheckbox", "Human step", { exact: true }).tap();
+  await browser.keyboard.press("Escape");
+  await saveFlowWithReadiness(screen, /^Not ready/);
+  await target.tap();
+  await screen.getByRole("menuitemcheckbox", "Human step", { exact: true }).tap();
+  await browser.keyboard.press("Escape");
+  await expect(target).toHaveAttribute("aria-label", "Targets of exit finish: none");
+  const undo = await browser.evaluate(
+    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
+  );
+
+  // Act
+  await browser.keyboard.press(undo as string);
+
+  // Assert
+  await expect(target).toHaveAttribute("aria-label", "Targets of exit finish: Human step");
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+});
+
 test("configure inherited and local Block exits, preserve wired hidden exits and report a name conflict as not ready", async ({
   app,
   screen,

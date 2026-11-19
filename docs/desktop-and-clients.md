@@ -408,13 +408,17 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **18**. A server accepts clients from protocol **17**; a current client
-requires a protocol **18** server. Protocol 18 adds the [Trigger operations](studio.md#trigger-http-api)
+The current protocol is **19**. A server accepts clients from protocol **17**. The current client
+requires a protocol **19** server for [Agent Create reservations](studio.md#agent-definitions).
+Clients on protocols 17 and 18 can still create Agents without a reservation. A protocol 19 client
+shows the server update gate when the server does not support reservations.
+
+Protocol 18 adds the [Trigger operations](studio.md#trigger-http-api)
 over the product HTTP API, a `triggers` list to the Studio live subscription (snapshots and change
 sets) and the [Run origin](runs.md#starting-from-a-trigger) (`origin`) to Run detail and navigation.
 Protocol 17 clients keep working against a protocol 18 server, since they never call the new routes
-and ignore the added list and field. A current client manages Triggers in Studio, so it refuses a
-protocol 17 server and shows the update gate naming the server.
+and ignore the added list and field. Protocol 18 clients refuse protocol 17 servers because
+they manage Triggers in Studio.
 Protocol 17 gave every
 Flow and Agent an [owning Project](studio.md#ownership) (`projectId`, null for a global definition) that
 create accepts, validates a Flow's unsaved content by its id (`POST /api/flows/:id/validate`) and names

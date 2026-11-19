@@ -22,7 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { randomId } from "@/lib/ids";
-import { addWire, canConnect, hasWire, removeWire } from "../flow-graph.ts";
+import { canConnect, hasWire, type FlowWire } from "../flow-graph.ts";
 import { StatusBadge } from "./status-badge.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
@@ -45,13 +45,13 @@ export function TargetSelect({
   graph,
   source,
   label,
-  onChange,
+  onWireChange,
 }: {
   graph: FlowGraph;
   source: WireSource;
   /** What the select connects, for its accessible name, such as "exit Approve". */
   label: string;
-  onChange: (graph: FlowGraph) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
   const wired = (targetBlockId: string) => hasWire(graph, { source, targetBlockId });
   const choices = graph.blocks.filter(
@@ -87,8 +87,7 @@ export function TargetSelect({
             key={block.id}
             checked={wired(block.id)}
             onCheckedChange={(checked) => {
-              const wire = { source, targetBlockId: block.id };
-              onChange(checked ? addWire(graph, wire) : removeWire(graph, wire));
+              onWireChange({ source, targetBlockId: block.id }, checked);
             }}
           >
             <span className="truncate">{block.name || "Unnamed block"}</span>
@@ -104,20 +103,20 @@ export function BlockExitConfiguration({
   graph,
   agents,
   onEdit,
-  onChange,
+  onWireChange,
 }: {
   block: ExitBlock;
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
   onEdit: (block: FlowBlock) => void;
-  onChange: (graph: FlowGraph) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
   const target = (exitId: string, label: string) => (
     <TargetSelect
       graph={graph}
       source={{ kind: "exit", sourceBlockId: block.id, exitId }}
       label={label}
-      onChange={onChange}
+      onWireChange={onWireChange}
     />
   );
   if (block.kind === "wait" || block.kind === "continuation")

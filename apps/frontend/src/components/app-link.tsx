@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   useSettingsOptions,
   useStudioOptions,
+  useStudio,
   type StudioSelection,
   type SettingsSelection,
 } from "../settings-navigation.ts";
@@ -49,4 +50,20 @@ type StudioLinkProps = {
 export function StudioLink({ selection, ...props }: StudioLinkProps) {
   const options = useStudioOptions(selection);
   return <AppLink {...options} {...props} />;
+}
+
+/** Opens an Agent over the current Flow and any Trigger that opened that Flow. */
+export function FlowAgentLink({
+  agentId,
+  flowId,
+  ...props
+}: Omit<StudioLinkProps, "selection"> & { agentId: string; flowId: string }) {
+  const studio = useStudio();
+  const fromTrigger = studio?.tab === "flows" ? studio.fromTrigger : undefined;
+  return (
+    <StudioLink
+      selection={{ tab: "agents", agentId, fromFlow: flowId, ...(fromTrigger && { fromTrigger }) }}
+      {...props}
+    />
+  );
 }

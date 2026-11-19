@@ -1,3 +1,4 @@
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   arrangeFlow,
   AUTHORING_DIMENSIONS,
@@ -32,7 +33,6 @@ import {
   type StudioDefinitions,
 } from "@t3-factory/contracts";
 import {
-  agentCreateDeadline,
   CANVAS_COORD_MESSAGE,
   duplicateTreatment,
   executionForProject,
@@ -208,6 +208,7 @@ type DefinitionOperations = Pick<
   | "getAgentCapabilities"
   | "listAgents"
   | "getAgent"
+  | "reserveAgentCreate"
   | "getAgentCreateOutcome"
   | "createAgent"
   | "updateAgent"
@@ -234,6 +235,10 @@ const LIVE_PUBLISHING_OPERATIONS: ReadonlySet<keyof DefinitionOperations> = new 
   "commitImport",
 ]);
 
+const createClockMillis = Clock.monotonicTimeNanos.pipe(
+  Effect.map((now) => Number(now / 1_000_000n)),
+);
+
 export const makeDefinitions = (
   t3: T3Adapter,
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
@@ -244,6 +249,17 @@ export const makeDefinitions = (
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    // Only this backend lifetime can accept its reservations. After restart the Agent row still
+    // resolves a committed attempt, and an unused reservation from the stopped host cannot write.
+    const createKey = randomBytes(32);
+    const signCreate = (payload: string) =>
+      createHmac("sha256", createKey).update(payload).digest("base64url");
+    const createDeadline = (id: string) => {
+      const ticket = /^([0-9a-f-]{36}\.([0-9]{1,16}))\.([\w-]{43})$/.exec(id);
+      if (!ticket || !timingSafeEqual(Buffer.from(signCreate(ticket[1]!)), Buffer.from(ticket[3]!)))
+        return undefined;
+      return Number(ticket[2]);
+    };
     /** Publishes after a write's transaction committed; a refused write changed nothing. */
     const publishOnSuccess = <A, E>(write: Effect.Effect<Result<A>, E>) =>
       write.pipe(
@@ -433,7 +449,7 @@ export const makeDefinitions = (
         if (!agent) return failure("not_found", "This Agent does not exist.");
         return yield* operation(agent);
       });
-    const readCreateOutcome = (id: string, deadline: number) =>
+    const readCreateOutcome = (id: string, deadline: number | undefined) =>
       transaction<AgentCreateOutcome | { status: "pending"; remaining: number }>(
         Effect.gen(function* () {
           const [identity] = yield* sql<{ removed_at: string | null }>`
@@ -443,7 +459,7 @@ export const makeDefinitions = (
             return yield* withSavedAgent(id, (agent) =>
               Effect.succeed({ ok: true, value: { status: "created" as const, agent } }),
             );
-          const remaining = deadline - (yield* Clock.currentTimeMillis);
+          const remaining = deadline === undefined ? 0 : deadline - (yield* createClockMillis);
           return {
             ok: true,
             value: remaining > 0 ? { status: "pending", remaining } : { status: "absent" },
@@ -781,16 +797,22 @@ export const makeDefinitions = (
         transaction(
           withSavedAgent(id, (agent) => Effect.succeed({ ok: true as const, value: agent })),
         ),
-      getAgentCreateOutcome(id) {
-        const deadline = agentCreateDeadline(id);
-        if (!deadline.ok) return Effect.succeed(deadline);
+      reserveAgentCreate() {
         return Effect.gen(function* () {
-          const first = yield* readCreateOutcome(id, deadline.value);
+          const deadline = (yield* createClockMillis) + AGENT_CREATE_WINDOW_MS;
+          const payload = `${randomUUID()}.${deadline}`;
+          return { ok: true as const, value: `${payload}.${signCreate(payload)}` };
+        });
+      },
+      getAgentCreateOutcome(id) {
+        const deadline = createDeadline(id);
+        return Effect.gen(function* () {
+          const first = yield* readCreateOutcome(id, deadline);
           if (!first.ok) return first;
           if (first.value.status !== "pending") return { ok: true as const, value: first.value };
           if (first.value.remaining <= AGENT_CREATE_WINDOW_MS) {
             yield* Effect.sleep(first.value.remaining);
-            const checked = yield* readCreateOutcome(id, deadline.value);
+            const checked = yield* readCreateOutcome(id, deadline);
             if (!checked.ok) return checked;
             if (checked.value.status !== "pending")
               return { ok: true as const, value: checked.value };
@@ -802,8 +824,11 @@ export const makeDefinitions = (
         const validated = validateCreateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
         const { requestId } = validated.value;
-        const deadline = requestId === undefined ? null : agentCreateDeadline(requestId);
-        if (deadline && !deadline.ok) return Effect.succeed(deadline);
+        const deadline = requestId === undefined ? undefined : createDeadline(requestId);
+        if (requestId !== undefined && deadline === undefined)
+          return Effect.succeed(
+            failure("conflict", "This Agent Create reservation is no longer valid."),
+          );
         return Effect.gen(function* () {
           const capabilities = yield* loadCapabilities();
           return yield* transaction<AgentDefinition>(
@@ -822,8 +847,8 @@ export const makeDefinitions = (
                 (yield* ownerRefusal(projectId)) ??
                 (yield* overridesRefusal(projectId, agentInput, capabilities));
               if (refused) return refused;
-              if (deadline) {
-                const remaining = deadline.value - (yield* Clock.currentTimeMillis);
+              if (deadline !== undefined) {
+                const remaining = deadline - (yield* createClockMillis);
                 if (remaining <= 0)
                   return failure(
                     "conflict",

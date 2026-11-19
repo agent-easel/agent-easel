@@ -26,8 +26,8 @@ type TriggerSelection = { tab: "triggers"; triggerId?: string };
 
 export type StudioSelection =
   | { tab: "flows"; flowId?: string; fromTrigger?: string }
-  /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
-  | { tab: "agents"; agentId?: string; fromFlow?: string }
+  /** A Flow and its optional Trigger stay open beneath the Agent. */
+  | { tab: "agents"; agentId?: string; fromFlow?: string; fromTrigger?: string }
   | TriggerSelection;
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
 
@@ -48,7 +48,10 @@ function studioSelection(value: unknown): StudioSelection | undefined {
     return {
       tab: "agents",
       ...(typeof selection.agentId === "string" ? { agentId: selection.agentId } : {}),
-      ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
+      ...(typeof selection.fromFlow === "string" && {
+        fromFlow: selection.fromFlow,
+        ...(typeof selection.fromTrigger === "string" && { fromTrigger: selection.fromTrigger }),
+      }),
     };
   if (selection.tab === "triggers") {
     return {

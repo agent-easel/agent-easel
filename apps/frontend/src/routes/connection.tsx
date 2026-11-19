@@ -17,6 +17,7 @@ import {
   settingsConnectionPresentation,
   type SettingsConnectionPresentation,
 } from "../connection-state.tsx";
+import { fieldAria } from "../components/field-state.ts";
 
 export function ConnectionSettingsPanel() {
   const { connection, loadError, presentation: status, setConnection } = useConnectionState();
@@ -199,13 +200,16 @@ function ConnectionRows({
         />
       </SettingsGroup>
       {invalid && (
-        <ProblemCard tone="error" title="Use HTTPS, or HTTP on this computer">
+        <ProblemCard id={addressProblemId} tone="error" title="Use HTTPS, or HTTP on this computer">
           Leave credentials, queries and fragments out of the address.
         </ProblemCard>
       )}
     </>
   );
 }
+
+/** The address field names the card that explains why its value is not allowed. */
+const addressProblemId = "connection-address-problem";
 
 function AuthorizationAction({
   connection,
@@ -257,7 +261,7 @@ function AddressForm({
       <Input
         type="url"
         aria-label="Address"
-        aria-invalid={invalid}
+        {...fieldAria(invalid && addressProblemId)}
         disabled={disabled}
         value={value}
         placeholder="http://127.0.0.1:3773/mcp"

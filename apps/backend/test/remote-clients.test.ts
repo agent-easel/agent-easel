@@ -97,9 +97,10 @@ const serverUpdate = {
 it.for([
   [16, serverUpdate],
   [17, serverUpdate],
-  [18, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [18, serverUpdate],
+  [19, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which manages Triggers, refuses a protocol %i server only when it predates 18",
+  "the current client, which reserves Agent Creates, refuses a protocol %i server only when it predates 19",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });

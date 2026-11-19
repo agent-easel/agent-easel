@@ -6,6 +6,7 @@ import {
   removeAgentElsewhere,
   saveAgentElsewhere,
 } from "./support/agents.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { flowsBreadcrumb } from "./support/studio.ts";
 
 beforeEach(async ({ browser }) => {
@@ -74,7 +75,7 @@ test("Back to a created Agent removed after its first live appearance shows not 
   await app.screenshot("created-agent-removed-before-back");
 });
 
-test("a lost Create reply can open the Agent after another client has revised it", async ({
+test("a skewed browser clock does not prevent Create or recovery of its lost reply", async ({
   app,
   browser,
   screen,
@@ -83,12 +84,18 @@ test("a lost Create reply can open the Agent after another client has revised it
   await browser.setViewport({ width: 1440, height: 900 });
   const original = "Creation recovery · Lost reply";
   const revised = "Creation recovery · Revised after Create";
-  await app.open("/studio/agents/new");
+  await openRemoteBrowser(app);
+  await openApproved(app, "/studio/agents/new");
   await screen.getByLabel("Name", { exact: true }).fill(original);
   await screen.getByLabel("Prompt", { exact: true }).fill("Review the change.");
+  await browser.evaluate(
+    "Date.now = (() => { const now = Date.now; return () => now() - 60_000; })()",
+  );
   await browser.route("**/api/agents", async (route) => {
     if (route.request.method !== "POST") return route.continue();
-    await route.fetch();
+    const reply = await route.fetch();
+    if (reply.status !== 201)
+      return route.fulfill({ status: reply.status, body: await reply.text() });
     const agent = (await listAgentDefinitions(app.baseUrl)).find(
       (entry) => entry.name === original,
     );

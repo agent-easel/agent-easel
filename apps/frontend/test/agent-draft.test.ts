@@ -1,5 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
+import { ApiError } from "../src/api.ts";
 import { createShapedContent } from "../src/agent-draft.ts";
 import { comparedAgentLines } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
@@ -365,6 +366,43 @@ it("an Agent Duplicate creates the copy in the chosen target owner and returns i
     name: "Reviewer copy",
   });
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
+});
+
+it("a refused Create with an expired reservation keeps the draft retryable", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  factory.createAgent.mockRejectedValueOnce(
+    new ApiError({ code: "conflict", message: "The Agent Create request expired.", issues: [] }),
+  );
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    canSave: true,
+    content: { name: "New reviewer" },
+    error: "The Agent Create request expired.",
+  });
+});
+
+it("a lost reservation reply leaves Create retryable because no Agent was sent", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  factory.reserveAgentCreate.mockRejectedValueOnce(new OfflineError("unknown"));
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.createAgent).not.toHaveBeenCalled();
+  expect(draft.getSnapshot()).toMatchObject({
+    canSave: true,
+    content: { name: "New reviewer" },
+    createCheck: { status: "none" },
+  });
 });
 
 it("a lost Create checks its own request and ends in a safe state if the lookup fails", async () => {

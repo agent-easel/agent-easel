@@ -638,7 +638,6 @@ export {
   validateUpdateFlow,
 } from "./flow.ts";
 export {
-  agentCreateDeadline,
   executionForProject,
   validateCreateAgent,
   validateDuplicateAgent,

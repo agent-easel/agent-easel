@@ -55,6 +55,7 @@ export function studioFactory(): Operations {
       savedFlow(name),
     ),
     removeFlow: vi.fn<StudioDefinitionsOperations["removeFlow"]>(async () => undefined),
+    reserveAgentCreate: vi.fn<StudioDefinitionsOperations["reserveAgentCreate"]>(),
     getAgentCreateOutcome: vi.fn<StudioDefinitionsOperations["getAgentCreateOutcome"]>(),
     createAgent: vi.fn<StudioDefinitionsOperations["createAgent"]>(async (content) =>
       savedAgent({ ...content, id: "created" }),

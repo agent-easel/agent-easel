@@ -139,7 +139,7 @@ export type AgentCreateOutcome =
   | { readonly status: "removed" | "absent" | "unconfirmed" };
 
 export interface CreateAgentInput extends AgentContentInput {
-  /** An optional UUID followed by the write deadline in Unix milliseconds, used as the Agent id. */
+  /** Factory-issued reservation for an identifiable Create, also used as the Agent id. */
   readonly requestId?: string;
   /** The owning Project's Factory id, or null (the default when omitted) for a global Agent. */
   readonly projectId?: string | null;
@@ -174,6 +174,10 @@ export const agentOperations = {
   listAgents: operation<never, readonly AgentDefinition[]>()({
     method: "GET",
     path: "/api/agents",
+  }),
+  reserveAgentCreate: operation<never, string>()({
+    method: "POST",
+    path: "/api/agents/create-reservation",
   }),
   createAgent: operation<CreateAgentInput, AgentDefinition>()({
     method: "POST",

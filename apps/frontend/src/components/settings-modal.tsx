@@ -78,7 +78,7 @@ type SettingsSection = {
 const settingsSections: readonly SettingsSection[] = [
   {
     tab: "connection",
-    rowLabels: ["Address", "T3 version", "Authorization", "Last checked"],
+    rowLabels: ["Connection", "Address", "T3 version", "Authorization", "Last checked"],
     label: "T3 connection",
     icon: Plug,
     group: "factory",
@@ -95,6 +95,7 @@ const settingsSections: readonly SettingsSection[] = [
   {
     tab: "devices",
     rowLabels: [
+      "Devices",
       "Remote access",
       "Allow approved devices on my LAN or tailnet",
       "Address",
@@ -110,7 +111,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "chat-model",
-    rowLabels: ["Provider", "Base URL", "Model", "API key", "Last tested"],
+    rowLabels: ["Connection", "Provider", "Base URL", "Model", "API key", "Last tested"],
     label: "Language model",
     icon: BotMessageSquare,
     group: "chat",
@@ -138,7 +139,14 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "run-titles",
-    rowLabels: ["Generate Run titles", "Provider instance", "Model", "Latest result"],
+    rowLabels: [
+      "Generate Run titles",
+      "Generation",
+      "Worker",
+      "Provider",
+      "Model",
+      "Latest result",
+    ],
     label: "Run titles",
     icon: Sparkle,
     group: "runs",
@@ -155,7 +163,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "appearance",
-    rowLabels: ["Light", "Dark", "Theme colors"],
+    rowLabels: ["Mode", "Light", "Dark", "T3 theme", "Theme", "Theme colors"],
     label: "Appearance",
     icon: Palette,
     group: "device",
@@ -163,7 +171,7 @@ const settingsSections: readonly SettingsSection[] = [
   },
   {
     tab: "keyboard",
-    rowLabels: shortcutDefinitions.map((command) => command.label),
+    rowLabels: ["Fixed", ...shortcutDefinitions.map((command) => command.label)],
     label: "Keyboard shortcuts",
     icon: Keyboard,
     group: "device",
@@ -172,9 +180,11 @@ const settingsSections: readonly SettingsSection[] = [
   {
     tab: "desktop",
     rowLabels: [
+      "Updates",
       "Version",
       "Release channel",
       "Last checked",
+      "Startup",
       "Open in the background at login",
       "Show in the menu bar",
       "Notifications",
