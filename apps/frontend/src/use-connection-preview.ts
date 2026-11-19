@@ -57,13 +57,17 @@ export function useConnectionPreview({
   });
 
   const releasePointer = (current: Preview | null) => (current?.via === "pointer" ? null : current);
+  const point = (event: PointerEvent<HTMLElement>) => {
+    if (event.pointerType !== "mouse") return;
+    pointer.current = { x: event.clientX, y: event.clientY, layer: event.currentTarget };
+    const source = cardOf(event.currentTarget, event.target);
+    update((current) => (source ? { source, via: "pointer" } : releasePointer(current)));
+  };
   const handlers = {
-    onPointerMove: (event: PointerEvent<HTMLElement>) => {
-      if (event.pointerType !== "mouse") return;
-      pointer.current = { x: event.clientX, y: event.clientY, layer: event.currentTarget };
-      const source = cardOf(event.currentTarget, event.target);
-      update((current) => (source ? { source, via: "pointer" } : releasePointer(current)));
-    },
+    onPointerMove: point,
+    // A press without movement also takes over from a keyboard preview; capturing keeps the
+    // layer's own pointerdown (pan) untouched.
+    onPointerDownCapture: point,
     onPointerLeave: () => update(releasePointer),
     onFocus: (event: FocusEvent<HTMLElement>) => {
       const source = cardOf(event.currentTarget, event.target);
