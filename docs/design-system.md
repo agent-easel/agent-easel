@@ -167,7 +167,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   tones are the Setting kinds Error, Attention, Info and Neutral, so a field tag and its card
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
   and Studio card; compact is the composer, Run page and dialog card. The next step is one
-  action: a button, or a card link to Settings, Studio or T3.
+  TextLink: an action, or a chevron link to Settings or Studio, or an external link to T3.
+- **Text link**: TextLink, for inline links and link-style actions. Its Link tone uses `--link`;
+  Neutral keeps secondary text and turns primary on hover and focus. A trailing chevron moves
+  forward in the app; the external ↗ leaves it or opens T3. It underlines on hover only, shows
+  the `--ring` outline on keyboard focus, and a disabled action is at 50% opacity. In-app routes
+  wrap AppLink, which stays the typed-route link; external links open in a new tab; actions are
+  buttons.
 - **Raw facts**: Technical details, closed by default with **Copy details**, as labelled rows
   or one raw error. Other closed secondary facts use the same disclosure.
 - **Field state**: the shared field-state helper sets `aria-invalid` and `aria-describedby` from
@@ -179,8 +185,8 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
   stays visible.
-- **Way out to T3**: OpenInT3, the "Open in T3 ↗" link; its filled button form is only for an
-  Attention card whose action is going to T3.
+- **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
+  an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
 - **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
   relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the

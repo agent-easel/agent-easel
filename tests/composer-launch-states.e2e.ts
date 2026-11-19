@@ -69,6 +69,38 @@ test("a lost T3 connection keeps the draft in one card and reconnects without it
   await app.screenshot("after-reconnected");
 });
 
+// The focused element's outline, drawn from `--ring` in each appearance.
+const focusOutline = `(() => { const style = getComputedStyle(document.activeElement); return [style.outlineStyle, style.outlineWidth, style.outlineColor].join(" "); })()`;
+const focusRings = [
+  { mode: "Dark", ring: "solid 2px rgb(129, 140, 248)" },
+  { mode: "Light", ring: "solid 2px rgb(99, 102, 241)" },
+] as const;
+
+for (const { mode, ring } of focusRings)
+  test(`a keyboard-focused card link shows the focus ring in ${mode}`, async ({
+    fixture,
+    app,
+    screen,
+    browser,
+  }) => {
+    // Arrange
+    await app.open("/settings/appearance");
+    await screen.getByRole("radio", mode, { exact: true }).tap();
+    await app.open("/runs/new");
+    await fixture.remoteAccess.t3Unavailable();
+    const link = screen.getByRole("link", "Open T3 connection settings", { exact: true });
+    await link.focus();
+    await browser.keyboard.press("Shift+Tab");
+
+    // Act
+    await browser.keyboard.press("Tab");
+
+    // Assert
+    await expect(link).toBeFocused();
+    expect(await browser.evaluate(focusOutline)).toBe(ring);
+    await app.screenshot(`text-link-focus-${mode.toLowerCase()}`);
+  });
+
 test("an unconfirmed Start keeps an Idle row and does not call the outcome Unknown", async ({
   app,
   screen,
