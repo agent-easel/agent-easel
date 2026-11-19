@@ -29,7 +29,7 @@ export function EmptyState(props: EmptyStateProps) {
         className="grid gap-1 rounded-lg border border-dashed px-2.5 py-3.5 wrap-anywhere"
       >
         <p className="text-sm leading-tight font-medium text-muted-foreground">{props.title}</p>
-        <p className="text-2xs leading-tight tracking-label text-subtle-foreground">{props.body}</p>
+        <p className="text-2xs leading-tight tracking-label text-muted-foreground">{props.body}</p>
       </div>
     );
   const { icon: Icon, title, body, action } = props;
@@ -38,9 +38,9 @@ export function EmptyState(props: EmptyStateProps) {
       <span className="flex size-9 items-center justify-center rounded-lg bg-foreground/5 text-muted-foreground">
         <Icon aria-hidden className="size-4" strokeWidth={1.5} />
       </span>
-      <h2 className="text-[14px] leading-tight font-semibold text-foreground">{title}</h2>
+      <h2 className="text-title font-semibold text-foreground">{title}</h2>
       {body && (
-        <p className="max-w-80 text-2xs leading-tight tracking-label wrap-anywhere text-subtle-foreground">
+        <p className="max-w-80 text-2xs leading-tight tracking-label wrap-anywhere text-muted-foreground">
           {body}
         </p>
       )}
