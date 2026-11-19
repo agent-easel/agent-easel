@@ -183,11 +183,7 @@ export function TriggerFieldNotices({
               : "GitHub readiness needs attention"
           }
           details={gh.details}
-          action={
-            <TextLink trailing="chevron" onClick={retry}>
-              Check again
-            </TextLink>
-          }
+          action={<TextLink onClick={retry}>Check again</TextLink>}
         >
           {gh.message}
         </ProblemCard>
@@ -228,11 +224,7 @@ export function EditorNotices({
               ? "A newer revision was saved elsewhere"
               : `Revision ${conflict.revision} was saved elsewhere`
           }
-          action={
-            <TextLink trailing="chevron" onClick={draft.compare}>
-              Compare latest revision
-            </TextLink>
-          }
+          action={<TextLink onClick={draft.compare}>Compare latest revision</TextLink>}
         />
       )}
       {conflict.status === "comparing" && (
@@ -357,11 +349,7 @@ function recoveryMessage(
   if (lookedUp === "failed")
     return {
       message: "Factory couldn’t read the Trigger list. Your settings are still here.",
-      action: (
-        <TextLink trailing="chevron" onClick={retryLookup}>
-          Check again
-        </TextLink>
-      ),
+      action: <TextLink onClick={retryLookup}>Check again</TextLink>,
     };
   const { found } = lookedUp;
   if (found)
@@ -375,10 +363,6 @@ function recoveryMessage(
     };
   return {
     message: "No Trigger with this name was found. Your settings are still here.",
-    action: (
-      <TextLink trailing="chevron" onClick={onRetry}>
-        Create again
-      </TextLink>
-    ),
+    action: <TextLink onClick={onRetry}>Create again</TextLink>,
   };
 }

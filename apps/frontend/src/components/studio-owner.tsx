@@ -547,9 +547,7 @@ export function OwnerChangeNotice({
       }
       action={
         change.status === "changed" && (
-          <TextLink trailing="chevron" onClick={() => onAcknowledge(change.to)}>
-            Acknowledge new owner
-          </TextLink>
+          <TextLink onClick={() => onAcknowledge(change.to)}>Acknowledge new owner</TextLink>
         )
       }
     >

@@ -1236,9 +1236,7 @@ function OwnerGoneNotice({
       title={`${owner.title} is no longer in T3`}
       action={
         <MutationGate>
-          <TextLink trailing="chevron" onClick={onChangeOwner}>
-            Change owner…
-          </TextLink>
+          <TextLink onClick={onChangeOwner}>Change owner…</TextLink>
         </MutationGate>
       }
     >
@@ -1345,7 +1343,6 @@ function ConflictNotice({
         }
         action={
           <TextLink
-            trailing="chevron"
             onClick={() => {
               setComparisonOpen(true);
               onCompare();

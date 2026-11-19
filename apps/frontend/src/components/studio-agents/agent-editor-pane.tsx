@@ -263,13 +263,7 @@ function OwnerGoneCard({ ownership, ownerGone, onChangeOwner }: CardProps) {
       tone="attention"
       icon={Unplug}
       title={`${ownership.owner.title} is no longer in T3`}
-      action={
-        onChangeOwner && (
-          <TextLink trailing="chevron" onClick={onChangeOwner}>
-            Change owner…
-          </TextLink>
-        )
-      }
+      action={onChangeOwner && <TextLink onClick={onChangeOwner}>Change owner…</TextLink>}
     >
       This Agent can’t be edited or placed until it has an owner in T3.
     </ProblemCard>
@@ -288,7 +282,7 @@ function OverridesCard({ draft, state, ownership, global }: CardProps) {
         tone="attention"
         title="Project overrides can’t be kept"
         action={
-          <TextLink trailing="chevron" onClick={draft.removeOverrides}>
+          <TextLink onClick={draft.removeOverrides}>
             {overrides === 1 ? "Remove override" : "Remove overrides"}
           </TextLink>
         }
@@ -360,16 +354,8 @@ function CreateOutcomeCard({
         Open Agent
       </TextLink>
     ),
-    absent: (
-      <TextLink trailing="chevron" onClick={draft.createAgain}>
-        Create again
-      </TextLink>
-    ),
-    unconfirmed: (
-      <TextLink trailing="chevron" onClick={() => void draft.checkCreate()}>
-        Check again
-      </TextLink>
-    ),
+    absent: <TextLink onClick={draft.createAgain}>Create again</TextLink>,
+    unconfirmed: <TextLink onClick={() => void draft.checkCreate()}>Check again</TextLink>,
     checking: undefined,
     removed: undefined,
   };

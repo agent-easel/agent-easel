@@ -26,9 +26,7 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
       title={`This ${kind} was removed elsewhere`}
       action={
         <div className="grid gap-2">
-          <TextLink trailing="chevron" onClick={() => void copy()}>
-            Copy as JSON
-          </TextLink>
+          <TextLink onClick={() => void copy()}>Copy as JSON</TextLink>
           {copied === json && <p role="status">Copied to clipboard.</p>}
           {fallback && (
             <div className="grid w-full gap-2">

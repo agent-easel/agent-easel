@@ -554,11 +554,7 @@ function RefreshProjects({ model }: { model: Composer }) {
   const { projects } = model;
   return (
     <MutationGate>
-      <TextLink
-        trailing="chevron"
-        disabled={projects.busy}
-        onClick={() => void projects.act(api.recheckProjects)}
-      >
+      <TextLink disabled={projects.busy} onClick={() => void projects.act(api.recheckProjects)}>
         Refresh projects
       </TextLink>
     </MutationGate>
@@ -725,7 +721,7 @@ function outcomeLaunchNotice(model: Composer) {
         title="We couldn’t confirm the start"
         action={
           <MutationGate>
-            <TextLink trailing="chevron" disabled={draft.busy} onClick={() => void start()}>
+            <TextLink disabled={draft.busy} onClick={() => void start()}>
               Check now
             </TextLink>
           </MutationGate>

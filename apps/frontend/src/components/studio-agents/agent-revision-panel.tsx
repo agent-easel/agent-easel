@@ -174,7 +174,6 @@ export function AgentRevisionCard({
             <span role="status">Loading the latest revision…</span>
           ) : (
             <TextLink
-              trailing="chevron"
               onClick={() => {
                 setComparisonOpen(true);
                 draft.compare();
