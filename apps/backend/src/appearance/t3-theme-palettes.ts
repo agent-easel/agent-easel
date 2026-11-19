@@ -28,7 +28,7 @@
  * SOFTWARE.
  */
 import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
-import type { PublishedT3Theme, T3ThemeColors } from "../adapters/t3.ts";
+import type { PublishedT3Theme, T3ThemeColors } from "../t3/appearance.ts";
 import { canonicalThemeColor, generateSeedColors } from "./t3-theme-generator.ts";
 
 /** The T3 revision these palettes and their resolution were inspected and ported from. */

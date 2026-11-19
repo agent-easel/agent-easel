@@ -34,7 +34,7 @@ async function authorizedFactory(
   await factory.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
   await factory.recheckConnection();
-  return { factory, adapter: live.adapter, directory };
+  return { factory, appearance: live.appearance, directory };
 }
 
 it("Factory follows T3's published default theme over the authorized T3 connection without another pairing", async (context) => {
@@ -75,10 +75,10 @@ it("a T3 that lists no t3_theme_read reads as unsupported rather than as an outa
   // Arrange
   const external = await oauthT3();
   context.onTestFinished(() => external.close());
-  const { adapter } = await authorizedFactory(context, external);
+  const { appearance } = await authorizedFactory(context, external);
 
   // Act
-  const read = await adapter.readTheme({ endpoint: external.endpoint });
+  const read = await appearance.readTheme({ endpoint: external.endpoint });
 
   // Assert
   expect(read).toBe(null);
@@ -90,10 +90,10 @@ it("a default theme id outside T3's published form reaches Factory cut and unabl
     themeRead: () => ({ current: "ocean".repeat(12), builtIn: [], published: [], guide: "" }),
   });
   context.onTestFinished(() => external.close());
-  const { adapter } = await authorizedFactory(context, external);
+  const { appearance } = await authorizedFactory(context, external);
 
   // Act
-  const read = await adapter.readTheme({ endpoint: external.endpoint });
+  const read = await appearance.readTheme({ endpoint: external.endpoint });
 
   // Assert
   expect(read?.defaultTheme).toBe(`${"ocean".repeat(12).slice(0, 48)}…`);

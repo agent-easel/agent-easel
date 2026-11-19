@@ -359,11 +359,7 @@ export class ControlledT3 implements T3Modules, T3Adapter {
     return this.controlledProviders;
   }
   /** `t3_theme_read` of the same environment. */
-  readonly appearance = new ControlledAppearance();
-  async readTheme(_target: T3Endpoint) {
-    this.connection.requireConnection();
-    return this.appearance.read(this.connection.environmentId);
-  }
+  readonly appearance = new ControlledAppearance(this.connection);
   async close() {}
 }
 

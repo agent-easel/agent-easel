@@ -103,7 +103,7 @@ export const makeFactoryService = (
       changes,
     );
     const appearance = yield* makeAppearance(
-      t3.adapter,
+      t3.appearance,
       connection.getConnection,
       intervalMs,
       changes,

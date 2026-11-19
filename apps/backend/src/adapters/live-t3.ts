@@ -1,7 +1,6 @@
 import { stat } from "node:fs/promises";
 import { isAbsolute, basename } from "node:path";
 import { threadRepository } from "./worker-repository.ts";
-import { themeListing, themeRead } from "./t3-theme-read.ts";
 import type {
   AttachmentUpload,
   T3Adapter,
@@ -27,7 +26,7 @@ import {
   type T3Session,
   type T3Target,
 } from "../t3/connection.ts";
-import { hasEnvironmentIdentity, readEnvironmentIdentity } from "../t3/environment-identity.ts";
+import { hasEnvironmentIdentity } from "../t3/environment-identity.ts";
 import type { AgentEnvironment } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
@@ -305,20 +304,6 @@ export class LiveT3Adapter implements T3Adapter {
           ? body.label.trim()
           : body.environmentId;
       return { environmentId: body.environmentId, label };
-    });
-  }
-  async readTheme(target: T3Endpoint) {
-    return this.connection.authorized(target, async (session) => {
-      const tools = await session.tools();
-      if (!tools.some((tool) => tool.name === "t3_theme_read")) return null;
-      const read = async (args: Record<string, string>) =>
-        structured(await session.call("t3_theme_read", args, 10_000));
-      const environmentId = await readEnvironmentIdentity(session);
-      const listing = themeListing(await read({}));
-      const file = listing.published.includes(listing.defaultTheme)
-        ? await read({ themeId: listing.defaultTheme })
-        : null;
-      return themeRead(environmentId, listing, file);
     });
   }
   async orchestratorCapabilities(target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {

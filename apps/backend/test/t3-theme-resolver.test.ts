@@ -1,5 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
-import { publishedThemes } from "../src/adapters/t3-theme-read.ts";
+import { publishedThemes } from "../src/t3/theme-read.ts";
 import { T3_RESOLVER_PIN, resolveT3Theme } from "../src/appearance/t3-theme-palettes.ts";
 import {
   upstreamBuiltIn,
