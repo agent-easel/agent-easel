@@ -35,6 +35,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - `conversation`: Demo · Discussing · Agent asked about empty-state wording
 - `rejected-report`: Demo · Problem · Report exit needs correction
 - `human-review`: Demo · Waiting for your review
+- `human-context`: Demo · Decision · Long review summary for the reset action
 - `correction`: Demo · Corrections back in review
 - `parallel`: Demo · Two reviewers working in parallel
 - `parallel-start`: Demo · Parallel review from one prompt

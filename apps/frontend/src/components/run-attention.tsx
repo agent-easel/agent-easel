@@ -1,4 +1,4 @@
-import { RunTextReaderLink } from "./run-result.tsx";
+import { AgentTextPreview } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -281,7 +281,7 @@ function QuestionMatter({
   // A settling Run accepts no answers, so its question cards show no Needs input chip.
   const answerable = !run.settlement;
   if (item.kind === "human") {
-    const source = occurrenceSource(
+    const source = parallelSource(
       run,
       run.humanOccurrences.find((entry) => entry.id === item.occurrenceId),
     );
@@ -548,12 +548,16 @@ function SettleRunAction({ run }: { run: RunDetail }) {
 }
 
 /** Figma RD50: where a pending Human occurrence came from, when its step has several pending. */
-function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence | undefined) {
+function parallelSource(run: RunDetail, occurrence: HumanOccurrence | undefined) {
   if (!occurrence) return null;
   const parallel = run.humanOccurrences.filter(
     (item) => item.blockId === occurrence.blockId && item.state === "pending",
   );
-  if (parallel.length < 2) return null;
+  return parallel.length < 2 ? null : occurrenceSource(run, occurrence);
+}
+
+/** "From Review implementation · Visit 1": the Block and visit whose result reached the occurrence. */
+function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence) {
   const intent = run.intents.find((item) => item.id === occurrence.incomingIntentId);
   if (!intent?.sourceBlockId) return null;
   const source = run.blocks.find((block) => block.blockId === intent.sourceBlockId);
@@ -705,16 +709,20 @@ function HumanResponseForm({
   return (
     <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
       {occurrence.context && (
-        <>
-          <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
-          <RunTextReaderLink
-            label="Read context"
-            title={`${blockName} · context`}
-            metadata={clockTime(occurrence.appearedAt)}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <AgentTextPreview
             text={occurrence.context}
-            link={null}
+            readLabel="Read full context"
+            variant="needs-input"
+            heading={{
+              title: `${blockName} · context`,
+              provenance: [occurrenceSource(run, occurrence), clockTime(occurrence.appearedAt)]
+                .filter(Boolean)
+                .join(" · "),
+              t3Link: null,
+            }}
           />
-        </>
+        </div>
       )}
       <DecisionSelect
         value={exitId}

@@ -84,6 +84,37 @@ const reviewContent = {
   },
 };
 
+/** A review written as Markdown: long enough for the Human step to preview it with Read full context. */
+const longReviewContext = [
+  "## Review summary",
+  "",
+  "The search behavior looks good. Two wording choices need your decision before release.",
+  "The [empty-state notes](https://example.com/atlas/empty-state) list the options.",
+  "",
+  "### Empty state",
+  "",
+  '- Title: `No results for "{query}"`',
+  "- The query stays visible in the search field.",
+  "- The body suggests clearing filters instead of retrying the same search.",
+  "",
+  "### Reset action",
+  "",
+  "The button is labelled **Reset filters**. It clears `status`, `owner` and `tag` but keeps the query:",
+  "",
+  "```",
+  "GET /search?q=atlas&status=any&owner=me",
+  "→ GET /search?q=atlas",
+  "```",
+  "",
+  'The reviewed markup is <button class="reset">Reset filters</button>.',
+  "",
+  "### Decide",
+  "",
+  "Approve if the reset action is clear enough.",
+  "Request changes if it should also clear the query.",
+  "Compare it with the [reset filters layout](https://example.com/atlas/reset-filters).",
+].join("\n");
+
 const continuationContent = {
   prompt:
     "Plan saved searches for Atlas. Interview me about scope first, then write the spec and the tickets in the same conversation.",
@@ -210,6 +241,14 @@ export const seedScenarioList: readonly SeedScenario[] = [
     flow: "review",
     state: "result released to a Human review",
     ...reviewContent,
+  },
+  {
+    key: "human-context",
+    title: "Decision · Long review summary for the reset action",
+    flow: "review",
+    state: "result released to a Human review",
+    ...reviewContent,
+    review: { exit: "Ready for your decision", message: longReviewContext },
   },
   {
     key: "correction",

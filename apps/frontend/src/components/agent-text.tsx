@@ -1,6 +1,7 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -16,13 +17,19 @@ import { CopyButton } from "./copy-button.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 
-type Density = "card" | "reader";
+/** `card` previews a result; `attention` is a Needs input card's text, read before deciding. */
+type Density = "card" | "attention" | "reader";
 
 const typography: Record<Density, { title: string; heading: string; text: string }> = {
   card: {
     title: "text-sm font-semibold text-foreground",
     heading: "text-sm font-semibold text-foreground",
     text: "text-sm text-muted-foreground",
+  },
+  attention: {
+    title: "text-sm font-semibold text-foreground",
+    heading: "text-sm font-semibold text-foreground",
+    text: "text-sm text-foreground",
   },
   reader: {
     title: "text-lg font-semibold text-foreground",
@@ -97,18 +104,22 @@ function markdownComponents(density: Density): Components {
   };
 }
 
-const components = { card: markdownComponents("card"), reader: markdownComponents("reader") };
+const components = {
+  card: markdownComponents("card"),
+  attention: markdownComponents("attention"),
+  reader: markdownComponents("reader"),
+};
 
 /**
- * One rendering of Agent-written text: CommonMark with GitHub tables and task lists. Raw HTML stays
- * literal text and links open outside Factory.
+ * One rendering of Agent-written text: CommonMark with GitHub tables and task lists, keeping single
+ * line breaks. Raw HTML stays literal text and links open outside Factory.
  */
 function AgentMarkdown({ text, density }: { text: string; density: Density }) {
   return (
     <div
-      className={cn("flex min-w-0 flex-col break-words", density === "card" ? "gap-2" : "gap-3")}
+      className={cn("flex min-w-0 flex-col break-words", density === "reader" ? "gap-3" : "gap-2")}
     >
-      <Markdown remarkPlugins={[remarkGfm]} components={components[density]}>
+      <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} components={components[density]}>
         {text}
       </Markdown>
     </div>
@@ -208,21 +219,38 @@ export function AgentTextReader({
   );
 }
 
-/** Collapsed previews fade out only when the text is longer than the preview. */
-function useOverflowing() {
+/**
+ * Collapsed previews fade out only when the text is longer than the preview. A link or scrolling
+ * block (code, table) the clamp cuts off leaves the tab order, so focus never lands out of sight
+ * or scrolls the preview; the reader keeps every one of them.
+ */
+function useClampedPreview(text: string) {
   const ref = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const measure = () => setOverflowing(element.scrollHeight > element.clientHeight + 1);
+    const measure = () => {
+      const bottom = element.getBoundingClientRect().bottom;
+      for (const stop of element.querySelectorAll<HTMLElement>("a, pre, div:has(> table)")) {
+        if (stop.getBoundingClientRect().bottom > bottom + 1) stop.tabIndex = -1;
+        else stop.removeAttribute("tabindex");
+      }
+      setOverflowing(element.scrollHeight > element.clientHeight + 1);
+    };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     if (element.firstElementChild) observer.observe(element.firstElementChild);
     return () => observer.disconnect();
-  }, []);
+  }, [text]);
   return [ref, overflowing] as const;
 }
+
+const previews = {
+  result: { density: "card", clamp: "max-h-16", fade: "mask-b-from-50%" },
+  // Figma RD42: the 64 px fade ends a 198 px preview, and the decision follows it.
+  "needs-input": { density: "attention", clamp: "max-h-49.5", fade: "mask-b-from-33.5" },
+} as const;
 
 /**
  * Agent-written Markdown clamped to its rendered beginning, faded when it continues, with a link
@@ -235,6 +263,7 @@ export function AgentTextPreview({
   heading,
   empty,
   footer,
+  variant = "result",
 }: {
   text: string;
   readLabel: string;
@@ -242,22 +271,22 @@ export function AgentTextPreview({
   /** What the reader says when `text` is empty. */
   empty?: string | undefined;
   footer?: ReactNode;
+  /** A Needs input card previews more of its text, in the card's own text colour. */
+  variant?: keyof typeof previews;
 }) {
   const [reading, setReading] = useState(false);
-  const [preview, overflowing] = useOverflowing();
+  const [preview, overflowing] = useClampedPreview(text);
   const readable = overflowing || !!heading.technicalDetails;
+  const { density, clamp, fade } = previews[variant];
   return (
     <>
       {text && (
         <div
           ref={preview}
           data-result-preview
-          className={cn(
-            "max-h-16 overflow-hidden",
-            overflowing && "mask-b-from-50% mask-b-to-100%",
-          )}
+          className={cn("overflow-hidden", clamp, overflowing && cn(fade, "mask-b-to-100%"))}
         >
-          <AgentMarkdown text={text} density="card" />
+          <AgentMarkdown text={text} density={density} />
         </div>
       )}
       {(footer || readable) && (
@@ -268,7 +297,8 @@ export function AgentTextPreview({
               type="button"
               variant="link"
               size="xs"
-              className="text-label"
+              // Figma RD42: alone on its row, the link lines up with the text above it.
+              className={cn("text-label", !footer && "h-auto py-0.5 has-[>svg]:px-0")}
               onClick={() => setReading(true)}
             >
               {readLabel}

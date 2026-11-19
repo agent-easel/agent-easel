@@ -489,6 +489,136 @@ test("a Human correction answered from the selected Human step revisits the same
   await app.screenshot("same-worker-second-visit");
 });
 
+const longContextRun = "UI worker · Decision · Long review summary for the reset action";
+
+/** The Overview's answer form for the long-context Human step, before anything is chosen. */
+async function openLongContextAnswer(app: App, screen: Screen) {
+  const found = await findRun(app.baseUrl, longContextRun);
+  await app.open(`/runs/${found.id}`);
+  const answer = screen
+    .getByRole("complementary", "Run inspector")
+    .getByRole("form", "Answer Your review", { exact: true });
+  await expect(answer).toBeVisible();
+  return {
+    found,
+    answer,
+    reader: screen.getByRole("dialog", "Your review · context", { exact: true }),
+  };
+}
+
+test("a long Human context previews as Markdown on its card and opens in full in the reader without decision controls", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer, reader } = await openLongContextAnswer(app, screen);
+  await expect(answer.getByRole("heading", "Review summary", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("listitem")).toHaveCount(3);
+  await expect(answer.getByText('No results for "{query}"', { exact: true })).toBeVisible();
+  await app.screenshot("human-context-preview");
+
+  // Act
+  await answer.getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  await expect(reader).toContainText(/From Review implementation · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Decide", { exact: true })).toBeVisible();
+  await expect(reader.getByText("→ GET /search?q=atlas", { exact: false })).toBeVisible();
+  await expect(reader).toContainText('<button class="reset">Reset filters</button>');
+  expect(
+    await browser.evaluate(
+      `!document.querySelector('[role="dialog"] [data-result-body] button') && document.querySelector('[role="dialog"] [data-result-body]').innerText.includes("clear enough.\\nRequest changes")`,
+    ),
+  ).toBe(true);
+  await expect(reader.getByRole("combobox")).toHaveCount(0);
+  await expect(reader.getByRole("button", "Submit answer", { exact: true })).toHaveCount(0);
+  await app.screenshot("human-context-reader");
+});
+
+test("Esc closes the Human context reader and returns focus to Read full context", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer, reader } = await openLongContextAnswer(app, screen);
+  await answer.getByRole("button", "Read full context", { exact: true }).tap();
+  await expect(reader).toBeVisible();
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(reader).toHaveCount(0);
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
+});
+
+test("Tab skips the context links the clamped preview hides and reaches Read full context", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer } = await openLongContextAnswer(app, screen);
+  await expect(answer.getByRole("link", "reset filters layout", { exact: true })).toHaveCount(1);
+  await answer.getByRole("link", "empty-state notes", { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Tab");
+
+  // Assert
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
+});
+
+test("an answer submits from the Human card while its context is long", async ({ app, screen }) => {
+  // Arrange
+  const { found, answer } = await openLongContextAnswer(app, screen);
+  await answer
+    .getByRole("combobox", "Decision")
+    .selectOption({ label: "Approve — ends this branch" });
+
+  // Act
+  await answer.getByRole("button", "Submit answer", { exact: true }).tap();
+
+  // Assert
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).humanOccurrences[0]?.state)
+    .toBe("answered");
+});
+
+test("parallel Human occurrences each open their own context in the reader", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, "UI worker · Two reviews wait for your decision");
+  await app.open(`/runs/${found.id}`);
+  const attention = screen.getByRole("complementary", "Run inspector");
+  const accessibility = attention.getByRole(
+    "article",
+    "Needs input · Your decision · From Accessibility review · Visit 1",
+    { exact: true },
+  );
+  await expect(
+    attention
+      .getByRole("article", "Needs input · Your decision · From Code review · Visit 1", {
+        exact: true,
+      })
+      .getByRole("button", "Read full context", { exact: true }),
+  ).toBeVisible();
+  await app.screenshot("parallel-human-context");
+
+  // Act
+  await accessibility.getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Your decision · context", { exact: true });
+  await expect(reader).toContainText(/From Accessibility review · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Accessibility review", { exact: true })).toBeVisible();
+  await expect(reader).not.toContainText("Code review");
+});
+
 test("Settle confirmation cancels without changes, then stops workers and settles from the row menu", async ({
   app,
   screen,

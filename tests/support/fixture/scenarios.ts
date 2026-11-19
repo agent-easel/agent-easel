@@ -23,7 +23,9 @@ import {
   workerAtWork,
   workerHandle,
   generatedTitleApplied,
+  humanStep,
   observeFor,
+  twoWorkersStarted,
 } from "../../../apps/backend/test/support/scenarios.ts";
 import type { RunDetail } from "../../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../../packages/domain-validation/src/index.ts";
@@ -146,6 +148,22 @@ async function createFixtureScenarioSet(host: Host) {
     ],
     connections: [connection("worker", "review", "pause")],
   });
+  // Two reviews of one change reach the same Human step as parallel occurrences (Figma RD50).
+  const parallelDecision = await saveFlow(factory, "UI decision · Two reviews, one decision", {
+    flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("reviewer", "Code review", world.agents.reviewer, { x: 320, y: 40 }),
+      agentBlock("accessibility", "Accessibility review", world.agents.accessibility, {
+        x: 320,
+        y: 320,
+      }),
+      humanStep("decision", "Your decision", { x: 700, y: 180 }),
+    ],
+    connections: [
+      connection("reviewer", "approved", "decision"),
+      connection("accessibility", "approved", "decision"),
+    ],
+  });
 
   // Exercise published defaults and mixed value domains through the Agent editor.
   t3.controlledProviders[0] = {
@@ -258,8 +276,40 @@ async function createFixtureScenarioSet(host: Host) {
   });
   requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
   await createOwnershipSet(host, unselectedModelOptions);
-  return { pause, launch };
+  return { pause, launch, parallelDecision };
 }
+
+/** Each parallel review, long enough for its Human occurrence to preview it. */
+const parallelReviews = [
+  [
+    "## Code review",
+    "",
+    "The filters panel code is ready to ship.",
+    "",
+    "- Filter state lives in one reducer.",
+    "- `clearFilters` keeps the query.",
+    "- Errors from the count request show inline.",
+    "",
+    "### Nits",
+    "",
+    "One naming nit is noted inline; it does not block the release.",
+    "Rename `countQuery` to `resultCountQuery` when convenient.",
+  ].join("\n"),
+  [
+    "## Accessibility review",
+    "",
+    "Keyboard navigation works across the filters panel.",
+    "",
+    "- Focus returns to the filter button after closing.",
+    "- Every checkbox has a visible label.",
+    "- The result count is announced politely.",
+    "",
+    "### Checked",
+    "",
+    "Screen reader output was checked with the panel open and closed.",
+    "Zoom at 200% keeps every filter reachable without horizontal scrolling.",
+  ].join("\n"),
+] as const;
 
 /**
  * Project-owned definitions for Studio's owner grouping: Northwind stays available, while Docs
@@ -486,6 +536,32 @@ export async function scenariosFixture(host: Host) {
   });
   /** The fixture's scenario copy, prepared on a journey's first request. */
   const refreshPrepared = scenarioCopy("UI worker · ", "ui-worker", [
+    [
+      "parallel-decision",
+      async (keyNamespace) => {
+        const [first, second] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.parallelDecision,
+            "parallel-decision",
+            "UI worker · Two reviews wait for your decision",
+            "Review the Atlas filters panel for code quality and keyboard accessibility.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        await resultReported(context, first, { exit: "Approved", message: parallelReviews[0] });
+        await resultReported(context, second, { exit: "Approved", message: parallelReviews[1] });
+        await observeFor(
+          "observe both decisions",
+          context,
+          first.runId,
+          (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,
+        );
+        return first.runId;
+      },
+    ],
     [
       "report-release",
       async (keyNamespace) =>
