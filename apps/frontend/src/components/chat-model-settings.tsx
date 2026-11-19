@@ -22,6 +22,7 @@ import {
   FieldRow,
   SaveActions,
   SecretField,
+  secretInputShown,
   useChatControlSection,
   type MovedSecretChoice,
   type SaveFailure,
@@ -390,7 +391,10 @@ function KeyRow({
     onValue: (value: string) => onChange({ ...draft, keyValue: value }),
   };
   return (
-    <FieldRow label="API key" htmlFor="chat-model-key">
+    <FieldRow
+      label="API key"
+      htmlFor={secretInputShown({ ...field, choice: draft.keyChoice }) ? field.id : undefined}
+    >
       {keyDecisionNeeded(draft, settings) ? (
         <SecretField {...field} destinationChanged choice={draft.keyChoice} />
       ) : (

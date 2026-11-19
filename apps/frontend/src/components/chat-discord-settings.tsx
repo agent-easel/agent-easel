@@ -44,6 +44,7 @@ import {
   FieldRow,
   SaveActions,
   SecretField,
+  secretInputShown,
   useChatControlSection,
   type SecretChoice,
 } from "./chat-control-form.tsx";
@@ -604,7 +605,14 @@ function BotCard({
             <CopyButton text={configuration.publicKey} label="Copy Public key" />
           )}
         </FieldRow>
-        <FieldRow label="Bot token" htmlFor="discord-token">
+        <FieldRow
+          label="Bot token"
+          htmlFor={
+            secretInputShown({ stored: configuration.tokenConfigured, choice: draft.tokenChoice })
+              ? "discord-token"
+              : undefined
+          }
+        >
           <SecretField
             tag={failure?.tag && <StatusBadge kind="error">{failure.tag}</StatusBadge>}
             id="discord-token"
