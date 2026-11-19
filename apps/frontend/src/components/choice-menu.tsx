@@ -247,7 +247,7 @@ function ChoiceRow({ choice, at, id }: { choice: MenuChoice; at: number; id: str
           )}
         </span>
         {choice.description && (
-          <span id={descriptionId} className="text-2xs break-words text-muted-foreground">
+          <span id={descriptionId} className="text-2xs wrap-anywhere text-muted-foreground">
             {choice.description}
           </span>
         )}
