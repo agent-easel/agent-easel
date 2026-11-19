@@ -107,19 +107,17 @@ it("each exit's recipients follow connection order, and a missing target has no 
   expect(recipients("a", "unwired")).toStrictEqual([]);
 });
 
-it("one block's recipients read the same as the canvas index and leave out other blocks' exits", () => {
+it("one block's recipients follow connection order and leave out other blocks' exits", () => {
   // Arrange
   const graph = wiringGraph();
 
   // Act
-  const ab = blockExitRecipients(graph, "a:b");
-  const a = blockExitRecipients(graph, "a");
+  const recipients = blockExitRecipients(graph, "a:b");
 
   // Assert
-  expect(ab("c")).toStrictEqual(["Target", "Target", undefined]);
-  expect(a("b:c")).toStrictEqual(["Target"]);
-  expect(a("c")).toStrictEqual([]);
-  expect(a("unwired")).toStrictEqual([]);
+  expect(recipients("c")).toStrictEqual(["Target", "Target", undefined]);
+  expect(recipients("b:c")).toStrictEqual([]);
+  expect(recipients("unwired")).toStrictEqual([]);
 });
 
 it("a Condition output's row reads its rule's first arrival, a draft rule's missing number or Otherwise's fallback", () => {
