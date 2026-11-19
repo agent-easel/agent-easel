@@ -1,4 +1,9 @@
-import type { RunAttention, RunBlock, RunDetail } from "@t3-factory/contracts";
+import {
+  awaitsReviewInT3,
+  type RunAttention,
+  type RunBlock,
+  type RunDetail,
+} from "@t3-factory/contracts";
 
 /**
  * Plain wording for each Attention card: one sentence that names the Block and what happened, and
@@ -59,6 +64,30 @@ export function requestReportBlocker(run: RunDetail, block: RunBlock | undefined
   if (block.engineStatus !== "completed" || block.freshness !== "fresh") return "not-idle" as const;
   if (block.pendingRequestCount !== 0) return "not-idle" as const;
   return null;
+}
+
+/** T3 threads a pending Attention card already opens. An activation hides only a binding whose
+ * own link is one of these, so another thread on the same Block keeps its link. */
+export function attentionLinkedThreads(run: RunDetail) {
+  const reviews = run.settlement ? [] : run.blocks.filter((block) => awaitsReviewInT3(block));
+  return new Set([
+    ...run.attention.flatMap((item) => (!item.settledAt && item.link ? [item.link] : [])),
+    ...reviews.flatMap((block) => (block.link ? [block.link] : [])),
+    ...(run.attention.some((item) => item.kind === "settlement-unresolved" && !item.settledAt)
+      ? blockedWorkers(run).flatMap((worker) => (worker.link ? [worker.link] : []))
+      : []),
+  ]);
+}
+
+/** The worker or coordinator thread that can fix a failed worktree. Never the title thread. */
+export function worktreeFixHref(run: RunDetail): string | null {
+  const byId = new Map(run.blocks.map((block) => [block.blockId, block]));
+  for (const id of run.definitions.flow.graph.flowInput.targetBlockIds) {
+    const link = byId.get(id)?.link;
+    if (link) return link;
+  }
+  for (const block of run.blocks) if (block.link) return block.link;
+  return run.runCoordinator?.link ?? null;
 }
 
 /** The workers a settlement could not resolve. */

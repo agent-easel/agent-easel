@@ -75,9 +75,10 @@ test("an unconfirmed Start keeps an Idle row and does not call the outcome Unkno
   await startLosingResponse(screen, browser);
   await expect(screen.getByText(/Start outcome unknown/)).toBeVisible();
   await expect(screen.getByText(/The row shows Unknown until T3 confirms/)).toHaveCount(0);
+  await expect(screen.getByRole("link", "Confirm this Start later", { exact: true })).toBeVisible();
   await expect(
     screen.getByRole("link", "Confirm this Start later Idle", { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(screen.getByRole("link", /^Confirm this Start later\s*Draft$/)).toHaveCount(0);
   await app.screenshot("after-outcome-unknown");
 });

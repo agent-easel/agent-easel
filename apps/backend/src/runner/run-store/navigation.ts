@@ -43,14 +43,16 @@ export function openRunNavigation(database: RunnerDatabase) {
             project_title: string;
             workspace_root: string;
             availability: RunNavigationEntry["project"]["availability"];
-          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,
+            workspace_state: "preparing" | "bound" | "failed" | null;
+          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,w.state AS workspace_state,
           COALESCE((SELECT MAX(e.observed_at) FROM run_events e WHERE e.run_id=r.id AND e.kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')),r.started_at) AS last_activity_at,
           CASE WHEN r.settled_at IS NULL THEN EXISTS(${pendingRunWork(sql, sql`r.id`)}) ELSE 0 END AS pending_work,
           f.name AS flow_name,p.project_icon_json,p.favicon_path,
           p.id AS project_id,p.title AS project_title,p.workspace_root,p.availability
           FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
           JOIN flow_revisions f ON f.id=r.flow_revision_id
-          LEFT JOIN run_presentation rp ON rp.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
+          LEFT JOIN run_presentation rp ON rp.run_id=r.id
+          LEFT JOIN run_workspaces w ON w.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
           const settlements = yield* readRunSettlementStates(sql, rows);
           const origins = yield* readRunOrigins(sql);
           const titleGenerations = yield* readTitleGenerations(
@@ -169,7 +171,9 @@ export function openRunNavigation(database: RunnerDatabase) {
                     settlement === null &&
                     (reviewInT3.has(row.id) ||
                       matters.some((matter) => matter.presentation === "needs-input")),
-                  problem: matters.some((matter) => matter.presentation === "problem"),
+                  problem:
+                    (active && row.workspace_state === "failed") ||
+                    matters.some((matter) => matter.presentation === "problem"),
                   matters,
                 },
               };

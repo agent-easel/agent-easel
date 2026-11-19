@@ -1,7 +1,7 @@
 import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
-import { attentionLinkedBlocks } from "./run-attention.tsx";
+import { attentionLinkedThreads } from "../attention-copy.ts";
 import { ResultCard } from "./run-result.tsx";
 
 export const bindingRole: Record<RunThreadBinding["role"], string> = {
@@ -59,9 +59,10 @@ function Activation({
       .findIndex((a) => a.id === activation.id) + 1;
   const report = run.reports.findLast((r) => r.activationId === activation.id);
   const name = run.blocks.find((b) => b.blockId === activation.blockId)?.name ?? activation.blockId;
-  // A thread a pending Attention card already opens gets no second link here, and the card
-  // states the visit's problem, whose raw reason stays in its Technical details.
-  const linked = attentionLinkedBlocks(run).has(activation.blockId);
+  // A thread a pending Attention card already opens gets no second link here. Another binding
+  // on the same Block keeps its own link. The card states the visit's problem.
+  const linkedThreads = attentionLinkedThreads(run);
+  const linked = (link: string | null) => link !== null && linkedThreads.has(link);
   const problem =
     run.lifecycle !== "archived" &&
     !run.attention.some((item) => item.blockId === activation.blockId && !item.settledAt) &&
@@ -74,7 +75,9 @@ function Activation({
       <ResultCard
         run={run}
         report={report}
-        titleOnly={{ workerLink: linked ? null : (worker?.link ?? null) }}
+        titleOnly={{
+          workerLink: worker?.link && linked(worker.link) ? null : (worker?.link ?? null),
+        }}
       />
     );
   }
@@ -82,7 +85,7 @@ function Activation({
     <>
       {problem && <p className="text-xs text-attention">{problem}</p>}
       {run.threadBindings
-        .filter((b) => b.blockId === activation.blockId && !(b.link && linked))
+        .filter((b) => b.blockId === activation.blockId && !linked(b.link))
         .map((binding) => (
           <div key={binding.id} className="flex flex-col gap-1 text-xs">
             <BindingLink binding={binding} />
@@ -103,7 +106,10 @@ function Activation({
       </ResultCard>
     );
   const workers = run.threadBindings.flatMap((binding) =>
-    binding.blockId === activation.blockId && binding.role === "worker" && binding.link && !linked
+    binding.blockId === activation.blockId &&
+    binding.role === "worker" &&
+    binding.link &&
+    !linked(binding.link)
       ? [{ id: binding.id, link: binding.link }]
       : [],
   );
@@ -124,7 +130,9 @@ function Activation({
       </div>
       {problem && <p className="text-xs text-attention">{problem}</p>}
       {run.threadBindings
-        .filter((b) => b.blockId === activation.blockId && b.role === "descendant")
+        .filter(
+          (b) => b.blockId === activation.blockId && b.role === "descendant" && !linked(b.link),
+        )
         .map((binding) => (
           <div key={binding.id} className="flex flex-col gap-1 text-xs">
             <BindingLink binding={binding} />

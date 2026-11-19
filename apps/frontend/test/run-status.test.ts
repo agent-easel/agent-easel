@@ -1,5 +1,10 @@
 import { expect, it } from "vite-plus/test";
-import { lifecycleAt, runFreshness, waitsForWorkerConfirmation } from "../src/run-status.ts";
+import {
+  lifecycleAt,
+  runActivity,
+  runFreshness,
+  waitsForWorkerConfirmation,
+} from "../src/run-status.ts";
 import { block, event, runDetail, runEntry } from "./support/run.ts";
 
 it("a reopened Run shows the time of its latest settlement", () => {
@@ -20,7 +25,7 @@ it("a reopened Run shows the time of its latest settlement", () => {
   expect(at).toBe("2026-11-08T10:15:00Z");
 });
 
-it("a finished Block with a pending handoff is not yet waiting for worker confirmation", () => {
+it("a finished Block with a pending handoff is idle and not yet waiting for worker confirmation", () => {
   // Arrange
   const run = {
     ...runEntry(),
@@ -30,9 +35,25 @@ it("a finished Block with a pending handoff is not yet waiting for worker confir
 
   // Act
   const waiting = waitsForWorkerConfirmation(run);
+  const activity = runActivity(run);
 
   // Assert
   expect(waiting).toBe(false);
+  expect(activity).toBe("idle");
+});
+
+it("a Block that is waiting is the Waiting activity", () => {
+  // Arrange
+  const run = {
+    ...runEntry(),
+    blocks: [{ ...block("worker"), state: "waiting" as const }],
+  };
+
+  // Act
+  const activity = runActivity(run);
+
+  // Assert
+  expect(activity).toBe("waiting");
 });
 
 it("a stale started block makes an active Run Not live since its latest observation", () => {

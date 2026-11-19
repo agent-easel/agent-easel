@@ -18,6 +18,7 @@ import { api } from "../api.ts";
 import {
   blockedWorkers,
   matterCopy,
+  worktreeFixHref,
   pendingRecovery,
   reportCopy,
   reportReasonCode,
@@ -88,20 +89,6 @@ export function attentionPending(run: RunDetail) {
     reviewsInT3(run, undefined).length > 0 ||
     workspaceFailed(run)
   );
-}
-
-/** The Blocks whose T3 thread a pending Attention card links to; their Activations rows carry no
- * link. */
-export function attentionLinkedBlocks(run: RunDetail) {
-  return new Set([
-    ...run.attention.flatMap((item) =>
-      !item.settledAt && item.link && item.blockId ? [item.blockId] : [],
-    ),
-    ...reviewsInT3(run, undefined).flatMap((block) => (block.link ? [block.blockId] : [])),
-    ...(run.attention.some((item) => item.kind === "settlement-unresolved" && !item.settledAt)
-      ? blockedWorkers(run).flatMap((worker) => (worker.link ? [worker.blockId] : []))
-      : []),
-  ]);
 }
 
 /** A missing report and the report rejections of the same execution are one matter. */
@@ -387,7 +374,6 @@ function ReportProblem({
   compact: boolean;
 }) {
   const first = items[0]!;
-  const missing = items.find((item) => item.kind === "missing-report");
   const rejection = items.findLast((item) => item.kind === "report-problem");
   const { block } = matterFacts(run, first);
   const recovery = reportRecoveryState(
@@ -414,18 +400,6 @@ function ReportProblem({
         title={copy.title}
         next={`Report requested at ${clockTime(recovery.recovery.requestedAt)}. The Agent is checking its work.`}
         actions={link && <OpenInT3 href={link} />}
-        details={details}
-      />
-    );
-  if (!missing)
-    return (
-      <AttentionCard
-        tone="problem"
-        subject={subject}
-        compact={compact}
-        title={copy.title}
-        next="Check the Agent’s work in T3."
-        actions={link && <OpenInT3 href={link} variant="button" />}
         details={details}
       />
     );
@@ -529,17 +503,23 @@ function SettlementActions({ run }: { run: RunDetail }) {
   );
 }
 
-/** Figma RD40: T3 could not create the Run's worktree, so no worker was launched into it. */
+/** Figma RD40: T3 could not create the Run's worktree, so no worker was launched into it.
+ * Open in T3 when a thread holds the fix; otherwise Settle. */
 function WorkspaceProblem({ run }: { run: RunDetail }) {
   const workspace = run.workspace;
+  const fix = worktreeFixHref(run);
   return (
     <AttentionCard
       tone="problem"
       subject="Run"
       compact={false}
       title="T3 couldn’t create this Run’s worktree"
-      next="Settle this Run, then start it again once T3 can create the worktree."
-      actions={<SettleRunAction run={run} />}
+      next={
+        fix
+          ? "Fix it in T3, then start the Run again."
+          : "Settle this Run, then start it again once T3 can create the worktree."
+      }
+      actions={fix ? <OpenInT3 href={fix} variant="button" /> : <SettleRunAction run={run} />}
       details={[
         ["Reason", "worktree-failed"],
         ["Base", workspace.mode === "worktree" ? workspace.baseRef : null],

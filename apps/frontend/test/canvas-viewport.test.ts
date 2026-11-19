@@ -449,6 +449,50 @@ it("a Run without active work opens on the most recently changed finished Block"
   expect(targets).toStrictEqual(["review"]);
 });
 
+it("a later attention resolution on an earlier finished Block does not displace the last visit", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "finished" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "report-accepted" as const },
+      { ...event(3), blockId: "implement", kind: "attention-settled" as const },
+      { ...event(4), blockId: "implement", kind: "execution-observed" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
+});
+
+it("entry focus uses the latest stopped visit when it is newer than an earlier finish", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    blocks: [
+      { ...block("review"), state: "stopped" as const },
+      { ...block("implement"), state: "finished" as const },
+    ],
+    events: [
+      { ...event(1), blockId: "implement", kind: "report-accepted" as const },
+      { ...event(2), blockId: "review", kind: "worker-stopped" as const },
+    ],
+  };
+
+  // Act
+  const targets = selectEntryTargets(run, []);
+
+  // Assert
+  expect(targets).toStrictEqual(["review"]);
+});
+
 it("the Flow editor opens at 100 percent with the Flow input at the left margin and no Block cut", () => {
   // Arrange
   const flowInput = { x: 40, y: 50, width: 180, height: 70 };

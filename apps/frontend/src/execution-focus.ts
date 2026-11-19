@@ -34,6 +34,21 @@ export function selectExecutionTargets(run: {
   return targets.map((block) => block.blockId);
 }
 
+/** Events that end a finished or stopped visit. A later observation or attention resolution on
+ * an already finished Block is not another visit. */
+const VISIT_ENDS = new Set([
+  "report-accepted",
+  "human-answered",
+  "human-cancelled",
+  "wait-forwarded",
+  "wait-continued",
+  "wait-cancelled",
+  "continuation-forwarded",
+  "continuation-passed",
+  "condition-selected",
+  "worker-stopped",
+]);
+
 /** The latest recorded visit is an entry target only. It does not resume following. */
 export function selectEntryTargets(run: RunDetail, targets: readonly string[]): readonly string[] {
   if (
@@ -49,7 +64,9 @@ export function selectEntryTargets(run: RunDetail, targets: readonly string[]): 
       )
       .map(({ blockId }) => blockId),
   );
-  const latest = run.events.findLast((event) => event.blockId && terminal.has(event.blockId));
+  const latest = run.events.findLast(
+    (event) => event.blockId && terminal.has(event.blockId) && VISIT_ENDS.has(event.kind),
+  );
   return latest?.blockId ? [latest.blockId] : targets;
 }
 

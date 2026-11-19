@@ -9,6 +9,7 @@ import {
   workerAtWork,
   workerLaunched,
   workingReportedIdle,
+  worktreeFanOutFlow,
 } from "./support/scenarios.ts";
 
 const repository = {
@@ -340,6 +341,24 @@ it("a pending native request in navigation carries the worker's pending request 
   expect(navigation.value[0]?.attention.matters).toMatchObject([
     { kind: "native-request", pendingRequestCount: 2, blockName: "Entry worker" },
   ]);
+});
+
+it("a Run whose worktree creation failed is a Problem in navigation without an attention matter", async (c) => {
+  // Arrange
+  const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
+  t3.rejectLaunch = true;
+  const started = await f.startRun(input);
+  assert(started.ok);
+  await f.reconcileRuns();
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  assert(navigation.ok);
+  const entry = navigation.value.find((run) => run.id === started.value.id);
+  expect(entry?.lifecycle).toBe("active");
+  expect(entry?.attention).toStrictEqual({ needsInput: false, problem: true, matters: [] });
 });
 
 it("an Agent idle with a working report marks its Run Needs input in navigation without an attention matter", async (c) => {

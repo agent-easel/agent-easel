@@ -149,6 +149,10 @@ function RunProgress({ run, waitingForWorkers }: { run: RunDetail; waitingForWor
       <ul className="-mt-1 flex flex-col gap-1">
         {started.map(({ block, recorded, kind }) => {
           const icon = stateIcon[kind];
+          const status = progressLine(run, block, recorded, kind);
+          const outcome =
+            status.startsWith("→ ") ||
+            (recorded.state === "stopped" && status.startsWith("Stopped"));
           return (
             <li
               key={block.id}
@@ -167,8 +171,13 @@ function RunProgress({ run, waitingForWorkers }: { run: RunDetail; waitingForWor
                   <span className="sr-only">{RUN_STATE_LABELS[kind]}: </span>
                   {block.name}
                 </span>
-                <span className="text-xs break-words text-subtle-foreground">
-                  {progressLine(run, block, recorded, kind)}
+                <span
+                  className={cn(
+                    "text-xs break-words",
+                    outcome ? "text-foreground" : "text-subtle-foreground",
+                  )}
+                >
+                  {status}
                 </span>
               </div>
             </li>

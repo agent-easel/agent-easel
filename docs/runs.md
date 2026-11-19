@@ -512,7 +512,7 @@ fixed Human exits their old exits were mapped to.
   availability and shortcuts: **Snooze** or **Restore**, **Settle**, **Rename**, and **Archive…** for Active Runs,
   and **Rename** and **Archive…** for Settled Runs. Archived Runs have no action menu. The timeline starts collapsed as one bar with the event count, such as **23 events**, and **Show timeline**. The inspector's **Workspace** section reads **Project checkout**, **Preparing worktree** with the base ref until T3 reports the worktree, **Worktree · branch · path**, or
   **Worktree not created**. A worktree T3 could not create is a Run-level Problem card, **T3 couldn’t create this Run’s
-  worktree**, whose action is **Settle…**; T3's reason is in its Technical details. Retained Runs that queued a
+  worktree**. When a worker or the Run coordinator thread can fix it, the action is **Open in T3 ↗** and the next step is to fix it in T3, then start the Run again; otherwise the action is **Settle…**. T3's reason stays in Technical details. Retained Runs that queued a
   first visit on an idle worker prepared under the earlier contract still show **entered · prepared idle T3 thread**.
 - Running worker work is ordinary progress; unavailable observations mark the Block **Not live**, preserving prior facts without creating a Problem.
 

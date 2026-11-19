@@ -22,6 +22,17 @@ const workingTitle = "Demo · Working · Improve the project picker";
 // such a Run, so Settle journeys use the scenario copy started under the current authorization.
 const settleTitle = "UI worker · Snoozed · Navigation research";
 
+test("a Waiting Run's sidebar row uses the Waiting activity", async ({ app, screen, browser }) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/runs/new");
+  const open = screen.getByRole("navigation", "Open Runs");
+
+  // Assert
+  await expect(open.getByRole("link", /Demo · Waiting for your review.*Waiting$/)).toBeVisible();
+  await app.screenshot("sidebar-activity-glyphs");
+});
+
 test("wheeling over the sidebar footer keeps the Run page pinned to the viewport", async ({
   app,
   screen,
@@ -472,8 +483,10 @@ test("a working Run's header shows no Not live while its worker is freshly obser
 test("a Settled Run shows its lifecycle time and selects its grouped sidebar row", async ({
   app,
   screen,
+  browser,
 }) => {
   // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
   const title = "Demo · Settled · Clearer onboarding copy";
   const canvas = screen.getByRole("region", "Execution canvas");
 

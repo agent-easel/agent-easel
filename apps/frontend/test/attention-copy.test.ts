@@ -1,6 +1,22 @@
+import type { RunThreadBinding } from "@t3-factory/contracts";
 import { expect, it } from "vite-plus/test";
-import { reportRecoveryState, settlementPrimary } from "../src/attention-copy.ts";
+import {
+  attentionLinkedThreads,
+  reportRecoveryState,
+  settlementPrimary,
+  worktreeFixHref,
+} from "../src/attention-copy.ts";
 import { attention, block, blockedWorker, runDetail, unresolvedSettlement } from "./support/run.ts";
+
+const binding = (id: string, role: RunThreadBinding["role"], link: string): RunThreadBinding => ({
+  id,
+  blockId: "worker",
+  environmentId: "env",
+  threadId: id,
+  role,
+  parentBindingId: role === "descendant" ? "worker-binding" : null,
+  link,
+});
 
 it("a settlement T3 cannot stop leads with Open in T3", () => {
   // Arrange
@@ -60,4 +76,83 @@ it("a missing report whose requested report turn ended without one reads as no v
 
   // Assert
   expect(recovery).toStrictEqual({ state: "no-valid-report" });
+});
+
+it("an Attention card hides only the thread it links, not every binding on its Block", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    attention: [{ ...attention("worker", "execution-failed"), link: "https://t3.example/worker" }],
+    blocks: [{ ...block("worker"), link: "https://t3.example/worker" }],
+    threadBindings: [
+      binding("worker-binding", "worker", "https://t3.example/worker"),
+      binding("child", "descendant", "https://t3.example/child"),
+    ],
+  };
+
+  // Act
+  const linked = attentionLinkedThreads(run);
+
+  // Assert
+  expect(linked.has("https://t3.example/worker")).toBe(true);
+  expect(linked.has("https://t3.example/child")).toBe(false);
+});
+
+it("a failed worktree opens the Flow-input thread and never the title thread", () => {
+  // Arrange
+  const detail = runDetail();
+  const run = {
+    ...detail,
+    definitions: {
+      ...detail.definitions,
+      flow: {
+        ...detail.definitions.flow,
+        graph: {
+          ...detail.definitions.flow.graph,
+          flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["worker"] },
+        },
+      },
+    },
+    blocks: [
+      { ...block("worker"), link: "https://t3.example/creator" },
+      { ...block("other"), link: "https://t3.example/other" },
+    ],
+    titleGeneration: {
+      state: "applied" as const,
+      reason: null,
+      modelLabel: "Model",
+      deadlineAt: "2026-11-08T00:00:30Z",
+      automaticTitle: "Run",
+      generatedTitle: "Run",
+      threadLink: "https://t3.example/title",
+    },
+  };
+
+  // Act
+  const href = worktreeFixHref(run);
+
+  // Assert
+  expect(href).toBe("https://t3.example/creator");
+});
+
+it("a failed worktree with no worker or coordinator thread has no T3 fix link", () => {
+  // Arrange
+  const run = {
+    ...runDetail(),
+    titleGeneration: {
+      state: "failed" as const,
+      reason: "T3 rejected the title thread launch.",
+      modelLabel: "Model",
+      deadlineAt: "2026-11-08T00:00:30Z",
+      automaticTitle: "Run",
+      generatedTitle: null,
+      threadLink: "https://t3.example/title",
+    },
+  };
+
+  // Act
+  const href = worktreeFixHref(run);
+
+  // Assert
+  expect(href).toBeNull();
 });

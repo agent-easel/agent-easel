@@ -145,7 +145,7 @@ export function SidebarRow({
   preview: ReactNode;
   actions: ReactNode;
   children: ReactNode;
-  /** Overrides the draft row's accessible name. Pending Starts say Idle, not Draft. */
+  /** Overrides the draft row's accessible name. A draft awaiting Start has no status name. */
   label?: string;
 }) {
   const interaction = useRowInteractions(disabled, selected);

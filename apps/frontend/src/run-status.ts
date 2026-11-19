@@ -24,6 +24,24 @@ export function waitsForWorkerConfirmation(run: RunNavigationEntry) {
 }
 
 /**
+ * Sidebar activity, never a Run status. A spinner while an Agent works, a pause while a Block
+ * waits, and the neutral Idle ring when nothing is working or waiting — including a finished
+ * Block whose handoff is still pending. Idle is the icon only.
+ */
+export type RunActivity = "settled" | "finished" | "stale" | "working" | "waiting" | "idle";
+
+export function runActivity(run: RunNavigationEntry): RunActivity {
+  if (run.lifecycle === "settled") return "settled";
+  if (waitsForWorkerConfirmation(run)) return "finished";
+  if (run.blocks.some((block) => block.state !== "not-started" && block.freshness !== "fresh"))
+    return "stale";
+  if (run.blocks.some((block) => block.state === "working" || block.state === "sent"))
+    return "working";
+  if (run.blocks.some((block) => block.state === "waiting")) return "waiting";
+  return "idle";
+}
+
+/**
  * Whether the screen shows what Factory observes now. An Active Run is Not live while its live
  * delivery is unavailable or any block that ran has a stale observation; `lastObservedAt` is the
  * latest observation of those blocks or the Run coordinator.

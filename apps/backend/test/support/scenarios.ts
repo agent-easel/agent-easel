@@ -1259,6 +1259,36 @@ export async function modelLessLaterFlow(world: ScenarioWorld): Promise<ReadyFlo
   return { agent, flow };
 }
 
+/**
+ * Entry worker hands "Done" to Reviewer and to Missing. Both Agents have a model, so the saved
+ * Flow is ready. A Start test removes Missing and Reviewer's model after that readiness read.
+ */
+export async function divergingLaterAgentsFlow(world: ScenarioWorld): Promise<ReadyFlow> {
+  const agent = await workerAgent(world, "create the entry Agent");
+  const saved = async (name: string) =>
+    stepResult(
+      `create the ${name} Agent`,
+      await world.factory.createAgent({
+        name,
+        prompt: agent.prompt,
+        execution: agent.execution,
+        exits: agent.exits,
+      }),
+    );
+  const reviewer = await saved("Reviewer");
+  const missing = await saved("Missing");
+  const flow = await saveFlow(world, "Diverging later Agents", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      entryWorker(agent.id),
+      agentBlock("review", "Review", reviewer.id),
+      agentBlock("missing", "Missing", missing.id),
+    ],
+    connections: [connection("worker", "done", "review"), connection("worker", "done", "missing")],
+  });
+  return { agent, flow };
+}
+
 /*
  * Named Run states of one worker's lifecycle. Each is a fixed sequence of public Factory
  * operations and simulated T3 facts, with bounded observation, documented by its postcondition:

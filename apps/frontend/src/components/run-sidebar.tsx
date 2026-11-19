@@ -7,7 +7,7 @@ import { RunActionItems, useRunActions, useRunActionsState } from "./run-actions
 import { publishSidebarNavigation } from "../sidebar-navigation.ts";
 import { runListView, useRunListView } from "../run-list-view.ts";
 import { mattersNeedingOwner, type RunNavigationEntry } from "@t3-factory/contracts";
-import { waitsForWorkerConfirmation } from "../run-status.ts";
+import { runActivity } from "../run-status.ts";
 import {
   ChevronDown,
   ChevronRight,
@@ -58,27 +58,26 @@ import { fullDateTime } from "../time-format.ts";
  * nothing works but something is pending.
  */
 function execution(run: RunNavigationEntry) {
-  if (run.lifecycle === "settled")
+  const activity = runActivity(run);
+  if (activity === "settled")
     return { Icon: CircleCheck, label: "Settled", className: "text-success" };
-  if (waitsForWorkerConfirmation(run))
+  if (activity === "finished")
     return { Icon: CircleCheck, label: "Finished", className: "text-success" };
-  if (run.blocks.some((block) => block.state !== "not-started" && block.freshness !== "fresh"))
+  if (activity === "stale")
     return {
       Icon: CircleDashed,
       label: "Observation unknown or stale",
       className: "text-muted-foreground",
     };
-  if (run.blocks.some((block) => block.state === "working" || block.state === "sent"))
+  if (activity === "working")
     return {
       Icon: LoaderCircle,
       label: "Working",
       className: "text-status-working motion-safe:animate-spin",
     };
-  if (run.blocks.some((block) => block.state === "waiting"))
-    return { Icon: CirclePause, label: "Waiting", className: "text-muted-foreground" };
-  if (run.attention.needsInput || run.attention.problem)
-    return { Icon: Circle, label: "Idle", className: "text-muted-foreground" };
-  return { Icon: CirclePause, label: "Waiting", className: "text-muted-foreground" };
+  if (activity === "waiting")
+    return { Icon: CirclePause, label: "Waiting", className: "text-status-waiting" };
+  return { Icon: Circle, label: "Idle", className: "text-muted-foreground" };
 }
 
 function useRunNavigation() {
@@ -586,11 +585,11 @@ function DraftRow({
       kind="draft"
       selected={selected}
       onClick={() => runDraft.openDraft(draft.id)}
-      label={`${title} ${pending ? "Idle" : "Draft"}`}
+      label={pending ? title : `${title} Draft`}
       preview={
         <>
           <p className="text-sm font-medium break-words">{title}</p>
-          <p className="text-muted-foreground">{pending ? "Idle" : "Draft"}</p>
+          {!pending && <p className="text-muted-foreground">Draft</p>}
         </>
       }
       actions={
@@ -610,7 +609,7 @@ function DraftRow({
     >
       <span className="flex min-w-0 items-center gap-2">
         {pending ? (
-          <CircleDashed aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <Circle aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
         ) : (
           <FilePen aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
         )}
