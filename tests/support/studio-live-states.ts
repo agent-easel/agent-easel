@@ -14,6 +14,7 @@ import { browserRequests, resetBrowserRequests, delayLiveSnapshots } from "./liv
 import {
   expectRetainedDefinition,
   expectBrokenAgentWire,
+  expectFlowSaved,
   expectSavedAgentRevision,
   readinessSummary,
 } from "./studio.ts";
@@ -147,7 +148,7 @@ export async function expectBrokenDependency(
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, agent.exits[0]!.id);
   await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 1");
+  await expectFlowSaved(screen);
   expect(await layer.getAttribute("style")).toContain(view);
   await expect(canvas).toHaveAttribute("data-zoom", zoom!);
   expect((await readFlow(app.baseUrl, id)).graph).toEqual(flow.graph);
@@ -366,8 +367,9 @@ export async function beforeSavedFlow(fixtures: StudioFixtures, prefix: string) 
 
 export async function expectSavedFlow(state: Awaited<ReturnType<typeof beforeSavedFlow>>) {
   const { app, screen, prefix, id, flowPanel } = state;
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 6");
+  await expectFlowSaved(screen);
   const ownFlow = await readFlow(app.baseUrl, id);
+  expect(ownFlow.revision).toBe(6);
   expect(ownFlow.name).toBe(`Acceptance · ${prefix} · Local Flow`);
   await expect(flowPanel).toHaveCount(0);
   expect(await browserRequests(app)).not.toEqual(listReads);
@@ -446,9 +448,7 @@ export async function expectReopenedLatestFlow(
   const latestFlow = await readFlow(app.baseUrl, id);
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(latestFlow.name);
   await expect(canvas.getByRole("article", /^Block /)).toHaveCount(0);
-  await expect(screen.getByRole("status", "Flow save status")).toContainText(
-    `Saved · Revision ${latestFlow.revision}`,
-  );
+  await expectFlowSaved(screen);
   return { ...state, latestFlow };
 }
 
@@ -797,9 +797,7 @@ export async function expectChangedDirtyDependency(
   const canvas = screen.getByRole("region", "Flow canvas");
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, wired.id);
-  await expect(screen.getByRole("status", "Flow save status")).toContainText(
-    "Unsaved changes · Revision 1",
-  );
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
   await expect(screen.getByLabel("Flow name")).toHaveValue(`Live · ${prefix} · Canvas Flow edited`);
   await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await app.screenshot("studio-live-agent-changed-on-canvas");

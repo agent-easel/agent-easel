@@ -133,13 +133,12 @@ the viewport width minus 32 px.
 A primary action with a blank required name stays neutral and disabled, with no reason and without
 marking the field invalid. Any other cause that keeps it from running shows that one reason beside
 the action. The control stays neutral while disabled and uses the filled primary only when it can
-run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow it. Flow editor
-**Save Flow** keeps the filled primary while disabled until that editor is revised; the same rule
-still describes when it may run.
+run. **Create Flow**, **Import** and the Studio editors' **Save** / **Create Agent** follow it.
 
-Save is the only filled primary action in Studio editors. The Trigger form's **Review and enable**
-is the exception. The Flow and Agent editors place Save in the header. The Trigger form keeps its
-actions in a pinned footer because its fields scroll.
+Save is the only filled primary action in Studio editors: filled only while there are unsaved
+changes it may send, neutral and disabled while saved or blocked, and **Saving…** while saving.
+In the Trigger form, **Review and enable** stays neutral beside Save. The Flow and Agent editors
+place Save in the header. The Trigger form keeps its actions in a pinned footer because its fields scroll.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio fills the window with a 16 px inset on every side at all viewport
@@ -190,6 +189,13 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Dialog**: the shared dialog in its standard or wide size, with the shared header.
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
+- **Studio editor header**: StudioEditorHeader in three layouts. Toolbar is the Flow editor's
+  52 px row above the canvas: owner, name, save status, controls, More actions, Save. Stacked is the
+  Agent editor's title row (name, controls, More actions, Save) over one status line, with no owner
+  because the list group beside it names the owner. Page is the Trigger editor's title with its
+  controls at the right over its check status, with Save in the pinned footer. StudioSaveButton
+  carries the Save rule wherever Save sits, including a pinned footer, and StudioSaveStatus shows
+  the saved check or the unsaved dot.
 - **Empty state**: EmptyState, always in a dashed frame. Large is for a whole list or preview
   that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
   title, an optional body and an optional action; on a muted surface, such as Studio, the icon tile

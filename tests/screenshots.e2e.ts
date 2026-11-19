@@ -5,6 +5,7 @@ import { expect, type Screen } from "e2e";
 import { copyAgentDefinition } from "./support/agents.ts";
 import { saveFlowCopy } from "./support/flows.ts";
 import { namedAgent, ownedFlow } from "./support/owners.ts";
+import { expectFlowSaved } from "./support/studio.ts";
 
 /** Settles popover and menu transitions before a screenshot. */
 const settled =
@@ -65,7 +66,7 @@ test("capture Studio and an authored Flow that survives reload", async ({
   await screen.getByRole("button", "Save").tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await browser.reload();
   await expect(screen.getByLabel("Flow name")).toHaveValue("Screenshot review Flow");
   await expect(screen.getByRole("article", /^Block /)).toHaveCount(1);

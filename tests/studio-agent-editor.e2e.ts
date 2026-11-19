@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
-import { readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
-import { chooseAgentAction, expectSavedAgentRevision, openStudioAgent } from "./support/studio.ts";
+import { copyAgentDefinition, readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
+import { namedAgent } from "./support/owners.ts";
+import {
+  chooseAgentAction,
+  expectSaveFilled,
+  expectSaveNeutral,
+  expectSavedAgentRevision,
+  openEditedStudioAgent,
+  openStudioAgent,
+} from "./support/studio.ts";
 import {
   expectCleanAgentRevision,
   beforeCleanAgentRevision,
@@ -204,4 +212,94 @@ test("Escape closes only the model picker and returns focus to it", async ({
   await expect(settings).toHaveCount(0);
   await expect(screen.getByRole("dialog", "Studio")).toBeVisible();
   await expect(picker).toBeFocused();
+});
+
+test("the Agent header's Save is filled once the Agent has unsaved changes", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioAgent(
+    { app, screen, browser },
+    `Header unsaved state ${crypto.randomUUID().slice(0, 8)}`,
+  );
+  await expectSavedAgentRevision(screen, 1);
+
+  // Act
+  await screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
+
+  // Assert
+  await expect(screen.getByText(/^Unsaved changes · Revision 1 · Unused$/)).toBeVisible();
+  await expectSaveFilled(screen);
+  await app.screenshot("agent-header-unsaved");
+});
+
+test("the Agent header's Save turns neutral and disabled once the Agent is saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openEditedStudioAgent(
+    { app, screen, browser },
+    `Header saved state ${crypto.randomUUID().slice(0, 8)}`,
+  );
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectSavedAgentRevision(screen, 2);
+  await expectSaveNeutral(screen);
+  await app.screenshot("agent-header-saved");
+});
+
+test("a Project group heading in the Agents list says only that Project's Flows can place its Agents", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { projectId } = await namedAgent(app.baseUrl, "Northwind QA");
+  const second = await copyAgentDefinition(
+    app.baseUrl,
+    "Sample worker",
+    `Northwind second ${crypto.randomUUID().slice(0, 8)}`,
+    { projectId },
+  );
+  await app.open("/studio/agents");
+  const northwind = screen.getByRole("region", "Northwind", { exact: true });
+  await expect(northwind.getByText(second.name, { exact: true })).toBeVisible();
+
+  // Act
+  await northwind.getByText("Northwind", { exact: true }).hover();
+
+  // Assert
+  await expect(screen.getByRole("tooltip")).toHaveText(
+    "Only Northwind Flows can place these Agents.",
+  );
+  await app.screenshot("agents-placement-rule");
+});
+
+test("an open Project Agent stays listed under its Project while the search hides it", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const agent = await namedAgent(app.baseUrl, "Northwind QA");
+  await app.open(`/studio/agents/${agent.id}`);
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(agent.name);
+
+  // Act
+  await screen.getByLabel("Search Agents", { exact: true }).fill("Sample worker");
+
+  // Assert
+  const northwind = screen.getByRole("region", "Northwind", { exact: true });
+  await expect(northwind.getByText(agent.name, { exact: true })).toBeVisible();
+  await expect(screen.getByText("Launch worker", { exact: true })).toHaveCount(0);
+  await northwind.getByText("Northwind", { exact: true }).hover();
+  await expect(screen.getByRole("tooltip")).toHaveText(
+    "Only Northwind Flows can place this Agent.",
+  );
+  await app.screenshot("agents-open-agent-kept-in-search");
 });

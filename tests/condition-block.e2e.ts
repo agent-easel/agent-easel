@@ -17,7 +17,12 @@ import {
   openIdenticalReviewsThroughCondition,
   readerScreenshot,
 } from "./support/human-answers.ts";
-import { chooseFlowAction, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
+import {
+  chooseFlowAction,
+  expectFlowSaved,
+  readinessSummary,
+  saveFlowWithReadiness,
+} from "./support/studio.ts";
 
 /** Adds a block from the library row `row` at its default place and names it in its settings. */
 async function addBlock(screen: Screen, row: string, name: string) {
@@ -66,7 +71,7 @@ test("a Condition added from the library is ready once its Otherwise is connecte
   await screen
     .getByRole("button", "Connect output Otherwise of Escalate")
     .dragTo(screen.getByRole("article", "Block Coder"));
-  await saveFlowWithReadiness(screen, "Ready", 3);
+  await saveFlowWithReadiness(screen, "Ready");
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 1 output name").fill("Human");
@@ -75,7 +80,7 @@ test("a Condition added from the library is ready once its Otherwise is connecte
   await screen.getByLabel("Rule 2 output name").fill("End branch");
   await screen.getByLabel("Rule 2 from arrival").fill("5");
   await screen.getByRole("button", "Save").tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 4");
+  await expectFlowSaved(screen);
   await expect(screen.getByRole("article", "Block Escalate")).toContainText(
     /from arrival 5 onward\s*End branch/,
   );
@@ -137,7 +142,7 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
   await screen.getByRole("button", "Save").tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
   await expect(
@@ -263,15 +268,14 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(coder);
   await screen.getByRole("button", "Save").tap();
-  const saveStatus = screen.getByRole("status", "Flow save status");
-  await expect(saveStatus).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await expectFlowBlocked(screen, /rule 2 "Stop" is never selected/);
   await app.screenshot("condition-authored-readiness-row");
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("listitem", "Rule 2 Stop").getByRole("button", "Move rule up").tap();
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
   await screen.getByRole("button", "Save").tap();
-  await expect(saveStatus).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
@@ -377,7 +381,7 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
   await screen.getByRole("button", "Save").tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   const saved = await readFlow(app.baseUrl, flow.id);
   const condition = saved.graph.blocks.find((block) => block.id === "escalate");
   assert(condition?.kind === "condition");

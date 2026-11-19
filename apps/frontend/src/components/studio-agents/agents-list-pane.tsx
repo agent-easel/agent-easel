@@ -13,7 +13,9 @@ import { NeedsModel } from "../needs-model.tsx";
 import { OwnerGroupHeader } from "../studio-owner.tsx";
 import { StudioListMessage, StudioListRow, StudioRowIcon, StudioRowMenu } from "../studio-list.tsx";
 import {
+  allOwners,
   ownerGroups,
+  shownByFilter,
   type OwnerGroup,
   type StudioOwner,
   type StudioOwnerFilter,
@@ -44,7 +46,7 @@ export function AgentsListColumn({
   onChangeOwner: (agent: AgentDefinition) => void;
   onRemove: (agent: AgentDefinition) => void;
 }) {
-  const groups = shownGroups(agents, query, owners);
+  const groups = shownGroups(agents, query, owners, selectedId);
   return (
     <div className="flex w-full min-w-0 flex-col gap-2 md:w-100 md:shrink-0">
       {creatingNew && (
@@ -124,14 +126,24 @@ export function firstOpenAgent(
   return shownGroups(agents, query, owners).find((group) => !group.owner.gone)?.items[0]?.id;
 }
 
+/**
+ * The Agents the search and Owner filter show, grouped by owner. The open Agent stays listed under
+ * its owner even when they would hide it: the editor has no owner line, so its group heading is
+ * where the owner and the placement rule are read.
+ */
 function shownGroups(
   agents: readonly AgentDefinition[] | null,
   query: string,
   { projects, filter }: ReturnType<typeof useStudioOwners>,
+  selectedId?: string,
 ) {
   const needle = query.trim().toLocaleLowerCase();
-  const matching = agents?.filter((agent) => agent.name.toLocaleLowerCase().includes(needle));
-  return matching ? ownerGroups(matching, projects, filter) : [];
+  const shown = agents?.filter(
+    (agent) =>
+      agent.id === selectedId ||
+      (agent.name.toLocaleLowerCase().includes(needle) && shownByFilter(agent.projectId, filter)),
+  );
+  return shown ? ownerGroups(shown, projects, allOwners) : [];
 }
 
 function AgentOwnerSection({
@@ -150,9 +162,18 @@ function AgentOwnerSection({
   onRemove: (agent: AgentDefinition) => void;
 }) {
   const count = `${items.length} ${items.length === 1 ? "Agent" : "Agents"}`;
+  const placedAgents = items.length === 1 ? "this Agent" : "these Agents";
   return (
     <section aria-label={owner.title} className="flex flex-col gap-2">
-      <OwnerGroupHeader owner={owner} count={count} />
+      <OwnerGroupHeader
+        owner={owner}
+        count={count}
+        placement={
+          owner.projectId !== null && !owner.gone
+            ? `Only ${owner.title} Flows can place ${placedAgents}.`
+            : undefined
+        }
+      />
       {items.map((agent) => (
         <AgentRow
           key={agent.id}

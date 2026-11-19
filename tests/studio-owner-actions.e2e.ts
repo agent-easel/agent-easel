@@ -25,7 +25,12 @@ const unique = () => crypto.randomUUID().slice(0, 8);
 const settled =
   "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)";
 
-const agentEditor = (screen: Screen) => screen.getByRole("region", "Agent editor");
+/** The list beside the editor names an Agent's owner: its row sits in the `owner` group. */
+async function expectListedUnder(screen: Screen, owner: string, name: string) {
+  await expect(
+    screen.getByRole("region", owner, { exact: true }).getByText(name, { exact: true }),
+  ).toBeVisible();
+}
 
 /** A new global Agent open in Studio, and the id of the fixture's available Northwind Project. */
 async function openGlobalAgent(
@@ -58,13 +63,13 @@ test("Change owner moves an Agent into a Project without a new revision, also af
 
   // Assert
   await expect(dialog).toHaveCount(0);
-  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
+  await expectListedUnder(screen, "Northwind", agent.name);
   const moved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(moved.projectId, northwind);
   assert.equal(moved.revision, agent.revision);
   await app.screenshot("change-owner-success");
   await app.open(`/studio/agents/${agent.id}`);
-  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
+  await expectListedUnder(screen, "Northwind", agent.name);
   await app.screenshot("change-owner-reload");
 });
 
@@ -290,6 +295,6 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Edited while the owner moves.",
   );
-  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
+  await expectListedUnder(screen, "Northwind", agent.name);
   await app.screenshot("dirty-owner-reload");
 });

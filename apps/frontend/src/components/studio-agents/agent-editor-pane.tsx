@@ -1,6 +1,6 @@
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { StudioRemovedDraft } from "../studio-removed-draft.tsx";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -8,7 +8,7 @@ import type {
   FlowDraft,
 } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
-import { Check, Copy, FolderGit2, MoreHorizontal, Unplug, Workflow } from "lucide-react";
+import { Copy, FolderGit2, MoreHorizontal, Unplug } from "lucide-react";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  StudioEditorHeader,
+  StudioSaveButton,
+  StudioSaveStatus,
+} from "../studio-editor-header.tsx";
 import { cn } from "@/lib/utils";
 import {
   createShapedContent,
@@ -50,7 +55,6 @@ import type { StudioOwner } from "../../studio-definitions.ts";
 import { TextLink } from "@/components/ui/text-link";
 import { SettingsLink } from "../app-link.tsx";
 import { ProblemCard } from "../problem-card.tsx";
-import { StatusBadge } from "../status-badge.tsx";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
 type AgentOwnership =
@@ -110,6 +114,7 @@ export function AgentEditorPane(props: AgentEditorProps) {
     : null;
   const reportingProblem = reportingStatus?.state === "attention" ? reportingStatus : null;
   const readOnly = saving || ownerGone;
+  const agent = state.saved;
   return (
     <form
       className="flex min-h-0 min-w-0 flex-1 flex-col"
@@ -118,12 +123,10 @@ export function AgentEditorPane(props: AgentEditorProps) {
         void props.onSave();
       }}
     >
-      <AgentEditorHeader
-        {...props}
-        name={name}
-        saving={saving}
-        ownerGone={ownerGone}
-        picker={
+      <StudioEditorHeader
+        layout="stacked"
+        title={agentTitle(state)}
+        controls={
           <AgentModelPicker
             settings={settings}
             capabilities={capabilities}
@@ -143,6 +146,16 @@ export function AgentEditorPane(props: AgentEditorProps) {
             }
           />
         }
+        moreActions={agent && <AgentMoreActions {...props} agent={agent} saving={saving} />}
+        save={
+          <AgentSaveButton
+            state={state}
+            ownership={ownership}
+            saving={saving}
+            ownerGone={ownerGone}
+          />
+        }
+        status={<AgentSaveStatus state={state} flowUsage={props.flowUsage} />}
       />
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-6 py-4">
         <AgentEditorCards
@@ -393,93 +406,43 @@ function SaveOutcomeCard({
   );
 }
 
-/** Figma SA06: the owner, the name with the Worker picker, More actions and Save, one status line. */
-function AgentEditorHeader(
-  props: AgentEditorProps & {
-    name: string;
-    saving: boolean;
-    ownerGone: boolean;
-    picker: ReactNode;
-  },
-) {
-  const { state, flowUsage, name, saving, ownership, picker, ownerGone } = props;
-  const agent = state.saved;
+/** The draft's name, the saved name while it is blank, or **New Agent** before the first save. */
+function agentTitle({ saved, content }: AgentDraftSnapshot) {
+  return saved ? content.name || saved.name : "New Agent";
+}
+
+/** **Save**, or **Create Agent** for a new Agent, under the one Save rule. */
+function AgentSaveButton({
+  state,
+  ownership,
+  saving,
+  ownerGone,
+}: Pick<AgentEditorProps, "state" | "ownership"> & { saving: boolean; ownerGone: boolean }) {
   const ownerBlock = ownership.kind === "new" ? ownership.blocked : null;
-  // Save is filled only while there are unsaved changes it may send; otherwise it is neutral.
-  const ready = state.canSave && state.dirty && !ownerBlock && name.trim() !== "" && !ownerGone;
   return (
-    <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-6 pt-5 pb-4">
-      {ownership.kind === "saved" && <AgentOwner owner={ownership.owner} />}
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="min-w-0 max-w-full break-words text-xl font-semibold">
-          {agent ? name || agent.name : "New Agent"}
-        </h1>
-        {/* The actions wrap together, so Save never leaves More actions behind. */}
-        <div className="ml-auto flex max-w-full min-w-0 items-center gap-2">
-          {picker}
-          {agent && <AgentMoreActions {...props} agent={agent} />}
-          <MutationGate>
-            <Button
-              type="submit"
-              variant={saving || ready ? "default" : "outline"}
-              disabled={saving || !ready}
-            >
-              {saving ? "Saving…" : agent ? "Save" : "Create Agent"}
-            </Button>
-          </MutationGate>
-        </div>
-      </div>
-      <AgentStatusLine state={state} flowUsage={flowUsage} />
-    </header>
-  );
-}
-
-/** The saved Agent's owner in the owner tones; a Project gone from T3 carries "Not in T3". */
-function AgentOwner({ owner }: { owner: StudioOwner }) {
-  const global = owner.projectId === null;
-  const Icon = global ? Workflow : FolderGit2;
-  const text = (
-    <p
-      // Focusable so a keyboard reaches the Project's placement rule.
-      tabIndex={global ? undefined : 0}
-      className={cn(
-        "flex w-fit max-w-full items-center gap-1.25 rounded-xs text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        global || owner.gone ? "text-subtle-foreground" : "text-brand-cyan",
-      )}
+    <StudioSaveButton
+      type="submit"
+      unsaved={state.dirty}
+      ready={state.canSave && !ownerBlock && state.content.name.trim() !== "" && !ownerGone}
+      saving={saving}
     >
-      <Icon aria-hidden className="size-3 shrink-0" strokeWidth={1.5} />
-      <span className="truncate">{ownerName(owner)}</span>
-      {owner.gone && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
-    </p>
-  );
-  if (global || owner.gone) return text;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{text}</TooltipTrigger>
-      <TooltipContent>Only {owner.title} Flows can place this Agent.</TooltipContent>
-    </Tooltip>
+      {state.saved ? "Save" : "Create Agent"}
+    </StudioSaveButton>
   );
 }
 
-function AgentStatusLine({ state, flowUsage }: { state: AgentDraftSnapshot; flowUsage: number }) {
+/** The status line: the save state, revision and Flow usage of a saved Agent. */
+function AgentSaveStatus({ state, flowUsage }: { state: AgentDraftSnapshot; flowUsage: number }) {
   const agent = state.saved;
-  const className = "flex items-center gap-1.25 text-xs text-subtle-foreground";
-  if (state.removed) return <p className={className}>Removed elsewhere</p>;
-  if (!agent) return <p className={className}>Not saved yet</p>;
   const usage = flowUsage === 0 ? "Unused" : `Used in ${flowUsageLabel(flowUsage)}`;
-  const facts = `Revision ${agent.revision} · ${usage}`;
-  if (state.dirty)
-    return (
-      <p className={className}>
-        <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-attention" />
-        Unsaved changes · {facts}
-      </p>
-    );
   return (
-    <p className={className}>
-      <Check aria-hidden className="size-3 shrink-0 text-success" />
-      Saved · {facts}
-    </p>
+    <StudioSaveStatus unsaved={!agent || state.dirty || state.removed}>
+      {state.removed
+        ? "Removed elsewhere"
+        : !agent
+          ? "Not saved yet"
+          : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${agent.revision} · ${usage}`}
+    </StudioSaveStatus>
   );
 }
 

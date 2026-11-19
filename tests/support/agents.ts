@@ -38,7 +38,13 @@ export async function copyAgentDefinition(
   {
     modelLess = false,
     projectOverrides = [],
-  }: { modelLess?: boolean; projectOverrides?: AgentDefinition["projectOverrides"] } = {},
+    projectId = null,
+  }: {
+    modelLess?: boolean;
+    projectOverrides?: AgentDefinition["projectOverrides"];
+    /** The owning Project's Factory id; Global when omitted. */
+    projectId?: string | null;
+  } = {},
 ) {
   const template = (await listAgentDefinitions(baseUrl)).find((agent) => agent.name === source);
   assert(template);
@@ -52,6 +58,7 @@ export async function copyAgentDefinition(
         execution: modelLess ? null : template.execution,
         exits: template.exits,
         projectOverrides,
+        projectId,
       }),
     })
   ).json()) as Result<AgentDefinition>;
