@@ -7,12 +7,8 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
-import type {
-  T3Adapter,
-  T3ConnectionReason,
-  T3ContractSnapshot,
-  T3Support,
-} from "./adapters/t3.ts";
+import type { T3Adapter, T3ContractSnapshot, T3Support } from "./adapters/t3.ts";
+import type { T3ConnectionReason } from "./t3/connection.ts";
 import { NO_T3_SUPPORT } from "./adapters/t3-contract.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";

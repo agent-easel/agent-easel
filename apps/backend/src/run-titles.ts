@@ -16,12 +16,8 @@ import {
   validateUpdateRunTitleSetting,
 } from "@t3-factory/domain-validation";
 import type { StartPrompt } from "@t3-factory/domain-validation";
-import {
-  isT3Refusal,
-  type LaunchPayload,
-  type T3Adapter,
-  type T3ContractSnapshot,
-} from "./adapters/t3.ts";
+import type { LaunchPayload, T3Adapter, T3ContractSnapshot } from "./adapters/t3.ts";
+import { isT3Refusal } from "./t3/connection.ts";
 import type { ContractSnapshots } from "./connection.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import { reportingInstallationProblem } from "./explicit-readiness.ts";

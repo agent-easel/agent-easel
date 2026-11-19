@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
-import type { T3Adapter, T3ContractSnapshot, T3Endpoint } from "../adapters/t3.ts";
+import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { T3Endpoint } from "../t3/connection.ts";
 import { recoverOperation } from "./runner-effects.ts";
 
 /** A thread Factory owns under one T3 authorization context, such as a Run's worker or title

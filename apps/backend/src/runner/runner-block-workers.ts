@@ -1,13 +1,7 @@
 import type { RunDefinitions, RunImage } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
-import {
-  isT3Refusal,
-  type LaunchAttachment,
-  type LaunchPayload,
-  type T3Adapter,
-  type T3Support,
-  type T3Target,
-} from "../adapters/t3.ts";
+import type { LaunchAttachment, LaunchPayload, T3Adapter, T3Support } from "../adapters/t3.ts";
+import { isT3Refusal, type T3Target } from "../t3/connection.ts";
 import { attachmentSupport } from "../adapters/t3-contract.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { verifiedLaunchedThread } from "./launched-thread.ts";

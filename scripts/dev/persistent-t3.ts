@@ -9,13 +9,12 @@ import {
   recordLaunchedThread,
   startQueuedSend,
 } from "../../apps/backend/test/support/controlled-thread.ts";
+import type { LaunchPayload, SendPayload } from "../../apps/backend/src/adapters/t3.ts";
 import {
   T3Failure,
-  type LaunchPayload,
-  type SendPayload,
   type T3Endpoint,
   type T3ProjectTarget,
-} from "../../apps/backend/src/adapters/t3.ts";
+} from "../../apps/backend/src/t3/connection.ts";
 
 type Snapshot = ReturnType<PersistentT3["snapshot"]>;
 /** Version 5, or version 3 or 4, whose idle worker threads Factory no longer uses. State saved

@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import { dirname, join } from "node:path";
 import { LiveT3Adapter } from "../src/index.ts";
-import { T3Failure } from "../src/adapters/t3.ts";
+import { T3Failure } from "../src/t3/connection.ts";
 import { attachmentSupport } from "../src/adapters/t3-contract.ts";
 import type { ControlledT3 } from "./support/controlled-t3.ts";
 import { authorizedLiveOAuth, reportReadSchema } from "./support/boundaries-setup.ts";

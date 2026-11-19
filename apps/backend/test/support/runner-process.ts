@@ -7,7 +7,7 @@ const [databasePath, fixturePath, mode] = process.argv.slice(2);
 const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
 class ExternalEngine extends ControlledT3 {
   override async launchThread(
-    target: import("../../src/adapters/t3.ts").T3Endpoint,
+    target: import("../../src/t3/connection.ts").T3Endpoint,
     payload: import("../../src/adapters/t3.ts").LaunchPayload,
   ) {
     const reference = await super.launchThread(target, payload);

@@ -1,23 +1,25 @@
 import type { AgentEnvironment } from "@t3-factory/contracts";
-import { T3Failure } from "../../src/adapters/t3.ts";
+import { T3Failure } from "../../src/t3/connection.ts";
 import { NO_T3_SUPPORT } from "../../src/adapters/t3-contract.ts";
 import { ControlledAppearance } from "./controlled-appearance.ts";
 import type {
   AttachmentUpload,
-  AuthorizationResumption,
   LaunchPayload,
   LaunchReference,
   T3Adapter,
   LaunchCandidate,
-  T3Endpoint,
-  T3EnvironmentTarget,
-  T3Target,
   T3Inspection,
   T3Project,
-  T3ProjectTarget,
   T3ProviderCapability,
   T3Support,
 } from "../../src/adapters/t3.ts";
+import type {
+  AuthorizationResumption,
+  T3Endpoint,
+  T3EnvironmentTarget,
+  T3Target,
+  T3ProjectTarget,
+} from "../../src/t3/connection.ts";
 
 /** Independent external-engine lifetime; no SQL or Factory internals. */
 export class ControlledT3 implements T3Adapter {

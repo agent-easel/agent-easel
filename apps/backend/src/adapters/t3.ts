@@ -7,19 +7,18 @@ import type {
   RunPullRequest,
   T3Contract,
 } from "@t3-factory/contracts";
+import type {
+  T3Authorization,
+  T3ConnectionReason,
+  T3Endpoint,
+  T3EnvironmentTarget,
+  T3ProjectTarget,
+  T3Target,
+} from "../t3/connection.ts";
 
 /** A provider as T3's catalog publishes it; Factory adds its own reporting support. */
 export type T3ProviderCapability = Omit<AgentProviderCapability, "reporting">;
 
-export type T3ConnectionReason =
-  | "connected"
-  | "approval-required"
-  | "approval-pending"
-  | "browser-unavailable"
-  | "callback-unavailable"
-  | "approval-expired"
-  | "contract-missing";
-export type AuthorizationResumption = "reopened" | "completing" | "none";
 export interface T3Inspection {
   readonly state: ConnectionState;
   readonly reason: T3ConnectionReason;
@@ -54,40 +53,8 @@ export interface T3ContractSnapshot {
   readonly answered: boolean;
   readonly support: T3Support;
 }
-/** Saved T3 connection and project context Factory passes into adapter operations. */
-export interface T3Target {
-  readonly endpoint: string;
-  readonly environmentId: string;
-  readonly projectId: string;
-  readonly workspaceRoot: string;
-}
-export type T3Endpoint = Pick<T3Target, "endpoint">;
-export type T3EnvironmentTarget = Pick<T3Target, "endpoint" | "environmentId">;
-export type T3ProjectTarget = Pick<T3Target, "endpoint" | "environmentId" | "workspaceRoot">;
-/**
- * Why one T3 call failed. `unavailable`: T3 could not be reached or answered with a server error,
- * a timeout or no reply, so an action's outcome is uncertain. `authorization-required`: T3 rejected
- * the grant. `refused`: T3 declined the request or does not support it; nothing was accepted.
- * `invalid-response`: T3 answered outside the contract, so an action's outcome is uncertain.
- */
-export type T3FailureKind =
-  | "unavailable"
-  | "authorization-required"
-  | "refused"
-  | "invalid-response";
-/** One call's failure, classified by the adapter for that call only. */
-export class T3Failure extends Error {
-  override readonly name = "T3Failure";
-  readonly kind: T3FailureKind;
-  constructor(kind: T3FailureKind, message: string) {
-    super(message);
-    this.kind = kind;
-  }
-}
-export const isT3Refusal = (error: unknown) =>
-  error instanceof T3Failure && error.kind === "refused";
 /** Every call that rejects does so only with a `T3Failure`. */
-export interface T3Adapter {
+export interface T3Adapter extends T3Authorization {
   /** `t3_thread_wait` for one run with its delegated and background work. Queues, native
    * requests and business completion stay separate. */
   readDelegatedSettlement(
@@ -115,15 +82,6 @@ export interface T3Adapter {
   listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]>;
   createProject(target: T3ProjectTarget): Promise<T3Project>;
   inspect(target: T3Endpoint): Promise<T3Inspection>;
-  /** Starts backend-host approval; returns without waiting for the human. */
-  authorize(target: T3Endpoint): Promise<void>;
-  /**
-   * Reopens a live pending approval's own authorization page in the backend-host browser,
-   * keeping its state and verifier. `completing`: a callback is being exchanged; `none`:
-   * no live attempt exists (never started, expired, denied or completed). Throws when
-   * the browser cannot open. The page address never leaves the adapter.
-   */
-  resumeAuthorization(target: T3Endpoint): Promise<AuthorizationResumption>;
   readEnvironment(target: T3Endpoint): Promise<AgentEnvironment>;
   orchestratorCapabilities(target: T3Endpoint): Promise<readonly T3ProviderCapability[]>;
   /**
