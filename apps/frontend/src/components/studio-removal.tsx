@@ -9,6 +9,7 @@ import { ChevronRight, Trash2, Workflow, Zap, type LucideIcon } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { Surface } from "@/components/ui/surface";
 import { studioOwner } from "../studio-definitions.ts";
 import { StatusBadge } from "./status-badge.tsx";
 import { cn } from "@/lib/utils";
@@ -148,8 +149,7 @@ export function RemoveMenuItem({
   );
 }
 
-const blockerRowClass =
-  "flex w-full min-w-0 items-center gap-2 rounded-lg border bg-muted px-3 py-2.5";
+const blockerRowClass = "flex w-full min-w-0 items-center gap-2 px-3 py-2.5";
 
 /** One Flow or Trigger that blocks removal. A gone Trigger is text only; it cannot be opened. */
 function RemovalBlocker({
@@ -178,23 +178,27 @@ function RemovalBlocker({
   return (
     <li>
       {onOpen ? (
-        <button
-          type="button"
+        <Surface
+          tone="inset"
+          asChild
           className={cn(
             blockerRowClass,
             "text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
           )}
-          onClick={onOpen}
         >
-          {body}
-          <ChevronRight
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-        </button>
+          <button type="button" onClick={onOpen}>
+            {body}
+            <ChevronRight
+              aria-hidden
+              className="size-4 shrink-0 text-muted-foreground"
+              strokeWidth={1.5}
+            />
+          </button>
+        </Surface>
       ) : (
-        <div className={blockerRowClass}>{body}</div>
+        <Surface tone="inset" className={blockerRowClass}>
+          {body}
+        </Surface>
       )}
     </li>
   );

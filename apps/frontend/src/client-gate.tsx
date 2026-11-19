@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Surface } from "@/components/ui/surface";
 import { fieldLabelClass } from "@/components/page";
 import { GateScreen } from "@/components/gate-screen";
 import { api, ApiError } from "./api.ts";
@@ -184,13 +185,13 @@ function PendingScreen({ client }: { client: FactoryClient }) {
       title="Waiting for approval on the Factory host"
       description="Open Factory on the server computer, go to Settings → Devices & access, and approve this request only if its code matches."
     >
-      <div className="grid gap-1 rounded-md border bg-muted p-4 text-center">
+      <Surface tone="inset" className="grid gap-1 p-4 text-center">
         <span className={fieldLabelClass}>Verification code</span>
         <output aria-label="Verification code" className="font-mono text-2xl tracking-widest">
           {client.verificationCode}
         </output>
         <span className="text-xs text-muted-foreground">Requested as “{client.label}”</span>
-      </div>
+      </Surface>
     </GateScreen>
   );
 }
