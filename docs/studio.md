@@ -565,7 +565,9 @@ Turning a switch on opens the [review](#reviewing-what-starts); turning it off s
 
 The repository and Flow fields show their own readiness. A problem with `gh` has a card with
 **Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
-page, and **Review and enable**. When another Trigger already watches the same repository, the
+page, and **Review and enable**. Save follows the
+[one Save rule](design-system.md#components-and-interaction) and is the only filled action; Review and
+enable stays neutral. When another Trigger already watches the same repository, the
 form warns before saving and the warning also appears in the review. Saving is still available.
 
 **Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
@@ -574,7 +576,8 @@ current problem and its repair guidance. **Check now** is available for an enabl
 no unsaved edits. Runs started by that action can be opened from the strip. A failing Trigger
 keeps checking. Factory keeps the latest check and problem.
 
-The pinned footer has **Save** only. Saved-revision and removal notices appear as cards above it.
+The pinned footer has **Save** only, filled only while there are unsaved edits. Saved-revision and
+removal notices appear as cards above it.
 
 Triggers follow the [saved-revision rules](#following-saved-revisions) of the other editors: **Updated to revision
 N**, **Revision N was saved elsewhere** with **Compare latest revision**, **Load revision N** and **Keep my edits**, and
