@@ -30,9 +30,11 @@ import {
   type BlockPosition,
   type CanvasBlock,
   type CanvasGraph,
+  type CanvasNode,
   type FlowWire,
 } from "../flow-graph.ts";
 import { useCanvasViewport } from "../use-canvas-viewport.ts";
+import { useConnectionPreview } from "../use-connection-preview.ts";
 import { useFlowLayoutSession } from "../use-flow-layout.ts";
 import { CanvasZoomControls } from "./canvas-zoom-controls.tsx";
 import { AutoArrangeButton, AutoArrangeStatus } from "./flow-arrange-control.tsx";
@@ -92,11 +94,6 @@ export type CanvasBlockContent = {
   /** The status footers drawn now, in order. */
   readonly footers: readonly ReactNode[];
 };
-
-/** A node an adapter moves: one block, or the Flow input block. */
-export type CanvasNode =
-  | { readonly kind: "block"; readonly blockId: string }
-  | { readonly kind: "flow-input" };
 
 /**
  * A gesture in progress, drawn over the graph without changing it: a node at its dragged
@@ -554,8 +551,13 @@ function useSurfaceGraph({
 
 type SurfaceGraph = ReturnType<typeof useSurfaceGraph>;
 
-/** The transformed layer: wires, the connection being drawn, adapter content and every block. */
+/**
+ * The transformed layer: wires, the connection being drawn, adapter content and every block.
+ * Orthogonal wires are read-only, so hovering or focusing a card previews its outgoing wires.
+ */
 function SurfaceLayer({
+  scope,
+  shown,
   view,
   surfaceGraph,
   dimensions,
@@ -573,8 +575,12 @@ function SurfaceLayer({
   flowInput: CanvasFlowInputContent;
   startPan: (event: PointerEvent<HTMLElement>) => void;
   children: ReactNode;
+  scope: string | null;
+  shown: boolean;
 }) {
   const { arranged, geometry, graph, drawn, pending, routes, content } = surfaceGraph;
+  // Kept here rather than in the surface, so a preview does not recompute every block's content.
+  const preview = useConnectionPreview({ enabled: wires.kind === "orthogonal", scope, shown });
   return (
     <div
       data-canvas-pan
@@ -587,6 +593,7 @@ function SurfaceLayer({
         ]),
       }}
       onPointerDown={startPan}
+      {...preview.handlers}
     >
       <FlowWires
         graph={graph}
@@ -594,6 +601,7 @@ function SurfaceLayer({
         presentation={wires}
         routes={routes}
         pendingWire={pending}
+        emphasized={preview.source}
       />
       <GesturePreview graph={graph} geometry={drawn} gesture={gesture} />
       {children}
@@ -746,6 +754,8 @@ export function CanvasSurface(props: CanvasSurfaceProps) {
     >
       <div data-canvas-pan className="absolute inset-0" onPointerDown={viewport.startPan} />
       <SurfaceLayer
+        scope={scope}
+        shown={shown}
         view={view}
         surfaceGraph={surfaceGraph}
         dimensions={dimensions}
