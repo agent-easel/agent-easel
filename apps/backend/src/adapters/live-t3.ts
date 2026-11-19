@@ -15,6 +15,7 @@ import {
 import { themeListing, themeRead } from "./t3-theme-read.ts";
 import {
   Client,
+  InMemoryResponseCacheStore,
   StreamableHTTPClientTransport,
   UnauthorizedError,
   UnsupportedProtocolVersionError,
@@ -22,11 +23,15 @@ import {
   SdkError,
   SdkErrorCode,
   ProtocolError,
+  type JsonSchemaType,
+  type JsonSchemaValidator,
+  type ListToolsResult,
   type OAuthClientProvider,
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
   type OAuthDiscoveryState,
 } from "@modelcontextprotocol/client";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import type {
   AttachmentUpload,
   AuthorizationResumption,
@@ -233,6 +238,45 @@ const closeConnection = (connection: Connection) =>
     (client) => client.close().catch(() => {}),
     () => {},
   );
+
+function connectedT3Client(): Client {
+  let validators = new Map<string, JsonSchemaValidator<unknown> | undefined>();
+  const responseCacheStore = new (class extends InMemoryResponseCacheStore {
+    override set(...args: Parameters<InMemoryResponseCacheStore["set"]>): number {
+      const [key, entry] = args;
+      if (key.method === "tools/list" && this.get(key)?.value !== entry.value) {
+        // The SDK stores the completed, decoded catalog before compiling its validators.
+        const catalog = JSON.parse(entry.value) as ListToolsResult;
+        const current = new Map<string, JsonSchemaValidator<unknown> | undefined>();
+        for (const { outputSchema } of catalog.tools) {
+          if (outputSchema === undefined) continue;
+          const schemaKey = JSON.stringify(outputSchema);
+          current.set(schemaKey, validators.get(schemaKey));
+        }
+        validators = current;
+      }
+      return super.set(...args);
+    }
+  })();
+  return new Client(
+    { name: "t3-factory", version: "0.0.0" },
+    {
+      responseCacheStore,
+      jsonSchemaValidator: {
+        getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
+          const key = JSON.stringify(schema);
+          const cached = validators.get(key);
+          if (cached) return cached as JsonSchemaValidator<T>;
+          // A fresh AJV instance allows a changed schema to keep its previous $id.
+          const validator = new AjvJsonSchemaValidator().getValidator<T>(schema);
+          // A call already reading the previous catalog must not put a retired schema back.
+          if (validators.has(key)) validators.set(key, validator);
+          return validator;
+        },
+      },
+    },
+  );
+}
 
 const markCallUnavailable = () => {
   const record = currentCall.getStore();
@@ -899,7 +943,7 @@ export class LiveT3Adapter implements T3Adapter {
   private connection(endpoint: string): Connection {
     const existing = this.connections.get(endpoint);
     if (existing) return existing;
-    const client = new Client({ name: "t3-factory", version: "0.0.0" });
+    const client = connectedT3Client();
     const connection: Connection = {
       client: classifiedCall(async () => {
         await client.connect(this.transport(endpoint, this.provider(endpoint, false)), {

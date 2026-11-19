@@ -69,6 +69,28 @@ it("after T3 forgets its sessions, the next call succeeds on a new connection", 
   expect(external.openedSessions).toBe(2);
 });
 
+it("after T3 changes a tool's output schema, the shared connection checks the new schema", async (context) => {
+  // Arrange
+  let environmentId = "fixture-environment";
+  const { adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+    environmentOutputSchema: () => ({
+      $id: "https://fixture.example/environment.json",
+      type: "object",
+      properties: { environmentId: { const: environmentId } },
+      required: ["environmentId"],
+    }),
+  });
+  expect(await adapter.inspect({ endpoint })).toMatchObject({ state: "ready" });
+  environmentId = "another-environment";
+
+  // Act
+  const inspection = await adapter.inspect({ endpoint });
+
+  // Assert
+  expect(inspection).toMatchObject({ state: "incompatible" });
+  expect(external.openedSessions).toBe(1);
+});
+
 it("a send whose request may have reached T3 is not resent and reports T3 unavailable", async (context) => {
   // Arrange
   const sends: unknown[] = [];
