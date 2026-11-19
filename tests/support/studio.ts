@@ -20,12 +20,26 @@ export async function openEditedStudioAgent(fixtures: StudioFixtures, name: stri
 }
 
 /**
+ * How long a held save waits at most. A journey that fails before its release cannot run cleanup
+ * first: the runner settles route handlers before `afterEach` within the default 30 s cleanup
+ * budget, so the hold ends on its own well inside that budget and past the journey's 5 s
+ * assertions after Save.
+ */
+const saveHoldMs = 20_000;
+
+/**
  * Starts the open Studio editor's Save while its request to `path` is held, and returns the release.
  * Something else, such as a removal elsewhere, can then reach the editor before the save replies.
  */
 export async function startHeldSave(browser: Browser, screen: Screen, path: string) {
   let release = () => {};
-  const held = new Promise<void>((resolve) => (release = resolve));
+  const held = new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, saveHoldMs);
+    release = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+  });
   await browser.route(`**${path}`, async (route) => {
     if (route.request.method === "PUT") await held;
     return route.continue();
