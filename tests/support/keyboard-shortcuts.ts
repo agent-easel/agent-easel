@@ -41,9 +41,10 @@ export async function recordDesktopNewRunCandidate(app: App, screen: Screen, bro
 
 export async function fillHumanReviewChanges(screen: Screen, message: string) {
   const answer = screen.getByRole("form", "Answer Your review", { exact: true });
-  await answer
-    .getByRole("combobox", "Decision")
-    .selectOption({ label: "Request changes → Implement change" });
+  await answer.getByRole("button", "Decision: Choose a decision", { exact: true }).tap();
+  await screen
+    .getByRole("menuitemradio", "Request changes → Implement change", { exact: true })
+    .tap();
   await answer.getByRole("textbox", "Requested changes").fill(message);
   return answer;
 }

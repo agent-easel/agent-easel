@@ -5,7 +5,6 @@ import { mayStartFlow } from "@t3-factory/domain-validation";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
@@ -13,6 +12,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ChoiceMenu } from "../choice-menu.tsx";
 import { FlowGroup, ProjectOption } from "../launch-picker-options.tsx";
 import { fieldLabelClass, selectFieldClass } from "../page.tsx";
 import { SettingsRow } from "../settings-page.tsx";
@@ -27,6 +27,10 @@ import {
 
 const inputClass = "h-7.5 border-border bg-muted";
 const rowClass = "[&>div]:min-h-13.5 [&>div]:py-3";
+const INTERVAL_UNITS = (["minutes", "hours"] satisfies IntervalUnit[]).map((unit) => ({
+  id: unit,
+  label: unit,
+}));
 
 export const triggerProblemIds = {
   name: "trigger-name-problem",
@@ -142,17 +146,16 @@ export function TriggerFields({
                 disabled={!content.scheduleEnabled && !state.intervalError}
                 onChange={(event) => draft.edit({ interval: event.target.value })}
               />
-              <NativeSelect
-                aria-label="Interval unit"
-                className={cn(inputClass, "focus:border-primary")}
-                wrapperClassName="w-28"
+              <ChoiceMenu
+                id="trigger-interval-unit"
+                label="Interval unit"
+                className={cn(inputClass, "w-28")}
                 value={content.unit}
+                choices={INTERVAL_UNITS}
                 disabled={!content.scheduleEnabled && !state.intervalError}
-                onChange={(event) => draft.edit({ unit: event.target.value as IntervalUnit })}
-              >
-                <NativeSelectOption value="minutes">minutes</NativeSelectOption>
-                <NativeSelectOption value="hours">hours</NativeSelectOption>
-              </NativeSelect>
+                placeholder="Choose a unit"
+                onChange={(unit) => draft.edit({ unit: unit as IntervalUnit })}
+              />
             </>
           )}
         />
@@ -194,7 +197,7 @@ function ProjectRow({
     <SettingsRow
       title="Project"
       control={(text) => (
-        <ChoiceMenu
+        <GroupedChoiceMenu
           labelledBy={text.title}
           value={projectId}
           label={project?.title ?? (projectId ? "Project unavailable" : undefined)}
@@ -206,7 +209,7 @@ function ProjectRow({
             <ProjectOption key={entry.id} project={entry} busy={false} peers={projectNames} />
           ))}
           {!available.length && <EmptyChoices>No available Projects</EmptyChoices>}
-        </ChoiceMenu>
+        </GroupedChoiceMenu>
       )}
     />
   );
@@ -282,7 +285,7 @@ function FlowRow({
       control={(text) => (
         <>
           {problem && <StatusBadge kind="error">Not ready</StatusBadge>}
-          <ChoiceMenu
+          <GroupedChoiceMenu
             labelledBy={text.title}
             value={content.flowId}
             label={flow?.name ?? (content.flowId ? "Flow unavailable" : undefined)}
@@ -308,7 +311,7 @@ function FlowRow({
             {!offered.length && (
               <EmptyChoices>{flows ? "No Flows available" : "Loading Flows…"}</EmptyChoices>
             )}
-          </ChoiceMenu>
+          </GroupedChoiceMenu>
         </>
       )}
     />
@@ -334,7 +337,7 @@ function EmptyChoices({ children }: { children: ReactNode }) {
   );
 }
 
-function ChoiceMenu({
+function GroupedChoiceMenu({
   labelledBy,
   value,
   label,

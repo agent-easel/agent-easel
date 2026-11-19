@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "./status-badge.tsx";
-import { fieldAria, fieldBorder } from "./field-state.ts";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 import { selectFieldClass } from "@/components/page";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +38,8 @@ export function ChoiceMenu({
   placeholder,
   className,
   describedBy,
+  problemTone = "attention",
+  required,
 }: {
   id: string;
   /** The field label; the trigger's accessible name adds the current value. */
@@ -50,6 +52,10 @@ export function ChoiceMenu({
   /** Trigger size where the form is denser than the composer, such as a Settings row. */
   className?: string;
   describedBy?: string | undefined;
+  /** The tone of the problem that `describedBy` names. */
+  problemTone?: FieldState["tone"];
+  /** The value must be chosen; the placeholder is never one of the choices. */
+  required?: boolean;
 }) {
   const selected = choices.find((choice) => choice.id === value);
   const shown = selected?.label ?? placeholder;
@@ -61,12 +67,13 @@ export function ChoiceMenu({
           id={id}
           variant="outline"
           aria-label={`${label}: ${selected ? `${shown}${selected.badge ? `, ${selected.badge}` : ""}` : shown}`}
+          aria-required={required}
           {...fieldAria(describedBy)}
           className={cn(
             selectFieldClass,
             "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
             className,
-            fieldBorder(describedBy ? "attention" : undefined),
+            fieldBorder(describedBy ? problemTone : undefined),
           )}
         >
           <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>

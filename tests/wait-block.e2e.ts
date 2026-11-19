@@ -7,7 +7,7 @@ import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 
-test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
+test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration, the unit chosen from the keyboard and its output", async ({
   app,
   screen,
   browser,
@@ -38,16 +38,24 @@ test("a Wait added from the library saves with a missing duration as a readiness
   // Act
   await screen.getByRole("button", "Wait Cool down").tap();
   await screen.getByLabel("Wait for").fill("90");
-  await screen.getByLabel("Unit").selectOption("minutes");
+  await screen.getByRole("button", "Unit: minutes", { exact: true }).press("Enter");
+  const minutes = screen.getByRole("menuitemradio", "minutes", { exact: true });
+  await expect(minutes).toBeFocused();
+  await minutes.press("ArrowDown");
+  const hours = screen.getByRole("menuitemradio", "hours", { exact: true });
+  await expect(hours).toBeFocused();
+  await hours.press("Enter");
+  await expect(screen.getByRole("button", "Unit: hours", { exact: true })).toBeFocused();
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
-  await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 minutes");
+  await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 hours");
   await screen.getByRole("button", "Wait Cool down").tap();
   await expect(screen.getByLabel("Wait for")).toHaveValue("90");
+  await expect(screen.getByRole("button", "Unit: hours", { exact: true })).toBeVisible();
   await expect(
     screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
   ).toBeVisible();
@@ -59,7 +67,7 @@ test("a Wait added from the library saves with a missing duration as a readiness
   expect(saved.value.graph.blocks[1]).toMatchObject({
     kind: "wait",
     name: "Cool down",
-    duration: { amount: 90, unit: "minutes" },
+    duration: { amount: 90, unit: "hours" },
   });
 });
 

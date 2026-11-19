@@ -18,13 +18,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { FlowAgentLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
+import { ChoiceMenu } from "./choice-menu.tsx";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
 import { fieldAria } from "./field-state.ts";
@@ -304,7 +304,10 @@ function AgentBlockSettings({
   );
 }
 
-const WAIT_UNITS: readonly WaitUnit[] = ["minutes", "hours", "days"];
+const WAIT_UNITS = (["minutes", "hours", "days"] satisfies WaitUnit[]).map((unit) => ({
+  id: unit,
+  label: unit,
+}));
 
 /** A fixed relative duration; an empty amount saves the draft without one. */
 function WaitBlockSettings({
@@ -317,6 +320,7 @@ function WaitBlockSettings({
   onEdit: (block: FlowBlock) => void;
 }) {
   const amountId = useId();
+  const unitId = useId();
   const unit = block.duration?.unit ?? "minutes";
   return (
     <Field id={amountId} label="Wait for" problem={problem}>
@@ -334,26 +338,26 @@ function WaitBlockSettings({
             onEdit({ ...block, duration: Number.isFinite(amount) ? { amount, unit } : null });
           }}
         />
-        <NativeSelect
-          aria-label="Unit"
-          {...fieldAria(problem && `${amountId}-problem`)}
+        <ChoiceMenu
+          id={unitId}
+          label="Unit"
+          describedBy={problem ? `${amountId}-problem` : undefined}
+          problemTone="error"
           value={unit}
-          onChange={(e) =>
+          choices={WAIT_UNITS}
+          disabled={false}
+          placeholder="Choose a unit"
+          className="h-8 border-input bg-background"
+          onChange={(next) =>
             onEdit({
               ...block,
               duration: block.duration && {
                 amount: block.duration.amount,
-                unit: e.target.value as WaitUnit,
+                unit: next as WaitUnit,
               },
             })
           }
-        >
-          {WAIT_UNITS.map((option) => (
-            <NativeSelectOption key={option} value={option}>
-              {option}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        />
       </div>
     </Field>
   );
