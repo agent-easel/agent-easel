@@ -126,7 +126,7 @@ export function StudioListBody({
   if (error) return <StudioListMessage tone="error">{errorText}</StudioListMessage>;
   if (!loaded) return <StudioListMessage tone="muted">{loadingText}</StudioListMessage>;
   if (noMatch) return <StudioListMessage tone="muted">{noMatchText}</StudioListMessage>;
-  if (empty) return <EmptyState size="large" icon={emptyIcon} title={emptyTitle} />;
+  if (empty) return <EmptyState size="large" surface="muted" icon={emptyIcon} title={emptyTitle} />;
   return children;
 }
 

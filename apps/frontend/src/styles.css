@@ -237,6 +237,8 @@ html[data-desktop="true"] [data-studio] > header {
   --text-sm--line-height: 18px;
   --text-base: 13px;
   --text-base--line-height: 20px;
+  --text-subtitle: 14px; /* EmptyState Large title */
+  --text-subtitle--line-height: 17px;
   --text-title: 15px; /* modal and Settings section titles (R07c/R07d) */
   --text-title--line-height: 20px;
   --text-lg: 16px;

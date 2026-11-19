@@ -267,7 +267,7 @@ function AgentsBoard({
   if (library.error && !library.agents)
     return <StudioListMessage tone="error">Couldn’t load Agents.</StudioListMessage>;
   if (empty && agentId === undefined)
-    return <EmptyState size="large" icon={Bot} title="No Agents yet" />;
+    return <EmptyState size="large" surface="muted" icon={Bot} title="No Agents yet" />;
   return (
     <div className="flex min-w-0 items-start gap-4">
       <AgentsListColumn
