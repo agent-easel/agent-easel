@@ -348,12 +348,9 @@ function RunFlowName({ run }: { run: RunDetail }) {
   );
   if (run.currentFlowRevision === null) return <span className="truncate font-medium">{name}</span>;
   return (
-    <StudioLink
-      selection={{ tab: "flows", flowId: run.flowId }}
-      className="truncate font-medium text-subtle-foreground hover:text-foreground"
-    >
-      {name}
-    </StudioLink>
+    <TextLink asChild tone="neutral" className="block truncate">
+      <StudioLink selection={{ tab: "flows", flowId: run.flowId }}>{name}</StudioLink>
+    </TextLink>
   );
 }
 

@@ -1,5 +1,6 @@
 import type { RunOrigin } from "@t3-factory/contracts";
-import { CircleDashed, ExternalLink, Zap } from "lucide-react";
+import { CircleDashed, Zap } from "lucide-react";
+import { TextLink } from "@/components/ui/text-link";
 import { InspectorSection } from "./inspector-section.tsx";
 
 /** `name#N` as Figma RD17 writes it, from the copy stored at Start; the issue link names the owner. */
@@ -47,22 +48,17 @@ export function RunOriginSection({ origin }: { origin: RunOrigin }) {
           {origin.trigger.name}
         </span>
       </div>
-      <a
+      <TextLink
         href={origin.url}
-        target="_blank"
-        rel="noreferrer"
-        className="group flex min-w-0 items-center gap-2 text-sm font-medium text-foreground"
+        tone="neutral"
+        trailing="external"
+        className="flex min-w-0 gap-2 text-sm"
       >
-        <CircleDashed
-          aria-hidden
-          className="size-3.5 shrink-0 text-muted-foreground"
-          strokeWidth={1.75}
-        />
-        <span className="min-w-0 flex-1 truncate group-hover:underline">
+        <CircleDashed aria-hidden className="size-3.5 shrink-0" strokeWidth={1.75} />
+        <span className="min-w-0 flex-1 truncate">
           {originIssue(origin)} {origin.title}
         </span>
-        <ExternalLink aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-      </a>
+      </TextLink>
       <p className="text-2xs tracking-label text-subtle-foreground">
         A record of what started this Run — not a claim, no live issue state.
       </p>
