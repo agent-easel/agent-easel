@@ -115,11 +115,12 @@ export async function expectRenamedDependency(
     renamed: Awaited<ReturnType<typeof saveAgentElsewhere>>;
   },
 ) {
-  const { library, canvas, renamed } = state;
+  const { library, canvas, browser, renamed } = state;
   await expect(canvas.getByText(renamed.name, { exact: true })).toBeVisible();
-  await expect(library.getByRole("button", `Add ${renamed.name}`, { exact: true })).toContainText(
-    "acceptance-unavailable-model",
-  );
+  await expect(library.getByRole("button", `Add ${renamed.name}`, { exact: true })).toHaveCount(0);
+  const row = browser.locator(`#block-library [aria-label=${JSON.stringify(renamed.name)}]`);
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(row).toContainText("Needs a model");
   await expect(
     canvas.getByRole("button", "Connect exit delivered of Worker", { exact: true }),
   ).toBeVisible();

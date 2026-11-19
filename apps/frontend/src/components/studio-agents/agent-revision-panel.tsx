@@ -4,11 +4,13 @@ import type {
   AgentCapabilities,
   AgentDefinition,
   AgentExecutionSettings,
+  AgentModelOptionDescriptor,
+  AgentModelOptionValue,
   FactoryProject,
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { resolveAgentModel } from "@t3-factory/domain-validation";
+import { optionValue, resolveAgentModel } from "@t3-factory/domain-validation";
 import { modelOptionLabel } from "@/lib/agent-display";
 import { revisionExitLines, revisionLine, type RevisionLine } from "../../revision-diff.ts";
 import { RevisionComparison } from "../revision-comparison.tsx";
@@ -22,6 +24,30 @@ const updatedNoticeMs = 4000;
 type ComparedContent = Omit<AgentContent, "execution"> & {
   readonly execution: AgentContent["execution"] | null;
 };
+
+function workerOptionLines(
+  options: readonly AgentModelOptionValue[],
+  descriptors: readonly AgentModelOptionDescriptor[],
+): RevisionLine[] {
+  const byId = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
+  const saved = new Set(options.map((option) => option.id));
+  return [
+    ...options.map((option) => {
+      const descriptor = byId.get(option.id);
+      const value = descriptor ? modelOptionLabel(descriptor, option.value) : String(option.value);
+      return revisionLine(`  ${descriptor?.label ?? "Unknown option"}  ${value}`, option);
+    }),
+    ...descriptors
+      .filter((descriptor) => !saved.has(descriptor.id))
+      .map((descriptor) => {
+        const value = optionValue(options, descriptor);
+        return revisionLine(
+          `  ${descriptor.label}  ${modelOptionLabel(descriptor, value)} · Default`,
+          descriptor.id,
+        );
+      }),
+  ];
+}
 
 /** Display every saved Worker setting, including options missing from the current catalog. */
 function workerLines(
@@ -45,11 +71,7 @@ function workerLines(
       settings.providerInstanceId,
     ),
     revisionLine(`  Model  ${model?.label ?? "Unknown model"}`, settings.modelId),
-    ...settings.modelOptions.map((option) => {
-      const descriptor = model?.options?.find((entry) => entry.id === option.id);
-      const value = descriptor ? modelOptionLabel(descriptor, option.value) : String(option.value);
-      return revisionLine(`  ${descriptor?.label ?? "Unknown option"}  ${value}`, option);
-    }),
+    ...workerOptionLines(settings.modelOptions, model?.options ?? []),
   ];
 }
 

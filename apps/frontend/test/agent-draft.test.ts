@@ -628,5 +628,6 @@ it("a non-effort Worker option is visible as a changed setting in the Agent comp
 
   // Assert
   expect(shown).toContainEqual(expect.objectContaining({ text: "  Old  Off" }));
+  expect(shown).toContainEqual(expect.objectContaining({ text: "  Effort  Low · Default" }));
   expect(shown).toContainEqual(expect.objectContaining({ text: "  Environment  Local" }));
 });
