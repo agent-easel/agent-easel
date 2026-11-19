@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   arrangeFlow,
   AUTHORING_DIMENSIONS,
@@ -799,9 +799,8 @@ export const makeDefinitions = (
         ),
       reserveAgentCreate() {
         return Effect.gen(function* () {
-          const id = yield* newId;
           const deadline = (yield* createClockMillis) + AGENT_CREATE_WINDOW_MS;
-          const payload = `${id}.${deadline}`;
+          const payload = `${randomUUID()}.${deadline}`;
           return { ok: true as const, value: `${payload}.${signCreate(payload)}` };
         });
       },

@@ -139,22 +139,7 @@ export function StudioListEmpty({ icon, title }: { icon: ReactNode; title: strin
   );
 }
 
-/** One Studio list row. A `selection` opens that page; without one the row stays put. */
-export function StudioListRow({
-  icon,
-  name,
-  meta,
-  metaAction,
-  reason,
-  badge,
-  trailing,
-  menu,
-  selection,
-  selected,
-  chevron,
-  control,
-  wrap,
-}: {
+type StudioRowContentProps = {
   icon: ReactNode;
   name: string;
   meta: ReactNode;
@@ -163,15 +148,51 @@ export function StudioListRow({
   reason?: ReactNode | undefined;
   badge?: ReactNode | undefined;
   trailing?: ReactNode | undefined;
-  menu: ReactNode;
   selection?: StudioSelection | undefined;
   selected?: boolean | undefined;
+  /** Agent names and summaries wrap. Other lists keep one line. */
+  wrap?: boolean | undefined;
+};
+
+/** One Studio list row. A `selection` opens that page; without one the row stays put. */
+export function StudioListRow({
+  menu,
+  chevron,
+  control,
+  ...content
+}: StudioRowContentProps & {
+  menu: ReactNode;
   chevron?: ReactNode | undefined;
   /** A control before the ⋯ menu, such as a Trigger's switch. It sits above the row link. */
   control?: ReactNode | undefined;
-  /** Agent names and summaries wrap. Other lists keep one line. */
-  wrap?: boolean | undefined;
 }) {
+  return (
+    <div
+      className={cn(
+        "relative flex min-h-[58px] w-full items-center gap-3 rounded-lg border bg-muted px-4 py-1.5 text-left text-foreground transition-colors hover:border-border-hover hover:bg-accent",
+        content.selected && "border-primary bg-sidebar-accent",
+      )}
+    >
+      <StudioRowContent {...content} />
+      {control && <div className="relative z-10 shrink-0">{control}</div>}
+      <div className="relative z-10 shrink-0">{menu}</div>
+      {chevron}
+    </div>
+  );
+}
+
+function StudioRowContent({
+  icon,
+  name,
+  meta,
+  metaAction,
+  reason,
+  badge,
+  trailing,
+  selection,
+  selected,
+  wrap,
+}: StudioRowContentProps) {
   const titleSelection = metaAction ? selection : undefined;
   const rowSelection = metaAction ? undefined : selection;
   const body = (
@@ -189,29 +210,17 @@ export function StudioListRow({
       {trailing}
     </>
   );
-  const content = rowSelection ? (
+  const className = "flex min-w-0 flex-1 items-center gap-3";
+  return rowSelection ? (
     <StudioLink
       selection={rowSelection}
       aria-current={selected ? "page" : undefined}
-      className={cn("flex min-w-0 flex-1 items-center gap-3", studioRowLinkClass)}
+      className={cn(className, studioRowLinkClass)}
     >
       {body}
     </StudioLink>
   ) : (
-    <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
-  );
-  return (
-    <div
-      className={cn(
-        "relative flex min-h-[58px] w-full items-center gap-3 rounded-lg border bg-muted px-4 py-1.5 text-left text-foreground transition-colors hover:border-border-hover hover:bg-accent",
-        selected && "border-primary bg-sidebar-accent",
-      )}
-    >
-      {content}
-      {control && <div className="relative z-10 shrink-0">{control}</div>}
-      <div className="relative z-10 shrink-0">{menu}</div>
-      {chevron}
-    </div>
+    <div className={className}>{body}</div>
   );
 }
 

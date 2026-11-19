@@ -259,7 +259,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     if (isStaleOwner(cause)) {
       ownerChange = { status: "waiting" };
       waitingSince = unknownBoundary;
-    } else if (cause.detail.code === "conflict" && (config.isRevisionConflict?.(cause) ?? true)) {
+    } else if (
+      saved &&
+      cause.detail.code === "conflict" &&
+      (config.isRevisionConflict?.(cause) ?? true)
+    ) {
       conflict = { status: "detected", revision: null };
     }
   }

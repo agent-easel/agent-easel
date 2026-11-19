@@ -122,11 +122,13 @@ function selectedFlow(selection: StudioSelection): FlowSelection | undefined {
       flowId: selection.fromFlow,
       ...(selection.fromTrigger && { fromTrigger: selection.fromTrigger }),
     };
+  return undefined;
 }
 
 function selectedTrigger(selection: StudioSelection) {
   if (selection.tab === "triggers") return selection;
   if (selection.fromTrigger) return { tab: "triggers" as const, triggerId: selection.fromTrigger };
+  return undefined;
 }
 
 function flowParents(fromTrigger: string | undefined, triggerName: string) {
