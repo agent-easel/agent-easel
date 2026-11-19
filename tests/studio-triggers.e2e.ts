@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { expect, type Screen } from "e2e";
+import { expect, type App, type Screen } from "e2e";
+import type { Fixture } from "./support/fixture/handle.ts";
 import type {
   Result,
   RunNavigationEntry,
@@ -41,6 +42,17 @@ async function expectEditorOff(screen: Screen, name: string) {
   await expect(
     screen.getByRole("switch", "Trigger enabled", { exact: true, checked: false }),
   ).toBeVisible();
+}
+
+/** Opens a saved, enabled Trigger named `name` from the Trigger list. */
+async function openSavedTrigger(
+  { app, screen, fixture }: { app: App; screen: Screen; fixture: Fixture },
+  name: string,
+) {
+  await fixture.github.trigger({ name });
+  await app.open("/studio/triggers");
+  await screen.getByRole("link", name, { exact: false }).tap();
+  await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
 }
 
 /** Opens the named Trigger from the list; answers its status strip once it shows Problem. */
@@ -118,10 +130,7 @@ test("an opened Trigger returns to the Trigger list from its breadcrumb", async 
 }) => {
   // Arrange
   const name = "Journey · Back to the list";
-  await fixture.github.trigger({ name });
-  await app.open("/studio/triggers");
-  await screen.getByRole("link", name, { exact: false }).tap();
-  await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
+  await openSavedTrigger({ app, screen, fixture }, name);
 
   // Act
   await browser
@@ -212,19 +221,55 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await expect(
     screen.getByText("Another Trigger watches factory-demo/atlas", { exact: true }),
   ).toBeVisible();
-  await expect(screen.getByRole("button", "Review and enable", { exact: true })).toBeEnabled();
+  const review = screen.getByRole("button", "Review and enable", { exact: true });
+  await expect(review).toBeEnabled();
+  // Save is the only primary: Review and enable stays neutral even when it can run.
+  await expect(review).not.toHaveAttribute("data-variant", "default");
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toHaveAttribute("data-variant", "default");
+  await expect(screen.getByRole("switch", "Trigger enabled", { exact: true })).toHaveCount(0);
 
   // Act
-  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await save.tap();
 
   // Assert
   await expectEditorOff(screen, name);
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
   await expect(screen.getByRole("button", "Check now", { exact: true })).toBeDisabled();
   const response = await fetch(new URL("/api/triggers", app.baseUrl));
   const saved = (await response.json()) as Result<readonly TriggerDefinition[]>;
   assert(saved.ok);
   assert.equal(saved.value.find((trigger) => trigger.name === name)?.enabled, false);
   await app.screenshot("edit-trigger-off");
+});
+
+test("a saved Trigger's footer Save is filled only with unsaved edits and turns neutral and disabled once saved", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Footer Save state";
+  await openSavedTrigger({ app, screen, fixture }, name);
+  await expect(
+    screen.getByRole("switch", "Trigger enabled", { exact: true, checked: true }),
+  ).toBeVisible();
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
+  await expect(screen.getByRole("button", "Review and enable", { exact: true })).toHaveCount(0);
+  await screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
+  await expect(save).toBeEnabled();
+  await expect(save).toHaveAttribute("data-variant", "default");
+
+  // Act
+  await save.tap();
+
+  // Assert
+  await expect(screen.getByRole("heading", `${name} edited`, { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
 });
 
 test("a Trigger and its Flow retain their drafts when an Agent opens over them", async ({

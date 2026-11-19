@@ -135,8 +135,8 @@ run. **Create Flow**, **Import** and the Studio editors' **Save** / **Create Age
 
 Save is the only filled primary action in Studio editors: filled only while there are unsaved
 changes it may send, neutral and disabled while saved or blocked, and **Saving…** while saving.
-The Trigger form's **Review and enable** is the exception. The Flow and Agent editors place Save
-in the header. The Trigger form keeps its actions in a pinned footer because its fields scroll.
+In the Trigger form, **Review and enable** stays neutral beside Save. The Flow and Agent editors
+place Save in the header. The Trigger form keeps its actions in a pinned footer because its fields scroll.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio fills the window with a 16 px inset on every side at all viewport

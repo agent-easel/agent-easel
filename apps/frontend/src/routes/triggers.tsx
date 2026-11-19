@@ -25,6 +25,7 @@ import {
   queryWarning,
 } from "../components/studio-triggers/trigger-form.tsx";
 import { TriggerStatusStrip } from "../components/studio-triggers/trigger-status-strip.tsx";
+import { StudioEditorHeader, StudioSaveButton } from "../components/studio-editor-header.tsx";
 import {
   useTriggerActions,
   type TriggerActions,
@@ -507,34 +508,37 @@ function TriggerEditorHeader({
   onDisable: (trigger: TriggerDefinition) => void;
   onCheck: (trigger: TriggerDefinition) => void;
 }) {
+  const existing = trigger && !removed ? trigger : null;
   return (
-    <header className="mb-5 grid gap-5">
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xl leading-tight font-semibold">
-          {trigger?.name ?? "New GitHub Issues Trigger"}
-        </h2>
-        {trigger && !removed && (
+    <StudioEditorHeader
+      layout="page"
+      title={trigger?.name ?? "New GitHub Issues Trigger"}
+      headingLevel={2}
+      controls={
+        existing && (
           <MutationGate>
             <Switch
               aria-label="Trigger enabled"
-              checked={trigger.enabled}
+              checked={existing.enabled}
               disabled={disabled}
-              onCheckedChange={(enabled) => (enabled ? onEnable(trigger) : onDisable(trigger))}
+              onCheckedChange={(enabled) => (enabled ? onEnable(existing) : onDisable(existing))}
             />
           </MutationGate>
-        )}
-      </div>
-      {trigger && !removed && (
-        <TriggerStatusStrip
-          trigger={trigger}
-          checked={checked}
-          checking={checking}
-          disabled={disabled || dirty}
-          moved={moved}
-          onCheck={() => onCheck(trigger)}
-        />
-      )}
-    </header>
+        )
+      }
+      status={
+        existing && (
+          <TriggerStatusStrip
+            trigger={existing}
+            checked={checked}
+            checking={checking}
+            disabled={disabled || dirty}
+            moved={moved}
+            onCheck={() => onCheck(existing)}
+          />
+        )
+      }
+    />
   );
 }
 
@@ -555,28 +559,24 @@ function EditorActions({
 }) {
   const { name, projectId, flowId } = state.content;
   const missing = !name.trim() || !projectId || !flowId;
-  const saveDisabled = !canSave || (!creating && !state.dirty);
-  const saveVariant = saveDisabled ? "secondary" : creating ? "outline" : "default";
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       {creating && missing && (
         <p className="mr-auto text-xs text-muted-foreground">Name, Project and Flow are required</p>
       )}
-      <MutationGate>
-        <Button variant={saveVariant} disabled={saveDisabled} onClick={onSave}>
-          {state.saving ? "Saving…" : "Save"}
-        </Button>
-        {creating && (
-          <Button
-            variant={canReview ? "default" : "outline"}
-            className={!canReview ? "bg-muted" : undefined}
-            disabled={!canReview}
-            onClick={onReview}
-          >
+      <StudioSaveButton
+        unsaved={creating || state.dirty}
+        ready={canSave}
+        saving={state.saving}
+        onClick={onSave}
+      />
+      {creating && (
+        <MutationGate>
+          <Button variant="outline" disabled={!canReview} onClick={onReview}>
             Review and enable
           </Button>
-        )}
-      </MutationGate>
+        </MutationGate>
+      )}
     </div>
   );
 }
