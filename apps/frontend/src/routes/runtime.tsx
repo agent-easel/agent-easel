@@ -4,13 +4,9 @@ import { useEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
-import {
-  SettingsGroup,
-  SettingsPage,
-  SettingsProblemCard,
-  SettingsRow,
-  SettingsTechnicalDetails,
-} from "../components/settings-page.tsx";
+import { ProblemCard } from "../components/problem-card.tsx";
+import { TechnicalDetails } from "../components/technical-details.tsx";
+import { SettingsGroup, SettingsPage, SettingsRow } from "../components/settings-page.tsx";
 import { StatusBadge, type SettingKind } from "../components/status-badge.tsx";
 import { targetNeedsAttention, useReportingState } from "../reporting-state.tsx";
 
@@ -91,13 +87,9 @@ export function RuntimeSettings() {
       }
     >
       {error && !checking && (
-        <SettingsProblemCard
-          tone="error"
-          title="Couldn’t check Agent reporting"
-          details={readDetails}
-        >
+        <ProblemCard tone="error" title="Couldn’t check Agent reporting" details={readDetails}>
           Check again in a moment. Runs already started aren’t affected.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {checking && !targets ? (
         <SettingsGroup label="Harnesses">
@@ -287,7 +279,7 @@ function TargetRow({
       />
       {!failed && targetHasDetails(target) && (
         <div className="px-4 pb-3">
-          <SettingsTechnicalDetails details={target.message} />
+          <TechnicalDetails details={target.message} />
         </div>
       )}
     </div>
@@ -305,15 +297,15 @@ function TargetProblem({
   const details = [target.path, failure ?? target.message].filter(Boolean).join("\n");
   if (failure)
     return (
-      <SettingsProblemCard tone="error" title={`Couldn’t install for ${name}`} details={details}>
+      <ProblemCard tone="error" title={`Couldn’t install for ${name}`} details={details}>
         Check the configuration permissions, then install again.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (target.status === "needs-attention") {
     const missing = !target.path && target.message.includes("ENOENT");
     return (
-      <SettingsProblemCard
-        tone="warning"
+      <ProblemCard
+        tone="attention"
         title={
           missing
             ? `${name}’s configuration folder is missing`
@@ -326,7 +318,7 @@ function TargetProblem({
           : target.actions.repair
             ? "Repair the configuration, then start a fresh T3 session."
             : "Review Technical details and fix the configuration on the Factory host."}
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   }
   return null;

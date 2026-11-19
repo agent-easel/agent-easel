@@ -5,15 +5,11 @@ import { KeyRound, LoaderCircle, Unplug } from "lucide-react";
 import { useClientScope } from "../client-scope.ts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsPage,
-  SettingsProblemCard,
-  SettingsTechnicalDetails,
-} from "@/components/settings-page";
+import { ProblemCard } from "@/components/problem-card";
+import { TechnicalDetails } from "@/components/technical-details";
+import { SettingsDetailRow, SettingsGroup, SettingsPage } from "@/components/settings-page";
 import { StatusBadge } from "@/components/status-badge";
-import { dayAndTime } from "@/components/execution-state";
+import { dayAndTime } from "../time-format.ts";
 import { api } from "../api.ts";
 import {
   ConnectionStateBadge,
@@ -91,7 +87,7 @@ export function ConnectionSettingsPanel() {
         }
       />
       {operationError && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="Couldn’t change the T3 connection"
           details={operationError}
@@ -107,7 +103,7 @@ export function ConnectionSettingsPanel() {
         />
       )}
       {presentation === "ready" && connection?.contract && (
-        <SettingsTechnicalDetails details={contractDetails(connection)} />
+        <TechnicalDetails details={contractDetails(connection)} />
       )}
     </SettingsPage>
   );
@@ -203,9 +199,9 @@ function ConnectionRows({
         />
       </SettingsGroup>
       {invalid && (
-        <SettingsProblemCard tone="error" title="Use HTTPS, or HTTP on this computer">
+        <ProblemCard tone="error" title="Use HTTPS, or HTTP on this computer">
           Leave credentials, queries and fragments out of the address.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -335,41 +331,41 @@ function ConnectionProblem({
 }) {
   if (presentation === "unavailable")
     return (
-      <SettingsProblemCard
+      <ProblemCard
         tone="error"
         icon={Unplug}
         title="Factory can’t reach T3"
         details={connection?.explanation}
       >
         Start T3 on the Factory host, then check again. Runs keep going in T3.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (presentation === "authorization-required")
     return connection?.authorizationPending ? (
-      <SettingsProblemCard
-        tone="warning"
+      <ProblemCard
+        tone="attention"
         icon={LoaderCircle}
         title="Approve in the browser on the Factory host"
         action={action}
       >
         This page updates by itself.
-      </SettingsProblemCard>
+      </ProblemCard>
     ) : (
-      <SettingsProblemCard tone="warning" title="Authorize Factory in T3" action={action}>
+      <ProblemCard tone="attention" title="Authorize Factory in T3" action={action}>
         T3’s approval page opens in a browser on the Factory host.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (presentation === "incompatible" && connection)
     return (
-      <SettingsProblemCard tone="warning" title="Update T3" details={contractDetails(connection)}>
+      <ProblemCard tone="attention" title="Update T3" details={contractDetails(connection)}>
         This T3 version is incompatible. Existing Runs keep their history.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (presentation === "load-error")
     return (
-      <SettingsProblemCard tone="error" title="Couldn’t read the connection status" details={error}>
+      <ProblemCard tone="error" title="Couldn’t read the connection status" details={error}>
         Check that Factory is running, then check again.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   return null;
 }

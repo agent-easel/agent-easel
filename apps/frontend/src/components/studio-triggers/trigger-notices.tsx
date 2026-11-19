@@ -8,7 +8,8 @@ import {
   type TriggerDraftModel,
   type TriggerDraftSnapshot,
 } from "../../trigger-draft.ts";
-import { SettingsProblemCard, SettingsTechnicalDetails } from "../settings-page.tsx";
+import { ProblemCard } from "../problem-card.tsx";
+import { TechnicalDetails } from "../technical-details.tsx";
 import type { TriggerActions } from "./trigger-actions.ts";
 import { triggerProblemIds } from "./trigger-form.tsx";
 import { scheduleText } from "./trigger-text.ts";
@@ -43,7 +44,7 @@ export function TriggerGuidance({ message }: { message: string }) {
   return (
     <>
       <p>{guidance.message}</p>
-      {guidance.details && <SettingsTechnicalDetails details={guidance.details} />}
+      {guidance.details && <TechnicalDetails details={guidance.details} />}
     </>
   );
 }
@@ -70,12 +71,12 @@ export function SharedRepositoryCard({
   if (!watchers.length) return null;
   const names = watchers.map((entry) => entry.name).join(", ");
   return (
-    <SettingsProblemCard tone="warning" title={`Another Trigger watches ${repository}`}>
+    <ProblemCard tone="attention" title={`Another Trigger watches ${repository}`}>
       {watchers.length === 1
         ? `Trigger ${names} already watches`
         : `Triggers ${names} already watch`}{" "}
       {repository}. Each Trigger starts its own Runs for the issues it matches.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -101,16 +102,12 @@ export function TriggerFieldNotices({
   return (
     <>
       {state.nameTaken && (
-        <SettingsProblemCard
-          id={triggerProblemIds.name}
-          tone="error"
-          title="This name is already used"
-        >
+        <ProblemCard id={triggerProblemIds.name} tone="error" title="This name is already used">
           Another Trigger has this name. Choose a different name.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {"error" in query && (
-        <SettingsProblemCard
+        <ProblemCard
           id={triggerProblemIds.query}
           tone="error"
           title={
@@ -120,29 +117,29 @@ export function TriggerFieldNotices({
           }
         >
           {queryCode(query.error)}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {publicQueryWarning && (
-        <SettingsProblemCard
+        <ProblemCard
           id={triggerProblemIds.query}
-          tone="warning"
+          tone="attention"
           title="No author filter on a public repository"
         >
           Issues anyone opens can start a Run once they carry the ready label.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {repository && (
-        <SettingsProblemCard
+        <ProblemCard
           id={triggerProblemIds.repository}
           tone="error"
           title="The repository can’t be read"
           details={repository.details}
         >
           {repository.message}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {flowProblem && (
-        <SettingsProblemCard
+        <ProblemCard
           id={triggerProblemIds.flow}
           tone="error"
           title="The selected Flow isn’t ready"
@@ -162,28 +159,24 @@ export function TriggerFieldNotices({
           }
         >
           {flowProblem}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {state.intervalError && (
-        <SettingsProblemCard
+        <ProblemCard
           id={triggerProblemIds.interval}
           tone="error"
           title="Check interval out of range"
         >
           {state.intervalError}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {state.limitError && (
-        <SettingsProblemCard
-          id={triggerProblemIds.limit}
-          tone="error"
-          title="Max active Runs out of range"
-        >
+        <ProblemCard id={triggerProblemIds.limit} tone="error" title="Max active Runs out of range">
           {state.limitError}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {gh && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title={
             ghProblem.includes("gh auth login")
@@ -198,7 +191,7 @@ export function TriggerFieldNotices({
           }
         >
           {gh.message}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -219,9 +212,9 @@ export function EditorNotices({
   return (
     <>
       {state.removed && (
-        <SettingsProblemCard tone="warning" title="This Trigger was removed elsewhere">
+        <ProblemCard tone="attention" title="This Trigger was removed elsewhere">
           Your edits are kept here. They can no longer be saved.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {state.updatedTo !== null && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -229,8 +222,8 @@ export function EditorNotices({
         </p>
       )}
       {conflict.status === "detected" && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title={
             conflict.revision === null
               ? "A newer revision was saved elsewhere"
@@ -249,8 +242,8 @@ export function EditorNotices({
         </p>
       )}
       {conflict.status === "compared" && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title={`Revision ${conflict.latest.revision} was saved elsewhere`}
           action={
             <span className="flex flex-wrap gap-2">
@@ -274,7 +267,7 @@ export function EditorNotices({
           “{conflict.latest.name}” checks <code>{conflict.latest.github.query}</code>{" "}
           {scheduleText(conflict.latest.schedule)} with up to {conflict.latest.maxActiveRuns} active
           Runs.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {!state.saved && state.saveOutcome === "unknown" ? (
         <UnknownCreateNotice
@@ -303,13 +296,13 @@ function SaveFailure({
 }) {
   const guidance = splitGuidance(message);
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="error"
       title={title ?? (creating ? "Couldn’t create this Trigger" : "Couldn’t save this Trigger")}
       details={guidance.details}
     >
       {guidance.message} {creating && "Your settings are still here."}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -345,13 +338,13 @@ function UnknownCreateNotice({
     setAttempt((previous) => previous + 1);
   });
   return (
-    <SettingsProblemCard
-      tone="warning"
+    <ProblemCard
+      tone="attention"
       title="Factory may have created this Trigger"
       action={result.action}
     >
       {result.message}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 

@@ -51,7 +51,7 @@ import {
 } from "../components/studio-removal.tsx";
 import { Dialog, DialogContent } from "../components/ui/dialog.tsx";
 import { MutationGate } from "@/client-gate";
-import { SettingsProblemCard } from "../components/settings-page.tsx";
+import { ProblemCard } from "../components/problem-card.tsx";
 import { ApiError } from "../api.ts";
 import { Bot } from "lucide-react";
 import { useReportingState } from "../reporting-state.tsx";
@@ -537,9 +537,9 @@ function AgentRemoveFromList({
         }
       >
         {error && (
-          <SettingsProblemCard tone="error" title="Couldn’t remove the Agent">
+          <ProblemCard tone="error" title="Couldn’t remove the Agent">
             {error}
-          </SettingsProblemCard>
+          </ProblemCard>
         )}
       </DialogContent>
     </Dialog>

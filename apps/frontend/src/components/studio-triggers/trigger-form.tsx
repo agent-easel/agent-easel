@@ -16,6 +16,7 @@ import {
 import { FlowGroup, ProjectOption } from "../launch-picker-options.tsx";
 import { fieldLabelClass, selectFieldClass } from "../page.tsx";
 import { SettingsRow } from "../settings-page.tsx";
+import { fieldAria } from "../field-state.ts";
 import { cn } from "@/lib/utils";
 import {
   triggerFlows,
@@ -51,10 +52,6 @@ export function chosenFlowProblem(
     : flow.readiness.issues.map((issue) => issue.message).join(" ");
 }
 
-function fieldProblem(id: string, error: boolean) {
-  return { "aria-invalid": error, "aria-describedby": id };
-}
-
 /** Figma T03/T05/T08: the GitHub Issues fields shared by create and edit. */
 export function TriggerFields({
   draft,
@@ -88,7 +85,7 @@ export function TriggerFields({
               {state.nameTaken && <StatusBadge kind="error">Already used</StatusBadge>}
               <Input
                 aria-labelledby={text.title}
-                {...(state.nameTaken && fieldProblem(triggerProblemIds.name, true))}
+                {...fieldAria(state.nameTaken && triggerProblemIds.name)}
                 className={cn(inputClass, "w-60")}
                 maxLength={200}
                 value={content.name}
@@ -138,7 +135,7 @@ export function TriggerFields({
               <span className="text-sm text-muted-foreground">every</span>
               <Input
                 aria-label="Check interval"
-                {...(state.intervalError && fieldProblem(triggerProblemIds.interval, true))}
+                {...fieldAria(state.intervalError && triggerProblemIds.interval)}
                 inputMode="numeric"
                 className={cn(inputClass, "w-13 font-mono text-label")}
                 value={content.interval}
@@ -166,7 +163,7 @@ export function TriggerFields({
               {state.limitError && <StatusBadge kind="error">Out of range</StatusBadge>}
               <Input
                 aria-labelledby={text.title}
-                {...(state.limitError && fieldProblem(triggerProblemIds.limit, true))}
+                {...fieldAria(state.limitError && triggerProblemIds.limit)}
                 inputMode="numeric"
                 className={cn(inputClass, "w-16 font-mono text-label")}
                 value={content.maxActiveRuns}
@@ -231,11 +228,7 @@ function RepositoryValue({
   const repository = moved ?? state.content.repository;
   if (problem)
     return (
-      <div
-        role="group"
-        aria-label="Repository"
-        {...fieldProblem(triggerProblemIds.repository, true)}
-      >
+      <div role="group" aria-label="Repository" {...fieldAria(triggerProblemIds.repository)}>
         <StatusBadge kind="error">Can’t read</StatusBadge>
       </div>
     );
@@ -255,7 +248,7 @@ function RepositoryValue({
         <Button
           variant="outline"
           size="sm"
-          {...fieldProblem("trigger-status-detail", false)}
+          aria-describedby="trigger-status-detail"
           onClick={() => onConfirm(moved)}
         >
           Confirm
@@ -367,7 +360,7 @@ function ChoiceMenu({
           type="button"
           variant="outline"
           aria-labelledby={labelledBy}
-          {...(problemId && fieldProblem(problemId, true))}
+          {...fieldAria(problemId)}
           className={cn(selectFieldClass, "h-7.5 w-50 justify-between border-border")}
         >
           <span className={cn("truncate", !label && "text-subtle-foreground")}>
@@ -437,7 +430,8 @@ function QueryRow({
       </div>
       <Input
         id="trigger-query"
-        {...fieldProblem(description, error)}
+        aria-invalid={error}
+        aria-describedby={description}
         className={cn(
           inputClass,
           "font-mono text-label",

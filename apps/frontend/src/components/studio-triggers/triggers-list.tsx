@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { ChevronRight, Pencil, RefreshCw, Trash2, Zap } from "lucide-react";
 import type { FactoryProject, TriggerDefinition, TriggerStartedRun } from "@t3-factory/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ProblemCard } from "../problem-card.tsx";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "../status-badge.tsx";
@@ -127,13 +127,7 @@ export function TriggersList({
         onCreate={create}
         createLabel="New Trigger"
       />
-      {failure && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {failure.name}: {failure.message}
-          </AlertDescription>
-        </Alert>
-      )}
+      {failure && <ProblemCard tone="error" title={`${failure.name}: ${failure.message}`} />}
       <StudioListBody
         error={Boolean(triggers.error)}
         loaded={loaded}

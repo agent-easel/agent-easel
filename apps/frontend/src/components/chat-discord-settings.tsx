@@ -25,21 +25,21 @@ import {
 } from "./chat-discord-access.tsx";
 import { DeliveryCard } from "./chat-discord-delivery.tsx";
 import { CopyButton } from "./copy-button.tsx";
-import { dayAndTime } from "./execution-state.tsx";
+import { dayAndTime } from "../time-format.ts";
 import { useSettingsDraftGuard } from "./settings-draft-guard.tsx";
-import { SettingsGroup, SettingsProblemCard, SettingsRow } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import type { TechnicalDetail } from "./technical-details.tsx";
+import { SettingsGroup, SettingsRow } from "./settings-page.tsx";
 import {
   ChatControlPage,
   chatControlError,
-  fieldAria,
   FieldRow,
   SaveActions,
   SecretField,
-  technicalDetails,
   useChatControlSection,
-  type FieldState,
   type SecretChoice,
 } from "./chat-control-form.tsx";
+import { fieldAria, type FieldState } from "./field-state.ts";
 
 /** The setup steps live in the documentation; the page links them until the first passing check. */
 const SETUP_GUIDE_URL =
@@ -454,22 +454,22 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
         />
       </div>
       {page.switchError && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title={`Couldn’t turn Chat control ${settings.chatControlEnabled ? "off" : "on"}`}
           details={page.switchError}
         >
           Fix what the details name, then try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {page.refreshError && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="Couldn’t refresh the connection state"
           details={page.refreshError}
         >
           Factory retries automatically.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -568,7 +568,7 @@ function BotCard({
             spellCheck={false}
             disabled={disabled}
             className="flex-1 bg-muted font-mono text-label"
-            {...fieldAria(publicKeyState)}
+            {...fieldAria(publicKeyState?.cardId)}
             onChange={(event) => onChange({ ...draft, publicKey: event.target.value })}
           />
           {configuration.publicKey && (
@@ -619,21 +619,21 @@ function BotProblems({
   return (
     <>
       {page.publicKeyProblem && (
-        <SettingsProblemCard id={CARD.publicKey} tone="error" title="Public key isn’t valid">
+        <ProblemCard id={CARD.publicKey} tone="error" title="Public key isn’t valid">
           {page.publicKeyProblem}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {replacesToken(draft, settings) && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title={`A token from another bot replaces ${settings.botName ?? "the current bot"}`}
         >
           Its conversations are cleared and its waiting reviews stop working. A new token of the
           same bot keeps everything.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {page.stopped === "bot" && page.bot.saveFailure && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="Couldn’t save the bot"
           details={page.bot.saveFailure.message}
@@ -641,7 +641,7 @@ function BotProblems({
           {page.access.dirty
             ? "Access changes weren’t saved. Previous grants are still active."
             : "Your edits are kept. Save again."}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {settings.chatControlEnabled ? (
         <RunningConnectionProblems settings={settings} />
@@ -649,13 +649,9 @@ function BotProblems({
         <CheckProblem settings={settings} />
       )}
       {page.checkError && (
-        <SettingsProblemCard
-          tone="error"
-          title="Couldn’t check the connection"
-          details={page.checkError}
-        >
+        <ProblemCard tone="error" title="Couldn’t check the connection" details={page.checkError}>
           Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -667,18 +663,18 @@ function CheckProblem({ settings }: { settings: DiscordSettings }) {
   const failure = tokenFailure(settings);
   if (!check || !failure) return null;
   return (
-    <SettingsProblemCard
+    <ProblemCard
       id={CARD.token}
       tone="error"
       title={failure.title}
-      details={technicalDetails([
+      details={[
         ["When", dayAndTime(check.checkedAt)],
         ["Revision", String(check.revision)],
         ["Error", check.message],
-      ])}
+      ]}
     >
       {failure.next}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -686,41 +682,41 @@ function CheckProblem({ settings }: { settings: DiscordSettings }) {
 function RunningConnectionProblems({ settings }: { settings: DiscordSettings }) {
   const { connectionStatus, connectionProblem, commandSetup } = settings;
   const failure = tokenFailure(settings);
-  const details = connectionProblem
-    ? technicalDetails([
+  const details: readonly TechnicalDetail[] | undefined = connectionProblem
+    ? [
         ["When", dayAndTime(connectionProblem.occurredAt)],
         ["Revision", String(settings.configuration.revision)],
         ["Error", connectionProblem.message],
-      ])
+      ]
     : undefined;
   return (
     <>
       {connectionStatus === "reconnecting" && (
-        <SettingsProblemCard tone="warning" title="Factory can’t reach Discord" details={details}>
+        <ProblemCard tone="attention" title="Factory can’t reach Discord" details={details}>
           It keeps trying with increasing waits.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {connectionStatus === "rejected" && (
-        <SettingsProblemCard
+        <ProblemCard
           id={CARD.token}
           tone="error"
           title={failure?.title ?? "Discord ended the connection"}
           details={details}
         >
           {failure?.tag ? failure.next : "Fix the cause, then retry the connection."}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {commandSetup?.outcome === "failed" && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="/factory reset isn’t registered"
-          details={technicalDetails([
+          details={[
             ["When", dayAndTime(commandSetup.occurredAt)],
             ["Error", commandSetup.message],
-          ])}
+          ]}
         >
           Retry the connection to register it again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -739,35 +735,31 @@ function AccessProblems({ page, settings }: { page: DiscordPage; settings: Disco
   return (
     <>
       {(page.stopped === "access" || page.stopped === "access-after-bot") && access.saveFailure && (
-        <SettingsProblemCard
-          tone="error"
-          title="Couldn’t save Access"
-          details={access.saveFailure.message}
-        >
+        <ProblemCard tone="error" title="Couldn’t save Access" details={access.saveFailure.message}>
           {page.stopped === "access-after-bot"
             ? "The bot is saved. Save again to retry Access."
             : "Your edits are kept. Save again."}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {page.accessTest.error && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="Couldn’t send the access test"
           details={page.accessTest.error}
         >
           Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {channelNames.length > 0 && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="info"
           title={`Everyone who can read ${channelNames.join(", ")} sees the bot’s replies`}
         />
       )}
       {settings.chatControlEnabled && !access.dirty && nobody && (
-        <SettingsProblemCard tone="info" title="Nobody can use Chat control yet">
+        <ProblemCard tone="info" title="Nobody can use Chat control yet">
           Allow a user and a channel that grants a Project.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

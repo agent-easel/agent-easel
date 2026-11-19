@@ -2,7 +2,12 @@ import { FlowGroup } from "../components/launch-picker-options.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ScreenLayout } from "../components/screen-layout.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import type { AgentDefinition, FlowDraft, LaunchChoices } from "@t3-factory/contracts";
+import {
+  T3_APP_URL,
+  type AgentDefinition,
+  type FlowDraft,
+  type LaunchChoices,
+} from "@t3-factory/contracts";
 import { api } from "../api.ts";
 import {
   connectionIsConfigured,
@@ -16,31 +21,21 @@ import { composerFlows, runDraft, useRunDraft } from "../run-draft.ts";
 import {
   composerLaunchCard,
   composerLaunchCardId,
-  t3AppUrl,
   type LaunchCard,
   type StartCause,
 } from "../composer-launch.ts";
 import { useLiveDelivery, useTransport, type TransportState } from "../transport.ts";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  ChevronsUpDown,
-  CircleHelp,
-  CloudOff,
-  Info,
-  Play,
-  TriangleAlert,
-  Unplug,
-  Workflow,
-} from "lucide-react";
+import { ChevronsUpDown, CircleHelp, CloudOff, Info, Play, Unplug, Workflow } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import {
-  Notice,
-  NoticeButton,
-  NoticeExternalLink,
-  NoticeSettingsLink,
-  NoticeStudioLink,
-} from "../components/notice.tsx";
+  ProblemCard,
+  ProblemCardButton,
+  ProblemCardExternalLink,
+  ProblemCardSettingsLink,
+  ProblemCardStudioLink,
+} from "../components/problem-card.tsx";
 import { selectFieldClass, toolbarPillClass } from "../components/page.tsx";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
@@ -563,9 +558,12 @@ function RefreshProjects({ model }: { model: Composer }) {
   const { projects } = model;
   return (
     <MutationGate>
-      <NoticeButton disabled={projects.busy} onClick={() => void projects.act(api.recheckProjects)}>
+      <ProblemCardButton
+        disabled={projects.busy}
+        onClick={() => void projects.act(api.recheckProjects)}
+      >
         Refresh projects
-      </NoticeButton>
+      </ProblemCardButton>
     </MutationGate>
   );
 }
@@ -573,23 +571,27 @@ function RefreshProjects({ model }: { model: Composer }) {
 function CauseLink({ cause }: { cause: StartCause }) {
   if (cause.destination === "reporting")
     return (
-      <NoticeSettingsLink selection={{ tab: "agent-reporting" }}>
+      <ProblemCardSettingsLink selection={{ tab: "agent-reporting" }}>
         Open Settings → Agent reporting
-      </NoticeSettingsLink>
+      </ProblemCardSettingsLink>
     );
   if (cause.destination === "connection")
     return (
-      <NoticeSettingsLink selection={{ tab: "connection" }}>
+      <ProblemCardSettingsLink selection={{ tab: "connection" }}>
         Open T3 connection settings
-      </NoticeSettingsLink>
+      </ProblemCardSettingsLink>
     );
   if (cause.destination === "flows")
     return (
-      <NoticeStudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
+      <ProblemCardStudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
         Open Studio → Flows
-      </NoticeStudioLink>
+      </ProblemCardStudioLink>
     );
-  return <NoticeStudioLink selection={{ tab: "agents" }}>Open Studio → Agents</NoticeStudioLink>;
+  return (
+    <ProblemCardStudioLink selection={{ tab: "agents" }}>
+      Open Studio → Agents
+    </ProblemCardStudioLink>
+  );
 }
 
 function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
@@ -619,81 +621,88 @@ function connectionLaunchNotice(model: Composer) {
   const { card } = model;
   if (card.kind === "factory-offline")
     return (
-      <Notice tone="critical" icon={CloudOff} title="Factory offline">
+      <ProblemCard density="compact" tone="error" icon={CloudOff} title="Factory offline">
         Your draft is kept.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "checking")
     return (
-      <Notice tone="neutral" icon={CircleHelp} title="Checking T3 connection…">
+      <ProblemCard
+        density="compact"
+        tone="neutral"
+        icon={CircleHelp}
+        title="Checking T3 connection…"
+      >
         Start is available once Factory confirms T3 is connected.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "status-unknown")
     return (
-      <Notice tone="critical" icon={TriangleAlert} title="Could not load T3 connection status">
+      <ProblemCard density="compact" tone="error" title="Could not load T3 connection status">
         Your draft is kept. Check that Factory is running, then check the connection again.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "unconfigured")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Connect Factory to T3"
         action={
-          <NoticeSettingsLink selection={{ tab: "connection" }}>
+          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
             Open T3 connection
-          </NoticeSettingsLink>
+          </ProblemCardSettingsLink>
         }
       />
     );
   if (card.kind === "disconnected")
     return (
-      <Notice
-        tone="critical"
+      <ProblemCard
+        density="compact"
+        tone="error"
         icon={Unplug}
         title="T3 is disconnected"
         action={
-          <NoticeSettingsLink selection={{ tab: "connection" }}>
+          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
             Open T3 connection settings
-          </NoticeSettingsLink>
+          </ProblemCardSettingsLink>
         }
       >
         Your draft is kept and Project and Flow show their last known values. Start is available
         again as soon as Factory reconnects to T3.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "authorization")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Authorize Factory in T3"
         action={
-          <NoticeSettingsLink selection={{ tab: "connection" }}>
+          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
             Open T3 connection settings
-          </NoticeSettingsLink>
+          </ProblemCardSettingsLink>
         }
       >
         T3 is running but hasn’t granted this Factory access. Approve it in T3 — your draft stays
         here.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "incompatible")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="T3 version is incompatible"
         action={
-          <NoticeSettingsLink selection={{ tab: "connection" }}>
+          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
             Open T3 connection settings
-          </NoticeSettingsLink>
+          </ProblemCardSettingsLink>
         }
       >
         Update T3 and check again. Until then Factory can show history but can’t start Runs.
-      </Notice>
+      </ProblemCard>
     );
   return null;
 }
@@ -702,31 +711,32 @@ function outcomeLaunchNotice(model: Composer) {
   const { card, start, draft } = model;
   if (card.kind === "start-unknown")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="neutral"
         icon={CircleHelp}
         title="We couldn’t confirm the start"
         action={
           <MutationGate>
-            <NoticeButton disabled={draft.busy} onClick={() => void start()}>
+            <ProblemCardButton disabled={draft.busy} onClick={() => void start()}>
               Check now
-            </NoticeButton>
+            </ProblemCardButton>
           </MutationGate>
         }
       >
         {card.message}
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "start-rejected")
     return (
-      <Notice
-        tone="critical"
-        icon={TriangleAlert}
+      <ProblemCard
+        density="compact"
+        tone="error"
         title="Start was not accepted"
         action={<StartCauseList causes={card.causes} />}
       >
         No Run was created.
-      </Notice>
+      </ProblemCard>
     );
   return null;
 }
@@ -735,111 +745,129 @@ function setupLaunchNotice(model: Composer) {
   const { card } = model;
   if (card.kind === "discovery")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Project discovery failed"
         action={<RefreshProjects model={model} />}
       >
         {card.message}
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "no-projects")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Add a project in T3 first"
         action={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
             <RefreshProjects model={model} />
-            <NoticeExternalLink href={t3AppUrl}>Open T3</NoticeExternalLink>
+            <ProblemCardExternalLink href={T3_APP_URL}>Open T3</ProblemCardExternalLink>
           </span>
         }
       >
         Choose an available project once T3 reports one. Factory uses the projects T3 knows about:
         add a repository in T3, then refresh — your prompt is kept.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "choose-project")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Choose a project"
         action={<RefreshProjects model={model} />}
       >
         Choose an available project, then a Flow for it. Your prompt is kept.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "create-agent")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Create your first Agent"
-        action={<NoticeStudioLink selection={{ tab: "agents" }}>Go to Agents</NoticeStudioLink>}
+        action={
+          <ProblemCardStudioLink selection={{ tab: "agents" }}>Go to Agents</ProblemCardStudioLink>
+        }
       />
     );
   if (card.kind === "setup-agent")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Set up an Agent"
-        action={<NoticeStudioLink selection={{ tab: "agents" }}>Go to Agents</NoticeStudioLink>}
+        action={
+          <ProblemCardStudioLink selection={{ tab: "agents" }}>Go to Agents</ProblemCardStudioLink>
+        }
       />
     );
   if (card.kind === "create-flow")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="info"
         icon={Info}
         title="Create your first Flow"
-        action={<NoticeStudioLink selection={{ tab: "flows" }}>Go to Flows</NoticeStudioLink>}
+        action={
+          <ProblemCardStudioLink selection={{ tab: "flows" }}>Go to Flows</ProblemCardStudioLink>
+        }
       >
         Your draft is kept while you are away.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "no-ready-flows")
     return (
-      <Notice
-        tone="critical"
-        icon={TriangleAlert}
+      <ProblemCard
+        density="compact"
+        tone="error"
         title={`No ready Flows for ${card.projectTitle}`}
         action={
-          <NoticeStudioLink selection={{ tab: "flows" }}>Open Flows in Studio</NoticeStudioLink>
+          <ProblemCardStudioLink selection={{ tab: "flows" }}>
+            Open Flows in Studio
+          </ProblemCardStudioLink>
         }
       />
     );
   if (card.kind === "flow-not-ready")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         id={composerLaunchCardId}
-        tone="critical"
-        icon={TriangleAlert}
+        tone="error"
         title={`“${card.flowName}” isn’t ready to run`}
         action={
-          <NoticeStudioLink selection={{ tab: "flows", flowId: card.flowId }}>
+          <ProblemCardStudioLink selection={{ tab: "flows", flowId: card.flowId }}>
             Open {card.flowName} in Flows
-          </NoticeStudioLink>
+          </ProblemCardStudioLink>
         }
       >
         {card.issues.length ? `${card.issues.join(" ")} ${flowStay}` : flowStay}
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "draft-storage")
     return (
-      <Notice tone="attention" icon={TriangleAlert} title="This browser can’t save your draft">
+      <ProblemCard density="compact" tone="attention" title="This browser can’t save your draft">
         Your prompt and choices stay while this window is open. Allow site storage for Factory in
         your browser settings to keep drafts after a reload.
-      </Notice>
+      </ProblemCard>
     );
   if (card.kind === "choices-stale")
     return (
-      <Notice tone="neutral" icon={CircleHelp} title="Launch choices are out of date">
+      <ProblemCard
+        density="compact"
+        tone="neutral"
+        icon={CircleHelp}
+        title="Launch choices are out of date"
+      >
         {card.message}
-      </Notice>
+      </ProblemCard>
     );
   return null;
 }

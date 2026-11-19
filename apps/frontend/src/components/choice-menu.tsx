@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { StatusBadge } from "./status-badge.tsx";
+import { fieldAria, fieldBorder } from "./field-state.ts";
 import { selectFieldClass } from "@/components/page";
 import { cn } from "@/lib/utils";
 
@@ -60,13 +61,12 @@ export function ChoiceMenu({
           id={id}
           variant="outline"
           aria-label={`${label}: ${selected ? `${shown}${selected.badge ? `, ${selected.badge}` : ""}` : shown}`}
-          aria-invalid={describedBy ? true : undefined}
-          aria-describedby={describedBy}
+          {...fieldAria(describedBy)}
           className={cn(
             selectFieldClass,
             "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
             className,
-            describedBy && "aria-invalid:border-attention",
+            fieldBorder(describedBy ? "attention" : undefined),
           )}
         >
           <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>

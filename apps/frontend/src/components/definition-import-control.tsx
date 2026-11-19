@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { Bot, TriangleAlert, Workflow } from "lucide-react";
+import { Bot, Workflow } from "lucide-react";
 import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
 } from "../definition-import.ts";
 import { ModelOptionField } from "./execution-settings-fields.tsx";
 import { NeedsModel } from "./needs-model.tsx";
-import { Notice } from "./notice.tsx";
+import { ProblemCard } from "./problem-card.tsx";
 import { OwnerPicker } from "./studio-owner.tsx";
 import { ownerPicker } from "../studio-definitions.ts";
 
@@ -163,9 +163,9 @@ function ImportFileContent({
         </p>
       )}
       {rejected && (
-        <Notice
-          tone="critical"
-          icon={TriangleAlert}
+        <ProblemCard
+          density="compact"
+          tone="error"
           title="Couldn’t import this file"
           action={
             state.issues.length > 0 && (
@@ -178,7 +178,7 @@ function ImportFileContent({
           }
         >
           {state.error}
-        </Notice>
+        </ProblemCard>
       )}
     </DialogContent>
   );
@@ -237,13 +237,13 @@ function ImportReviewContent({
         hint=""
         quietStatus
       />
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Imported prompts run with your T3 permissions"
       >
         Read them in Studio before you start a Run.
-      </Notice>
+      </ProblemCard>
       <section aria-labelledby="import-creates" className="grid gap-1.5">
         <h3 id="import-creates" className="text-2xs font-medium text-muted-foreground">
           Creates

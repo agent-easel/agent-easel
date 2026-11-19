@@ -7,18 +7,18 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-card text-card-foreground",
+        /* Untinted legacy look, left only for the Flow editor and condition arrivals until #519. */
         destructive:
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
-        /* Figma launch / connection notices: tinted surface, toned icon, neutral title and body. */
-        critical: "border-destructive/40 bg-destructive/8 text-foreground [&>svg]:text-destructive",
+        /* ProblemCard tones: tinted surface, toned icon, neutral title and body. */
+        error: "border-destructive/40 bg-destructive/8 text-foreground [&>svg]:text-destructive",
         attention: "border-attention/40 bg-attention/8 text-foreground [&>svg]:text-attention",
         info: "border-primary/50 bg-primary/8 text-foreground [&>svg]:text-link",
         neutral: "border-border-strong bg-card text-foreground [&>svg]:text-muted-foreground",
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: "neutral",
     },
   },
 );

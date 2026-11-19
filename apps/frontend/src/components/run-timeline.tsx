@@ -8,7 +8,7 @@ import {
 } from "@t3-factory/contracts";
 import { capturedExits } from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
-import { clockTime, dayAndTime } from "./execution-state.tsx";
+import { clockTime, dayAndTime, fullDateTime } from "../time-format.ts";
 import { BLOCK_KINDS } from "../block-kind.ts";
 import { conditionOutputName, countText } from "../condition-arrivals.ts";
 import { TitleMark, titleOutcome, titleStateLabel } from "./run-title-generation.tsx";
@@ -500,7 +500,7 @@ function StatusUpdates({
       >
         <time
           dateTime={first.observedAt}
-          title={`Observed ${new Date(first.observedAt).toLocaleString()} to ${new Date(last.observedAt).toLocaleString()}`}
+          title={`Observed ${fullDateTime(first.observedAt)} to ${fullDateTime(last.observedAt)}`}
           className="shrink-0 font-mono text-xs"
         >
           {timeSpan(first.observedAt, last.observedAt)}
@@ -570,7 +570,7 @@ function TimelineEvent({
     >
       <time
         dateTime={event.observedAt}
-        title={`Observed ${new Date(event.observedAt).toLocaleString()}`}
+        title={`Observed ${fullDateTime(event.observedAt)}`}
         className="w-9 shrink-0 font-mono text-overline whitespace-nowrap text-subtle-foreground"
       >
         {clockTime(event.observedAt)}

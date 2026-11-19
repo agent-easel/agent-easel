@@ -8,6 +8,7 @@ import { randomId } from "@/lib/ids";
 import { cn } from "@/lib/utils";
 import type { ExitProblem } from "../../agent-draft.ts";
 import { StatusBadge } from "../status-badge.tsx";
+import { fieldAria } from "../field-state.ts";
 import { removeIconButtonClass } from "./agent-project-overrides.tsx";
 
 const columnHeadClass = "pb-1 text-left text-2xs font-normal text-subtle-foreground";
@@ -68,8 +69,7 @@ export function AgentExitsField({
                         aria-label={`Exit ${index + 1} name`}
                         maxLength={200}
                         value={exit.name}
-                        aria-invalid={problem ? true : undefined}
-                        aria-describedby={problem ? problemCardId : undefined}
+                        {...fieldAria(problem ? problemCardId : undefined)}
                         onChange={(event) => update(exit.id, { name: event.target.value })}
                         className={cn("h-8 bg-muted text-sm", problem && "pr-24")}
                       />

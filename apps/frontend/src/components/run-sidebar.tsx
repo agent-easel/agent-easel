@@ -50,6 +50,7 @@ import { GeneratingTitle } from "./run-title-generation.tsx";
 import { RunOriginPreview } from "./run-origin.tsx";
 import { repositorySummary, RunRepositories } from "./run-repositories.tsx";
 import { cn } from "../lib/utils.ts";
+import { fullDateTime } from "../time-format.ts";
 
 /**
  * Run/ExecIndicator: the row icon shows activity, never state; a Problem or Needs input chip shows
@@ -746,7 +747,7 @@ function RunPreview({ run }: { run: RunNavigationEntry }) {
         ))}
       <RunRepositories workers={run.repositories} />
       <p className="text-2xs text-muted-foreground">
-        Last activity {new Date(run.lastActivityAt).toLocaleString()}
+        Last activity {fullDateTime(run.lastActivityAt)}
       </p>
     </div>
   );

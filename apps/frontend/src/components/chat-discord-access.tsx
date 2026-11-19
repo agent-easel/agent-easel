@@ -19,16 +19,12 @@ import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
-import { timeAgo } from "./execution-state.tsx";
+import { timeAgo } from "../time-format.ts";
 import { randomId } from "../lib/ids.ts";
-import { SettingsGroup, SettingsProblemCard } from "./settings-page.tsx";
-import {
-  fieldAria,
-  fieldBorder,
-  FieldRow,
-  useChatControlSection,
-  type FieldState,
-} from "./chat-control-form.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup } from "./settings-page.tsx";
+import { FieldRow, useChatControlSection } from "./chat-control-form.tsx";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 
 interface ChannelDraft {
   /** Stable while the owner edits the row's channel ID. */
@@ -233,8 +229,8 @@ export function AccessCard({
             autoComplete="off"
             spellCheck={false}
             disabled={disabled}
-            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(usersState))}
-            {...fieldAria(usersState)}
+            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(usersState?.tone))}
+            {...fieldAria(usersState?.cardId)}
             onChange={(event) => onChange({ ...draft, users: event.target.value })}
             onPaste={(event) => {
               // One ID per line is accepted and shown as the comma-separated list.
@@ -276,14 +272,14 @@ export function AccessCard({
         />
       </SettingsGroup>
       {problem && (
-        <SettingsProblemCard id={PROBLEM} tone="error" title="Access isn’t valid">
+        <ProblemCard id={PROBLEM} tone="error" title="Access isn’t valid">
           {problem}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {(unknown.users.length > 0 || unknown.channels.length > 0) && (
-        <SettingsProblemCard id={UNKNOWN} tone="warning" title={unknownTitle(unknown)}>
+        <ProblemCard id={UNKNOWN} tone="attention" title={unknownTitle(unknown)}>
           Fix the IDs, then save.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       <AccessTestProblems settings={settings} draft={draft} test={test} />
     </>
@@ -380,21 +376,21 @@ function AccessTestProblems({
   return (
     <>
       {cantPost.length > 0 && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title={`${settings.botName ?? "The bot"} can’t post in ${labels(cantPost)}`}
         >
           Allow it to send messages there, then send again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {gone.length > 0 && (
-        <SettingsProblemCard
+        <ProblemCard
           id={GONE}
-          tone="warning"
+          tone="attention"
           title={`${labels(gone)} no longer exist${gone.length === 1 ? "s" : ""}`}
         >
           Remove {gone.length === 1 ? "it" : "them"}, then send again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -471,9 +467,9 @@ function ChannelRow({
         disabled={disabled}
         className={cn(
           "w-auto min-w-0 flex-1 basis-40 bg-muted font-mono text-label",
-          fieldBorder(state),
+          fieldBorder(state?.tone),
         )}
-        {...fieldAria(state)}
+        {...fieldAria(state?.cardId)}
         onChange={(event) => onChange({ channelId: event.target.value })}
       />
       <ProjectsSelect

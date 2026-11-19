@@ -1,6 +1,9 @@
 import type { FlowReadiness } from "./flow.ts";
 import { operation } from "./operation.ts";
 
+/** T3's hosted app; Factory links to it and to its thread routes but takes no action there. */
+export const T3_APP_URL = "https://app.t3.codes";
+
 export interface RuntimeSelection {
   readonly projectId: string;
   readonly agentId: string;

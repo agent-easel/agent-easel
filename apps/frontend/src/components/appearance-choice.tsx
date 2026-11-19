@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
 import { chooseAppearance, useAppearance } from "../appearance.ts";
 import { SegmentedChoice } from "./segmented-choice.tsx";
-import { SettingsProblemCard, SettingsRow } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsRow } from "./settings-page.tsx";
 
 const appearanceOptions = [
   ["light", "Light"],
@@ -43,7 +44,7 @@ export function AppearanceChoice() {
         />
       </div>
       {failure && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title={
             appearance === failure.mode
@@ -55,7 +56,7 @@ export function AppearanceChoice() {
           {appearance === failure.mode
             ? failure.message
             : `Factory stays in ${appearance === "light" ? "Light" : "Dark"}. Try again.`}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

@@ -29,7 +29,8 @@ import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
 import { RUN_STATE_LABELS, StatusBadge, type RunStateKind } from "./status-badge.tsx";
 import { ContinueNow } from "./wait-arrivals.tsx";
 import { FlowInputTitleLine } from "./run-title-generation.tsx";
-import { clockTime, dayAndTime, executionStateLabel } from "./execution-state.tsx";
+import { executionStateLabel } from "./execution-state.tsx";
+import { clockTime, dayAndTime } from "../time-format.ts";
 
 /** Not-started blocks were never observed. Stale and unknown apply only after a block starts. */
 function blockObservation(block: RunBlock, unavailable: boolean) {

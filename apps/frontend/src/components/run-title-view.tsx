@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { clockTimeWithSeconds } from "../time-format.ts";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunTitleGeneration } from "@t3-factory/contracts";
 import { ChevronLeft, X } from "lucide-react";
@@ -7,16 +8,6 @@ import { KeyChip } from "@/components/ui/key-chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
 import { TitleMark, TitleStateBadge, titleStateLabel } from "./run-title-generation.tsx";
-
-/** A deadline is 30 seconds after Start, so it reads to the second. */
-function secondsTime(at: string) {
-  return new Date(at).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  });
-}
 
 /**
  * The Run title in the docked inspector: how its generation went. It is not a Block selection, so
@@ -84,7 +75,7 @@ export function RunTitleView({
               {reason && <span className="block text-muted-foreground">{reason}</span>}
             </DetailRow>
             <DetailRow label="Model">{generation.modelLabel}</DetailRow>
-            <DetailRow label="Deadline">{secondsTime(generation.deadlineAt)}</DetailRow>
+            <DetailRow label="Deadline">{clockTimeWithSeconds(generation.deadlineAt)}</DetailRow>
           </dl>
         </InspectorSection>
         <InspectorSection title="Titles">

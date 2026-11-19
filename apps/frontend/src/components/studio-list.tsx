@@ -3,6 +3,7 @@ import { Ellipsis, Search } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import type { StudioSelection } from "../settings-navigation.ts";
+import { relativeDay } from "../time-format.ts";
 import { StudioLink } from "./app-link.tsx";
 import { Button } from "./ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -258,11 +259,4 @@ export function StudioRowIcon({ children }: { children: ReactNode }) {
   );
 }
 
-export function editedLabel(updatedAt: string) {
-  const days = Math.round(
-    (new Date().setHours(0, 0, 0, 0) - new Date(updatedAt).setHours(0, 0, 0, 0)) / 86_400_000,
-  );
-  if (days <= 0) return "Edited today";
-  if (days === 1) return "Edited yesterday";
-  return `Edited ${new Date(updatedAt).toLocaleDateString()}`;
-}
+export const editedLabel = (updatedAt: string) => `Edited ${relativeDay(updatedAt)}`;

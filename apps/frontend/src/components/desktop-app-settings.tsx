@@ -12,13 +12,8 @@ import { desktopBridge } from "../desktop-bridge.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useDesktopState } from "../desktop-state.ts";
 import { AppearanceChoice } from "./appearance-choice.tsx";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsPage,
-  SettingsProblemCard,
-  SettingsRow,
-} from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { UpdateSettings, useSettingsUpdate } from "./update-settings.tsx";
 
@@ -41,9 +36,9 @@ function DesktopAppControls({ local }: { local: boolean }) {
   const controls = (
     <>
       {error && (
-        <SettingsProblemCard tone="error" title="Couldn’t change a setting" details={error}>
+        <ProblemCard tone="error" title="Couldn’t change a setting" details={error}>
           Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {update.feedback}
       <UpdateSettings
@@ -180,8 +175,8 @@ function NotificationSettings({
         />
       </SettingsGroup>
       {denied && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title="macOS blocks Factory’s notifications"
           action={
             <Button
@@ -193,7 +188,7 @@ function NotificationSettings({
           }
         >
           Allow them in System Settings.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

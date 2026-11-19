@@ -2,14 +2,10 @@ import { useState } from "react";
 import type { DesktopState, FactoryDesktop } from "@t3-factory/contracts/desktop-bridge";
 import { Button } from "@/components/ui/button";
 import { useUpgrade } from "../use-upgrade.ts";
-import { dayAndTime } from "./execution-state.tsx";
+import { dayAndTime } from "../time-format.ts";
 import { SegmentedChoice } from "./segmented-choice.tsx";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsProblemCard,
-  SettingsRow,
-} from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 import { downloadPercent, versionIn } from "./update-control.tsx";
 import { UpgradeReview } from "./upgrade-review.tsx";
@@ -99,7 +95,7 @@ function UpdateProblem({ upgrade }: { upgrade: ReturnType<typeof useUpgrade> }) 
       .join("\n");
   const version = failed[0]?.update.version;
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="error"
       title={
         upgrade.failure?.title ??
@@ -108,7 +104,7 @@ function UpdateProblem({ upgrade }: { upgrade: ReturnType<typeof useUpgrade> }) 
       details={details}
     >
       Factory stays on its current version.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -127,7 +123,7 @@ export function UpdateSettings({
   return (
     <>
       {supported && state.updateChannel === "stable" && state.version.includes("-beta.") && (
-        <SettingsProblemCard tone="info" title="This beta stays until a newer stable release" />
+        <ProblemCard tone="info" title="This beta stays until a newer stable release" />
       )}
       <SettingsGroup label="Updates">
         <SettingsDetailRow label="Version" value={state.version} />

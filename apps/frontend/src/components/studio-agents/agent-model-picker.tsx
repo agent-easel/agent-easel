@@ -11,6 +11,7 @@ import { workerTrigger } from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
 import { ExecutionSettingsFields } from "../execution-settings-fields.tsx";
 import { useMenuActions } from "../menu-actions.ts";
+import { fieldAria } from "../field-state.ts";
 import {
   OverrideDialog,
   ProjectOverridesSection,
@@ -72,8 +73,7 @@ export function AgentModelPicker({
             variant="outline"
             disabled={disabled}
             aria-label={`Worker: ${shown.label}`}
-            aria-invalid={flagged || undefined}
-            aria-describedby={flagged ? describedBy : undefined}
+            {...fieldAria(flagged && describedBy)}
             className={cn(
               "h-8 min-w-0 shrink gap-1.5 bg-card pr-2 pl-2.5 font-medium data-[state=open]:border-primary",
               flagged && "border-attention data-[state=open]:border-attention",

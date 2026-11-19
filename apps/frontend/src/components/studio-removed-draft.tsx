@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { NoticeButton } from "./notice.tsx";
-import { SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard, ProblemCardButton } from "./problem-card.tsx";
 import { Textarea } from "./ui/textarea";
 
 /**
@@ -21,12 +20,12 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
     }
   }
   return (
-    <SettingsProblemCard
-      tone="warning"
+    <ProblemCard
+      tone="attention"
       title={`This ${kind} was removed elsewhere`}
       action={
         <div className="grid gap-2">
-          <NoticeButton onClick={() => void copy()}>Copy as JSON</NoticeButton>
+          <ProblemCardButton onClick={() => void copy()}>Copy as JSON</ProblemCardButton>
           {copied === json && <p role="status">Copied to clipboard.</p>}
           {fallback && (
             <div className="grid w-full gap-2">
@@ -45,6 +44,6 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
       }
     >
       Your draft is kept.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }

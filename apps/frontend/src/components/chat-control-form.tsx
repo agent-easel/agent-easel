@@ -4,8 +4,10 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ApiError } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 import { SettingsDraftDialog, type useSettingsDraftGuard } from "./settings-draft-guard.tsx";
-import { SettingsPage, SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsPage } from "./settings-page.tsx";
 
 /** The operation's message with its distinct issue messages, or `fallback` for a lost answer. */
 export const chatControlError = (cause: unknown, fallback: string) =>
@@ -198,9 +200,9 @@ export function ChatControlPage({
       }
     >
       {loadError ? (
-        <SettingsProblemCard tone="error" title="Couldn’t read the settings" details={loadError}>
+        <ProblemCard tone="error" title="Couldn’t read the settings" details={loadError}>
           Factory didn’t answer. Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       ) : children !== null ? (
         <MutationGate>{children}</MutationGate>
       ) : (
@@ -212,11 +214,6 @@ export function ChatControlPage({
     </SettingsPage>
   );
 }
-
-/** The labelled lines of a Technical details block, skipping absent values. */
-export const technicalDetails = (
-  lines: readonly (readonly [string, string | null | undefined])[],
-) => lines.flatMap(([label, value]) => (value ? [`${label}: ${value}`] : [])).join("\n");
 
 /**
  * One editable setting in a labelled card: the label column, the field, then a field-state tag.
@@ -257,22 +254,6 @@ export function FieldRow({
     </div>
   );
 }
-
-/** A field's problem state: the tag tone wired to the card that explains it. */
-export interface FieldState {
-  readonly tone: "error" | "attention";
-  /** The id of the problem card, which the field names in `aria-describedby`. */
-  readonly cardId: string;
-}
-
-/** The ARIA wiring for a field that shows a state tag (#525): invalid and described by its card. */
-export const fieldAria = (state: FieldState | undefined) =>
-  state ? { "aria-invalid": true as const, "aria-describedby": state.cardId } : {};
-
-/** Classes for a field's border by its state; error borders come from `aria-invalid`. */
-export const fieldBorder = (state: FieldState | undefined) =>
-  state?.tone === "attention" &&
-  "border-attention aria-invalid:border-attention focus-visible:border-attention";
 
 /** What a save does with a stored secret. */
 export type SecretChoice = "keep" | "replace" | "remove";
@@ -374,8 +355,8 @@ function OpenSecret({
         // Replace opens the field in its Open state.
         autoFocus={stored}
         disabled={disabled}
-        className={cn("bg-muted font-mono text-label", fieldBorder(state))}
-        {...fieldAria(state)}
+        className={cn("bg-muted font-mono text-label", fieldBorder(state?.tone))}
+        {...fieldAria(state?.cardId)}
         onChange={(event) => onValue(event.target.value)}
       />
       {tag}

@@ -5,7 +5,7 @@ import type {
 } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
-import { clockTime, dayAndTime } from "../execution-state.tsx";
+import { clockTime, dayAndTime } from "../../time-format.ts";
 import { TriggerHealth } from "./trigger-health.tsx";
 import { problemHeadline } from "./trigger-text.ts";
 import { StartedRuns } from "./started-runs.tsx";

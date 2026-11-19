@@ -1,9 +1,6 @@
 import type { FactoryProject, ValidationIssue } from "@t3-factory/contracts";
 import type { ConnectionPresentation } from "./connection-state.tsx";
 
-/** T3's app. The no-project card only navigates here; Factory takes no action in T3. */
-export const t3AppUrl = "https://app.t3.codes";
-
 /** The one composer card, so a field can point its description at it. */
 export const composerLaunchCardId = "composer-launch-card";
 

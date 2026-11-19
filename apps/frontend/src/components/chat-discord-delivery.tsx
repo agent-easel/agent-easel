@@ -7,14 +7,11 @@ import type {
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { api } from "../api.ts";
-import { chatControlError, technicalDetails } from "./chat-control-form.tsx";
-import { dayAndTime } from "./execution-state.tsx";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsProblemCard,
-  SettingsTechnicalDetails,
-} from "./settings-page.tsx";
+import { chatControlError } from "./chat-control-form.tsx";
+import { dayAndTime } from "../time-format.ts";
+import { ProblemCard } from "./problem-card.tsx";
+import { TechnicalDetails, technicalDetailsText } from "./technical-details.tsx";
+import { SettingsDetailRow, SettingsGroup } from "./settings-page.tsx";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-dialog";
 
 const STATES: Record<
@@ -40,7 +37,7 @@ const OPERATION_LABELS: Record<ChatActionOperation, string> = {
 };
 
 const problemDetails = (problem: ChatDeliveryProblem) =>
-  technicalDetails([
+  technicalDetailsText([
     ["Message", `${PURPOSE_LABELS[problem.purpose]}, ${STATES[problem.state].label}`],
     ["Error", problem.message],
     ["Thread", problem.threadId],
@@ -135,12 +132,12 @@ export function DeliveryCard({
         )}
       </SettingsGroup>
       {problems.length > 0 && (
-        <SettingsTechnicalDetails details={problems.map(problemDetails).join("\n\n")} />
+        <TechnicalDetails details={problems.map(problemDetails).join("\n\n")} />
       )}
       {error && (
-        <SettingsProblemCard tone="error" title="Couldn’t retry the message" details={error}>
+        <ProblemCard tone="error" title="Couldn’t retry the message" details={error}>
           Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       <AlertDialog
         open={confirming !== null}

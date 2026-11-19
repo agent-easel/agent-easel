@@ -13,22 +13,20 @@ import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { reportChatModelSettings } from "../chat-control-attention.ts";
-import { dayAndTime } from "./execution-state.tsx";
+import { dayAndTime } from "../time-format.ts";
 import { useSettingsDraftGuard } from "./settings-draft-guard.tsx";
-import { SettingsGroup, SettingsDetailRow, SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup, SettingsDetailRow } from "./settings-page.tsx";
 import {
   ChatControlPage,
   chatControlError,
-  fieldAria,
-  fieldBorder,
   FieldRow,
   SaveActions,
   SecretField,
-  technicalDetails,
   useChatControlSection,
-  type FieldState,
   type SaveFailure,
 } from "./chat-control-form.tsx";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 
 const providerChoices = [
   { id: "openai-compatible", label: "OpenAI-compatible" },
@@ -323,7 +321,7 @@ function ModelForm({
             inputMode="url"
             disabled={saving}
             className="flex-1 bg-muted font-mono text-label"
-            {...fieldAria(states.baseUrl)}
+            {...fieldAria(states.baseUrl?.cardId)}
             onChange={(event) => onChange({ ...draft, baseUrl: event.target.value })}
           />
         </FieldRow>
@@ -336,7 +334,7 @@ function ModelForm({
             spellCheck={false}
             disabled={saving}
             className="flex-1 bg-muted font-mono text-label"
-            {...fieldAria(states.model)}
+            {...fieldAria(states.model?.cardId)}
             onChange={(event) => onChange({ ...draft, model: event.target.value })}
           />
         </FieldRow>
@@ -437,7 +435,7 @@ function KeyDestinationChoice({
         onChange={(id) => onChange({ ...draft, keyChoice: id as KeyChoice, keyValue: "" })}
         disabled={disabled}
         placeholder="Choose for the new address"
-        className={cn("h-8 flex-1", fieldBorder(state))}
+        className={cn("h-8 flex-1", fieldBorder(state?.tone))}
       />
       {draft.keyChoice === "replace" && (
         <Input
@@ -477,21 +475,17 @@ function ModelProblems({
   return (
     <>
       {baseUrlProblem && (
-        <SettingsProblemCard id={CARD.baseUrl} tone="error" title="Base URL isn’t valid">
+        <ProblemCard id={CARD.baseUrl} tone="error" title="Base URL isn’t valid">
           {baseUrlProblem}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {keyDecisionNeeded(draft, settings) && draft.keyChoice === "keep" && (
-        <SettingsProblemCard
-          id={CARD.key}
-          tone="warning"
-          title="Send the stored key to the new address?"
-        >
+        <ProblemCard id={CARD.key} tone="attention" title="Send the stored key to the new address?">
           Use the stored key there, replace it, or send no key.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {saveFailure && (
-        <SettingsProblemCard
+        <ProblemCard
           id={CARD.save}
           tone="error"
           title="Couldn’t save"
@@ -500,38 +494,38 @@ function ModelProblems({
           {requiredWhileOn
             ? "Chat control is On, so the provider, base URL and model are required. Turn it off first to remove them."
             : "Your edits are kept. Save again."}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {test?.outcome === "failed" && (
-        <SettingsProblemCard
+        <ProblemCard
           id={CARD.test}
           tone="error"
           title="The test failed"
-          details={technicalDetails([
+          details={[
             ["When", dayAndTime(test.testedAt)],
             ["Revision", String(test.revision)],
-          ])}
+          ]}
         >
           {test.message}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {testError && (
-        <SettingsProblemCard tone="error" title="Couldn’t run the test" details={testError}>
+        <ProblemCard tone="error" title="Couldn’t run the test" details={testError}>
           Try again.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {settings.needsAttention && runtimeProblem && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="error"
           title="Chat replies are failing"
-          details={technicalDetails([
+          details={[
             ["When", dayAndTime(runtimeProblem.occurredAt)],
             ["Revision", String(runtimeProblem.revision)],
             ["Error", runtimeProblem.message],
-          ])}
+          ]}
         >
           The provider didn’t answer. This clears after the next reply.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

@@ -10,6 +10,7 @@ import {
   type SetStateAction,
 } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { compactAge, fullDateTime } from "../time-format.ts";
 import { AppLink as Link } from "./app-link.tsx";
 import { Button } from "./ui/button.tsx";
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent } from "./ui/context-menu.tsx";
@@ -34,22 +35,13 @@ export function SidebarRowsProvider({ children }: { children: ReactNode }) {
 
 export function ActivityAge({ at }: { at: string }) {
   const { now } = useContext(SidebarRowsContext)!;
-  const minutes = Math.max(0, Math.floor((now - Date.parse(at)) / 60_000));
-  const age =
-    minutes < 1
-      ? "now"
-      : minutes < 60
-        ? `${minutes}m`
-        : minutes < 1440
-          ? `${Math.floor(minutes / 60)}h`
-          : `${Math.floor(minutes / 1440)}d`;
   return (
     <time
       dateTime={at}
-      aria-label={`Last activity ${new Date(at).toLocaleString()}`}
+      aria-label={`Last activity ${fullDateTime(at)}`}
       className="shrink-0 text-2xs tabular-nums text-muted-foreground"
     >
-      {age}
+      {compactAge(at, now)}
     </time>
   );
 }

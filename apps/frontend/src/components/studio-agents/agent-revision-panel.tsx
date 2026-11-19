@@ -12,8 +12,7 @@ import { agentRuntimeMeta } from "@/lib/agent-display";
 import { cn } from "@/lib/utils";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
-import { NoticeButton } from "../notice.tsx";
-import { SettingsProblemCard } from "../settings-page.tsx";
+import { ProblemCard, ProblemCardButton } from "../problem-card.tsx";
 
 const updatedNoticeMs = 4000;
 
@@ -113,8 +112,8 @@ export function AgentRevisionCard({
         : null;
   return (
     <>
-      <SettingsProblemCard
-        tone="warning"
+      <ProblemCard
+        tone="attention"
         title={
           revision === null
             ? "A newer revision was saved elsewhere"
@@ -124,19 +123,19 @@ export function AgentRevisionCard({
           conflict.status === "comparing" ? (
             <span role="status">Loading the latest revision…</span>
           ) : (
-            <NoticeButton
+            <ProblemCardButton
               onClick={() => {
                 setComparisonOpen(true);
                 draft.compare();
               }}
             >
               Compare latest revision
-            </NoticeButton>
+            </ProblemCardButton>
           )
         }
       >
         Your changes are kept. Compare them before saving.
-      </SettingsProblemCard>
+      </ProblemCard>
       {comparisonOpen && conflict.status === "compared" && (
         <CompareDialog
           draft={draft}

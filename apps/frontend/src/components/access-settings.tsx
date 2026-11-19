@@ -3,19 +3,14 @@ import { MutationGate } from "@/client-gate";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
 import { CircleX, KeyRound, type LucideIcon } from "lucide-react";
-import { dayAndTime } from "./execution-state.tsx";
+import { dayAndTime } from "../time-format.ts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
-import {
-  SettingsDetailRow,
-  SettingsProblemCard,
-  SettingsGroup,
-  SettingsPage,
-  SettingsRow,
-} from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
 type Decision = "approve" | "deny" | "revoke";
@@ -111,11 +106,7 @@ export function AccessSettings() {
   return (
     <SettingsPage title="Devices & access">
       {error && (
-        <SettingsProblemCard
-          tone="error"
-          title="Couldn’t update devices and access"
-          details={error}
-        />
+        <ProblemCard tone="error" title="Couldn’t update devices and access" details={error} />
       )}
       <RemoteAccessGroup remote={remote} busy={busy} onToggle={setRemoteAccess} />
       <DeviceList clients={clients} busy={busy} onDecide={decide} />
@@ -216,13 +207,9 @@ function RemoteAccessGroup({
         )}
       </SettingsGroup>
       {remote?.problem && (
-        <SettingsProblemCard
-          tone="error"
-          title="Remote access couldn’t start"
-          details={remote.problem}
-        >
+        <ProblemCard tone="error" title="Remote access couldn’t start" details={remote.problem}>
           Check the network and certificate settings, then turn remote access off and on.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

@@ -21,14 +21,9 @@ import { useClientScope } from "../client-scope.ts";
 import { useSettingsNavigation } from "../settings-navigation.ts";
 import { ModelOptionSelect } from "./execution-settings-fields.tsx";
 import { modelOptionChoices } from "@/lib/agent-display";
-import { dayAndTime } from "./execution-state.tsx";
-import {
-  SettingsDetailRow,
-  SettingsGroup,
-  SettingsPage,
-  SettingsProblemCard,
-  SettingsRow,
-} from "./settings-page.tsx";
+import { dayAndTime } from "../time-format.ts";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 const rowChoiceClass = "h-8 w-55";
@@ -139,9 +134,9 @@ export function RunTitleSettings() {
           <ReadOnlyTitles setting={setting} providers={providers ?? []} />
         ))}
       {saveError && (
-        <SettingsProblemCard tone="error" title="Couldn’t save Run titles" details={saveError}>
+        <ProblemCard tone="error" title="Couldn’t save Run titles" details={saveError}>
           The saved setting is unchanged. Try again in a moment.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {setting?.diagnostic && <LatestResult diagnostic={setting.diagnostic} />}
     </SettingsPage>
@@ -151,7 +146,7 @@ export function RunTitleSettings() {
 function TitleReadError({ error, retry }: { error: string; retry: () => void }) {
   return (
     <SettingsPage title="Run titles" action={<Button onClick={retry}>Try again</Button>}>
-      <SettingsProblemCard tone="error" title="Couldn’t read Run titles" details={error} />
+      <ProblemCard tone="error" title="Couldn’t read Run titles" details={error} />
     </SettingsPage>
   );
 }
@@ -228,9 +223,9 @@ function HostTitleFields({
       </SettingsGroup>
       {showWorker && catalogRead && !providers && <TitleConnectionProblem />}
       {needsModel && (
-        <SettingsProblemCard id={problemId} tone="warning" title="Run titles need a model">
+        <ProblemCard id={problemId} tone="attention" title="Run titles need a model">
           New Runs keep their first line as the title until you choose one.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -344,7 +339,7 @@ function workerLabel(name: string, disabled: boolean) {
 function TitleConnectionProblem() {
   const openSettings = useSettingsNavigation();
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="neutral"
       icon={Unplug}
       title="Factory can’t reach T3"
@@ -359,7 +354,7 @@ function TitleConnectionProblem() {
       }
     >
       Provider and model choices load once T3 is connected.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -464,12 +459,12 @@ const diagnosticOutcomes: Record<RunTitleDiagnostic["outcome"], string> = {
 function LatestResult({ diagnostic }: { diagnostic: RunTitleDiagnostic }) {
   const run = diagnostic.runNumber === null ? "A Run" : `Run #${diagnostic.runNumber}`;
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="neutral"
       title={`${run} kept its first-line title`}
       details={diagnostic.message}
     >
       {diagnosticOutcomes[diagnostic.outcome]} · {dayAndTime(diagnostic.recordedAt)}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }

@@ -5,9 +5,8 @@ import type {
   FlowDraft,
   FlowDuplicatePlanAgent,
 } from "@t3-factory/contracts";
-import { Bot, ChevronRight, Copy, Link, TriangleAlert, Workflow } from "lucide-react";
+import { Bot, ChevronRight, Copy, Link, Workflow } from "lucide-react";
 import { MutationGate } from "@/client-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -28,7 +27,7 @@ import {
 import { fieldLabelClass } from "./page.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
 import { OwnerPicker, OwnerTargetMenu } from "./studio-owner.tsx";
-import { SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
 
 /** The definition a dialog acts on, with the owning Project its editor shows now. */
 interface DialogSubject {
@@ -220,19 +219,19 @@ function ChangeOwnerRefusal({
         </>
       }
     >
-      <Alert variant="attention" className="px-3 py-2.5">
-        <TriangleAlert aria-hidden strokeWidth={1.5} />
-        <AlertTitle>
-          {kind === "Agent"
+      <ProblemCard
+        tone="attention"
+        density="compact"
+        title={
+          kind === "Agent"
             ? `Flows outside ${title} place this Agent`
-            : `This Flow places Agents ${target === null ? "a global Flow" : title} can’t place`}
-        </AlertTitle>
-        <AlertDescription>
-          {kind === "Agent"
-            ? `A Project Agent can only be placed by Flows of its owning Project. Remove it from these Flows first, or duplicate it into ${title} instead.`
-            : `Remove these Agents from the Flow first, or duplicate it into ${title} instead; Duplicate copies the Agents the target can’t place.`}
-        </AlertDescription>
-      </Alert>
+            : `This Flow places Agents ${target === null ? "a global Flow" : title} can’t place`
+        }
+      >
+        {kind === "Agent"
+          ? `A Project Agent can only be placed by Flows of its owning Project. Remove it from these Flows first, or duplicate it into ${title} instead.`
+          : `Remove these Agents from the Flow first, or duplicate it into ${title} instead; Duplicate copies the Agents the target can’t place.`}
+      </ProblemCard>
       <ul
         aria-label={kind === "Agent" ? "Blocking Flows" : "Blocking Agents"}
         className="grid gap-0.5 rounded-lg border bg-muted px-2 py-1.5"
@@ -627,14 +626,14 @@ export function DuplicateAgentDialog({
         hint=""
       />
       {unsavedRevision !== undefined && (
-        <SettingsProblemCard tone="info" title={`Copies saved revision ${unsavedRevision}`}>
+        <ProblemCard tone="info" title={`Copies saved revision ${unsavedRevision}`}>
           Your unsaved changes aren’t included.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {error && (
-        <SettingsProblemCard tone="error" title="Couldn’t duplicate the Agent">
+        <ProblemCard tone="error" title="Couldn’t duplicate the Agent">
           {error}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </OwnerDialog>
   );

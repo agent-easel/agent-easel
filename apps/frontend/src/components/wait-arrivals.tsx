@@ -5,7 +5,8 @@ import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
-import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
+import { ExecutionStateBadge } from "./execution-state.tsx";
+import { clockTime, dayAndTime } from "../time-format.ts";
 import { sectionLabelClass } from "./page.tsx";
 
 const OUTCOME: Record<WaitArrival["state"], string> = {

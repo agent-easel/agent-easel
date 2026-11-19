@@ -1,4 +1,4 @@
-import { timeAgo } from "../execution-state.tsx";
+import { timeAgo } from "../../time-format.ts";
 import type {
   FactoryProject,
   FlowDraft,

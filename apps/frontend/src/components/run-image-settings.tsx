@@ -25,7 +25,8 @@ import { MutationGate } from "../client-gate.tsx";
 import { revalidateRunImages, useRunImageSource } from "../run-images.ts";
 import { useProjects } from "../use-projects.ts";
 import { StatusBadge } from "./status-badge.tsx";
-import { SettingsGroup, SettingsPage, SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup, SettingsPage } from "./settings-page.tsx";
 
 const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
 const lifecycleLabel = { settled: "Settled", archived: "Archived" } as const;
@@ -151,23 +152,23 @@ function RunImageProblems({
   return (
     <>
       {listError && (
-        <SettingsProblemCard tone="error" title="Couldn’t list Run images" details={listError}>
+        <ProblemCard tone="error" title="Couldn’t list Run images" details={listError}>
           No images were changed.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {deleteError && (
-        <SettingsProblemCard tone="error" title="Couldn’t delete the images" details={deleteError}>
+        <ProblemCard tone="error" title="Couldn’t delete the images" details={deleteError}>
           Try again in a moment.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {skipped > 0 && (
-        <SettingsProblemCard tone="neutral" title={deletionResultTitle(kept, skipped)}>
+        <ProblemCard tone="neutral" title={deletionResultTitle(kept, skipped)}>
           {kept > 0 &&
             `Active Runs still use ${kept === 1 ? "the retained image" : `${kept} retained images`}.`}
           {kept > 0 && other > 0 && " "}
           {other > 0 &&
             `${count(other, "file")} ${other === 1 ? "was" : "were"} unavailable for deletion.`}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );

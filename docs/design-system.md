@@ -112,9 +112,6 @@ read-only facts in rows. On/off settings use a switch named by the row title.
 The content pane scrolls with a visible scrollbar and fades at the bottom
 while more content follows.
 
-Use **StatusBadge** for Run states, Settings states and field tags. Use a
-single problem card for each issue with its next step. Put raw errors, paths
-and identifiers under closed **Technical details**, with **Copy details**.
 Agent reporting shows the configuration home on the row to identify it.
 
 Use **Refresh** to fetch the latest list or snapshot, **Check again** to repeat
@@ -158,6 +155,38 @@ State indicators and attention remain distinct. The execution canvas is read-onl
 arrangement and viewport never mutate the Run's captured Flow revision. Product behavior is
 defined in [Flow authoring](studio.md#canvas-and-block-configuration) and
 [Runs](runs.md#execution-canvas).
+
+### Which component for which pattern
+
+Screens are assembled from these shared components. When a screen needs a pattern none of them
+covers, extend the owning component or add a new one here (and on the Figma 🧩 Components page)
+first, then use it; a one-off styled at the call site becomes the next consistency review.
+
+- **State tag**: StatusBadge, with the Run kinds or the Setting kinds above.
+- **Problem, notice or explanation**: ProblemCard, one card per issue with its next step. Its
+  tones are the Setting kinds Error, Attention, Info and Neutral, so a field tag and its card
+  agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
+  and Studio card; compact is the composer, Run page and dialog card. The next step is one
+  action: a button, or a card link to Settings, Studio or T3.
+- **Raw facts**: Technical details, closed by default with **Copy details**, as labelled rows
+  or one raw error. Other closed secondary facts use the same disclosure.
+- **Field state**: the shared field-state helper sets `aria-invalid` and `aria-describedby` from
+  the explaining card's id, and the Attention border.
+- **Shortcut hint**: the key chip.
+- **Dialog**: the shared dialog in its standard or wide size, with the shared header.
+- **Settings page**: the Settings page template of header, groups, rows and detail rows.
+- **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
+- **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
+  NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
+  stays visible.
+- **Way out to T3**: OpenInT3, the "Open in T3 ↗" link; its filled button form is only for an
+  Attention card whose action is going to T3.
+- **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
+- **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
+  relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the
+  full local date and time for tooltips and accessible names.
+- **Canvas**: the canvas surface, which owns block geometry, ports, wires and the dot grid for
+  both the Flow editor and the execution canvas.
 
 ## Changing the design system
 

@@ -7,7 +7,7 @@ import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
-import { Ellipsis, Info, Moon, PanelRight, TriangleAlert, Unplug, Workflow } from "lucide-react";
+import { Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
 import { StudioLink } from "../components/app-link.tsx";
@@ -22,8 +22,8 @@ import {
 import { GeneratingTitle } from "../components/run-title-generation.tsx";
 import { RunTimeline } from "../components/run-timeline.tsx";
 import { ExecutionCanvas } from "../components/execution-canvas.tsx";
-import { clockTime, dayAndTime } from "../components/execution-state.tsx";
-import { Notice, NoticeSettingsLink } from "../components/notice.tsx";
+import { clockTime, dayAndTime } from "../time-format.ts";
+import { ProblemCard, ProblemCardSettingsLink } from "../components/problem-card.tsx";
 import { useConnectionState } from "../connection-state.tsx";
 import { RunActionItems, runActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
@@ -35,7 +35,6 @@ import { useProjects } from "../use-projects.ts";
 import { useLiveRun } from "../live/run.ts";
 import { useLiveDelivery } from "../transport.ts";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -159,9 +158,12 @@ export function RunScreen({ id }: { id: string }) {
       ) : (
         <>
           {(error || seenError) && (
-            <Alert variant="destructive" className="m-3 mb-0">
-              <AlertDescription>{error || seenError}</AlertDescription>
-            </Alert>
+            <ProblemCard
+              tone="error"
+              density="compact"
+              title={error || seenError}
+              className="m-3 mb-0"
+            />
           )}
           {!error && <p className="p-6 text-sm text-muted-foreground">Loading Run…</p>}
         </>
@@ -442,26 +444,27 @@ function CanvasOverlay({
       </div>
       <RunConversationNotice coordinator={run.runCoordinator} />
       {observed.error && (
-        <Notice tone="critical" icon={TriangleAlert} title={observed.error} className="w-140" />
+        <ProblemCard density="compact" tone="error" title={observed.error} className="w-140" />
       )}
       {seenError && (
-        <Notice tone="attention" icon={TriangleAlert} title={seenError} className="w-140" />
+        <ProblemCard density="compact" tone="attention" title={seenError} className="w-140" />
       )}
       {run.lifecycle !== "archived" && presentation === "unavailable" && (
-        <Notice
-          tone="critical"
+        <ProblemCard
+          density="compact"
+          tone="error"
           icon={Unplug}
           title="T3 is disconnected"
           className="w-140"
           action={
-            <NoticeSettingsLink selection={{ tab: "connection" }}>
+            <ProblemCardSettingsLink selection={{ tab: "connection" }}>
               Open T3 connection settings
-            </NoticeSettingsLink>
+            </ProblemCardSettingsLink>
           }
         >
           Showing what Factory last observed. Blocks won’t advance here until Factory reconnects;
           nothing is lost.
-        </Notice>
+        </ProblemCard>
       )}
     </>
   );

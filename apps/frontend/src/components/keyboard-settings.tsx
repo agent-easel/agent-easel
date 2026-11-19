@@ -26,8 +26,10 @@ import {
   setShortcutRecording,
   useShortcutPreferences,
 } from "../shortcut-preferences.ts";
-import { SettingsGroup, SettingsPage, SettingsProblemCard, SettingsRow } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
+import { fieldAria } from "./field-state.ts";
 
 type Command = (typeof shortcutDefinitions)[number];
 const groups = [...new Set(shortcutDefinitions.map((command) => command.group))];
@@ -57,8 +59,8 @@ export function KeyboardSettings() {
       }
     >
       {(sessionOnly || storageIssue) && (
-        <SettingsProblemCard
-          tone="warning"
+        <ProblemCard
+          tone="attention"
           title={
             sessionOnly
               ? "Changes last only for this session"
@@ -66,12 +68,12 @@ export function KeyboardSettings() {
           }
         >
           {storageIssue ?? "This browser can’t store shortcuts."}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {error && (
-        <SettingsProblemCard tone="error" title={error.title}>
+        <ProblemCard tone="error" title={error.title}>
           {error.message}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {conflictCommands.length > 0 && (
         <div className="grid gap-5">
@@ -79,7 +81,7 @@ export function KeyboardSettings() {
             const binding = defaults[command.id];
             const other = binding && conflictingShortcut(command.id, binding, bindings);
             return (
-              <SettingsProblemCard
+              <ProblemCard
                 id={`shortcut-conflict-${command.id}`}
                 key={command.id}
                 tone="error"
@@ -88,7 +90,7 @@ export function KeyboardSettings() {
                 {other
                   ? `Its default, ${formatShortcut(binding)}, is now used by ${other.label}. Change ${other.label}, then reset ${command.label}.`
                   : `Reset ${command.label} to restore its default.`}
-              </SettingsProblemCard>
+              </ProblemCard>
             );
           })}
         </div>
@@ -153,8 +155,7 @@ function ShortcutRow({
     <div
       role="group"
       aria-label={command.label}
-      aria-invalid={conflict || undefined}
-      aria-describedby={conflict ? `shortcut-conflict-${command.id}` : undefined}
+      {...fieldAria(conflict && `shortcut-conflict-${command.id}`)}
     >
       <SettingsRow
         title={
@@ -274,8 +275,7 @@ function ShortcutRecorder({ command, onClose }: { command: Command; onClose: () 
           tabIndex={0}
           aria-label="Shortcut"
           aria-readonly
-          aria-invalid={problem ? true : undefined}
-          aria-describedby={problem ? issueId : undefined}
+          {...fieldAria(problem ? issueId : undefined)}
           className={cn(
             "flex min-h-16 items-center justify-center gap-2 rounded-md border bg-background px-3 text-sm text-muted-foreground outline-none",
             problem ? "border-destructive" : "border-ring ring-1 ring-ring/30",
@@ -287,9 +287,9 @@ function ShortcutRecorder({ command, onClose }: { command: Command; onClose: () 
           {problem && <StatusBadge kind="error">{problem.tag}</StatusBadge>}
         </div>
         {problem && (
-          <SettingsProblemCard id={issueId} tone="error" title={problem.title}>
+          <ProblemCard id={issueId} tone="error" title={problem.title}>
             {problem.message}
-          </SettingsProblemCard>
+          </ProblemCard>
         )}
       </DialogContent>
     </Dialog>

@@ -2,7 +2,8 @@ import { Unplug } from "lucide-react";
 import type { AppearancePresentation, T3Appearance } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { useSettingsNavigation } from "../settings-navigation.ts";
-import { SettingsDetailRow, SettingsGroup, SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup } from "./settings-page.tsx";
 
 export function ThemeColorSettings({
   status,
@@ -13,9 +14,9 @@ export function ThemeColorSettings({
 }) {
   if (status?.state === "unsupported")
     return (
-      <SettingsProblemCard tone="neutral" title="This T3 doesn’t share its theme">
+      <ProblemCard tone="neutral" title="This T3 doesn’t share its theme">
         Update T3 to follow its theme.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (status?.state === "unavailable" && !presentation) return <ThemeConnectionProblem />;
   const name = presentation?.theme.name ?? status?.unreadableTheme;
@@ -34,13 +35,13 @@ export function ThemeColorSettings({
         {modes && !rejected && <ThemeModes modes={modes} />}
       </SettingsGroup>
       {details && (
-        <SettingsProblemCard
+        <ProblemCard
           tone="neutral"
           title={`Factory can’t use the “${name}” theme`}
           details={details}
         >
           Factory uses its own colors.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
     </>
   );
@@ -64,7 +65,7 @@ function ThemeModes({ modes }: { modes: AppearancePresentation["modes"] }) {
 function ThemeConnectionProblem() {
   const openSettings = useSettingsNavigation();
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="neutral"
       icon={Unplug}
       title="Theme colors wait for the T3 connection"
@@ -79,6 +80,6 @@ function ThemeConnectionProblem() {
       }
     >
       Factory colors are used meanwhile.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }

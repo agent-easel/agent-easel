@@ -9,8 +9,7 @@ import {
   type RunBlock,
   type RunDetail,
 } from "@t3-factory/contracts";
-import { TriangleAlert } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -30,9 +29,10 @@ import {
 import { capturedExits, exitRecipients } from "../flow-graph.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
-import { clockTime, dayAndTime } from "./execution-state.tsx";
+import { clockTime, dayAndTime } from "../time-format.ts";
 import { exitDisplayName } from "./flow-block.tsx";
-import { InspectorDisclosure, InspectorHeading } from "./inspector-section.tsx";
+import { Disclosure } from "./disclosure.tsx";
+import { InspectorHeading } from "./inspector-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { fieldLabelClass } from "./page.tsx";
 import { runActions, useRunActions } from "./run-actions.tsx";
@@ -244,13 +244,13 @@ export function ResolvedAttention({ run, blockId }: { run: RunDetail; blockId?: 
   );
   if (!settled.length) return null;
   return (
-    <InspectorDisclosure label={`Resolved attention · ${settled.length}`}>
+    <Disclosure label={`Resolved attention · ${settled.length}`}>
       <div aria-label="Resolved attention" role="group" className="flex flex-col gap-3">
         {settled.map((item) => (
           <SettledMatter key={item.id} run={run} item={item} />
         ))}
       </div>
-    </InspectorDisclosure>
+    </Disclosure>
   );
 }
 
@@ -748,11 +748,9 @@ function HumanResponseForm({
         onChange={setMessage}
       />
       {error && (
-        <Alert variant="destructive">
-          <TriangleAlert aria-hidden />
-          <AlertTitle>Couldn’t submit your answer</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" density="compact" title="Couldn’t submit your answer">
+          {error}
+        </ProblemCard>
       )}
       <SubmitAnswer busy={busy} blocker={blocker} />
     </form>

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { CirclePause, CircleX, TriangleAlert } from "lucide-react";
+import { CirclePause, CircleX } from "lucide-react";
 import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -121,24 +121,14 @@ function ReviewBody({
         </>
       }
     >
-      {review.notice && (
-        <Alert variant="attention" role="status">
-          <TriangleAlert aria-hidden />
-          <AlertDescription className="text-foreground">{review.notice}</AlertDescription>
-        </Alert>
-      )}
+      {review.notice && <ProblemCard tone="attention" title={review.notice} />}
       <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
       {read.status === "loading" && (
         <div role="status" className="rounded-lg border bg-background px-3.5 py-2.5">
           <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
         </div>
       )}
-      {read.status === "failed" && (
-        <Alert variant="critical">
-          <CircleX aria-hidden />
-          <AlertDescription className="text-foreground">{read.message}</AlertDescription>
-        </Alert>
-      )}
+      {read.status === "failed" && <ProblemCard tone="error" icon={CircleX} title={read.message} />}
       {read.status === "answered" && <PreviewResult preview={read.preview} />}
     </DialogContent>
   );
@@ -174,13 +164,9 @@ function PreviewResult({ preview }: { preview: TriggerPreview }) {
   return (
     <>
       {problem ? (
-        <Alert variant="critical">
-          <CircleX aria-hidden />
-          <AlertTitle>{problemHeadline(problem)}</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            {problem.message} The check will show this problem and start nothing until it is fixed.
-          </AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" icon={CircleX} title={problemHeadline(problem)}>
+          {problem.message} The check will show this problem and start nothing until it is fixed.
+        </ProblemCard>
       ) : (
         <section aria-labelledby="trigger-review-issues" className="grid gap-3.5">
           <h3 id="trigger-review-issues" className="text-xs text-muted-foreground">

@@ -1,8 +1,6 @@
 import { useId, type ReactNode } from "react";
-import { ChevronRight, Info, Lock, TriangleAlert, type LucideIcon } from "lucide-react";
+import { Lock } from "lucide-react";
 import { StatusBadge } from "./status-badge.tsx";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button.tsx";
 
@@ -153,94 +151,5 @@ export function SettingsDetailRow({
       {copy !== undefined && <CopyButton text={copy} label={`Copy ${label}`} />}
       {action}
     </div>
-  );
-}
-
-/** Closed-by-default detail such as "How it works" or "Diagnostics", with a one-line hint. */
-function SettingsDisclosure({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-}) {
-  return (
-    <Collapsible className="grid gap-3">
-      <CollapsibleTrigger className="group flex w-fit flex-wrap items-center gap-x-1.5 rounded-sm text-left text-sm leading-tight outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <ChevronRight
-          aria-hidden
-          strokeWidth={1.5}
-          className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none"
-        />
-        <span className="font-medium text-muted-foreground">{label}</span>
-        {hint && <span className="text-subtle-foreground">{hint}</span>}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="grid gap-3 pl-5 text-sm text-muted-foreground">
-        {children}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-/** Raw diagnostics are collapsed by default and copied as a single block. */
-export function SettingsTechnicalDetails({ details }: { details: string }) {
-  return (
-    <SettingsDisclosure label="Technical details">
-      <pre className="min-w-0 font-mono text-label wrap-anywhere whitespace-pre-wrap">
-        {details}
-      </pre>
-      <CopyButton text={details} label="Copy details" showLabel />
-    </SettingsDisclosure>
-  );
-}
-
-/** One explanation and next step for a Settings problem. */
-export function SettingsProblemCard({
-  id,
-  label,
-  tone,
-  title,
-  children,
-  details,
-  action,
-  icon,
-}: {
-  /** Lets a field tag point at this card with `aria-describedby`. */
-  id?: string;
-  /** Names the card's live region where its title alone is ambiguous on the page. */
-  label?: string;
-  tone: "error" | "warning" | "info" | "neutral";
-  title: ReactNode;
-  children?: ReactNode;
-  details?: string | undefined;
-  action?: ReactNode;
-  icon?: LucideIcon;
-}) {
-  const variant = {
-    error: "critical",
-    warning: "attention",
-    info: "info",
-    neutral: "neutral",
-  } as const;
-  const Icon = icon ?? (tone === "error" || tone === "warning" ? TriangleAlert : Info);
-  return (
-    <Alert
-      id={id}
-      aria-label={label}
-      variant={variant[tone]}
-      role={tone === "error" ? "alert" : "status"}
-    >
-      <Icon aria-hidden strokeWidth={1.5} />
-      <AlertTitle>{title}</AlertTitle>
-      {(children || details || action) && (
-        <AlertDescription className="min-w-0 justify-items-stretch gap-2">
-          {children && <p>{children}</p>}
-          {action && <div>{action}</div>}
-          {details && <SettingsTechnicalDetails details={details} />}
-        </AlertDescription>
-      )}
-    </Alert>
   );
 }

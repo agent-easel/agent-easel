@@ -16,8 +16,8 @@ import {
 import { cn } from "@/lib/utils";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
-import { clockTime } from "./execution-state.tsx";
-import { InspectorDisclosure } from "./inspector-section.tsx";
+import { clockTime } from "../time-format.ts";
+import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 import { CopyButton } from "./copy-button.tsx";
 
 type RunReport = RunDetail["reports"][number];
@@ -323,7 +323,7 @@ function RunTextReader({
   link: string | null;
   onClose: () => void;
   children: ReactNode;
-  technicalDetails?: ReactNode;
+  technicalDetails?: readonly TechnicalDetail[];
 }) {
   const body = useRef<HTMLDivElement>(null);
   return (
@@ -361,7 +361,7 @@ function RunTextReader({
         </div>
         {technicalDetails && (
           <footer className="shrink-0 border-t px-5 pt-1.5 pb-2.5">
-            <InspectorDisclosure label="Technical details">{technicalDetails}</InspectorDisclosure>
+            <TechnicalDetails details={technicalDetails} />
           </footer>
         )}
       </DialogSurface>
@@ -388,16 +388,12 @@ function ResultReader({
       text={report.resultMessage ?? ""}
       link={link}
       onClose={onClose}
-      technicalDetails={
-        <div className="flex flex-col gap-1 font-mono text-2xs leading-4 break-all text-muted-foreground">
-          <p>Execution: {report.executionId ?? "unresolved"}</p>
-          <p>Completion: {facts.completion}</p>
-          <p>Version: {facts.version}</p>
-          {deliveries(run, report).map((delivery) => (
-            <p key={delivery}>{delivery}</p>
-          ))}
-        </div>
-      }
+      technicalDetails={[
+        ["Execution", report.executionId ?? "unresolved"],
+        ["Completion", facts.completion],
+        ["Version", facts.version],
+        ...deliveries(run, report).map((delivery): TechnicalDetail => ["Delivery", delivery]),
+      ]}
     >
       {report.resultMessage ? (
         <ResultMarkdown text={report.resultMessage} density="reader" />

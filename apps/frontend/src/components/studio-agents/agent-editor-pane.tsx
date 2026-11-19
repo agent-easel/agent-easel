@@ -46,8 +46,7 @@ import {
 } from "../studio-removal.tsx";
 import { useStudioNavigation } from "../../settings-navigation.ts";
 import type { StudioOwner } from "../../studio-definitions.ts";
-import { NoticeButton, NoticeSettingsLink } from "../notice.tsx";
-import { SettingsProblemCard } from "../settings-page.tsx";
+import { ProblemCard, ProblemCardButton, ProblemCardSettingsLink } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
@@ -227,9 +226,9 @@ function AgentEditorCards(props: CardProps) {
       )}
       <SaveOutcomeCard draft={draft} state={state} onOpenCreated={onOpenCreated} />
       {state.exitProblems && (
-        <SettingsProblemCard id={exitsCardId} tone="error" title={state.exitProblems.card.title}>
+        <ProblemCard id={exitsCardId} tone="error" title={state.exitProblems.card.title}>
           {state.exitProblems.card.body}
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       {!state.removed && (
         <AgentRevisionCard
@@ -257,14 +256,18 @@ function AgentEditorCards(props: CardProps) {
 function OwnerGoneCard({ ownership, ownerGone, onChangeOwner }: CardProps) {
   if (ownership.kind !== "saved" || !ownerGone) return null;
   return (
-    <SettingsProblemCard
-      tone="warning"
+    <ProblemCard
+      tone="attention"
       icon={Unplug}
       title={`${ownership.owner.title} is no longer in T3`}
-      action={onChangeOwner && <NoticeButton onClick={onChangeOwner}>Change owner…</NoticeButton>}
+      action={
+        onChangeOwner && (
+          <ProblemCardButton onClick={onChangeOwner}>Change owner…</ProblemCardButton>
+        )
+      }
     >
       This Agent can’t be edited or placed until it has an owner in T3.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -276,23 +279,23 @@ function OverridesCard({ draft, state, ownership, global }: CardProps) {
     return null;
   if (ownership.kind === "saved")
     return state.strandedOverrides ? (
-      <SettingsProblemCard
-        tone="warning"
+      <ProblemCard
+        tone="attention"
         title="Project overrides can’t be kept"
         action={
-          <NoticeButton onClick={draft.removeOverrides}>
+          <ProblemCardButton onClick={draft.removeOverrides}>
             {overrides === 1 ? "Remove override" : "Remove overrides"}
-          </NoticeButton>
+          </ProblemCardButton>
         }
       >
         This Agent is owned by {ownerName(ownership.owner)} now, and a Project Agent has no Project
         overrides.
-      </SettingsProblemCard>
+      </ProblemCard>
     ) : null;
   return (
-    <SettingsProblemCard tone="warning" title="Project overrides left out">
+    <ProblemCard tone="attention" title="Project overrides left out">
       A Project Agent has no Project overrides. Choose Global to keep them.
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -301,25 +304,25 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
   if (ownerGone) return null;
   if (state.needsModel)
     return (
-      <SettingsProblemCard id={workerCardId} tone="warning" title="Needs a model">
+      <ProblemCard id={workerCardId} tone="attention" title="Needs a model">
         Flows that use this Agent can’t start until it has one.
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (!reportingProblem) return null;
   return (
-    <SettingsProblemCard
+    <ProblemCard
       id={workerCardId}
       label="Agent reporting status"
-      tone="warning"
+      tone="attention"
       title={reportingProblem.label}
       action={
-        <NoticeSettingsLink selection={{ tab: "agent-reporting" }}>
+        <ProblemCardSettingsLink selection={{ tab: "agent-reporting" }}>
           Open Agent reporting
-        </NoticeSettingsLink>
+        </ProblemCardSettingsLink>
       }
     >
       {reportingProblem.message}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -339,21 +342,21 @@ function SaveOutcomeCard({
   const check = state.createCheck;
   if (check.status !== "none")
     return (
-      <SettingsProblemCard
-        tone="warning"
+      <ProblemCard
+        tone="attention"
         title="Create outcome unknown"
         action={
           check.status === "created" ? (
-            <NoticeButton
+            <ProblemCardButton
               onClick={() => {
                 const made = draft.openCreated();
                 if (made) onOpenCreated(made);
               }}
             >
               Open Agent
-            </NoticeButton>
+            </ProblemCardButton>
           ) : check.status === "absent" ? (
-            <NoticeButton onClick={draft.createAgain}>Create again</NoticeButton>
+            <ProblemCardButton onClick={draft.createAgain}>Create again</ProblemCardButton>
           ) : undefined
         }
       >
@@ -362,19 +365,19 @@ function SaveOutcomeCard({
           : check.status === "created"
             ? "Factory created this Agent."
             : "Factory didn’t create this Agent. Your changes are kept."}
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   if (!state.error) return null;
   if (state.saveOutcome === "unknown")
     return (
-      <SettingsProblemCard tone="warning" title="Save outcome unknown">
+      <ProblemCard tone="attention" title="Save outcome unknown">
         {state.error}
-      </SettingsProblemCard>
+      </ProblemCard>
     );
   return (
-    <SettingsProblemCard tone="error" title="Couldn’t save the Agent">
+    <ProblemCard tone="error" title="Couldn’t save the Agent">
       Your changes are kept. {state.error}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }
 
@@ -660,9 +663,9 @@ function AgentRemoveDialog({
         closeDisabled={removing}
       >
         {removalError && !inUse && (
-          <SettingsProblemCard tone="error" title="Couldn’t remove the Agent">
+          <ProblemCard tone="error" title="Couldn’t remove the Agent">
             {removalError}
-          </SettingsProblemCard>
+          </ProblemCard>
         )}
       </DialogContent>
     </Dialog>

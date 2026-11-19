@@ -28,7 +28,8 @@ import {
   continuationPromptVisit,
   threadOwnerName,
 } from "./execution-canvas.tsx";
-import { clockTime, ExecutionStateBadge } from "./execution-state.tsx";
+import { ExecutionStateBadge } from "./execution-state.tsx";
+import { clockTime, fullDateTime } from "../time-format.ts";
 import { RUN_STATE_LABELS, type RunStateKind } from "./status-badge.tsx";
 import { blockStateKind } from "../run-block-state.ts";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
@@ -37,7 +38,8 @@ import { RootWork } from "./run-coordination-controls.tsx";
 import { BindingLink, bindingRole, CoordinatorActivations } from "./run-coordination.tsx";
 import { RunInitialPrompt } from "./run-prompt.tsx";
 import { BranchName, repositorySummary, RunRepositories } from "./run-repositories.tsx";
-import { InspectorDisclosure, InspectorSection } from "./inspector-section.tsx";
+import { Disclosure } from "./disclosure.tsx";
+import { InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
 import { RunOriginSection } from "./run-origin.tsx";
@@ -314,7 +316,7 @@ function elapsedSeconds(from: string, to: string) {
 }
 
 function observedTime(at: string | null | undefined) {
-  return at ? new Date(at).toLocaleString() : "not yet observed";
+  return at ? fullDateTime(at) : "not yet observed";
 }
 
 function WorkPeriods({ run }: { run: RunDetail }) {
@@ -414,7 +416,7 @@ function RunOverview({
       <RootWork run={run} />
       <div aria-hidden className="flex-1" />
       <ResolvedAttention run={run} />
-      <InspectorDisclosure label="Workspace & observation">
+      <Disclosure label="Workspace & observation">
         <InspectorSection title="Project">
           <p className="text-sm text-emphasis-foreground">
             {project?.title ?? "Project"}
@@ -428,7 +430,7 @@ function RunOverview({
         </InspectorSection>
         <RunWorkspace run={run} />
         <WorkPeriods run={run} />
-      </InspectorDisclosure>
+      </Disclosure>
     </div>
   );
 }

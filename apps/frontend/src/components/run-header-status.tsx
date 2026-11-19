@@ -1,5 +1,5 @@
 import type { RunFreshness } from "../run-status.ts";
-import { clockTime } from "./execution-state.tsx";
+import { clockTime } from "../time-format.ts";
 import { StatusBadge } from "./status-badge.tsx";
 
 const statusClass = "flex min-w-0 shrink items-center gap-1.5 text-xs leading-4 whitespace-nowrap";

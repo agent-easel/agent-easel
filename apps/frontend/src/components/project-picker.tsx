@@ -3,7 +3,7 @@ import { useMutationsAllowed } from "@/client-gate";
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import type { FactoryProject, ProjectCatalog } from "@t3-factory/contracts";
 import { ChevronsUpDownIcon, RefreshCwIcon } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -236,9 +236,7 @@ export function ProjectPicker({
         </PickerMenuContent>
       </DropdownMenu>
       {error && (
-        <Alert variant="destructive" className={toolbarStatusClass}>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" density="compact" title={error} className={toolbarStatusClass} />
       )}
     </>
   );

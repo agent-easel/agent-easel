@@ -14,8 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
-import { NoticeButton } from "./notice.tsx";
-import { SettingsProblemCard } from "./settings-page.tsx";
+import { ProblemCard, ProblemCardButton } from "./problem-card.tsx";
 import { fieldLabelClass, selectFieldClass } from "./page.tsx";
 import type { OwnerChange } from "../revisioned-draft.ts";
 import {
@@ -537,7 +536,7 @@ export function OwnerChangeNotice({
   if (change.status === "none") return null;
   const to = change.status === "changed" ? studioOwner(change.to, projects) : null;
   return (
-    <SettingsProblemCard
+    <ProblemCard
       tone="info"
       icon={RefreshCw}
       title={
@@ -547,15 +546,15 @@ export function OwnerChangeNotice({
       }
       action={
         change.status === "changed" && (
-          <NoticeButton onClick={() => onAcknowledge(change.to)}>
+          <ProblemCardButton onClick={() => onAcknowledge(change.to)}>
             Acknowledge new owner
-          </NoticeButton>
+          </ProblemCardButton>
         )
       }
     >
       {change.status === "changed"
         ? "Your changes are kept. Acknowledge the new owner before saving."
         : "Your changes are kept. Waiting for Studio to show the new owner…"}
-    </SettingsProblemCard>
+    </ProblemCard>
   );
 }

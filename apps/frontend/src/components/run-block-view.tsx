@@ -22,7 +22,8 @@ import {
   threadOwnerName,
   waitingText,
 } from "./execution-canvas.tsx";
-import { clockTime, ExecutionStateBadge } from "./execution-state.tsx";
+import { ExecutionStateBadge } from "./execution-state.tsx";
+import { clockTime } from "../time-format.ts";
 import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
 import { RequestReport, ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";

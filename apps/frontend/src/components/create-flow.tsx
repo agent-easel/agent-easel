@@ -2,7 +2,6 @@ import { MutationGate } from "@/client-gate";
 import { useState, type FormEvent } from "react";
 import type { FlowDraft } from "@t3-factory/contracts";
 import { validateCreateFlow } from "@t3-factory/domain-validation";
-import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -15,7 +14,7 @@ import {
 } from "../studio-definitions.ts";
 import { fieldLabelClass } from "./page.tsx";
 import { OwnerPicker } from "./studio-owner.tsx";
-import { Notice } from "./notice.tsx";
+import { ProblemCard } from "./problem-card.tsx";
 
 export function CreateFlow({
   definitions,
@@ -202,9 +201,9 @@ function NewFlowDialog({
           />
         </div>
         {failed && (
-          <Notice tone="critical" icon={TriangleAlert} title="Couldn’t create the Flow">
+          <ProblemCard density="compact" tone="error" title="Couldn’t create the Flow">
             Your name and owner are kept — try again.
-          </Notice>
+          </ProblemCard>
         )}
       </DialogContent>
     </Dialog>
