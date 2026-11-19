@@ -46,6 +46,8 @@ export function declaredProtocolCompatibility(
 /** Bounds unauthenticated access requests per peer; approval itself is never automatic. */
 export class RequestLimiter {
   private readonly attempts = new Map<string, number[]>();
+  private expiry: ReturnType<typeof setTimeout> | undefined;
+  private closed = false;
   private readonly limit: number;
   private readonly windowMs: number;
   constructor(limit: number, windowMs: number) {
@@ -53,12 +55,25 @@ export class RequestLimiter {
     this.windowMs = windowMs;
   }
   allow(key: string, at = Date.now()): boolean {
+    if (this.closed) return false;
     const recent = (this.attempts.get(key) ?? []).filter((time) => at - time < this.windowMs);
-    if (recent.length >= this.limit) {
-      this.attempts.set(key, recent);
-      return false;
-    }
+    if (recent.length >= this.limit) return false;
     this.attempts.set(key, [...recent, at]);
+    this.expiry ??= setTimeout(this.expire, this.windowMs).unref();
     return true;
+  }
+
+  private readonly expire = () => {
+    const cutoff = Date.now() - this.windowMs;
+    for (const [peer, attempts] of this.attempts)
+      if (!attempts.some((time) => time > cutoff)) this.attempts.delete(peer);
+    this.expiry = this.attempts.size ? setTimeout(this.expire, this.windowMs).unref() : undefined;
+  };
+
+  close() {
+    this.closed = true;
+    clearTimeout(this.expiry);
+    this.expiry = undefined;
+    this.attempts.clear();
   }
 }
