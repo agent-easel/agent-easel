@@ -225,6 +225,8 @@ html[data-desktop="true"] [data-studio] > header {
   --tracking-section: 0.6px;
   --tracking-heading: -0.4px; /* launch composer heading */
 
+  --text-3xs: 8px; /* monogram in the 16 px inline project icon; two wide letters still fit */
+  --text-3xs--line-height: 12px;
   --text-2xs: 10px;
   --text-2xs--line-height: 14px;
   --text-overline: 10.5px; /* panel section headings */
@@ -237,6 +239,8 @@ html[data-desktop="true"] [data-studio] > header {
   --text-sm--line-height: 18px;
   --text-base: 13px;
   --text-base--line-height: 20px;
+  --text-subtitle: 14px; /* EmptyState Large title */
+  --text-subtitle--line-height: 17px;
   --text-title: 15px; /* modal and Settings section titles (R07c/R07d) */
   --text-title--line-height: 20px;
   --text-lg: 16px;

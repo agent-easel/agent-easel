@@ -194,6 +194,28 @@ test("title search combines drafts and all Run states in creation order", async 
   await app.screenshot("flat-search-muted-states");
 });
 
+test("a title search with no match explains that search looks at titles only", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/runs/new");
+  const query = "No Run is titled this";
+
+  // Act
+  await screen.getByRole("textbox", "Search Run titles").fill(query);
+
+  // Assert
+  const empty = screen.getByRole("navigation", "Open Runs").getByRole("status");
+  await expect(empty).toContainText(`No Run titles match “${query}”`);
+  await expect(empty).toContainText(
+    "Search looks at titles only. Clear search (Esc) to see all Runs.",
+  );
+  await app.screenshot("sidebar-search-no-match");
+});
+
 test("restore during search keeps focus on the matching row", async ({ app, screen, browser }) => {
   // Arrange
   const { actions } = await openSidebarAction(

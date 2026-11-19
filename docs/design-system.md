@@ -63,6 +63,8 @@ first paint use the baseline until a client receives the presentation.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
   substitute for readable helper text.
+- Feature components take font sizes only from the type-scale tokens in
+  `apps/frontend/src/styles.css`, never arbitrary sizes such as `text-[13px]`.
 - Focus must stay visible. Respect reduced motion: remove spatial transitions and keep
   modal changes short; programmatic canvas viewport moves jump instead of animating.
   Interactive controls must remain outside desktop drag regions.
@@ -124,9 +126,9 @@ button. Use at most one short introductory sentence in the body. Place any actio
 at the trailing edge, with Cancel or Keep editing before the primary or destructive
 action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between
 the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
-Compare latest revision, Review and enable, and Import use the wide width
-`clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
-32 px.
+Compare latest revision, Review and enable, Import and the keyboard shortcuts
+sheet use the wide width `clamp(560px, 60vw, 960px)`. Below 640 px wide, both use
+the viewport width minus 32 px.
 
 A primary action with a blank required name stays neutral and disabled, with no reason and without
 marking the field invalid. Any other cause that keeps it from running shows that one reason beside
@@ -185,8 +187,17 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   52 px row above the canvas: owner, name, save status, controls, More actions, Save. Stacked is the
   Agent editor's title row (name, controls, More actions, Save) over one status line, with no owner
   because the list group beside it names the owner. Page is the Trigger editor's title with its
-  controls at the right over its check status, with Save in the pinned footer. StudioSaveButton carries the Save rule wherever Save sits, including a pinned
-  footer, and StudioSaveStatus shows the saved check or the unsaved dot.
+  controls at the right over its check status, with Save in the pinned footer. StudioSaveButton
+  carries the Save rule wherever Save sits, including a pinned footer, and StudioSaveStatus shows
+  the saved check or the unsaved dot.
+- **Empty state**: EmptyState, always in a dashed frame. Large is for a whole list or preview
+  that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
+  title, an optional body and an optional action; on a muted surface, such as Studio, the icon tile
+  takes the accent fill, which every palette keeps distinct from muted. Compact is for a panel list
+  that is empty for a reason worth explaining, such as a Run sidebar title search with no match: a
+  left-aligned title and a short body. A one-line hint without an explanation stays plain status
+  text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
+  list loading, no-match and error lines.
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
   stays visible.

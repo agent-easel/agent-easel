@@ -37,7 +37,6 @@ import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.t
 import { placingFlows } from "@/lib/agent-display";
 import { DefinitionImportControl } from "../components/definition-import-control.tsx";
 import {
-  StudioListEmpty,
   StudioListHeader,
   StudioListMessage,
   studioListClass,
@@ -50,6 +49,7 @@ import {
   racedBlockers,
 } from "../components/studio-removal.tsx";
 import { Dialog, DialogContent } from "../components/ui/dialog.tsx";
+import { EmptyState } from "../components/ui/empty-state.tsx";
 import { MutationGate } from "@/client-gate";
 import { ProblemCard } from "../components/problem-card.tsx";
 import { ApiError } from "../api.ts";
@@ -267,12 +267,7 @@ function AgentsBoard({
   if (library.error && !library.agents)
     return <StudioListMessage tone="error">Couldn’t load Agents.</StudioListMessage>;
   if (empty && agentId === undefined)
-    return (
-      <StudioListEmpty
-        icon={<Bot aria-hidden className="size-8" strokeWidth={1.5} />}
-        title="No Agents yet"
-      />
-    );
+    return <EmptyState size="large" surface="muted" icon={Bot} title="No Agents yet" />;
   return (
     <div className="flex min-w-0 items-start gap-4">
       <AgentsListColumn

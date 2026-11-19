@@ -136,7 +136,7 @@ export function TriggersList({
         errorText="Couldn’t load Triggers."
         loadingText="Loading Triggers…"
         noMatchText="No matching Triggers"
-        emptyIcon={<Zap aria-hidden className="size-8" strokeWidth={1.5} />}
+        emptyIcon={Zap}
         emptyTitle="No Triggers yet"
       >
         <div className="flex flex-col gap-2">
