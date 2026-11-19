@@ -229,7 +229,7 @@ are distinct and non-empty. The editor checks this live: a duplicate or empty na
 [Saving and readiness](#saving-and-readiness)). Agents saved before Agent exits existed have none: their blocks kept their former exits as Flow-local exits.
 
 Under the shared Studio header, a 300 px list sits beside the editor ([Owners in Studio](#owners-in-studio)). Opening Agents with no Agent in the URL selects the first listed Agent, skipping a Project gone from T3. An empty list shows **No Agents yet** and no editor, unless the URL is a new-Agent draft or already names an Agent. **Import** is its own button ([Import](#import)); **New Agent** in the header is outline while that draft is open, because **Create Agent** is the primary. Each row shows the Agent's name, a runtime summary such as **Codex · GPT 6.1 Sol · High**, and **1 Flow** or **Unused** (distinct saved Flows, excluding Runs and unsaved
-drafts); the name and summary wrap, and narrow screens stack list and editor. The Studio breadcrumb ends with the opened Agent: **Studio / Agents / *Agent name***, or **Studio / Agents / New Agent**; a new Agent opened from a Flow editor's **New Agent** reads **Studio / Flows / *Flow* / New Agent**, and **Create Agent** or Esc returns to that Flow. The editor header is the shared header's Stacked layout: the name with the Worker picker (see **Worker settings** below), a ⋯ **More actions** menu and **Save** (**Create Agent** for a new one), then one status line: **✓ Saved · Revision *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · Revision *N* · …** while the draft is dirty, **Not saved yet** for a new Agent, or **Removed elsewhere**, the last three with the attention dot. It has no owner line ([Owners in Studio](#owners-in-studio)). **Save** is the only primary: neutral and disabled while saved, filled with unsaved changes, **Saving…** while saving; **Create Agent** stays neutral and disabled while the name is blank, with no error text. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)), **Remove worker** while a Worker is saved, and **Remove…**; focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header, one card per problem (saving, a revision or removal elsewhere, an owner change, exit names, Project overrides, Needs a model, reporting, a Project gone from T3) sits above the form: the name, the owner choice for a new Agent as the **Global** and **Project** cards, the
+drafts); the name and summary wrap, and narrow screens stack list and editor. The Studio breadcrumb ends with the opened Agent: **Studio / Agents / *Agent name***, or **Studio / Agents / New Agent**; a new Agent opened from a Flow editor's **New Agent** reads **Studio / Flows / *Flow* / New Agent**, and **Create Agent** or Esc returns to that Flow. The editor header is the shared header's Stacked layout: the name with the Worker picker (see **Worker settings** below), a ⋯ **More actions** menu and **Save** (**Create Agent** for a new one), then one status line: **✓ Saved · Revision *N* · Used in *N* Flows** (**Unused** for none), **Unsaved changes · Revision *N* · …** while the draft is dirty, **Not saved yet** for a new Agent, or **Removed elsewhere**, the last three with the attention dot. It has no owner line ([Owners in Studio](#owners-in-studio)). **Save** follows the [one Save rule](design-system.md#components-and-interaction); **Create Agent** stays neutral and disabled while the name is blank, with no error text. The menu exists after the first save and holds **Duplicate…**, **Change owner…**, **Export JSON** (see [Definition export](#definition-export)), **Remove worker** while a Worker is saved, and **Remove…**; focus returns to ⋯ when an item's dialog closes. A new Agent shows **New Agent** and no menu. Below the header, one card per problem (saving, a revision or removal elsewhere, an owner change, exit names, Project overrides, Needs a model, reporting, a Project gone from T3) sits above the form: the name, the owner choice for a new Agent as the **Global** and **Project** cards, the
 Prompt, which starts short enough to keep the exits visible and keeps its resize, and the exits. Leaving an edited Agent asks **Discard unsaved changes?** with **Keep
 editing** or **Discard changes**.
 
@@ -468,7 +468,7 @@ The toolbar's ⋯ **More Flow actions** menu holds **Duplicate…**, **Change ow
 [Definition export](#definition-export)) and **Remove…** (see [Removing a Flow](#removing-a-flow)). A disabled item shows its reason under its label, and
 focus returns to ⋯ when an item's dialog closes.
 
-**Save** is the only primary action: filled only while there are unsaved changes it may send, neutral and disabled while saved or blocked, and **Saving…** while a save is in flight. It
+**Save** follows the [one Save rule](design-system.md#components-and-interaction). It
 accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave. **⌘Z** (Ctrl+Z
 elsewhere) undoes the last structural edit until Save: a removed block together with its wires, or a removed wire; edits made since are kept, and a text field
 keeps its own undo.
@@ -565,9 +565,8 @@ Turning a switch on opens the [review](#reviewing-what-starts); turning it off s
 
 The repository and Flow fields show their own readiness. A problem with `gh` has a card with
 **Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
-page, and **Review and enable**. Save follows the
-[one Save rule](design-system.md#components-and-interaction) and is the only filled action; Review and
-enable stays neutral. When another Trigger already watches the same repository, the
+page, and **Review and enable**, which stays neutral; Save follows the
+[one Save rule](design-system.md#components-and-interaction). When another Trigger already watches the same repository, the
 form warns before saving and the warning also appears in the review. Saving is still available.
 
 **Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
@@ -576,8 +575,7 @@ current problem and its repair guidance. **Check now** is available for an enabl
 no unsaved edits. Runs started by that action can be opened from the strip. A failing Trigger
 keeps checking. Factory keeps the latest check and problem.
 
-The pinned footer has **Save** only, filled only while there are unsaved edits. Saved-revision and
-removal notices appear as cards above it.
+The pinned footer has **Save** only. Saved-revision and removal notices appear as cards above it.
 
 Triggers follow the [saved-revision rules](#following-saved-revisions) of the other editors: **Updated to revision
 N**, **Revision N was saved elsewhere** with **Compare latest revision**, **Load revision N** and **Keep my edits**, and

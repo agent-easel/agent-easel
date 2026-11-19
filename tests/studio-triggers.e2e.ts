@@ -8,6 +8,7 @@ import type {
 } from "../packages/contracts/src/index.ts";
 import { archiveJourneyRun } from "./support/run-history.ts";
 import { saveFlowCopy, readFlow, saveFlowElsewhere } from "./support/flows.ts";
+import { expectSaveFilled, expectSaveNeutral } from "./support/studio.ts";
 import { afterEach, beforeEach, test } from "./support/test.ts";
 
 /** Runs a journey's Trigger started, archived afterwards so later journeys do not list them. */
@@ -53,6 +54,15 @@ async function openSavedTrigger(
   await app.open("/studio/triggers");
   await screen.getByRole("link", name, { exact: false }).tap();
   await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
+}
+
+/** Opens a saved, enabled Trigger named `name` and edits its name, leaving the edit unsaved. */
+async function openEditedTrigger(
+  fixtures: { app: App; screen: Screen; fixture: Fixture },
+  name: string,
+) {
+  await openSavedTrigger(fixtures, name);
+  await fixtures.screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
 }
 
 /** Opens the named Trigger from the list; answers its status strip once it shows Problem. */
@@ -221,21 +231,13 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await expect(
     screen.getByText("Another Trigger watches factory-demo/atlas", { exact: true }),
   ).toBeVisible();
-  const review = screen.getByRole("button", "Review and enable", { exact: true });
-  await expect(review).toBeEnabled();
-  // Save is the only primary: Review and enable stays neutral even when it can run.
-  await expect(review).not.toHaveAttribute("data-variant", "default");
-  const save = screen.getByRole("button", "Save", { exact: true });
-  await expect(save).toHaveAttribute("data-variant", "default");
-  await expect(screen.getByRole("switch", "Trigger enabled", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "Review and enable", { exact: true })).toBeEnabled();
 
   // Act
-  await save.tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectEditorOff(screen, name);
-  await expect(save).toBeDisabled();
-  await expect(save).toHaveAttribute("data-variant", "outline");
   await expect(screen.getByRole("button", "Check now", { exact: true })).toBeDisabled();
   const response = await fetch(new URL("/api/triggers", app.baseUrl));
   const saved = (await response.json()) as Result<readonly TriggerDefinition[]>;
@@ -244,32 +246,59 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await app.screenshot("edit-trigger-off");
 });
 
-test("a saved Trigger's footer Save is filled only with unsaved edits and turns neutral and disabled once saved", async ({
+test("a complete new Trigger has Save as its only filled action", async ({ app, screen }) => {
+  // Arrange
+  const name = "Journey · New Trigger Save";
+  await app.open("/studio/triggers/new/github-issues");
+  await expect(
+    screen.getByRole("heading", "New GitHub Issues Trigger", { exact: true }),
+  ).toBeVisible();
+
+  // Act
+  await fillTrigger(screen, name);
+
+  // Assert
+  await expect(screen.getByRole("button", "Save", { exact: true })).toHaveAttribute(
+    "data-variant",
+    "default",
+  );
+  const review = screen.getByRole("button", "Review and enable", { exact: true });
+  await expect(review).toBeEnabled();
+  await expect(review).not.toHaveAttribute("data-variant", "default");
+  await expect(screen.getByRole("switch", "Trigger enabled", { exact: true })).toHaveCount(0);
+});
+
+test("a saved Trigger's footer Save is filled once the Trigger has unsaved edits", async ({
   app,
   screen,
   fixture,
 }) => {
   // Arrange
-  const name = "Journey · Footer Save state";
+  const name = "Journey · Footer Save unsaved";
   await openSavedTrigger({ app, screen, fixture }, name);
-  await expect(
-    screen.getByRole("switch", "Trigger enabled", { exact: true, checked: true }),
-  ).toBeVisible();
-  const save = screen.getByRole("button", "Save", { exact: true });
-  await expect(save).toBeDisabled();
-  await expect(save).toHaveAttribute("data-variant", "outline");
-  await expect(screen.getByRole("button", "Review and enable", { exact: true })).toHaveCount(0);
-  await screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
-  await expect(save).toBeEnabled();
-  await expect(save).toHaveAttribute("data-variant", "default");
 
   // Act
-  await save.tap();
+  await screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
+
+  // Assert
+  await expectSaveFilled(screen);
+});
+
+test("a saved Trigger's footer Save turns neutral and disabled once saved", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Footer Save saved";
+  await openEditedTrigger({ app, screen, fixture }, name);
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByRole("heading", `${name} edited`, { exact: true })).toBeVisible();
-  await expect(save).toBeDisabled();
-  await expect(save).toHaveAttribute("data-variant", "outline");
+  await expectSaveNeutral(screen);
 });
 
 test("a Trigger and its Flow retain their drafts when an Agent opens over them", async ({

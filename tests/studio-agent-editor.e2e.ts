@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
-import { chooseAgentAction, expectSavedAgentRevision, openStudioAgent } from "./support/studio.ts";
+import {
+  chooseAgentAction,
+  expectSaveFilled,
+  expectSaveNeutral,
+  expectSavedAgentRevision,
+  openEditedStudioAgent,
+  openStudioAgent,
+} from "./support/studio.ts";
 import {
   expectCleanAgentRevision,
   beforeCleanAgentRevision,
@@ -206,7 +213,7 @@ test("Escape closes only the model picker and returns focus to it", async ({
   await expect(picker).toBeFocused();
 });
 
-test("the Agent header's Save is filled only with unsaved changes and turns neutral and disabled once saved", async ({
+test("the Agent header's Save is filled once the Agent has unsaved changes", async ({
   app,
   screen,
   browser,
@@ -214,25 +221,36 @@ test("the Agent header's Save is filled only with unsaved changes and turns neut
   // Arrange
   await openStudioAgent(
     { app, screen, browser },
-    `Header save state ${crypto.randomUUID().slice(0, 8)}`,
+    `Header unsaved state ${crypto.randomUUID().slice(0, 8)}`,
   );
-  const save = screen.getByRole("button", "Save", { exact: true });
   await expectSavedAgentRevision(screen, 1);
-  await expect(save).toBeDisabled();
-  await expect(save).toHaveAttribute("data-variant", "outline");
-  await screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
-  await expect(screen.getByText(/^Unsaved changes · Revision 1 · Unused$/)).toBeVisible();
-  await expect(save).toBeEnabled();
-  await expect(save).toHaveAttribute("data-variant", "default");
-  await app.screenshot("agent-header-unsaved");
 
   // Act
-  await save.tap();
+  await screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
+
+  // Assert
+  await expect(screen.getByText(/^Unsaved changes · Revision 1 · Unused$/)).toBeVisible();
+  await expectSaveFilled(screen);
+  await app.screenshot("agent-header-unsaved");
+});
+
+test("the Agent header's Save turns neutral and disabled once the Agent is saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openEditedStudioAgent(
+    { app, screen, browser },
+    `Header saved state ${crypto.randomUUID().slice(0, 8)}`,
+  );
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectSavedAgentRevision(screen, 2);
-  await expect(save).toBeDisabled();
-  await expect(save).toHaveAttribute("data-variant", "outline");
+  await expectSaveNeutral(screen);
   await app.screenshot("agent-header-saved");
 });
 

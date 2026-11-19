@@ -125,7 +125,6 @@ export function AgentEditorPane(props: AgentEditorProps) {
     >
       <StudioEditorHeader
         layout="stacked"
-        headingLevel={1}
         title={agentTitle(state)}
         controls={
           <AgentModelPicker

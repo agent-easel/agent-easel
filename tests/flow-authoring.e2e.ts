@@ -18,9 +18,12 @@ import {
 import {
   chooseFlowAction,
   expectFlowSaved,
+  expectSaveFilled,
+  expectSaveNeutral,
   expectSavedAgentRevision,
   flowsBreadcrumb,
   openEditedStudioFlow,
+  openStudioFlowCopy,
   readinessSummary,
   saveFlowWithReadiness,
 } from "./support/studio.ts";
@@ -593,26 +596,38 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await app.screenshot("agent-exit-removed-readiness");
 });
 
-test("the Flow header's Save is filled only with unsaved changes and turns neutral and disabled once saved", async ({
+test("the Flow header's Save is filled once the Flow has unsaved changes", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const name = `Header save state ${crypto.randomUUID()}`;
-  await openEditedStudioFlow({ app, screen, browser }, name);
-  const save = screen.getByRole("button", "Save", { exact: true });
-  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
-  await expect(save).toBeEnabled();
-  await expect(save).toHaveAttribute("data-variant", "default");
-  await app.screenshot("flow-header-unsaved");
+  const name = `Header unsaved state ${crypto.randomUUID()}`;
+  await openStudioFlowCopy({ app, screen, browser }, name);
 
   // Act
-  await save.tap();
+  await screen.getByLabel("Flow name").fill(`${name} edited`);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveFilled(screen);
+  await app.screenshot("flow-header-unsaved");
+});
+
+test("the Flow header's Save turns neutral and disabled once the Flow is saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openEditedStudioFlow({ app, screen, browser }, `Header saved state ${crypto.randomUUID()}`);
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectFlowSaved(screen);
-  await expect(save).toHaveAttribute("data-variant", "outline");
+  await expectSaveNeutral(screen);
   await app.screenshot("flow-header-saved");
 });
 

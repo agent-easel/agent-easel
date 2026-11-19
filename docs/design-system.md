@@ -181,10 +181,11 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Dialog**: the shared dialog in its standard or wide size, with the shared header.
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
-- **Studio editor header**: StudioEditorHeader, in the order owner, name, save status, controls,
-  More actions, Save. Its Toolbar layout is the Flow editor's 52 px row above the canvas, Stacked
-  the Agent editor's title row over one status line, and Page the Trigger editor's title over its
-  check status. StudioSaveButton carries the Save rule wherever Save sits, including a pinned
+- **Studio editor header**: StudioEditorHeader in three layouts. Toolbar is the Flow editor's
+  52 px row above the canvas: owner, name, save status, controls, More actions, Save. Stacked is the
+  Agent editor's title row (name, controls, More actions, Save) over one status line, with no owner
+  because the list group beside it names the owner. Page is the Trigger editor's title with its
+  controls at the right over its check status, with Save in the pinned footer. StudioSaveButton carries the Save rule wherever Save sits, including a pinned
   footer, and StudioSaveStatus shows the saved check or the unsaved dot.
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that

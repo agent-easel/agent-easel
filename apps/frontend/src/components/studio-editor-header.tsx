@@ -5,8 +5,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 
-type HeaderElementProps = Omit<ComponentProps<"header">, "children" | "title">;
-
 /** The editable name in the Toolbar layout, edited in place. */
 type StudioEditorNameField = {
   /** The field's accessible name, such as "Flow name". */
@@ -16,45 +14,41 @@ type StudioEditorNameField = {
   onChange: (value: string) => void;
 };
 
-type TitleHeading = {
-  title: ReactNode;
-  /** The title's heading level within the editor's page. */
-  headingLevel: 1 | 2;
-};
+/** Event handlers on the Toolbar header, such as the Flow editor's typing reports. */
+type ToolbarHeaderEvents = Omit<ComponentProps<"header">, "children" | "title" | "className">;
 
-type StudioEditorHeaderProps = HeaderElementProps &
-  (
-    | {
-        /** One 52 px row above a canvas (Flow editor). */
-        layout: "toolbar";
-        owner: ReactNode;
-        nameField: StudioEditorNameField;
-        status: ReactNode;
-        controls?: ReactNode;
-        moreActions: ReactNode;
-        save: ReactNode;
-      }
-    | ({
-        /** The title row with its actions, then one status line (Agent editor). */
-        layout: "stacked";
-        status: ReactNode;
-        controls?: ReactNode;
-        moreActions?: ReactNode;
-        save: ReactNode;
-      } & TitleHeading)
-    | ({
-        /** A page title with its controls at the right, then a status strip; Save stays in the
-         * page's own footer (Trigger editor). */
-        layout: "page";
-        status?: ReactNode;
-        controls?: ReactNode;
-      } & TitleHeading)
-  );
+type StudioEditorHeaderProps =
+  | (ToolbarHeaderEvents & {
+      /** One 52 px row above a canvas (Flow editor): owner, name, save status, controls, More
+       * actions, Save. */
+      layout: "toolbar";
+      owner: ReactNode;
+      nameField: StudioEditorNameField;
+      status: ReactNode;
+      controls?: ReactNode;
+      moreActions: ReactNode;
+      save: ReactNode;
+    })
+  | {
+      /** The page's title (h1) with controls, More actions and Save, then the status line (Agent
+       * editor). The owner is named by the list group beside the editor. */
+      layout: "stacked";
+      title: ReactNode;
+      status: ReactNode;
+      controls?: ReactNode;
+      moreActions?: ReactNode;
+      save: ReactNode;
+    }
+  | {
+      /** A section title (h2, below the Triggers page heading) with its controls at the right,
+       * then a status strip; Save stays in the page's own footer (Trigger editor). */
+      layout: "page";
+      title: ReactNode;
+      status?: ReactNode;
+      controls?: ReactNode;
+    };
 
-/**
- * Figma 🧩 Studio/EditorHeader: one header for the Studio editors, in the element order owner,
- * name, save status, controls, More actions, Save.
- */
+/** Figma 🧩 Studio/EditorHeader: one header for the Studio editors, in three layouts. */
 export function StudioEditorHeader(props: StudioEditorHeaderProps) {
   switch (props.layout) {
     case "toolbar": {
@@ -66,14 +60,10 @@ export function StudioEditorHeader(props: StudioEditorHeaderProps) {
         controls,
         moreActions,
         save,
-        className,
-        ...rest
+        ...events
       } = props;
       return (
-        <header
-          className={cn("flex h-13 shrink-0 items-center gap-2.5 border-b px-4", className)}
-          {...rest}
-        >
+        <header className="flex h-13 shrink-0 items-center gap-2.5 border-b px-4" {...events}>
           {owner}
           <Input
             aria-label={nameField.label}
@@ -91,27 +81,11 @@ export function StudioEditorHeader(props: StudioEditorHeaderProps) {
       );
     }
     case "stacked": {
-      const {
-        layout: _layout,
-        title,
-        headingLevel,
-        status,
-        controls,
-        moreActions,
-        save,
-        className,
-        ...rest
-      } = props;
+      const { title, status, controls, moreActions, save } = props;
       return (
-        <header
-          className={cn(
-            "flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-6 pt-5 pb-4",
-            className,
-          )}
-          {...rest}
-        >
+        <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-6 pt-5 pb-4">
           <div className="flex flex-wrap items-center gap-2">
-            <EditorTitle level={headingLevel}>{title}</EditorTitle>
+            <EditorTitle level={1}>{title}</EditorTitle>
             {/* The actions wrap together, so Save never leaves More actions behind. */}
             <div className="ml-auto flex max-w-full min-w-0 items-center gap-2">
               {controls}
@@ -124,11 +98,11 @@ export function StudioEditorHeader(props: StudioEditorHeaderProps) {
       );
     }
     case "page": {
-      const { layout: _layout, title, headingLevel, status, controls, className, ...rest } = props;
+      const { title, status, controls } = props;
       return (
-        <header className={cn("mb-5 grid gap-5", className)} {...rest}>
+        <header className="mb-5 grid gap-5">
           <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
-            <EditorTitle level={headingLevel}>{title}</EditorTitle>
+            <EditorTitle level={2}>{title}</EditorTitle>
             {controls}
           </div>
           {status}

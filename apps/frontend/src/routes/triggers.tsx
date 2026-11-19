@@ -513,7 +513,6 @@ function TriggerEditorHeader({
     <StudioEditorHeader
       layout="page"
       title={trigger?.name ?? "New GitHub Issues Trigger"}
-      headingLevel={2}
       controls={
         existing && (
           <MutationGate>

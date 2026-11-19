@@ -150,7 +150,7 @@ function AgentOwnerSection({
   onRemove: (agent: AgentDefinition) => void;
 }) {
   const count = `${items.length} ${items.length === 1 ? "Agent" : "Agents"}`;
-  const placed = items.length === 1 ? "this Agent" : "these Agents";
+  const placedAgents = items.length === 1 ? "this Agent" : "these Agents";
   return (
     <section aria-label={owner.title} className="flex flex-col gap-2">
       <OwnerGroupHeader
@@ -158,7 +158,7 @@ function AgentOwnerSection({
         count={count}
         placement={
           owner.projectId !== null && !owner.gone
-            ? `Only ${owner.title} Flows can place ${placed}.`
+            ? `Only ${owner.title} Flows can place ${placedAgents}.`
             : undefined
         }
       />

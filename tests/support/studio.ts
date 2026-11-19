@@ -12,14 +12,42 @@ export async function openStudioAgent({ app, screen }: StudioFixtures, name: str
   return agent;
 }
 
-/** A saved copy of a seeded Flow is open in Studio with an unsaved rename. */
-export async function openEditedStudioFlow({ app, screen, browser }: StudioFixtures, name: string) {
+/** A saved copy of Sample worker is open in Studio with an unsaved Prompt edit. */
+export async function openEditedStudioAgent(fixtures: StudioFixtures, name: string) {
+  const agent = await openStudioAgent(fixtures, name);
+  await fixtures.screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
+  return agent;
+}
+
+/** The open Studio editor's Save has unsaved changes to send: enabled and filled. */
+export async function expectSaveFilled(screen: Screen) {
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeEnabled();
+  await expect(save).toHaveAttribute("data-variant", "default");
+}
+
+/** The open Studio editor's Save has nothing to send: disabled and neutral. */
+export async function expectSaveNeutral(screen: Screen) {
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
+}
+
+/** A saved copy of a seeded Flow is open in Studio with no unsaved changes. */
+export async function openStudioFlowCopy({ app, screen, browser }: StudioFixtures, name: string) {
   await browser.setViewport({ width: 1600, height: 1000 });
   const id = await saveFlowCopy(app.baseUrl, "Demo · Grill, spec and tickets", name, {
     mode: "checkout",
   });
   await app.open(`/studio/flows/${id}`);
-  await screen.getByLabel("Flow name").fill(`${name} edited`);
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+  return id;
+}
+
+/** A saved copy of a seeded Flow is open in Studio with an unsaved rename. */
+export async function openEditedStudioFlow(fixtures: StudioFixtures, name: string) {
+  const id = await openStudioFlowCopy(fixtures, name);
+  await fixtures.screen.getByLabel("Flow name").fill(`${name} edited`);
   return id;
 }
 
