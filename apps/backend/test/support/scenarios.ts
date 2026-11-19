@@ -13,7 +13,7 @@ import type {
   Result,
   RunDetail,
 } from "@t3-factory/contracts";
-import { holdInspection, START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
+import { START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 import {
   beginThreadRun,
   busyAgainOnSend,
@@ -129,9 +129,9 @@ export async function enableRunTitlesWithCheapModel(
  */
 function afterStartPreflight(t3: ControlledT3, action: () => void) {
   let inspections = 0;
-  t3.beforeInspection = () => {
+  t3.contract.beforeInspection = () => {
     if (++inspections <= START_INSPECTIONS) return;
-    delete t3.beforeInspection;
+    delete t3.contract.beforeInspection;
     action();
   };
 }
@@ -150,7 +150,7 @@ export function withdrawTitleModelAfterStartCheck(t3: ControlledT3, withdraw: ()
 export function reauthorizeDuringTitleDispatch(t3: ControlledT3) {
   return new Promise<void>((resolve) =>
     afterStartPreflight(t3, () => {
-      t3.approve("controlled-grant-3");
+      t3.connection.approve("controlled-grant-3");
       resolve();
     }),
   );
@@ -171,7 +171,7 @@ export function reauthorizeDuringTitleEligibility(
       const read = t3.orchestratorCapabilities.bind(t3);
       t3.orchestratorCapabilities = async (target) => {
         t3.orchestratorCapabilities = read;
-        t3.approve("controlled-grant-3");
+        t3.connection.approve("controlled-grant-3");
         await factory.recheckConnection();
         resolve();
         return read(target);
@@ -611,7 +611,7 @@ async function workerAgent(
     await world.factory.createAgent({
       name: "Worker",
       prompt: "Follow repository instructions.",
-      execution: controlledExecution(world.t3.environmentId),
+      execution: controlledExecution(world.t3.connection.environmentId),
       exits,
       projectId,
     }),
@@ -1436,7 +1436,7 @@ export function snoozed(world: ScenarioWorld, worker: WorkerHandle) {
  * Factory observed the settlement unresolved and raised its Problem. */
 export function settleUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
   return reach("settlement unresolved", async () => {
-    world.t3.support.stop = false;
+    world.t3.contract.support.stop = false;
     stepResult(
       "confirm Settle",
       await world.factory.settleRun(worker.runId, { stopWorkers: true }),
@@ -1989,7 +1989,7 @@ export function twoWorkersStarted(world: ScenarioWorld, start: unknown) {
  * the pass's support answers are read after the release. */
 export function imageDispatchHeld(world: ScenarioWorld, start: unknown) {
   return reach("image dispatch held", async () => {
-    const { release } = holdInspection(world.t3, START_INSPECTIONS);
+    const { release } = world.t3.contract.holdInspection(START_INSPECTIONS);
     const started = stepResult("start a Run", await world.factory.startRun(start));
     return { runId: started.id, release };
   });

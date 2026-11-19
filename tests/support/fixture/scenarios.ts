@@ -309,7 +309,9 @@ async function createFixtureScenarioSet(host: Host) {
       },
     ],
   };
-  const unselectedModelOptions = controlledExecution(t3.environmentId, { modelOptions: [] });
+  const unselectedModelOptions = controlledExecution(t3.connection.environmentId, {
+    modelOptions: [],
+  });
   requireSuccess(
     await factory.createAgent({
       name: "Sample worker",

@@ -86,7 +86,7 @@ it("changed grant identity leaves an uncertain worker launch unresolved", async 
   await f.reconcileRuns();
   await f.close();
   t3.loseLaunchReply = false;
-  t3.approve("different-grant");
+  t3.connection.approve("different-grant");
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -103,7 +103,7 @@ it("changed grant identity leaves an uncertain worker launch unresolved", async 
 it("runtime readiness without report support blocks Start", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
 
   // Act
   const blocked = await f.startRun(input);
@@ -221,7 +221,7 @@ it("an unproven retry scope still binds the searched worker and does not launch 
   await f.reconcileRuns();
   await f.close();
   t3.loseLaunchReply = false;
-  t3.support.launchRetryScope = null;
+  t3.contract.support.launchRetryScope = null;
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -422,7 +422,7 @@ it("Start refuses a Project Flow whose repository directory is missing, with tha
 it("Start refuses a Project Flow while T3 is unreachable, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   const result = await f.startRun(input);
@@ -438,7 +438,7 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
 it("Start refuses an Agent whose report support its T3 snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
   changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
 
   // Act
@@ -453,7 +453,7 @@ it("Start refuses an Agent whose report support its T3 snapshot lacked, though a
 it("Start refuses with a recheck-and-retry explanation when T3's launch replay proof cannot be established, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
-  t3.support.launchProofFails = true;
+  t3.contract.support.launchProofFails = true;
 
   // Act
   const result = await f.startRun(input);
@@ -474,7 +474,7 @@ it("Start refuses with a recheck-and-retry explanation when T3's launch replay p
 it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.environmentId = "other-environment";
+  t3.connection.environmentId = "other-environment";
 
   // Act
   const result = await f.startRun(input);

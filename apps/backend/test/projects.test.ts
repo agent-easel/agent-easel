@@ -58,13 +58,13 @@ it("recheckProjects records different-environment when the grant environment cha
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   t3.projects = [{ projectId: "same-id", title: "Old", workspaceRoot: "/old", available: true }];
   const factory = await harness.open({ t3 });
   assertOk(await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" }));
   const original = assertOk(await factory.recheckProjects()).projects[0]!;
-  t3.available = true;
-  t3.environmentId = "other-environment";
+  t3.connection.available = true;
+  t3.connection.environmentId = "other-environment";
   t3.projects = [
     { projectId: "same-id", title: "Other", workspaceRoot: "/moved", available: true },
   ];
@@ -84,7 +84,7 @@ it("uncertain T3 project creation does not leak private errors or retry automati
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   const factory = await harness.open({ t3 });
   assertOk(await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" }));
   const create = t3.createProject.bind(t3);

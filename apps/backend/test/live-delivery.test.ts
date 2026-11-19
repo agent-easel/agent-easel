@@ -319,12 +319,12 @@ it("a failed re-read marks the view not current until a later read succeeds", as
 it("a T3 connection change reaches connection subscribers without another read", async (c) => {
   // Arrange
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   const factory = await (await factoryHarness(c)).open({ t3, connectionRetryMs: 60_000 });
   assert((await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" })).ok);
   const connection = subscribe(c, factory.live.watchConnection());
   await connection.until((messages) => messages.length > 0);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   const rechecked = await factory.recheckConnection();

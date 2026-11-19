@@ -3,7 +3,7 @@ import { assert, expect, it, type TestContext } from "@effect/vitest";
 import { readdir, stat, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LiveT3Adapter } from "../src/index.ts";
+import { makeLiveT3 } from "../src/index.ts";
 import { factoryHarness } from "./support/factory.ts";
 import { oauthT3 } from "./support/oauth-t3.ts";
 import {
@@ -12,8 +12,8 @@ import {
   recheckConnection,
 } from "./support/boundaries-setup.ts";
 
-function liveAdapter(credentialsDirectory: string, onUrl: (url: string) => void) {
-  return new LiveT3Adapter({
+function liveT3(credentialsDirectory: string, onUrl: (url: string) => void) {
+  return makeLiveT3({
     credentialsDirectory,
     callbackPort: 0,
     openBrowser: async (url) => {
@@ -29,15 +29,15 @@ async function openOAuthFactory(context: TestContext) {
   const credentialsDirectory = join(dirname(harness.databasePath), "credentials");
   let authorizationUrl = "";
   const openedUrls: string[] = [];
-  const adapter = liveAdapter(credentialsDirectory, (url) => {
+  const live = liveT3(credentialsDirectory, (url) => {
     authorizationUrl = url;
     openedUrls.push(url);
   });
   // Deliver consent immediately after an inspection observed pending approval. This
   // exercises the adapter boundary between that stale observation and reopening.
   let approveAfterInspection = false;
-  const inspect = adapter.inspect.bind(adapter);
-  adapter.inspect = async (target) => {
+  const inspect = live.contract.inspect.bind(live.contract);
+  live.contract.inspect = async (target) => {
     const observation = await inspect(target);
     if (approveAfterInspection && observation.reason === "approval-pending") {
       approveAfterInspection = false;
@@ -46,7 +46,7 @@ async function openOAuthFactory(context: TestContext) {
     }
     return observation;
   };
-  const factory = await harness.open({ t3: adapter });
+  const factory = await harness.open({ t3: live });
   await factory.configureConnection({ endpoint: external.endpoint });
   return {
     harness,
@@ -93,7 +93,7 @@ it("OAuth approval completes after backend restart on the pending callback", asy
   const callback = external.approvalUrl(getAuthorizationUrl());
   await factory.close();
   const reopened = await harness.open({
-    t3: liveAdapter(join(dirname(harness.databasePath), "credentials"), () => {}),
+    t3: liveT3(join(dirname(harness.databasePath), "credentials"), () => {}),
   });
   expect((await readConnection(reopened)).explanation).toMatch(/Approve access in the browser/);
 
@@ -161,7 +161,7 @@ it("token refresh restores ready without a second authorization when refresh suc
   external.expireAccess();
   external.refreshUnavailable(true);
   const reopened = await harness.open({
-    t3: liveAdapter(join(dirname(harness.databasePath), "credentials"), () => {}),
+    t3: liveT3(join(dirname(harness.databasePath), "credentials"), () => {}),
   });
   await reopened.configureConnection({ endpoint: external.endpoint });
   expect((await readConnection(reopened)).state).toBe("unavailable");
@@ -226,7 +226,7 @@ it("a T3 call's transient failure is not reported on a concurrent inspection who
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
   const readFails = new Promise<void>((resolve) => (failRead = resolve));
   const rejectionAnswered = new Promise<void>((resolve) => (answerRejection = resolve));
-  const { adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, adapter, external, endpoint } = await authorizedLiveOAuth(context, {
     runtimeActivity: async () => {
       readReached();
       await readFails;
@@ -237,7 +237,7 @@ it("a T3 call's transient failure is not reported on a concurrent inspection who
   await readStarted;
   external.revoke();
   const rejectionHeld = external.holdAuthorizationRejections(rejectionAnswered);
-  const inspection = adapter.inspect({ endpoint });
+  const inspection = live.contract.inspect({ endpoint });
   await rejectionHeld;
 
   // Act
@@ -281,7 +281,7 @@ it("a browser open failure during authorize stays actionable and never leaks the
   const external = await oauthT3();
   context.onTestFinished(() => external.close());
   const factory = await harness.open({
-    t3: new LiveT3Adapter({
+    t3: makeLiveT3({
       credentialsDirectory: join(dirname(harness.databasePath), "credentials"),
       callbackPort: 0,
       openBrowser: async () => {
@@ -307,7 +307,7 @@ it("an occupied callback port leaves authorization required with an actionable e
   const external = await oauthT3();
   context.onTestFinished(() => external.close());
   const factory = await harness.open({
-    t3: new LiveT3Adapter({
+    t3: makeLiveT3({
       credentialsDirectory: join(dirname(harness.databasePath), "credentials"),
       callbackPort: Number(new URL(external.endpoint).port),
       openBrowser: async () => {

@@ -28,8 +28,8 @@ async function reportingHomes(context: TestContext, driver: string) {
   await mkdir(state);
   await mkdir(home);
   const t3 = new ControlledT3();
-  t3.approve();
-  await writeReportingState(state, t3.environmentId, home, "test-provider", driver);
+  t3.connection.approve();
+  await writeReportingState(state, t3.connection.environmentId, home, "test-provider", driver);
   return { harness, state, home, t3 };
 }
 

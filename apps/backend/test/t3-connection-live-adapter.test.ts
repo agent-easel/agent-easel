@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import type { LiveT3Adapter } from "../src/index.ts";
+import type { T3Modules } from "../src/index.ts";
 import {
   authorizedLiveOAuth,
   connectedLiveT3,
@@ -24,7 +24,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
   // Arrange
   let readReached!: () => void;
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
-  const { adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, adapter, external, endpoint } = await authorizedLiveOAuth(context, {
     projects: true,
     runtimeActivity: () => {
       readReached();
@@ -40,7 +40,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
 
   // Act
   const answers = await Promise.all([
-    adapter.inspect({ endpoint }),
+    live.contract.inspect({ endpoint }),
     adapter.sendMessage({ endpoint }, queuedSend),
     adapter.readExecution({ endpoint }, "thread-1"),
     adapter.listProjects({ endpoint, environmentId: "fixture-environment" }),
@@ -72,7 +72,7 @@ it("after T3 forgets its sessions, the next call succeeds on a new connection", 
 it("after T3 changes a tool's output schema, the shared connection checks the new schema", async (context) => {
   // Arrange
   let environmentId = "fixture-environment";
-  const { adapter, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, external, endpoint } = await authorizedLiveOAuth(context, {
     environmentOutputSchema: () => ({
       $id: "https://fixture.example/environment.json",
       type: "object",
@@ -80,11 +80,11 @@ it("after T3 changes a tool's output schema, the shared connection checks the ne
       required: ["environmentId"],
     }),
   });
-  expect(await adapter.inspect({ endpoint })).toMatchObject({ state: "ready" });
+  expect(await live.contract.inspect({ endpoint })).toMatchObject({ state: "ready" });
   environmentId = "another-environment";
 
   // Act
-  const inspection = await adapter.inspect({ endpoint });
+  const inspection = await live.contract.inspect({ endpoint });
 
   // Assert
   expect(inspection).toMatchObject({ state: "incompatible" });
@@ -142,25 +142,25 @@ it("after re-authorization, calls use a new connection and never the previous gr
 it.for([
   [
     "resumed authorization",
-    async (adapter: LiveT3Adapter, endpoint: string) => {
-      await adapter.resumeAuthorization({ endpoint });
+    async (live: T3Modules, endpoint: string) => {
+      await live.connection.resumeAuthorization({ endpoint });
     },
   ],
   [
     "an endpoint change",
-    async (adapter: LiveT3Adapter, _endpoint: string, other: string) => {
-      await adapter.inspect({ endpoint: other });
+    async (live: T3Modules, _endpoint: string, other: string) => {
+      await live.contract.inspect({ endpoint: other });
     },
   ],
-  ["adapter close", (adapter: LiveT3Adapter) => adapter.close()],
+  ["closing T3", (live: T3Modules) => live.close()],
 ] as const)("after %s, the next call opens a new connection", async ([, change], context) => {
   // Arrange
-  const { adapter, external, endpoint } = await connectedLiveT3(context);
+  const { live, adapter, external, endpoint } = await connectedLiveT3(context);
   const other = await oauthT3();
   context.onTestFinished(() => other.close());
   await adapter.readExecution({ endpoint }, "thread-1");
   const previous = threadReadSession(external.sessionRequests);
-  await change(adapter, endpoint, other.endpoint);
+  await change(live, endpoint, other.endpoint);
 
   // Act
   const observation = await adapter.readExecution({ endpoint }, "thread-1");

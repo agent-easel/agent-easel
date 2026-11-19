@@ -20,7 +20,7 @@ class ExternalEngine extends ControlledT3 {
   }
 }
 const t3 = new ExternalEngine();
-t3.approve();
+t3.connection.approve();
 t3.projects = fixture.projects;
 for (const [key, value] of fixture.launches ?? []) t3.launches.set(key, value);
 try {

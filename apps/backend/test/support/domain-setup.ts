@@ -31,7 +31,7 @@ export const sampleAgentInput = (name = "Coder", projectId: OwningProject = null
 
 export async function openFactoryWithApprovedT3(context: TestContext) {
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   const harness = await factoryHarness(context);
   const factory = await harness.open({ t3 });
   assert((await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
@@ -160,7 +160,7 @@ export async function reviewedFlow(context: TestContext) {
 export async function projectsHarness(context: TestContext) {
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   t3.projects = [
     { projectId: "one", title: "First clone", workspaceRoot: "/repos/one", available: true },
     {

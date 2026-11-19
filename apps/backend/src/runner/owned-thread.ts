@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
-import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3ContractSnapshot } from "../t3/contract.ts";
 import type { T3Endpoint } from "../t3/connection.ts";
 import { recoverOperation } from "./runner-effects.ts";
 

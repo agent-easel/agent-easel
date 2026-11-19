@@ -156,7 +156,7 @@ export const clockedConversation = (c: TestContext) =>
     const root = join(harness.processHome, "project");
     yield* Effect.promise(() => mkdir(root));
     const t3 = new ControlledT3();
-    t3.approve();
+    t3.connection.approve();
     const factory = yield* harness.service({
       t3,
       discordApiUrl: discord.apiUrl,

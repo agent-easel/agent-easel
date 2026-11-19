@@ -20,7 +20,7 @@ export function runImagesAndTitlesFixture(
   return {
     actions: {
       attachments({ supported }: { supported: boolean }) {
-        t3.support.attachmentLimit = supported ? 8 : null;
+        t3.contract.support.attachmentLimit = supported ? 8 : null;
       },
       /** Each worker launch of Run `number` with its attachment names and uploaded digests. */
       launches: ({ number }: { number: number }) =>
@@ -49,7 +49,7 @@ export function runImagesAndTitlesFixture(
       },
     },
     async reset() {
-      t3.support.attachmentLimit = 8;
+      t3.contract.support.attachmentLimit = 8;
       if (
         providers.length !== t3.controlledProviders.length ||
         providers.some((provider, index) => provider !== t3.controlledProviders[index])

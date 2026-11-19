@@ -192,7 +192,7 @@ it("a downstream worker launch whose replay proof T3 cannot establish stays pend
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
-  setup.t3.support.launchProofFails = true;
+  setup.t3.contract.support.launchProofFails = true;
   const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
 
   // Act
@@ -533,7 +533,7 @@ it("Request report leaves its assessment turn unsent as uncertain when T3's send
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await workingReportedIdle(setup.world, atWork)) };
-  f.t3.support.sendProofFails = true;
+  f.t3.contract.support.sendProofFails = true;
 
   // Act
   const result = await f.f.requestReport(f.runId, { blockId: "worker" });
@@ -603,9 +603,9 @@ it("a prepared revisit is not sent while its worker thread has started another r
   const setup = await prepared(c, { revisit: true });
   const atWork = await workerAtWork(setup.world, setup.input);
   const reported = await resultReported(setup.world, atWork);
-  setup.t3.support.send = false;
+  setup.t3.contract.support.send = false;
   const worker = await resultReleasedToSameWorker(setup.world, reported);
-  setup.t3.support.send = true;
+  setup.t3.contract.support.send = true;
   const f = { ...setup, ...worker };
   turnBegins(f.world, worker, "reply-execution");
 

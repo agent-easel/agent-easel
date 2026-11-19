@@ -20,8 +20,7 @@ import type {
 import { executionForProject } from "@t3-factory/domain-validation";
 import { agentSettingsStatus } from "./agents.ts";
 import type { GitAdapter } from "./adapters/git.ts";
-import { reportSupport } from "./adapters/t3-contract.ts";
-import type { T3ContractSnapshot } from "./adapters/t3.ts";
+import { reportSupport, type T3ContractSnapshot } from "./t3/contract.ts";
 import type { ContractSnapshots } from "./connection.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 

@@ -1,6 +1,6 @@
 import type { GitAdapter } from "./adapters/git.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
-import type { T3Adapter } from "./adapters/t3.ts";
+import type { T3Modules } from "./t3/modules.ts";
 
 /** Everything a caller may choose when opening a Factory; defaults live where each is consumed. */
 export interface FactoryOptions {
@@ -8,7 +8,7 @@ export interface FactoryOptions {
   readonly reportingStateDirectory?: string;
   readonly databasePath: string;
   readonly credentialsDirectory?: string;
-  readonly t3?: T3Adapter;
+  readonly t3?: T3Modules;
   readonly github?: GitHubAdapter;
   readonly git?: GitAdapter;
   readonly connectionRetryMs?: number;

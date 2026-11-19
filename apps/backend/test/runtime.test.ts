@@ -18,13 +18,13 @@ it("missing user installation blocks readiness without launching setup work", as
   expect(await readdir(root)).toStrictEqual([".git"]);
   expect(t3.launches.size).toBe(0);
   expect(t3.sends.size).toBe(0);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("recheckRuntime reports reporting_unsupported when T3 lacks report support", async (c) => {
   // Arrange
   const { f, t3, selection } = await runtimeReadinessFixture(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
 
   // Act
   const result = await f.recheckRuntime(selection);
@@ -38,7 +38,7 @@ it("recheckRuntime reports reporting_unsupported when T3 lacks report support", 
 it("recheckRuntime reports reporting_unsupported from its own connection check, though a later check finds report support", async (c) => {
   // Arrange
   const { f, t3, selection } = await runtimeReadinessFixture(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
   changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
 
   // Act
@@ -66,10 +66,10 @@ it("recheckRuntime never answers a new authorization context with the report sup
   // A Project recheck holds the Project catalog while readiness makes its connection check.
   const projectRecheck = f.recheckProjects();
   await listing;
-  const inspect = t3.inspect.bind(t3);
+  const inspect = t3.contract.inspect.bind(t3.contract);
   const readinessInspected = new Promise<void>((resolve) => {
-    t3.inspect = async (target) => {
-      t3.inspect = inspect;
+    t3.contract.inspect = async (target) => {
+      t3.contract.inspect = inspect;
       const answer = await inspect(target);
       resolve();
       return answer;
@@ -79,8 +79,8 @@ it("recheckRuntime never answers a new authorization context with the report sup
   // Act
   const readiness = f.recheckRuntime(selection);
   await readinessInspected;
-  t3.approve("replacement-grant");
-  t3.support.reportReads = false;
+  t3.connection.approve("replacement-grant");
+  t3.contract.support.reportReads = false;
   await f.recheckConnection();
   releaseListing();
   await projectRecheck;
@@ -102,8 +102,8 @@ it("recheckRuntime never reports reporting evidence read after the authorization
   git.resolveRepository = async (endpoint, path) => {
     git.resolveRepository = resolve;
     const root = await resolve(endpoint, path);
-    t3.approve("replacement-grant");
-    t3.support.reportReads = false;
+    t3.connection.approve("replacement-grant");
+    t3.contract.support.reportReads = false;
     await f.recheckConnection();
     return root;
   };

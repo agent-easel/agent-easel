@@ -52,7 +52,7 @@ it("an upgraded host shows its kept theme colors from the first status while T3 
   // Arrange
   const { h, captured, colors, source } = await pairedThemeCapture(c);
   const t3 = await restoreCapturedAdapter(captured.t3, h.processHome);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   const factory = await h.open({ t3, connectionRetryMs: 60_000 });

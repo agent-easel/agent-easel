@@ -16,7 +16,7 @@ export function latestAppearance(messages: readonly AppearanceLiveMessage[]): T3
 /** An approved controlled T3 whose environment default is Ocean. */
 function oceanT3(arrange: (t3: ControlledT3) => void) {
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   t3.appearance.defaultTheme = "ocean";
   arrange(t3);
   return t3;

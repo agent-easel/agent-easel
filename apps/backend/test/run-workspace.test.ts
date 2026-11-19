@@ -66,7 +66,7 @@ it("a worktree Start is rejected before any Run when T3 cannot launch into workt
   const { f, t3, input, project } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
-  t3.support.worktreeLaunch = false;
+  t3.contract.support.worktreeLaunch = false;
 
   // Act
   const result = await f.startRun(input);

@@ -1,8 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
 import { dirname, join } from "node:path";
-import { LiveT3Adapter } from "../src/index.ts";
+import { makeLiveT3, type T3Modules } from "../src/index.ts";
 import { T3Failure } from "../src/t3/connection.ts";
-import { attachmentSupport } from "../src/adapters/t3-contract.ts";
+import { attachmentSupport } from "../src/t3/contract.ts";
 import type { ControlledT3 } from "./support/controlled-t3.ts";
 import { authorizedLiveOAuth, reportReadSchema } from "./support/boundaries-setup.ts";
 import { launchFixture } from "./support/launch-fixture.ts";
@@ -18,10 +18,10 @@ import {
 } from "./support/worker-contract.ts";
 
 /** The controlled T3 answers launch support as the live adapter inspected it at `endpoint`. */
-async function answerLaunchSupportFrom(adapter: LiveT3Adapter, endpoint: string, t3: ControlledT3) {
-  const { launch } = (await adapter.inspect({ endpoint })).support;
-  const inspect = t3.inspect.bind(t3);
-  t3.inspect = async (target) => {
+async function answerLaunchSupportFrom(live: T3Modules, endpoint: string, t3: ControlledT3) {
+  const { launch } = (await live.contract.inspect({ endpoint })).support;
+  const inspect = t3.contract.inspect.bind(t3.contract);
+  t3.contract.inspect = async (target) => {
     const inspection = await inspect(target);
     return { ...inspection, support: { ...inspection.support, launch } };
   };
@@ -161,10 +161,11 @@ it("a reported worker's result is released when the live thread read and delegat
 
 it("launch support permits an absent runtime mode without inventing replay proof", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { live, external } = await launchFixture(c);
 
   // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.checkout;
+  const support = (await live.contract.inspect({ endpoint: external.endpoint })).support.launch
+    .checkout;
 
   // Assert
   expect(support.supported).toBe(true);
@@ -173,11 +174,11 @@ it("launch support permits an absent runtime mode without inventing replay proof
 
 it("a launch replay proof that cannot be established leaves only launch support unknown", async (c) => {
   // Arrange
-  const { adapter, external, failProof } = await launchFixture(c);
+  const { live, external, failProof } = await launchFixture(c);
   failProof();
 
   // Act
-  const inspection = await adapter.inspect({ endpoint: external.endpoint });
+  const inspection = await live.contract.inspect({ endpoint: external.endpoint });
 
   // Assert
   expect(inspection.state).toBe("ready");
@@ -200,11 +201,11 @@ it("a send replay proof that cannot be established leaves only send support unkn
       mode: { type: "string", enum: ["queue"] },
     },
   };
-  const { adapter, endpoint } = await authorizedLiveOAuth(
+  const { live, endpoint } = await authorizedLiveOAuth(
     c,
     { sendSchema, send: () => ({}), readSchema: reportReadSchema },
     {
-      adapter: {
+      contract: {
         sendRecoveryScope: async () => {
           throw new Error("The replay proof could not be established.");
         },
@@ -213,7 +214,7 @@ it("a send replay proof that cannot be established leaves only send support unkn
   );
 
   // Act
-  const inspection = await adapter.inspect({ endpoint });
+  const inspection = await live.contract.inspect({ endpoint });
 
   // Assert
   expect(inspection.state).toBe("ready");
@@ -270,11 +271,11 @@ it("a malformed upload address from T3 is an invalid answer that never reveals t
 
 it("T3 advertising upload preparation and launch attachments supports image launches", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { live, external } = await launchFixture(c);
 
   // Act
   const support = attachmentSupport(
-    (await adapter.inspect({ endpoint: external.endpoint })).support,
+    (await live.contract.inspect({ endpoint: external.endpoint })).support,
     8,
   );
 
@@ -284,12 +285,12 @@ it("T3 advertising upload preparation and launch attachments supports image laun
 
 it("a launch schema without attachments does not support image launches", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   delete (schema.properties as Record<string, unknown>).attachments;
 
   // Act
   const support = attachmentSupport(
-    (await adapter.inspect({ endpoint: external.endpoint })).support,
+    (await live.contract.inspect({ endpoint: external.endpoint })).support,
     1,
   );
 
@@ -319,10 +320,11 @@ it("a launch sends its uploaded attachments with the first message", async (c) =
 
 it("T3's workspace strategy schema supports worktree launches", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { live, external } = await launchFixture(c);
 
   // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.worktree;
+  const support = (await live.contract.inspect({ endpoint: external.endpoint })).support.launch
+    .worktree;
 
   // Assert
   expect(support.supported).toBe(true);
@@ -330,7 +332,7 @@ it("T3's workspace strategy schema supports worktree launches", async (c) => {
 
 it("Start rejects worktree support that cannot express whether T3 fetches origin", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   const strategy = (
     schema.properties as { workspaceStrategy: { properties: Record<string, unknown> } }
   ).workspaceStrategy;
@@ -338,7 +340,7 @@ it("Start rejects worktree support that cannot express whether T3 fetches origin
   const { f, t3, input } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
-  await answerLaunchSupportFrom(adapter, external.endpoint, t3);
+  await answerLaunchSupportFrom(live, external.endpoint, t3);
 
   // Act
   const result = await f.startRun(input);
@@ -354,7 +356,7 @@ it("Start rejects worktree support that cannot express whether T3 fetches origin
 
 it("worktree launch support is refused when the strategy cannot name an existing worktree", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   Object.assign(schema.properties!, {
     workspaceStrategy: {
       type: "object",
@@ -367,7 +369,8 @@ it("worktree launch support is refused when the strategy cannot name an existing
   });
 
   // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.worktree;
+  const support = (await live.contract.inspect({ endpoint: external.endpoint })).support.launch
+    .worktree;
 
   // Assert
   expect(support).toMatchObject({
@@ -378,10 +381,10 @@ it("worktree launch support is refused when the strategy cannot name an existing
 
 it("Start rejects a schema requiring runtime mode before accepting work", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   schema.required = ["runtimeMode"];
   const { f, t3, input } = await prepared(c);
-  await answerLaunchSupportFrom(adapter, external.endpoint, t3);
+  await answerLaunchSupportFrom(live, external.endpoint, t3);
 
   // Act
   const blocked = await f.startRun(input);
@@ -465,7 +468,7 @@ it("send replay proof stays independent from launch recovery scope", async (c) =
   const external = await oauthT3({ sendSchema, send: () => ({ threadId: "thread", runId: "x" }) });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
@@ -474,18 +477,18 @@ it("send replay proof stays independent from launch recovery scope", async (c) =
     launchRecoveryScope: async () => "launch-proof-is-not-send-proof",
     sendRecoveryScope: async () => proof,
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
   await f.recheckConnection();
-  expect((await adapter.inspect({ endpoint: external.endpoint })).support.send.supported).toBe(
-    true,
-  );
+  expect(
+    (await live.contract.inspect({ endpoint: external.endpoint })).support.send.supported,
+  ).toBe(true);
   proof = "send-continuity-and-retention";
 
   // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.send;
+  const support = (await live.contract.inspect({ endpoint: external.endpoint })).support.send;
 
   // Assert
   expect(support.retryScope).toBe(proof);
@@ -521,14 +524,14 @@ it("sendMessage returns the exact queued run reference from the live SDK", async
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
@@ -542,7 +545,7 @@ it("sendMessage returns the exact queued run reference from the live SDK", async
   };
 
   // Act
-  const sent = await adapter.sendMessage({ endpoint: external.endpoint }, payload);
+  const sent = await live.adapter.sendMessage({ endpoint: external.endpoint }, payload);
 
   // Assert
   expect(sent.runId).toBe("queued-exact");
@@ -557,14 +560,14 @@ it("sendMessage rejects malformed live responses as uncertain", async (c) => {
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
@@ -578,7 +581,7 @@ it("sendMessage rejects malformed live responses as uncertain", async (c) => {
   };
 
   // Act
-  const rejection = adapter.sendMessage({ endpoint: external.endpoint }, payload);
+  const rejection = live.adapter.sendMessage({ endpoint: external.endpoint }, payload);
 
   // Assert
   await expect(rejection).rejects.toThrow(/uncertain/);
@@ -603,21 +606,21 @@ it("a thread read without a pending native request count is rejected rather than
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
   await f.recheckConnection();
 
   // Act
-  const rejection = adapter.readExecution({ endpoint: external.endpoint }, "thread");
+  const rejection = live.adapter.readExecution({ endpoint: external.endpoint }, "thread");
 
   // Assert
   await expect(rejection).rejects.toThrow(/Invalid thread observation/);

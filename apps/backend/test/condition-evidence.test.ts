@@ -264,7 +264,7 @@ it("each evidence read shows a recipient's current disposition, not the one at s
   // Arrange
   const f = await prepared(c, conditionFlow);
   const worker = await workerAtWork(f.world, f.input);
-  f.t3.support.launch = false;
+  f.t3.contract.support.launch = false;
   await resultReported(f.world, worker, { message: "Hold this." });
   await arrivalsNumbered(f.world, worker.runId, 1);
   const before = await f.f.listConditionArrivals(worker.runId, "gate", "", "");

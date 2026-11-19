@@ -305,7 +305,7 @@ it("a Discord denial after Start preflight leaves the same consent usable when m
   pending.release();
   const firstAnswer = await pending.answer;
   world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
-  delete world.t3.beforeInspection;
+  delete world.t3.contract.beforeInspection;
 
   // Act
   const answer = await clicked(
@@ -333,7 +333,7 @@ it("restoring Discord membership cannot revive a consent revoked by Factory duri
   await pending.answer;
   world.discord.addThreadMember(world.clickOptions.thread.id, PARTICIPANT_ID);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id]);
-  delete world.t3.beforeInspection;
+  delete world.t3.contract.beforeInspection;
 
   // Act
   const answer = await clicked(

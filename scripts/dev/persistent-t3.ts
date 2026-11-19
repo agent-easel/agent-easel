@@ -33,8 +33,12 @@ export class PersistentT3 extends ControlledT3 {
   constructor(home: string, restore: boolean) {
     super();
     this.statePath = join(home, "demo-engine.json");
-    this.authorized = true;
-    this.serverVersion = "local-development-simulator";
+    this.connection.authorized = true;
+    this.connection.authorize = async () => {
+      this.connection.authorized = true;
+      this.saveAccepted();
+    };
+    this.contract.serverVersion = "local-development-simulator";
     // A provider T3 offers but Factory cannot correlate reports from yet.
     this.controlledProviders.push({
       providerInstanceId: "demo-cursor",
@@ -55,7 +59,7 @@ export class PersistentT3 extends ControlledT3 {
       const saved = JSON.parse(readFileSync(this.statePath, "utf8")) as SavedState;
       if (saved.version < 3 || saved.version > 5)
         throw new Error("Unsupported demo engine state; run pnpm db:reset.");
-      this.identity = saved.identity;
+      this.connection.identity = saved.identity;
       for (const [key, value] of saved.subagents) this.subagents.set(key, value);
       for (const [key, value] of saved.delegatedSettlements)
         this.delegatedSettlements.set(key, value);
@@ -78,7 +82,7 @@ export class PersistentT3 extends ControlledT3 {
   private snapshot() {
     return {
       version: 5,
-      identity: this.identity,
+      identity: this.connection.identity,
       subagents: [...this.subagents],
       delegatedSettlements: [...this.delegatedSettlements],
 
@@ -223,10 +227,5 @@ export class PersistentT3 extends ControlledT3 {
     const project = await super.createProject(target);
     this.saveAccepted();
     return project;
-  }
-
-  override async authorize(_target: T3Endpoint) {
-    this.authorized = true;
-    this.saveAccepted();
   }
 }

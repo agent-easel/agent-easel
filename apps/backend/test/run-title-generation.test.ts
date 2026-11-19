@@ -274,7 +274,7 @@ it("a pending generation launches one top-level title thread in the Project chec
   assert(started.ok);
   const launch = await titleGenerationLaunched(fixture.world, started.value.id);
   expect(launch).toStrictEqual({
-    environmentId: fixture.t3.environmentId,
+    environmentId: fixture.t3.connection.environmentId,
     projectId: fixture.project.projectId,
     clientRequestId: `factory-title:${started.value.id}`,
     title: `Factory title · Run #1 · ${started.value.id}`,

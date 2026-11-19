@@ -11,7 +11,8 @@ import { recoveryDispatchGeneration } from "./runner-recovery.ts";
 import type { FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import type { SendPayload, SendReference, T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { SendPayload, SendReference, T3Adapter } from "../adapters/t3.ts";
+import type { T3ContractSnapshot } from "../t3/contract.ts";
 import type { Delivery, Handoff, RunStore, ScheduledWait } from "./run-store/run-store.ts";
 import { intactPayload } from "../fingerprint.ts";
 import {

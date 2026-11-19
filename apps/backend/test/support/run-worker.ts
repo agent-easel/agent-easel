@@ -89,9 +89,9 @@ export function reopenDuringSettlement(world: ScenarioWorld, worker: WorkerHandl
   const { t3 } = world;
   const read = t3.readDelegatedSettlement.bind(t3);
   let inspections = 0;
-  t3.beforeInspection = () => {
+  t3.contract.beforeInspection = () => {
     if (++inspections < 2) return;
-    delete t3.beforeInspection;
+    delete t3.contract.beforeInspection;
     t3.readDelegatedSettlement = async (...args) => {
       t3.readDelegatedSettlement = read;
       assert((await report(world, worker, workingReport())) === "ACCEPTED");
@@ -115,7 +115,7 @@ export function changeAuthorizationAfterNextRead(t3: ControlledT3) {
   t3.readExecution = async (target, threadId) => {
     t3.readExecution = read;
     const thread = await read(target, threadId);
-    t3.approve("different-grant");
+    t3.connection.approve("different-grant");
     return thread;
   };
 }
@@ -138,8 +138,8 @@ export function failInspectionAfterNextRead(t3: ControlledT3) {
  * was asked. */
 export function failNextInspection(t3: ControlledT3) {
   return new Promise<void>((resolve) => {
-    t3.beforeInspection = () => {
-      delete t3.beforeInspection;
+    t3.contract.beforeInspection = () => {
+      delete t3.contract.beforeInspection;
       resolve();
       throw new Error("T3 is unreachable");
     };

@@ -5,121 +5,34 @@ import { themeListing, themeRead } from "./t3-theme-read.ts";
 import type {
   AttachmentUpload,
   T3Adapter,
-  T3Inspection,
-  T3Support,
   T3Project,
   ExecutionObservation,
   LaunchDiscovery,
   LaunchPayload,
   LaunchReference,
-  LaunchSupport,
   ThreadIdentityRead,
   SendPayload,
   SendReference,
   T3ProviderCapability,
 } from "./t3.ts";
-import { contractSupport } from "./t3-contract.ts";
 import { discoverLaunches, threadIdentityRead } from "../launch-discovery.ts";
 import {
   T3Failure,
   structured,
+  type T3Calls,
   type T3Endpoint,
   type T3EnvironmentTarget,
   type T3ListedTool,
-  type T3Probe,
   type T3ProjectTarget,
   type T3Session,
   type T3Target,
 } from "../t3/connection.ts";
-import { LiveT3Connection, type LiveT3ConnectionOptions } from "../t3/live-connection.ts";
+import { hasEnvironmentIdentity, readEnvironmentIdentity } from "../t3/environment-identity.ts";
 import type { AgentEnvironment } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import { readDelegatedSettlement } from "./delegated-settlement.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { parseProviderCapabilities } from "./t3-capabilities.ts";
-
-export interface LiveT3Options extends LiveT3ConnectionOptions {
-  /** Integration-only proof of server continuity and request-key retention. No proof = no replay.
-   * The verifier must return a stable scope only while those conditions are established. */
-  readonly sendRecoveryScope?: (endpoint: string) => Promise<string | null>;
-  readonly launchRecoveryScope?: (endpoint: string) => Promise<string | null>;
-}
-
-/** An inspection before its support answers are derived from the listed tools. */
-type Inspected = Omit<T3Inspection, "support">;
-/** What an inspection reads over the probe's connection. */
-interface ContractRead {
-  readonly tools: readonly T3ListedTool[];
-  readonly environmentId: string | null;
-  readonly problems: readonly string[];
-}
-
-const hasEnvironmentIdentity = (body: unknown): body is { environmentId: string } =>
-  typeof body === "object" &&
-  body !== null &&
-  "environmentId" in body &&
-  typeof body.environmentId === "string" &&
-  body.environmentId !== "";
-
-function acceptsEmptyArguments(tool: T3ListedTool | undefined): boolean {
-  if (!tool || tool.inputSchema.type !== "object") return false;
-  const required = tool.inputSchema.required;
-  return !(Array.isArray(required) && required.length > 0);
-}
-
-async function readEnvironmentIdentity(session: T3Session): Promise<string | null> {
-  const answer = await session.call("t3_environment_read", {}, 10_000);
-  return !answer.isError && hasEnvironmentIdentity(answer.content)
-    ? answer.content.environmentId
-    : null;
-}
-
-async function readContract(session: T3Session): Promise<ContractRead> {
-  const tools = await session.tools();
-  const problems: string[] = [];
-  let environmentId: string | null = null;
-  if (!acceptsEmptyArguments(tools.find((tool) => tool.name === "t3_environment_read"))) {
-    problems.push("t3_environment_read must accept an empty object.");
-  } else {
-    environmentId = await readEnvironmentIdentity(session);
-    if (!environmentId)
-      problems.push("t3_environment_read did not return an environment identity.");
-  }
-  return { tools, environmentId, problems };
-}
-
-/** A probe's answer as an inspection; an approved grant binds the authorization context. */
-function inspection(probe: T3Probe<ContractRead>): Inspected {
-  if (probe.status === "authorization-required")
-    return { state: "authorization-required", reason: probe.reason };
-  if (probe.status === "contract-failure")
-    return {
-      state: "incompatible",
-      reason: "contract-missing",
-      contract: {
-        ...probe.server,
-        environmentId: null,
-        tools: [],
-        problems: ["T3 returned an unsupported MCP protocol or invalid connection contract."],
-        executionVerified: false,
-      },
-    };
-  const problems = [...probe.answer.problems];
-  if (!probe.approved)
-    problems.push("An approved OAuth grant is required to bind authorization context.");
-  return {
-    state: problems.length ? "incompatible" : "ready",
-    reason: problems.length ? "contract-missing" : "connected",
-    ...(probe.authorizationIdentity ? { authorizationIdentity: probe.authorizationIdentity } : {}),
-    contract: {
-      ...probe.server,
-      environmentId: probe.answer.environmentId,
-      tools: probe.answer.tools,
-      problems,
-      executionVerified: false,
-    },
-  };
-}
 
 type ThreadExecutionRead = {
   thread: {
@@ -223,49 +136,10 @@ function supportsProjectTool(
 
 /** Every T3 call over one live connection, which owns authorization and classifies failures. */
 export class LiveT3Adapter implements T3Adapter {
-  private readonly options: LiveT3Options;
-  private readonly connection: LiveT3Connection;
-  constructor(options: LiveT3Options) {
-    this.options = options;
-    this.connection = new LiveT3Connection(options);
-  }
-  authorize(target: T3Endpoint) {
-    return this.connection.authorize(target);
-  }
-  resumeAuthorization(target: T3Endpoint) {
-    return this.connection.resumeAuthorization(target);
-  }
-  async inspect(target: T3Endpoint): Promise<T3Inspection> {
-    const inspected = inspection(await this.connection.probe(target, readContract));
-    return { ...inspected, support: await this.support(target.endpoint, inspected) };
-  }
-  /** Replay scopes are asked for only when the answer they would qualify is supported. A proof
-   * that cannot be established leaves only that answer unknown, never the whole inspection. */
-  private async support(endpoint: string, inspection: Inspected): Promise<T3Support> {
-    const support = contractSupport(inspection.state === "ready", inspection.contract?.tools ?? []);
-    const { checkout, worktree } = support.launch;
-    /** undefined: the proof was asked for and could not be established. */
-    const proven = async (proof: LiveT3Options["launchRecoveryScope"]) => {
-      try {
-        return (await proof?.(endpoint)) ?? null;
-      } catch {
-        return undefined;
-      }
-    };
-    // A supported worktree launch implies a supported checkout launch.
-    const launchScope = checkout.supported ? await proven(this.options.launchRecoveryScope) : null;
-    const sendScope = support.send.supported ? await proven(this.options.sendRecoveryScope) : null;
-    const scoped = (answer: LaunchSupport, retryScope: string | null | undefined) =>
-      !answer.supported
-        ? answer
-        : retryScope === undefined
-          ? { supported: false, retryScope: null, explanation: null }
-          : { ...answer, retryScope };
-    return {
-      ...support,
-      launch: { checkout: scoped(checkout, launchScope), worktree: scoped(worktree, launchScope) },
-      send: scoped(support.send, sendScope),
-    };
+  private readonly connection: T3Calls;
+
+  constructor(connection: T3Calls) {
+    this.connection = connection;
   }
   /** The upload URL is a signed capability on the MCP origin: it is sent without the OAuth bearer
    * and never logged or included in errors. */
@@ -572,8 +446,5 @@ export class LiveT3Adapter implements T3Adapter {
       threadId,
       runId,
     );
-  }
-  close() {
-    return this.connection.close();
   }
 }

@@ -77,7 +77,7 @@ it("an unavailable observation preserves last known worker repositories and mark
   const { f, t3, world, input } = await prepared(c);
   const launched = await workerLaunched(world, input);
   const { runId } = await repositoryFactsObserved(world, launched, repository);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   assert((await f.reconcileRuns()).ok);

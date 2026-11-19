@@ -203,7 +203,7 @@ it.effect(
       // Arrange
       const f = yield* preparedService(c, fanOutConditionFlow);
       const worker = yield* Effect.promise(() => workerAtWork(f.world, f.input));
-      f.t3.support.launch = false;
+      f.t3.contract.support.launch = false;
       yield* Effect.promise(() => resultReported(f.world, worker, { message: "For both." }));
       yield* Effect.promise(() =>
         observeFor(
@@ -214,7 +214,7 @@ it.effect(
         ),
       );
       yield* f.close;
-      f.t3.support.launch = true;
+      f.t3.contract.support.launch = true;
       const followUpLaunch = nextLaunch(f.world);
 
       // Act
@@ -272,7 +272,7 @@ it("Archive after a committed selection keeps it as history and cancels its unse
   // Arrange
   const f = await prepared(c, conditionFlow);
   const worker = await workerAtWork(f.world, f.input);
-  f.t3.support.launch = false;
+  f.t3.contract.support.launch = false;
   await resultReported(f.world, worker, { message: "Do not deliver." });
   await arrivalsNumbered(f.world, worker.runId, 1);
 
@@ -305,7 +305,7 @@ it("Archive racing acceptance leaves a count matching its recorded selections an
   // Arrange
   const f = await prepared(c, conditionFlow);
   const worker = await workerAtWork(f.world, f.input);
-  f.t3.support.launch = false;
+  f.t3.contract.support.launch = false;
   await resultReported(f.world, worker);
 
   // Act

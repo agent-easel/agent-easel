@@ -25,12 +25,12 @@ async function preparedHomes(processHome: string) {
   const root = join(processHome, "neutral");
   await mkdir(root);
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   const reportingStateDirectory = join(processHome, "reporting-state");
   const reportingHome = join(processHome, "codex-home");
   await mkdir(reportingStateDirectory);
   await mkdir(reportingHome);
-  await writeReportingState(reportingStateDirectory, t3.environmentId, reportingHome);
+  await writeReportingState(reportingStateDirectory, t3.connection.environmentId, reportingHome);
   return { root, t3, github: new ControlledGitHub(), reportingStateDirectory };
 }
 

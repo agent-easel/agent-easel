@@ -7,9 +7,13 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
-import type { T3Adapter, T3ContractSnapshot, T3Support } from "./adapters/t3.ts";
-import type { T3ConnectionReason } from "./t3/connection.ts";
-import { NO_T3_SUPPORT } from "./adapters/t3-contract.ts";
+import type { T3Authorization, T3ConnectionReason } from "./t3/connection.ts";
+import {
+  NO_T3_SUPPORT,
+  type T3ContractReader,
+  type T3ContractSnapshot,
+  type T3Support,
+} from "./t3/contract.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 
@@ -59,7 +63,19 @@ export interface ContractSnapshots {
 }
 
 /** Every status transition is published to live subscribers; `status` is the authority. */
-export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveChanges) =>
+export const makeConnection = (
+  {
+    connection: authorization,
+    contract,
+    close: closeT3,
+  }: {
+    connection: T3Authorization;
+    contract: T3ContractReader;
+    close: () => Promise<void>;
+  },
+  intervalMs: number,
+  changes: LiveChanges,
+) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const mutex = yield* Semaphore.make(1);
@@ -111,7 +127,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
       const endpoint = saved.endpoint;
       const before = status;
       return yield* Effect.gen(function* () {
-        const observation = yield* Effect.tryPromise(() => t3.inspect({ endpoint }));
+        const observation = yield* Effect.tryPromise(() => contract.inspect({ endpoint }));
         const environment = observation.contract?.environmentId;
         if (
           observation.authorizationIdentity &&
@@ -197,7 +213,9 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
         state: "authorization-required",
       };
       changes.connectionChanged();
-      return yield* Effect.tryPromise(() => t3.authorize({ endpoint: endpoint.endpoint })).pipe(
+      return yield* Effect.tryPromise(() =>
+        authorization.authorize({ endpoint: endpoint.endpoint }),
+      ).pipe(
         Effect.matchEffect({
           onFailure: () =>
             Effect.sync(() => {
@@ -219,7 +237,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
       if (closed) return;
       closed = true;
       yield* stopWorker;
-      yield* Effect.tryPromise(() => t3.close());
+      yield* Effect.tryPromise(closeT3);
     });
     yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
     return {
@@ -269,7 +287,7 @@ export const makeConnection = (t3: T3Adapter, intervalMs: number, changes: LiveC
               return value();
             lastOpenedAt = at;
             const resumed = yield* Effect.tryPromise(() =>
-              t3.resumeAuthorization({ endpoint: endpoint.endpoint }),
+              authorization.resumeAuthorization({ endpoint: endpoint.endpoint }),
             ).pipe(Effect.option);
             if (resumed._tag === "None") {
               status = {

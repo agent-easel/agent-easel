@@ -6,8 +6,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { dirname, join } from "node:path";
 import { LiveGitAdapter } from "../../src/adapters/live-git.ts";
-import { LiveT3Adapter } from "../../src/index.ts";
-import type { Factory, FactoryOptions } from "../../src/index.ts";
+import { makeLiveT3, type Factory, type FactoryOptions } from "../../src/index.ts";
+import type { LiveT3ContractOptions } from "../../src/t3/live-contract.ts";
 import type { T3Connection } from "@t3-factory/contracts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
@@ -42,10 +42,7 @@ export async function authorizedLiveOAuth(
   c: TestContext,
   options: Parameters<typeof oauthT3>[0] = {},
   setup: {
-    readonly adapter?: Pick<
-      ConstructorParameters<typeof LiveT3Adapter>[0],
-      "launchRecoveryScope" | "sendRecoveryScope"
-    >;
+    readonly contract?: LiveT3ContractOptions;
     readonly open?: Omit<FactoryOptions, "databasePath" | "t3">;
   } = {},
 ) {
@@ -53,15 +50,15 @@ export async function authorizedLiveOAuth(
   const external = await oauthT3(options);
   c.onTestFinished(() => external.close());
   let authorizationUrl = "";
-  const adapter = new LiveT3Adapter({
-    ...setup.adapter,
+  const live = makeLiveT3({
+    ...setup.contract,
     credentialsDirectory: join(dirname(harness.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       authorizationUrl = url;
     },
   });
-  const factory = await harness.open({ ...setup.open, t3: adapter });
+  const factory = await harness.open({ ...setup.open, t3: live });
   const configured = await factory.configureConnection({ endpoint: external.endpoint });
   expect(configured.ok).toBe(true);
   const started = await factory.authorizeConnection();
@@ -72,7 +69,8 @@ export async function authorizedLiveOAuth(
   return {
     harness,
     factory,
-    adapter,
+    live,
+    adapter: live.adapter,
     external,
     endpoint: external.endpoint,
     /** The consent page the latest authorization opened. */
@@ -179,7 +177,7 @@ export async function reportAdapter(
   read: (args: Record<string, unknown>) => unknown,
   schema = reportReadSchema,
 ) {
-  const { adapter: t3, endpoint } = await authorizedLiveOAuth(c, {
+  const { live: t3, endpoint } = await authorizedLiveOAuth(c, {
     runtimeActivity: read,
     readSchema: schema,
   });
@@ -205,7 +203,7 @@ async function legacyRuntimeRepository(c: TestContext, directoryName: string, cl
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: h.processHome },
   });
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   if (claude)
     t3.controlledProviders.push({
       ...t3.controlledProviders[0]!,
@@ -219,7 +217,7 @@ async function legacyRuntimeRepository(c: TestContext, directoryName: string, cl
   const input = {
     name: "Worker",
     prompt: "Work",
-    execution: controlledExecution(t3.environmentId, {
+    execution: controlledExecution(t3.connection.environmentId, {
       providerInstanceId: claude ? "claude-local" : "codex-main",
       modelOptions: [],
     }),
@@ -238,14 +236,14 @@ export async function runtimeReadinessFixture(c: TestContext) {
     env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: dirname(h.databasePath) },
   });
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   const f = await h.open({ t3 });
   await f.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" });
   const p = await f.addRepository({ path: root });
   const a = await f.createAgent({
     name: "Worker",
     prompt: "Work",
-    execution: controlledExecution(t3.environmentId, { modelOptions: [] }),
+    execution: controlledExecution(t3.connection.environmentId, { modelOptions: [] }),
     exits: [],
   });
   assert(p.ok && a.ok);

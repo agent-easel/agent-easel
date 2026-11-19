@@ -1,15 +1,10 @@
 import type {
   AgentEnvironment,
   AgentProviderCapability,
-  ConnectionState,
-  FlowWorkspace,
   ProjectIcon,
   RunPullRequest,
-  T3Contract,
 } from "@t3-factory/contracts";
 import type {
-  T3Authorization,
-  T3ConnectionReason,
   T3Endpoint,
   T3EnvironmentTarget,
   T3ProjectTarget,
@@ -19,42 +14,8 @@ import type {
 /** A provider as T3's catalog publishes it; Factory adds its own reporting support. */
 export type T3ProviderCapability = Omit<AgentProviderCapability, "reporting">;
 
-export interface T3Inspection {
-  readonly state: ConnectionState;
-  readonly reason: T3ConnectionReason;
-  /** Opaque grant lineage, never an access/refresh token or client secret. */
-  readonly authorizationIdentity?: string;
-  readonly contract?: T3Contract;
-  /** Every support answer of this inspection; nothing is supported unless T3 is ready. */
-  readonly support: T3Support;
-}
-export interface ReportSupport {
-  readonly supported: boolean;
-  readonly explanation: string;
-}
-/** What T3's advertised tools let Factory do, as one inspection found them. */
-export interface T3Support {
-  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
-  readonly launch: Readonly<Record<FlowWorkspace["mode"], LaunchSupport>>;
-  /** The most images one launch may carry through `t3_attachment_prepare_upload`; null when T3
-   * advertises no uploaded attachments with a request key. */
-  readonly attachmentLimit: number | null;
-  readonly send: LaunchSupport;
-  readonly settle: ReportSupport;
-  readonly stop: ReportSupport;
-  /** Whether public thread reads can retrieve reporting activity, before any harness check. */
-  readonly reportReads: boolean;
-}
-/** One connection check's answer: the authorization context, only while T3 is ready, and the
- * support answers of the same inspection. `answered` is false when T3 could not be reached for
- * it, so a missing context is no evidence that authorization changed. */
-export interface T3ContractSnapshot {
-  readonly contextId: string | null;
-  readonly answered: boolean;
-  readonly support: T3Support;
-}
 /** Every call that rejects does so only with a `T3Failure`. */
-export interface T3Adapter extends T3Authorization {
+export interface T3Adapter {
   /** `t3_thread_wait` for one run with its delegated and background work. Queues, native
    * requests and business completion stay separate. */
   readDelegatedSettlement(
@@ -81,7 +42,6 @@ export interface T3Adapter extends T3Authorization {
   readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation>;
   listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]>;
   createProject(target: T3ProjectTarget): Promise<T3Project>;
-  inspect(target: T3Endpoint): Promise<T3Inspection>;
   readEnvironment(target: T3Endpoint): Promise<AgentEnvironment>;
   orchestratorCapabilities(target: T3Endpoint): Promise<readonly T3ProviderCapability[]>;
   /**
@@ -89,7 +49,6 @@ export interface T3Adapter extends T3Authorization {
    * cannot be reached or answers outside the contract.
    */
   readTheme(target: T3Endpoint): Promise<T3ThemeRead | null>;
-  close(): Promise<void>;
 }
 
 /** A published theme's colors by T3 role name; names and CSS color text are length-bounded. */
@@ -166,15 +125,6 @@ export interface AttachmentUpload {
 export interface LaunchAttachment extends AttachmentUpload {
   readonly type: "image";
   readonly id: string;
-}
-export interface LaunchSupport {
-  readonly supported: boolean;
-  /** Non-null only when the adapter can establish continuity AND retained replay keys.
-   * Matching version/schema alone is insufficient. Changes invalidate uncertain replay. */
-  readonly retryScope: string | null;
-  /** Null when a replay proof could not be established, so whether T3 supports the operation is
-   * unknown; each caller explains what that means for its operation. */
-  readonly explanation: string | null;
 }
 export interface LaunchReference {
   readonly projectId: string;

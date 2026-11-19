@@ -14,7 +14,7 @@ import { makeProjects } from "./projects.ts";
 import { makeDefinitions } from "./definitions.ts";
 import * as RuntimeSetup from "./runtime-setup.ts";
 import * as ReportingInstaller from "./reporting-installation.ts";
-import type { T3Adapter } from "./adapters/t3.ts";
+import type { T3Modules } from "./t3/modules.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
 import type { GitAdapter } from "./adapters/git.ts";
 import { createRuntime, type RuntimeReports } from "./runtime.ts";
@@ -77,7 +77,6 @@ function guardOperations(operations: FactoryEffectOperations): FactoryEffectOper
   return guarded as FactoryEffectOperations;
 }
 
-/** Composition root: wires domain modules to one T3 adapter and delegates each public operation. */
 /** The typed error a live read reports when its read transaction cannot run. */
 const liveReadError: OperationError = {
   code: "internal",
@@ -85,10 +84,11 @@ const liveReadError: OperationError = {
   issues: [],
 };
 
+/** Composition root: wires domain modules and delegates each public operation. */
 export const makeFactoryService = (
   options: FactoryOptions,
   owner: Awaited<ReturnType<typeof acquireRunnerOwner>>,
-  t3: T3Adapter,
+  t3: T3Modules,
   github: GitHubAdapter,
   git: GitAdapter,
   credentialsDirectory: string,
@@ -97,12 +97,21 @@ export const makeFactoryService = (
     const intervalMs = options.connectionRetryMs ?? 5_000;
     const changes = makeLiveChanges();
     const sql = yield* SqlClient.SqlClient;
-    const connection = yield* makeConnection(t3, intervalMs, changes);
-    const appearance = yield* makeAppearance(t3, connection.getConnection, intervalMs, changes);
-    const projects = yield* makeProjects(t3, git, connection, intervalMs, changes);
+    const connection = yield* makeConnection(
+      { connection: t3.connection, contract: t3.contract, close: () => t3.close() },
+      intervalMs,
+      changes,
+    );
+    const appearance = yield* makeAppearance(
+      t3.adapter,
+      connection.getConnection,
+      intervalMs,
+      changes,
+    );
+    const projects = yield* makeProjects(t3.adapter, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
     const definitions = yield* makeDefinitions(
-      t3,
+      t3.adapter,
       connection,
       projects,
       changes,
@@ -149,7 +158,7 @@ export const makeFactoryService = (
     );
     const setup = Context.get(setupContext, RuntimeSetup.RuntimeSetup);
     const runTitles = yield* makeRunTitles(
-      t3,
+      t3.adapter,
       {
         getAgentCapabilities: definitions.getAgentCapabilities,
         getReportingInstallations: reporting.getReportingInstallations,
@@ -352,7 +361,7 @@ export const makeFactoryService = (
       factory,
       connection.snapshots.fresh,
       projects.refreshProjects,
-      t3,
+      t3.adapter,
       git,
       owner,
       intervalMs,
