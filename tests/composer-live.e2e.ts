@@ -16,7 +16,7 @@ const launchChoiceRequests = async (app: { baseUrl: string | undefined }) =>
 test("an idle Run composer sends no periodic launch-choice requests", async ({ app, screen }) => {
   // Arrange
   await app.open("/runs/new");
-  await expect(screen.getByRole("button", /^Select Flow: /)).toBeVisible();
+  await expect(screen.getByRole("combobox", /^Select Flow: /)).toBeVisible();
   await expect(screen.getByRole("button", /^Select project: /)).toBeVisible();
   // Either state means the initial reporting reads, Agents included, have answered.
   await expect(
@@ -38,8 +38,8 @@ test("a ready Flow saved in another window appears in an open Run composer", asy
 }) => {
   // Arrange
   await app.open("/runs/new");
-  await screen.getByRole("button", /^Select Flow: /).tap();
-  await expect(screen.getByRole("group", "Flows")).toBeVisible();
+  await screen.getByRole("combobox", /^Select Flow: /).tap();
+  await expect(screen.getByRole("listbox", "Flow", { exact: true })).toBeVisible();
 
   // Act
   const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Live composer Flow", {
@@ -47,9 +47,7 @@ test("a ready Flow saved in another window appears in an open Run composer", asy
   });
 
   // Assert
-  await expect(
-    screen.getByRole("menuitemradio", "Live composer Flow", { exact: true }),
-  ).toBeVisible();
+  await expect(screen.getByRole("option", "Live composer Flow", { exact: true })).toBeVisible();
   await removeFlowElsewhere(app.baseUrl, flow);
 });
 
@@ -60,12 +58,12 @@ test("switching Project silently clears another Project's Flow and no Project di
 }) => {
   // Arrange
   const selection = await projectSelection(app.baseUrl);
-  const flowPicker = screen.getByRole("button", /^Select Flow: /);
+  const flowPicker = screen.getByRole("combobox", /^Select Flow: /);
   const prompt = screen.getByLabel("Initial prompt", { exact: false });
   await app.open("/runs/new");
   await selectComposerProject(screen, "Northwind");
   await flowPicker.tap();
-  const projectFlow = screen.getByRole("menuitemradio", "Northwind release", { exact: true });
+  const projectFlow = screen.getByRole("option", "Northwind release", { exact: true });
   await expect(projectFlow).toBeVisible();
   await app.screenshot("composer-project-flow-picker");
   await projectFlow.tap();

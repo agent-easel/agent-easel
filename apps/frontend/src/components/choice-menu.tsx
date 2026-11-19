@@ -1,9 +1,21 @@
-import { useId, type ReactNode } from "react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FocusEvent,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { CheckIcon, ChevronsUpDown } from "lucide-react";
 import { Select } from "radix-ui";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "./status-badge.tsx";
 import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
+import { PickerMenuSearch, pickerShowsSearch } from "./picker-menu-search.tsx";
 import { selectFieldClass } from "@/components/page";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +37,10 @@ export interface MenuChoice {
 
 /** What the trigger shows beside the chosen label. */
 interface TriggerExtras {
+  /** The trigger's name before its value when it differs from the field's, such as "Select Flow". */
+  readonly label?: string;
+  /** A glyph that always leads the trigger, such as the composer Flow pill's icon. */
+  readonly glyph?: ReactNode;
   /** Visible words before the value, such as "Owner:". */
   readonly prefix?: string;
   /** The chosen choice's icon before its label. */
@@ -36,9 +52,29 @@ interface TriggerExtras {
 /** The field's name: a label the trigger prefixes to its value, or the id of a visible label. */
 type ChoiceName = { label: string; labelledBy?: never } | { labelledBy: string; label?: never };
 
+/** A search pinned above a list of more than seven choices; it filters them by label. */
+interface ChoiceSearch {
+  /** The search field's name and placeholder, such as "Search Flows". */
+  readonly label: string;
+  /** What the list says when no choice matches. */
+  readonly noMatch: string;
+}
+
+/**
+ * A Run composer toolbar menu. It opens under the field, left-aligned, and stops at the space
+ * below it: a long list scrolls, with a visible scrollbar and a fade over the row the cap cuts
+ * off, instead of flipping up over the heading.
+ */
+interface ComposerMenu {
+  readonly search: ChoiceSearch;
+  /** A Start is pending: the trigger keeps focus and says so, but neither opens nor changes. */
+  readonly busy: boolean;
+}
+
 /**
  * A single choice from a list: a select-only combobox whose list keeps unavailable choices
- * visible, unchoosable and explained. The trigger and the list carry the field's name.
+ * visible, unchoosable and explained. The trigger and the list carry the field's name. An
+ * unavailable choice the value names shows on the trigger but is never checked in the list.
  */
 export function ChoiceMenu({
   id,
@@ -56,6 +92,7 @@ export function ChoiceMenu({
   describedBy,
   problemTone = "attention",
   required,
+  composer,
   trigger = {},
 }: ChoiceName & {
   id: string;
@@ -77,57 +114,137 @@ export function ChoiceMenu({
   problemTone?: FieldState["tone"];
   /** The value must be chosen; the placeholder is never one of the choices. */
   required?: boolean;
+  composer?: ComposerMenu;
   trigger?: TriggerExtras;
 }) {
   const { listValue, selected, shown } = chosen(choices, value, unlistedLabel);
-  const names = choiceNames(label, labelledBy, `${shown ?? placeholder}${badgeSuffix(selected)}`);
+  const names = choiceNames(
+    label,
+    labelledBy,
+    trigger.label,
+    `${shown ?? placeholder}${badgeSuffix(selected)}`,
+  );
+  const { listSearch, ...root } = useChoiceList({ choices, onChange, composer });
   return (
-    <Select.Root
-      value={listValue}
-      onValueChange={(next) => onChange(choices[Number(next)]!.id)}
-      disabled={disabled}
-    >
-      <Select.Trigger asChild>
-        <Button
-          type="button"
-          id={id}
-          variant="outline"
-          {...names.trigger}
-          // On the trigger only: Radix's own `required` would also make the hidden form select
-          // block submission with the browser's message instead of the form's.
-          aria-required={required}
-          {...fieldAria(describedBy)}
-          className={cn(
-            selectFieldClass,
-            "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
-            className,
-            fieldBorder(describedBy ? problemTone : undefined),
-          )}
-        >
-          <ChoiceValue
-            shown={shown}
-            placeholder={placeholder}
-            selected={selected}
-            extras={trigger}
-          />
-          <ChevronsUpDown
-            aria-hidden
-            className="size-4 shrink-0 text-muted-foreground"
-            strokeWidth={1.5}
-          />
-        </Button>
-      </Select.Trigger>
-      <ChoiceList name={names.list} choices={choices} empty={empty} className={popupClassName} />
+    <Select.Root {...root} value={listValue} disabled={disabled}>
+      <ChoiceTrigger
+        id={id}
+        name={names.trigger}
+        required={required}
+        busy={composer?.busy}
+        searching={!!listSearch}
+        describedBy={describedBy}
+        problemTone={problemTone}
+        className={className}
+      >
+        <ChoiceValue shown={shown} placeholder={placeholder} selected={selected} extras={trigger} />
+      </ChoiceTrigger>
+      <ChoiceList
+        name={names.list}
+        choices={choices}
+        empty={empty}
+        className={popupClassName}
+        opensDown={!!composer}
+        search={listSearch}
+      />
     </Select.Root>
   );
 }
+
+function ChoiceTrigger({
+  id,
+  name,
+  required,
+  busy,
+  searching,
+  describedBy,
+  problemTone,
+  className,
+  children,
+}: {
+  id: string;
+  name: ReturnType<typeof choiceNames>["trigger"];
+  required: boolean | undefined;
+  busy: boolean | undefined;
+  searching: boolean;
+  describedBy: string | undefined;
+  problemTone: FieldState["tone"];
+  className: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <Select.Trigger asChild>
+      <Button
+        type="button"
+        id={id}
+        variant="outline"
+        {...name}
+        // On the trigger only: Radix's own `required` would also make the hidden form select
+        // block submission with the browser's message instead of the form's.
+        aria-required={required}
+        {...triggerState(busy, searching)}
+        {...fieldAria(describedBy)}
+        className={cn(
+          selectFieldClass,
+          "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
+          className,
+          fieldBorder(describedBy ? problemTone : undefined),
+        )}
+      >
+        {children}
+        <ChevronsUpDown
+          aria-hidden
+          className="size-4 shrink-0 text-muted-foreground"
+          strokeWidth={1.5}
+        />
+      </Button>
+    </Select.Trigger>
+  );
+}
+
+/**
+ * Whether the list is open, its search, which starts empty on each opening, and choosing. A busy
+ * field neither opens nor changes, including by the closed trigger's typeahead.
+ */
+function useChoiceList({
+  choices,
+  onChange,
+  composer,
+}: {
+  choices: readonly MenuChoice[];
+  onChange: (value: string) => void;
+  composer: ComposerMenu | undefined;
+}) {
+  const busy = composer?.busy;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const onOpenChange = (next: boolean) => {
+    if (next && busy) return;
+    setOpen(next);
+    if (next) setQuery("");
+  };
+  const onValueChange = (next: string) => {
+    if (!busy) onChange(choices[Number(next)]!.id);
+  };
+  const listSearch =
+    composer && pickerShowsSearch(choices.length)
+      ? { ...composer.search, query, onQuery: setQuery }
+      : undefined;
+  return { open, onOpenChange, onValueChange, listSearch };
+}
+
+/** A busy trigger is disabled for assistive technology only; with search, the popup is a dialog. */
+const triggerState = (busy: boolean | undefined, searching: boolean) => ({
+  ...(busy && { "aria-disabled": true, "aria-busy": true }),
+  ...(searching && { "aria-haspopup": "dialog" as const }),
+});
 
 /** The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder. */
 function ChoiceValue({
   shown,
   placeholder,
   selected,
-  extras: { prefix, icon, detail },
+  extras: { glyph, prefix, icon, detail },
 }: {
   shown: string | undefined;
   placeholder: string;
@@ -136,9 +253,13 @@ function ChoiceValue({
 }) {
   return (
     <>
+      {glyph}
       {prefix && <span className="shrink-0 text-subtle-foreground">{prefix}</span>}
       {icon && selected?.icon && <span className="flex shrink-0">{selected.icon}</span>}
-      <span className={cn("min-w-0 truncate", !shown && "text-muted-foreground")}>
+      <span
+        data-slot="choice-value"
+        className={cn("min-w-0 truncate", !shown && "text-muted-foreground")}
+      >
         {shown ?? placeholder}
       </span>
       {selected?.badge && (
@@ -163,42 +284,176 @@ function TriggerDetail({ detail }: { detail: string | undefined }) {
   );
 }
 
-/** The popup listbox, named like its field. */
+type ListName = ReturnType<typeof choiceNames>["list"];
+
+/** The popup listbox, named like its field; with search, a dialog holding the search and the list. */
 function ChoiceList({
   name,
   choices,
   empty,
   className,
+  opensDown,
+  search,
 }: {
-  name: ReturnType<typeof choiceNames>["list"];
+  name: ListName;
   choices: readonly MenuChoice[];
   empty: string | undefined;
   className: string | undefined;
+  opensDown: boolean;
+  search: (ChoiceSearch & { query: string; onQuery: (query: string) => void }) | undefined;
 }) {
+  const searchRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
+  const viewportRef = useCallback((node: HTMLDivElement | null) => {
+    listRef.current = node;
+    setViewport(node);
+  }, []);
+  const query = search?.query.trim().toLocaleLowerCase() ?? "";
+  const matches = (choice: MenuChoice) => choice.label.toLocaleLowerCase().includes(query);
+  const handlers = useSearchFocus(searchRef, listRef);
+  const parts = listParts(name, opensDown, !!search);
   return (
     <Select.Portal>
       <Select.Content
         position="popper"
-        align="end"
+        side="bottom"
         sideOffset={4}
-        {...name}
-        className={cn(
-          "z-50 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) max-w-[calc(100vw-1rem)] min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
-          className,
-        )}
+        {...parts.content}
+        {...(search && handlers)}
+        className={cn(parts.content.className, className)}
       >
+        {search && (
+          <PickerMenuSearch
+            ariaLabel={search.label}
+            placeholder={search.label}
+            value={search.query}
+            onChange={search.onQuery}
+            inputRef={searchRef}
+            listRef={listRef}
+            firstChoiceSelector={firstShownChoice}
+          />
+        )}
         {/* Radix hides the list's scrollbar; a long list keeps it visible. */}
-        <Select.Viewport className="[scrollbar-width:thin]!">
-          <ChoiceRows choices={choices} />
-          {!choices.length && empty && (
-            <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-              {empty}
-            </p>
-          )}
+        <Select.Viewport ref={viewportRef} {...parts.list}>
+          <ChoiceRows choices={choices} shows={matches} />
+          <ListStatus status={listStatus(choices, matches, empty, search?.noMatch)} />
         </Select.Viewport>
+        {opensDown && <ListFade viewport={viewport} watch={`${query}:${choices.length}`} />}
       </Select.Content>
     </Select.Portal>
   );
+}
+
+const popupClass =
+  "relative z-50 max-h-(--radix-select-content-available-height) w-(--radix-select-trigger-width) max-w-[calc(100vw-1rem)] min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95";
+
+/** Leaves a 12px gap above the window edge. */
+const opensDownClass = "max-h-[calc(var(--radix-select-content-available-height)-12px)]";
+
+/**
+ * The popup and its list. Without search the popup is the named listbox; with search it is a
+ * named dialog holding the search and the listbox.
+ */
+function listParts(name: ListName, opensDown: boolean, searching: boolean) {
+  const content = {
+    ...name,
+    align: opensDown ? ("start" as const) : ("end" as const),
+    avoidCollisions: !opensDown,
+    className: cn(popupClass, opensDown && opensDownClass, searching && "p-0"),
+  };
+  const scrollbar = cn(
+    "[scrollbar-width:thin]!",
+    opensDown && "[scrollbar-color:var(--border-strong)_transparent]",
+  );
+  if (!searching) return { content, list: { className: scrollbar } };
+  return {
+    content: { ...content, role: "dialog" },
+    list: { ...name, role: "listbox", className: cn(scrollbar, "p-1") },
+  };
+}
+
+/** Why the list shows no choice, if it shows none: nothing to choose, or nothing matches. */
+function listStatus(
+  choices: readonly MenuChoice[],
+  matches: (choice: MenuChoice) => boolean,
+  empty: string | undefined,
+  noMatch: string | undefined,
+) {
+  if (!choices.length) return empty;
+  return choices.some(matches) ? undefined : noMatch;
+}
+
+function ListStatus({ status }: { status: string | undefined }) {
+  if (!status) return null;
+  return (
+    <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+      {status}
+    </p>
+  );
+}
+
+/** A fade over the row the height cap cuts off. */
+function ListFade({ viewport, watch }: { viewport: HTMLElement | null; watch: string }) {
+  if (!useCutOff(viewport, watch)) return null;
+  return (
+    <div
+      aria-hidden
+      data-slot="choice-menu-fade"
+      className="pointer-events-none absolute right-2 bottom-0 left-0 h-8 bg-linear-to-t from-popover to-transparent"
+    />
+  );
+}
+
+const firstShownChoice = '[role="option"]:not([data-disabled]):not([hidden])';
+
+/** Whether the list scrolls on past its bottom edge, so a row there is cut off. */
+function useCutOff(viewport: HTMLElement | null, watch: string) {
+  const [cut, setCut] = useState(false);
+  useLayoutEffect(() => {
+    if (!viewport) return;
+    const update = () =>
+      setCut(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 1);
+    update();
+    viewport.addEventListener("scroll", update);
+    const observer = new ResizeObserver(update);
+    observer.observe(viewport);
+    return () => {
+      viewport.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, [viewport, watch]);
+  return !!viewport && cut;
+}
+
+/**
+ * Keeps focus in the search until the person moves into the list: Radix focuses the checked
+ * choice on open (after scrolling to it) and the list when the pointer leaves a choice, and a
+ * hovered choice takes focus. ArrowUp on the first shown choice returns to the search.
+ */
+function useSearchFocus(
+  searchRef: RefObject<HTMLInputElement | null>,
+  listRef: RefObject<HTMLDivElement | null>,
+) {
+  const toSearch = () => searchRef.current?.focus();
+  return {
+    onFocusCapture: (event: FocusEvent<HTMLElement>) => {
+      if (event.target === searchRef.current) return;
+      const fromInside =
+        event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget);
+      if (event.target === event.currentTarget || !fromInside) toSearch();
+    },
+    onPointerMoveCapture: (event: PointerEvent<HTMLElement>) => {
+      if (document.activeElement === searchRef.current) event.preventDefault();
+    },
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key !== "ArrowUp") return;
+      if (event.target !== listRef.current?.querySelector(firstShownChoice)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toSearch();
+    },
+  };
 }
 
 /** The chosen choice, its list value, and what the trigger shows for `value`. */
@@ -207,19 +462,27 @@ function chosen(choices: readonly MenuChoice[], value: string, unlistedLabel: st
   const index = choices.findIndex((choice) => choice.id === value);
   const selected = choices[index];
   return {
-    listValue: selected ? String(index) : "",
+    listValue: selected && !selected.disabled ? String(index) : "",
     selected,
     shown: selected?.label ?? (value ? unlistedLabel : undefined),
   };
 }
 
 /** The list is named like its field; a labelled trigger also reads out what it shows. */
-function choiceNames(label: string | undefined, labelledBy: string | undefined, shown: string) {
+function choiceNames(
+  label: string | undefined,
+  labelledBy: string | undefined,
+  triggerLabel: string | undefined,
+  shown: string,
+) {
   if (labelledBy) {
     const name = { "aria-labelledby": labelledBy };
     return { list: name, trigger: name };
   }
-  return { list: { "aria-label": label }, trigger: { "aria-label": `${label}: ${shown}` } };
+  return {
+    list: { "aria-label": label },
+    trigger: { "aria-label": `${triggerLabel ?? label}: ${shown}` },
+  };
 }
 
 const badgeSuffix = (choice: MenuChoice | undefined) => (choice?.badge ? `, ${choice.badge}` : "");
@@ -236,16 +499,35 @@ function groupChoices(choices: readonly MenuChoice[]) {
   }, []);
 }
 
-function ChoiceRows({ choices }: { choices: readonly MenuChoice[] }) {
+/**
+ * The list's rows. A search hides the rows it does not match rather than removing them: Radix
+ * moves focus to its checked row whenever that row mounts again, which would leave the search.
+ */
+function ChoiceRows({
+  choices,
+  shows,
+}: {
+  choices: readonly MenuChoice[];
+  shows: (choice: MenuChoice) => boolean;
+}) {
   const rowId = useId();
   const row = ({ choice, at }: { choice: MenuChoice; at: number }) => (
-    <ChoiceRow key={choice.id} choice={choice} at={at} id={`${rowId}-${at}`} />
+    <ChoiceRow
+      key={choice.id}
+      choice={choice}
+      at={at}
+      id={`${rowId}-${at}`}
+      hidden={!shows(choice)}
+    />
   );
   return groupChoices(choices).flatMap(({ title, rows }) =>
     title === undefined
       ? rows.map(row)
       : [
-          <Select.Group key={`group-${rows[0]!.at}`}>
+          <Select.Group
+            key={`group-${rows[0]!.at}`}
+            hidden={!rows.some(({ choice }) => shows(choice))}
+          >
             <Select.Label className="px-2 pt-2 pb-1 text-xs font-medium text-subtle-foreground">
               {title}
             </Select.Label>
@@ -256,7 +538,17 @@ function ChoiceRows({ choices }: { choices: readonly MenuChoice[] }) {
 }
 
 /** One choice: its label and badge name it; its description describes it. */
-function ChoiceRow({ choice, at, id }: { choice: MenuChoice; at: number; id: string }) {
+function ChoiceRow({
+  choice,
+  at,
+  id,
+  hidden,
+}: {
+  choice: MenuChoice;
+  at: number;
+  id: string;
+  hidden: boolean;
+}) {
   const labelId = `${id}-label`;
   const badgeId = `${id}-badge`;
   const descriptionId = `${id}-description`;
@@ -264,6 +556,7 @@ function ChoiceRow({ choice, at, id }: { choice: MenuChoice; at: number; id: str
     <Select.Item
       value={String(at)}
       disabled={choice.disabled}
+      hidden={hidden}
       aria-labelledby={choice.badge ? `${labelId} ${badgeId}` : labelId}
       aria-describedby={choice.description ? descriptionId : undefined}
       className="relative my-0.5 flex cursor-default items-start gap-2 rounded-md py-2 pr-8 pl-3 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[state=checked]:bg-brand-soft [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
@@ -271,10 +564,11 @@ function ChoiceRow({ choice, at, id }: { choice: MenuChoice; at: number; id: str
       {choice.icon && <span className="mt-0.5 flex shrink-0">{choice.icon}</span>}
       <span className="grid min-w-0 flex-1 gap-0.5">
         <span className="flex min-w-0 items-center gap-2">
-          {/* Wraps rather than truncates: a decision label names where the choice leads. */}
-          <Select.ItemText id={labelId} className="min-w-0 break-words">
-            {choice.label}
-          </Select.ItemText>
+          {/* Wraps rather than truncates, so a long name keeps the ending that tells it apart.
+              Radix's ItemText drops its className, so the wrapping is on this span. */}
+          <span className="min-w-0 wrap-anywhere">
+            <Select.ItemText id={labelId}>{choice.label}</Select.ItemText>
+          </span>
           {choice.badge && (
             <StatusBadge id={badgeId} kind={choice.badgeKind ?? "attention"}>
               {choice.badge}

@@ -1,7 +1,6 @@
-import { FlowGroup } from "../components/launch-picker-options.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ScreenLayout } from "../components/screen-layout.tsx";
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   T3_APP_URL,
   type AgentDefinition,
@@ -26,27 +25,16 @@ import {
 } from "../composer-launch.ts";
 import { useLiveDelivery, useTransport, type TransportState } from "../transport.ts";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronsUpDown, CircleHelp, CloudOff, Info, Play, Unplug, Workflow } from "lucide-react";
+import { CircleHelp, CloudOff, Info, Play, Unplug, Workflow } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
-import { StatusBadge } from "../components/status-badge.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { SettingsLink, StudioLink } from "../components/app-link.tsx";
 import { ProblemCard } from "../components/problem-card.tsx";
-import { selectFieldClass, toolbarPillClass } from "../components/page.tsx";
+import { toolbarPillClass } from "../components/page.tsx";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
 import { KeyChip } from "@/components/ui/key-chip";
-import {
-  DropdownMenu,
-  DropdownMenuRadioGroup,
-  DropdownMenuTrigger,
-} from "../components/ui/dropdown-menu.tsx";
-import {
-  PickerMenuContent,
-  PickerMenuList,
-  PickerMenuSearch,
-  pickerShowsSearch,
-} from "../components/picker-menu-search.tsx";
+import { ChoiceMenu, type MenuChoice } from "../components/choice-menu.tsx";
 import { Label } from "../components/ui/label.tsx";
 import {
   AttachImagesButton,
@@ -275,192 +263,60 @@ export function RunComposer() {
   );
 }
 
-function flowFieldState({ draft, flows, flow }: Composer) {
-  const empty = flows?.length === 0;
-  const choices = composerFlows(flows ?? [], draft.projectId);
-  const notReady = !!flow && !flowCanLaunch(flow);
-  return {
-    empty,
-    choices,
-    notReady,
-    placeholder: empty ? "No Flows yet" : "Choose a Flow",
-    value: flow?.name,
-  };
-}
-
-/** The Flow pill's value: the name, marked when the Flow cannot launch. */
-function FlowFieldValue({
-  model,
-  value,
-  placeholder,
-}: {
-  model: Composer;
-  value?: string;
-  placeholder: string;
-}) {
-  const { flow } = model;
-  if (!value) return <span className="truncate text-muted-foreground">{placeholder}</span>;
-  return (
-    <>
-      <span className="min-w-0 truncate font-medium">{value}</span>
-      {flow && !flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
-    </>
-  );
-}
-
-/** Why the menu lists no Flow, if it lists none. A menu of disabled rows adds no line of its own. */
-function flowChoicesStatus(
-  flows: readonly FlowDraft[] | null,
-  listed: number,
-  matched: number,
-  query: string,
-) {
-  if (!flows) return "Loading Flows…";
-  if (query && matched === 0) return "No matching Flows";
-  if (listed === 0) return "No Flows yet";
-  return undefined;
-}
-
-function FlowChoices({
-  model,
-  busy,
-  search,
-  listRef,
-  onSelect,
-}: {
-  model: Composer;
-  busy: boolean;
-  search: string;
-  listRef: RefObject<HTMLDivElement | null>;
-  onSelect: (flowId: string) => void;
-}) {
-  const { draft, flows, flow, project } = model;
-  const { choices } = flowFieldState(model);
-  const query = search.trim().toLocaleLowerCase();
-  const matches = (name: string) => name.toLocaleLowerCase().includes(query);
-  const globalFlows = choices.global.filter((item) => matches(item.name));
-  const projectFlows = choices.project.filter((item) => matches(item.name));
-  const visible = [...globalFlows, ...projectFlows];
-  const peers = visible.map((item) => item.name);
-  const listed = choices.global.length + choices.project.length;
-  const status = flowChoicesStatus(flows, listed, visible.length, query);
-  const checked = flow && flowCanLaunch(flow) ? draft.flowId : "";
-  const positioned = useRef(false);
-  useLayoutEffect(() => {
-    if (positioned.current || !flows) return;
-    listRef.current
-      ?.querySelector<HTMLElement>('[data-state="checked"]')
-      ?.scrollIntoView({ block: "nearest" });
-    positioned.current = true;
-  }, [flows, listRef]);
-  return (
-    <DropdownMenuRadioGroup value={checked} onValueChange={onSelect}>
-      <FlowGroup title="Global" flows={globalFlows} busy={busy} peers={peers} />
-      <FlowGroup title={project?.title ?? ""} flows={projectFlows} busy={busy} peers={peers} />
-      {status && (
-        <p role="status" className="px-3 py-6 text-center text-sm text-muted-foreground">
-          {status}
-        </p>
-      )}
-    </DropdownMenuRadioGroup>
-  );
+/** The Flow choices: Global, then the Project's; a not-ready Flow is listed but cannot be chosen. */
+function flowChoices({ flows, project }: Composer, listed: ReturnType<typeof composerFlows>) {
+  const choice =
+    (group: string) =>
+    (flow: FlowDraft): MenuChoice => ({
+      id: flow.id,
+      label: flow.name,
+      icon: <Workflow aria-hidden className="text-muted-foreground" strokeWidth={1.5} />,
+      group,
+      ...(!flowCanLaunch(flow) && { badge: "Not ready", badgeKind: "error", disabled: true }),
+    });
+  const choices = [
+    ...listed.global.map(choice("Global")),
+    ...listed.project.map(choice(project?.title ?? "")),
+  ];
+  const empty = !flows ? "Loading Flows…" : "No Flows yet";
+  return { choices, empty };
 }
 
 function FlowField({ model }: { model: Composer }) {
-  const { draft, edit, locked, configured, card } = model;
-  const state = flowFieldState(model);
-  const busy = locked;
-  // No Flow is chosen without a Project.
-  const disabled = state.choices.disabled || !configured;
-  const describedBy = card.kind === "flow-not-ready" ? composerLaunchCardId : undefined;
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const triggerLabel = state.value ?? state.placeholder;
-  const choiceCount = state.choices.global.length + state.choices.project.length;
-  const showSearch = pickerShowsSearch(choiceCount);
+  const { draft, flows, edit, locked, configured, card } = model;
+  const listed = composerFlows(flows ?? [], draft.projectId);
+  const { choices, empty } = flowChoices(model, listed);
   return (
     <>
       <Label htmlFor="launch-flow" className="sr-only">
         Flow
       </Label>
-      <DropdownMenu
-        open={menuOpen}
-        onOpenChange={(open) => {
-          setMenuOpen(open && !busy && !disabled);
-          if (open) setSearch("");
-        }}
-      >
-        <DropdownMenuTrigger asChild>
-          <Button
-            type="button"
-            id="launch-flow"
-            variant="outline"
-            disabled={disabled}
-            aria-disabled={busy || disabled}
-            aria-busy={busy}
-            aria-label={`Select Flow: ${triggerLabel}`}
-            aria-invalid={state.notReady || undefined}
-            aria-describedby={describedBy}
-            className={cn(
-              selectFieldClass,
-              toolbarPillClass,
-              "w-55",
-              state.notReady && "border-destructive",
-            )}
-          >
+      <ChoiceMenu
+        id="launch-flow"
+        label="Flow"
+        value={draft.flowId}
+        choices={choices}
+        onChange={(flowId) => flowId !== draft.flowId && edit({ flowId })}
+        // No Flow is chosen without a Project.
+        disabled={listed.disabled || !configured}
+        placeholder={flows?.length === 0 ? "No Flows yet" : "Choose a Flow"}
+        empty={empty}
+        describedBy={card.kind === "flow-not-ready" ? composerLaunchCardId : undefined}
+        problemTone="error"
+        composer={{ search: { label: "Search Flows", noMatch: "No matching Flows" }, busy: locked }}
+        className={cn(toolbarPillClass, "w-55 **:data-[slot=choice-value]:font-medium")}
+        popupClassName="w-80"
+        trigger={{
+          label: "Select Flow",
+          glyph: (
             <Workflow
               aria-hidden
               className="size-4 shrink-0 text-muted-foreground"
               strokeWidth={1.5}
             />
-            <span className="flex min-w-0 flex-1 items-center gap-2 text-left">
-              <FlowFieldValue
-                model={model}
-                placeholder={state.placeholder}
-                {...(state.value ? { value: state.value } : {})}
-              />
-            </span>
-            <ChevronsUpDown
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.5}
-            />
-          </Button>
-        </DropdownMenuTrigger>
-        <PickerMenuContent
-          className="overflow-y-hidden"
-          searchRef={searchRef}
-          listRef={listRef}
-          searchEnabled={showSearch}
-        >
-          {showSearch && (
-            <PickerMenuSearch
-              ariaLabel="Search Flows"
-              placeholder="Search Flows"
-              value={search}
-              onChange={setSearch}
-              inputRef={searchRef}
-              listRef={listRef}
-              firstChoiceSelector="[data-flow-id]:not([data-disabled])"
-            />
-          )}
-          <PickerMenuList listRef={listRef} label="Flows" watch={`${search}:${choiceCount}`}>
-            <FlowChoices
-              model={model}
-              busy={busy}
-              search={search}
-              listRef={listRef}
-              onSelect={(flowId) => {
-                if (busy || !flowId) return;
-                setMenuOpen(false);
-                if (flowId !== draft.flowId) edit({ flowId });
-              }}
-            />
-          </PickerMenuList>
-        </PickerMenuContent>
-      </DropdownMenu>
+          ),
+        }}
+      />
     </>
   );
 }

@@ -10,6 +10,7 @@ import { beforeEach, test } from "./support/test.ts";
 import { blockOnModelLessLaterReview, selectComposerProject } from "./support/composer.ts";
 import {
   chooseComposerFlow,
+  flowList,
   openComposerMenus,
   openFlowMenu,
   pageString,
@@ -31,31 +32,57 @@ async function openProjectMenu(screen: Screen) {
 const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => null))).then(() => true)";
 
-const checkedRadios = `document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]').length`;
+const checkedChoices = `document.querySelectorAll('[role="option"][data-state="checked"]').length`;
+
+/** The Flow field's open popup, which its trigger controls. */
+const flowPopup = `document.getElementById(document.getElementById("launch-flow")?.getAttribute("aria-controls") ?? "")`;
 
 /** The open animation slides the menu in from above, so geometry is read only once it has settled. */
 const menuSettled = `(() => {
   const trigger = document.getElementById("launch-flow")?.getBoundingClientRect();
-  const menu = document.querySelector('[role="menu"]')?.getBoundingClientRect();
+  const menu = ${flowPopup}?.getBoundingClientRect();
   if (!trigger || !menu) return false;
   return menu.top >= trigger.bottom - 1 && menu.bottom <= window.innerHeight - 11;
 })()`;
 
 const menuPresented = `(() => {
-  const label = [...document.querySelectorAll("[data-slot=dropdown-menu-label]")].find(
+  const menu = ${flowPopup};
+  const label = [...(menu?.querySelectorAll('[role="group"] > *') ?? [])].find(
     (node) => node.textContent === "Global",
   );
-  const list = document.querySelector('[aria-label="Flows"]');
+  const list = menu?.querySelector("[data-radix-select-viewport]");
   const trigger = document.getElementById("launch-flow");
-  const menu = document.querySelector('[role="menu"]');
   return JSON.stringify({
     transform: label ? getComputedStyle(label).textTransform : "missing",
     shadow: trigger ? getComputedStyle(trigger).boxShadow : "missing",
     side: menu?.getAttribute("data-side") ?? "",
     scroll: !!list && list.scrollHeight > list.clientHeight + 1,
-    fade: !!document.querySelector('[data-slot="picker-menu-fade"]'),
+    fade: !!menu?.querySelector('[data-slot="choice-menu-fade"]'),
   });
 })()`;
+
+/** Where each named option's label ends, against the list's edges. */
+function labelEnds(names: readonly string[]) {
+  return `(() => {
+    const list = ${flowPopup}?.querySelector("[data-radix-select-viewport]")?.getBoundingClientRect();
+    return JSON.stringify(${JSON.stringify(names)}.map((name) => {
+      const option = [...document.querySelectorAll('[role="option"]')].find(
+        (item) => item.textContent === name,
+      );
+      const label = document.getElementById(option?.getAttribute("aria-labelledby")?.split(" ")[0] ?? "");
+      const text = label?.firstChild;
+      const range = document.createRange();
+      range.setStart(text, text.length - 3);
+      range.setEnd(text, text.length);
+      const end = range.getBoundingClientRect();
+      return {
+        text: label?.textContent,
+        lines: label ? label.getClientRects().length : 0,
+        endInside: !!list && end.left >= list.left && end.right <= list.right,
+      };
+    }));
+  })()`;
+}
 
 function placeholderContrast(placeholder: string) {
   return `(() => {
@@ -90,29 +117,28 @@ test("the Flow menu checks the chosen ready Flow and has no placeholder, footer,
   await openFlowMenu(screen);
 
   // Assert
-  await expect(
-    screen.getByRole("menuitemradio", "Northwind release", { exact: true }),
-  ).toHaveAttribute("aria-checked", "true");
-  await expect(screen.getByRole("menuitemradio", "Choose a Flow", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("option", "Northwind release", { exact: true })).toHaveAttribute(
+    "data-state",
+    "checked",
+  );
+  await expect(screen.getByRole("option", "Choose a Flow", { exact: true })).toHaveCount(0);
   await expect(
     screen.getByText("Only ready Flows are listed. Flows of other Projects run only there."),
   ).toHaveCount(0);
   await expect(screen.getByText("Selected Flow unavailable", { exact: true })).toHaveCount(0);
-  await expect(screen.getByText("Global", { exact: true })).toBeVisible();
-  await expect(screen.getByText("Northwind", { exact: true }).last()).toBeVisible();
+  await expect(flowList(screen).getByText("Global", { exact: true })).toBeVisible();
+  await expect(flowList(screen).getByText("Northwind", { exact: true })).toBeVisible();
   await expect.poll(() => browser.evaluate(menuSettled)).toBe(true);
   const presented = JSON.parse(pageString(await browser.evaluate(menuPresented))) as {
     transform: string;
     shadow: string;
     side: string;
     scroll: boolean;
-    fade: boolean;
   };
   expect(presented.transform).toBe("none");
   expect(presented.shadow).not.toBe("none");
   expect(presented.side).toBe("bottom");
   expect(presented.scroll).toBe(true);
-  expect(presented.fade).toBe(true);
   await app.screenshot("after-flow-checked");
 });
 
@@ -120,7 +146,7 @@ test("an empty Flow field checks nothing in the menu", async ({ app, screen, bro
   // Arrange
   await selectComposerProject(screen, "Northwind");
   await expect(
-    screen.getByRole("button", "Select Flow: Choose a Flow", { exact: true }),
+    screen.getByRole("combobox", "Select Flow: Choose a Flow", { exact: true }),
   ).toBeVisible();
 
   // Act
@@ -134,8 +160,13 @@ test("an empty Flow field checks nothing in the menu", async ({ app, screen, bro
       ),
     ),
   ).toBe("open");
-  expect(Number(await browser.evaluate(checkedRadios))).toBe(0);
-  await expect(screen.getByRole("menuitemradio", "Choose a Flow", { exact: true })).toHaveCount(0);
+  expect(Number(await browser.evaluate(checkedChoices))).toBe(0);
+  await expect(screen.getByRole("option", "Choose a Flow", { exact: true })).toHaveCount(0);
+  await expect.poll(() => browser.evaluate(menuSettled)).toBe(true);
+  const presented = JSON.parse(pageString(await browser.evaluate(menuPresented))) as {
+    fade: boolean;
+  };
+  expect(presented.fade).toBe(true);
   await app.screenshot("after-flow-empty");
 });
 
@@ -146,7 +177,7 @@ test("a not-ready Flow is a disabled row, and a chosen one stays in the field", 
 }) => {
   // Arrange
   await blockOnModelLessLaterReview(app, screen);
-  const flowPicker = screen.getByRole("button", /^Select Flow: /);
+  const flowPicker = screen.getByRole("combobox", /^Select Flow: /);
   await expect(flowPicker).toContainText("Model-less later review");
   await expect(flowPicker).toContainText("Not ready");
   await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
@@ -155,32 +186,51 @@ test("a not-ready Flow is a disabled row, and a chosen one stays in the field", 
   await openFlowMenu(screen);
 
   // Assert
-  const row = screen.getByRole("menuitem", "Model-less later review · Not ready", { exact: true });
+  const row = screen.getByRole("option", "Model-less later review Not ready", { exact: true });
   await expect(row).toBeDisabled();
-  await expect(
-    screen.getByRole("menuitemradio", "Model-less later review", { exact: true }),
-  ).toHaveCount(0);
-  expect(Number(await browser.evaluate(checkedRadios))).toBe(0);
-  const rowOpacity = pageString(
-    await browser.evaluate(
-      `getComputedStyle(document.querySelector('[aria-label="Model-less later review · Not ready"]')).opacity`,
-    ),
+  await expect(screen.getByRole("option", "Model-less later review", { exact: true })).toHaveCount(
+    0,
   );
-  expect(rowOpacity).toBe("1");
+  expect(Number(await browser.evaluate(checkedChoices))).toBe(0);
   await browser.keyboard.press("ArrowDown");
   const landed = pageString(
     await browser.evaluate(
       `JSON.stringify({ role: document.activeElement?.getAttribute("role"), disabled: document.activeElement?.getAttribute("aria-disabled") })`,
     ),
   );
-  expect(JSON.parse(landed)).toEqual({ role: "menuitemradio", disabled: null });
-  await browser.evaluate(
-    `document.querySelector('[aria-label="Model-less later review · Not ready"]').scrollIntoView({ block: "center" })`,
-  );
+  expect(JSON.parse(landed)).toEqual({ role: "option", disabled: null });
+  await row.scrollIntoView();
   await app.screenshot("after-flow-not-ready");
 });
 
-test("Flow search is pinned once more than seven Flows are listed, and Enter in the search does not choose", async ({
+test("with seven or fewer Flows the list has no search and choosing a row sets the Flow", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const flows = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
+  const kept = flows.find((flow) => flow.name === "Northwind release");
+  assert(kept);
+  await fixture.definitions.removeFlows({ keepId: kept.id });
+  await browser.reload();
+  await selectComposerProject(screen, "Northwind");
+  await openFlowMenu(screen);
+  await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toHaveCount(0);
+  await app.screenshot("after-flow-few");
+
+  // Act
+  await screen.getByRole("option", "Northwind release", { exact: true }).tap();
+
+  // Assert
+  await expect(flowList(screen)).toBeHidden();
+  await expect(
+    screen.getByRole("combobox", "Select Flow: Northwind release", { exact: true }),
+  ).toBeFocused();
+});
+
+test("Flow search is pinned and focused once more than seven Flows are listed", async ({
   app,
   screen,
   browser,
@@ -206,69 +256,92 @@ test("Flow search is pinned once more than seven Flows are listed, and Enter in 
   const ratio = Number(await browser.evaluate(placeholderContrast("Search Flows")));
   expect(ratio).toBeGreaterThanOrEqual(4.5);
   await app.screenshot("after-flow-search");
+});
+
+test("Enter in the Flow search does not choose a Flow", async ({ screen, browser }) => {
+  // Arrange
+  await selectComposerProject(screen, "Northwind");
+  await openFlowMenu(screen);
+  await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toBeFocused();
+
+  // Act
   await browser.keyboard.press("Enter");
-  await expect(screen.getByRole("menu")).toBeVisible();
+
+  // Assert
+  await expect(flowList(screen)).toBeVisible();
   expect(
     pageString(
       await browser.evaluate(
-        `document.getElementById("launch-flow")?.getAttribute("data-state") ?? ""`,
+        `document.getElementById("launch-flow")?.getAttribute("aria-label") ?? ""`,
       ),
     ),
-  ).toBe("open");
-  await search.fill("zzzz-no-such-flow");
-  await expect(screen.getByText("No matching Flows", { exact: true })).toBeVisible();
-  await app.screenshot("after-flow-no-match");
-  await search.fill("");
-  await browser.keyboard.press("ArrowDown");
-  const chosen = pageString(
-    await browser.evaluate(`document.activeElement?.getAttribute("aria-label") ?? ""`),
-  );
-  assert(chosen !== "" && !chosen.endsWith("Not ready"));
-  await browser.keyboard.press("Enter");
-  await expect(screen.getByRole("menu")).toBeHidden();
-  await expect(screen.getByRole("button", `Select Flow: ${chosen}`, { exact: true })).toBeVisible();
+  ).toBe("Select Flow: Choose a Flow");
 });
 
-test("Flow names that would truncate to the same text keep the ending that tells them apart", async ({
-  app,
-  screen,
-  browser,
-}) => {
+test("a Flow search with no match says so", async ({ app, screen }) => {
   // Arrange
-  const stem = `ZZ Truncation ${"x".repeat(90)}`;
-  const one = `${stem} ONE`;
-  const two = `${stem} TWO`;
-  await saveFlowCopy(app.baseUrl, "Demo · Focused change", one, { mode: "checkout" });
-  await saveFlowCopy(app.baseUrl, "Demo · Focused change", two, { mode: "checkout" });
   await selectComposerProject(screen, "Northwind");
   await openFlowMenu(screen);
 
   // Act
-  await screen.getByRole("searchbox", "Search Flows", { exact: true }).fill("ZZ Truncation");
+  await screen.getByRole("searchbox", "Search Flows", { exact: true }).fill("zzzz-no-such-flow");
 
   // Assert
-  await expect(screen.getByRole("menuitemradio", one, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("menuitemradio", two, { exact: true })).toBeVisible();
-  const shown = JSON.parse(
-    pageString(
-      await browser.evaluate(`(() => JSON.stringify([...document.querySelectorAll('[role="menuitemradio"]')].map((item) => ({
-        label: item.getAttribute("aria-label"),
-        title: item.querySelector("span[title]")?.getAttribute("title"),
-        text: item.querySelector("span[title]")?.textContent,
-      }))))()`),
-    ),
-  ) as { label: string; title: string; text: string }[];
-  const first = shown.find((item) => item.label === one);
-  const second = shown.find((item) => item.label === two);
-  assert(first && second);
-  expect(first.title).toBe(one);
-  expect(second.title).toBe(two);
-  expect(first.text).toContain("…");
-  expect(second.text).toContain("…");
-  expect(first.text.endsWith("E")).toBe(true);
-  expect(second.text.endsWith("O")).toBe(true);
-  expect(first.text).not.toBe(second.text);
-  await app.screenshot("after-flow-truncated");
+  await expect(flowList(screen).getByText("No matching Flows", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("option")).toHaveCount(0);
+  await app.screenshot("after-flow-no-match");
+});
+
+test("a filtered Flow is chosen from the search by keyboard", async ({ app, screen, browser }) => {
+  // Arrange
+  await selectComposerProject(screen, "Northwind");
+  await openFlowMenu(screen);
+  await screen.getByRole("searchbox", "Search Flows", { exact: true }).fill("northwind rel");
+  await expect(screen.getByRole("option")).toHaveCount(1);
+  await browser.keyboard.press("ArrowDown");
+  await expect(screen.getByRole("option", "Northwind release", { exact: true })).toBeFocused();
+  await app.screenshot("after-flow-filtered");
+
+  // Act
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  await expect(flowList(screen)).toBeHidden();
+  await expect(
+    screen.getByRole("combobox", "Select Flow: Northwind release", { exact: true }),
+  ).toBeFocused();
+});
+
+test("long unbroken Flow names wrap in the list and keep the ending that tells them apart", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange — 63 characters without a space.
+  const stem = `ZZWrap-${"x".repeat(52)}`;
+  const one = `${stem}-ONE`;
+  const two = `${stem}-TWO`;
+  await saveFlowCopy(app.baseUrl, "Demo · Focused change", one, { mode: "checkout" });
+  await saveFlowCopy(app.baseUrl, "Demo · Focused change", two, { mode: "checkout" });
+  await selectComposerProject(screen, "Northwind");
+
+  // Act
+  await openFlowMenu(screen);
+
+  // Assert
+  await expect(screen.getByRole("option", one, { exact: true })).toBeAttached();
+  await expect(screen.getByRole("option", two, { exact: true })).toBeAttached();
+  const ends = JSON.parse(pageString(await browser.evaluate(labelEnds([one, two])))) as {
+    text: string;
+    lines: number;
+    endInside: boolean;
+  }[];
+  expect(ends[0]).toMatchObject({ text: one, endInside: true });
+  expect(ends[1]).toMatchObject({ text: two, endInside: true });
+  expect(ends[0]!.lines).toBeGreaterThan(1);
+  expect(ends[1]!.lines).toBeGreaterThan(1);
+  await screen.getByRole("option", one, { exact: true }).scrollIntoView();
+  await app.screenshot("after-flow-long-names");
 });
 
 test("the Project menu lists available projects and Refresh projects", async ({

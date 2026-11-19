@@ -183,8 +183,8 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
 - **Choice**: ChoiceMenu for every dropdown choice, a select-only combobox named by its field, with
-  or without groups, icons, descriptions, badges and disabled reasons; a menu that combines a choice
-  with search, actions or a submenu (the Run composer Flow menu, the Project picker, the Flow
+  or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
+  wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
   workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
   for a short exclusive choice that stays visible.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for

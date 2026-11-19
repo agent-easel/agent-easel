@@ -5,6 +5,7 @@ import { beforeEach, test } from "./support/test.ts";
 import { selectComposerProject } from "./support/composer.ts";
 import {
   chooseComposerFlow,
+  flowList,
   openComposerMenus,
   openFlowMenu,
   pageString,
@@ -33,13 +34,11 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
 
   // Assert
   await expect(
-    screen.getByRole("button", "Select Flow: Choose a Flow", { exact: true }),
+    screen.getByRole("combobox", "Select Flow: Choose a Flow", { exact: true }),
   ).toBeVisible();
   await expect(screen.getByText("Selected Flow unavailable", { exact: true })).toHaveCount(0);
   await openFlowMenu(screen);
-  await expect(screen.getByRole("menuitemradio", "Northwind release", { exact: true })).toHaveCount(
-    0,
-  );
+  await expect(screen.getByRole("option", "Northwind release", { exact: true })).toHaveCount(0);
   await app.screenshot("after-flow-deleted");
   await browser.keyboard.press("Escape");
 
@@ -54,14 +53,12 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   await openFlowMenu(screen);
 
   // Assert
-  await expect(screen.getByRole("menuitemradio")).toHaveCount(0);
+  await expect(screen.getByRole("option", { disabled: false })).toHaveCount(0);
   await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toHaveCount(0);
   await expect(
-    screen.getByRole("menuitem", "Demo · Release checklist (draft) · Not ready", { exact: true }),
+    screen.getByRole("option", "Demo · Release checklist (draft) Not ready", { exact: true }),
   ).toBeDisabled();
-  await expect(
-    screen.getByRole("group", "Flows").getByText("No Flows yet", { exact: true }),
-  ).toHaveCount(0);
+  await expect(flowList(screen).getByText("No Flows yet", { exact: true })).toHaveCount(0);
   await expect(screen.getByText("No matching Flows", { exact: true })).toHaveCount(0);
   await expect(screen.getByText("No ready Flows for Northwind", { exact: true })).toBeVisible();
   await browser.keyboard.press("ArrowDown");
@@ -83,10 +80,8 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   await openFlowMenu(screen);
 
   // Assert
-  await expect(
-    screen.getByRole("group", "Flows").getByText("No Flows yet", { exact: true }),
-  ).toBeVisible();
-  await expect(screen.getByRole("menuitemradio")).toHaveCount(0);
+  await expect(flowList(screen).getByText("No Flows yet", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("option")).toHaveCount(0);
   await expect(screen.getByText("Create your first Flow", { exact: true })).toBeVisible();
   await app.screenshot("after-flow-none");
 });

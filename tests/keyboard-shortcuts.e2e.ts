@@ -196,7 +196,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
     "data-focus-order",
     "1",
   );
-  await expect(screen.getByRole("button", /^Select Flow: /)).toHaveAttribute(
+  await expect(screen.getByRole("combobox", /^Select Flow: /)).toHaveAttribute(
     "data-focus-order",
     "2",
   );
