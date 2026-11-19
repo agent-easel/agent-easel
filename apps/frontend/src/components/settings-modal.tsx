@@ -230,12 +230,13 @@ function matchingSections(
 
 /**
  * Run titles shows one row per option of the chosen Worker, and those labels come from T3's
- * capabilities. They are read once, when a search starts, so the index matches the visible rows.
+ * capabilities. Each search reads them again, so a search after T3 recovers matches the rows the
+ * Run titles pane shows; until a read answers, the last labels stay.
  */
 function useWorkerOptionLabels(searching: boolean) {
-  const [labels, setLabels] = useState<readonly string[] | null>(null);
+  const [labels, setLabels] = useState<readonly string[]>([]);
   useEffect(() => {
-    if (!searching || labels) return;
+    if (!searching) return;
     let active = true;
     api.getAgentCapabilities().then(
       (capabilities) => {
@@ -245,13 +246,13 @@ function useWorkerOptionLabels(searching: boolean) {
         );
         setLabels([...new Set(names)]);
       },
-      () => active && setLabels([]),
+      () => undefined,
     );
     return () => {
       active = false;
     };
-  }, [searching, labels]);
-  return labels ?? [];
+  }, [searching]);
+  return labels;
 }
 
 /** Figma Settings/ModalShell: breadcrumb header, section nav and the selected section's pane. */

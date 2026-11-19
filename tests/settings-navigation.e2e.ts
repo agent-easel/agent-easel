@@ -178,3 +178,24 @@ test("searching for a Worker option or a fixed shortcut finds its section", asyn
   ).toBeVisible();
   await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
 });
+
+test("a Worker option search after T3 reconnects finds Run titles again", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange: the first search runs while T3 is away, so it has no Worker options to match.
+  await app.open("/settings/connection");
+  await fixture.remoteAccess.t3Unavailable();
+  const search = screen.getByLabel("Search settings");
+  await search.fill("fast mode");
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toHaveCount(0);
+  await search.fill("");
+  await fixture.remoteAccess.t3Available();
+
+  // Act
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
+});
