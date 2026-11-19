@@ -468,7 +468,7 @@ The toolbar's ⋯ **More Flow actions** menu holds **Duplicate…**, **Change ow
 [Definition export](#definition-export)) and **Remove…** (see [Removing a Flow](#removing-a-flow)). A disabled item shows its reason under its label, and
 focus returns to ⋯ when an item's dialog closes.
 
-**Save** is the only primary action: filled while there are unsaved changes, neutral and disabled while saved, and **Saving…** while a save is in flight. It
+**Save** is the only primary action: filled only while there are unsaved changes it may send, neutral and disabled while saved or blocked, and **Saving…** while a save is in flight. It
 accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave. **⌘Z** (Ctrl+Z
 elsewhere) undoes the last structural edit until Save: a removed block together with its wires, or a removed wire; edits made since are kept, and a text field
 keeps its own undo.

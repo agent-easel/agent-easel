@@ -593,6 +593,29 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await app.screenshot("agent-exit-removed-readiness");
 });
 
+test("the Flow header's Save is filled only with unsaved changes and turns neutral and disabled once saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Header save state ${crypto.randomUUID()}`;
+  await openEditedStudioFlow({ app, screen, browser }, name);
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expect(save).toBeEnabled();
+  await expect(save).toHaveAttribute("data-variant", "default");
+  await app.screenshot("flow-header-unsaved");
+
+  // Act
+  await save.tap();
+
+  // Assert
+  await expectFlowSaved(screen);
+  await expect(save).toHaveAttribute("data-variant", "outline");
+  await app.screenshot("flow-header-saved");
+});
+
 test("removing a Flow with unsaved changes returns to the Flow list without a discard dialog", async ({
   app,
   screen,

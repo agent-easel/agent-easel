@@ -22,9 +22,7 @@ import type {
   FlowGraph,
 } from "@t3-factory/contracts";
 import {
-  Check,
   CircleAlert,
-  CircleDot,
   Copy,
   FolderGit2,
   MoreHorizontal,
@@ -35,7 +33,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
-import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -106,6 +103,11 @@ import {
   type StudioOwner,
 } from "../studio-definitions.ts";
 import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
+import {
+  StudioEditorHeader,
+  StudioSaveButton,
+  StudioSaveStatus,
+} from "../components/studio-editor-header.tsx";
 import {
   CantRemoveDialog,
   RemoveMenuItem,
@@ -909,7 +911,7 @@ function FlowMoreActions({
               <Button
                 ref={trigger}
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 aria-label="More Flow actions"
                 disabled={state.busy}
@@ -988,8 +990,8 @@ function FlowLoadState({ error }: { error: string }) {
 }
 
 /**
- * Editor top row: owner badge, editable Flow name and save status, then Workspace, More Flow
- * actions and Save, the only primary, which is filled only while there are unsaved changes.
+ * Editor top row in the shared header's Toolbar layout: owner badge, editable Flow name and save
+ * status, then Workspace, More Flow actions and Save.
  */
 function EditorToolbar({
   draft,
@@ -1017,61 +1019,65 @@ function EditorToolbar({
   onOwnerDialog: (dialog: FlowOwnerDialog) => void;
   definitions: StudioDefinitions;
 }) {
-  const filled = state.dirty && !state.removed && !readOnly;
   return (
-    <div className="flex h-13 shrink-0 items-center gap-2.5 border-b px-4" {...fields}>
-      <OwnerBadge owner={owner} />
-      {readOnly && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
-      <Input
-        aria-label="Flow name"
-        className="field-sizing-content h-8 w-auto max-w-80 min-w-24 border-transparent bg-transparent px-1.5 text-base font-semibold hover:border-border focus-visible:border-ring"
-        value={state.content.name}
-        disabled={state.busy || readOnly}
-        onChange={(e) => draft.edit({ name: e.target.value })}
-      />
-      <FlowSaveStatus state={state} />
-      <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
-      <span className="flex-1" />
-      <FlowWorkspaceControl
-        workspace={state.content.workspace}
-        disabled={state.busy || readOnly}
-        onChange={(workspace) => draft.edit({ workspace })}
-      />
-      <FlowMoreActions
-        draft={draft}
-        state={state}
-        exporter={exporter}
-        onOwnerDialog={onOwnerDialog}
-        definitions={definitions}
-        flowId={flowId}
-      />
-      <MutationGate>
-        <Button
-          variant={filled ? "default" : "outline"}
-          disabled={!state.canSave || !state.dirty || invalidEntry || readOnly}
+    <StudioEditorHeader
+      layout="toolbar"
+      {...fields}
+      owner={
+        <>
+          <OwnerBadge owner={owner} />
+          {readOnly && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+        </>
+      }
+      nameField={{
+        label: "Flow name",
+        value: state.content.name,
+        disabled: state.busy || readOnly,
+        onChange: (name) => draft.edit({ name }),
+      }}
+      status={
+        <>
+          <FlowSaveStatus state={state} />
+          <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
+        </>
+      }
+      controls={
+        <FlowWorkspaceControl
+          workspace={state.content.workspace}
+          disabled={state.busy || readOnly}
+          onChange={(workspace) => draft.edit({ workspace })}
+        />
+      }
+      moreActions={
+        <FlowMoreActions
+          draft={draft}
+          state={state}
+          exporter={exporter}
+          onOwnerDialog={onOwnerDialog}
+          definitions={definitions}
+          flowId={flowId}
+        />
+      }
+      save={
+        <StudioSaveButton
+          unsaved={state.dirty}
+          ready={state.canSave && !invalidEntry && !readOnly}
+          saving={state.saving}
           onClick={() => void draft.save()}
-        >
-          {state.saving ? "Saving…" : "Save"}
-        </Button>
-      </MutationGate>
-    </div>
+        />
+      }
+    />
   );
 }
 
 /** Whether the draft matches its saved revision, or was removed elsewhere. */
 function FlowSaveStatus({ state }: { state: FlowDraftSnapshot }) {
-  const attention = state.dirty || state.removed;
   return (
-    <span
+    <StudioSaveStatus
       role="status"
       aria-label="Flow save status"
-      className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground"
+      unsaved={state.dirty || state.removed}
     >
-      {attention ? (
-        <CircleDot aria-hidden className="size-3 text-attention" />
-      ) : (
-        <Check aria-hidden className="size-3.5 text-success" />
-      )}
       {state.saving
         ? "Saving…"
         : state.removed
@@ -1079,7 +1085,7 @@ function FlowSaveStatus({ state }: { state: FlowDraftSnapshot }) {
           : state.dirty
             ? "Unsaved changes"
             : "Saved"}
-    </span>
+    </StudioSaveStatus>
   );
 }
 
