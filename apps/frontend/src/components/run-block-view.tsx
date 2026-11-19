@@ -31,7 +31,8 @@ import { OpenInT3 } from "./open-in-t3.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails } from "./technical-details.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
-import { ResultCard, RunTextReaderLink } from "./run-result.tsx";
+import { ResultCard } from "./run-result.tsx";
+import { WorkingReport } from "./agent-text.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
 import { ConditionArrivals } from "./condition-arrivals.tsx";
 
@@ -54,25 +55,21 @@ function visitSpan(visit: Visits[number]) {
 
 /** The current report of a working visit; a sent Continuation reports like an Agent. An Agent
  * idle with it can be asked to report. */
-function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
+function WorkingReportSection({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
   if (recorded.state !== "working" && recorded.state !== "sent") return null;
   if (!recorded.workingMessage) return null;
   return (
-    <div className="flex flex-col gap-2.5">
-      <p className="text-sm break-words whitespace-pre-wrap text-foreground">
-        {recorded.workingMessage}
-      </p>
-      <RunTextReaderLink
-        label="Read working report"
-        title={`${recorded.name} · working report`}
-        metadata={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
-        text={recorded.workingMessage}
-        link={recorded.link}
-      />
+    <WorkingReport
+      text={recorded.workingMessage}
+      blockName={recorded.name}
+      provenance={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
+      t3Link={recorded.link}
+      size="result"
+    >
       {(awaitsReviewInT3(recorded) || pendingRecovery(run, recorded)) && (
         <RequestReport run={run} block={recorded} />
       )}
-    </div>
+    </WorkingReport>
   );
 }
 
@@ -89,7 +86,7 @@ function BlockNow({
   const visits = blockVisits(run, block);
   return (
     <>
-      <WorkingReport run={run} recorded={recorded} />
+      <WorkingReportSection run={run} recorded={recorded} />
       {block.kind === "wait" && <WaitArrivals run={run} blockId={block.id} />}
       {block.kind === "condition" && (
         <ConditionArrivals key={`${run.id}:${block.id}`} run={run} blockId={block.id} />
@@ -265,7 +262,7 @@ function ContinuationHistory({
             {queued ? `${queued} waiting behind the response` : "none"}
           </DetailRow>
         </dl>
-        <WorkingReport run={run} recorded={recorded} />
+        <WorkingReportSection run={run} recorded={recorded} />
       </InspectorSection>
       <ContinuationExchange run={run} block={block} prompt={prompt} />
       {ordered.length > 0 && (

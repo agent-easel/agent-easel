@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
-import { expect, type Screen } from "e2e";
+import { expect, type Locator, type Screen } from "e2e";
 import {
   expectFlowBlocked,
   readFlow,
@@ -10,6 +10,13 @@ import {
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
+import {
+  approveFirstReviewAtLength,
+  expectWrittenByFirstReview,
+  finalSignoff,
+  openIdenticalReviewsThroughCondition,
+  readerScreenshot,
+} from "./support/human-answers.ts";
 import {
   chooseFlowAction,
   expectFlowSaved,
@@ -607,4 +614,99 @@ test("the Timeline lists only a Condition's latest 50 arrivals and notes that th
   await expect(timeline).toContainText("arrival 52 → Keep going");
   await expect(timeline).not.toContainText("→ Otherwise");
   await app.screenshot("condition-timeline-window");
+});
+
+test("a person's answer a Condition routes to the next Human step names the step that answered, not the Agent before it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await approveFirstReviewAtLength(
+    { app, screen, browser },
+    "answer-condition",
+    "answerCondition",
+    "Approve → Route the answer",
+  );
+
+  // Act
+  await finalSignoff(screen).getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  await expectWrittenByFirstReview(screen);
+  await readerScreenshot(app, browser, "condition-routed-answer-provenance");
+});
+
+test("a result and a person's answer about it that one Condition routes on each name their own author", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const runId = await approveFirstReviewAtLength(
+    { app, screen, browser },
+    "answer-beside-result",
+    "answerBesideResult",
+    "Approve → Route the answer",
+    [
+      "## Implementation notes",
+      "",
+      "The project picker spacing now follows the sidebar grid.",
+      "",
+      "- Rows use the shared 32px height.",
+      "- Long names truncate with an ellipsis.",
+      "- The popover keeps focus inside while open.",
+      "",
+      "### Checked",
+      "",
+      "Both themes and the narrow window were checked by hand.",
+      "No other screen uses the changed spacing tokens.",
+    ].join("\n"),
+  );
+  const signoff = (source: string) =>
+    screen
+      .getByRole("complementary", "Run inspector")
+      .getByRole("article", `Needs input · Final sign-off · From ${source}`, { exact: true })
+      .getByRole("button", "Read full context", { exact: true });
+
+  // Act
+  await signoff("Implement change · Visit 1").tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Final sign-off · context", { exact: true });
+  await expect(reader).toContainText(/From Implement change · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Implementation notes", { exact: true })).toBeVisible();
+  await readerScreenshot(app, browser, "condition-routed-result-beside-answer-provenance");
+  await app.open(`/runs/${runId}`);
+  await signoff("First review").tap();
+  await expectWrittenByFirstReview(screen);
+  await readerScreenshot(app, browser, "condition-routed-answer-beside-result-provenance");
+});
+
+test("identical reviews from two Agents that one Condition routes to parallel Human occurrences each name their own Agent and visit", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { readContext } = await openIdenticalReviewsThroughCondition({ app, screen, browser });
+  const expectSharedReviewFrom = async (reader: Locator, source: string) => {
+    await expect(reader).toContainText(new RegExp(`From ${source} · \\d\\d:\\d\\d`));
+    await expect(reader.getByRole("heading", "Shared review", { exact: true })).toBeVisible();
+  };
+
+  // Act
+  const codeReview = await readContext("Code review · Visit 1");
+
+  // Assert
+  await expectSharedReviewFrom(codeReview, "Code review · Visit 1");
+  await readerScreenshot(app, browser, "condition-routed-identical-review-code-provenance");
+  await codeReview.getByRole("button", "Close reader", { exact: true }).tap();
+  const accessibilityReview = await readContext("Accessibility review · Visit 1");
+  await expectSharedReviewFrom(accessibilityReview, "Accessibility review · Visit 1");
+  await readerScreenshot(
+    app,
+    browser,
+    "condition-routed-identical-review-accessibility-provenance",
+  );
 });

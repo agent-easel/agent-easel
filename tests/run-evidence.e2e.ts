@@ -361,3 +361,52 @@ test("Esc closes the result reader and returns focus to the card that opened it"
   await expect(card.getByRole("button", "Read result", { exact: true })).toBeFocused();
   await expect(screen.getByRole("heading", "Overview", { exact: true })).toBeVisible();
 });
+
+test("a short result shows whole on its card, and its Technical details link opens the reader with the details shown", async ({
+  app,
+  screen,
+}) => {
+  // Arrange: a Run waiting in its Human review, so it never settles into its title-only overview.
+  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+  await app.open(`/runs/${found.id}`);
+  const card = screen
+    .getByRole("complementary", "Run inspector")
+    .getByRole("article", "Implement change · Visit 1 · result", { exact: true });
+  await expect(
+    card.getByText(
+      "The empty state now preserves the query and offers Reset filters. Ready for a review.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(card.getByRole("button", "Read result", { exact: true })).toHaveCount(0);
+
+  // Act
+  await card.getByRole("button", "Technical details", { exact: true }).tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Implement change · result", { exact: true });
+  await expect(reader.getByText("1 of 1", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("button", "Copy details", { exact: true })).toBeVisible();
+  await app.screenshot("short-result-technical-details");
+});
+
+test("a long result previews its beginning with Read result and no separate Technical details link", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(
+    app.baseUrl,
+    "UI worker · Decision · Long review summary for the reset action",
+  );
+
+  // Act
+  await app.open(`/runs/${found.id}`);
+
+  // Assert
+  const card = screen
+    .getByRole("complementary", "Run inspector")
+    .getByRole("article", "Review implementation · Visit 1 · result", { exact: true });
+  await expect(card.getByRole("button", "Read result", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", "Technical details", { exact: true })).toHaveCount(0);
+});

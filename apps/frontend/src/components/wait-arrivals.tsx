@@ -5,6 +5,7 @@ import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
+import { AgentMarkdown } from "./agent-text.tsx";
 import { ExecutionStateBadge } from "./execution-state.tsx";
 import { clockTime, dayAndTime } from "../time-format.ts";
 import { sectionLabelClass } from "./page.tsx";
@@ -106,10 +107,10 @@ export function WaitArrivals({ run, blockId }: { run: RunDetail; blockId: string
                     ? "Message cleared when the arrival was cancelled."
                     : "Message cleared once its recipients no longer needed it."}
               </p>
+            ) : arrival.message ? (
+              <AgentMarkdown text={arrival.message} density="primary" />
             ) : (
-              <p className="text-sm break-words whitespace-pre-wrap text-foreground">
-                {arrival.message || "No message."}
-              </p>
+              <p className="text-sm text-foreground">No message.</p>
             )}
           </li>
         ))}
