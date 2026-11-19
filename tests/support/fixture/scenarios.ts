@@ -244,6 +244,30 @@ async function createFixtureScenarioSet(host: Host) {
     ],
   });
 
+  // Both reviews reach one Human step through one Condition, so each occurrence's message is a
+  // Condition selection whose author only its worker provenance tells apart.
+  const conditionReviews = await saveFlow(factory, "UI condition · Two reviews routed", {
+    flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("reviewer", "Code review", world.agents.reviewer, { x: 320, y: 40 }),
+      agentBlock("accessibility", "Accessibility review", world.agents.accessibility, {
+        x: 320,
+        y: 320,
+      }),
+      conditionBlock("route", "Route the reviews", [conditionRule("later", "Later reviews", 2)], {
+        x: 700,
+        y: 180,
+      }),
+      humanStep("decision", "Your decision", { x: 1080, y: 180 }),
+    ],
+    connections: [
+      connection("reviewer", "approved", "route"),
+      connection("accessibility", "approved", "route"),
+      connection("route", "later", "decision"),
+      connection("route", OTHERWISE, "decision"),
+    ],
+  });
+
   // Exercise published defaults and mixed value domains through the Agent editor.
   t3.controlledProviders[0] = {
     ...t3.controlledProviders[0]!,
@@ -361,6 +385,7 @@ async function createFixtureScenarioSet(host: Host) {
     answerCondition,
     answerBesideResult,
     continuationRelay,
+    conditionReviews,
     launch,
     parallelDecision,
   };
@@ -397,6 +422,22 @@ const parallelReviews = [
     "Zoom at 200% keeps every filter reachable without horizontal scrolling.",
   ].join("\n"),
 ] as const;
+
+/** One long review both reviewers of the identical-reviews Run report word for word. */
+const identicalReview = [
+  "## Shared review",
+  "",
+  "The filters panel is ready to ship.",
+  "",
+  "- Filter state lives in one reducer.",
+  "- Focus returns to the filter button after closing.",
+  "- The result count is announced politely.",
+  "",
+  "### Checked",
+  "",
+  "Both themes and the narrow window were checked by hand.",
+  "Nothing else blocks the release.",
+].join("\n");
 
 /**
  * Project-owned definitions for Studio's owner grouping: Northwind stays available, while Docs
@@ -642,6 +683,32 @@ export async function scenariosFixture(host: Host) {
         await resultReported(context, second, { exit: "Approved", message: parallelReviews[1] });
         await observeFor(
           "observe both decisions",
+          context,
+          first.runId,
+          (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,
+        );
+        return first.runId;
+      },
+    ],
+    [
+      "condition-identical-reviews",
+      async (keyNamespace) => {
+        const [first, second] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.conditionReviews,
+            "condition-identical-reviews",
+            "UI worker · Two identical reviews routed to your decision",
+            "Review the Atlas filters panel for code quality and keyboard accessibility.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        await resultReported(context, first, { exit: "Approved", message: identicalReview });
+        await resultReported(context, second, { exit: "Approved", message: identicalReview });
+        await observeFor(
+          "observe both routed reviews",
           context,
           first.runId,
           (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,

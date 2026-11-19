@@ -1,7 +1,8 @@
 import { expect, type App, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
 import { liveRun } from "./live.ts";
-import { applyRunState } from "./scenarios.ts";
+import { findRun } from "./run-history.ts";
+import { applyRunState, prepareScenarios } from "./scenarios.ts";
 
 /**
  * Journey Run `key` of `flow`, whose Implement change `result` reached First review, where a person
@@ -65,4 +66,36 @@ export async function readerScreenshot(app: App, browser: Browser, name: string)
     "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
   );
   await app.screenshot(name);
+}
+
+/**
+ * Opens the Run whose Code review and Accessibility review each reported the same long "Shared
+ * review" through the Condition Route the reviews to two pending Your decision occurrences.
+ * `readContext` opens the reader of the occurrence whose card names `source` and returns it.
+ */
+export async function openIdenticalReviewsThroughCondition({
+  app,
+  screen,
+  browser,
+}: {
+  app: App;
+  screen: Screen;
+  browser: Browser;
+}) {
+  await browser.setViewport({ width: 1600, height: 1000 });
+  await prepareScenarios(app);
+  const run = await findRun(
+    app.baseUrl,
+    "UI worker · Two identical reviews routed to your decision",
+  );
+  await app.open(`/runs/${run.id}`);
+  const readContext = async (source: string) => {
+    await screen
+      .getByRole("complementary", "Run inspector")
+      .getByRole("article", `Needs input · Your decision · From ${source}`, { exact: true })
+      .getByRole("button", "Read full context", { exact: true })
+      .tap();
+    return screen.getByRole("dialog", "Your decision · context", { exact: true });
+  };
+  return { readContext };
 }

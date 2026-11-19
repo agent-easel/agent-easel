@@ -590,7 +590,8 @@ function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence) {
 
 type Delivery = RunDetail["intents"][number];
 type MessageAuthor = { blockId: string | null; activationId: string | null };
-/** Each relayed message's author by relay Block and message; null while it is being resolved. */
+/** Each relayed message's author by relay Block, message and worker origin; null while it is being
+ * resolved. */
 type RelayAuthors = Map<string, MessageAuthor | null>;
 
 const sender = (intent: Delivery): MessageAuthor => ({
@@ -618,7 +619,12 @@ function messageAuthor(
   }
   const received = receivedMessage(run, intent);
   if (received) {
-    const key = JSON.stringify([intent.sourceBlockId, intent.fingerprint]);
+    const key = JSON.stringify([
+      intent.sourceBlockId,
+      intent.fingerprint,
+      intent.origin?.activationId,
+      intent.origin?.threadId,
+    ]);
     if (!relays.has(key)) {
       relays.set(key, null);
       relays.set(key, sharedAuthor(run, received, relays) ?? sender(intent));
@@ -633,23 +639,24 @@ function messageAuthor(
 /**
  * The deliveries a Condition, or a Continuation passing messages through, received with
  * `intent`'s message; null when `intent` is neither relay's output. Run detail does not link these
- * outputs to the delivery they forward, but the message passes unchanged and a released delivery's
- * fingerprint is its `{ message }` payload's, so the received deliveries carry the same fingerprint.
+ * outputs to the delivery they forward, but both relays forward the message and its worker origin
+ * unchanged, and a released delivery's fingerprint is its `{ message }` payload's, so the received
+ * deliveries carry the same fingerprint and origin.
  */
 function receivedMessage(run: RunDetail, intent: Delivery) {
+  const forwarded = (item: Delivery) =>
+    item.fingerprint === intent.fingerprint &&
+    item.origin?.activationId === intent.origin?.activationId &&
+    item.origin?.threadId === intent.origin?.threadId;
   if (intent.conditionArrivalId)
-    return run.intents.filter(
-      (item) => item.blockId === intent.sourceBlockId && item.fingerprint === intent.fingerprint,
-    );
+    return run.intents.filter((item) => item.blockId === intent.sourceBlockId && forwarded(item));
   if (intent.reportId) return null;
   const passed = new Set(
     run.continuationVisits
       .filter((visit) => visit.blockId === intent.sourceBlockId && visit.kind === "pass-through")
       .map((visit) => visit.incomingIntentId),
   );
-  return passed.size
-    ? run.intents.filter((item) => passed.has(item.id) && item.fingerprint === intent.fingerprint)
-    : null;
+  return passed.size ? run.intents.filter((item) => passed.has(item.id) && forwarded(item)) : null;
 }
 
 /** The author every one of `deliveries` resolves to; null when they differ or none resolves. */

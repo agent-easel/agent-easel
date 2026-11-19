@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
-import { expect, type Screen } from "e2e";
+import { expect, type Locator, type Screen } from "e2e";
 import {
   expectFlowBlocked,
   readFlow,
@@ -14,6 +14,7 @@ import {
   approveFirstReviewAtLength,
   expectWrittenByFirstReview,
   finalSignoff,
+  openIdenticalReviewsThroughCondition,
   readerScreenshot,
 } from "./support/human-answers.ts";
 import { chooseFlowAction, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
@@ -676,4 +677,32 @@ test("a result and a person's answer about it that one Condition routes on each 
   await signoff("First review").tap();
   await expectWrittenByFirstReview(screen);
   await readerScreenshot(app, browser, "condition-routed-answer-beside-result-provenance");
+});
+
+test("identical reviews from two Agents that one Condition routes to parallel Human occurrences each name their own Agent and visit", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { readContext } = await openIdenticalReviewsThroughCondition({ app, screen, browser });
+  const expectSharedReviewFrom = async (reader: Locator, source: string) => {
+    await expect(reader).toContainText(new RegExp(`From ${source} · \\d\\d:\\d\\d`));
+    await expect(reader.getByRole("heading", "Shared review", { exact: true })).toBeVisible();
+  };
+
+  // Act
+  const codeReview = await readContext("Code review · Visit 1");
+
+  // Assert
+  await expectSharedReviewFrom(codeReview, "Code review · Visit 1");
+  await readerScreenshot(app, browser, "condition-routed-identical-review-code-provenance");
+  await codeReview.getByRole("button", "Close reader", { exact: true }).tap();
+  const accessibilityReview = await readContext("Accessibility review · Visit 1");
+  await expectSharedReviewFrom(accessibilityReview, "Accessibility review · Visit 1");
+  await readerScreenshot(
+    app,
+    browser,
+    "condition-routed-identical-review-accessibility-provenance",
+  );
 });

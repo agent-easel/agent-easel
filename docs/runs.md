@@ -516,9 +516,9 @@ fixed Human exits their old exits were mapped to.
     context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the Agent
     visit that wrote the context also when a Wait, Condition or Continuation passing messages through forwarded it.
     Context a person wrote as an earlier Human step's answer names that step without a visit, and a Continuation's own
-    response names the Continuation and its visit. Through a Condition or pass-through the line follows the forwarded
-    message: when the deliveries the relay received with that message came from different authors, or a relayed
-    delivery's record is gone, it names the relay that sent the context. The reader has no decision
+    response names the Continuation and its visit. Through a Condition or pass-through the line follows the deliveries
+    the relay received with the same message and worker provenance: when those came from different authors, or a
+    relayed delivery's record is gone, it names the relay that sent the context. The reader has no decision
     controls: **Decision**, **Response** and **Submit answer** follow the preview directly, so the answer is always given
     on the card. Parallel occurrences each have their own preview and reader.
   - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full
