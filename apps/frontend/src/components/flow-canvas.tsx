@@ -154,7 +154,7 @@ function moveGraphNode(
 }
 
 const dragPressClass =
-  "flex w-full cursor-grab flex-col text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing";
+  "flex w-full cursor-grab flex-col text-left outline-none focus-ring active:cursor-grabbing";
 
 function grip(visible: boolean) {
   return (

@@ -321,3 +321,14 @@ html[data-desktop="true"] [data-studio] > header {
     overflow-wrap: anywhere;
   }
 }
+
+/*
+ * The shared keyboard focus ring. As a plain utility it sorts before every variant utility, so a
+ * call site's `focus-visible:ring-*` tone, `aria-invalid:ring-*` or `focus-visible:ring-0`
+ * still overrides it; tailwind-merge does not know this class and keeps both.
+ */
+@utility focus-ring {
+  &:focus-visible {
+    @apply ring-[3px] ring-ring/50;
+  }
+}

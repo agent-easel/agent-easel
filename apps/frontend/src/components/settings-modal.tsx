@@ -403,7 +403,7 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
       aria-label={marker ? `${section.label}, ${marker}` : section.label}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium outline-none hover:bg-accent focus-ring",
         active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground",
       )}
     >

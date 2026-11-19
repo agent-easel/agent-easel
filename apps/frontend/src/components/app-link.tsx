@@ -17,7 +17,7 @@ const StyledAnchor = forwardRef<HTMLAnchorElement, ComponentProps<"a">>(function
     <a
       ref={ref}
       className={cn(
-        "rounded-sm text-link underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "rounded-sm text-link underline-offset-4 outline-none hover:underline focus-ring",
         className,
       )}
       {...props}

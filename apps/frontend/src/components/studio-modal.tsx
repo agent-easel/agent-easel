@@ -397,7 +397,7 @@ function DraftDiscardDialog({
 }
 
 const railLinkClass =
-  "flex h-8.5 items-center gap-2 rounded-md px-3 text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50";
+  "flex h-8.5 items-center gap-2 rounded-md px-3 text-sm outline-none hover:bg-accent focus-ring";
 
 function RailLink({
   selection,

@@ -198,7 +198,7 @@ export function ReadinessPanel({
       <Surface
         tone="floating"
         asChild
-        className="flex h-7 w-fit items-center gap-2 pr-2 pl-1 text-xs text-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-expanded:border-primary"
+        className="flex h-7 w-fit items-center gap-2 pr-2 pl-1 text-xs text-foreground outline-none hover:bg-accent focus-ring aria-expanded:border-primary"
       >
         <button
           type="button"
@@ -251,10 +251,7 @@ function IssueRow({
   return (
     <button
       type="button"
-      className={cn(
-        row,
-        "outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset",
-      )}
+      className={cn(row, "outline-none hover:bg-accent focus-ring focus-visible:ring-inset")}
       onClick={onSelect}
     >
       {content}

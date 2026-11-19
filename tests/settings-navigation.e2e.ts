@@ -119,6 +119,40 @@ test("searching for notifications finds Desktop app and keeps the open page", as
   await app.screenshot("settings-search-notifications");
 });
 
+// The focused element's box-shadow, polled past the button's transition: the shared focus ring,
+// 3 px of `--ring` at half opacity.
+const focusShadow = `getComputedStyle(document.activeElement).boxShadow`;
+const noShadow = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
+const focusRings = [
+  { mode: "Dark", ring: "oklab(0.680099 0.0191423 -0.157128 / 0.5) 0px 0px 0px 3px" },
+  { mode: "Light", ring: "oklab(0.585387 0.0253055 -0.202469 / 0.5) 0px 0px 0px 3px" },
+] as const;
+
+for (const { mode, ring } of focusRings)
+  test(`a keyboard-focused button shows the focus ring in ${mode}`, async ({
+    app,
+    screen,
+    browser,
+  }) => {
+    // Arrange
+    await app.open("/settings/appearance");
+    await screen.getByRole("radio", mode, { exact: true }).tap();
+    await app.open("/settings/connection");
+    const edit = screen.getByRole("button", "Edit address", { exact: true });
+    await edit.focus();
+    await browser.keyboard.press("Shift+Tab");
+
+    // Act
+    await browser.keyboard.press("Tab");
+
+    // Assert
+    await expect(edit).toBeFocused();
+    await expect
+      .poll(() => browser.evaluate(focusShadow))
+      .toBe([noShadow, noShadow, noShadow, ring, noShadow].join(", "));
+    await app.screenshot(`button-focus-${mode.toLowerCase()}`);
+  });
+
 test("a not-allowed T3 address names the card that explains it", async ({
   app,
   screen,
