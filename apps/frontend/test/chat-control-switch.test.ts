@@ -27,7 +27,10 @@ const discord = (
 
 it("names the bot and a language model when nothing is saved", () => {
   // Act
-  const blocker = chatControlBlocker(discord({ configuration: configuration(null, false) }), false);
+  const blocker = chatControlBlocker(
+    discord({ configuration: configuration(null, false) }),
+    "incomplete",
+  );
 
   // Assert
   expect(blocker).toStrictEqual({ kind: "save", bot: "the bot", model: true });
@@ -37,7 +40,7 @@ it("names only the missing bot token when the model and Public key are saved", (
   // Act
   const blocker = chatControlBlocker(
     discord({ configuration: configuration("a".repeat(64), false) }),
-    true,
+    "complete",
   );
 
   // Assert
@@ -46,9 +49,18 @@ it("names only the missing bot token when the model and Public key are saved", (
 
 it("a rejected token or a refused intent of the saved revision keeps the switch off", () => {
   // Act
-  const rejected = chatControlBlocker(discord({ latestCheck: check("token-rejected") }), true);
-  const intent = chatControlBlocker(discord({ latestCheck: check("intent-disallowed") }), true);
-  const earlier = chatControlBlocker(discord({ latestCheck: check("token-rejected", 1) }), true);
+  const rejected = chatControlBlocker(
+    discord({ latestCheck: check("token-rejected") }),
+    "complete",
+  );
+  const intent = chatControlBlocker(
+    discord({ latestCheck: check("intent-disallowed") }),
+    "complete",
+  );
+  const earlier = chatControlBlocker(
+    discord({ latestCheck: check("token-rejected", 1) }),
+    "complete",
+  );
 
   // Assert
   expect([rejected, intent, earlier]).toStrictEqual([
@@ -58,11 +70,25 @@ it("a rejected token or a refused intent of the saved revision keeps the switch 
   ]);
 });
 
+it("a model that is still being read or could not be read keeps the switch off", () => {
+  // Act
+  const reading = chatControlBlocker(discord({}), "reading");
+  const unread = chatControlBlocker(discord({}), "unread");
+  const bot = chatControlBlocker(discord({ configuration: configuration(null, true) }), "unread");
+
+  // Assert
+  expect([reading, unread, bot]).toStrictEqual([
+    { kind: "model", state: "reading" },
+    { kind: "model", state: "unread" },
+    { kind: "save", bot: "the Public key", model: false },
+  ]);
+});
+
 it("turning Off is never blocked", () => {
   // Act
   const blocker = chatControlBlocker(
     discord({ chatControlEnabled: true, latestCheck: check("token-rejected") }),
-    false,
+    "incomplete",
   );
 
   // Assert

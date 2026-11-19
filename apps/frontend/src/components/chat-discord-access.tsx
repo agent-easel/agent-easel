@@ -119,12 +119,21 @@ export function useAccessSection() {
   return { ...section, input, dirty, problem };
 }
 
-/** The draft IDs Discord does not know, by the names the latest lookup recorded. */
-function unknownIds(draft: AccessDraft, access: DiscordSettings["access"]) {
+/**
+ * The draft IDs Discord does not know, by the names the latest lookup recorded. A channel the
+ * access test found gone has its own card instead.
+ */
+function unknownIds(
+  draft: AccessDraft,
+  access: DiscordSettings["access"],
+  test: DiscordAccessTest | null,
+) {
   return {
     users: userIds(draft.users).filter((id) => access.userNames[id] === null),
     channels: draft.channels.filter(
-      (channel) => access.channelNames[channel.channelId.trim()] === null,
+      (channel) =>
+        access.channelNames[channel.channelId.trim()] === null &&
+        test?.channels[channel.channelId.trim()] !== "unknown-channel",
     ),
   };
 }
@@ -142,23 +151,12 @@ export interface AccessTestAction {
   readonly onSend: () => void;
 }
 
-/**
- * The draft's channels the latest access test could not post in: refused, or gone although
- * Discord's name lookup has not marked them unknown yet.
- */
-function testProblems(
-  draft: AccessDraft,
-  test: DiscordAccessTest | null,
-  access: DiscordSettings["access"],
-) {
+/** The draft's channels the latest access test could not post in: refused, or gone. */
+function testProblems(draft: AccessDraft, test: DiscordAccessTest | null) {
   const outcome = (channel: ChannelDraft) => test?.channels[channel.channelId.trim()];
   return {
     cantPost: draft.channels.filter((channel) => outcome(channel) === "cant-post"),
-    gone: draft.channels.filter(
-      (channel) =>
-        outcome(channel) === "unknown-channel" &&
-        access.channelNames[channel.channelId.trim()] !== null,
-    ),
+    gone: draft.channels.filter((channel) => outcome(channel) === "unknown-channel"),
   };
 }
 
@@ -202,7 +200,7 @@ export function AccessCard({
 }) {
   const projects = useProjects();
   const { userNames, channelNames } = settings.access;
-  const unknown = unknownIds(draft, settings.access);
+  const unknown = unknownIds(draft, settings.access, test);
   const users = userIds(draft.users);
   const usersState: FieldState | undefined = unknown.users.length
     ? { tone: "attention", cardId: UNKNOWN }
@@ -370,7 +368,7 @@ function AccessTestProblems({
   draft: AccessDraft;
   test: DiscordAccessTest | null;
 }) {
-  const { cantPost, gone } = testProblems(draft, test, settings.access);
+  const { cantPost, gone } = testProblems(draft, test);
   const labels = (channels: readonly ChannelDraft[]) =>
     channels.map((channel) => channelLabel(channel.channelId.trim(), settings.access)).join(", ");
   return (
@@ -408,13 +406,13 @@ function unknownTitle(unknown: ReturnType<typeof unknownIds>) {
 
 type TestPost = DiscordAccessTest["channels"][string];
 
-/** A channel ID Discord doesn't know, by its name lookup or the access test's post. */
+/** A channel ID Discord doesn't know, by the access test's post or its name lookup. */
 function channelState(
   name: string | null | undefined,
   post: TestPost | undefined,
 ): FieldState | undefined {
-  if (name === null) return { tone: "attention", cardId: UNKNOWN };
   if (post === "unknown-channel") return { tone: "attention", cardId: GONE };
+  if (name === null) return { tone: "attention", cardId: UNKNOWN };
   return undefined;
 }
 
