@@ -98,19 +98,20 @@ export function recordExecution(
   });
 }
 
-/** The Problem recorded on `execution`. A run T3 cancelled before it started is an execution
- * failure while it decides the Block's failure; after a finished report, one newer than the
- * deciding run did no work and records none. Otherwise it keeps what was recorded for it. */
+/** The Problem recorded on `execution`: a failed run is an execution failure. After a finished
+ * report, a run T3 cancelled before it started that is newer than the deciding run did no work
+ * and records none; once recorded cancelled, it keeps that classification when newer runs follow. */
 function executionProblem(
   execution: ExecutionRead,
   deciding: ExecutionRead | null,
   finished: boolean,
+  recordedCancelled: boolean,
 ): "execution-failed" | null | "keep" {
-  if (!cancelledBeforeStart(execution))
-    return failedRun(execution.status) ? "execution-failed" : null;
-  if (execution.runId === deciding?.runId) return "execution-failed";
+  if (!failedRun(execution.status)) return null;
+  if (!cancelledBeforeStart(execution) || execution.runId === deciding?.runId)
+    return "execution-failed";
   if (finished && deciding && (execution.ordinal ?? 0) > (deciding.ordinal ?? 0)) return null;
-  return "keep";
+  return recordedCancelled ? "keep" : "execution-failed";
 }
 
 function recordExecutions(
@@ -121,6 +122,7 @@ function recordExecutions(
   { thread }: WorkerThread,
   deciding: ExecutionRead | null,
   finished: boolean,
+  recordedCancelled: (runId: string) => boolean,
   time: string,
 ) {
   return Effect.gen(function* () {
@@ -136,7 +138,7 @@ function recordExecutions(
         scope,
         execution,
         thread.pendingRequestCount,
-        executionProblem(execution, deciding, finished),
+        executionProblem(execution, deciding, finished, recordedCancelled(execution.runId)),
         time,
       );
   });
@@ -276,12 +278,13 @@ function recordWorkerThread(
     );
     // A run queued for a Continuation's prompt belongs to that Continuation, not to the worker's
     // Block: its failure is the Continuation's. A run not recorded yet is recorded as the Block's.
-    const owners = yield* sql<{
+    const recorded = yield* sql<{
       execution_id: string;
       block_id: string;
-    }>`SELECT execution_id,block_id FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
-    const ownerOf = (runId: string) =>
-      owners.find((entry) => entry.execution_id === runId)?.block_id ?? block.block_id;
+      engine_status: string;
+    }>`SELECT execution_id,block_id,engine_status FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
+    const recordOf = (runId: string) => recorded.find((entry) => entry.execution_id === runId);
+    const ownerOf = (runId: string) => recordOf(runId)?.block_id ?? block.block_id;
     const current = (yield* currentReports(sql, run.id)).find(
       (entry) => entry.blockId === block.block_id,
     )?.report?.status;
@@ -294,6 +297,7 @@ function recordWorkerThread(
       worker,
       deciding,
       current === "finished",
+      (runId) => recordOf(runId)?.engine_status === "cancelled",
       time,
     );
     const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
