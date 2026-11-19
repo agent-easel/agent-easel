@@ -18,7 +18,7 @@ export function NavRow({ selected, density, className, children }: NavRowProps) 
       aria-current={selected ? "page" : undefined}
       className={cn(
         "flex items-center gap-2 rounded-md text-sm outline-none hover:bg-accent hover:no-underline focus-ring",
-        density === "compact" ? "h-8 px-2 font-medium" : "h-8.5 px-3",
+        density === "compact" ? "h-8 px-2" : "h-8.5 px-3",
         selected ? "bg-sidebar-accent font-medium text-foreground" : "text-muted-foreground",
         className,
       )}
