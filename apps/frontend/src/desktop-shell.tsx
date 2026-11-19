@@ -3,6 +3,7 @@ import { Laptop, LoaderCircle, Server, ServerCrash, ShieldCheck } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Surface } from "@/components/ui/surface";
 import { fieldLabelClass } from "@/components/page";
 import { useDesktopState } from "./desktop-state.ts";
 import { GateScreen } from "@/components/gate-screen";
@@ -221,7 +222,7 @@ function CertificateConfirmation({
 }) {
   const verified = probe.matchesExpected || probe.systemTrusted;
   return (
-    <div className="grid gap-3 rounded-md border bg-muted p-4">
+    <Surface tone="inset" className="grid gap-3 p-4">
       <div className="flex items-center gap-2 text-sm font-medium">
         <ShieldCheck aria-hidden strokeWidth={1.5} className="size-4" />
         {verified ? "Certificate verified" : "Compare the certificate fingerprint"}
@@ -237,6 +238,6 @@ function CertificateConfirmation({
       <Button disabled={busy} onClick={() => void onConfirm()}>
         {verified ? "Connect" : "Fingerprints match — connect"}
       </Button>
-    </div>
+    </Surface>
   );
 }
