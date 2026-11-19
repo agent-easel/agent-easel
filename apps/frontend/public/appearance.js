@@ -1,5 +1,7 @@
-// Resolve appearance before the stylesheet paints. The desktop entry supplies its preference
-// on <html>; a browser uses the value saved for this origin.
+// Resolves appearance before the stylesheet paints. It is a classic blocking script because the
+// deferred app module could run after the first paint; the key and values belong to
+// src/appearance.ts. The desktop entry supplies its preference on <html>; a browser uses the
+// value saved for this origin.
 (function () {
   const root = document.documentElement;
   let preference = root.dataset.appearancePreference;
