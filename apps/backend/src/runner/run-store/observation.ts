@@ -2,7 +2,7 @@ import type { RunAttention, RunPullRequest } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { blockState, failedRun, missingReport } from "../observation-rules.ts";
+import { blockState, decidingRun, failedRun, missingReport } from "../observation-rules.ts";
 import type { BlockRow, RunRow } from "../runner-types.ts";
 import { now } from "../../time.ts";
 import type { WorkerThread } from "../worker-thread.ts";
@@ -98,6 +98,7 @@ function recordExecutions(
   block: BlockRow,
   bindingId: string,
   { thread }: WorkerThread,
+  noWork: string | null,
   time: string,
 ) {
   return Effect.gen(function* () {
@@ -113,7 +114,7 @@ function recordExecutions(
         scope,
         execution,
         thread.pendingRequestCount,
-        failedRun(execution.status) ? "execution-failed" : null,
+        failedRun(execution.status) && execution.runId !== noWork ? "execution-failed" : null,
         time,
       );
   });
@@ -251,27 +252,33 @@ function recordWorkerThread(
       thread.pendingRequestCount > 0,
       time,
     );
-    yield* recordExecutions(sql, run, block, binding.id, worker, time);
     // A run queued for a Continuation's prompt belongs to that Continuation, not to the worker's
-    // Block: its failure is the Continuation's.
-    const [owner] = latest
-      ? yield* sql<{
-          block_id: string;
-        }>`SELECT block_id FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId} AND execution_id=${latest.runId}`
-      : [];
-    const ownerScope = { block_id: owner?.block_id ?? block.block_id };
-    if (latest && failedRun(latest.status))
+    // Block: its failure is the Continuation's. A run not recorded yet is recorded as the Block's.
+    const owners = yield* sql<{
+      execution_id: string;
+      block_id: string;
+    }>`SELECT execution_id,block_id FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
+    const ownerOf = (runId: string) =>
+      owners.find((entry) => entry.execution_id === runId)?.block_id ?? block.block_id;
+    const current = (yield* currentReports(sql, run.id)).find(
+      (entry) => entry.blockId === block.block_id,
+    )?.report?.status;
+    const deciding = decidingRun(worker, current, (runId) => ownerOf(runId) === block.block_id);
+    const noWork = latest && deciding !== latest ? latest.runId : null;
+    yield* recordExecutions(sql, run, block, binding.id, worker, noWork, time);
+    const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
+    if (deciding && failedRun(deciding.status))
       yield* observeAttention(
         sql,
         run.id,
         ownerScope,
-        latest.runId,
+        deciding.runId,
         "execution-failed",
         true,
         time,
       );
     // A later run of the thread that completes recovers earlier execution failures.
-    if (latest?.status === "completed")
+    if (deciding?.status === "completed")
       yield* settlePendingAttention(
         sql,
         run.id,
@@ -281,7 +288,8 @@ function recordWorkerThread(
         time,
       );
     yield* recordActivation(sql, run, block, worker, time);
-    yield* recordContinuations(sql, run, binding.id, worker, ownerScope.block_id, time);
+    const latestOwner = latest ? ownerOf(latest.runId) : block.block_id;
+    yield* recordContinuations(sql, run, binding.id, worker, latestOwner, time);
     yield* advanceGeneration(sql, run.id);
   });
 }

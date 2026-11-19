@@ -248,6 +248,95 @@ it("an accepted result stays held while T3 has not settled the worker's delegate
   expect(f.t3.launches.size).toBe(1);
 });
 
+it("a queued turn T3 cancels before it starts after the worker reported keeps the result releasing", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  const thread = f.t3.executionObservations.get("thread-1")!;
+  f.t3.executionObservations.set("thread-1", {
+    ...thread,
+    latestRunId: "execution-queued",
+    recentRuns: [
+      ...thread.recentRuns,
+      { runId: "execution-queued", status: "cancelled", ordinal: 2, startedAt: null },
+    ],
+  });
+  answerDelegatedWait(f.t3, "thread-1", "execution-queued", "settled", "cancelled");
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
+  expect(run.value.attention.filter((a) => a.kind === "execution-failed")).toStrictEqual([]);
+  expect(run.value.reports[0]?.completionEligibleAt).not.toBeNull();
+  expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker", "parallel-block"]);
+  expect(f.t3.launches.size).toBe(2);
+});
+it.for([
+  ["after it started", { startedAt: "2026-11-17T08:00:00.000Z" }],
+  ["without start evidence", {}],
+] as const)(
+  "a queued turn T3 cancels %s after the worker reported holds the result with a Problem",
+  async ([, start], c) => {
+    // Arrange
+    const setup = await prepared(c, handoffFlow);
+    const atWork = await workerAtWork(setup.world, setup.input);
+    const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+    const thread = f.t3.executionObservations.get("thread-1")!;
+    f.t3.executionObservations.set("thread-1", {
+      ...thread,
+      latestRunId: "execution-queued",
+      recentRuns: [
+        ...thread.recentRuns,
+        { runId: "execution-queued", status: "cancelled", ordinal: 2, ...start },
+      ],
+    });
+    answerDelegatedWait(f.t3, "thread-1", "execution-queued", "settled", "cancelled");
+
+    // Act
+    await f.f.reconcileRuns();
+
+    // Assert
+    const run = await f.f.getRun(f.runId);
+    assert(run.ok);
+    expect(run.value.blocks[0]).toMatchObject({ state: "error", problem: "execution-failed" });
+    expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
+    expect(f.t3.launches.size).toBe(1);
+  },
+);
+it("a reporting turn that fails still holds the result when a later queued turn never started", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork, { status: "failed" })) };
+  const thread = f.t3.executionObservations.get("thread-1")!;
+  f.t3.executionObservations.set("thread-1", {
+    ...thread,
+    latestRunId: "execution-queued",
+    recentRuns: [
+      ...thread.recentRuns,
+      { runId: "execution-queued", status: "cancelled", ordinal: 2, startedAt: null },
+    ],
+  });
+  answerDelegatedWait(f.t3, "thread-1", "execution-queued", "settled", "cancelled");
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.attention.find((a) => a.kind === "execution-failed")).toMatchObject({
+    executionId: "execution-1",
+    settledAt: null,
+  });
+  expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
+  expect(f.t3.launches.size).toBe(1);
+});
 it("a worker rolled back after reporting shows a Problem and holds its prior result", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);

@@ -323,6 +323,10 @@ close the Run.
   rolled back, the Block shows an execution-failed Problem for that run, holding any prior result. It settles when a
   later run of the same thread completes or when the Block reports, and is not raised again for
   that run; a later failed run raises a new one. Factory never retries failed work automatically.
+  After a `finished` result, a later run of the Block's own that T3 cancelled with an explicit
+  null `startedAt` did no work: it stays in work history, and the newest run that started is
+  judged instead, so a failure of the reporting turn still holds the result. A cancelled run
+  without start evidence is still a failure.
 - A rejected report for a known Block of an open Run records a report-problem with a
   static rejection code, explanation and next step. It retains only existing
   execution/binding references, never rejected report content, call payloads or secrets.

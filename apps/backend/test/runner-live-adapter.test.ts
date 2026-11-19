@@ -426,6 +426,8 @@ it("execution observation preserves native requests and renewed work references"
   expect(observation.latestRunId).toBe("newer-direct-activity");
   expect(observation.recentRuns[1]?.ordinal).toBe(2);
   expect(observation.recentRuns[0]?.sourceAt).toBe("2026-11-01T08:01:00.000Z");
+  expect(observation.recentRuns[0]).not.toHaveProperty("startedAt");
+  expect(observation.recentRuns[2]?.startedAt).toBeNull();
 });
 
 it("a worktree thread read exposes the worktree path and branch T3 bound", async (c) => {
