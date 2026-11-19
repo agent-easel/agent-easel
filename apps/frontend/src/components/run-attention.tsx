@@ -606,8 +606,12 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
 }
 
 /** Figma RD18: each decision names where it leads, or that it ends the branch. */
-function decisionLabel(run: RunDetail, blockId: string, exit: { id: string; name: string }) {
-  const recipients = exitRecipients(run.definitions.flow.graph, blockId, exit.id).filter(Boolean);
+function decisionLabel(
+  recipientsOf: ReturnType<typeof exitRecipients>,
+  blockId: string,
+  exit: { id: string; name: string },
+) {
+  const recipients = recipientsOf(blockId, exit.id).filter(Boolean);
   return recipients.length
     ? `${exit.name} → ${recipients.join(", ")}`
     : `${exit.name} — ends this branch`;
@@ -682,6 +686,7 @@ function HumanResponseForm({
   const online = useMutationsAllowed();
   const confirming = useStillBefore(occurrence.chatConfirmationUntil);
   const exits = capturedExits(run.definitions, occurrence.blockId);
+  const recipients = exitRecipients(run.definitions.flow.graph);
   const selected = exits.find((exit) => exit.id === exitId);
   const messageRequired = !!selected?.messageRequired;
   const blocker = submitBlocker({
@@ -714,7 +719,7 @@ function HumanResponseForm({
         disabled={locked}
         options={exits.map((exit) => ({
           id: exit.id,
-          label: decisionLabel(run, occurrence.blockId, {
+          label: decisionLabel(recipients, occurrence.blockId, {
             id: exit.id,
             name: exitDisplayName(exit),
           }),

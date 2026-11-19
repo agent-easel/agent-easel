@@ -32,7 +32,7 @@ import {
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { StatusBadge } from "./status-badge.tsx";
-import { blockIdentity, conditionRoute, exitDisplayName } from "./flow-block.tsx";
+import { blockIdentity, conditionRoutes, exitDisplayName } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
 import { issueTag, outputKey, type ReadinessMarks } from "./flow-readiness.tsx";
 
@@ -299,17 +299,18 @@ const REFERENCE_TONES: Record<ReferenceTone, string> = {
  * recipients. A Condition output that is not connected shows its name in the error colour.
  */
 function AuthoringExit({
-  graph,
-  block,
   exit,
+  route,
+  recipients,
   unconnected,
 }: {
-  graph: FlowGraph;
-  block: CanvasBlock;
   exit: CanvasBlock["exits"][number];
+  /** When a Condition output is selected. */
+  route: string;
+  /** The names of the blocks its connections reach. */
+  recipients: string;
   unconnected: boolean;
 }) {
-  const recipients = exitRecipients(graph, block.id, exit.id).join(", ");
   const name =
     exit.source === "wait"
       ? "after the wait"
@@ -319,9 +320,7 @@ function AuthoringExit({
   return (
     <>
       {exit.source === "condition" && (
-        <span className="truncate text-2xs tracking-label text-muted-foreground">
-          {conditionRoute(block, exit.id)}
-        </span>
+        <span className="truncate text-2xs tracking-label text-muted-foreground">{route}</span>
       )}
       <span className="flex-1" />
       <span
@@ -388,6 +387,7 @@ function blockFrameClass({
 /** An editable block: dragged by its identity rows, with a connection handle on each usable exit. */
 function authoringBlock({
   graph,
+  recipients,
   block,
   agents,
   marks,
@@ -401,6 +401,7 @@ function authoringBlock({
   connectFrom,
 }: {
   graph: FlowGraph;
+  recipients: ReturnType<typeof exitRecipients>;
   block: CanvasBlock;
   agents: readonly AgentDefinition[];
   marks: ReadinessMarks;
@@ -422,6 +423,7 @@ function authoringBlock({
   const { tags, describedBy } = blockTags(block, issue);
   const unconnected = (exitId: string) => marks.unconnectedOutputs.has(outputKey(block.id, exitId));
   const reference = blockReference(block, { graph, agents }).card;
+  const route = conditionRoutes(block);
   const identity = blockIdentity({
     kind: block.kind,
     name,
@@ -462,7 +464,12 @@ function authoringBlock({
     header: identity.header,
     title: identity.title,
     exit: (exit) => (
-      <AuthoringExit graph={graph} block={block} exit={exit} unconnected={unconnected(exit.id)} />
+      <AuthoringExit
+        exit={exit}
+        route={route(exit.id)}
+        recipients={recipients(block.id, exit.id).join(", ")}
+        unconnected={unconnected(exit.id)}
+      />
     ),
     exitPort: (exit) =>
       exit.unavailable
@@ -580,6 +587,7 @@ function authoringContent({
   gestures: ReturnType<typeof useAuthoringGestures>;
 }) {
   const fromFlowInput = connect.connect?.source.kind === "flow-input";
+  const recipients = exitRecipients(graph);
   return {
     flowInput: authoringFlowInput({
       dragging: move.drag?.node.kind === "flow-input",
@@ -593,6 +601,7 @@ function authoringContent({
     block: (block: CanvasBlock) =>
       authoringBlock({
         graph,
+        recipients,
         block,
         agents,
         marks,

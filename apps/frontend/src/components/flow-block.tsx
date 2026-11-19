@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { TextCursorInput } from "lucide-react";
-import type { FlowBlock } from "@t3-factory/contracts";
+import type { ConditionRule, FlowBlock } from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { cn } from "@/lib/utils";
 import { BLOCK_KINDS, isSingleOutput } from "../block-kind.ts";
@@ -23,16 +23,26 @@ export function exitDisplayName(
   return exit.name || (exit.source === "condition" ? "Unnamed output" : "Unnamed exit");
 }
 
+/** One formatter for every row: `toLocaleString` builds a new one per call, which thousands of
+ * Condition rows make costly. */
+const arrivalNumbers = new Intl.NumberFormat("en-US");
+
 /**
- * When a Condition output is selected, as its canvas row reads before the output name: from its
- * rule's arrival onward, or Otherwise's fallback.
+ * When each Condition output is selected, as its canvas row reads before the output name: from
+ * its rule's arrival onward, or Otherwise's fallback. Rules are indexed once per block, since a
+ * Condition may draw thousands of rows.
  */
-export function conditionRoute(block: FlowBlock, exitId: string) {
-  const rule = block.kind === "condition" && block.rules.find((item) => item.id === exitId);
-  if (!rule) return "when no rule matches";
-  return rule.fromArrival === null
-    ? "no arrival number yet"
-    : `from arrival ${rule.fromArrival.toLocaleString("en-US")} onward`;
+export function conditionRoutes(block: FlowBlock) {
+  const rules = new Map<string, ConditionRule>();
+  if (block.kind === "condition")
+    for (const rule of block.rules) if (!rules.has(rule.id)) rules.set(rule.id, rule);
+  return (exitId: string) => {
+    const rule = rules.get(exitId);
+    if (!rule) return "when no rule matches";
+    return rule.fromArrival === null
+      ? "no arrival number yet"
+      : `from arrival ${arrivalNumbers.format(rule.fromArrival)} onward`;
+  };
 }
 
 /** The content of an authoring block's header and title rows: kind, name and what it runs. */

@@ -181,10 +181,22 @@ export function continuedThread(graph: FlowGraph, blockId: string): string | nul
   return agent ? `${agent.name || "Unnamed block"}'s thread` : null;
 }
 
-export function exitRecipients(graph: FlowGraph, blockId: string, exitId: string) {
-  return graph.connections
-    .filter((c) => c.sourceBlockId === blockId && c.exitId === exitId)
-    .map((c) => graph.blocks.find((t) => t.id === c.targetBlockId)?.name);
+/**
+ * The names of the blocks each exit's connections reach, in graph order, indexed once per graph
+ * since a canvas asks for every exit row; undefined for a target the graph lacks.
+ */
+export function exitRecipients(graph: FlowGraph) {
+  const names = new Map<string, string>();
+  for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
+  const recipients = new Map<string, (string | undefined)[]>();
+  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
+    const key = JSON.stringify([sourceBlockId, exitId]);
+    const list = recipients.get(key) ?? [];
+    list.push(names.get(targetBlockId));
+    recipients.set(key, list);
+  }
+  return (blockId: string, exitId: string): readonly (string | undefined)[] =>
+    recipients.get(JSON.stringify([blockId, exitId])) ?? [];
 }
 
 /**

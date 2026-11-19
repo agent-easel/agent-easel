@@ -1,5 +1,5 @@
 import { Trash2 } from "lucide-react";
-import { incomingPortIndex, wireRouteKey } from "@t3-factory/flow-layout";
+import { wireRouteKey } from "@t3-factory/flow-layout";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -64,34 +64,40 @@ type Wire = {
   readonly target: string;
 };
 
-function exitWires(
+/** The graph's blocks by id, the first block where an id repeats. */
+function blocksById(graph: CanvasGraph) {
+  const blocks = new Map<string, CanvasBlock>();
+  for (const block of graph.blocks) if (!blocks.has(block.id)) blocks.set(block.id, block);
+  return blocks;
+}
+
+/** Every connection's wire, in graph order; a wire whose source or target is missing is not drawn. */
+export function exitWires(
   graph: CanvasGraph,
   kind: WirePresentation["kind"],
   geometry: Geometry,
   routes: ReadonlyMap<string, WireRoute> | undefined,
 ): Wire[] {
+  const blocks = blocksById(graph);
   return graph.connections.flatMap((connection): Wire[] => {
-    const source = graph.blocks.find((block) => block.id === connection.sourceBlockId);
-    const target = graph.blocks.find((block) => block.id === connection.targetBlockId);
+    const source = blocks.get(connection.sourceBlockId);
+    const target = blocks.get(connection.targetBlockId);
     if (!source || !target) return [];
-    const key = wireRouteKey(connectionWire(connection).source, connection.targetBlockId);
+    const wire = connectionWire(connection);
+    const key = wireRouteKey(wire.source, connection.targetBlockId);
     const routed = routes?.get(key);
     const from = geometry.exitPoint(source, connection.exitId);
     const fromBottom = source.position.y + geometry.blockHeight(source);
-    const incomingIndex = incomingPortIndex(graph, connection.targetBlockId, {
-      kind: "exit",
-      sourceBlockId: connection.sourceBlockId,
-      exitId: connection.exitId,
-    });
+    const incomingIndex = geometry.incomingPortIndex(connection.targetBlockId, wire.source);
     return [
       {
         key,
-        wire: connectionWire(connection),
+        wire,
         path: routed ?? routedPath(kind, geometry, from, fromBottom, target, incomingIndex),
         exit:
           source.kind === "continuation"
             ? null
-            : source.exits.find((item) => item.id === connection.exitId)?.name || "exit",
+            : geometry.exit(source, connection.exitId)?.name || "exit",
         source: source.name || "Unnamed block",
         target: target.name || "Unnamed block",
       },
@@ -106,12 +112,13 @@ function flowInputWires(
   routes: ReadonlyMap<string, WireRoute> | undefined,
 ): Wire[] {
   const from = geometry.flowInputPoint;
+  const blocks = blocksById(graph);
   return graph.flowInput.targetBlockIds.flatMap((targetBlockId): Wire[] => {
-    const target = graph.blocks.find((block) => block.id === targetBlockId);
+    const target = blocks.get(targetBlockId);
     if (!target) return [];
     const key = wireRouteKey({ kind: "flow-input" }, targetBlockId);
     const routed = routes?.get(key);
-    const incomingIndex = incomingPortIndex(graph, targetBlockId, { kind: "flow-input" });
+    const incomingIndex = geometry.incomingPortIndex(targetBlockId, { kind: "flow-input" });
     return [
       {
         key,

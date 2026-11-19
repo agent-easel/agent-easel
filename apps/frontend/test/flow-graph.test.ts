@@ -1,6 +1,14 @@
 import { expect, it } from "vite-plus/test";
 import type { ConditionRule, FlowBlock, FlowGraph } from "@t3-factory/contracts";
-import { canvasGraph, removeBlock, replaceBlock, undoRemoval } from "../src/flow-graph.ts";
+import { conditionRoutes } from "../src/components/flow-block.tsx";
+import {
+  canvasGraph,
+  exitRecipients,
+  removeBlock,
+  replaceBlock,
+  undoRemoval,
+} from "../src/flow-graph.ts";
+import { wiringGraph } from "./support/geometry.ts";
 
 const position = { x: 0, y: 0 };
 
@@ -81,4 +89,32 @@ it("undoing a Block removal brings back its wires and keeps an edit made since",
   expect(undone.blocks.map((block) => block.id)).toStrictEqual(["gate", "next"]);
   expect(undone.connections).toStrictEqual(before.connections);
   expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
+});
+
+it("each exit's recipients follow connection order, and a missing target has no name", () => {
+  // Arrange
+  const graph = wiringGraph();
+
+  // Act
+  const recipients = exitRecipients(graph);
+
+  // Assert
+  expect(recipients("a:b", "c")).toStrictEqual(["Target", "Target", undefined]);
+  expect(recipients("a", "b:c")).toStrictEqual(["Target"]);
+  expect(recipients("gate", "early")).toStrictEqual(["Agent a"]);
+  expect(recipients("gate", "otherwise")).toStrictEqual(["Target"]);
+  expect(recipients("a", "unwired")).toStrictEqual([]);
+});
+
+it("a Condition output's row reads its rule's first arrival, a draft rule's missing number or Otherwise's fallback", () => {
+  // Arrange
+  const block = condition([rule("late", 12_345), rule("draft"), rule("late", 1)]);
+
+  // Act
+  const route = conditionRoutes(block);
+
+  // Assert
+  expect(route("late")).toBe("from arrival 12,345 onward");
+  expect(route("draft")).toBe("no arrival number yet");
+  expect(route("otherwise")).toBe("when no rule matches");
 });

@@ -1,12 +1,6 @@
 import { stoppedVisitAt } from "../run-status.ts";
 import type { ReactNode } from "react";
-import type {
-  FlowBlock,
-  FlowGraph,
-  RunAttention,
-  RunBlock,
-  RunDetail,
-} from "@t3-factory/contracts";
+import type { FlowBlock, RunAttention, RunBlock, RunDetail } from "@t3-factory/contracts";
 import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { CircleHelp, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -22,7 +16,7 @@ import {
   type CanvasFlowInputContent,
   type CanvasPort,
 } from "./canvas-surface.tsx";
-import { conditionRoute, exitDisplayName } from "./flow-block.tsx";
+import { conditionRoutes, exitDisplayName } from "./flow-block.tsx";
 import { pendingArrivals } from "../wait-display.ts";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import { FlowInputPrompt, runPromptText } from "./run-prompt.tsx";
@@ -141,7 +135,7 @@ function continuationActivity(run: RunDetail, blockId: string, state: RunBlock["
     return `In ${owner ? `${owner}’s` : "its worker’s"} thread · since ${clockTime(prompt.arrivedAt)}`;
   }
   if (state !== "pass-through" || !prompt.forwardedAt) return null;
-  const recipients = exitRecipients(run.definitions.flow.graph, blockId, "output").filter(Boolean);
+  const recipients = exitRecipients(run.definitions.flow.graph)(blockId, "output").filter(Boolean);
   return `Passed on${recipients.length ? ` to ${recipients.join(", ")}` : ""} · ${clockTime(prompt.forwardedAt)}`;
 }
 
@@ -249,23 +243,22 @@ function visitActivityText(run: RunDetail, block: FlowBlock, recorded: RunBlock 
 /** One exit row: a Condition output's rule, the exit's name (primary text only once chosen)
  * and, for screen readers, its recipients. */
 function ExecutionExit({
-  graph,
-  block,
   exit,
+  route,
+  recipients,
   chosen,
 }: {
-  graph: FlowGraph;
-  block: CanvasBlock;
   exit: EffectiveExit;
+  /** When a Condition output is selected. */
+  route: string;
+  /** The names of the blocks its connections reach. */
+  recipients: string;
   chosen: boolean;
 }) {
-  const recipients = exitRecipients(graph, block.id, exit.id).join(", ");
   return (
     <>
       {exit.source === "condition" && (
-        <span className="truncate text-2xs tracking-label text-subtle-foreground">
-          {conditionRoute(block, exit.id)}
-        </span>
+        <span className="truncate text-2xs tracking-label text-subtle-foreground">{route}</span>
       )}
       <span className="flex-1" />
       <span
@@ -500,6 +493,7 @@ function executionFlowInput(
 
 function executionBlock(
   run: RunDetail,
+  recipients: ReturnType<typeof exitRecipients>,
   block: CanvasBlock,
   selected: boolean,
   unavailable: boolean,
@@ -510,6 +504,7 @@ function executionBlock(
   const workingMessage = recorded?.state === "working" ? recorded.workingMessage : null;
   const observation = recorded ? blockObservation(recorded, unavailable) : "unvisited";
   const chosen = chosenExitIds(run, block, recorded);
+  const route = conditionRoutes(block);
   return {
     className: cn(
       frameColor[state ?? "not-started"],
@@ -537,9 +532,9 @@ function executionBlock(
     ),
     exit: (exit) => (
       <ExecutionExit
-        graph={run.definitions.flow.graph}
-        block={block}
         exit={exit}
+        route={route(exit.id)}
+        recipients={recipients(block.id, exit.id).join(", ")}
         chosen={chosen.has(exit.id)}
       />
     ),
@@ -576,6 +571,7 @@ export function ExecutionCanvas({
   overlay?: ReactNode;
 }) {
   const targets = selectExecutionTargets(run);
+  const recipients = exitRecipients(run.definitions.flow.graph);
   return (
     <CanvasSurface
       label="Execution canvas"
@@ -586,7 +582,7 @@ export function ExecutionCanvas({
       reservedFooters={MAX_FOOTERS}
       flowInput={executionFlowInput(run, () => onSelect(null), title)}
       block={(block) =>
-        executionBlock(run, block, selected === block.id, observationUnavailable, () =>
+        executionBlock(run, recipients, block, selected === block.id, observationUnavailable, () =>
           onSelect(block.id),
         )
       }

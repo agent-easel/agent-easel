@@ -1,6 +1,5 @@
 import {
   createFlowLayoutDimensions,
-  incomingPortIndex,
   type CanvasDimensions,
   type WireSource,
 } from "@t3-factory/flow-layout";
@@ -390,7 +389,7 @@ function GesturePreview({
   if (!from) return null;
   const target = graph.blocks.find((b) => b.id === targetBlockId);
   const to = target
-    ? geometry.inputPoint(target, incomingPortIndex(graph, target.id, source))
+    ? geometry.inputPoint(target, geometry.incomingPortIndex(target.id, source))
     : gesture.pointer;
   return <ConnectionPreview from={from} to={to} />;
 }
@@ -613,7 +612,7 @@ function SurfaceLayer({
           content={content(item)}
           pendingInput={
             pending?.targetBlockId === item.id
-              ? incomingPortIndex(graph, item.id, pending.source)
+              ? drawn.incomingPortIndex(item.id, pending.source)
               : null
           }
         />

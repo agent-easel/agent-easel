@@ -173,14 +173,14 @@ function ExitRow({
 }
 
 function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
-  const graph = run.definitions.flow.graph;
+  const recipients = exitRecipients(run.definitions.flow.graph);
   if (block.kind === "continuation")
     return (
       <InspectorSection title="Output">
         <ul className="flex flex-col gap-2.5">
           <ExitRow
             name="response, then pass-through"
-            recipients={exitRecipients(graph, block.id, CONTINUATION_EXIT.id)}
+            recipients={recipients(block.id, CONTINUATION_EXIT.id)}
           />
         </ul>
       </InspectorSection>
@@ -192,7 +192,7 @@ function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
           <ExitRow
             key={exit.id}
             name={exitDisplayName(exit, "Output")}
-            recipients={exitRecipients(graph, block.id, exit.id)}
+            recipients={recipients(block.id, exit.id)}
           />
         ))}
       </ul>
