@@ -179,32 +179,38 @@ async function storedKeyMoved(app: App, screen: Screen, key: string) {
   return { connection, moved: movedProvider };
 }
 
-/** The stored key waits for the owner's choice: the Choose tag, its attention card and no Save. */
+/**
+ * The stored key waits for the owner's choice: the Choose tag, the key field invalid and described
+ * by its attention card, and no Save.
+ */
 async function expectKeyUndecided(screen: Screen) {
   const connection = screen.getByRole("region", "Connection");
-  await expect(connection.getByText("Choose", { exact: true })).toBeVisible();
+  const keyField = connection.getByRole("group", "API key", { exact: true });
+  await expect(keyField.getByText("Choose", { exact: true })).toBeVisible();
+  await expect(keyField).toHaveAttribute("aria-invalid", "true");
+  await expect(keyField).toHaveAttribute("aria-describedby", "chat-model-key-problem");
   await expect(screen.getByText("Send the stored key to the new address?")).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
 }
 
-test("after the address changes, the host uses the stored key there and the new provider receives it", async ({
+test("a stored key the host chose to use at a new address is the one the new provider receives", async ({
   app,
   screen,
 }) => {
   // Arrange
   const { connection, moved } = await storedKeyMoved(app, screen, "sk-ui-moved");
   await app.screenshot("chat-model-key-choose");
-
-  // Act
   await connection.getByRole("button", "Use stored key", { exact: true }).tap();
   await expect(connection.getByText("Stored · used at the new address")).toBeVisible();
   await expect(screen.getByText("Send the stored key to the new address?")).toHaveCount(0);
   await app.screenshot("chat-model-key-reused");
   await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(connection.getByRole("button", "Replace the API key")).toBeVisible();
+
+  // Act
+  await screen.getByRole("button", "Test connection").tap();
 
   // Assert
-  await expect(connection.getByRole("button", "Replace the API key")).toBeVisible();
-  await screen.getByRole("button", "Test connection").tap();
   await expect(screen.getByText("Test passed", { exact: true })).toBeVisible();
   assert.deepStrictEqual(
     moved.requests.map((headers) => headers.authorization),

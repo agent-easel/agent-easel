@@ -228,7 +228,7 @@ export function FieldRow({
 }: {
   label: ReactNode;
   /** The field the label names; omit when the row holds several controls. */
-  htmlFor?: string;
+  htmlFor?: string | undefined;
   tag?: ReactNode;
   secondary?: ReactNode;
   children: ReactNode;
@@ -293,18 +293,27 @@ type SecretFieldProps = SecretFieldBase &
  * clears a stored secret.
  */
 export function SecretField(props: SecretFieldProps) {
-  return props.stored && props.choice !== "replace" ? (
-    <StoredSecret {...props} />
-  ) : (
-    <OpenSecret {...props} />
-  );
+  return secretInputShown(props) ? <OpenSecret {...props} /> : <StoredSecret {...props} />;
 }
+
+/**
+ * Whether SecretField shows its masked input, the only control a row label can name; otherwise
+ * the stored secret is a named group of choices.
+ */
+export const secretInputShown = ({ stored, choice }: { stored: boolean; choice: string }) =>
+  !stored || choice === "replace";
 
 function StoredSecret(props: SecretFieldProps) {
   const { label, choice, state, tag, disabled, onChoice } = props;
+  const group = {
+    role: "group",
+    "aria-label": label,
+    ...fieldAria(state?.cardId),
+    className: "flex min-w-0 flex-1 flex-wrap items-center gap-2",
+  };
   if (choice === "remove" || choice === "reuse")
     return (
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <div {...group}>
         <span className={choice === "remove" ? "text-muted-foreground" : "text-foreground"}>
           {choice === "remove" ? "None" : "Stored · used at the new address"}
         </span>
@@ -324,16 +333,15 @@ function StoredSecret(props: SecretFieldProps) {
       </div>
     );
   return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+    <div {...group}>
       <span className="text-foreground">Stored</span>
       {tag}
-      {/* The choices wrap together, so a narrow row never splits them. */}
-      <div className="ml-auto flex gap-2">
+      {/* The choices move to their own line together, and wrap there only when it is too narrow. */}
+      <div className="ml-auto flex flex-wrap justify-end gap-2">
         {props.destinationChanged && (
           <Button
             type="button"
             variant="outline"
-            aria-describedby={state?.cardId}
             disabled={disabled}
             onClick={() => props.onChoice("reuse")}
           >
@@ -344,7 +352,6 @@ function StoredSecret(props: SecretFieldProps) {
           type="button"
           variant="outline"
           aria-label={`Replace the ${label}`}
-          aria-describedby={state?.cardId}
           disabled={disabled}
           onClick={() => onChoice("replace")}
         >
