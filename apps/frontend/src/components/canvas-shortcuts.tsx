@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
 import { TextLink } from "@/components/ui/text-link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { surfaceVariants } from "@/components/ui/surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 /**
  * Figma RD15: the canvas group of the shortcut cheat sheet, with current bindings, one click
@@ -35,7 +37,10 @@ export function CanvasShortcutsButton() {
         align="end"
         sideOffset={8}
         aria-label="Canvas shortcuts"
-        className="flex w-67 flex-col gap-2.5 rounded-[10px] border-border bg-card px-3.5 py-3"
+        className={cn(
+          surfaceVariants({ tone: "floating" }),
+          "flex w-67 flex-col gap-2.5 px-3.5 py-3",
+        )}
         onCloseAutoFocus={(event) => {
           if (!cheatSheetRequested.current) return;
           cheatSheetRequested.current = false;

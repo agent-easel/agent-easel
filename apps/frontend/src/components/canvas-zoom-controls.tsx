@@ -2,11 +2,11 @@ import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import type { ReactNode } from "react";
 import { Crosshair, Minus, Plus, Scan } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/ui/surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CanvasShortcutsButton } from "./canvas-shortcuts.tsx";
 
-const toolbarClass =
-  "pointer-events-auto flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-floating";
+const toolbarClass = "pointer-events-auto flex items-center gap-0.5 p-1";
 const separator = <span aria-hidden className="h-5 w-px bg-border" />;
 
 function ControlButton({
@@ -92,7 +92,7 @@ export function CanvasZoomControls({
   const fit = shortcutHint("fit");
   return (
     <div className="pointer-events-none flex items-center gap-2">
-      <div className={toolbarClass}>
+      <Surface tone="floating" className={toolbarClass}>
         <ControlButton label="Zoom out" shortcut={zoomOut} onClick={() => onZoom(1 / 1.1)}>
           <Minus aria-hidden className="size-3.75" strokeWidth={1.5} />
         </ControlButton>
@@ -110,13 +110,13 @@ export function CanvasZoomControls({
         <ControlButton label="Fit Flow" shortcut={fit} onClick={onFit}>
           <Scan aria-hidden className="size-3.5" strokeWidth={1.5} />
         </ControlButton>
-      </div>
-      <div className={toolbarClass}>
+      </Surface>
+      <Surface tone="floating" className={toolbarClass}>
         {follow && <FollowActiveButton {...follow} />}
         {arrange}
         {separator}
         <CanvasShortcutsButton />
-      </div>
+      </Surface>
     </div>
   );
 }

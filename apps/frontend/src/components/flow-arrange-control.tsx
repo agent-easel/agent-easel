@@ -1,5 +1,6 @@
 import { LayoutGrid, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -46,14 +47,15 @@ export function AutoArrangeStatus({
 }) {
   if (!error) return null;
   return (
-    <div
+    <Surface
+      tone="floating"
       role="alert"
-      className="pointer-events-auto max-w-sm rounded-lg border border-destructive/40 bg-card px-3 py-2 text-2xs text-destructive shadow-floating"
+      className="pointer-events-auto max-w-sm border-destructive/40 px-3 py-2 text-2xs text-destructive"
     >
       <p>{error}</p>
       <TextLink tone="neutral" className="mt-1" onClick={onDismiss}>
         Dismiss
       </TextLink>
-    </div>
+    </Surface>
   );
 }
