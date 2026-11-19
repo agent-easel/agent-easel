@@ -13,6 +13,7 @@ import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Surface } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
 import {
@@ -180,25 +181,28 @@ function AttentionCard({
   children?: ReactNode;
 }) {
   return (
-    <article
-      aria-label={label ?? `${RUN_STATE_LABELS[tone]} · ${subject}`}
+    <Surface
+      asChild
+      tone="raised"
       className={cn(
-        "flex min-w-0 flex-col gap-2.5 rounded-lg border bg-card p-4",
+        "flex min-w-0 flex-col gap-2.5 p-4",
         tone === "needs-input" ? "border-attention/75" : "border-destructive/75",
       )}
     >
-      {!compact && (
-        <div className="flex min-w-0 items-center gap-2">
-          <StatusBadge kind={tone} />
-          <span className="truncate text-xs text-muted-foreground">{subject}</span>
-        </div>
-      )}
-      {title && <h3 className="text-sm leading-5 font-semibold text-foreground">{title}</h3>}
-      {next && <p className="text-sm text-muted-foreground">{next}</p>}
-      {children}
-      {actions && <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{actions}</div>}
-      {!compact && details && <TechnicalDetails details={details} />}
-    </article>
+      <article aria-label={label ?? `${RUN_STATE_LABELS[tone]} · ${subject}`}>
+        {!compact && (
+          <div className="flex min-w-0 items-center gap-2">
+            <StatusBadge kind={tone} />
+            <span className="truncate text-xs text-muted-foreground">{subject}</span>
+          </div>
+        )}
+        {title && <h3 className="text-sm leading-5 font-semibold text-foreground">{title}</h3>}
+        {next && <p className="text-sm text-muted-foreground">{next}</p>}
+        {children}
+        {actions && <div className="flex flex-wrap items-center gap-x-3 gap-y-2">{actions}</div>}
+        {!compact && details && <TechnicalDetails details={details} />}
+      </article>
+    </Surface>
   );
 }
 
@@ -677,33 +681,35 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
   const exit = selectedExit(run, item);
   const reply = run.coordinationActions.questionReplies.find((r) => r.attentionId === item.id);
   return (
-    <article className="flex flex-col gap-1.5 rounded-lg border bg-muted p-3 text-sm">
-      <div className="flex min-w-0 items-center gap-2">
-        <StatusBadge kind={attentionPresentation(item.kind)} />
-        <h3 className="truncate text-2xs font-medium text-muted-foreground">
-          {attentionSubject(item)}
-        </h3>
-      </div>
-      {item.message &&
-        // Only a conversation-waiting message is the Agent's own question; other kinds record
-        // Factory's reason.
-        (item.kind === "conversation-waiting" ? (
-          <AgentMarkdown text={item.message} density="card" />
-        ) : (
-          <p className="whitespace-pre-wrap">{item.message}</p>
-        ))}
-      {exit && <p>Decision: {exit}</p>}
-      <p>Resolved: {item.settlementReason}</p>
-      {reply && (
-        <p className="whitespace-pre-wrap">
-          Recorded answer: {reply.message} · {reply.state}
-        </p>
-      )}
-      {item.settledAt && (
-        <p className="text-xs text-subtle-foreground">{dayAndTime(item.settledAt)}</p>
-      )}
-      {item.link && <OpenInT3 href={item.link} className="text-sm" />}
-    </article>
+    <Surface asChild tone="raised" className="flex flex-col gap-1.5 p-3 text-sm">
+      <article>
+        <div className="flex min-w-0 items-center gap-2">
+          <StatusBadge kind={attentionPresentation(item.kind)} />
+          <h3 className="truncate text-2xs font-medium text-muted-foreground">
+            {attentionSubject(item)}
+          </h3>
+        </div>
+        {item.message &&
+          // Only a conversation-waiting message is the Agent's own question; other kinds record
+          // Factory's reason.
+          (item.kind === "conversation-waiting" ? (
+            <AgentMarkdown text={item.message} density="card" />
+          ) : (
+            <p className="whitespace-pre-wrap">{item.message}</p>
+          ))}
+        {exit && <p>Decision: {exit}</p>}
+        <p>Resolved: {item.settlementReason}</p>
+        {reply && (
+          <p className="whitespace-pre-wrap">
+            Recorded answer: {reply.message} · {reply.state}
+          </p>
+        )}
+        {item.settledAt && (
+          <p className="text-xs text-subtle-foreground">{dayAndTime(item.settledAt)}</p>
+        )}
+        {item.link && <OpenInT3 href={item.link} className="text-sm" />}
+      </article>
+    </Surface>
   );
 }
 

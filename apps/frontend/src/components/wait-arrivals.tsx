@@ -3,6 +3,7 @@ import { FastForward } from "lucide-react";
 import { useState } from "react";
 import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { AgentMarkdown } from "./agent-text.tsx";
@@ -82,37 +83,40 @@ export function WaitArrivals({ run, blockId }: { run: RunDetail; blockId: string
       <h3 className={cn(sectionLabelClass, "px-2")}>Arrivals · {arrivals.length}</h3>
       <ul className="flex flex-col gap-1.5">
         {arrivals.map(({ arrival, number }) => (
-          <li
+          <Surface
             key={arrival.id}
-            aria-label={`Arrival ${number}, ${OUTCOME[arrival.state]}`}
-            className="flex flex-col gap-1.5 rounded-md border bg-muted px-3 py-2"
+            tone="inset"
+            asChild
+            className="flex flex-col gap-1.5 px-3 py-2"
           >
-            <div className="flex items-center gap-2">
-              <p className="min-w-0 flex-1 text-sm font-medium">Arrival {number}</p>
-              <ExecutionStateBadge state={OUTCOME[arrival.state]} />
-            </div>
-            {arrival.state === "pending" && run.gateOpen && (
-              <div className="flex flex-col items-start gap-1">
-                <ContinueNow arrival={arrival} label={`Continue arrival ${number} now`} />
+            <li aria-label={`Arrival ${number}, ${OUTCOME[arrival.state]}`}>
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 text-sm font-medium">Arrival {number}</p>
+                <ExecutionStateBadge state={OUTCOME[arrival.state]} />
               </div>
-            )}
-            <p className="text-2xs tracking-label text-subtle-foreground">
-              {arrivalTiming(arrival)}
-            </p>
-            {arrival.message === null ? (
-              <p className="text-xs text-muted-foreground">
-                {run.lifecycle === "archived"
-                  ? "Message cleared when the Run was archived."
-                  : arrival.state === "cancelled"
-                    ? "Message cleared when the arrival was cancelled."
-                    : "Message cleared once its recipients no longer needed it."}
+              {arrival.state === "pending" && run.gateOpen && (
+                <div className="flex flex-col items-start gap-1">
+                  <ContinueNow arrival={arrival} label={`Continue arrival ${number} now`} />
+                </div>
+              )}
+              <p className="text-2xs tracking-label text-subtle-foreground">
+                {arrivalTiming(arrival)}
               </p>
-            ) : arrival.message ? (
-              <AgentMarkdown text={arrival.message} density="primary" />
-            ) : (
-              <p className="text-sm text-foreground">No message.</p>
-            )}
-          </li>
+              {arrival.message === null ? (
+                <p className="text-xs text-muted-foreground">
+                  {run.lifecycle === "archived"
+                    ? "Message cleared when the Run was archived."
+                    : arrival.state === "cancelled"
+                      ? "Message cleared when the arrival was cancelled."
+                      : "Message cleared once its recipients no longer needed it."}
+                </p>
+              ) : arrival.message ? (
+                <AgentMarkdown text={arrival.message} density="primary" />
+              ) : (
+                <p className="text-sm text-foreground">No message.</p>
+              )}
+            </li>
+          </Surface>
         ))}
       </ul>
     </section>

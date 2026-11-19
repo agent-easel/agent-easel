@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { TextLink } from "@/components/ui/text-link";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Surface } from "@/components/ui/surface";
 import { StatusBadge } from "@/components/status-badge";
 import { api, ApiError } from "../api.ts";
 import {
@@ -451,7 +452,7 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
   const reason = blocker !== null && !(blocker.kind === "model" && blocker.state === "reading");
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-muted">
+      <Surface tone="group">
         <SettingsRow
           title="Chat control"
           control={(text) => (
@@ -471,7 +472,7 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
             </>
           )}
         />
-      </div>
+      </Surface>
       {page.switchError && (
         <ProblemCard
           tone="error"

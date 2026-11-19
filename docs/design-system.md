@@ -170,6 +170,12 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
   and Studio card; compact is the composer, Run page and dialog card. The next step is one
   TextLink: an action, or a chevron link to Settings or Studio, or an external link to T3.
+- **Bordered container**: Surface, in one of four tones. Inset is content inside a panel or
+  card; Group holds grouped rows, as in Settings, divided by borders and clipped; Raised is a
+  card that stands on the page; Floating is a control or popup over the canvas, with the
+  floating shadow. Surface owns the border, background, radius and shadow only; padding, gap,
+  layout and content stay at the call site. A popover or other primitive that renders its own
+  element takes Surface's classes instead of nesting a Surface.
 - **Text link**: TextLink, for inline links and link-style actions. Its Link tone uses `--link`;
   Neutral keeps secondary text and turns primary on hover and focus. A trailing chevron moves
   forward in the app; the external ↗ leaves it or opens T3. It underlines on hover only, shows

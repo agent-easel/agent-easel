@@ -2,6 +2,7 @@ import { useId, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { StatusBadge } from "./status-badge.tsx";
 import { cn } from "@/lib/utils";
+import { Surface } from "@/components/ui/surface";
 import { CopyButton } from "./copy-button.tsx";
 
 /**
@@ -68,7 +69,7 @@ export function SettingsGroup({
         </h3>
         {badge}
       </div>
-      <div className="divide-y overflow-hidden rounded-lg border bg-muted">{children}</div>
+      <Surface tone="group">{children}</Surface>
     </section>
   );
 }

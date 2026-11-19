@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunDetail } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/ui/surface";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
 import { clockTime } from "../time-format.ts";
@@ -125,67 +126,65 @@ export function ResultCard({
   if (titleOnly) {
     const firstLine = report.resultMessage?.trim().split("\n", 1)[0]?.trim();
     return (
-      <article
-        aria-label={facts.name}
-        className="flex min-w-0 flex-col gap-1 rounded-md border bg-card px-3 py-2.5"
-      >
-        <header className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="text-sm font-semibold">{facts.block}</span>
-          <span className="text-xs text-subtle-foreground">{facts.visit}</span>
-          {titleOnly.workerLink && (
-            <OpenInT3 href={titleOnly.workerLink} className="ml-auto text-sm" />
+      <Surface asChild tone="raised" className="flex min-w-0 flex-col gap-1 px-3 py-2.5">
+        <article aria-label={facts.name}>
+          <header className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span className="text-sm font-semibold">{facts.block}</span>
+            <span className="text-xs text-subtle-foreground">{facts.visit}</span>
+            {titleOnly.workerLink && (
+              <OpenInT3 href={titleOnly.workerLink} className="ml-auto text-sm" />
+            )}
+          </header>
+          {firstLine && (
+            <p className="break-words text-sm font-medium">{firstLine.replace(/^#{1,6}\s+/, "")}</p>
           )}
-        </header>
-        {firstLine && (
-          <p className="break-words text-sm font-medium">{firstLine.replace(/^#{1,6}\s+/, "")}</p>
-        )}
-        <Button
-          type="button"
-          variant="link"
-          size="xs"
-          className="h-auto w-fit p-0 text-label"
-          onClick={() => setReading(true)}
-        >
-          Read result
-        </Button>
-        {children}
-        {reading && (
-          <AgentTextReader
-            text={report.resultMessage ?? ""}
-            heading={resultHeading(run, report)}
-            empty={noResultMessage}
-            onClose={() => setReading(false)}
-          />
-        )}
-      </article>
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            className="h-auto w-fit p-0 text-label"
+            onClick={() => setReading(true)}
+          >
+            Read result
+          </Button>
+          {children}
+          {reading && (
+            <AgentTextReader
+              text={report.resultMessage ?? ""}
+              heading={resultHeading(run, report)}
+              empty={noResultMessage}
+              onClose={() => setReading(false)}
+            />
+          )}
+        </article>
+      </Surface>
     );
   }
   return (
-    <article
-      aria-label={facts.name}
-      className="flex min-w-0 flex-col gap-2 rounded-lg border bg-muted p-3"
-    >
-      <header className="flex min-w-0 items-center gap-1.5">
-        <span className="shrink-0 text-sm font-semibold text-foreground">{facts.block}</span>
-        <span className="shrink-0 text-xs text-subtle-foreground">{facts.visit}</span>
-        {facts.exit && (
-          <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground">
-            → {facts.exit}
-          </span>
-        )}
-      </header>
-      <AgentTextPreview
-        text={report.resultMessage ?? ""}
-        readLabel="Read result"
-        heading={resultHeading(run, report)}
-        empty={noResultMessage}
-        footer={
-          <p className="min-w-0 flex-1 text-xs text-subtle-foreground">
-            {[...footer, clockTime(report.acceptedAt)].filter(Boolean).join(" · ")}
-          </p>
-        }
-      />
-      {children}
-    </article>
+    <Surface asChild tone="raised" className="flex min-w-0 flex-col gap-2 p-3">
+      <article aria-label={facts.name}>
+        <header className="flex min-w-0 items-center gap-1.5">
+          <span className="shrink-0 text-sm font-semibold text-foreground">{facts.block}</span>
+          <span className="shrink-0 text-xs text-subtle-foreground">{facts.visit}</span>
+          {facts.exit && (
+            <span className="min-w-0 flex-1 truncate text-right font-mono text-xs text-muted-foreground">
+              → {facts.exit}
+            </span>
+          )}
+        </header>
+        <AgentTextPreview
+          text={report.resultMessage ?? ""}
+          readLabel="Read result"
+          heading={resultHeading(run, report)}
+          empty={noResultMessage}
+          footer={
+            <p className="min-w-0 flex-1 text-xs text-subtle-foreground">
+              {[...footer, clockTime(report.acceptedAt)].filter(Boolean).join(" · ")}
+            </p>
+          }
+        />
+        {children}
+      </article>
+    </Surface>
   );
 }

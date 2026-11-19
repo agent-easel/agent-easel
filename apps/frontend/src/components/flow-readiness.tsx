@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
+import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
@@ -194,34 +195,37 @@ export function ReadinessPanel({
     );
   return (
     <div className={cn(position, "grid w-110 max-w-[calc(100%-2rem)] gap-2")}>
-      <button
-        type="button"
-        className="flex h-7 w-fit items-center gap-2 rounded-md border bg-card pr-2 pl-1 text-xs text-foreground shadow-floating outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-expanded:border-primary"
-        aria-expanded={open}
-        aria-controls="flow-readiness"
-        onClick={() => setOpen(!open)}
+      <Surface
+        tone="floating"
+        asChild
+        className="flex h-7 w-fit items-center gap-2 pr-2 pl-1 text-xs text-foreground outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-expanded:border-primary"
       >
-        <StatusBadge kind="error">Not ready</StatusBadge>
-        {issues.length} {issues.length === 1 ? "issue" : "issues"}
-        <ChevronDown aria-hidden className={cn("size-3.5", open && "rotate-180")} />
-      </button>
-      {open && (
-        <ul
-          id="flow-readiness"
-          aria-label="Readiness issues"
-          className="grid overflow-hidden rounded-lg border bg-card shadow-floating"
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls="flow-readiness"
+          onClick={() => setOpen(!open)}
         >
-          {issues.map((issue, index) => (
-            <li key={index} className="flex items-center border-b last:border-b-0">
-              <IssueRow
-                issue={issue}
-                selectable={!folderMissing}
-                onSelect={() => selectIssue(issue, graph, onSelect)}
-              />
-              {issue.code === "flow_input_required" && newAgent}
-            </li>
-          ))}
-        </ul>
+          <StatusBadge kind="error">Not ready</StatusBadge>
+          {issues.length} {issues.length === 1 ? "issue" : "issues"}
+          <ChevronDown aria-hidden className={cn("size-3.5", open && "rotate-180")} />
+        </button>
+      </Surface>
+      {open && (
+        <Surface tone="floating" asChild className="grid overflow-hidden">
+          <ul id="flow-readiness" aria-label="Readiness issues">
+            {issues.map((issue, index) => (
+              <li key={index} className="flex items-center border-b last:border-b-0">
+                <IssueRow
+                  issue={issue}
+                  selectable={!folderMissing}
+                  onSelect={() => selectIssue(issue, graph, onSelect)}
+                />
+                {issue.code === "flow_input_required" && newAgent}
+              </li>
+            ))}
+          </ul>
+        </Surface>
       )}
     </div>
   );
