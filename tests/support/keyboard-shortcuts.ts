@@ -4,6 +4,7 @@ import { desktopBridgeOptions, desktopBridgeScript } from "./desktop-bridge.ts";
 
 export const shortcutMod = process.platform === "darwin" ? "Meta" : "Control";
 export const desktopNewRunHint = process.platform === "darwin" ? "⌘N" : "Ctrl+N";
+export const startRunHint = process.platform === "darwin" ? "⌘↵" : "Ctrl+Enter";
 
 export async function installDesktopBridge(browser: Browser) {
   await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("client"));
