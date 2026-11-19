@@ -47,6 +47,7 @@ export function declaredProtocolCompatibility(
 export class RequestLimiter {
   private readonly attempts = new Map<string, number[]>();
   private expiry: ReturnType<typeof setTimeout> | undefined;
+  private closed = false;
   private readonly limit: number;
   private readonly windowMs: number;
   constructor(limit: number, windowMs: number) {
@@ -54,11 +55,9 @@ export class RequestLimiter {
     this.windowMs = windowMs;
   }
   allow(key: string, at = Date.now()): boolean {
+    if (this.closed) return false;
     const recent = (this.attempts.get(key) ?? []).filter((time) => at - time < this.windowMs);
-    if (recent.length >= this.limit) {
-      this.attempts.set(key, recent);
-      return false;
-    }
+    if (recent.length >= this.limit) return false;
     this.attempts.set(key, [...recent, at]);
     this.expiry ??= setTimeout(this.expire, this.windowMs).unref();
     return true;
@@ -72,6 +71,7 @@ export class RequestLimiter {
   };
 
   close() {
+    this.closed = true;
     clearTimeout(this.expiry);
     this.expiry = undefined;
     this.attempts.clear();

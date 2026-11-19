@@ -386,7 +386,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           Effect.suspend(() =>
             // Only an invocation still waiting for Chat SDK to hand it back owns this slot.
             pending.delete(message.id) && reservation !== "busy"
-              ? Effect.orDie(reservation.cancel)
+              ? Effect.catch(reservation.cancel, () =>
+                  Effect.logWarning(
+                    "Chat control could not clear an unclaimed message reservation.",
+                  ),
+                )
               : Effect.void,
           ),
       );
