@@ -71,15 +71,17 @@ viewport; use comparable states and explain differences in the PR. Capture Befor
 and After each in its own CLI run (fresh fixture) from a known seeded scenario,
 with distinct `--output .e2e/proof/<change>/before` and
 `--output .e2e/proof/<change>/after`, so an earlier journey cannot contaminate evidence.
-Embed both sets in the PR body's **UI screenshots** section: write local references
-such as `![Before: <view>](./before.png)` under `### Before` and `### After`, then
-check the installed `gh pr edit --help` and run
+Embed both sets in the PR body's **UI screenshots** section as a `| Before | After |`
+table with one row per view, Before on the left and After on the right, so each pair
+compares side by side; GitHub scales each image to its column and opens it full size
+on click. Write local references such as `![Before: <view>](./before.png)` in the
+cells, then check the installed `gh pr edit --help` and run
 `gh pr edit <PR> --body-file body.md --attach ./before.png --attach ./after.png`.
 It uploads the files and rewrites matching local references to uploaded URLs;
-attachments the body does not reference are appended at its end, outside those
-headings. Use this path when you can push to the repository; without push access
+attachments the body does not reference are appended at its end, outside the
+table. Use this path when you can push to the repository; without push access
 (for example from a fork), `--attach` cannot upload, so drop the images into the PR
-description editor on GitHub under the same headings. Do not use gists or other
+description editor on GitHub into the same table cells. Do not use gists or other
 hosting. On partial failure it still updates the body with successful uploads and
 exits non-zero.
 Then run `pnpm check:ui-evidence --pr <PR>`, the same validator as CI;
@@ -89,9 +91,9 @@ Record the base/head commit, viewport, scenario and command alongside the images
 Capture After only after the last application edit; rebuild and repeat the affected
 journey if the UI changes afterward. Inspect both image sets yourself, including
 long text and each worker link. The **UI evidence attachments** CI check only
-checks for embedded HTTPS images outside HTML comments and code, accepting alt
-text with nested or escaped brackets; it does not check their content,
-provenance or comparability. A non-empty reason under `### No UI evidence`
+checks that one row of the two-column Before | After table holds an embedded HTTPS
+image in both cells, outside HTML comments and code, accepting alt text with nested or escaped brackets;
+it does not check their content, provenance or comparability. A non-empty reason under `### No UI evidence`
 replaces both images for a frontend change without visible UI impact.
 Human review still owns those judgments.
 
