@@ -16,6 +16,7 @@ import { CreateFlow } from "./create-flow.tsx";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 import { Dialog, DialogContent, DialogSurface } from "./ui/dialog";
 import { Button } from "./ui/button";
+import { TextLink } from "./ui/text-link";
 import { WorkspaceDialogHeader } from "./workspace-dialog-header.tsx";
 import { cn } from "@/lib/utils";
 import { type StudioDraft, useStudioDraftGuard } from "../use-studio-draft-guard.ts";
@@ -88,16 +89,13 @@ function useLastAgentNames(agents: readonly AgentDefinition[] | null) {
   return names;
 }
 
-const headerParentClass =
-  "shrink-0 text-muted-foreground no-underline hover:text-foreground hover:no-underline";
-
 function breadcrumbParent(label: string, selection: StudioSelection) {
   return {
     label,
     link: (
-      <StudioLink selection={selection} className={headerParentClass}>
-        {label}
-      </StudioLink>
+      <TextLink asChild tone="neutral" className="shrink-0 font-normal">
+        <StudioLink selection={selection}>{label}</StudioLink>
+      </TextLink>
     ),
   };
 }
