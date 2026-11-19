@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from "react";
-import { AGENT_CREATE_WINDOW_MS } from "@t3-factory/contracts";
 import type {
   AgentCapabilities,
   AgentCreateOutcome,
+  CreateAgentInput,
   AgentDefinition,
   AgentExecutionSettings,
   AgentModelOptionDescriptor,
@@ -19,6 +19,7 @@ import {
   validateUpdateAgent,
 } from "@t3-factory/domain-validation";
 import type { api } from "./api.ts";
+import { OfflineError } from "./transport.ts";
 import { randomId } from "./lib/ids.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import {
@@ -30,6 +31,7 @@ import {
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
   typeof api,
+  | "reserveAgentCreate"
   | "createAgent"
   | "getAgentCreateOutcome"
   | "updateAgent"
@@ -208,7 +210,7 @@ function saveRequest(
   operations: AgentDraftOperations,
   /** The owning Project a save expects, or the one a create gives the new Agent. */
   owner: string | null,
-  requestId: string | undefined,
+  create: (input: CreateAgentInput) => Promise<AgentDefinition>,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
@@ -237,12 +239,12 @@ function saveRequest(
       fallback,
     };
   }
-  const validation = validateCreateAgent({ ...content, projectId: owner, requestId });
+  const validation = validateCreateAgent({ ...content, projectId: owner });
   if (!validation.ok) return { error: validation.error.message };
-  const { projectId: _, requestId: __, ...input } = validation.value;
+  const { projectId: _, ...input } = validation.value;
   return {
     submitted: asContent(input),
-    send: () => operations.createAgent(validation.value),
+    send: () => create(validation.value),
     unknownMessage: "Factory may have created this Agent. Checking before it can be created again…",
     fallback,
   };
@@ -406,9 +408,9 @@ export function createAgentDraft(
     removeOverrides() {
       edit({ projectOverrides: [] });
     },
-    /** **Remove worker**: back to Needs a model; saving then stores no execution settings. */
+    /** Remove the Worker and the Project overrides that depend on it from this draft. */
     removeWorker() {
-      edit({ execution: NO_WORKER });
+      edit({ execution: NO_WORKER, projectOverrides: [] });
     },
     dismissUpdate: draft.dismissUpdate,
     clearRemovalError: draft.clearRemovalError,
@@ -424,14 +426,18 @@ export function createAgentDraft(
       // A Project Agent has no Project overrides, so the editor says Create leaves them out. Only
       // the request omits them: the draft keeps them until a Create succeeds.
       const submitted = !saved && owner !== null ? { ...content, projectOverrides: [] } : content;
-      const requestId = saved ? undefined : `${randomId()}-${Date.now() + AGENT_CREATE_WINDOW_MS}`;
-      const request = saveRequest(
-        saved,
-        submitted,
-        source,
-        saved ? snapshot.owner : owner,
-        requestId,
-      );
+      let requestId: string | undefined;
+      const create = async (input: CreateAgentInput) => {
+        try {
+          requestId = await source.reserveAgentCreate();
+        } catch (cause) {
+          // Losing the reservation reply cannot create an Agent.
+          if (cause instanceof OfflineError) throw new OfflineError("not-sent");
+          throw cause;
+        }
+        return source.createAgent({ ...input, requestId });
+      };
+      const request = saveRequest(saved, submitted, source, saved ? snapshot.owner : owner, create);
       if ("error" in request) {
         draft.report(request.error);
         return undefined;

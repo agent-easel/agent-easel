@@ -8,7 +8,7 @@ import type {
   FlowDraft,
   ValidationIssue,
 } from "@t3-factory/contracts";
-import { useStudioNavigation } from "../settings-navigation.ts";
+import { useStudioNavigation, type StudioSelection } from "../settings-navigation.ts";
 import {
   createAgentDraft,
   useAgentDraftSnapshot,
@@ -120,6 +120,8 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
   };
 }
 
+type FlowSelection = Extract<StudioSelection, { tab: "flows" }>;
+
 /**
  * New Agent's context: the owner, preselected from the asking Flow, else from the owner filter,
  * and that Flow, which Create Agent returns to.
@@ -127,32 +129,22 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
 function useNewAgentOwner(
   definitions: StudioDefinitions,
   flows: ShownLists["flows"] | null,
-  fromFlow: string | undefined,
+  returnToFlow: FlowSelection | undefined,
 ) {
   const { projects, filter } = useStudioOwners(definitions);
-  const flow = fromFlow ? flows?.find((entry) => entry.id === fromFlow) : undefined;
-  return { projects, initial: defaultOwner(filter, flow), fromFlow };
+  const flow = flows?.find((entry) => entry.id === returnToFlow?.flowId);
+  return { projects, initial: defaultOwner(filter, flow), returnTo: returnToFlow };
 }
 
 /**
- * The Agents page's own navigation: with no Agent opened it opens `firstId`, and Esc from a new
- * Agent that a Flow's editor asked for returns to that Flow.
+ * With no Agent opened, the Agents page opens the first Agent in the visible list.
  */
-function useAgentsNavigation(
-  agentId: string | undefined,
-  fromFlow: string | undefined,
-  firstId: string | undefined,
-  registerEscape: (handler: () => void) => () => void,
-) {
+function useAgentsNavigation(agentId: string | undefined, firstId: string | undefined) {
   const openStudio = useStudioNavigation();
   const openRef = useRef(openStudio);
   useEffect(() => {
     openRef.current = openStudio;
   }, [openStudio]);
-  useEffect(() => {
-    if (agentId !== "new" || !fromFlow) return;
-    return registerEscape(() => void openRef.current({ tab: "flows", flowId: fromFlow }));
-  }, [agentId, fromFlow, registerEscape]);
   useEffect(() => {
     if (agentId !== undefined || !firstId) return;
     void openRef.current({ tab: "agents", agentId: firstId });
@@ -162,21 +154,19 @@ function useAgentsNavigation(
 
 export function StudioAgentsPage({
   agentId,
-  fromFlow,
+  returnToFlow,
   definitions,
   reportAgentDraft,
-  registerEscape,
 }: {
   agentId: string | undefined;
   /** The Flow whose editor asked for a new Agent; Create Agent and Esc return to it. */
-  fromFlow: string | undefined;
+  returnToFlow: FlowSelection | undefined;
   definitions: StudioDefinitions;
   reportAgentDraft: ReportDraft;
-  registerEscape: (handler: () => void) => () => void;
 }) {
   const library = useAgentsLibrary(definitions);
   const owners = useStudioOwners(definitions);
-  const newOwner = useNewAgentOwner(definitions, library.flows, fromFlow);
+  const newOwner = useNewAgentOwner(definitions, library.flows, returnToFlow);
   const serverId = useServerId();
   const [query, setQuery] = useState("");
   const [rowAction, setRowAction] = useState<AgentRowAction | null>(null);
@@ -184,7 +174,7 @@ export function StudioAgentsPage({
   const [acknowledged, setAcknowledged] = useState<AgentDefinition | null>(null);
   const creating = agentId === "new";
   const firstId = firstOpenAgent(library.agents, query, owners);
-  const openStudio = useAgentsNavigation(agentId, fromFlow, firstId, registerEscape);
+  const openStudio = useAgentsNavigation(agentId, firstId);
   const empty = agentsListEmpty(library.agents, creating, owners.filter, query);
   const showEditor = agentId !== undefined;
   return (
@@ -591,8 +581,7 @@ function SelectedAgentEditor({
     if (!active.current) return;
     if (value.id === agentId) return;
     onAcknowledged(value);
-    if (agentId === "new" && newOwner.fromFlow)
-      void openStudio({ tab: "flows", flowId: newOwner.fromFlow });
+    if (agentId === "new" && newOwner.returnTo) void openStudio(newOwner.returnTo);
     else void openStudio({ tab: "agents", agentId: value.id });
   };
   const deleted = () => {

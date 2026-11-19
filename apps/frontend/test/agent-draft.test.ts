@@ -367,6 +367,24 @@ it("an Agent Duplicate creates the copy in the chosen target owner and returns i
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
 });
 
+it("a lost reservation reply leaves Create retryable because no Agent was sent", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  factory.reserveAgentCreate.mockRejectedValueOnce(new OfflineError("unknown"));
+
+  // Act
+  await draft.save();
+
+  // Assert
+  expect(factory.createAgent).not.toHaveBeenCalled();
+  expect(draft.getSnapshot()).toMatchObject({
+    canSave: true,
+    content: { name: "New reviewer" },
+    createCheck: { status: "none" },
+  });
+});
+
 it("a lost Create checks its own request and ends in a safe state if the lookup fails", async () => {
   // Arrange
   const { draft, factory } = agentDraft(null);

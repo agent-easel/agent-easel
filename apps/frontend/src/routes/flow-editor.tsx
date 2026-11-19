@@ -78,6 +78,7 @@ import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
+  addWire,
   hasWire,
   newBlock,
   removeBlock,
@@ -209,7 +210,8 @@ const DIALOG = '[role="dialog"],[role="alertdialog"]';
  * (such as a discard confirmation), whose focused buttons must not edit the draft behind it.
  */
 function inEditorLayer(scope: HTMLElement | null, target: EventTarget | null) {
-  const own = scope?.closest(DIALOG) ?? null;
+  if (!scope || scope.closest("[inert]")) return false;
+  const own = scope.closest(DIALOG);
   const at = target instanceof Element ? target.closest(DIALOG) : null;
   return at === own || target === document.body;
 }
@@ -590,7 +592,10 @@ export function FlowDetail({
           condition={conditionEditing}
           onClose={select}
           onEdit={editBlock}
-          onChange={change}
+          onWireChange={(wire, connected) => {
+            if (connected) change(addWire(graph, wire));
+            else remove(removeWire(graph, wire));
+          }}
           onRemove={deleteBlock}
         />
       </EditorBody>
@@ -694,7 +699,7 @@ function EditorSettings({
   condition,
   onClose,
   onEdit,
-  onChange,
+  onWireChange,
   onRemove,
 }: {
   selected: string | null;
@@ -706,7 +711,7 @@ function EditorSettings({
   /** Called with null to close the settings. */
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
-  onChange: (graph: FlowGraph) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
   onRemove: (blockId: string) => void;
 }) {
   const close = () => onClose(null);
@@ -724,7 +729,7 @@ function EditorSettings({
             graph={graph}
             source={{ kind: "flow-input" }}
             label="the Flow input"
-            onChange={onChange}
+            onWireChange={onWireChange}
           />
         </section>
       </SettingsPanel>
@@ -756,7 +761,7 @@ function EditorSettings({
         flowId={flowId}
         condition={condition(block.id)}
         onEdit={onEdit}
-        onChange={onChange}
+        onWireChange={onWireChange}
       />
     </SettingsPanel>
   );

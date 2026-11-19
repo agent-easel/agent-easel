@@ -49,7 +49,7 @@ function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft)
   if (draft.kind === "trigger")
     return (
       (studio.tab === "triggers" && studio.triggerId === draft.id) ||
-      (studio.tab === "flows" && studio.fromTrigger === draft.id)
+      ((studio.tab === "flows" || studio.tab === "agents") && studio.fromTrigger === draft.id)
     );
   return studio.tab === "agents" && studio.agentId === draft.id;
 }

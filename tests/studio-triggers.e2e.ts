@@ -227,7 +227,7 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await app.screenshot("edit-trigger-off");
 });
 
-test("a Trigger draft survives opening the Flow that became not ready", async ({
+test("a Trigger and its Flow retain their drafts when an Agent opens over them", async ({
   app,
   browser,
   screen,
@@ -251,10 +251,28 @@ test("a Trigger draft survives opening the Flow that became not ready", async ({
   await screen.getByRole("button", "Open Flow", { exact: true }).tap();
   await expect(screen.getByRole("button", "Back to Trigger", { exact: true })).toBeVisible();
 
+  const flowDraftName = "Unsaved Flow repair";
+  await screen.getByLabel("Flow name", { exact: true }).fill(flowDraftName);
+  const agentBlock = flow.graph.blocks.find((block) => block.kind === "agent");
+  assert(agentBlock);
+  await screen.getByRole("button", `Agent ${agentBlock.name}`, { exact: true }).tap();
+
   // Act
-  await browser.keyboard.press("Escape");
+  await screen.getByRole("link", "Open Agent", { exact: true }).tap();
 
   // Assert
+  await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toHaveCount(0);
+  await expect(screen.getByRole("link", flowName, { exact: true })).toBeVisible();
+  await app.screenshot("agent-opened-over-flow-and-trigger");
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(flowDraftName);
+  await screen.getByRole("button", "Back to Trigger", { exact: true }).tap();
+  // Closing the edited Flow still protects that draft. Returning to the Trigger keeps its edits.
+  await screen
+    .getByRole("dialog", "Discard unsaved changes?")
+    .getByRole("button", "Discard changes", { exact: true })
+    .tap();
   await expect(browser).toHaveURL("/studio/triggers/new/github-issues");
   await expect(screen.getByRole("textbox", "Name", { exact: true })).toHaveValue(name);
   await expect(flowPicker).toContainText(flowName);

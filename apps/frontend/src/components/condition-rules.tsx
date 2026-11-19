@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { randomId } from "@/lib/ids";
+import type { FlowWire } from "../flow-graph.ts";
 import { PanelHeading, TargetSelect } from "./block-exit-configuration.tsx";
 import { fieldIssue, type BlockIssue } from "./flow-readiness.tsx";
 import { StatusBadge } from "./status-badge.tsx";
@@ -152,7 +153,7 @@ export function ConditionOutputs({
   editing,
   issues,
   onEdit,
-  onChange,
+  onWireChange,
 }: {
   block: ConditionBlock;
   graph: FlowGraph;
@@ -162,7 +163,7 @@ export function ConditionOutputs({
   /** The block's readiness issues; a rule row and Otherwise show theirs. */
   issues: readonly BlockIssue[];
   onEdit: (block: FlowBlock) => void;
-  onChange: (graph: FlowGraph) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
   const [list, setList] = useState<HTMLOListElement | null>(null);
   const { rules } = block;
@@ -200,7 +201,7 @@ export function ConditionOutputs({
       graph={graph}
       source={{ kind: "exit", sourceBlockId: block.id, exitId }}
       label={label}
-      onChange={onChange}
+      onWireChange={onWireChange}
     />
   );
   // Block-level issues name Otherwise; rule issues name their rule.

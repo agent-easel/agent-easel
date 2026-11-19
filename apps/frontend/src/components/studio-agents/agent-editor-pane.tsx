@@ -10,6 +10,7 @@ import type {
 import { fieldLabelClass } from "@/components/page";
 import { Check, Copy, FolderGit2, MoreHorizontal, Unplug, Workflow } from "lucide-react";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -503,6 +504,7 @@ function AgentMoreActions({
 }: AgentEditorProps & { agent: AgentDefinition; saving: boolean }) {
   const { trigger, queue, onCloseAutoFocus } = useMenuActions();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmingWorker, setConfirmingWorker] = useState(false);
   if (confirmingDelete && state.removed && !state.removing) setConfirmingDelete(false);
   return (
     <>
@@ -526,12 +528,15 @@ function AgentMoreActions({
         </Tooltip>
         <DropdownMenuContent align="end" className="w-58" onCloseAutoFocus={onCloseAutoFocus}>
           <AgentMenuItems
-            draft={draft}
             state={state}
             onDuplicate={onDuplicate}
             onChangeOwner={onChangeOwner}
             exporter={exporter}
             queue={queue}
+            onRemoveWorker={() => {
+              if (draft.getSnapshot().content.projectOverrides.length) setConfirmingWorker(true);
+              else draft.removeWorker();
+            }}
             onDelete={() => {
               if (draft.getSnapshot().removed) return;
               draft.clearRemovalError();
@@ -541,6 +546,33 @@ function AgentMoreActions({
         </DropdownMenuContent>
       </DropdownMenu>
       {exporter && <DefinitionExportDialog {...exporter} />}
+      <AlertDialog open={confirmingWorker} onOpenChange={setConfirmingWorker}>
+        <AlertDialogContent
+          title="Remove worker and Project overrides?"
+          description="Saving without a Worker also removes all Project overrides from this Agent."
+          actions={
+            <>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <MutationGate>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    draft.removeWorker();
+                    setConfirmingWorker(false);
+                  }}
+                >
+                  Remove worker
+                </Button>
+              </MutationGate>
+            </>
+          }
+          onCloseAutoFocus={(event) => {
+            if (!trigger.current?.isConnected) return;
+            event.preventDefault();
+            trigger.current.focus();
+          }}
+        />
+      </AlertDialog>
       <AgentRemoveDialog
         open={confirmingDelete}
         agent={agent}
@@ -556,20 +588,23 @@ function AgentMoreActions({
 }
 
 function AgentMenuItems({
-  draft,
   state,
   onDuplicate,
   onChangeOwner,
   exporter,
   queue,
   onDelete,
-}: Pick<AgentEditorProps, "draft" | "state" | "onDuplicate" | "onChangeOwner" | "exporter"> & {
+  onRemoveWorker,
+}: Pick<AgentEditorProps, "state" | "onDuplicate" | "onChangeOwner" | "exporter"> & {
   queue: (action: () => void) => void;
   onDelete: () => void;
+  onRemoveWorker: () => void;
 }) {
   const writable = useMutationsAllowed();
   // **Remove worker** is the deliberate way back to Needs a model now that the picker has no Clear.
-  const workerSaved = Boolean(state.saved?.execution) && !state.needsModel;
+  const canRemoveWorker =
+    Boolean(state.saved?.execution) &&
+    (!state.needsModel || state.content.projectOverrides.length > 0);
   return (
     <>
       {onDuplicate && (
@@ -595,8 +630,8 @@ function AgentMenuItems({
           onSelect={() => queue(() => void exporter.model.request(state.dirty))}
         />
       )}
-      {workerSaved && (
-        <DropdownMenuItem onSelect={draft.removeWorker}>
+      {canRemoveWorker && (
+        <DropdownMenuItem disabled={!writable} onSelect={() => queue(onRemoveWorker)}>
           <Unplug aria-hidden />
           Remove worker
         </DropdownMenuItem>

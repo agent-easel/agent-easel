@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
-import { StudioLink } from "../components/app-link.tsx";
+import { FlowAgentLink } from "../components/app-link.tsx";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { newBlock, type BlockPosition } from "../flow-graph.ts";
 import type { GrabOffset } from "./canvas-surface.tsx";
@@ -34,8 +34,9 @@ const headingClass = "text-label tracking-label text-muted-foreground";
 /** Opens the new Agent draft over this Flow; Create returns here. */
 export function NewAgentLink({ flowId, className }: { flowId: string; className?: string }) {
   return (
-    <StudioLink
-      selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}
+    <FlowAgentLink
+      agentId="new"
+      flowId={flowId}
       className={cn(
         "inline-flex w-fit items-center gap-1 text-sm font-medium text-link no-underline hover:underline",
         className,
@@ -43,7 +44,7 @@ export function NewAgentLink({ flowId, className }: { flowId: string; className?
     >
       New Agent
       <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
-    </StudioLink>
+    </FlowAgentLink>
   );
 }
 

@@ -19,7 +19,7 @@ saved revisions ([Following saved revisions](#following-saved-revisions)).
 Leaving a Flow with unsaved changes, whether for a list, Agents, Triggers, another Flow or by closing Studio, opens the centred dialog **Discard unsaved changes?** (“*Name*” has changes that aren’t saved) with **Keep editing**, which stays on the Flow, and **Discard changes** (browser Back follows the same
 rule; reload uses the browser's leave warning). Agent and Trigger edits are guarded the same way when leaving their page. A Flow opened from a Trigger keeps the Trigger draft underneath.
 
-**Return from cross-surface links.** A link from the Flow editor to another surface opens its target over the editor: the block settings' **Open Agent** and **New Agent** (in the library and on the readiness issue) open the Agent with the breadcrumb **Studio / Flows / *Flow* / *Agent*** (or **New Agent**). The Flow's editor and its unsaved draft stay mounted underneath, so this asks nothing; **Esc**, the header's **Back to Flow** (✕) or the Flow crumb returns to it. After **Create Agent** the editor returns to the Flow, where the new Agent appears in the library; it is not wired automatically. Opening Settings from an editor with unsaved changes neither discards nor prompts either; the leave dialog applies only when the user leaves the editor for another Studio page.
+**Return from cross-surface links.** A link from the Flow editor to another surface opens its target over the editor: the block settings' **Open Agent** and **New Agent** (in the library and on the readiness issue) open the Agent with the breadcrumb **Studio / Flows / *Flow* / *Agent*** (or **New Agent**). The Flow's editor and its unsaved draft stay mounted underneath, along with the Trigger and its draft if the Flow opened from a Trigger. The breadcrumb then reads **Studio / Triggers / *Trigger* / *Flow* / *Agent***. **Esc**, the header's **Back to Flow** (✕) or the Flow crumb returns to it. After **Create Agent** the editor returns to the Flow, where the new Agent appears in the library; it is not wired automatically. Opening Settings from an editor with unsaved changes neither discards nor prompts either; the leave dialog applies only when the user leaves the editor for another Studio page.
 
 The header breadcrumb carries the full path: an opened Flow reads **Studio / Flows / *Flow name***, and the editor has no back link of its own.
 
@@ -252,7 +252,7 @@ Availability is separate from verified execution support. A provider without Fac
 as a disabled row tagged **No Factory reporting**, so it cannot be chosen. New Agents default to the first provider with reporting support; when T3 offers none, no provider is preselected. Saved settings always carry their thinking-option list, empty when none is chosen; malformed lists are rejected. Factory launches each Block worker with these saved settings
 ([Run execution](runner.md#current-execution-contract)); the API's `execution` field holds the worker settings. Agent reads return the saved settings without contacting T3; Studio judges their availability against the capabilities it loads.
 
-The Worker is optional. **Remove worker** in **More actions** is the deliberate way back to Needs a model, and a save whose environment, provider or model is not chosen stores
+The Worker is optional. **Remove worker** in **More actions** is the deliberate way back to Needs a model. When the draft has Project overrides, the action asks to remove them with the Worker. Confirming removes both from the draft, and **Save** stores those changes in the next revision. A save whose environment, provider or model is not chosen stores
 no execution settings rather than a partial one, so an Agent can be saved before T3 offers a supported provider. Such an
 Agent shows [**Needs a model**](../GLOSSARY.md#needs-a-model) in the Agent list, in the block library, on the block
 inspector's worker line (which links to the Agent) and as a neutral tag on its Flow canvas blocks, never presented as an
@@ -307,7 +307,7 @@ arriving meanwhile moves the comparison to it, and a removal dismisses it.
 **Create outcome unknown.** Repeating a Create whose reply was lost could make a second Agent, so the new-Agent form keeps its
 draft and disables Create while Factory looks up the original request by the Agent ID that request would have created.
 The lookup finds the Agent even if its revision or owner changed. **Open Agent** opens its current revision.
-**Create again** is offered only when Factory confirms that no Agent was created for the request and its write window has expired.
+Factory reserves the request ID before the browser sends Create and bounds its write window using the host's monotonic clock. **Create again** is offered only when Factory confirms that no Agent was created and the original request can no longer write. A restart ends unused reservations and the lookup still finds committed Agents.
 If Factory cannot confirm the result, **Check again** repeats the lookup. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
 **Duplicate…**, the opened Agent follows these rules even before Studio has delivered it.
 

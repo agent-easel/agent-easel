@@ -22,7 +22,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
-import { StudioLink } from "../components/app-link.tsx";
+import { FlowAgentLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
@@ -32,6 +32,7 @@ import { fieldProblem, issueTag, type BlockIssue } from "./flow-readiness.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
+import type { FlowWire } from "../flow-graph.ts";
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
 type WaitBlock = Extract<FlowBlock, { kind: "wait" }>;
 type ContinuationBlock = Extract<FlowBlock, { kind: "continuation" }>;
@@ -52,7 +53,7 @@ export function BlockConfiguration({
   flowId,
   condition,
   onEdit,
-  onChange,
+  onWireChange,
 }: {
   block: FlowBlock;
   graph: FlowGraph;
@@ -64,7 +65,7 @@ export function BlockConfiguration({
   /** The editor's part in a Condition's rule editing; used only for a Condition. */
   condition: ConditionEditing;
   onEdit: (block: FlowBlock) => void;
-  onChange: (graph: FlowGraph) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
   const nameId = useId();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -108,7 +109,7 @@ export function BlockConfiguration({
           editing={condition}
           issues={issues}
           onEdit={onEdit}
-          onChange={onChange}
+          onWireChange={onWireChange}
         />
       ) : (
         <BlockExitConfiguration
@@ -116,7 +117,7 @@ export function BlockConfiguration({
           graph={graph}
           agents={agents.all}
           onEdit={onEdit}
-          onChange={onChange}
+          onWireChange={onWireChange}
         />
       )}
     </div>
@@ -281,12 +282,9 @@ function AgentBlockSettings({
         {block.agentId && (
           <div className="flex items-center gap-2 text-xs">
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{summary}</span>
-            <StudioLink
-              selection={{ tab: "agents", agentId: block.agentId, fromFlow: flowId }}
-              className="shrink-0 font-medium"
-            >
+            <FlowAgentLink agentId={block.agentId} flowId={flowId} className="shrink-0 font-medium">
               Open Agent
-            </StudioLink>
+            </FlowAgentLink>
           </div>
         )}
       </Field>

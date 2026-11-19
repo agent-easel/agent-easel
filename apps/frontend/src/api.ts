@@ -119,6 +119,7 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
 
 export const api = {
   ...operationCalls(agentOperations, false, {
+    reserveAgentCreate: 5_000,
     createAgent: AGENT_CREATE_WINDOW_MS + 5_000,
     getAgentCreateOutcome: AGENT_CREATE_WINDOW_MS + 5_000,
   }),

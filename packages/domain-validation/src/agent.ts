@@ -338,16 +338,6 @@ function validateAgentContent(input: unknown): Result<AgentContent> {
   };
 }
 
-/** The deadline is part of the identity so a late copy cannot extend the original attempt. */
-export function agentCreateDeadline(id: unknown): Result<number> {
-  const match =
-    typeof id === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-([0-9]{13})$/.exec(id);
-  return match
-    ? { ok: true, value: Number(match[1]) }
-    : invalid("invalid_create_request", "requestId", "The Agent Create request id is invalid.");
-}
-
 export function validateCreateAgent(input: unknown): Result<CreateAgentInput> {
   const requestId =
     typeof input === "object" && input !== null && "requestId" in input

@@ -144,6 +144,7 @@ export function StudioListRow({
   icon,
   name,
   meta,
+  metaAction,
   reason,
   badge,
   trailing,
@@ -157,6 +158,8 @@ export function StudioListRow({
   icon: ReactNode;
   name: string;
   meta: ReactNode;
+  /** Interactive content in the summary line, above the stretched row link. */
+  metaAction?: ReactNode;
   reason?: ReactNode | undefined;
   badge?: ReactNode | undefined;
   trailing?: ReactNode | undefined;
@@ -169,19 +172,19 @@ export function StudioListRow({
   /** Agent names and summaries wrap. Other lists keep one line. */
   wrap?: boolean | undefined;
 }) {
-  const text = wrap ? "break-words" : "truncate";
+  const titleSelection = metaAction ? selection : undefined;
+  const rowSelection = metaAction ? undefined : selection;
   const body = (
     <>
       {icon}
-      <span className="grid min-w-0 flex-1 gap-[3px] leading-[normal]">
-        <span className={cn("text-sm leading-[normal] font-medium", text)}>{name}</span>
-        <span className={cn("text-2xs leading-[normal] text-subtle-foreground", text)}>{meta}</span>
-        {reason ? (
-          <span className="text-xs leading-[normal] break-words text-muted-foreground">
-            {reason}
-          </span>
-        ) : null}
-      </span>
+      <StudioRowText
+        name={name}
+        meta={metaAction ?? meta}
+        reason={reason}
+        wrap={wrap}
+        selection={titleSelection}
+        selected={selected}
+      />
       {badge}
       {trailing}
     </>
@@ -193,11 +196,11 @@ export function StudioListRow({
         selected && "border-primary bg-sidebar-accent",
       )}
     >
-      {selection ? (
+      {rowSelection ? (
         <StudioLink
-          selection={selection}
+          selection={rowSelection}
           aria-current={selected ? "page" : undefined}
-          className="flex min-w-0 flex-1 items-center gap-3 text-foreground after:absolute after:inset-0 hover:no-underline"
+          className={cn("flex min-w-0 flex-1 items-center gap-3", studioRowLinkClass)}
         >
           {body}
         </StudioLink>
@@ -208,6 +211,46 @@ export function StudioListRow({
       <div className="relative z-10 shrink-0">{menu}</div>
       {chevron}
     </div>
+  );
+}
+
+const studioRowLinkClass = "text-foreground after:absolute after:inset-0 hover:no-underline";
+
+function StudioRowText({
+  name,
+  meta,
+  reason,
+  wrap,
+  selection,
+  selected,
+}: {
+  name: string;
+  meta: ReactNode;
+  reason: ReactNode;
+  wrap: boolean | undefined;
+  selection: StudioSelection | undefined;
+  selected: boolean | undefined;
+}) {
+  const text = wrap ? "break-words" : "truncate";
+  const titleClass = cn("text-sm leading-[normal] font-medium", text);
+  return (
+    <span className="grid min-w-0 flex-1 gap-[3px] leading-[normal]">
+      {selection ? (
+        <StudioLink
+          selection={selection}
+          aria-current={selected ? "page" : undefined}
+          className={cn(titleClass, studioRowLinkClass)}
+        >
+          {name}
+        </StudioLink>
+      ) : (
+        <span className={titleClass}>{name}</span>
+      )}
+      <span className={cn("text-2xs leading-[normal] text-subtle-foreground", text)}>{meta}</span>
+      {reason && (
+        <span className="text-xs leading-[normal] break-words text-muted-foreground">{reason}</span>
+      )}
+    </span>
   );
 }
 

@@ -404,6 +404,7 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
   return {
     getAgentCapabilities: { handle: () => answer(() => factory.getAgentCapabilities()) },
     listAgents: { handle: () => answer(() => factory.listAgents()) },
+    reserveAgentCreate: { handle: () => answer(() => factory.reserveAgentCreate()) },
     createAgent: {
       body: definitionBody,
       handle: ({ input }) => answer(() => factory.createAgent(input), 201),

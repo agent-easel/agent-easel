@@ -232,6 +232,7 @@ export const makeFactoryService = (
       getAgentCapabilities: definitions.getAgentCapabilities,
       listAgents: definitions.listAgents,
       getAgent: definitions.getAgent,
+      reserveAgentCreate: definitions.reserveAgentCreate,
       createAgent: definitions.createAgent,
       getAgentCreateOutcome: definitions.getAgentCreateOutcome,
       updateAgent: definitions.updateAgent,

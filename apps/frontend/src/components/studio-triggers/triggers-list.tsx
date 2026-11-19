@@ -241,7 +241,7 @@ function TriggerRow({
         </StudioRowIcon>
       }
       name={trigger.name}
-      meta={<TriggerMeta trigger={trigger} names={names} checking={checking} started={started} />}
+      {...triggerMeta(trigger, names, checking, started)}
       reason={problem}
       badge={problem ? <StatusBadge kind="problem" /> : undefined}
       control={
@@ -281,23 +281,20 @@ function TriggerRow({
   );
 }
 
-function TriggerMeta({
-  trigger,
-  names,
-  checking,
-  started,
-}: {
-  trigger: TriggerDefinition;
-  names: TriggerNames;
-  checking: boolean;
-  started: readonly TriggerStartedRun[] | undefined;
-}) {
-  if (checking) return "Checking…";
-  if (started) {
-    if (started.length === 0) return "Nothing ready to start";
-    return <StartedRuns runs={started} />;
-  }
-  return `GitHub Issues · ${triggerRoute(trigger, names)} · ${scheduleText(trigger.schedule)}`;
+function triggerMeta(
+  trigger: TriggerDefinition,
+  names: TriggerNames,
+  checking: boolean,
+  started: readonly TriggerStartedRun[] | undefined,
+) {
+  if (checking) return { meta: "Checking…" };
+  if (started)
+    return started.length
+      ? { meta: null, metaAction: <StartedRuns runs={started} /> }
+      : { meta: "Nothing ready to start" };
+  return {
+    meta: `GitHub Issues · ${triggerRoute(trigger, names)} · ${scheduleText(trigger.schedule)}`,
+  };
 }
 
 function TriggerRowMenu({
