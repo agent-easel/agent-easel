@@ -10,6 +10,11 @@ import {
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
+import {
+  approveFirstReviewAtLength,
+  expectWrittenByFirstReview,
+  finalSignoff,
+} from "./support/human-answers.ts";
 import { chooseFlowAction, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 
 /** Adds a block from the library row `row` at its default place and names it in its settings. */
@@ -603,4 +608,25 @@ test("the Timeline lists only a Condition's latest 50 arrivals and notes that th
   await expect(timeline).toContainText("arrival 52 → Keep going");
   await expect(timeline).not.toContainText("→ Otherwise");
   await app.screenshot("condition-timeline-window");
+});
+
+test("a person's answer a Condition routes to the next Human step names the step that answered, not the Agent before it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await approveFirstReviewAtLength(
+    { app, screen, browser },
+    "answer-condition",
+    "answerCondition",
+    "Approve → Route the answer",
+  );
+
+  // Act
+  await finalSignoff(screen).getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  await expectWrittenByFirstReview(screen);
+  await app.screenshot("condition-routed-answer-provenance");
 });

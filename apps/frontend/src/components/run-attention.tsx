@@ -574,26 +574,79 @@ function parallelSource(run: RunDetail, occurrence: HumanOccurrence | undefined)
   return parallel.length < 2 ? null : occurrenceSource(run, occurrence);
 }
 
-/**
- * "From Review implementation · Visit 1": the Block and visit whose result the occurrence's message
- * is. A Wait or Condition passes the message on with its worker provenance, so the delivery's
- * origin names it; a person's answer, or a delivery without a known origin, names its sender.
- */
+/** "From Review implementation · Visit 1": the Block, and an Agent's visit, that wrote the
+ * occurrence's message. */
 function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence) {
   const intent = run.intents.find((item) => item.id === occurrence.incomingIntentId);
   if (!intent?.sourceBlockId) return null;
-  const activationId =
-    (!intent.occurrenceId && intent.origin?.activationId) ||
-    run.reports.find((report) => report.id === intent.reportId)?.activationId;
-  const blockId =
-    run.activations.find((activation) => activation.id === activationId)?.blockId ??
-    intent.sourceBlockId;
+  const { blockId, activationId } = messageAuthor(run, intent, new Map()) ?? sender(intent);
   const source = run.blocks.find((block) => block.blockId === blockId);
   const visit =
     run.activations
       .filter((activation) => activation.blockId === blockId)
       .findIndex((activation) => activation.id === activationId) + 1;
   return `From ${source?.name ?? blockId}${visit ? ` · Visit ${visit}` : ""}`;
+}
+
+type Delivery = RunDetail["intents"][number];
+type MessageAuthor = { blockId: string | null; activationId: string | null };
+/** Each Condition relay's author by Condition and origin; null while it is being resolved. */
+type ConditionAuthors = Map<string, MessageAuthor | null>;
+
+const sender = (intent: Delivery): MessageAuthor => ({
+  blockId: intent.sourceBlockId,
+  activationId: null,
+});
+
+/**
+ * Who wrote `intent`'s message, following Wait and Condition relays back to the delivery that
+ * produced it: an Agent's report names its visit, a person's answer or any other delivery its
+ * sender, and a missing link the relay that sent it. The delivery's `origin` cannot name the
+ * author: a Human answer repeats the reviewed worker's origin to route later work, and relays
+ * forward it unchanged. Null for a Condition relay met again while it is being resolved (a loop).
+ */
+function messageAuthor(
+  run: RunDetail,
+  intent: Delivery,
+  conditions: ConditionAuthors,
+): MessageAuthor | null {
+  if (intent.waitArrivalId) {
+    const arrival = run.waitArrivals.find((item) => item.id === intent.waitArrivalId);
+    const incoming = run.intents.find((item) => item.id === arrival?.incomingIntentId);
+    return incoming ? messageAuthor(run, incoming, conditions) : sender(intent);
+  }
+  if (intent.conditionArrivalId) {
+    const key = JSON.stringify([intent.sourceBlockId, intent.origin]);
+    if (!conditions.has(key)) {
+      conditions.set(key, null);
+      conditions.set(key, conditionAuthor(run, intent, conditions));
+    }
+    return conditions.get(key) ?? null;
+  }
+  const activationId = run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const activation = run.activations.find((item) => item.id === activationId);
+  return activation ? { blockId: activation.blockId, activationId: activation.id } : sender(intent);
+}
+
+/** A Condition arrival is not linked to the delivery it numbered, so a selection's author is the
+ * one every delivery into that Condition with the same origin resolves to, else the Condition. */
+function conditionAuthor(run: RunDetail, intent: Delivery, conditions: ConditionAuthors) {
+  const authors = run.intents
+    .filter(
+      (item) =>
+        item.blockId === intent.sourceBlockId &&
+        item.origin?.activationId === intent.origin?.activationId &&
+        item.origin?.threadId === intent.origin?.threadId,
+    )
+    .map((item) => messageAuthor(run, item, conditions))
+    .filter((author) => author !== null);
+  const [first] = authors;
+  return first &&
+    authors.every(
+      (author) => author.blockId === first.blockId && author.activationId === first.activationId,
+    )
+    ? first
+    : sender(intent);
 }
 
 function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {

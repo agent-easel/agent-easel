@@ -513,8 +513,11 @@ fixed Human exits their old exits were mapped to.
     facts live under **Technical details**. When the result fits its preview, the card offers **Technical details** in
     place of **Read result**; it opens the reader with those facts expanded.
   - **Human step context.** The decision card shows short context whole and previews long context with **Read full
-    context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the visit
-    that wrote the context also when a Wait or Condition passed it on, and has no decision
+    context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the Agent
+    visit that wrote the context also when a Wait or Condition passed it on. Context a person wrote as an earlier Human
+    step's answer names that step without a visit. When the deliveries a Condition received with the same worker
+    provenance came from different authors, or a relayed delivery's record is gone, it names the Wait or Condition that
+    sent the context. The reader has no decision
     controls: **Decision**, **Response** and **Submit answer** follow the preview directly, so the answer is always given
     on the card. Parallel occurrences each have their own preview and reader.
   - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full

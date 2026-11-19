@@ -13,8 +13,12 @@ import {
   resultReleasedToSecondWorker,
   resultReleasedToTwoWorkers,
   resultReleasedToWait,
+  conditionBlock,
+  conditionRule,
   connection,
+  OTHERWISE,
   waitBlock,
+  WAIT_OUTPUT,
   workingReported,
   workingReportedIdle,
   report,
@@ -151,6 +155,40 @@ async function createFixtureScenarioSet(host: Host) {
     ],
     connections: [connection("worker", "review", "pause")],
   });
+  // A person's answer that a Wait passes on to a second Human step keeps the person as its author.
+  const answerRelay = await saveFlow(factory, "UI wait · Answer held for sign-off", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      humanStep("review", "First review", { x: 700, y: 180 }),
+      waitBlock("hold", "Hold for sign-off", { amount: 1, unit: "days" }, { x: 1080, y: 180 }),
+      humanStep("signoff", "Final sign-off", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "review"),
+      connection("review", "approve", "hold"),
+      connection("hold", WAIT_OUTPUT, "signoff"),
+    ],
+  });
+  // The same answer selected by a Condition keeps the person as its author too.
+  const answerCondition = await saveFlow(factory, "UI condition · Answer routed to sign-off", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      humanStep("review", "First review", { x: 700, y: 180 }),
+      conditionBlock("route", "Route the answer", [conditionRule("later", "Later answers", 2)], {
+        x: 1080,
+        y: 180,
+      }),
+      humanStep("signoff", "Final sign-off", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "review"),
+      connection("review", "approve", "route"),
+      connection("route", "later", "signoff"),
+      connection("route", OTHERWISE, "signoff"),
+    ],
+  });
   // Two reviews of one change reach the same Human step as parallel occurrences (Figma RD50).
   const parallelDecision = await saveFlow(factory, "UI decision · Two reviews, one decision", {
     flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
@@ -279,7 +317,7 @@ async function createFixtureScenarioSet(host: Host) {
   });
   requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
   await createOwnershipSet(host, unselectedModelOptions);
-  return { pause, launch, parallelDecision };
+  return { pause, answerRelay, answerCondition, launch, parallelDecision };
 }
 
 /** Each parallel review, long enough for its Human occurrence to preview it. */

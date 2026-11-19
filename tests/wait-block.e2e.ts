@@ -8,6 +8,11 @@ import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 import { liveRun } from "./support/live.ts";
+import {
+  approveFirstReviewAtLength,
+  expectWrittenByFirstReview,
+  finalSignoff,
+} from "./support/human-answers.ts";
 
 test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
   app,
@@ -195,6 +200,13 @@ test("Continue now forwards the selected one of two waiting arrivals early; the 
   ]);
 });
 
+/** Continue now forwards the first waiting arrival of the Run's Wait `name`. */
+async function continueFirstArrival(screen: Screen, name: string) {
+  await screen.getByRole("button", new RegExp(`^Wait ${name}, Waiting`)).tap();
+  await screen.getByRole("button", "Continue arrival 1 now").tap();
+  await expect(screen.getByRole("listitem", "Arrival 1, forwarded")).toBeVisible();
+}
+
 test("Human occurrences a Wait forwarded name the reviewer and visit that wrote each message", async ({
   app,
   screen,
@@ -202,9 +214,7 @@ test("Human occurrences a Wait forwarded name the reviewer and visit that wrote 
 }) => {
   // Arrange
   const held = await openMorningSyncRun(app, browser);
-  await screen.getByRole("button", /^Wait Hold for the morning sync, Waiting/).tap();
-  await screen.getByRole("button", "Continue arrival 1 now").tap();
-  await expect(screen.getByRole("listitem", "Arrival 1, forwarded")).toBeVisible();
+  await continueFirstArrival(screen, "Hold for the morning sync");
   await screen.getByRole("button", "Continue arrival 2 now").tap();
   await expect(screen.getByRole("listitem", "Arrival 2, forwarded")).toBeVisible();
 
@@ -226,4 +236,27 @@ test("Human occurrences a Wait forwarded name the reviewer and visit that wrote 
     ),
   ).toBeVisible();
   await app.screenshot("wait-forwarded-human-provenance");
+});
+
+test("a person's answer a Wait passes on to the next Human step names the step that answered, not the Agent before it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const runId = await approveFirstReviewAtLength(
+    { app, screen, browser },
+    "answer-relay",
+    "answerRelay",
+    "Approve → Hold for sign-off",
+  );
+  await continueFirstArrival(screen, "Hold for sign-off");
+  await app.open(`/runs/${runId}`);
+
+  // Act
+  await finalSignoff(screen).getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  await expectWrittenByFirstReview(screen);
+  await app.screenshot("wait-relayed-answer-provenance");
 });
