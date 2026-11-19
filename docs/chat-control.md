@@ -52,7 +52,8 @@ model content, logs or Test results; the browser holds a typed key only in memor
 A saved key shows as **Stored** with **Replace** and **Remove**. Leaving the field blank keeps a saved
 key; Replace opens a masked field with **Cancel**, and Remove shows the key as None with **Undo**
 until Save. Changing the provider or base URL while a key is saved requires a choice before saving:
-**Use stored key** at the new destination, **Replace key** or **No key**.
+**Use stored key** at the new destination, **Replace** with a new key, or **Remove**, which saves no
+key. Undo and Cancel return to the choice.
 
 The key is stored outside SQLite in an owner-only file under `credentials/chat-control/` in the data
 home (directory 0700, file 0600). These files are protected by file permissions, not encrypted. A

@@ -188,6 +188,8 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
+  After its destination changes, a stored secret shows the Choose tag and adds Use stored key;
+  Save waits for a choice, and Undo or Cancel return to it.
 - **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
   relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the
   full local date and time for tooltips and accessible names.
