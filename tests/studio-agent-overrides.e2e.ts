@@ -40,43 +40,84 @@ async function overrideDialogForNorthwind(
   return { northwind, agent, dialog };
 }
 
-test("a global Agent saved with a Project override keeps it in its editor and list, also after reload", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const { northwind, agent, dialog } = await overrideDialogForNorthwind(
-    { app, screen, browser },
-    "Override",
-  );
+/** A new global Agent with a GPT 6 Astra override for Northwind applied in its editor, unsaved. */
+async function appliedNorthwindOverride(
+  fixtures: Pick<StudioFixtures, "app" | "screen" | "browser">,
+) {
+  const { app, screen, browser } = fixtures;
+  const { northwind, agent, dialog } = await overrideDialogForNorthwind(fixtures, "Override");
   await dialog.getByRole("combobox", /^Model:/).tap();
   await screen.getByRole("option", "GPT 6 Astra", { exact: true }).tap();
   await browser.evaluate(settled);
   await app.screenshot("override-dialog");
   await dialog.getByRole("button", "Apply", { exact: true }).tap();
+  return { northwind, agent };
+}
+
+/** That override saved. */
+async function savedNorthwindOverride(
+  fixtures: Pick<StudioFixtures, "app" | "screen" | "browser">,
+) {
+  const { agent } = await appliedNorthwindOverride(fixtures);
+  await fixtures.screen.getByRole("button", "Save", { exact: true }).tap();
+  await expectSavedAgentRevision(fixtures.screen, agent.revision + 1);
+  return agent;
+}
+
+test("a global Agent saved with a Project override keeps it in its editor and list", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { northwind, agent } = await appliedNorthwindOverride({ app, screen, browser });
 
   // Act
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  const picker = screen.getByRole("button", /^Worker: /);
-  const overrides = screen.getByRole("list", "Project overrides");
-  await picker.tap();
-  await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
-  // A screen reader hears the override's Worker on its row, not only the Project.
-  await expect(
-    overrides.getByRole("button", /^Edit override for Northwind: .*GPT 6 Astra/),
-  ).toBeVisible();
+  await expectSavedAgentRevision(screen, agent.revision + 1);
+  await expect(screen.getByText(/\+1 Project override/).first()).toBeVisible();
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.equal(saved.revision, agent.revision + 1);
   assert.deepEqual(
     saved.projectOverrides.map((override) => [override.projectId, override.execution.modelId]),
     [[northwind, "gpt-6-astra"]],
   );
-  await app.open(`/studio/agents/${agent.id}`);
-  await picker.tap();
+});
+
+test("the model picker of a saved Agent lists its Project override with that Worker", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await savedNorthwindOverride({ app, screen, browser });
+
+  // Act
+  await screen.getByRole("button", /^Worker: /).tap();
+
+  // Assert
+  const overrides = screen.getByRole("list", "Project overrides");
   await expect(overrides.getByText("Northwind", { exact: true })).toBeVisible();
+  // A screen reader hears the override's Worker on its row, not only the Project.
+  await expect(
+    overrides.getByRole("button", /^Edit override for Northwind: .*GPT 6 Astra/),
+  ).toBeVisible();
+});
+
+test("a saved Project override is still listed after reload", async ({ app, screen, browser }) => {
+  // Arrange
+  const agent = await savedNorthwindOverride({ app, screen, browser });
+  await app.open(`/studio/agents/${agent.id}`);
+
+  // Act
+  await screen.getByRole("button", /^Worker: /).tap();
+
+  // Assert
+  await expect(
+    screen.getByRole("list", "Project overrides").getByText("Northwind", { exact: true }),
+  ).toBeVisible();
   await expect(screen.getByText(/\+1 Project override/).first()).toBeVisible();
   await app.screenshot("override-saved-after-reload");
 });

@@ -5,8 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { FlowDraft, ProjectCatalog, Result } from "../packages/contracts/src/index.ts";
-import { expect, type Screen } from "e2e";
+import type { Browser } from "@e2e-dev/web";
+import { expect, type App, type Screen } from "e2e";
 import { beforeEach, test } from "./support/test.ts";
+import type { Fixture } from "./support/fixture/handle.ts";
 import {
   blockOnModelLessLaterReview,
   selectComposerProject,
@@ -27,6 +29,8 @@ import { changeFlowOwnerElsewhere, namedAgent, projectFlowPlacing } from "./supp
 beforeEach(async ({ app, browser, screen }) => {
   await openComposerMenus(app, browser, screen);
 });
+
+type MenuJourney = { app: App; screen: Screen; browser: Browser; fixture: Fixture };
 
 async function openProjectMenu(screen: Screen) {
   await screen.getByRole("button", /^Select project: /).tap();
@@ -203,33 +207,67 @@ test("a not-ready Flow is a disabled row, and a chosen one stays in the field", 
     0,
   );
   expect(Number(await browser.evaluate(checkedChoices))).toBe(0);
+  await row.scrollIntoView();
+  await app.screenshot("after-flow-not-ready");
+});
+
+test("ArrowDown in the menu of a chosen not-ready Flow reaches an enabled row", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await blockOnModelLessLaterReview(app, screen);
+  await openFlowMenu(screen);
+
+  // Act
   await browser.keyboard.press("ArrowDown");
+
+  // Assert
   const landed = pageString(
     await browser.evaluate(
       `JSON.stringify({ role: document.activeElement?.getAttribute("role"), disabled: document.activeElement?.getAttribute("aria-disabled") })`,
     ),
   );
   expect(JSON.parse(landed)).toEqual({ role: "option", disabled: null });
-  await row.scrollIntoView();
-  await app.screenshot("after-flow-not-ready");
 });
 
-test("with seven or fewer Flows the list has no search and choosing a row sets the Flow", async ({
-  app,
-  screen,
-  browser,
-  fixture,
-}) => {
-  // Arrange
+/** Northwind release is the only Flow left, in a reloaded composer with Northwind chosen. */
+async function keepOnlyNorthwindRelease({ app, screen, browser, fixture }: MenuJourney) {
   const flows = await readFactoryJson<FlowDraft[]>(app.baseUrl, "/api/flows");
   const kept = flows.find((flow) => flow.name === "Northwind release");
   assert(kept);
   await fixture.definitions.removeFlows({ keepId: kept.id });
   await browser.reload();
   await selectComposerProject(screen, "Northwind");
+}
+
+test("with seven or fewer Flows the list has no search", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await keepOnlyNorthwindRelease({ app, screen, browser, fixture });
+
+  // Act
   await openFlowMenu(screen);
+
+  // Assert
   await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toHaveCount(0);
   await app.screenshot("after-flow-few");
+});
+
+test("choosing a row of a short Flow list sets the Flow", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await keepOnlyNorthwindRelease({ app, screen, browser, fixture });
+  await openFlowMenu(screen);
 
   // Act
   await screen.getByRole("option", "Northwind release", { exact: true }).tap();

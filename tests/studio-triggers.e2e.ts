@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { expect, type Screen } from "e2e";
+import { expect, type App, type Screen } from "e2e";
 import type {
   Result,
   RunNavigationEntry,
@@ -233,20 +233,21 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await app.screenshot("edit-trigger-off");
 });
 
-test("a Trigger and its Flow retain their drafts when an Agent opens over them", async ({
-  app,
-  browser,
-  screen,
-}) => {
-  // Arrange
-  const name = "Journey · Retain Trigger draft";
-  const flowName = "Journey · Flow to repair";
-  const id = await saveFlowCopy(app.baseUrl, "Demo · Focused change", flowName, {
+const retainedTrigger = "Journey · Retain Trigger draft";
+const flowDraftName = "Unsaved Flow repair";
+
+/**
+ * A new Trigger draft whose Flow lost its input wiring elsewhere, opened from the Trigger, renamed
+ * there without saving, with its Agent block selected.
+ */
+async function repairingTriggerFlow(app: App, screen: Screen) {
+  const flowToRepair = `Journey · Flow to repair ${crypto.randomUUID().slice(0, 8)}`;
+  const id = await saveFlowCopy(app.baseUrl, "Demo · Focused change", flowToRepair, {
     mode: "checkout",
   });
   const flow = await readFlow(app.baseUrl, id);
   await app.open("/studio/triggers/new/github-issues");
-  await fillTrigger(screen, name, flowName);
+  await fillTrigger(screen, retainedTrigger, flowToRepair);
   await saveFlowElsewhere(app.baseUrl, flow, {
     graph: { ...flow.graph, flowInput: { ...flow.graph.flowInput, targetBlockIds: [] } },
   });
@@ -256,32 +257,88 @@ test("a Trigger and its Flow retain their drafts when an Agent opens over them",
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await screen.getByRole("link", "Open Flow", { exact: true }).tap();
   await expect(screen.getByRole("button", "Back to Trigger", { exact: true })).toBeVisible();
-
-  const flowDraftName = "Unsaved Flow repair";
   await screen.getByLabel("Flow name", { exact: true }).fill(flowDraftName);
   const agentBlock = flow.graph.blocks.find((block) => block.kind === "agent");
   assert(agentBlock);
   await screen.getByRole("button", `Agent ${agentBlock.name}`, { exact: true }).tap();
+  return { flowPicker, flowToRepair };
+}
+
+/** That Flow's Agent opened over the Flow and the Trigger. */
+async function agentOverRepair(app: App, screen: Screen) {
+  await repairingTriggerFlow(app, screen);
+  await screen.getByRole("link", "Open Agent", { exact: true }).tap();
+  await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
+}
+
+/** Back to Trigger from that edited Flow, asking whether to discard the Flow draft. */
+async function discardPrompt(app: App, screen: Screen) {
+  const repairing = await repairingTriggerFlow(app, screen);
+  await screen.getByRole("button", "Back to Trigger", { exact: true }).tap();
+  return { ...repairing, discard: screen.getByRole("dialog", "Discard unsaved changes?") };
+}
+
+test("an Agent opens over an edited Flow and Trigger without asking to discard them", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { flowToRepair } = await repairingTriggerFlow(app, screen);
 
   // Act
   await screen.getByRole("link", "Open Agent", { exact: true }).tap();
 
   // Assert
+  await expect(screen.getByRole("link", flowToRepair, { exact: true })).toBeVisible();
   await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
   await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toHaveCount(0);
-  await expect(screen.getByRole("link", flowName, { exact: true })).toBeVisible();
   await app.screenshot("agent-opened-over-flow-and-trigger");
+});
+
+test("closing an Agent opened over an edited Flow returns to the Flow draft", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await agentOverRepair(app, screen);
+
+  // Act
   await browser.keyboard.press("Escape");
+
+  // Assert
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(flowDraftName);
+});
+
+test("going back to the Trigger from an edited Flow asks before discarding the Flow draft", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await repairingTriggerFlow(app, screen);
+
+  // Act
   await screen.getByRole("button", "Back to Trigger", { exact: true }).tap();
-  // Closing the edited Flow still protects that draft. Returning to the Trigger keeps its edits.
-  await screen
-    .getByRole("dialog", "Discard unsaved changes?")
-    .getByRole("button", "Discard changes", { exact: true })
-    .tap();
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toBeVisible();
+});
+
+test("discarding the Flow draft returns to the Trigger with its edits", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  const { flowPicker, flowToRepair, discard } = await discardPrompt(app, screen);
+
+  // Act
+  await discard.getByRole("button", "Discard changes", { exact: true }).tap();
+
+  // Assert
   await expect(browser).toHaveURL("/studio/triggers/new/github-issues");
-  await expect(screen.getByRole("textbox", "Name", { exact: true })).toHaveValue(name);
-  await expect(flowPicker).toContainText(flowName);
+  await expect(screen.getByRole("textbox", "Name", { exact: true })).toHaveValue(retainedTrigger);
+  await expect(flowPicker).toContainText(flowToRepair);
   await expect(flowPicker).toHaveAttribute("aria-describedby", "trigger-flow-problem");
 });
 

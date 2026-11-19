@@ -222,7 +222,23 @@ test("a stored key the host chose to use at a new address is the one the new pro
   });
 });
 
-test("after the address changes, a blank replacement can't be saved and Cancel returns to the choice", async ({
+test("after the address changes, Replace opens a blank key field that can't be saved", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { connection } = await storedKeyMoved(app, screen, "sk-ui-blank");
+
+  // Act
+  await connection.getByRole("button", "Replace the API key").tap();
+
+  // Assert
+  await expect(connection.getByLabel("API key")).toBeFocused();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+  await app.screenshot("chat-model-key-replace-open");
+});
+
+test("after the address changes, Cancel on a replacement returns to the stored-key choice", async ({
   app,
   screen,
 }) => {
@@ -230,8 +246,6 @@ test("after the address changes, a blank replacement can't be saved and Cancel r
   const { connection } = await storedKeyMoved(app, screen, "sk-ui-kept");
   await connection.getByRole("button", "Replace the API key").tap();
   await expect(connection.getByLabel("API key")).toBeFocused();
-  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
-  await app.screenshot("chat-model-key-replace-open");
 
   // Act
   await connection.getByRole("button", "Cancel", { exact: true }).tap();

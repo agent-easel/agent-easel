@@ -1,5 +1,5 @@
-import { test } from "./support/test.ts";
-import { expect } from "e2e";
+import { afterEach, beforeEach, test } from "./support/test.ts";
+import { expect, type App, type Screen } from "e2e";
 import { browserRequests, resetBrowserRequests } from "./support/live.ts";
 import { elapse } from "./support/remote-access.ts";
 import { removeFlowElsewhere, saveFlowCopy } from "./support/flows.ts";
@@ -8,6 +8,20 @@ import {
   restoreProjectSelection,
   selectComposerProject,
 } from "./support/composer.ts";
+
+/** Flows a journey saved, removed afterwards so later journeys do not list them. */
+const savedFlows: string[] = [];
+/** Factory's selected Project, which the Project picker changes for every client. */
+let selection: string | null = null;
+
+beforeEach(async ({ app }) => {
+  selection = await projectSelection(app.baseUrl);
+});
+
+afterEach(async ({ app }) => {
+  for (const id of savedFlows.splice(0)) await removeFlowElsewhere(app.baseUrl, id);
+  await restoreProjectSelection(app.baseUrl, selection);
+});
 
 /** Updater checks have their own schedule and are reported separately. */
 const launchChoiceRequests = async (app: { baseUrl: string | undefined }) =>
@@ -42,52 +56,79 @@ test("a ready Flow saved in another window appears in an open Run composer", asy
   await expect(screen.getByRole("listbox", "Flow", { exact: true })).toBeVisible();
 
   // Act
-  const flow = await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Live composer Flow", {
-    mode: "checkout",
-  });
+  savedFlows.push(
+    await saveFlowCopy(app.baseUrl, "Demo · Focused change", "Live composer Flow", {
+      mode: "checkout",
+    }),
+  );
 
   // Assert
   await expect(screen.getByRole("option", "Live composer Flow", { exact: true })).toBeVisible();
-  await removeFlowElsewhere(app.baseUrl, flow);
 });
 
-test("switching Project silently clears another Project's Flow and no Project disables the Flow picker", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const selection = await projectSelection(app.baseUrl);
-  const flowPicker = screen.getByRole("combobox", /^Select Flow: /);
-  const prompt = screen.getByLabel("Initial prompt", { exact: false });
+const flowPicker = (screen: Screen) => screen.getByRole("combobox", /^Select Flow: /);
+const promptField = (screen: Screen) => screen.getByLabel("Initial prompt", { exact: false });
+
+/** A composer with Northwind, its Flow Northwind release and a prompt. */
+async function composeForNorthwind(app: App, screen: Screen) {
   await app.open("/runs/new");
   await selectComposerProject(screen, "Northwind");
-  await flowPicker.tap();
+  await flowPicker(screen).tap();
   const projectFlow = screen.getByRole("option", "Northwind release", { exact: true });
   await expect(projectFlow).toBeVisible();
   await app.screenshot("composer-project-flow-picker");
   await projectFlow.tap();
-  await prompt.fill("UI Project switch");
+  await promptField(screen).fill("UI Project switch");
+}
+
+test("switching Project silently clears another Project's Flow and keeps the prompt", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await composeForNorthwind(app, screen);
 
   // Act
   await selectComposerProject(screen, "Atlas demo");
 
   // Assert
-  await expect(flowPicker).toHaveAccessibleName("Select Flow: Choose a Flow");
-  await expect(prompt).toHaveText("UI Project switch");
+  await expect(flowPicker(screen)).toHaveAccessibleName("Select Flow: Choose a Flow");
+  await expect(promptField(screen)).toHaveText("UI Project switch");
   await app.screenshot("composer-flow-cleared-after-project-switch");
+});
+
+test("a Flow cleared by switching Project stays cleared after a reload", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await composeForNorthwind(app, screen);
+  await selectComposerProject(screen, "Atlas demo");
+  await expect(flowPicker(screen)).toHaveAccessibleName("Select Flow: Choose a Flow");
+
+  // Act
   await browser.reload();
-  await expect(flowPicker).toHaveAccessibleName("Select Flow: Choose a Flow");
-  await expect(prompt).toHaveText("UI Project switch");
-  // The menu no longer offers a row that clears the Project. An empty selection still disables Flow.
+
+  // Assert
+  await expect(flowPicker(screen)).toHaveAccessibleName("Select Flow: Choose a Flow");
+  await expect(promptField(screen)).toHaveText("UI Project switch");
+});
+
+test("without a selected Project the Flow picker is disabled", async ({ app, screen, browser }) => {
+  // Arrange — the menu offers no row that clears the Project, so the selection is cleared here.
   await restoreProjectSelection(app.baseUrl, null);
+  await app.open("/runs/new");
   await browser.evaluate(`(() => {
     localStorage.removeItem("factory-last-project:browser");
     localStorage.removeItem("factory-last-flow:browser");
     localStorage.removeItem("factory-run-drafts:browser");
   })()`);
+
+  // Act
   await browser.reload();
-  await expect(flowPicker).toBeDisabled();
+
+  // Assert
+  await expect(flowPicker(screen)).toBeDisabled();
   await app.screenshot("composer-flow-picker-without-project");
-  await restoreProjectSelection(app.baseUrl, selection);
 });

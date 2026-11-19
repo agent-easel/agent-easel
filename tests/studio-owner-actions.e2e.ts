@@ -39,7 +39,7 @@ async function openGlobalAgent(
   return { northwind, agent };
 }
 
-test("Change owner moves an Agent into a Project without a new revision, also after reload", async ({
+test("Change owner moves an Agent into a Project without a new revision", async ({
   app,
   screen,
   browser,
@@ -63,17 +63,27 @@ test("Change owner moves an Agent into a Project without a new revision, also af
   assert.equal(moved.projectId, northwind);
   assert.equal(moved.revision, agent.revision);
   await app.screenshot("change-owner-success");
-  await app.open(`/studio/agents/${agent.id}`);
-  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
-  await app.screenshot("change-owner-reload");
 });
 
-test("a refused Change owner names the blocking Flow and offers Duplicate into the target", async ({
+test("an Agent moved into a Project opens with that owner after reload", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
+  const { northwind, agent } = await openGlobalAgent({ app, browser }, "Owner reload");
+  await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
+
+  // Act
+  await app.open(`/studio/agents/${agent.id}`);
+
+  // Assert
+  await expect(agentEditor(screen).getByText("Northwind", { exact: true })).toBeVisible();
+  await app.screenshot("change-owner-reload");
+});
+
+/** A global Agent placed by a global Flow, whose Change owner to Northwind was just refused. */
+async function refusedChangeOwner({ app, screen, browser }: StudioFixtures) {
   await browser.setViewport(viewport);
   const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", `Placed ${unique()}`);
   const flowName = `Global placing ${unique()}`;
@@ -87,24 +97,81 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   await chooseAgentAction(screen, "Change owner…");
   await screen.getByRole("combobox", "New owner").tap();
   await screen.getByRole("option", /^Northwind/).tap();
+  return { agent, flowName };
+}
+
+const refusalDialog = (screen: Screen, agent: { name: string }) =>
+  screen.getByRole("dialog", `Can’t make “${agent.name}” a Northwind Agent`);
+
+/** The refusal of that Change owner, shown. */
+async function shownRefusal(fixtures: StudioFixtures) {
+  const { agent } = await refusedChangeOwner(fixtures);
+  await fixtures.screen.getByRole("button", "Change owner", { exact: true }).tap();
+  return { agent, refusal: refusalDialog(fixtures.screen, agent) };
+}
+
+/** The Duplicate dialog that replaced that refusal. */
+async function duplicateAfterRefusal(fixtures: StudioFixtures) {
+  const { agent, refusal } = await shownRefusal(fixtures);
+  await refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }).tap();
+  const duplicate = fixtures.screen.getByRole("dialog", `Duplicate “${agent.name}”`);
+  await expect(duplicate).toBeVisible();
+  return duplicate;
+}
+
+test("a refused Change owner names the blocking Flow and offers Duplicate into the target", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { agent, flowName } = await refusedChangeOwner({ app, screen, browser });
 
   // Act
   await screen.getByRole("button", "Change owner", { exact: true }).tap();
 
   // Assert
-  const refusal = screen.getByRole("dialog", `Can’t make “${agent.name}” a Northwind Agent`);
+  const refusal = refusalDialog(screen, agent);
   await expect(refusal.getByRole("list", "Blocking Flows")).toContainText(flowName);
   await expect(refusal).toContainText("Global Flow · Worker block");
+  await expect(
+    refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }),
+  ).toBeVisible();
   assert.equal((await readAgentDefinition(app.baseUrl, agent.id)).projectId, null);
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused");
+});
+
+test("Duplicate from a refused Change owner targets that Project", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { agent, refusal } = await shownRefusal({ app, screen, browser });
+
+  // Act
   await refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }).tap();
+
+  // Assert
   const duplicate = screen.getByRole("dialog", `Duplicate “${agent.name}”`);
   await expect(duplicate.getByRole("combobox", "Owning Project")).toContainText("Northwind");
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused-duplicate");
-  // The Duplicate that replaced the refusal still returns focus to the menu that opened the chain.
+});
+
+test("cancelling the Duplicate that replaced a refusal returns focus to More actions", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const duplicate = await duplicateAfterRefusal({ app, screen, browser });
+
+  // Act
   await duplicate.getByRole("button", "Cancel", { exact: true }).tap();
+
+  // Assert
   await expect(duplicate).toHaveCount(0);
   await expect(screen.getByRole("button", "More actions", { exact: true })).toBeFocused();
 });
