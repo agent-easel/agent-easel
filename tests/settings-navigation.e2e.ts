@@ -1,4 +1,5 @@
 import { test } from "./support/test.ts";
+import type { Fixture } from "./support/fixture/handle.ts";
 import { expect, type Screen } from "e2e";
 import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
@@ -180,28 +181,61 @@ test("searching for a Worker option or a fixed shortcut finds its section", asyn
 });
 
 /**
- * Two T3 recovery paths for a Worker option search: the field is cleared before T3 returns, or a
- * query stays filled through the reconnect and is then replaced directly.
+ * Opens T3 connection Settings with T3 away and searches `query`, so the search has no Worker
+ * options from T3 to match yet. Returns the search field.
  */
-for (const { name, whileAway, clearFirst } of [
-  { name: "a search started after T3 reconnects", whileAway: "fast mode", clearFirst: true },
-  { name: "a search kept open while T3 reconnects", whileAway: "run", clearFirst: false },
-]) {
-  test(`${name} finds a Worker option in Run titles`, async ({ fixture, app, screen }) => {
-    // Arrange: the first search runs while T3 is away, so it has no Worker options to match.
-    await app.open("/settings/connection");
-    await fixture.remoteAccess.t3Unavailable();
-    const search = screen.getByLabel("Search settings");
-    await search.fill(whileAway);
-    if (clearFirst) await search.fill("");
-    await fixture.remoteAccess.t3Available();
-    // The open T3 connection page shows the recovered state even when the search hides its row.
-    await expect(screen.getByText("Connected", { exact: true })).toBeVisible();
-
-    // Act: type or directly replace the query.
-    await search.fill("fast mode");
-
-    // Assert
-    await expect(sections(screen).getByRole("link", "Run titles", { exact: true })).toBeVisible();
-  });
+async function searchWhileT3Away(
+  fixture: Fixture,
+  app: { open(path: string): Promise<unknown> },
+  screen: Screen,
+  query: string,
+) {
+  await app.open("/settings/connection");
+  await fixture.remoteAccess.t3Unavailable();
+  const search = screen.getByLabel("Search settings");
+  await search.fill(query);
+  return search;
 }
+
+/** The Run titles row of the Settings navigation. */
+const runTitlesRow = (screen: Screen) =>
+  sections(screen).getByRole("link", "Run titles", { exact: true });
+
+/** T3 returns; the open T3 connection page shows it even when the search hides that nav row. */
+async function reconnectT3(fixture: Fixture, screen: Screen) {
+  await fixture.remoteAccess.t3Available();
+  await expect(screen.getByText("Connected", { exact: true })).toBeVisible();
+}
+
+test("a Worker option search started after T3 reconnects finds Run titles", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange: a search while T3 is away, cleared before T3 returns.
+  const search = await searchWhileT3Away(fixture, app, screen, "fast mode");
+  await search.fill("");
+  await reconnectT3(fixture, screen);
+
+  // Act
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(runTitlesRow(screen)).toBeVisible();
+});
+
+test("a search kept open while T3 reconnects finds a Worker option after the query is replaced", async ({
+  fixture,
+  app,
+  screen,
+}) => {
+  // Arrange: "run" stays filled through the reconnect.
+  const search = await searchWhileT3Away(fixture, app, screen, "run");
+  await reconnectT3(fixture, screen);
+
+  // Act: replace the filled query directly, without clearing it first.
+  await search.fill("fast mode");
+
+  // Assert
+  await expect(runTitlesRow(screen)).toBeVisible();
+});
