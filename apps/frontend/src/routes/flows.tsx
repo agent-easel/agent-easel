@@ -100,7 +100,7 @@ export function FlowList({
         errorText="Couldn’t load Flows."
         loadingText="Loading Flows…"
         noMatchText="No matching Flows"
-        emptyIcon={<Workflow aria-hidden className="size-8" strokeWidth={1.5} />}
+        emptyIcon={Workflow}
         emptyTitle="No Flows yet"
       >
         <FlowGroups
