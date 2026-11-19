@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { KeyChip } from "./components/ui/key-chip";
+import { TextLink } from "./components/ui/text-link";
 
 const columns = [
   ["application", "navigation"],
@@ -110,16 +111,17 @@ export function ShortcutsCheatSheet({
           <DialogTitle ref={titleRef} tabIndex={-1} className="text-sm font-semibold outline-none">
             Keyboard shortcuts
           </DialogTitle>
-          <Link
-            to={pathname}
-            search={{ settings: { tab: "keyboard" } }}
-            mask={settingsMask({ tab: "keyboard" })}
-            resetScroll={false}
-            className="ml-auto text-[13px] font-medium text-link hover:underline"
-            onClick={() => onOpenChange(false)}
-          >
-            Edit in Settings
-          </Link>
+          <TextLink asChild className="ml-auto text-[13px]">
+            <Link
+              to={pathname}
+              search={{ settings: { tab: "keyboard" } }}
+              mask={settingsMask({ tab: "keyboard" })}
+              resetScroll={false}
+              onClick={() => onOpenChange(false)}
+            >
+              Edit in Settings
+            </Link>
+          </TextLink>
           <DialogDismiss label="Close keyboard shortcuts" />
         </header>
         <DialogDescription className="sr-only">

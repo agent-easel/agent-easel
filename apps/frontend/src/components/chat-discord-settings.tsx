@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
-import { ArrowUpRight, Unplug } from "lucide-react";
+import { Unplug } from "lucide-react";
 import type {
   DiscordCheckOutcome,
   DiscordSettings,
@@ -9,6 +8,7 @@ import type {
 } from "@t3-factory/contracts";
 import { validateDiscordPublicKey } from "@t3-factory/domain-validation";
 import { Button } from "@/components/ui/button";
+import { TextLink } from "@/components/ui/text-link";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
@@ -24,7 +24,7 @@ import {
   reportChatModelSettings,
   reportDiscordSettings,
 } from "../chat-control-attention.ts";
-import { useSettingsOptions } from "../settings-navigation.ts";
+import { SettingsLink } from "./app-link.tsx";
 import {
   AccessCard,
   firstGrants,
@@ -408,12 +408,9 @@ function HeaderActions({ page, settings }: { page: DiscordPage; settings: Discor
   return (
     <>
       {needsSetupGuide(settings) && (
-        <Button variant="link" asChild>
-          <a href={SETUP_GUIDE_URL} target="_blank" rel="noreferrer">
-            Setup guide
-            <ArrowUpRight aria-hidden strokeWidth={1.5} />
-          </a>
-        </Button>
+        <TextLink href={SETUP_GUIDE_URL} trailing="external">
+          Setup guide
+        </TextLink>
       )}
       <SaveActions
         dirty={page.dirty}
@@ -497,8 +494,9 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
   );
 }
 
+const modelSelection = { tab: "chat-model", from: "chat-discord" } as const;
+
 function BlockerReason({ blocker }: { blocker: ChatControlBlocker }) {
-  const modelOptions = useSettingsOptions({ tab: "chat-model", from: "chat-discord" });
   if (blocker.kind === "rejected") return "Replace the rejected token first";
   if (blocker.kind === "intent") return "Turn on Message Content Intent first";
   // Opening Language model reads the model again, and its answer reaches this page.
@@ -506,15 +504,15 @@ function BlockerReason({ blocker }: { blocker: ChatControlBlocker }) {
     return (
       <>
         Couldn’t read{" "}
-        <Link {...modelOptions} className="text-link underline underline-offset-2">
-          the language model
-        </Link>
+        <TextLink asChild>
+          <SettingsLink selection={modelSelection}>the language model</SettingsLink>
+        </TextLink>
       </>
     );
   const model = blocker.model && (
-    <Link {...modelOptions} className="text-link underline underline-offset-2">
-      a language model
-    </Link>
+    <TextLink asChild>
+      <SettingsLink selection={modelSelection}>a language model</SettingsLink>
+    </TextLink>
   );
   return (
     <>
