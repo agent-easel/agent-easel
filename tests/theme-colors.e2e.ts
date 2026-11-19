@@ -27,6 +27,7 @@ test("the host follows the T3 environment's default theme through the T3 connect
   browser,
 }) => {
   // Arrange
+  await browser.emulateMedia({ colorScheme: "dark" });
   await themeColors(app).followOcean();
 
   // Act
@@ -42,22 +43,31 @@ test("the host follows the T3 environment's default theme through the T3 connect
   await app.screenshot("theme-colors-host-following-dark");
 });
 
-test("two clients show the same T3 theme in their own Light and Dark modes", async ({
+test("an approved client follows its own system scheme through both T3 palettes", async ({
   app,
   screen,
   browser,
 }) => {
-  // Arrange: the host panel keeps Dark; an approved browser profile at another address opens.
+  // Arrange: the host explicitly saves Dark, then an approved profile opens under Light.
   const colors = await hostFollowingOcean({ app, browser });
+  await screen.getByRole("radio", "Dark").tap();
+  await expect(screen.getByRole("radio", "Dark")).toBeChecked();
   await app.screenshot("theme-colors-client-one-dark");
+  await browser.emulateMedia({ colorScheme: "light" });
   await colors.openApprovedClient(screen);
-
-  // Act
-  await screen.getByRole("radio", "Light").tap();
-
-  // Assert
+  await expect(screen.getByRole("radio", "System")).toBeChecked();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanLight);
   await app.screenshot("theme-colors-client-two-light");
+
+  // Act
+  await browser.emulateMedia({ colorScheme: "dark" });
+
+  // Assert
+  await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
+  await expect(screen.getByRole("radio", "System")).toBeChecked();
+  // Returning to the host under Light proves the two profiles kept separate preferences.
+  await browser.emulateMedia({ colorScheme: "light" });
+  await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanLight);
   await app.open("/settings/appearance");
   await expect(screen.getByRole("radio", "Dark")).toBeChecked();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(oceanDark);
@@ -86,6 +96,7 @@ test("a published T3 theme generated from canvas and accent seeds colors Factory
   browser,
 }) => {
   // Arrange
+  await browser.emulateMedia({ colorScheme: "dark" });
   const colors = themeColors(app);
   await colors.withPublishedThemes();
   await app.open("/settings/appearance");
@@ -103,19 +114,20 @@ test("a published T3 theme generated from canvas and accent seeds colors Factory
   await app.screenshot("theme-colors-published-seed-dark");
 });
 
-test("a published Dark-only theme keeps Factory's Light colors and reports both modes", async ({
+test("System uses Factory's Light colors when a published T3 theme only supplies Dark", async ({
   app,
   screen,
   browser,
 }) => {
-  // Arrange: an approved browser profile at another address, so the host panel keeps Dark.
+  // Arrange: an approved browser profile follows a system initially set to Dark.
+  await browser.emulateMedia({ colorScheme: "dark" });
   const colors = themeColors(app);
   await colors.followNightfallInApprovedBrowser();
-  await screen.getByRole("radio", "Dark").tap();
+  await expect(screen.getByRole("radio", "System")).toBeChecked();
   await expect.poll(() => browser.evaluate(canvasColor)).toBe(nightfallDark);
 
   // Act
-  await screen.getByRole("radio", "Light").tap();
+  await browser.emulateMedia({ colorScheme: "light" });
 
   // Assert
   const theme = screen.getByRole("region", "T3 theme");
@@ -154,6 +166,7 @@ test("a default theme in a format Factory does not support returns to Factory's 
   browser,
 }) => {
   // Arrange
+  await browser.emulateMedia({ colorScheme: "dark" });
   const colors = themeColors(app);
   await colors.withPublishedThemes();
   await colors.setDefaultTheme("nightfall");

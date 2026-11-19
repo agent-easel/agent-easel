@@ -1,16 +1,25 @@
-// Applies this browser profile's appearance before the stylesheet paints. It is a classic
-// blocking script because the deferred app module could run after the first paint; the key
-// and values belong to src/appearance.ts. The desktop app serves the page in its own mode.
+// Resolve appearance before the stylesheet paints. The desktop entry supplies its preference
+// on <html>; a browser uses the value saved for this origin.
 (function () {
-  if (window.factoryDesktop) return;
-  let stored = null;
-  try {
-    stored = window.localStorage.getItem("factory.appearance");
-  } catch {
-    // Storage can be unavailable (blocked by the profile); the shipped Dark applies.
+  const root = document.documentElement;
+  let preference = root.dataset.appearancePreference;
+  if (!window.factoryDesktop) {
+    try {
+      preference = window.localStorage.getItem("factory.appearance");
+    } catch {
+      // A profile that blocks storage uses the shipped preference.
+    }
   }
-  if (stored !== "light") return;
-  document.documentElement.dataset.appearance = "light";
-  // The Light canvas of styles.css, so browser chrome matches the page from first paint.
-  document.querySelector('meta[name="theme-color"]').content = "#ffffff";
+  if (preference !== "light" && preference !== "dark") preference = "system";
+  const mode =
+    preference === "system"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : preference;
+  root.dataset.appearancePreference = preference;
+  root.dataset.appearance = mode;
+  // Match the Factory canvas in styles.css before the stylesheet is available.
+  document.querySelector('meta[name="theme-color"]').content =
+    mode === "dark" ? "#09090b" : "#ffffff";
 })();

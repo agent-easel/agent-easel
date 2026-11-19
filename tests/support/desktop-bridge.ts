@@ -29,7 +29,8 @@ export function desktopBridgeScript({
   update,
   releaseNotes,
   livePortMessage,
-}: ReturnType<typeof desktopBridgeOptions>) {
+  rejectAppearanceSave,
+}: ReturnType<typeof desktopBridgeOptions> & { rejectAppearanceSave?: boolean }) {
   const desktopWindow = window as Window & {
     factoryDesktop?: FactoryDesktop;
     __desktopMenu?: Parameters<FactoryDesktop["setMenuState"]>[0];
@@ -112,7 +113,10 @@ export function desktopBridgeScript({
       publish();
       return { ok: true };
     },
-    setAppearance: async () => ({ ok: true }),
+    setAppearance: async (preference) =>
+      rejectAppearanceSave
+        ? { ok: false, message: `The desktop fixture refused to save ${preference}.` }
+        : { ok: true },
     installUpdate: async () => {
       desktopWindow.__clientInstallRequested = true;
       state = { ...state, update: { ...state.update, state: "idle", version: null } };

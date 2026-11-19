@@ -17,8 +17,9 @@ const publishedThemeFiles = [
 export function appearanceFixture({ t3 }: Host) {
   return {
     actions: {
-      publish() {
+      publish({ defaultTheme }: { defaultTheme: string }) {
         t3.appearance.themes = publishedThemeFiles;
+        t3.appearance.defaultTheme = defaultTheme;
       },
       /** `t3 theme set <id>` on the environment; the id need not be published. */
       setDefaultTheme({ theme }: { theme: string }) {
