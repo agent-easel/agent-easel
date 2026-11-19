@@ -544,7 +544,7 @@ test("a Condition's arrival list offers arrivals numbered while it is open for r
   await expect(details.getByRole("listitem", "Arrival 50, Keep going")).toBeVisible();
   await expect(details.getByRole("button", "Load more")).toHaveCount(0);
   await fixture.scenarios.arriveAtCondition({ id: runId, through: 56 });
-  await expect(details).toContainText("6 newer arrivals since this list was read.");
+  await expect(details).toContainText("6 newer arrivals since this list was read");
   await expect(details.getByRole("listitem", "Arrival 51, Keep going")).toHaveCount(0);
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await app.screenshot("condition-run-newer-arrivals");

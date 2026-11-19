@@ -7,9 +7,6 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        /* Untinted legacy look, left only for condition-arrivals.tsx until it moves to ProblemCard after #519. */
-        destructive:
-          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 [&>svg]:text-current",
         /* ProblemCard tones: tinted surface, toned icon, neutral title and body. */
         error: "border-destructive/40 bg-destructive/8 text-foreground [&>svg]:text-destructive",
         attention: "border-attention/40 bg-attention/8 text-foreground [&>svg]:text-attention",

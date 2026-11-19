@@ -70,7 +70,7 @@ import {
   definitionExportNotice,
 } from "../components/definition-export-control.tsx";
 import { useMenuActions } from "../components/menu-actions.ts";
-import { Notice, NoticeButton } from "../components/notice.tsx";
+import { ProblemCard, ProblemCardButton } from "../components/problem-card.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
@@ -1195,8 +1195,9 @@ function RemoveFlowDialog({
 function SaveProblem({ state, onSelect }: { state: FlowDraftSnapshot; onSelect: IssueSelect }) {
   const unknown = state.saveOutcome === "unknown";
   return (
-    <Notice
-      tone={unknown ? "attention" : "critical"}
+    <ProblemCard
+      tone={unknown ? "attention" : "error"}
+      density="compact"
       icon={unknown ? TriangleAlert : CircleAlert}
       title={unknown ? "Save outcome unknown" : state.error}
     >
@@ -1206,7 +1207,7 @@ function SaveProblem({ state, onSelect }: { state: FlowDraftSnapshot; onSelect: 
           {issue.message}
         </IssueLink>
       ))}
-    </Notice>
+    </ProblemCard>
   );
 }
 
@@ -1219,18 +1220,19 @@ function OwnerGoneNotice({
   onChangeOwner: () => void;
 }) {
   return (
-    <Notice
+    <ProblemCard
       tone="attention"
+      density="compact"
       icon={TriangleAlert}
       title={`${owner.title} is no longer in T3`}
       action={
         <MutationGate>
-          <NoticeButton onClick={onChangeOwner}>Change owner…</NoticeButton>
+          <ProblemCardButton onClick={onChangeOwner}>Change owner…</ProblemCardButton>
         </MutationGate>
       }
     >
       This Flow can’t be edited or started. Move it to another owner or remove it.
-    </Notice>
+    </ProblemCard>
   );
 }
 
@@ -1388,8 +1390,9 @@ function ConflictNotice({
   const theirs = latest ? contentLines(latest, agents) : [];
   return (
     <>
-      <Notice
+      <ProblemCard
         tone="attention"
+        density="compact"
         icon={TriangleAlert}
         title={
           revision === null
@@ -1397,18 +1400,18 @@ function ConflictNotice({
             : `Revision ${revision} was saved elsewhere`
         }
         action={
-          <NoticeButton
+          <ProblemCardButton
             onClick={() => {
               setComparisonOpen(true);
               onCompare();
             }}
           >
             Compare latest revision
-          </NoticeButton>
+          </ProblemCardButton>
         }
       >
         Your changes are kept. Compare them with the latest revision before you save.
-      </Notice>
+      </ProblemCard>
       {comparisonOpen && latest && (
         <Dialog open onOpenChange={(open) => !open && setComparisonOpen(false)}>
           <DialogContent

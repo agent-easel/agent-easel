@@ -33,6 +33,3 @@ export function ExecutionStateBadge({ state }: { state: string }) {
   const { kind, label } = executionState(state);
   return <StatusBadge kind={kind}>{label}</StatusBadge>;
 }
-
-// Only condition-arrivals.tsx still imports these here; it moves to time-format.ts after #519.
-export { clockTime, dayAndTime } from "../time-format.ts";

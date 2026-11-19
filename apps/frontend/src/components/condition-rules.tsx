@@ -21,6 +21,7 @@ import { randomId } from "@/lib/ids";
 import { PanelHeading, TargetSelect } from "./block-exit-configuration.tsx";
 import { fieldIssue, type BlockIssue } from "./flow-readiness.tsx";
 import { StatusBadge } from "./status-badge.tsx";
+import { fieldAria } from "./field-state.ts";
 
 type ConditionBlock = Extract<FlowBlock, { kind: "condition" }>;
 
@@ -340,8 +341,7 @@ function RuleRow({
         <span aria-hidden>From arrival</span>
         <Input
           aria-label={`${label} from arrival`}
-          aria-invalid={entry !== undefined || undefined}
-          aria-describedby={entry === undefined ? undefined : `${id}-detail`}
+          {...fieldAria(entry !== undefined && `${id}-detail`)}
           data-rule-field="fromArrival"
           inputMode="numeric"
           className="h-7 w-16 text-sm"

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { ConditionArrivalEvidence, RunDetail } from "@t3-factory/contracts";
 import { RefreshCw } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
@@ -12,7 +11,9 @@ import {
   countText,
   emptyArrivalWindow,
 } from "../condition-arrivals.ts";
-import { clockTime, dayAndTime, ExecutionStateBadge } from "./execution-state.tsx";
+import { ExecutionStateBadge } from "./execution-state.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { clockTime, dayAndTime } from "../time-format.ts";
 import { sectionLabelClass } from "./page.tsx";
 
 /** One window of the Condition's arrivals from the bounded read. The first page opens on its own
@@ -163,14 +164,13 @@ export function ConditionArrivals({ run, blockId }: { run: RunDetail; blockId: s
         </p>
       )}
       {newer > 0 && (
-        <Alert variant="info" role="status" className="px-3 py-2">
-          <AlertDescription>
-            <p className="text-xs">
-              {countText(newer)} newer {newer === 1 ? "arrival" : "arrivals"} since this list was
-              read. Refresh to read the list again with {newer === 1 ? "it" : "them"}.
-            </p>
-          </AlertDescription>
-        </Alert>
+        <ProblemCard
+          tone="info"
+          density="compact"
+          title={`${countText(newer)} newer ${newer === 1 ? "arrival" : "arrivals"} since this list was read`}
+        >
+          Refresh to read the list again with {newer === 1 ? "it" : "them"}.
+        </ProblemCard>
       )}
       {arrivalWindow.arrivals.length > 0 && (
         <>
@@ -191,9 +191,11 @@ export function ConditionArrivals({ run, blockId }: { run: RunDetail; blockId: s
         </p>
       )}
       {arrivalWindow.error && (
-        <Alert variant="destructive" className="px-3 py-2">
-          <AlertDescription className="flex w-full flex-col gap-1.5">
-            <p className="text-xs">{arrivalWindow.error.message}</p>
+        <ProblemCard
+          tone="error"
+          density="compact"
+          title={arrivalWindow.error.message}
+          action={
             <span className="flex gap-2">
               {arrivalWindow.error.during === "more" && (
                 <Button
@@ -209,8 +211,8 @@ export function ConditionArrivals({ run, blockId }: { run: RunDetail; blockId: s
                 {arrivalWindow.error.during === "more" ? "Refresh from arrival 1" : "Try again"}
               </Button>
             </span>
-          </AlertDescription>
-        </Alert>
+          }
+        />
       )}
       {arrivalWindow.nextCursor && (
         <div className="flex items-center gap-2 px-2">
