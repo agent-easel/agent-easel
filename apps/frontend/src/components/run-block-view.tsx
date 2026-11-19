@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import {
   attentionPresentation,
   awaitsReviewInT3,
@@ -57,11 +57,14 @@ function visitSpan(visit: Visits[number]) {
 /** The current report of a working visit; a sent Continuation reports like an Agent. An Agent
  * idle with it can be asked to report. */
 function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
+  const reportLabel = useId();
   if (recorded.state !== "working" && recorded.state !== "sent") return null;
   if (!recorded.workingMessage) return null;
   return (
-    <div className="flex min-w-0 flex-col gap-2.5">
-      <p className={fieldLabelClass}>Working report</p>
+    <section aria-labelledby={reportLabel} className="flex min-w-0 flex-col gap-2.5">
+      <h4 id={reportLabel} className={fieldLabelClass}>
+        Working report
+      </h4>
       <AgentTextPreview
         text={recorded.workingMessage}
         readLabel="Read full report"
@@ -74,7 +77,7 @@ function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }
       {(awaitsReviewInT3(recorded) || pendingRecovery(run, recorded)) && (
         <RequestReport run={run} block={recorded} />
       )}
-    </div>
+    </section>
   );
 }
 

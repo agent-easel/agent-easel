@@ -235,6 +235,7 @@ function ReviewInT3({
           <AgentTextPreview
             text={block.workingMessage}
             readLabel="Read full report"
+            variant="needs-input"
             heading={{
               title: `${block.name} · Working report`,
               provenance: `Visit ${visit} · waiting for your reply${since}`,
