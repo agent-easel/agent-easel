@@ -185,7 +185,7 @@ function FlowRow({
         )
       }
       trailing={
-        <span className="shrink-0 text-2xs tracking-label text-subtle-foreground">
+        <span className="shrink-0 text-2xs text-subtle-foreground">
           {editedLabel(flow.updatedAt)}
         </span>
       }
@@ -195,7 +195,7 @@ function FlowRow({
         owner.gone ? null : (
           <ChevronRight
             aria-hidden
-            className="size-4 shrink-0 text-subtle-foreground"
+            className="size-4 shrink-0 text-muted-foreground"
             strokeWidth={1.5}
           />
         )

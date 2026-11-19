@@ -6,7 +6,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { ImagePlus, X } from "lucide-react";
+import { Image as ImageIcon, X } from "lucide-react";
 import type { RunImage } from "@t3-factory/contracts";
 import { RUN_IMAGE_LIMIT, RUN_IMAGE_MIME_TYPES } from "@t3-factory/domain-validation";
 import type { ImageRejection } from "../run-draft.ts";
@@ -229,13 +229,13 @@ export function AttachImagesButton({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label="Attach images"
             className="shrink-0 text-muted-foreground"
             disabled={disabled}
             onClick={() => input.current?.click()}
           >
-            <ImagePlus aria-hidden strokeWidth={1.5} />
+            <ImageIcon aria-hidden strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
         <TooltipContent>Attach images</TooltipContent>

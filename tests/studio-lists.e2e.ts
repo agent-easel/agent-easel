@@ -237,9 +237,8 @@ test("Import reviews a Flow file whose Agent needs a model, and rejects a file i
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([needsModel]);
   const review = screen.getByRole("dialog", /^Import “/);
-  await expect(review).toContainText(
-    "Imported prompts run with your T3 permissions — Read them in Studio before you start a Run.",
-  );
+  await expect(review).toContainText("Imported prompts run with your T3 permissions");
+  await expect(review).toContainText("Read them in Studio before you start a Run.");
   await expect(review.getByRole("group", /Northwind QA/)).toContainText("Needs a model");
   await expect(review.getByRole("button", "Import", { exact: true })).toBeEnabled();
   await shot(app, browser, "import-needs-model");
@@ -437,6 +436,7 @@ test("empty Flows and Agents, and the composer’s Go to links return with the d
   await expect(screen.getByRole("link", "Go to Agents", { exact: true })).toHaveCount(0);
   const prompt = screen.getByRole("textbox", /Initial prompt/);
   await prompt.fill("Keep this draft");
+  await shot(app, browser, "composer-first-flow");
   await screen.getByRole("link", "Go to Flows", { exact: true }).tap();
   await expect(screen.getByRole("heading", "No Flows yet", { exact: true })).toBeVisible();
   await shot(app, browser, "flows-empty-from-composer");
@@ -455,6 +455,7 @@ test("empty Flows and Agents, and the composer’s Go to links return with the d
   await expect(kept).toContainText("Keep this draft");
   await expect(screen.getByRole("link", "Go to Agents", { exact: true })).toBeVisible();
   await expect(screen.getByRole("link", "Go to Flows", { exact: true })).toHaveCount(0);
+  await shot(app, browser, "composer-first-agent");
   await screen.getByRole("link", "Go to Agents", { exact: true }).tap();
   await expect(screen.getByRole("heading", "No Agents yet", { exact: true })).toBeVisible();
   await shot(app, browser, "agents-empty-from-composer");

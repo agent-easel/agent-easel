@@ -47,7 +47,7 @@ export function AgentsListColumn({
 }) {
   const groups = shownGroups(agents, query, owners);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2 md:w-[300px] md:shrink-0">
+    <div className="flex w-full min-w-0 flex-col gap-2 md:w-100 md:shrink-0">
       {creatingNew && (
         <StudioListRow
           icon={
@@ -223,7 +223,7 @@ function AgentRow({
       wrap
       selected={selected}
       trailing={
-        <span className="shrink-0 text-2xs font-medium text-muted-foreground">
+        <span className="shrink-0 text-2xs text-subtle-foreground">
           {flowUsageLabel(placingFlows(flows, agent.id).length)}
         </span>
       }

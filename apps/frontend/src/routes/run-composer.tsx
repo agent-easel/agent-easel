@@ -238,7 +238,7 @@ function StartButton({ model }: { model: Composer }) {
         disabled={!enabled}
         className={cn(
           "group/start ml-auto h-9 shrink-0 gap-2 pr-3 pl-3.5 font-semibold has-[>svg]:pr-3 has-[>svg]:pl-3.5",
-          !enabled && "bg-accent text-subtle-foreground hover:bg-accent disabled:opacity-100",
+          !enabled && "bg-border text-subtle-foreground hover:bg-border disabled:opacity-100",
         )}
       >
         <Play aria-hidden className="size-3" strokeWidth={2} />
@@ -255,7 +255,7 @@ function StartButton({ model }: { model: Composer }) {
 
 export function RunComposer() {
   const model = useComposer();
-  const { project, projectReady, start } = model;
+  const { project, start } = model;
   return (
     <ScreenLayout title="New Run">
       <main className="flex flex-1 items-center justify-center p-8 max-sm:px-4">
@@ -273,7 +273,8 @@ export function RunComposer() {
           }}
         >
           <h1 className="text-heading tracking-heading">
-            {projectReady ? `What should we work on in ${project?.title}?` : "Start a new Run"}
+            {/* A last-known Project keeps its heading while T3 is disconnected (R08a). */}
+            {project ? `What should we work on in ${project.title}?` : "Start a new Run"}
           </h1>
           <ComposerBox model={model} />
           <LaunchNotice model={model} />
@@ -593,10 +594,13 @@ function CauseLink({ cause }: { cause: StartCause }) {
 
 function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
   return (
-    <ul aria-label="Start blockers" className="list-disc space-y-1 pl-4 text-foreground">
+    <ul aria-label="Start blockers" className="grid gap-1">
       {causes.map((cause, index) => (
-        <li key={`${cause.destination}:${cause.message}:${index}`} className="break-words">
-          <span className="block">{cause.message}</span>
+        <li
+          key={`${cause.destination}:${cause.message}:${index}`}
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 break-words"
+        >
+          <span>{cause.message}</span>
           <CauseLink cause={cause} />
         </li>
       ))}

@@ -72,6 +72,7 @@ test("a deleted Flow clears, and a menu of only not-ready Flows adds no status l
   ).not.toBe("true");
   await app.screenshot("after-flow-all-disabled");
   await browser.keyboard.press("Escape");
+  await app.screenshot("after-no-ready-flows");
 
   // Arrange — remove the last Flow.
   await fixture.definitions.removeFlows();

@@ -2,8 +2,7 @@ import { MutationGate } from "@/client-gate";
 import { useState, type FormEvent } from "react";
 import type { FlowDraft } from "@t3-factory/contracts";
 import { validateCreateFlow } from "@t3-factory/domain-validation";
-import { CircleAlert } from "lucide-react";
-import { Alert, AlertTitle } from "@/components/ui/alert";
+import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,9 @@ import {
   useStudioOwners,
   type StudioDefinitions,
 } from "../studio-definitions.ts";
+import { fieldLabelClass } from "./page.tsx";
 import { OwnerPicker } from "./studio-owner.tsx";
+import { Notice } from "./notice.tsx";
 
 export function CreateFlow({
   definitions,
@@ -174,8 +175,10 @@ function NewFlowDialog({
         onPointerDownOutside={leave}
         onInteractOutside={leave}
       >
-        <div className="grid gap-1.5 pt-4">
-          <Label htmlFor="flow-name">Flow name</Label>
+        <div className="grid gap-1.5">
+          <Label htmlFor="flow-name" className={fieldLabelClass}>
+            Flow name
+          </Label>
           <Input
             id="flow-name"
             autoFocus
@@ -186,7 +189,7 @@ function NewFlowDialog({
             disabled={saving}
           />
         </div>
-        <div className="pt-4 pb-4">
+        <div>
           <OwnerPicker
             kind="Flow"
             chosen={owner}
@@ -199,10 +202,9 @@ function NewFlowDialog({
           />
         </div>
         {failed && (
-          <Alert variant="critical">
-            <CircleAlert aria-hidden />
-            <AlertTitle>Couldn’t create the Flow</AlertTitle>
-          </Alert>
+          <Notice tone="critical" icon={TriangleAlert} title="Couldn’t create the Flow">
+            Your name and owner are kept — try again.
+          </Notice>
         )}
       </DialogContent>
     </Dialog>

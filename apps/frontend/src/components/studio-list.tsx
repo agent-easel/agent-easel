@@ -1,5 +1,5 @@
 import { MutationGate } from "@/client-gate";
-import { Ellipsis, Plus, Search } from "lucide-react";
+import { Ellipsis, Search } from "lucide-react";
 import type { ReactNode, Ref } from "react";
 import { cn } from "@/lib/utils";
 import type { StudioSelection } from "../settings-navigation.ts";
@@ -38,8 +38,8 @@ export function StudioListHeader({
   filter?: ReactNode;
 }) {
   return (
-    <div className="grid gap-4">
-      <div className="flex min-h-8 items-center gap-2">
+    <div className="grid gap-5">
+      <div className="flex min-h-8 items-center gap-2.5">
         <h1 className="text-xl font-semibold">{title}</h1>
         {count !== null && (
           <span className="rounded-full border bg-muted px-2 py-0.5 text-2xs font-medium text-muted-foreground">
@@ -50,17 +50,16 @@ export function StudioListHeader({
           {importer}
           <MutationGate>
             <Button type="button" variant={createVariant} onClick={onCreate}>
-              <Plus aria-hidden strokeWidth={1.5} />
               {createLabel}
             </Button>
           </MutationGate>
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <div className="relative w-60 shrink-0">
+        <div className="relative w-70 shrink-0">
           <Search
             aria-hidden
-            className="pointer-events-none absolute top-2 left-2.5 size-4 text-subtle-foreground"
+            className="pointer-events-none absolute top-[9px] left-2.5 size-3.5 text-subtle-foreground"
             strokeWidth={1.5}
           />
           <Input
@@ -68,7 +67,7 @@ export function StudioListHeader({
             placeholder={`Search ${title}`}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            className="h-8 bg-muted pl-9"
+            className="h-8 bg-muted pl-8"
           />
         </div>
         {filter}
@@ -151,7 +150,7 @@ export function StudioListRow({
   selection,
   selected,
   chevron,
-  leading,
+  control,
   wrap,
 }: {
   icon: ReactNode;
@@ -164,8 +163,8 @@ export function StudioListRow({
   selection?: StudioSelection | undefined;
   selected?: boolean | undefined;
   chevron?: ReactNode | undefined;
-  /** A control at the start, such as a Trigger's switch. It sits above the row link. */
-  leading?: ReactNode | undefined;
+  /** A control before the ⋯ menu, such as a Trigger's switch. It sits above the row link. */
+  control?: ReactNode | undefined;
   /** Agent names and summaries wrap. Other lists keep one line. */
   wrap?: boolean | undefined;
 }) {
@@ -173,11 +172,13 @@ export function StudioListRow({
   const body = (
     <>
       {icon}
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className={cn("text-sm font-medium", text)}>{name}</span>
-        <span className={cn("text-2xs tracking-label text-subtle-foreground", text)}>{meta}</span>
+      <span className="grid min-w-0 flex-1 gap-[3px] leading-[normal]">
+        <span className={cn("text-sm leading-[normal] font-medium", text)}>{name}</span>
+        <span className={cn("text-2xs leading-[normal] text-subtle-foreground", text)}>{meta}</span>
         {reason ? (
-          <span className="text-xs break-words text-muted-foreground">{reason}</span>
+          <span className="text-xs leading-[normal] break-words text-muted-foreground">
+            {reason}
+          </span>
         ) : null}
       </span>
       {badge}
@@ -187,11 +188,10 @@ export function StudioListRow({
   return (
     <div
       className={cn(
-        "relative flex w-full items-center gap-3 rounded-lg border bg-muted px-4 py-3 text-left text-foreground transition-colors hover:border-border-hover hover:bg-accent",
+        "relative flex min-h-[58px] w-full items-center gap-3 rounded-lg border bg-muted px-4 py-1.5 text-left text-foreground transition-colors hover:border-border-hover hover:bg-accent",
         selected && "border-primary bg-sidebar-accent",
       )}
     >
-      {leading && <div className="relative z-10 shrink-0">{leading}</div>}
       {selection ? (
         <StudioLink
           selection={selection}
@@ -203,6 +203,7 @@ export function StudioListRow({
       ) : (
         <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
       )}
+      {control && <div className="relative z-10 shrink-0">{control}</div>}
       <div className="relative z-10 shrink-0">{menu}</div>
       {chevron}
     </div>

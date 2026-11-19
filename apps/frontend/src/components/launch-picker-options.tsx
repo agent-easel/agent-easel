@@ -1,4 +1,5 @@
 import type { FactoryProject, FlowDraft } from "@t3-factory/contracts";
+import { Workflow } from "lucide-react";
 import {
   DropdownMenuItem,
   DropdownMenuLabel,
@@ -27,7 +28,7 @@ export function ProjectOption({
       indicatorPosition="right"
       disabled={busy}
       aria-label={`${project.title} · ${project.workspaceRoot} · ${availability}`}
-      className="my-0.5 items-start rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring"
+      className="items-start py-1.5 pl-2"
     >
       <span className="mt-px">
         <ProjectIcon
@@ -57,8 +58,18 @@ export function ProjectOption({
   );
 }
 
-const flowRadioItemClass =
-  "my-0.5 rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring";
+/** Run/FlowOption: a 32 px row with the Flow icon; the chosen Flow shows only the check. */
+const flowRowClass = "h-8 items-center py-0 pl-2";
+
+function FlowIcon({ muted }: { muted?: boolean }) {
+  return (
+    <Workflow
+      aria-hidden
+      strokeWidth={1.5}
+      className={muted ? "text-muted-foreground opacity-50" : "text-muted-foreground"}
+    />
+  );
+}
 
 function FlowChoice({
   flow,
@@ -76,8 +87,9 @@ function FlowChoice({
       indicatorPosition="right"
       disabled={busy}
       aria-label={flow.name}
-      className={flowRadioItemClass}
+      className={flowRowClass}
     >
+      <FlowIcon />
       <MenuName name={flow.name} peers={peers} />
     </DropdownMenuRadioItem>
   );
@@ -90,9 +102,10 @@ function FlowUnavailable({ flow, peers }: { flow: FlowDraft; peers: readonly str
       disabled
       data-flow-id={flow.id}
       aria-label={`${flow.name} · Not ready`}
-      className="my-0.5 rounded-md py-2 data-[disabled]:opacity-100"
+      className={`${flowRowClass} pr-2 data-[disabled]:opacity-100`}
     >
-      <MenuName name={flow.name} peers={peers} className="text-muted-foreground" />
+      <FlowIcon muted />
+      <MenuName name={flow.name} peers={peers} className="text-subtle-foreground" />
       <StatusBadge kind="error">Not ready</StatusBadge>
     </DropdownMenuItem>
   );
@@ -113,7 +126,7 @@ export function FlowGroup({
   if (flows.length === 0) return null;
   return (
     <>
-      <DropdownMenuLabel className="normal-case">{title}</DropdownMenuLabel>
+      <DropdownMenuLabel className="px-2 text-xs normal-case">{title}</DropdownMenuLabel>
       {flows.map((flow) =>
         flow.readiness.ready ? (
           <FlowChoice key={flow.id} flow={flow} busy={busy} peers={peers} />

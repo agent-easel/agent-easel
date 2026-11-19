@@ -124,7 +124,7 @@ export function OwnerFilter({
           <ChevronDown aria-hidden className="ml-auto size-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-1rem)]">
+      <DropdownMenuContent align="start" className="w-56 max-w-[calc(100vw-1rem)]">
         <DropdownMenuRadioGroup
           value={filterValue(filter)}
           onValueChange={(value) =>
@@ -135,10 +135,11 @@ export function OwnerFilter({
             )
           }
         >
-          <DropdownMenuRadioItem value="all" indicatorPosition="right">
+          <DropdownMenuRadioItem value="all" indicatorPosition="right" className="pl-2">
             All owners
           </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="global" indicatorPosition="right">
+          <DropdownMenuRadioItem value="global" indicatorPosition="right" className="pl-2">
+            <Workflow aria-hidden strokeWidth={1.5} className="text-muted-foreground" />
             Global
           </DropdownMenuRadioItem>
           {targets.length > 1 && <DropdownMenuSeparator />}
@@ -149,8 +150,9 @@ export function OwnerFilter({
               disabled={disabled !== null}
               indicatorPosition="right"
               aria-label={`${owner.title} · ${owner.detail}${owner.unavailable ? ` · ${owner.unavailable}` : ""}`}
-              className="items-start"
+              className="items-start pl-2"
             >
+              <FolderGit2 aria-hidden strokeWidth={1.5} className="mt-0.5 text-muted-foreground" />
               <OwnerOptionText owner={owner} />
             </DropdownMenuRadioItem>
           ))}

@@ -1,7 +1,7 @@
 import { otherRepositoryWatchers } from "./trigger-notices.tsx";
 import { StartedRuns } from "./started-runs.tsx";
 import { useRef, useState } from "react";
-import { ChevronRight, Pencil, Play, Trash2, Zap } from "lucide-react";
+import { ChevronRight, Pencil, RefreshCw, Trash2, Zap } from "lucide-react";
 import type { FactoryProject, TriggerDefinition, TriggerStartedRun } from "@t3-factory/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -250,7 +250,7 @@ function TriggerRow({
       meta={<TriggerMeta trigger={trigger} names={names} checking={checking} started={started} />}
       reason={problem}
       badge={problem ? <StatusBadge kind="problem" /> : undefined}
-      leading={
+      control={
         gone ? undefined : (
           <MutationGate>
             <Switch
@@ -278,7 +278,7 @@ function TriggerRow({
         gone ? null : (
           <ChevronRight
             aria-hidden
-            className="size-4 shrink-0 text-subtle-foreground"
+            className="size-4 shrink-0 text-muted-foreground"
             strokeWidth={1.5}
           />
         )
@@ -337,7 +337,7 @@ function TriggerRowMenu({
             description={trigger.enabled ? undefined : "Turn the Trigger on to check it."}
             onSelect={onCheck}
           >
-            <Play aria-hidden strokeWidth={1.5} />
+            <RefreshCw aria-hidden strokeWidth={1.5} />
             Check now
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onEdit}>

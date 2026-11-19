@@ -1,13 +1,13 @@
 import { useRef } from "react";
-import { CircleAlert, ShieldAlert, Upload } from "lucide-react";
+import { Bot, TriangleAlert, Workflow } from "lucide-react";
 import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceMenu } from "@/components/choice-menu";
+import { cn } from "@/lib/utils";
 import {
   importModelChoices,
   useDefinitionImport,
@@ -18,6 +18,7 @@ import {
 } from "../definition-import.ts";
 import { ModelOptionField } from "./execution-settings-fields.tsx";
 import { NeedsModel } from "./needs-model.tsx";
+import { Notice } from "./notice.tsx";
 import { OwnerPicker } from "./studio-owner.tsx";
 import { ownerPicker } from "../studio-definitions.ts";
 
@@ -38,7 +39,6 @@ export function DefinitionImportControl({
     <>
       <MutationGate>
         <Button type="button" variant="outline" onClick={importer.choose}>
-          <Upload aria-hidden strokeWidth={1.5} />
           Import
         </Button>
       </MutationGate>
@@ -163,19 +163,22 @@ function ImportFileContent({
         </p>
       )}
       {rejected && (
-        <Alert variant="critical">
-          <CircleAlert aria-hidden />
-          <AlertTitle>{state.error}</AlertTitle>
-          {state.issues.length > 0 && (
-            <AlertDescription>
+        <Notice
+          tone="critical"
+          icon={TriangleAlert}
+          title="Couldn’t import this file"
+          action={
+            state.issues.length > 0 && (
               <ul className="list-disc pl-5">
                 {state.issues.map((issue) => (
                   <li key={issue}>{issue}</li>
                 ))}
               </ul>
-            </AlertDescription>
-          )}
-        </Alert>
+            )
+          }
+        >
+          {state.error}
+        </Notice>
       )}
     </DialogContent>
   );
@@ -234,40 +237,50 @@ function ImportReviewContent({
         hint=""
         quietStatus
       />
-      <Alert variant="attention">
-        <ShieldAlert aria-hidden />
-        <AlertDescription>
-          Imported prompts run with your T3 permissions — Read them in Studio before you start a
-          Run.
-        </AlertDescription>
-      </Alert>
-      <section aria-labelledby="import-creates" className="grid gap-3">
-        <h3 id="import-creates" className="text-sm font-semibold">
+      <Notice
+        tone="attention"
+        icon={TriangleAlert}
+        title="Imported prompts run with your T3 permissions"
+      >
+        Read them in Studio before you start a Run.
+      </Notice>
+      <section aria-labelledby="import-creates" className="grid gap-1.5">
+        <h3 id="import-creates" className="text-2xs font-medium text-muted-foreground">
           Creates
         </h3>
-        {flow && (
-          <div className="grid gap-0.5">
-            <p className="text-sm font-medium">{flow.name}</p>
-            {blocks !== null && (
-              <p className="text-2xs tracking-label text-muted-foreground">
-                {blocks} {blocks === 1 ? "block" : "blocks"}
+        <div className="grid overflow-hidden rounded-lg border bg-background">
+          {flow && (
+            <div className={createsRowClass}>
+              <Workflow aria-hidden className={createsIconClass} strokeWidth={1.5} />
+              <p className="flex min-w-0 flex-1 items-center gap-2 leading-[normal]">
+                <span className="truncate text-sm font-medium">{flow.name}</span>
+                {blocks !== null && (
+                  <span className="shrink-0 text-2xs text-subtle-foreground">
+                    {blocks} {blocks === 1 ? "block" : "blocks"}
+                  </span>
+                )}
               </p>
-            )}
-          </div>
-        )}
-        {rows.map((row) => (
-          <ImportModelRow
-            key={row.key}
-            model={model}
-            row={row}
-            capabilities={capabilities}
-            disabled={state.committing}
-          />
-        ))}
+            </div>
+          )}
+          {rows.map((row) => (
+            <ImportModelRow
+              key={row.key}
+              model={model}
+              row={row}
+              capabilities={capabilities}
+              disabled={state.committing}
+            />
+          ))}
+        </div>
       </section>
     </DialogContent>
   );
 }
+
+/** One definition in the S01i Creates list: icon, name, and an Agent's model select at the end. */
+const createsRowClass =
+  "flex min-h-[46px] flex-wrap items-center gap-x-2.5 gap-y-2 py-2 pr-2 pl-3 not-first:border-t";
+const createsIconClass = "size-4 shrink-0 text-muted-foreground";
 
 const choiceId = (providerInstanceId: string, modelId: string) =>
   JSON.stringify([providerInstanceId, modelId]);
@@ -290,12 +303,9 @@ function ImportModelRow({
     ?.models.find((entry) => entry.id === selection?.modelId);
   const pickerId = `import-model-${row.key}`;
   return (
-    <div
-      role="group"
-      aria-labelledby={`${pickerId}-name`}
-      className="grid gap-1.5 rounded-lg border px-3 py-2.5"
-    >
-      <div className="flex flex-wrap items-center gap-x-2">
+    <div role="group" aria-labelledby={`${pickerId}-name`} className={createsRowClass}>
+      <Bot aria-hidden className={createsIconClass} strokeWidth={1.5} />
+      <div className="flex min-w-0 flex-1 items-center gap-2">
         <Label id={`${pickerId}-name`} htmlFor={pickerId} className="text-sm font-medium">
           {row.name}
         </Label>
@@ -304,7 +314,7 @@ function ImportModelRow({
       <ChoiceMenu
         id={pickerId}
         label={`Model for ${row.name}`}
-        {...(selection ? {} : { className: "border-attention" })}
+        className={cn("h-7.5 w-50 shrink-0 bg-card", !selection && "border-attention")}
         value={selection ? choiceId(selection.providerInstanceId, selection.modelId) : ""}
         choices={[
           { id: "", label: "Needs a model" },
@@ -324,7 +334,7 @@ function ImportModelRow({
         placeholder="Needs a model"
       />
       {selection && chosenModel?.options && (
-        <div className="grid grid-cols-1 gap-3 pt-1.5 sm:grid-cols-2">
+        <div className="grid basis-full grid-cols-1 gap-3 pb-1 pl-6.5 sm:grid-cols-2">
           {chosenModel.options.map((descriptor) => (
             <ModelOptionField
               key={descriptor.id}
@@ -339,7 +349,7 @@ function ImportModelRow({
         </div>
       )}
       {row.refusal && (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="basis-full pl-6.5 text-xs text-destructive">
           {row.refusal}
         </p>
       )}

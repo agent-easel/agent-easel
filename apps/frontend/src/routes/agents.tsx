@@ -284,7 +284,7 @@ function AgentsBoard({
       />
     );
   return (
-    <div className="flex min-w-0 items-start gap-6">
+    <div className="flex min-w-0 items-start gap-4">
       <AgentsListColumn
         agents={library.agents}
         flows={library.flows}

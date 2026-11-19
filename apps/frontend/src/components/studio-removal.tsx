@@ -5,12 +5,13 @@ import type {
   TriggerDefinition,
   ValidationIssue,
 } from "@t3-factory/contracts";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight, Trash2, Workflow, Zap, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { studioOwner } from "../studio-definitions.ts";
 import { StatusBadge } from "./status-badge.tsx";
+import { cn } from "@/lib/utils";
 
 /** The id and name an in-use refusal names, from `Trigger "Name" (id)` or `Flow "Name" (id)`. */
 export function namedBlockers(issues: readonly ValidationIssue[], code: string) {
@@ -47,14 +48,15 @@ export function CantRemoveDialog({
         title={<>Can’t remove “{name}”</>}
         actions={
           <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
+            Close
           </Button>
         }
         onKeyDownCapture={(event) => {
           if (event.key === "Escape") event.stopPropagation();
         }}
       >
-        <ul aria-label={label} className="grid gap-0.5 rounded-lg border bg-muted px-2 py-1.5">
+        <p className="text-sm text-muted-foreground">Remove these {label} first.</p>
+        <ul aria-label={label} className="grid gap-1.5">
           {children}
         </ul>
       </DialogContent>
@@ -73,6 +75,7 @@ export function flowBlockers(
     return (
       <RemovalBlocker
         key={flow.id}
+        icon={Workflow}
         name={flow.name}
         detail={owner.projectId === null ? "Global" : owner.title}
         gone={owner.gone}
@@ -93,6 +96,7 @@ export function triggerBlockers(
     return (
       <RemovalBlocker
         key={trigger.id}
+        icon={Zap}
         name={trigger.name}
         detail={owner.title}
         gone={owner.gone}
@@ -111,6 +115,7 @@ export function racedBlockers(
   return blockers.map((blocker) => (
     <RemovalBlocker
       key={blocker.id}
+      icon={detail === "Trigger" ? Zap : Workflow}
       name={blocker.name}
       detail={detail}
       gone={false}
@@ -143,13 +148,18 @@ export function RemoveMenuItem({
   );
 }
 
+const blockerRowClass =
+  "flex w-full min-w-0 items-center gap-2 rounded-lg border bg-muted px-3 py-2.5";
+
 /** One Flow or Trigger that blocks removal. A gone Trigger is text only; it cannot be opened. */
 function RemovalBlocker({
+  icon: Icon,
   name,
   detail,
   gone,
   onOpen,
 }: {
+  icon: LucideIcon;
   name: string;
   detail: string;
   gone: boolean;
@@ -158,11 +168,11 @@ function RemovalBlocker({
 }) {
   const body = (
     <>
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="truncate text-sm font-medium">{name}</span>
-        <span className="truncate text-2xs tracking-label text-subtle-foreground">{detail}</span>
-      </span>
+      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
+      <span className="truncate text-sm leading-[normal] font-medium">{name}</span>
+      <span className="shrink-0 text-2xs leading-[normal] text-subtle-foreground">{detail}</span>
       {gone && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
+      <span className="flex-1" />
     </>
   );
   return (
@@ -170,7 +180,10 @@ function RemovalBlocker({
       {onOpen ? (
         <button
           type="button"
-          className="flex w-full items-center gap-2 rounded-sm py-1.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className={cn(
+            blockerRowClass,
+            "text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          )}
           onClick={onOpen}
         >
           {body}
@@ -181,7 +194,7 @@ function RemovalBlocker({
           />
         </button>
       ) : (
-        <div className="flex w-full items-center gap-2 py-1.5">{body}</div>
+        <div className={blockerRowClass}>{body}</div>
       )}
     </li>
   );

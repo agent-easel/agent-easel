@@ -603,9 +603,8 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText(name);
-  await expect(review).toContainText(
-    "Imported prompts run with your T3 permissions — Read them in Studio before you start a Run.",
-  );
+  await expect(review).toContainText("Imported prompts run with your T3 permissions");
+  await expect(review).toContainText("Read them in Studio before you start a Run.");
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
   );
