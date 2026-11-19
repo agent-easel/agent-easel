@@ -98,10 +98,20 @@ export function recordExecution(
   });
 }
 
-/** A run T3 cancelled before it started did no work: it is an execution failure only while it
- * decides the Block's failure. */
-const failedWork = (execution: ExecutionRead, deciding: ExecutionRead | null) =>
-  !cancelledBeforeStart(execution) || execution.runId === deciding?.runId;
+/** The Problem recorded on `execution`. A run T3 cancelled before it started is an execution
+ * failure while it decides the Block's failure; after a finished report, one newer than the
+ * deciding run did no work and records none. Otherwise it keeps what was recorded for it. */
+function executionProblem(
+  execution: ExecutionRead,
+  deciding: ExecutionRead | null,
+  finished: boolean,
+): "execution-failed" | null | "keep" {
+  if (!cancelledBeforeStart(execution))
+    return failedRun(execution.status) ? "execution-failed" : null;
+  if (execution.runId === deciding?.runId) return "execution-failed";
+  if (finished && deciding && (execution.ordinal ?? 0) > (deciding.ordinal ?? 0)) return null;
+  return "keep";
+}
 
 function recordExecutions(
   sql: SqlClient.SqlClient,
@@ -110,6 +120,7 @@ function recordExecutions(
   bindingId: string,
   { thread }: WorkerThread,
   deciding: ExecutionRead | null,
+  finished: boolean,
   time: string,
 ) {
   return Effect.gen(function* () {
@@ -125,7 +136,7 @@ function recordExecutions(
         scope,
         execution,
         thread.pendingRequestCount,
-        failedRun(execution.status) && failedWork(execution, deciding) ? "execution-failed" : null,
+        executionProblem(execution, deciding, finished),
         time,
       );
   });
@@ -275,7 +286,16 @@ function recordWorkerThread(
       (entry) => entry.blockId === block.block_id,
     )?.report?.status;
     const deciding = decidingRun(worker, current, (runId) => ownerOf(runId) === block.block_id);
-    yield* recordExecutions(sql, run, block, binding.id, worker, deciding, time);
+    yield* recordExecutions(
+      sql,
+      run,
+      block,
+      binding.id,
+      worker,
+      deciding,
+      current === "finished",
+      time,
+    );
     const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
     if (deciding && failedRun(deciding.status))
       yield* observeAttention(
