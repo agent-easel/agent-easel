@@ -33,6 +33,7 @@ export function SettingsLink({
   selection: SettingsSelection;
   children: React.ReactNode;
   className?: string;
+  "aria-label"?: string;
 }) {
   const options = useSettingsOptions(selection);
   return <AppLink {...options} {...props} />;

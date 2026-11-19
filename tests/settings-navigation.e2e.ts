@@ -119,8 +119,7 @@ test("searching for notifications finds Desktop app and keeps the open page", as
   await app.screenshot("settings-search-notifications");
 });
 
-// The focused element's box-shadow, polled past the button's transition: the shared focus ring,
-// 3 px of `--ring` at half opacity.
+// The shared focus ring is 3 px of `--ring` at half opacity.
 const focusShadow = `getComputedStyle(document.activeElement).boxShadow`;
 const noShadow = "rgba(0, 0, 0, 0) 0px 0px 0px 0px";
 const focusRings = [
@@ -129,7 +128,7 @@ const focusRings = [
 ] as const;
 
 for (const { mode, ring } of focusRings)
-  test(`a keyboard-focused button shows the focus ring in ${mode}`, async ({
+  test(`a keyboard-focused button and navigation row show the same focus ring in ${mode}`, async ({
     app,
     screen,
     browser,
@@ -138,6 +137,19 @@ for (const { mode, ring } of focusRings)
     await app.open("/settings/appearance");
     await screen.getByRole("radio", mode, { exact: true }).tap();
     await app.open("/settings/connection");
+    const shadow = [noShadow, noShadow, noShadow, ring, noShadow].join(", ");
+    const connection = sections(screen).getByRole("link", /^T3 connection, /);
+    await screen.getByLabel("Search settings", { exact: true }).focus();
+
+    // Act
+    await browser.keyboard.press("Tab");
+
+    // Assert
+    await expect(connection).toBeFocused();
+    await expect.poll(() => browser.evaluate(focusShadow)).toBe(shadow);
+    await app.screenshot(`navrow-focus-${mode.toLowerCase()}`);
+
+    // Arrange
     const edit = screen.getByRole("button", "Edit address", { exact: true });
     await edit.focus();
     await browser.keyboard.press("Shift+Tab");
@@ -147,9 +159,7 @@ for (const { mode, ring } of focusRings)
 
     // Assert
     await expect(edit).toBeFocused();
-    await expect
-      .poll(() => browser.evaluate(focusShadow))
-      .toBe([noShadow, noShadow, noShadow, ring, noShadow].join(", "));
+    await expect.poll(() => browser.evaluate(focusShadow)).toBe(shadow);
     await app.screenshot(`button-focus-${mode.toLowerCase()}`);
   });
 
