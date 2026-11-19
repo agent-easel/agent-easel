@@ -50,6 +50,14 @@ async function expectFirstRender(browser: Browser, mode: keyof typeof modes) {
   );
 }
 
+async function waitForSettingsDialog(browser: Browser) {
+  await expect
+    .poll(() =>
+      browser.evaluate(`getComputedStyle(document.querySelector('[role="dialog"]')).opacity`),
+    )
+    .toBe("1");
+}
+
 for (const mode of ["light", "dark"] as const) {
   test(`a fresh profile first renders in System ${mode}`, async ({ app, screen, browser }) => {
     // Arrange
@@ -63,6 +71,7 @@ for (const mode of ["light", "dark"] as const) {
     await expectFirstRender(browser, mode);
     await expect(screen.getByRole("radio", "System")).toBeChecked();
     await expectColors(browser, mode);
+    await waitForSettingsDialog(browser);
     await app.screenshot(`appearance-system-${mode}`);
   });
 }
@@ -92,6 +101,7 @@ for (const { mode, opposite } of [
     await expect(screen.getByRole("radio", label)).toBeChecked();
     await expectFirstRender(browser, mode);
     await expectColors(browser, mode);
+    await waitForSettingsDialog(browser);
     await app.screenshot(`appearance-${mode}-after-reload`);
   });
 
@@ -180,10 +190,10 @@ test("another tab of the same profile follows changes to Light, Dark, and System
   ).toBe(true);
   const mirroredChoice = () =>
     browser.evaluate(() => {
-      const tab = (window as Window & { __appearanceMirror: Window }).__appearanceMirror;
+      const tab = (window as Window & { __appearanceMirror?: Window }).__appearanceMirror;
       return [
-        tab.document.querySelector('[role="radio"][aria-checked="true"]')?.textContent ?? null,
-        tab.document.documentElement?.dataset.appearance ?? null,
+        tab?.document.querySelector('[role="radio"][aria-checked="true"]')?.textContent ?? null,
+        tab?.document.documentElement?.dataset.appearance ?? null,
       ];
     });
   await expect.poll(mirroredChoice).toEqual(["System", "light"]);
@@ -225,6 +235,7 @@ test("an offline client switches to System and follows the device without its se
 
   // Assert
   await expectColors(browser, "light");
+  await waitForSettingsDialog(browser);
   await app.screenshot("appearance-offline-light");
   await browser.emulateMedia({ colorScheme: "dark" });
   await expectColors(browser, "dark");
@@ -249,6 +260,7 @@ test("an incompatible server's gate offers System in local application settings"
   await expectColors(browser, "light");
   await expect(screen.getByRole("radio", "System")).toBeChecked();
   await expect(screen.getByRole("dialog", "Local application settings")).toBeVisible();
+  await waitForSettingsDialog(browser);
   await app.screenshot("appearance-gate-light");
   await browser.emulateMedia({ colorScheme: "dark" });
   await expectColors(browser, "dark");

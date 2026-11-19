@@ -4,7 +4,7 @@ import type { AppearancePreference } from "@t3-factory/contracts/desktop-bridge"
 import { desktopBridge } from "./desktop-bridge.ts";
 
 const storageKey = "factory.appearance";
-const systemScheme = window.matchMedia("(prefers-color-scheme: dark)");
+const systemSchemeQuery = "(prefers-color-scheme: dark)";
 const listeners = new Set<() => void>();
 
 function parsePreference(value: string | null | undefined): AppearancePreference {
@@ -35,7 +35,8 @@ function recolor(change: () => void) {
 }
 
 function applyEffectiveAppearance(preference: AppearancePreference) {
-  const mode = preference === "system" ? (systemScheme.matches ? "dark" : "light") : preference;
+  let mode = preference;
+  if (mode === "system") mode = window.matchMedia(systemSchemeQuery).matches ? "dark" : "light";
   const root = document.documentElement;
   if (mode === root.dataset.appearance) return;
   recolor(() => {
@@ -86,7 +87,9 @@ export function startAppearance() {
   // The system scheme may have changed since the blocking script set the initial mode.
   applyEffectiveAppearance(preference);
   syncThemeColor();
-  systemScheme.addEventListener("change", () => applyEffectiveAppearance(currentPreference()));
+  window.matchMedia(systemSchemeQuery).addEventListener("change", () => {
+    applyEffectiveAppearance(currentPreference());
+  });
 
   if (desktopBridge()) return;
   try {
