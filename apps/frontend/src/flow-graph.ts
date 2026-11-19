@@ -105,6 +105,22 @@ export function sameWire(a: FlowWire, b: FlowWire) {
   return a.source.sourceBlockId === b.source.sourceBlockId && a.source.exitId === b.source.exitId;
 }
 
+/** A node on the canvas: one block, or the Flow input block. */
+export type CanvasNode =
+  | { readonly kind: "block"; readonly blockId: string }
+  | { readonly kind: "flow-input" };
+
+export function sameNode(a: CanvasNode | null, b: CanvasNode | null) {
+  if (a?.kind === "block" && b?.kind === "block") return a.blockId === b.blockId;
+  return a?.kind === b?.kind;
+}
+
+/** Whether a wire leaves the node: from any of a block's exits, or from the Flow input. */
+export function leavesNode(wire: FlowWire, node: CanvasNode) {
+  if (node.kind === "flow-input") return wire.source.kind === "flow-input";
+  return wire.source.kind === "exit" && wire.source.sourceBlockId === node.blockId;
+}
+
 export function hasWire(graph: FlowGraph, wire: FlowWire) {
   if (wire.source.kind === "flow-input")
     return graph.flowInput.targetBlockIds.includes(wire.targetBlockId);

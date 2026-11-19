@@ -431,7 +431,14 @@ fixed Human exits their old exits were mapped to.
   [Continuation](#continuations) shows Working while its prompt is worked on and Finished once it passed the response on. A
   finished block reads its taken exit as an outcome, **→ *exit* · time**. Several blocks can be active at once; the canvas
   marks no "current step", percentage or taken path. Repeated visits update the same block; the timeline and executions keep
-  the sequence. Connections use one neutral style, including never-run branches.
+  the sequence. At rest, connections use one neutral style, including never-run branches.
+- Hovering a block or Flow input with a mouse or trackpad, or giving one of its controls keyboard focus, temporarily draws
+  that source's direct outgoing connections, including fan-out, unvisited branches and return connections, heavier and in
+  higher contrast above the other connections. One source previews at a time: the most recent pointer or keyboard
+  interaction chooses it, and it clears when the source loses hover or focus, when panning, zooming or Follow active moves
+  it out from under the pointer, and when Studio or Settings covers the canvas or another Run opens. The preview shows
+  configured connections, not traversal: incoming connections and later hops keep the resting style. It works on ended
+  Runs from the captured revision, leaves selection and Follow active unchanged, and a touch tap shows none.
 - Exit rows name each exit in muted text until a report, an answer, a Condition selection or a forward has chosen it; a
   chosen exit reads in primary text. Condition outputs keep their rule (**from arrival *N* onward**, **when no rule
   matches**); other exits carry no source label.

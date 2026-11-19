@@ -12,9 +12,11 @@ import {
 } from "../flow-geometry.ts";
 import {
   connectionWire,
+  leavesNode,
   sameWire,
   type CanvasBlock,
   type CanvasGraph,
+  type CanvasNode,
   type FlowWire,
 } from "../flow-graph.ts";
 import { type WireRoute } from "../flow-layout-elk.ts";
@@ -135,6 +137,8 @@ function flowInputWires(
 /**
  * Configured connections and the Flow input's wires in one neutral style, without labels.
  * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
+ * Orthogonal wires leaving the emphasized node are drawn heavier and in higher contrast, above
+ * the others.
  */
 export function FlowWires({
   graph,
@@ -142,6 +146,7 @@ export function FlowWires({
   presentation,
   routes,
   pendingWire,
+  emphasized,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
@@ -150,6 +155,7 @@ export function FlowWires({
   routes: ReadonlyMap<string, WireRoute> | null;
   /** Rendered separately by the drag preview, but reserves its incoming port. */
   pendingWire: FlowWire | null;
+  emphasized: CanvasNode | null;
 }) {
   const routed = routes ?? undefined;
   const { kind } = presentation;
@@ -161,6 +167,7 @@ export function FlowWires({
   const marker = selection ? "arrow" : "execution-arrow";
   const current = selection?.selected;
   const selected = current && wires.find((wire) => sameWire(wire.wire, current));
+  const emphasis = (item: Wire) => emphasized !== null && leavesNode(item.wire, emphasized);
   return (
     <>
       <svg
@@ -190,37 +197,56 @@ export function FlowWires({
               </marker>
             </>
           ) : (
-            <marker
-              id={marker}
-              markerWidth="6"
-              markerHeight="8"
-              refX="6"
-              refY="4"
-              orient="auto"
-              markerUnits="userSpaceOnUse"
-            >
-              <path d="M0,0 L6,4 L0,8 z" className="fill-subtle-foreground" />
-            </marker>
+            <>
+              <marker
+                id={marker}
+                markerWidth="6"
+                markerHeight="8"
+                refX="6"
+                refY="4"
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <path d="M0,0 L6,4 L0,8 z" className="fill-subtle-foreground" />
+              </marker>
+              <marker
+                id="execution-arrow-emphasis"
+                markerWidth="9"
+                markerHeight="11"
+                refX="9"
+                refY="5.5"
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <path d="M0,0 L9,5.5 L0,11 z" className="fill-foreground" />
+              </marker>
+            </>
           )}
         </defs>
-        {wires.map((wire) =>
-          selection ? (
-            <SelectableWire
-              key={wire.key}
-              wire={wire}
-              marker={marker}
-              selected={wire === selected}
-              onSelect={() => selection.onSelect(wire.wire)}
-            />
-          ) : (
-            <path
-              key={wire.key}
-              d={wire.path.d}
-              markerEnd={`url(#${marker})`}
-              className="fill-none stroke-subtle-foreground stroke-[1.4] [stroke-linecap:round] [stroke-linejoin:round]"
-            />
-          ),
-        )}
+        {selection
+          ? wires.map((wire) => (
+              <SelectableWire
+                key={wire.key}
+                wire={wire}
+                marker={marker}
+                selected={wire === selected}
+                onSelect={() => selection.onSelect(wire.wire)}
+              />
+            ))
+          : // Emphasized wires come last, so they cross over the resting ones.
+            [...wires.filter((wire) => !emphasis(wire)), ...wires.filter(emphasis)].map((wire) => (
+              <path
+                key={wire.key}
+                d={wire.path.d}
+                markerEnd={`url(#${emphasis(wire) ? "execution-arrow-emphasis" : marker})`}
+                className={cn(
+                  "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
+                  emphasis(wire)
+                    ? "stroke-foreground stroke-[2.5]"
+                    : "stroke-subtle-foreground stroke-[1.4]",
+                )}
+              />
+            ))}
       </svg>
       {selected?.path.label && (
         <DeleteConnection

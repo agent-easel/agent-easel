@@ -15,6 +15,7 @@ import {
   exitRecipients,
   type BlockPosition,
   type CanvasBlock,
+  type CanvasNode,
   type FlowWire,
 } from "../flow-graph.ts";
 import { AUTHORING_DIMENSIONS, type WireSource } from "@t3-factory/flow-layout";
@@ -24,7 +25,6 @@ import {
   type CanvasBlockContent,
   type CanvasFlowInputContent,
   type CanvasGesture,
-  type CanvasNode,
   type CanvasPoints,
   type CanvasPort,
   type GrabOffset,
