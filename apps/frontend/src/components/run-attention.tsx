@@ -1,4 +1,4 @@
-import { RunTextReaderLink } from "./run-result.tsx";
+import { AgentMarkdown, AgentTextPreview, WorkingReport } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -28,6 +28,7 @@ import {
   settlementPrimary,
 } from "../attention-copy.ts";
 import { blockExitRecipients, capturedExits } from "../flow-graph.ts";
+import { reviewInT3Since } from "../run-block-state.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
 import { clockTime, dayAndTime } from "../time-format.ts";
@@ -125,7 +126,7 @@ function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
       {(questions.length > 0 || reviews.length > 0) && (
         <section aria-label="Needs input" className="space-y-3">
           {reviews.map((block) => (
-            <ReviewInT3 key={block.blockId} block={block} compact={compact} />
+            <ReviewInT3 key={block.blockId} run={run} block={block} compact={compact} />
           ))}
           {questions.map((item) => (
             <QuestionMatter key={item.id} run={run} item={item} compact={compact} />
@@ -203,9 +204,22 @@ function AttentionCard({
 
 /**
  * Figma RD19: an Agent idle with a working report. It may be asking in chat or have stopped
- * without reporting, so the card never says it waits for a reply; the owner reviews in T3.
+ * without reporting, so its title never says it waits for a reply; the owner reviews in T3. The
+ * report's reader states the wait (RD45). RD43: without a report, only the title and Open in T3
+ * remain.
  */
-function ReviewInT3({ block, compact }: { block: RunBlock; compact: boolean }) {
+function ReviewInT3({
+  run,
+  block,
+  compact,
+}: {
+  run: RunDetail;
+  block: RunBlock;
+  compact: boolean;
+}) {
+  const visit = run.activations.filter((activation) => activation.blockId === block.blockId).length;
+  const waitingSince = reviewInT3Since(run, block);
+  const since = waitingSince ? ` · since ${clockTime(waitingSince)}` : "";
   return (
     <AttentionCard
       tone="needs-input"
@@ -216,9 +230,13 @@ function ReviewInT3({ block, compact }: { block: RunBlock; compact: boolean }) {
       actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
       {block.workingMessage && (
-        <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
-          {block.workingMessage}
-        </p>
+        <WorkingReport
+          text={block.workingMessage}
+          blockName={block.name}
+          provenance={`Visit ${visit} · waiting for your reply${since}`}
+          t3Link={block.link}
+          size="needs-input"
+        />
       )}
     </AttentionCard>
   );
@@ -281,7 +299,7 @@ function QuestionMatter({
   // A settling Run accepts no answers, so its question cards show no Needs input chip.
   const answerable = !run.settlement;
   if (item.kind === "human") {
-    const source = occurrenceSource(
+    const source = parallelSource(
       run,
       run.humanOccurrences.find((entry) => entry.id === item.occurrenceId),
     );
@@ -548,21 +566,111 @@ function SettleRunAction({ run }: { run: RunDetail }) {
 }
 
 /** Figma RD50: where a pending Human occurrence came from, when its step has several pending. */
-function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence | undefined) {
+function parallelSource(run: RunDetail, occurrence: HumanOccurrence | undefined) {
   if (!occurrence) return null;
   const parallel = run.humanOccurrences.filter(
     (item) => item.blockId === occurrence.blockId && item.state === "pending",
   );
-  if (parallel.length < 2) return null;
+  return parallel.length < 2 ? null : occurrenceSource(run, occurrence);
+}
+
+/** "From Review implementation · Visit 1": the Block, and an Agent's visit, that wrote the
+ * occurrence's message. */
+function occurrenceSource(run: RunDetail, occurrence: HumanOccurrence) {
   const intent = run.intents.find((item) => item.id === occurrence.incomingIntentId);
   if (!intent?.sourceBlockId) return null;
-  const source = run.blocks.find((block) => block.blockId === intent.sourceBlockId);
-  const activationId = run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const { blockId, activationId } = messageAuthor(run, intent, new Map()) ?? sender(intent);
+  const source = run.blocks.find((block) => block.blockId === blockId);
   const visit =
     run.activations
-      .filter((activation) => activation.blockId === intent.sourceBlockId)
+      .filter((activation) => activation.blockId === blockId)
       .findIndex((activation) => activation.id === activationId) + 1;
-  return `From ${source?.name ?? intent.sourceBlockId}${visit ? ` · Visit ${visit}` : ""}`;
+  return `From ${source?.name ?? blockId}${visit ? ` · Visit ${visit}` : ""}`;
+}
+
+type Delivery = RunDetail["intents"][number];
+type MessageAuthor = { blockId: string | null; activationId: string | null };
+/** Each relayed message's author by relay Block, message and worker origin; null while it is being
+ * resolved. */
+type RelayAuthors = Map<string, MessageAuthor | null>;
+
+const sender = (intent: Delivery): MessageAuthor => ({
+  blockId: intent.sourceBlockId,
+  activationId: null,
+});
+
+/**
+ * Who wrote `intent`'s message, following Wait, Condition and Continuation pass-through relays back
+ * to the delivery that produced it: an Agent's or a Continuation prompt's report names its visit, a
+ * person's answer or any other delivery its sender, and a missing link the relay that sent it. The
+ * delivery's `origin` cannot name the author: a Human answer repeats the reviewed worker's origin
+ * to route later work, and relays forward it unchanged. Null for a relayed message met again while
+ * it is being resolved (a loop).
+ */
+function messageAuthor(
+  run: RunDetail,
+  intent: Delivery,
+  relays: RelayAuthors,
+): MessageAuthor | null {
+  if (intent.waitArrivalId) {
+    const arrival = run.waitArrivals.find((item) => item.id === intent.waitArrivalId);
+    const incoming = run.intents.find((item) => item.id === arrival?.incomingIntentId);
+    return incoming ? messageAuthor(run, incoming, relays) : sender(intent);
+  }
+  const received = receivedMessage(run, intent);
+  if (received) {
+    const key = JSON.stringify([
+      intent.sourceBlockId,
+      intent.fingerprint,
+      intent.origin?.activationId,
+      intent.origin?.threadId,
+    ]);
+    if (!relays.has(key)) {
+      relays.set(key, null);
+      relays.set(key, sharedAuthor(run, received, relays) ?? sender(intent));
+    }
+    return relays.get(key) ?? null;
+  }
+  const activationId = run.reports.find((report) => report.id === intent.reportId)?.activationId;
+  const activation = run.activations.find((item) => item.id === activationId);
+  return activation ? { blockId: activation.blockId, activationId: activation.id } : sender(intent);
+}
+
+/**
+ * The deliveries a Condition, or a Continuation passing messages through, received with
+ * `intent`'s message; null when `intent` is neither relay's output. Run detail does not link these
+ * outputs to the delivery they forward, but both relays forward the message and its worker origin
+ * unchanged, and a released delivery's fingerprint is its `{ message }` payload's, so the received
+ * deliveries carry the same fingerprint and origin.
+ */
+function receivedMessage(run: RunDetail, intent: Delivery) {
+  const forwarded = (item: Delivery) =>
+    item.fingerprint === intent.fingerprint &&
+    item.origin?.activationId === intent.origin?.activationId &&
+    item.origin?.threadId === intent.origin?.threadId;
+  if (intent.conditionArrivalId)
+    return run.intents.filter((item) => item.blockId === intent.sourceBlockId && forwarded(item));
+  if (intent.reportId) return null;
+  const passed = new Set(
+    run.continuationVisits
+      .filter((visit) => visit.blockId === intent.sourceBlockId && visit.kind === "pass-through")
+      .map((visit) => visit.incomingIntentId),
+  );
+  return passed.size ? run.intents.filter((item) => passed.has(item.id) && forwarded(item)) : null;
+}
+
+/** The author every one of `deliveries` resolves to; null when they differ or none resolves. */
+function sharedAuthor(run: RunDetail, deliveries: readonly Delivery[], relays: RelayAuthors) {
+  const authors = deliveries
+    .map((item) => messageAuthor(run, item, relays))
+    .filter((author) => author !== null);
+  const [first] = authors;
+  return first &&
+    authors.every(
+      (author) => author.blockId === first.blockId && author.activationId === first.activationId,
+    )
+    ? first
+    : null;
 }
 
 function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
@@ -576,7 +684,14 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
           {attentionSubject(item)}
         </h3>
       </div>
-      {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
+      {item.message &&
+        // Only a conversation-waiting message is the Agent's own question; other kinds record
+        // Factory's reason.
+        (item.kind === "conversation-waiting" ? (
+          <AgentMarkdown text={item.message} density="card" />
+        ) : (
+          <p className="whitespace-pre-wrap">{item.message}</p>
+        ))}
       {exit && <p>Decision: {exit}</p>}
       <p>Resolved: {item.settlementReason}</p>
       {reply && (
@@ -705,16 +820,21 @@ function HumanResponseForm({
   return (
     <form aria-label={`Answer ${blockName}`} className="flex flex-col gap-3" onSubmit={submit}>
       {occurrence.context && (
-        <>
-          <p className="text-sm whitespace-pre-wrap text-foreground">{occurrence.context}</p>
-          <RunTextReaderLink
-            label="Read context"
-            title={`${blockName} · context`}
-            metadata={clockTime(occurrence.appearedAt)}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <AgentTextPreview
             text={occurrence.context}
-            link={null}
+            readLabel="Read full context"
+            variant="needs-input"
+            heading={{
+              kind: "text",
+              title: `${blockName} · context`,
+              provenance: [occurrenceSource(run, occurrence), clockTime(occurrence.appearedAt)]
+                .filter(Boolean)
+                .join(" · "),
+              t3Link: null,
+            }}
           />
-        </>
+        </div>
       )}
       <DecisionSelect
         value={exitId}

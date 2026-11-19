@@ -318,11 +318,16 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
 
   // Assert
   const block = screen.getByRole("article", "Block Implement change");
-  await expect(block).toContainText("Discussing the empty-state wording");
+  await expect(block).toContainText("I drafted three options for the empty state");
   await expect(block).toContainText("Needs input");
   const review = screen
     .getByRole("region", "Needs input")
     .getByRole("article", "Review Implement change in T3");
+  const report = review.getByRole("region", "Working report", { exact: true });
+  await expect(report.getByRole("heading", "Options", { exact: true })).toBeVisible();
+  await expect(report).toContainText("Neutral — “No results. Try fewer filters.”");
+  await expect(report).not.toContainText("**Neutral**");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
   await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   const after = await readHistoryRun(app.baseUrl, run.id);
@@ -333,6 +338,89 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
   await screen.getByRole("heading", "Work periods", { exact: true }).scrollIntoView();
   await expect(screen.getByText(/Report: accepted working/)).toBeVisible();
   await app.screenshot("worker-conversation-work-period");
+});
+
+/** The Run page of the Agent asking in T3, with its Needs input card's Working report. */
+async function openConversationRun(app: App, screen: Screen) {
+  const found = await findRun(
+    app.baseUrl,
+    "UI worker · Discussing · Agent asked about empty-state wording",
+  );
+  await app.open(`/runs/${found.id}`);
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
+  return {
+    review,
+    reader: screen.getByRole("dialog", "Implement change · Working report", { exact: true }),
+  };
+}
+
+test("Read full report opens the Agent's whole Working report with its visit and Open in T3", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { review, reader } = await openConversationRun(app, screen);
+
+  // Act
+  await review.getByRole("button", "Read full report", { exact: true }).tap();
+
+  // Assert
+  await expect(reader).toContainText(/Visit 1 · waiting for your reply · since \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Open questions", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("listitem")).toHaveCount(5);
+  await expect(
+    reader.getByText("Reply in T3 with the option number and any wording changes.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await app.screenshot("worker-conversation-working-report-reader");
+});
+
+/** Twelve links, one per line, so the clamped preview shows the first ones and fades the rest. */
+const reportLinks = [
+  "- [Link 1](https://example.com/atlas/1)",
+  "- [Link 2](https://example.com/atlas/2)",
+  "- [Link 3](https://example.com/atlas/3)",
+  "- [Link 4](https://example.com/atlas/4)",
+  "- [Link 5](https://example.com/atlas/5)",
+  "- [Link 6](https://example.com/atlas/6)",
+  "- [Link 7](https://example.com/atlas/7)",
+  "- [Link 8](https://example.com/atlas/8)",
+  "- [Link 9](https://example.com/atlas/9)",
+  "- [Link 10](https://example.com/atlas/10)",
+  "- [Link 11](https://example.com/atlas/11)",
+  "- [Link 12](https://example.com/atlas/12)",
+].join("\n");
+
+test("at a 10 px browser font size, Tab skips the Working report links the clamped preview fades out or hides", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const id = await liveRun(app, "report-links-small-font");
+  await applyRunState(app, id, "working reported and idle", reportLinks);
+  await app.open(`/runs/${id}`);
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
+  // The preview re-measures on the resize the smaller root font causes, by the second frame.
+  await browser.evaluate(
+    `(document.documentElement.style.fontSize = "10px", new Promise((settle) => requestAnimationFrame(() => requestAnimationFrame(settle))))`,
+  );
+  await review.getByRole("link", "Link 4", { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Tab");
+
+  // Assert
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeFocused();
 });
 
 test("a worker idle in working shows its message on the canvas and in its Run preview", async ({
@@ -528,6 +616,189 @@ test("a Human correction answered from the selected Human step revisits the same
     "Implement change · Visit 2",
   );
   await app.screenshot("same-worker-second-visit");
+});
+
+const longContextRun = "UI worker · Decision · Long review summary for the reset action";
+
+/** The Overview's answer form for a Run's pending Human step "Your review". */
+function reviewAnswer(screen: Screen) {
+  return screen
+    .getByRole("complementary", "Run inspector")
+    .getByRole("form", "Answer Your review", { exact: true });
+}
+
+/** The Overview's answer form for the long-context Human step, before anything is chosen. */
+async function openLongContextAnswer(app: App, screen: Screen) {
+  const found = await findRun(app.baseUrl, longContextRun);
+  await app.open(`/runs/${found.id}`);
+  const answer = reviewAnswer(screen);
+  await expect(answer).toBeVisible();
+  return {
+    found,
+    answer,
+    reader: screen.getByRole("dialog", "Your review · context", { exact: true }),
+  };
+}
+
+/** The long Human context open in the reader from its card. */
+async function openLongContextReader(app: App, screen: Screen) {
+  const opened = await openLongContextAnswer(app, screen);
+  await opened.answer.getByRole("button", "Read full context", { exact: true }).tap();
+  await expect(opened.reader).toBeVisible();
+  return opened;
+}
+
+test("a long Human context shows its Markdown formatted on the card with Read full context", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, longContextRun);
+
+  // Act
+  await app.open(`/runs/${found.id}`);
+
+  // Assert
+  const answer = reviewAnswer(screen);
+  await expect(answer.getByRole("heading", "Review summary", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("listitem")).toHaveCount(3);
+  await expect(answer.getByText('No results for "{query}"', { exact: true })).toBeVisible();
+  await expect(answer).not.toContainText("## Review summary");
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+  await app.screenshot("human-context-preview");
+});
+
+test("Read full context opens the whole Human context as written, with its source and without decision controls", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer, reader } = await openLongContextAnswer(app, screen);
+
+  // Act
+  await answer.getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  await expect(reader).toContainText(/From Review implementation · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Decide", { exact: true })).toBeVisible();
+  await expect(reader.getByText("→ GET /search?q=atlas", { exact: false })).toBeVisible();
+  await expect(reader).toContainText('<button class="reset">Reset filters</button>');
+  await expect(reader.getByRole("button", "Reset filters", { exact: true })).toHaveCount(0);
+  expect(
+    await browser.evaluate(
+      `document.querySelector('[role="dialog"] [role="region"][aria-label="Reader text"]').innerText`,
+    ),
+  ).toContain("Approve if the reset action is clear enough.\nRequest changes");
+  await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("combobox")).toHaveCount(0);
+  await expect(reader.getByRole("button", "Submit answer", { exact: true })).toHaveCount(0);
+  await app.screenshot("human-context-reader");
+});
+
+test("Esc closes the Human context reader and returns focus to Read full context", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer, reader } = await openLongContextReader(app, screen);
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(reader).toHaveCount(0);
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+});
+
+test("a short Human context shows whole on the card without Read full context", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+
+  // Act
+  await app.open(`/runs/${found.id}`);
+
+  // Assert
+  const answer = reviewAnswer(screen);
+  await expect(
+    answer.getByText(
+      "The search behavior looks good. Please review the empty-state wording and decide whether the reset action is clear enough.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toHaveCount(0);
+});
+
+test("Tab skips the context links the clamped preview fades out and reaches Read full context", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer } = await openLongContextAnswer(app, screen);
+  await expect(answer.getByRole("link", "reset filters layout", { exact: true })).toHaveCount(1);
+  await answer.getByRole("link", "empty-state notes", { exact: true }).focus();
+
+  // Act
+  await browser.keyboard.press("Tab");
+
+  // Assert
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
+});
+
+test("an answer submits from the Human card while its context is long", async ({ app, screen }) => {
+  // Arrange
+  const { found, answer } = await openLongContextAnswer(app, screen);
+  await answer
+    .getByRole("combobox", "Decision")
+    .selectOption({ label: "Approve — ends this branch" });
+
+  // Act
+  await answer.getByRole("button", "Submit answer", { exact: true }).tap();
+
+  // Assert
+  await expect
+    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).humanOccurrences[0]?.state)
+    .toBe("answered");
+});
+
+test("parallel Human occurrences each open their own context in the reader", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, "UI worker · Two reviews wait for your decision");
+  await app.open(`/runs/${found.id}`);
+  const attention = screen.getByRole("complementary", "Run inspector");
+  const accessibility = attention.getByRole(
+    "article",
+    "Needs input · Your decision · From Accessibility review · Visit 1",
+    { exact: true },
+  );
+  await expect(
+    attention
+      .getByRole("article", "Needs input · Your decision · From Code review · Visit 1", {
+        exact: true,
+      })
+      .getByRole("button", "Read full context", { exact: true }),
+  ).toBeVisible();
+  await app.screenshot("parallel-human-context");
+
+  // Act
+  await accessibility.getByRole("button", "Read full context", { exact: true }).tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Your decision · context", { exact: true });
+  await expect(reader).toContainText(/From Accessibility review · Visit 1 · \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Accessibility review", { exact: true })).toBeVisible();
+  await expect(reader).not.toContainText("Code review");
 });
 
 test("Settle confirmation cancels without changes, then stops workers and settles from the row menu", async ({

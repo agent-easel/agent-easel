@@ -52,6 +52,19 @@ export function blockStateKind(
   return kind;
 }
 
+/**
+ * When an Agent that awaits review in T3 began waiting: Factory first saw its current turn end.
+ * Its `observedAt` only says when Factory last looked.
+ */
+export function reviewInT3Since(run: RunDetail, recorded: RunBlock) {
+  return (
+    run.executions.find(
+      (execution) =>
+        execution.blockId === recorded.blockId && execution.executionId === recorded.executionId,
+    )?.observedEndedAt ?? null
+  );
+}
+
 /** The exits a report, an answer, a selection or a forward has chosen on the Block's latest
  * visit; the rest have not been taken. */
 export function chosenExitIds(

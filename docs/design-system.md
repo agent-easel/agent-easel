@@ -185,6 +185,9 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
   stays visible.
+- **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
+  the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
+  reader without a preview. Human-written text and Factory messages stay plain text.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.

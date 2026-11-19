@@ -13,9 +13,16 @@ import {
   resultReleasedToSecondWorker,
   resultReleasedToTwoWorkers,
   resultReleasedToWait,
+  blockWorkerLaunched,
+  conditionBlock,
+  conditionRule,
   connection,
+  continuationStep,
+  OTHERWISE,
   waitBlock,
+  WAIT_OUTPUT,
   workingReported,
+  workingReportedIdle,
   report,
   workingReport,
   replyTurnObserved,
@@ -23,8 +30,11 @@ import {
   workerAtWork,
   workerHandle,
   generatedTitleApplied,
+  humanStep,
   observeFor,
+  twoWorkersStarted,
 } from "../../../apps/backend/test/support/scenarios.ts";
+import { promptAnswered, promptSent } from "../../../apps/backend/test/support/continuation.ts";
 import type { RunDetail } from "../../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../../packages/domain-validation/src/index.ts";
 import { seedScenario, settlementUnresolved } from "../../../scripts/dev/seed.ts";
@@ -112,6 +122,8 @@ function runTransitions(context: Context) {
       resultReleasedToWait(context, workerOf(context, run)),
     "working reported": (run: RunDetail, message?: string) =>
       workingReported(context, workerOf(context, run), message),
+    "working reported and idle": (run: RunDetail, message?: string) =>
+      workingReportedIdle(context, workerOf(context, run), message),
     "reply turn observed": (run: RunDetail) =>
       replyTurnObserved(context, workerOf(context, run), "ui-worker-reply"),
     settled: (run: RunDetail) => settled(context, workerOf(context, run)),
@@ -145,6 +157,115 @@ async function createFixtureScenarioSet(host: Host) {
       waitBlock("pause", "Pause a minute", { amount: 1, unit: "minutes" }, { x: 700, y: 180 }),
     ],
     connections: [connection("worker", "review", "pause")],
+  });
+  // A person's answer that a Wait passes on to a second Human step keeps the person as its author.
+  const answerRelay = await saveFlow(factory, "UI wait · Answer held for sign-off", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      humanStep("review", "First review", { x: 700, y: 180 }),
+      waitBlock("hold", "Hold for sign-off", { amount: 1, unit: "days" }, { x: 1080, y: 180 }),
+      humanStep("signoff", "Final sign-off", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "review"),
+      connection("review", "approve", "hold"),
+      connection("hold", WAIT_OUTPUT, "signoff"),
+    ],
+  });
+  // An answer First review sends through the Condition Route the answer to Final sign-off.
+  const routedAnswer = (connections: readonly ReturnType<typeof connection>[]) => ({
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      humanStep("review", "First review", { x: 700, y: 40 }),
+      conditionBlock("route", "Route the answer", [conditionRule("later", "Later answers", 2)], {
+        x: 1080,
+        y: 180,
+      }),
+      humanStep("signoff", "Final sign-off", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      ...connections,
+      connection("review", "approve", "route"),
+      connection("route", "later", "signoff"),
+      connection("route", OTHERWISE, "signoff"),
+    ],
+  });
+  // The same answer selected by a Condition keeps the person as its author too.
+  const answerCondition = await saveFlow(
+    factory,
+    "UI condition · Answer routed to sign-off",
+    routedAnswer([connection("worker", "review", "review")]),
+  );
+  // The result reaches the Condition beside the review, so the answer is its second arrival with
+  // the same worker provenance; each sign-off keeps its own author.
+  const answerBesideResult = await saveFlow(
+    factory,
+    "UI condition · Result and answer routed",
+    routedAnswer([
+      connection("worker", "review", "review"),
+      connection("worker", "review", "route"),
+    ]),
+  );
+  // A Continuation whose prompt already answered passes a later review through to sign-off.
+  const continuationRelay = await saveFlow(factory, "UI continuation · Review passed through", {
+    flowInput: flowInput("worker"),
+    blocks: [
+      agentBlock("worker", "Implement change", world.agents.worker, { x: 320, y: 180 }, [], []),
+      agentBlock("reviewer", "Code review", world.agents.reviewer, { x: 700, y: 40 }, [], []),
+      continuationStep("spec", "Write the spec", "Write the spec from the change.", {
+        x: 1080,
+        y: 180,
+      }),
+      humanStep("signoff", "Final sign-off", { x: 1460, y: 180 }),
+    ],
+    connections: [
+      connection("worker", "review", "spec"),
+      connection("worker", "review", "reviewer"),
+      connection("reviewer", "approved", "spec"),
+      connection("spec", "output", "signoff"),
+    ],
+  });
+  // Two reviews of one change reach the same Human step as parallel occurrences (Figma RD50).
+  const parallelDecision = await saveFlow(factory, "UI decision · Two reviews, one decision", {
+    flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("reviewer", "Code review", world.agents.reviewer, { x: 320, y: 40 }),
+      agentBlock("accessibility", "Accessibility review", world.agents.accessibility, {
+        x: 320,
+        y: 320,
+      }),
+      humanStep("decision", "Your decision", { x: 700, y: 180 }),
+    ],
+    connections: [
+      connection("reviewer", "approved", "decision"),
+      connection("accessibility", "approved", "decision"),
+    ],
+  });
+
+  // Both reviews reach one Human step through one Condition, so each occurrence's message is a
+  // Condition selection whose author only its worker provenance tells apart.
+  const conditionReviews = await saveFlow(factory, "UI condition · Two reviews routed", {
+    flowInput: flowInput(["reviewer", "accessibility"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("reviewer", "Code review", world.agents.reviewer, { x: 320, y: 40 }),
+      agentBlock("accessibility", "Accessibility review", world.agents.accessibility, {
+        x: 320,
+        y: 320,
+      }),
+      conditionBlock("route", "Route the reviews", [conditionRule("later", "Later reviews", 2)], {
+        x: 700,
+        y: 180,
+      }),
+      humanStep("decision", "Your decision", { x: 1080, y: 180 }),
+    ],
+    connections: [
+      connection("reviewer", "approved", "route"),
+      connection("accessibility", "approved", "route"),
+      connection("route", "later", "decision"),
+      connection("route", OTHERWISE, "decision"),
+    ],
   });
 
   // Exercise published defaults and mixed value domains through the Agent editor.
@@ -258,8 +379,65 @@ async function createFixtureScenarioSet(host: Host) {
   });
   requireSuccess(await factory.createFlow({ name: "Shared remote plan" }));
   await createOwnershipSet(host, unselectedModelOptions);
-  return { pause, launch };
+  return {
+    pause,
+    answerRelay,
+    answerCondition,
+    answerBesideResult,
+    continuationRelay,
+    conditionReviews,
+    launch,
+    parallelDecision,
+  };
 }
+
+/** Each parallel review, long enough for its Human occurrence to preview it. */
+const parallelReviews = [
+  [
+    "## Code review",
+    "",
+    "The filters panel code is ready to ship.",
+    "",
+    "- Filter state lives in one reducer.",
+    "- `clearFilters` keeps the query.",
+    "- Errors from the count request show inline.",
+    "",
+    "### Nits",
+    "",
+    "One naming nit is noted inline; it does not block the release.",
+    "Rename `countQuery` to `resultCountQuery` when convenient.",
+  ].join("\n"),
+  [
+    "## Accessibility review",
+    "",
+    "Keyboard navigation works across the filters panel.",
+    "",
+    "- Focus returns to the filter button after closing.",
+    "- Every checkbox has a visible label.",
+    "- The result count is announced politely.",
+    "",
+    "### Checked",
+    "",
+    "Screen reader output was checked with the panel open and closed.",
+    "Zoom at 200% keeps every filter reachable without horizontal scrolling.",
+  ].join("\n"),
+] as const;
+
+/** One long review both reviewers of the identical-reviews Run report word for word. */
+const identicalReview = [
+  "## Shared review",
+  "",
+  "The filters panel is ready to ship.",
+  "",
+  "- Filter state lives in one reducer.",
+  "- Focus returns to the filter button after closing.",
+  "- The result count is announced politely.",
+  "",
+  "### Checked",
+  "",
+  "Both themes and the narrow window were checked by hand.",
+  "Nothing else blocks the release.",
+].join("\n");
 
 /**
  * Project-owned definitions for Studio's owner grouping: Northwind stays available, while Docs
@@ -486,6 +664,89 @@ export async function scenariosFixture(host: Host) {
   });
   /** The fixture's scenario copy, prepared on a journey's first request. */
   const refreshPrepared = scenarioCopy("UI worker · ", "ui-worker", [
+    [
+      "parallel-decision",
+      async (keyNamespace) => {
+        const [first, second] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.parallelDecision,
+            "parallel-decision",
+            "UI worker · Two reviews wait for your decision",
+            "Review the Atlas filters panel for code quality and keyboard accessibility.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        await resultReported(context, first, { exit: "Approved", message: parallelReviews[0] });
+        await resultReported(context, second, { exit: "Approved", message: parallelReviews[1] });
+        await observeFor(
+          "observe both decisions",
+          context,
+          first.runId,
+          (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,
+        );
+        return first.runId;
+      },
+    ],
+    [
+      "condition-identical-reviews",
+      async (keyNamespace) => {
+        const [first, second] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.conditionReviews,
+            "condition-identical-reviews",
+            "UI worker · Two identical reviews routed to your decision",
+            "Review the Atlas filters panel for code quality and keyboard accessibility.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        await resultReported(context, first, { exit: "Approved", message: identicalReview });
+        await resultReported(context, second, { exit: "Approved", message: identicalReview });
+        await observeFor(
+          "observe both routed reviews",
+          context,
+          first.runId,
+          (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,
+        );
+        return first.runId;
+      },
+    ],
+    [
+      "continuation-relay",
+      async (keyNamespace) => {
+        const worker = await startWorker(
+          flows.continuationRelay,
+          "continuation-relay",
+          "UI worker · Code review passed through the spec",
+          "Tidy the filters panel and write its spec.",
+          keyNamespace,
+        );
+        await resultReported(context, worker, {
+          exit: "review",
+          message: "The filters panel change is ready.",
+        });
+        const reviewer = await blockWorkerLaunched(context, worker.runId, "reviewer");
+        await promptAnswered(
+          context,
+          worker,
+          await promptSent(context, worker),
+          "Spec written: docs/filters.md.",
+        );
+        await resultReported(context, reviewer, { exit: "Approved", message: parallelReviews[0] });
+        await observeFor(
+          "observe the review passed through to sign-off",
+          context,
+          worker.runId,
+          (run) => run.humanOccurrences.filter((item) => item.state === "pending").length === 2,
+        );
+        return worker.runId;
+      },
+    ],
     [
       "report-release",
       async (keyNamespace) =>
