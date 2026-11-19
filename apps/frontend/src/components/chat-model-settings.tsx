@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChoiceMenu } from "@/components/choice-menu";
 import { StatusBadge } from "@/components/status-badge";
-import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { reportChatModelSettings } from "../chat-control-attention.ts";
 import { dayAndTime } from "../time-format.ts";
@@ -24,23 +23,21 @@ import {
   SaveActions,
   SecretField,
   useChatControlSection,
+  type MovedSecretChoice,
   type SaveFailure,
 } from "./chat-control-form.tsx";
-import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
+import { fieldAria, type FieldState } from "./field-state.ts";
 
 const providerChoices = [
   { id: "openai-compatible", label: "OpenAI-compatible" },
   { id: "anthropic", label: "Anthropic" },
 ];
 
-/** What happens to a stored key: kept, reused at a changed destination, replaced or removed. */
-type KeyChoice = "keep" | "reuse" | "replace" | "remove";
-
 interface Draft {
   readonly providerKind: ChatModelProviderKind | null;
   readonly baseUrl: string;
   readonly model: string;
-  readonly keyChoice: KeyChoice;
+  readonly keyChoice: MovedSecretChoice;
   /** A new key; blank keeps whatever the key choice says. Held only in memory. */
   readonly keyValue: string;
 }
@@ -360,7 +357,7 @@ function ModelForm({
   );
 }
 
-/** The API key: the stored-key controls, or the destination choice after an address change. */
+/** The API key; after an address change a stored key waits for the owner's choice. */
 function KeyRow({
   settings,
   draft,
@@ -374,84 +371,32 @@ function KeyRow({
   disabled: boolean;
   onChange: (draft: Draft) => void;
 }) {
-  const tag =
-    state?.tone === "attention" ? (
-      <StatusBadge kind="attention">Choose</StatusBadge>
-    ) : (
-      state && <StatusBadge kind="error">Refused</StatusBadge>
-    );
-  return (
-    <FieldRow
-      label="API key"
-      htmlFor="chat-model-key"
-      tag={keyDecisionNeeded(draft, settings) && tag}
-    >
-      {keyDecisionNeeded(draft, settings) ? (
-        <KeyDestinationChoice draft={draft} state={state} disabled={disabled} onChange={onChange} />
+  const field = {
+    id: "chat-model-key",
+    label: "API key",
+    stored: settings.configuration.keyConfigured,
+    value: draft.keyValue,
+    placeholder: "Optional",
+    state,
+    tag:
+      state?.tone === "attention" ? (
+        <StatusBadge kind="attention">Choose</StatusBadge>
       ) : (
-        <SecretField
-          id="chat-model-key"
-          label="API key"
-          stored={settings.configuration.keyConfigured}
-          choice={draft.keyChoice === "reuse" ? "keep" : draft.keyChoice}
-          value={draft.keyValue}
-          placeholder="Optional"
-          state={state}
-          tag={tag}
-          disabled={disabled}
-          onChoice={(choice) => onChange({ ...draft, keyChoice: choice, keyValue: "" })}
-          onValue={(value) => onChange({ ...draft, keyValue: value })}
-        />
+        state && <StatusBadge kind="error">Refused</StatusBadge>
+      ),
+    disabled,
+    onChoice: (choice: MovedSecretChoice) =>
+      onChange({ ...draft, keyChoice: choice, keyValue: "" }),
+    onValue: (value: string) => onChange({ ...draft, keyValue: value }),
+  };
+  return (
+    <FieldRow label="API key" htmlFor="chat-model-key">
+      {keyDecisionNeeded(draft, settings) ? (
+        <SecretField {...field} destinationChanged choice={draft.keyChoice} />
+      ) : (
+        <SecretField {...field} choice={draft.keyChoice === "reuse" ? "keep" : draft.keyChoice} />
       )}
     </FieldRow>
-  );
-}
-
-const keyChoices = [
-  { id: "reuse", label: "Use stored key" },
-  { id: "replace", label: "Replace key" },
-  { id: "remove", label: "No key" },
-];
-
-/** The provider or base URL changed while a key is stored: the owner decides where it goes. */
-function KeyDestinationChoice({
-  draft,
-  state,
-  disabled,
-  onChange,
-}: {
-  draft: Draft;
-  state: FieldState | undefined;
-  disabled: boolean;
-  onChange: (draft: Draft) => void;
-}) {
-  return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <ChoiceMenu
-        id="chat-model-key"
-        label="API key"
-        value={draft.keyChoice === "keep" ? "" : draft.keyChoice}
-        choices={keyChoices}
-        onChange={(id) => onChange({ ...draft, keyChoice: id as KeyChoice, keyValue: "" })}
-        disabled={disabled}
-        placeholder="Choose for the new address"
-        className={cn("h-8 flex-1", fieldBorder(state?.tone))}
-      />
-      {draft.keyChoice === "replace" && (
-        <Input
-          aria-label="New API key"
-          type="password"
-          value={draft.keyValue}
-          placeholder="Paste the new key"
-          autoComplete="off"
-          spellCheck={false}
-          autoFocus
-          disabled={disabled}
-          className="flex-1 bg-muted font-mono text-label"
-          onChange={(event) => onChange({ ...draft, keyValue: event.target.value })}
-        />
-      )}
-    </div>
   );
 }
 
