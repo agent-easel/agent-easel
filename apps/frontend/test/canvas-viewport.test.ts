@@ -5,7 +5,11 @@ import {
   selectExecutionTargets,
 } from "../src/execution-focus.ts";
 import { authoringEntryView, entryView, fitGraphView } from "../src/canvas-fit.ts";
-import { cutEntryGraph, distantAuthoringGraph } from "./support/entry-graphs.ts";
+import {
+  boundaryDenseEntryGraph,
+  cutEntryGraph,
+  distantAuthoringGraph,
+} from "./support/entry-graphs.ts";
 import { expect, it } from "vite-plus/test";
 import {
   canvasWheelZoomFactor,
@@ -610,6 +614,20 @@ it("a 500-block Flow editor keeps the open placement and resolves quickly", () =
   // Assert
   expect(view).toStrictEqual({ scale: 1, x: 8, y: -50 });
   expect(performance.now() - started).toBeLessThan(100);
+});
+
+it("a clear 500-block view opens promptly with fractional positions at the canvas corner", () => {
+  // Arrange
+  const graph = boundaryDenseEntryGraph();
+  const started = performance.now();
+
+  // Act
+  const view = entryView(graph.focus, graph.boxes, graph.surface, graph.padding);
+  const elapsed = performance.now() - started;
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400, y: 250 });
+  expect(elapsed).toBeLessThan(100);
 });
 
 it("the Flow editor can shift farther than a quarter width to clear a cut Block while keeping the input visible", () => {
