@@ -3,7 +3,12 @@ import { readFile } from "node:fs/promises";
 import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
-import { copyAgentDefinition, readAgentDefinition, updateAgentExits } from "./support/agents.ts";
+import {
+  copyAgentDefinition,
+  readAgentDefinition,
+  saveAgentElsewhere,
+  updateAgentExits,
+} from "./support/agents.ts";
 import {
   largestWirePortOffset,
   openFittedFlowBlock,
@@ -166,6 +171,9 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await screen.getByRole("button", "Compare latest revision").tap();
   const comparison = screen.getByRole("dialog", "Compare with revision 4");
   await expect(comparison.getByRole("heading", "Revision 4", { exact: true })).toBeVisible();
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.screenshot("after-flow-revision-comparison");
+  await browser.setViewport({ width: 1920, height: 1000 });
   await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
   await saveFlowWithReadiness(screen, "Ready", 5);
   await browser.reload();
@@ -732,4 +740,42 @@ test("a Flow reopened after discarding its edits on leaving shows its saved revi
 
   // Assert
   await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+});
+
+test("a saved Agent with a retired model cannot be placed from the library or picked for a Block", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  const name = "Review · Retired model";
+  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", name);
+  assert(agent.execution);
+  await saveAgentElsewhere(app.baseUrl, agent, {
+    execution: { ...agent.execution, modelId: "retired-model" },
+  });
+  const flowId = await saveSingleAgentFlow(app.baseUrl, "Review · Placement", "Sample worker", {
+    id: "worker",
+    name: "Worker",
+    x: 320,
+    y: 60,
+  });
+
+  // Act
+  await app.open(`/studio/flows/${flowId}`);
+
+  // Assert
+  const library = screen.getByRole("region", "Block library");
+  const retired = library.locator(`[aria-label=${JSON.stringify(name)}]`);
+  await retired.scrollIntoView();
+  await expect(retired).toHaveAttribute("aria-disabled", "true");
+  await expect(retired).toContainText("Needs a model");
+  await app.screenshot("after-flow-library-retired-model");
+  await screen.getByRole("button", "Agent Worker").tap();
+  await screen.getByRole("button", "Sample worker", { exact: true }).tap();
+  const option = screen.getByRole("menuitemradio", new RegExp(name));
+  await expect(option).toBeDisabled();
+  await expect(option).toContainText("Needs a model");
+  await app.screenshot("after-block-picker-retired-model");
 });

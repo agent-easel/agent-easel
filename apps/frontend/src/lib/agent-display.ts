@@ -48,10 +48,11 @@ export function modelOptionChoices(
 }
 
 /** The display label of a select option's value, such as “High” for `high`. */
-function modelOptionLabel(
+export function modelOptionLabel(
   descriptor: AgentModelOptionDescriptor,
   value: AgentModelOptionValue["value"],
 ): string {
+  if (typeof value === "boolean") return value ? "On" : "Off";
   const key = descriptor.values ? JSON.stringify(value) : String(value);
   return modelOptionChoices(descriptor).find((choice) => choice.id === key)?.label ?? String(value);
 }
@@ -59,7 +60,7 @@ function modelOptionLabel(
 /** What the Agent editor's Worker picker shows for the draft Worker. */
 export type WorkerTrigger =
   | { readonly state: "needs-model"; readonly label: "Needs a model" }
-  /** `unknown`: T3's capabilities are unavailable, so the names may be Factory ids. */
+  /** `unknown`: T3 has not supplied the display names. */
   | { readonly state: "ok" | "unknown"; readonly label: string };
 
 /**
@@ -73,27 +74,34 @@ export function workerTrigger(
 ): WorkerTrigger {
   if (!execution.environmentId || !execution.providerInstanceId || !execution.modelId)
     return { state: "needs-model", label: "Needs a model" };
+  if (capabilities?.state !== "ready")
+    return { state: "unknown", label: "Worker details unavailable" };
   const { provider, model } = resolveAgentModel(execution, capabilities);
-  const descriptor = model?.options?.[0];
+  const environment = capabilities.environments.find(
+    (item) => item.environmentId === execution.environmentId,
+  );
+  if (!model || !environment) return { state: "needs-model", label: "Needs a model" };
+  const descriptor = model.options?.[0];
   const effort =
     descriptor?.type === "select"
       ? modelOptionLabel(descriptor, optionValue(execution.modelOptions, descriptor))
       : "";
   const label = [
-    provider?.displayName ?? execution.providerInstanceId,
-    model?.label ?? execution.modelId,
+    provider?.displayName ?? "Unknown provider",
+    model.label ?? "Unknown model",
     effort,
   ]
     .filter(Boolean)
     .join(" · ");
-  return { state: capabilities?.state === "ready" ? "ok" : "unknown", label };
+  return { state: "ok", label };
 }
 
 /** The provider, model and effort of saved execution settings in display names; empty for none. */
 export function agentRuntimeMeta(
-  execution: AgentExecutionSettings,
+  execution: AgentExecutionSettings | null,
   capabilities: AgentCapabilities | null,
 ): string {
+  if (!execution) return "";
   const shown = workerTrigger(execution, capabilities);
   return shown.state === "needs-model" ? "" : shown.label;
 }

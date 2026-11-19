@@ -1,6 +1,8 @@
 import { useSyncExternalStore } from "react";
+import { AGENT_CREATE_WINDOW_MS } from "@t3-factory/contracts";
 import type {
   AgentCapabilities,
+  AgentCreateOutcome,
   AgentDefinition,
   AgentExecutionSettings,
   AgentModelOptionDescriptor,
@@ -20,7 +22,6 @@ import type { api } from "./api.ts";
 import { randomId } from "./lib/ids.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import {
-  canonical,
   createRevisionedDraft,
   type RevisionedDraftState,
   type SaveRequest,
@@ -29,7 +30,12 @@ import {
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
   typeof api,
-  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent" | "getAgent"
+  | "createAgent"
+  | "getAgentCreateOutcome"
+  | "updateAgent"
+  | "removeAgent"
+  | "duplicateAgent"
+  | "getAgent"
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
@@ -202,6 +208,7 @@ function saveRequest(
   operations: AgentDraftOperations,
   /** The owning Project a save expects, or the one a create gives the new Agent. */
   owner: string | null,
+  requestId: string | undefined,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
@@ -230,9 +237,9 @@ function saveRequest(
       fallback,
     };
   }
-  const validation = validateCreateAgent({ ...content, projectId: owner });
+  const validation = validateCreateAgent({ ...content, projectId: owner, requestId });
   if (!validation.ok) return { error: validation.error.message };
-  const { projectId: _, ...input } = validation.value;
+  const { projectId: _, requestId: __, ...input } = validation.value;
   return {
     submitted: asContent(input),
     send: () => operations.createAgent(validation.value),
@@ -270,15 +277,13 @@ function exitProblems(exits: readonly BlockExit[]) {
 }
 
 /**
- * After a Create whose reply was lost, whether Factory created the Agent: `checking` waits for
- * Studio's next synchronized delivery, `created` found the Agent the request made, and `absent`
- * confirms nothing was created, so Create may be sent again.
+ * After a Create whose reply was lost, only Factory's confirmed `absent` outcome allows
+ * another Create. A failed lookup leaves the original request available to check again.
  */
 export type CreateCheck =
   | { readonly status: "none" }
   | { readonly status: "checking" }
-  | { readonly status: "created"; readonly agent: AgentDefinition }
-  | { readonly status: "absent" };
+  | AgentCreateOutcome;
 
 export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition, AgentContent> {
   readonly choices: {
@@ -312,13 +317,7 @@ export function createAgentDraft(
 ) {
   const opened = (definition: AgentDefinition) => contentOf(definition, capabilities);
   let createCheck: CreateCheck = { status: "none" };
-  /** The lost Create: what it sent, the Agents listed before it, and the list it failed beside. */
-  let lostCreate: {
-    readonly submitted: AgentContent;
-    readonly owner: string | null;
-    readonly before: ReadonlySet<string>;
-    readonly failedBeside: readonly AgentDefinition[] | null;
-  } | null = null;
+  let lostCreateId: string | undefined;
   const draft = createRevisionedDraft({
     saved: agent,
     content: agent
@@ -349,23 +348,15 @@ export function createAgentDraft(
       };
     },
   });
-  /**
-   * Settles a lost Create from Studio's first synchronized delivery after it failed: an Agent
-   * listed only since then with the submitted content and owner is the one it made. Exit ids are
-   * generated per draft, so they tell that Agent apart from an identical earlier one.
-   */
-  function checkLostCreate() {
-    if (!lostCreate || createCheck.status !== "checking") return;
-    const read = source.getSnapshot().agents;
-    if (!read.synchronized || !read.value || read.value === lostCreate.failedBeside) return;
-    const { submitted, owner, before } = lostCreate;
-    const made = read.value.find(
-      (entry) =>
-        !before.has(entry.id) &&
-        entry.projectId === owner &&
-        canonical(opened(entry)) === canonical(submitted),
-    );
-    createCheck = made ? { status: "created", agent: made } : { status: "absent" };
+  async function checkLostCreate() {
+    if (!lostCreateId || createCheck.status === "checking") return;
+    createCheck = { status: "checking" };
+    draft.publish();
+    try {
+      createCheck = await source.getAgentCreateOutcome(lostCreateId);
+    } catch {
+      createCheck = { status: "unconfirmed" };
+    }
     draft.publish();
   }
   function edit(change: Partial<AgentContent>) {
@@ -382,10 +373,7 @@ export function createAgentDraft(
     subscribe: draft.subscribe,
     /** Follows Studio's saved Agents until the returned function is called. */
     connect() {
-      const unsubscribe = source.subscribe(() => {
-        draft.reconcile();
-        checkLostCreate();
-      });
+      const unsubscribe = source.subscribe(draft.reconcile);
       draft.reconcile();
       return unsubscribe;
     },
@@ -436,22 +424,22 @@ export function createAgentDraft(
       // A Project Agent has no Project overrides, so the editor says Create leaves them out. Only
       // the request omits them: the draft keeps them until a Create succeeds.
       const submitted = !saved && owner !== null ? { ...content, projectOverrides: [] } : content;
-      const request = saveRequest(saved, submitted, source, saved ? snapshot.owner : owner);
+      const requestId = saved ? undefined : `${randomId()}-${Date.now() + AGENT_CREATE_WINDOW_MS}`;
+      const request = saveRequest(
+        saved,
+        submitted,
+        source,
+        saved ? snapshot.owner : owner,
+        requestId,
+      );
       if ("error" in request) {
         draft.report(request.error);
         return undefined;
       }
-      const listed = source.getSnapshot().agents.value ?? [];
       const result = await draft.save(request);
-      if (!saved && draft.getSnapshot().saveOutcome === "unknown") {
-        lostCreate = {
-          submitted: request.submitted,
-          owner,
-          before: new Set(listed.map((entry) => entry.id)),
-          failedBeside: source.getSnapshot().agents.value,
-        };
-        createCheck = { status: "checking" };
-        draft.publish();
+      if (requestId && draft.getSnapshot().saveOutcome === "unknown") {
+        lostCreateId = requestId;
+        await checkLostCreate();
       }
       return result;
     },
@@ -470,10 +458,11 @@ export function createAgentDraft(
       return made;
     },
     /** Factory confirmed a lost Create made nothing, so Create may be sent again. */
+    checkCreate: checkLostCreate,
     createAgain() {
       if (createCheck.status !== "absent") return;
       createCheck = { status: "none" };
-      lostCreate = null;
+      lostCreateId = undefined;
       draft.acknowledgeUnknownSave();
     },
     setOption(id: string, value: AgentModelOptionValue["value"]) {

@@ -25,6 +25,7 @@ export type StudioDefinitionsOperations = Pick<
   | "updateFlow"
   | "removeFlow"
   | "createAgent"
+  | "getAgentCreateOutcome"
   | "updateAgent"
   | "duplicateAgent"
   | "removeAgent"
@@ -217,6 +218,7 @@ export function createStudioDefinitions(
     updateFlow: operations.updateFlow,
     removeFlow: operations.removeFlow,
     createAgent: operations.createAgent,
+    getAgentCreateOutcome: operations.getAgentCreateOutcome,
     updateAgent: operations.updateAgent,
     duplicateAgent: operations.duplicateAgent,
     removeAgent: operations.removeAgent,

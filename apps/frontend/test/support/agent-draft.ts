@@ -21,7 +21,7 @@ export const capabilities: AgentCapabilities = {
       models: [
         {
           id: "first",
-          label: null,
+          label: "First model",
           options: [
             {
               id: "effort",
@@ -35,7 +35,7 @@ export const capabilities: AgentCapabilities = {
         },
         {
           id: "second",
-          label: null,
+          label: "Second model",
           options: [
             {
               id: "effort",
@@ -57,7 +57,7 @@ export const capabilities: AgentCapabilities = {
       models: [
         {
           id: "other-first",
-          label: null,
+          label: "Other model",
           options: [
             {
               id: "effort",

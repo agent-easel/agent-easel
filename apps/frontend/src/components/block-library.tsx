@@ -31,12 +31,6 @@ const STEPS = [
 
 const headingClass = "text-label tracking-label text-muted-foreground";
 
-/** Agents with a model first, then those without, which can't be placed. */
-const modelFirst = (agents: readonly AgentDefinition[]) => [
-  ...agents.filter((agent) => agent.execution),
-  ...agents.filter((agent) => !agent.execution),
-];
-
 /** Opens the new Agent draft over this Flow; Create returns here. */
 export function NewAgentLink({ flowId, className }: { flowId: string; className?: string }) {
   return (
@@ -81,7 +75,10 @@ export function BlockLibrary({
   const steps = STEPS.filter((step) => matches(step.name));
   const shown = agents.filter((agent) => matches(agent.name));
   const groups = ownerGroups(shown, projects, { kind: "all" });
-  const placeable = agents.some((agent) => agent.execution);
+  const summaries = new Map(
+    agents.map((agent) => [agent.id, agentRuntimeMeta(agent.execution, capabilities)]),
+  );
+  const placeable = [...summaries.values()].some(Boolean);
   if (!open)
     return (
       <div className="flex w-11 shrink-0 flex-col items-center border-r bg-sidebar py-3">
@@ -180,20 +177,25 @@ export function BlockLibrary({
               {group.items.length}
             </span>
           </div>
-          {modelFirst(group.items).map((agent) => (
-            <LibraryItem
-              key={agent.id}
-              name={agent.name}
-              detail={
-                agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
-              }
-              kind="agent"
-              agent={agent}
-              disabled={!agent.execution}
-              dropAt={dropAt}
-              onAdd={(position) => onAdd("agent", agent, position)}
-            />
-          ))}
+          {[...group.items]
+            .sort(
+              (left, right) => Number(!!summaries.get(right.id)) - Number(!!summaries.get(left.id)),
+            )
+            .map((agent) => {
+              const summary = summaries.get(agent.id);
+              return (
+                <LibraryItem
+                  key={agent.id}
+                  name={agent.name}
+                  detail={summary || <NeedsModel />}
+                  kind="agent"
+                  agent={agent}
+                  disabled={!summary}
+                  dropAt={dropAt}
+                  onAdd={(position) => onAdd("agent", agent, position)}
+                />
+              );
+            })}
         </section>
       ))}
       {agents.length > 0 && !placeable && !searching && (

@@ -5,12 +5,15 @@ import {
   createFlowLayoutDimensions,
   FlowLayoutLimitError,
 } from "@t3-factory/flow-layout";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
 import {
+  AGENT_CREATE_WINDOW_MS,
   PORTABLE_DOCUMENT_FORMAT,
   PORTABLE_DOCUMENT_VERSION,
   type AgentCapabilities,
+  type AgentCreateOutcome,
   type AgentDefinition,
   type AgentProjectOverride,
   type FactoryOperations,
@@ -29,6 +32,7 @@ import {
   type StudioDefinitions,
 } from "@t3-factory/contracts";
 import {
+  agentCreateDeadline,
   CANVAS_COORD_MESSAGE,
   duplicateTreatment,
   executionForProject,
@@ -204,6 +208,7 @@ type DefinitionOperations = Pick<
   | "getAgentCapabilities"
   | "listAgents"
   | "getAgent"
+  | "getAgentCreateOutcome"
   | "createAgent"
   | "updateAgent"
   | "changeAgentOwner"
@@ -428,6 +433,23 @@ export const makeDefinitions = (
         if (!agent) return failure("not_found", "This Agent does not exist.");
         return yield* operation(agent);
       });
+    const readCreateOutcome = (id: string, deadline: number) =>
+      transaction<AgentCreateOutcome | { status: "pending"; remaining: number }>(
+        Effect.gen(function* () {
+          const [identity] = yield* sql<{ removed_at: string | null }>`
+            SELECT removed_at FROM agents WHERE id = ${id}`;
+          if (identity?.removed_at) return { ok: true, value: { status: "removed" } };
+          if (identity)
+            return yield* withSavedAgent(id, (agent) =>
+              Effect.succeed({ ok: true, value: { status: "created" as const, agent } }),
+            );
+          const remaining = deadline - (yield* Clock.currentTimeMillis);
+          return {
+            ok: true,
+            value: remaining > 0 ? { status: "pending", remaining } : { status: "absent" },
+          };
+        }),
+      );
     /** Runs `operation` on the current revision of Flow `id`, refusing a missing Flow. */
     const withSavedFlow = <A>(
       id: string,
@@ -759,9 +781,29 @@ export const makeDefinitions = (
         transaction(
           withSavedAgent(id, (agent) => Effect.succeed({ ok: true as const, value: agent })),
         ),
+      getAgentCreateOutcome(id) {
+        const deadline = agentCreateDeadline(id);
+        if (!deadline.ok) return Effect.succeed(deadline);
+        return Effect.gen(function* () {
+          const first = yield* readCreateOutcome(id, deadline.value);
+          if (!first.ok) return first;
+          if (first.value.status !== "pending") return { ok: true as const, value: first.value };
+          if (first.value.remaining <= AGENT_CREATE_WINDOW_MS) {
+            yield* Effect.sleep(first.value.remaining);
+            const checked = yield* readCreateOutcome(id, deadline.value);
+            if (!checked.ok) return checked;
+            if (checked.value.status !== "pending")
+              return { ok: true as const, value: checked.value };
+          }
+          return { ok: true as const, value: { status: "unconfirmed" as const } };
+        });
+      },
       createAgent(input) {
         const validated = validateCreateAgent(input);
         if (!validated.ok) return Effect.succeed(validated);
+        const { requestId } = validated.value;
+        const deadline = requestId === undefined ? null : agentCreateDeadline(requestId);
+        if (deadline && !deadline.ok) return Effect.succeed(deadline);
         return Effect.gen(function* () {
           const capabilities = yield* loadCapabilities();
           return yield* transaction<AgentDefinition>(
@@ -780,9 +822,20 @@ export const makeDefinitions = (
                 (yield* ownerRefusal(projectId)) ??
                 (yield* overridesRefusal(projectId, agentInput, capabilities));
               if (refused) return refused;
+              if (deadline) {
+                const remaining = deadline.value - (yield* Clock.currentTimeMillis);
+                if (remaining <= 0)
+                  return failure(
+                    "conflict",
+                    "The Agent Create request expired. Try creating again.",
+                  );
+                const [used] = yield* sql`SELECT id FROM agents WHERE id = ${requestId}`;
+                if (used)
+                  return failure("conflict", "Factory already used this Agent Create request.");
+              }
               const now = yield* currentTime;
               const agent: AgentDefinition = {
-                id: yield* newId,
+                id: requestId ?? (yield* newId),
                 projectId,
                 name: validated.value.name,
                 prompt: validated.value.prompt,

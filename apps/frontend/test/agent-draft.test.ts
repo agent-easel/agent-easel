@@ -2,17 +2,18 @@ import { expect, it } from "vite-plus/test";
 import type { AgentDefinition } from "@t3-factory/contracts";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
-import { comparedLines } from "../src/components/studio-agents/agent-revision-panel.tsx";
+import { comparedAgentLines } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
+import { held } from "./support/flow-draft.ts";
 import { factoryProject } from "./support/studio-definitions.ts";
 import {
   agentDraft,
   comparedAgent,
-  deliver,
   editedAgent,
   ownerChangedElsewhere,
   pendingSave,
+  publishedWhen,
   removedElsewhere,
   savedElsewhere,
 } from "./support/agent-editor.ts";
@@ -367,38 +368,65 @@ it("an Agent Duplicate creates the copy in the chosen target owner and returns i
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
 });
 
-it("a Create whose reply is lost blocks another Create while Factory is checked", async () => {
+it("a lost Create checks its own request and ends in a safe state if the lookup fails", async () => {
   // Arrange
   const { draft, factory } = agentDraft(null);
   draft.edit({ name: "New reviewer", prompt: "Review the change." });
   factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
+  factory.getAgentCreateOutcome.mockRejectedValueOnce(new OfflineError());
 
   // Act
   await draft.save();
 
   // Assert
+  expect(factory.getAgentCreateOutcome).toHaveBeenCalledWith(
+    factory.createAgent.mock.calls[0]![0].requestId,
+  );
   expect(draft.getSnapshot()).toMatchObject({
     saved: null,
     content: { name: "New reviewer" },
     saveOutcome: "unknown",
     canSave: false,
-    createCheck: { status: "checking" },
+    createCheck: { status: "unconfirmed" },
   });
 });
 
-it("a lost Create that made nothing offers Create again once Studio's next delivery confirms it", async () => {
+it("Create again stays blocked while Factory is checking the original request", async () => {
   // Arrange
   const setup = agentDraft(null);
-  setup.draft.edit({ name: "New reviewer", prompt: "Review the change." });
-  setup.factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
-  await setup.draft.save();
-  deliver(setup, [savedAgent({ id: "unrelated", name: "Unrelated" })]);
+  const { draft, factory } = setup;
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
+  const reply = held(factory.getAgentCreateOutcome);
+  const checking = publishedWhen(setup, (state) => state.createCheck.status === "checking");
+  const saving = draft.save();
+  await checking;
 
   // Act
-  setup.draft.createAgain();
+  draft.createAgain();
 
   // Assert
-  expect(setup.draft.getSnapshot()).toMatchObject({
+  expect(draft.getSnapshot()).toMatchObject({
+    canSave: false,
+    createCheck: { status: "checking" },
+  });
+  reply.answer({ status: "unconfirmed" });
+  await saving;
+});
+
+it("a lost Create that made nothing offers Create again after Factory confirms absence", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft(null);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
+  factory.getAgentCreateOutcome.mockResolvedValueOnce({ status: "absent" });
+  await draft.save();
+
+  // Act
+  draft.createAgain();
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
     canSave: true,
     error: "",
     saveOutcome: null,
@@ -406,31 +434,26 @@ it("a lost Create that made nothing offers Create again once Studio's next deliv
   });
 });
 
-it("a lost Create that made the Agent opens it instead of offering Create again", async () => {
+it("a recovered Create opens the Agent even when another client changed its content", async () => {
   // Arrange
-  const setup = agentDraft(null);
-  setup.draft.edit({ name: "New reviewer", prompt: "Review the change." });
-  let made: AgentDefinition | undefined;
-  setup.factory.createAgent.mockImplementationOnce(async (content) => {
-    made = savedAgent({ ...content, id: "made", revision: 1 });
-    throw new OfflineError("unknown");
-  });
-  await setup.draft.save();
-  deliver(setup, [made!]);
+  const { draft, factory } = agentDraft(null);
+  draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  const made = savedAgent({ id: "made", name: "Edited elsewhere", revision: 2 });
+  factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
+  factory.getAgentCreateOutcome.mockResolvedValueOnce({ status: "created", agent: made });
+  await draft.save();
 
   // Act
-  const opened = setup.draft.openCreated();
+  const opened = draft.openCreated();
 
   // Assert
-  expect(opened).toMatchObject({ id: "made" });
-  expect(setup.draft.getSnapshot()).toMatchObject({
-    saved: { id: "made" },
+  expect(opened).toStrictEqual(made);
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: made,
     dirty: false,
     error: "",
     createCheck: { status: "none" },
   });
-  setup.draft.createAgain();
-  expect(setup.factory.createAgent).toHaveBeenCalledTimes(1);
 });
 
 it("two exits with one name are tagged Duplicate and block Save before any request", async () => {
@@ -509,19 +532,23 @@ it("two Agent revisions that differ only in a Project override read differently 
   const base = savedAgent();
   const overridden = savedAgent({
     projectOverrides: [
-      { projectId: "northwind", execution: { ...base.execution!, modelId: "other-first" } },
+      {
+        projectId: "northwind",
+        execution: { ...base.execution!, providerInstanceId: "other", modelId: "other-first" },
+      },
     ],
   });
 
   // Act
   const shown = [
-    comparedLines(base, [], capabilities),
-    comparedLines(overridden, [], capabilities),
+    comparedAgentLines(base, [], capabilities),
+    comparedAgentLines(overridden, [], capabilities),
   ];
 
   // Assert
   expect(shown[0]).not.toStrictEqual(shown[1]);
-  expect(shown[1]).toContain("  Unknown Project  Primary · other-first");
+  expect(shown[1]).toContainEqual(expect.objectContaining({ text: "Unknown Project" }));
+  expect(shown[1]).toContainEqual(expect.objectContaining({ text: "  Model  Other model" }));
 });
 
 it("a refused Create for a Project keeps the Project overrides in the draft", async () => {
@@ -549,8 +576,8 @@ it("Agent revisions giving the same settings to two Projects with one title read
 
   // Act
   const shown = [
-    comparedLines(first, projects, capabilities),
-    comparedLines(second, projects, capabilities),
+    comparedAgentLines(first, projects, capabilities),
+    comparedAgentLines(second, projects, capabilities),
   ];
 
   // Assert
@@ -588,4 +615,19 @@ it("an Agent moved to a Project elsewhere saves without the Project overrides re
     "agent",
     expect.objectContaining({ expectedProjectId: "ledgerly", projectOverrides: [] }),
   );
+});
+
+it("a non-effort Worker option is visible as a changed setting in the Agent comparison", () => {
+  // Arrange
+  const base = savedAgent();
+  const modified = savedAgent({
+    execution: { ...base.execution!, modelOptions: [{ id: "old", value: false }] },
+  });
+
+  // Act
+  const shown = comparedAgentLines(modified, [], capabilities);
+
+  // Assert
+  expect(shown).toContainEqual(expect.objectContaining({ text: "  Old  Off" }));
+  expect(shown).toContainEqual(expect.objectContaining({ text: "  Environment  Local" }));
 });

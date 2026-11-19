@@ -45,7 +45,7 @@ export function ExecutionSettingsFields({
     ...providers.filter((entry) => !entry.reporting.supported),
   ].map((entry): MenuChoice => ({
     id: entry.providerInstanceId,
-    label: entry.displayName ?? entry.providerInstanceId,
+    label: entry.displayName ?? "Unknown provider",
     ...(entry.reporting.supported
       ? {}
       : { badge: "No Factory reporting", badgeKind: "neutral", disabled: true }),
@@ -77,7 +77,7 @@ export function ExecutionSettingsFields({
         disabled={saving || !execution.providerInstanceId}
         choices={(selectedProvider?.models ?? []).map((entry) => ({
           id: entry.id,
-          label: entry.label ?? entry.id,
+          label: entry.label ?? "Unknown model",
         }))}
       />
       {execution.modelId &&

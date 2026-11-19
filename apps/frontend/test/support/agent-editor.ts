@@ -30,6 +30,7 @@ function memoryAgents() {
       latest = { ...latest, projectId, updatedAt: laterThan(latest.updatedAt) };
       return latest;
     },
+    getAgentCreateOutcome: vi.fn<AgentDraftOperations["getAgentCreateOutcome"]>(),
     createAgent: vi.fn<AgentDraftOperations["createAgent"]>(async (content) => {
       latest = savedAgent({ ...content, id: "created", revision: 1 });
       return latest;

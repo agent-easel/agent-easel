@@ -117,10 +117,15 @@ export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph
   return { blocks, flowInput, unconnectedOutputs };
 }
 
-/** The tag a settings field shows: the first issue whose path is within `field`. */
+/** The first issue whose path is within this settings field. */
+export function fieldProblem(issues: readonly BlockIssue[], field: string) {
+  return issues.find((item) => item.field === field || item.field.startsWith(`${field}.`))?.issue;
+}
+
+/** The readiness tag a settings field shows. */
 export function fieldIssue(issues: readonly BlockIssue[], field: string) {
-  const found = issues.find((item) => item.field === field || item.field.startsWith(`${field}.`));
-  return found ? issueTag(found.issue) : null;
+  const problem = fieldProblem(issues, field);
+  return problem ? issueTag(problem) : null;
 }
 
 /** A save refusal's issue as a link that selects the block its path names. */

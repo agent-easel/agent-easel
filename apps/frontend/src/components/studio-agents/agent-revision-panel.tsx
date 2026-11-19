@@ -8,8 +8,10 @@ import type {
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { agentRuntimeMeta } from "@/lib/agent-display";
-import { cn } from "@/lib/utils";
+import { resolveAgentModel } from "@t3-factory/domain-validation";
+import { modelOptionLabel } from "@/lib/agent-display";
+import { revisionExitLines, revisionLine, type RevisionLine } from "../../revision-diff.ts";
+import { RevisionComparison } from "../revision-comparison.tsx";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
 import { ProblemCard, ProblemCardButton } from "../problem-card.tsx";
@@ -21,42 +23,67 @@ type ComparedContent = Omit<AgentContent, "execution"> & {
   readonly execution: AgentContent["execution"] | null;
 };
 
-/**
- * How one side of the comparison reads, line by line in display names: the Worker, Project
- * overrides, exits and the prompt. Projects sharing a title are told apart by their path.
- */
-export function comparedLines(
+/** Display every saved Worker setting, including options missing from the current catalog. */
+function workerLines(
+  settings: AgentExecutionSettings | null,
+  capabilities: AgentCapabilities | null,
+): RevisionLine[] {
+  if (!settings || (!settings.environmentId && !settings.providerInstanceId && !settings.modelId))
+    return ["  Needs a model"];
+  const catalog = capabilities?.state === "ready" ? capabilities : null;
+  const { provider, model } = resolveAgentModel(settings, catalog);
+  const environment = catalog?.environments.find(
+    (item) => item.environmentId === settings.environmentId,
+  );
+  return [
+    revisionLine(
+      `  Environment  ${environment?.label ?? "Unknown environment"}`,
+      settings.environmentId,
+    ),
+    revisionLine(
+      `  Provider  ${provider?.displayName ?? "Unknown provider"}`,
+      settings.providerInstanceId,
+    ),
+    revisionLine(`  Model  ${model?.label ?? "Unknown model"}`, settings.modelId),
+    ...settings.modelOptions.map((option) => {
+      const descriptor = model?.options?.find((entry) => entry.id === option.id);
+      const value = descriptor ? modelOptionLabel(descriptor, option.value) : String(option.value);
+      return revisionLine(`  ${descriptor?.label ?? "Unknown option"}  ${value}`, option);
+    }),
+  ];
+}
+
+/** One side of the comparison, using labels for its stored references. */
+export function comparedAgentLines(
   { name, prompt, execution, exits, projectOverrides }: ComparedContent,
   projects: readonly FactoryProject[],
   capabilities: AgentCapabilities | null,
-): string[] {
-  const worker = (settings: AgentExecutionSettings | null) =>
-    (settings && agentRuntimeMeta(settings, capabilities)) || "Needs a model";
+): RevisionLine[] {
   const projectName = (projectId: string) => {
     const owner = studioOwner(projectId, projects);
     const alike = projects.filter(
       (project) => studioOwner(project.id, projects).title === owner.title,
     );
-    return alike.length > 1 ? `${owner.title} (${owner.detail ?? projectId})` : owner.title;
+    return alike.length > 1 && owner.detail ? `${owner.title} (${owner.detail})` : owner.title;
   };
   return [
     `Name  ${name}`,
-    `Worker  ${worker(execution)}`,
+    "",
+    "Worker",
+    ...workerLines(execution, capabilities),
     ...(projectOverrides.length
       ? [
           "",
           "Project overrides",
-          ...projectOverrides.map(
-            (override) => `  ${projectName(override.projectId)}  ${worker(override.execution)}`,
-          ),
+          ...projectOverrides.flatMap((override) => [
+            revisionLine(projectName(override.projectId), override.projectId),
+            ...workerLines(override.execution, capabilities),
+          ]),
         ]
       : []),
     "",
     "Exits",
-    ...exits.map(
-      (exit) =>
-        `  ${exit.name || "(unnamed)"}${exit.messageRequired ? " · message required" : ""}${exit.description ? ` — ${exit.description}` : ""}`,
-    ),
+    ...exits.flatMap((exit) => revisionExitLines(exit, "  ")),
     "",
     "Prompt",
     ...prompt.split("\n").map((line) => `  ${line}`),
@@ -170,8 +197,8 @@ function CompareDialog({
   onClose: () => void;
 }) {
   const { revision } = latest;
-  const mine = comparedLines(content, projects, capabilities);
-  const theirs = comparedLines(latest, projects, capabilities);
+  const mine = comparedAgentLines(content, projects, capabilities);
+  const theirs = comparedAgentLines(latest, projects, capabilities);
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -202,51 +229,8 @@ function CompareDialog({
           </>
         }
       >
-        <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-          <ComparedSide title="Your draft" lines={mine} other={theirs} tone="removed" />
-          <ComparedSide title={`Revision ${revision}`} lines={theirs} other={mine} tone="added" />
-        </div>
+        <RevisionComparison mine={mine} theirs={theirs} revision={revision} />
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ComparedSide({
-  title,
-  lines,
-  other,
-  tone,
-}: {
-  title: string;
-  lines: readonly string[];
-  /** The other side's lines; a line missing there is tinted as changed. */
-  other: readonly string[];
-  tone: "removed" | "added";
-}) {
-  const present = new Set(other);
-  return (
-    <div className="grid min-w-0 gap-1.5">
-      <h3 className="text-2xs font-medium text-muted-foreground">{title}</h3>
-      <pre
-        aria-label={title}
-        className="min-w-0 overflow-hidden rounded-md border bg-background py-1.5 font-mono text-2xs leading-[1.4rem] whitespace-pre-wrap wrap-anywhere"
-      >
-        {lines.map((line, index) => {
-          const changed = line !== "" && !present.has(line);
-          return (
-            <span
-              key={index}
-              data-changed={changed || undefined}
-              className={cn(
-                "block min-h-[1.4rem] px-3",
-                changed && (tone === "removed" ? "bg-destructive/20" : "bg-success/20"),
-              )}
-            >
-              {line}
-            </span>
-          );
-        })}
-      </pre>
-    </div>
   );
 }
