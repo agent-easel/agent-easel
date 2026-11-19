@@ -31,7 +31,7 @@ import {
 import { ExecutionStateBadge } from "./execution-state.tsx";
 import { clockTime, fullDateTime } from "../time-format.ts";
 import { RUN_STATE_LABELS, type RunStateKind } from "./status-badge.tsx";
-import { blockStateKind } from "../run-block-state.ts";
+import { blockStateKind, reviewInT3Since } from "../run-block-state.ts";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
 import { ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { RootWork } from "./run-coordination-controls.tsx";
@@ -119,7 +119,7 @@ function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind
   if (kind === "needs-input")
     return block.kind === "human"
       ? `Waiting for your decision${since(latest?.start)}`
-      : `Review in T3${since(recorded.observedAt)}`;
+      : `Review in T3${since(reviewInT3Since(run, recorded))}`;
   const continuation = continuationProgress(run, block, recorded);
   if (continuation) return continuation;
   if (activeStates.includes(recorded.state)) return currentVisitText(run, block, visits);

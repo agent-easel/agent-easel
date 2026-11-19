@@ -108,7 +108,7 @@ export function WaitArrivals({ run, blockId }: { run: RunDetail; blockId: string
                     : "Message cleared once its recipients no longer needed it."}
               </p>
             ) : arrival.message ? (
-              <AgentMarkdown text={arrival.message} density="card" />
+              <AgentMarkdown text={arrival.message} density="primary" />
             ) : (
               <p className="text-sm text-foreground">No message.</p>
             )}

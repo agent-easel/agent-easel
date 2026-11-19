@@ -1,4 +1,4 @@
-import { AgentMarkdown, AgentTextPreview } from "./agent-text.tsx";
+import { AgentMarkdown, AgentTextPreview, WorkingReport } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -28,6 +28,7 @@ import {
   settlementPrimary,
 } from "../attention-copy.ts";
 import { blockExitRecipients, capturedExits } from "../flow-graph.ts";
+import { reviewInT3Since } from "../run-block-state.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
 import { clockTime, dayAndTime } from "../time-format.ts";
@@ -203,8 +204,9 @@ function AttentionCard({
 
 /**
  * Figma RD19: an Agent idle with a working report. It may be asking in chat or have stopped
- * without reporting, so its title never says it waits for a reply; the owner reviews in T3.
- * RD43: without a report, only the title and Open in T3 remain.
+ * without reporting, so its title never says it waits for a reply; the owner reviews in T3. The
+ * report's reader states the wait (RD45). RD43: without a report, only the title and Open in T3
+ * remain.
  */
 function ReviewInT3({
   run,
@@ -215,9 +217,9 @@ function ReviewInT3({
   block: RunBlock;
   compact: boolean;
 }) {
-  const reportLabel = useId();
   const visit = run.activations.filter((activation) => activation.blockId === block.blockId).length;
-  const since = block.observedAt ? ` · since ${clockTime(block.observedAt)}` : "";
+  const waitingSince = reviewInT3Since(run, block);
+  const since = waitingSince ? ` · since ${clockTime(waitingSince)}` : "";
   return (
     <AttentionCard
       tone="needs-input"
@@ -228,21 +230,13 @@ function ReviewInT3({
       actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
       {block.workingMessage && (
-        <section aria-labelledby={reportLabel} className="flex min-w-0 flex-col gap-1.5">
-          <h4 id={reportLabel} className={fieldLabelClass}>
-            Working report
-          </h4>
-          <AgentTextPreview
-            text={block.workingMessage}
-            readLabel="Read full report"
-            variant="needs-input"
-            heading={{
-              title: `${block.name} · Working report`,
-              provenance: `Visit ${visit} · waiting for your reply${since}`,
-              t3Link: block.link,
-            }}
-          />
-        </section>
+        <WorkingReport
+          text={block.workingMessage}
+          blockName={block.name}
+          provenance={`Visit ${visit} · waiting for your reply${since}`}
+          t3Link={block.link}
+          size="needs-input"
+        />
       )}
     </AttentionCard>
   );
@@ -746,6 +740,7 @@ function HumanResponseForm({
             readLabel="Read full context"
             variant="needs-input"
             heading={{
+              kind: "text",
               title: `${blockName} · context`,
               provenance: [occurrenceSource(run, occurrence), clockTime(occurrence.appearedAt)]
                 .filter(Boolean)

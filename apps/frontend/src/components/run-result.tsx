@@ -84,6 +84,7 @@ function resultHeading(run: RunDetail, report: RunReport): ReaderHeading {
   const facts = resultFacts(run, report);
   const provenance = [facts.visit, facts.exit && `→ ${facts.exit}`, clockTime(report.acceptedAt)];
   return {
+    kind: "result",
     title: `${facts.block} · result`,
     provenance: provenance.filter(Boolean).join(" · "),
     t3Link: run.blocks.find((block) => block.blockId === report.blockId)?.link ?? null,

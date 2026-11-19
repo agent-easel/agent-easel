@@ -299,7 +299,8 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
   await app.screenshot("worker-conversation-work-period");
 });
 
-async function openWorkingReportReader(app: App, screen: Screen) {
+/** The Run page of the Agent asking in T3, with its Needs input card's Working report. */
+async function openConversationRun(app: App, screen: Screen) {
   const found = await findRun(
     app.baseUrl,
     "UI worker · Discussing · Agent asked about empty-state wording",
@@ -320,7 +321,7 @@ test("Read full report opens the Agent's whole Working report with its visit and
   screen,
 }) => {
   // Arrange
-  const { review, reader } = await openWorkingReportReader(app, screen);
+  const { review, reader } = await openConversationRun(app, screen);
 
   // Act
   await review.getByRole("button", "Read full report", { exact: true }).tap();
@@ -337,25 +338,6 @@ test("Read full report opens the Agent's whole Working report with its visit and
   await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
   await expect(reader.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await app.screenshot("worker-conversation-working-report-reader");
-});
-
-test("Esc closes the Working report reader and returns focus to Read full report", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const { review, reader } = await openWorkingReportReader(app, screen);
-  await review.getByRole("button", "Read full report", { exact: true }).tap();
-  await expect(reader).toBeVisible();
-
-  // Act
-  await browser.keyboard.press("Escape");
-
-  // Assert
-  await expect(reader).toHaveCount(0);
-  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeFocused();
-  await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
 });
 
 test("a worker idle in working shows its message on the canvas and in its Run preview", async ({
@@ -555,13 +537,18 @@ test("a Human correction answered from the selected Human step revisits the same
 
 const longContextRun = "UI worker · Decision · Long review summary for the reset action";
 
+/** The Overview's answer form for a Run's pending Human step "Your review". */
+function reviewAnswer(screen: Screen) {
+  return screen
+    .getByRole("complementary", "Run inspector")
+    .getByRole("form", "Answer Your review", { exact: true });
+}
+
 /** The Overview's answer form for the long-context Human step, before anything is chosen. */
 async function openLongContextAnswer(app: App, screen: Screen) {
   const found = await findRun(app.baseUrl, longContextRun);
   await app.open(`/runs/${found.id}`);
-  const answer = screen
-    .getByRole("complementary", "Run inspector")
-    .getByRole("form", "Answer Your review", { exact: true });
+  const answer = reviewAnswer(screen);
   await expect(answer).toBeVisible();
   return {
     found,
@@ -570,17 +557,42 @@ async function openLongContextAnswer(app: App, screen: Screen) {
   };
 }
 
-test("a long Human context previews as Markdown on its card and opens in full in the reader without decision controls", async ({
+/** The long Human context open in the reader from its card. */
+async function openLongContextReader(app: App, screen: Screen) {
+  const opened = await openLongContextAnswer(app, screen);
+  await opened.answer.getByRole("button", "Read full context", { exact: true }).tap();
+  await expect(opened.reader).toBeVisible();
+  return opened;
+}
+
+test("a long Human context shows its Markdown formatted on the card with Read full context", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, longContextRun);
+
+  // Act
+  await app.open(`/runs/${found.id}`);
+
+  // Assert
+  const answer = reviewAnswer(screen);
+  await expect(answer.getByRole("heading", "Review summary", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("listitem")).toHaveCount(3);
+  await expect(answer.getByText('No results for "{query}"', { exact: true })).toBeVisible();
+  await expect(answer).not.toContainText("## Review summary");
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+  await app.screenshot("human-context-preview");
+});
+
+test("Read full context opens the whole Human context as written, with its source and without decision controls", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
   const { answer, reader } = await openLongContextAnswer(app, screen);
-  await expect(answer.getByRole("heading", "Review summary", { exact: true })).toBeVisible();
-  await expect(answer.getByRole("listitem")).toHaveCount(3);
-  await expect(answer.getByText('No results for "{query}"', { exact: true })).toBeVisible();
-  await app.screenshot("human-context-preview");
 
   // Act
   await answer.getByRole("button", "Read full context", { exact: true }).tap();
@@ -590,17 +602,58 @@ test("a long Human context previews as Markdown on its card and opens in full in
   await expect(reader.getByRole("heading", "Decide", { exact: true })).toBeVisible();
   await expect(reader.getByText("→ GET /search?q=atlas", { exact: false })).toBeVisible();
   await expect(reader).toContainText('<button class="reset">Reset filters</button>');
+  await expect(reader.getByRole("button", "Reset filters", { exact: true })).toHaveCount(0);
   expect(
     await browser.evaluate(
-      `!document.querySelector('[role="dialog"] [data-result-body] button') && document.querySelector('[role="dialog"] [data-result-body]').innerText.includes("clear enough.\\nRequest changes")`,
+      `document.querySelector('[role="dialog"] [role="region"][aria-label="Reader text"]').innerText`,
     ),
-  ).toBe(true);
+  ).toContain("Approve if the reset action is clear enough.\nRequest changes");
+  await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
   await expect(reader.getByRole("combobox")).toHaveCount(0);
   await expect(reader.getByRole("button", "Submit answer", { exact: true })).toHaveCount(0);
   await app.screenshot("human-context-reader");
 });
 
-test("Tab skips the context links the clamped preview hides and reaches Read full context", async ({
+test("Esc closes the Human context reader and returns focus to Read full context", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { answer, reader } = await openLongContextReader(app, screen);
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(reader).toHaveCount(0);
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+});
+
+test("a short Human context shows whole on the card without Read full context", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+
+  // Act
+  await app.open(`/runs/${found.id}`);
+
+  // Assert
+  const answer = reviewAnswer(screen);
+  await expect(
+    answer.getByText(
+      "The search behavior looks good. Please review the empty-state wording and decide whether the reset action is clear enough.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(answer.getByRole("button", "Submit answer", { exact: true })).toBeVisible();
+  await expect(answer.getByRole("button", "Read full context", { exact: true })).toHaveCount(0);
+});
+
+test("Tab skips the context links the clamped preview fades out and reaches Read full context", async ({
   app,
   screen,
   browser,

@@ -1,4 +1,4 @@
-import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { createElement, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkBreaks from "remark-breaks";
@@ -15,10 +15,14 @@ import {
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
+import { fieldLabelClass } from "./page.tsx";
 import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 
-/** `card` previews a result; `attention` is a Needs input card's text, read before deciding. */
-type Density = "card" | "attention" | "reader";
+/**
+ * `card` is secondary card text, such as a result preview; `primary` is card-size text that is
+ * the card's own content, such as a Needs input card's text or a held Wait message.
+ */
+type Density = "card" | "primary" | "reader";
 
 const typography: Record<Density, { title: string; heading: string; text: string }> = {
   card: {
@@ -26,7 +30,7 @@ const typography: Record<Density, { title: string; heading: string; text: string
     heading: "text-sm font-semibold text-foreground",
     text: "text-sm text-muted-foreground",
   },
-  attention: {
+  primary: {
     title: "text-sm font-semibold text-foreground",
     heading: "text-sm font-semibold text-foreground",
     text: "text-sm text-foreground",
@@ -106,7 +110,7 @@ function markdownComponents(density: Density): Components {
 
 const components = {
   card: markdownComponents("card"),
-  attention: markdownComponents("attention"),
+  primary: markdownComponents("primary"),
   reader: markdownComponents("reader"),
 };
 
@@ -128,6 +132,8 @@ export function AgentMarkdown({ text, density }: { text: string; density: Densit
 
 /** What a reader dialog says about the text it shows, apart from the text itself. */
 export type ReaderHeading = {
+  /** A result's reader names its close action and text after the result. */
+  kind: "result" | "text";
   title: string;
   /** Where the text came from; empty when there is nothing to say. */
   provenance: string;
@@ -138,6 +144,7 @@ export type ReaderHeading = {
 
 /** A reader uses the same actions for a result, Working report, or Human context. */
 function TextReader({
+  kind,
   title,
   provenance,
   t3Link,
@@ -152,7 +159,7 @@ function TextReader({
   children: ReactNode;
 }) {
   const body = useRef<HTMLDivElement>(null);
-  const result = title.endsWith(" · result");
+  const result = kind === "result";
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogSurface
@@ -220,37 +227,55 @@ export function AgentTextReader({
 }
 
 /**
- * Collapsed previews fade out only when the text is longer than the preview. A link or scrolling
- * block (code, table) the clamp cuts off leaves the tab order, so focus never lands out of sight
- * or scrolls the preview; the reader keeps every one of them.
+ * Collapsed previews fade out only when the text is longer than the preview. While clamped, a
+ * link or scrolling block (code, table) reaching into the fade or below it is inert, so focus never
+ * lands on what is barely visible or scrolls the preview; the reader keeps every one of them.
+ * `fadeStart` is where the fade begins, in pixels from the preview's top.
  */
-function useClampedPreview(text: string) {
+function useClampedPreview(text: string, fadeStart: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [overflowing, setOverflowing] = useState(false);
   useEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element) {
+      setOverflowing(false);
+      return;
+    }
     const measure = () => {
-      const bottom = element.getBoundingClientRect().bottom;
-      for (const stop of element.querySelectorAll<HTMLElement>("a, pre, div:has(> table)")) {
-        if (stop.getBoundingClientRect().bottom > bottom + 1) stop.tabIndex = -1;
-        else stop.removeAttribute("tabindex");
-      }
-      setOverflowing(element.scrollHeight > element.clientHeight + 1);
+      const clamped = element.scrollHeight > element.clientHeight + 1;
+      const fade = element.getBoundingClientRect().top + fadeStart;
+      for (const stop of element.querySelectorAll<HTMLElement>("a, pre, div:has(> table)"))
+        stop.inert = clamped && stop.getBoundingClientRect().bottom > fade;
+      setOverflowing(clamped);
     };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     if (element.firstElementChild) observer.observe(element.firstElementChild);
     return () => observer.disconnect();
-  }, [text]);
+  }, [text, fadeStart]);
   return [ref, overflowing] as const;
 }
 
+/** Each preview size; `fadeStart` repeats in pixels where its `fade` class begins. */
 const previews = {
-  result: { density: "card", clamp: "max-h-16", fade: "mask-b-from-50%" },
+  result: {
+    density: "card",
+    clamp: "max-h-16",
+    fade: "mask-b-from-8",
+    fadeStart: 32,
+    gap: "gap-2.5",
+  },
   // Figma RD42: the 64 px fade ends a 198 px preview, and the decision follows it.
-  "needs-input": { density: "attention", clamp: "max-h-49.5", fade: "mask-b-from-33.5" },
+  "needs-input": {
+    density: "primary",
+    clamp: "max-h-49.5",
+    fade: "mask-b-from-33.5",
+    fadeStart: 134,
+    gap: "gap-1.5",
+  },
 } as const;
+
+type PreviewSize = keyof typeof previews;
 
 /**
  * Agent-written Markdown clamped to its rendered beginning, faded when it continues, with a link
@@ -272,12 +297,12 @@ export function AgentTextPreview({
   empty?: string | undefined;
   footer?: ReactNode;
   /** A Needs input card previews more of its text, in the card's own text colour. */
-  variant?: keyof typeof previews;
+  variant?: PreviewSize;
 }) {
   const [reading, setReading] = useState(false);
-  const [preview, overflowing] = useClampedPreview(text);
+  const { density, clamp, fade, fadeStart } = previews[variant];
+  const [preview, overflowing] = useClampedPreview(text, fadeStart);
   const readable = overflowing || !!heading.technicalDetails;
-  const { density, clamp, fade } = previews[variant];
   return (
     <>
       {text && (
@@ -316,5 +341,41 @@ export function AgentTextPreview({
         />
       )}
     </>
+  );
+}
+
+/**
+ * An Agent's current Working report under its label (Figma RD19), previewed with **Read full
+ * report**; its reader adds **Open in T3** for `t3Link`. `children` follow the preview.
+ */
+export function WorkingReport({
+  text,
+  blockName,
+  provenance,
+  t3Link,
+  size,
+  children,
+}: {
+  text: string;
+  blockName: string;
+  provenance: string;
+  t3Link: string | null;
+  size: PreviewSize;
+  children?: ReactNode;
+}) {
+  const label = useId();
+  return (
+    <section aria-labelledby={label} className={cn("flex min-w-0 flex-col", previews[size].gap)}>
+      <h4 id={label} className={fieldLabelClass}>
+        Working report
+      </h4>
+      <AgentTextPreview
+        text={text}
+        readLabel="Read full report"
+        variant={size}
+        heading={{ kind: "text", title: `${blockName} · Working report`, provenance, t3Link }}
+      />
+      {children}
+    </section>
   );
 }

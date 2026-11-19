@@ -503,7 +503,7 @@ fixed Human exits their old exits were mapped to.
 - A card that previews Agent-written text clamps it to its rendered beginning and fades it out when it continues. The
   link under the preview opens the full text in the **reader**, and appears only when the text is longer than the
   preview or, for a result, when it has Technical details. While the preview is clamped, links and scrolling code or
-  tables cut off below it are left out of the tab order; the reader shows them all. The reader states where the text
+  tables that reach into its fade or below it are inert and left out of the tab order; the reader shows them all. The reader states where the text
   came from and has **Copy Markdown**, which copies the unmodified text, **Esc** and close; **Esc** returns focus to
   the link that opened it. Copying needs a secure context (Factory's own window, loopback or HTTPS); over a plain-HTTP
   remote address the reader says copying is unavailable.
@@ -517,7 +517,8 @@ fixed Human exits their old exits were mapped to.
     on the card. Parallel occurrences each have their own preview and reader.
   - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full
     report**, and **Open in T3 ↗** follows it directly. Its reader is titled ***Block* · Working report** with
-    **Visit *N* · waiting for your reply · since *time*** and adds **Open in T3 ↗**. An empty Working report leaves the
+    **Visit *N* · waiting for your reply · since *time***, the time Factory saw the Agent's turn end, and adds **Open in
+    T3 ↗**. An empty Working report leaves the
     label and text out.
 - Drag the inner edge of the shell sidebar (224–480 px) or of the inspector (280–640 px, at most half the area beside the
   sidebar) to resize it; with the edge focused, Left/Right step 16 px and Home/End jump to the bounds.
@@ -673,8 +674,8 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
 - **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. While an
   Agent block's worker thread is idle and the visit's current report is still `working`, the block and the Run show **Needs
   input**, and the overview has one card, **Review *Block* in T3**, with its Working report and **Open in T3 ↗**. An Agent
-  that stopped without reporting leaves the same evidence, so the card never says the Agent waits for a reply; only an
-  explicit T3 request does. It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
+  that stopped without reporting leaves the same evidence, so the card's title never says the Agent waits for a reply; only
+  an explicit T3 request does. Opened in full, the Working report states the wait ([presentation](#execution-canvas)). It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
   cannot start on unanswered questions. Factory never parses chat; a model may still omit or misuse a report. Earlier Agent questions recorded before this contract stay in Settled
   attention with their text, and an upgrade turned questions still pending into the visit's working report without resuming the
   worker. See [report acceptance](runner.md#report-acceptance).
