@@ -40,7 +40,12 @@ function studioSelectionFromLocation(location: {
 
 function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft) {
   if (!studio) return false;
-  if (draft.kind === "flow") return studio.tab === "flows" && studio.flowId === draft.id;
+  // An Agent opened from the Flow editor opens over it, so the Flow's draft stays.
+  if (draft.kind === "flow")
+    return (
+      (studio.tab === "flows" && studio.flowId === draft.id) ||
+      (studio.tab === "agents" && studio.fromFlow === draft.id)
+    );
   if (draft.kind === "trigger")
     return (
       (studio.tab === "triggers" && studio.triggerId === draft.id) ||

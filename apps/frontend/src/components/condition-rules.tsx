@@ -6,7 +6,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { ArrowDown, ArrowUp, Lock, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import {
   CONDITION_ARRIVAL_MAX,
   type ConditionRule,
@@ -14,13 +14,13 @@ import {
   type FlowGraph,
 } from "@t3-factory/contracts";
 import { CONDITION_OTHERWISE } from "@t3-factory/domain-validation";
-import { CONDITION_UNWIRED_PORTS } from "@t3-factory/flow-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { randomId } from "@/lib/ids";
-import { cn } from "@/lib/utils";
-import { exitRecipients } from "../flow-graph.ts";
+import { PanelHeading, TargetSelect } from "./block-exit-configuration.tsx";
+import { fieldIssue, type BlockIssue } from "./flow-readiness.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 
 type ConditionBlock = Extract<FlowBlock, { kind: "condition" }>;
 
@@ -39,7 +39,7 @@ export interface ConditionEditing {
 }
 
 /** One rule row's fixed height, gap included: rows are positioned by index, not measured. */
-const RULE_ROW = 116;
+const RULE_ROW = 128;
 /** Rows rendered beyond each edge of the panel's visible part. */
 const OVERSCAN = 4;
 
@@ -149,14 +149,19 @@ export function ConditionOutputs({
   graph,
   scroller,
   editing,
+  issues,
   onEdit,
+  onChange,
 }: {
   block: ConditionBlock;
   graph: FlowGraph;
   /** The panel's scroll container, which scrolls the rule list with the rest of the panel. */
   scroller: HTMLElement | null;
   editing: ConditionEditing;
+  /** The block's readiness issues; a rule row and Otherwise show theirs. */
+  issues: readonly BlockIssue[];
   onEdit: (block: FlowBlock) => void;
+  onChange: (graph: FlowGraph) => void;
 }) {
   const [list, setList] = useState<HTMLOListElement | null>(null);
   const { rules } = block;
@@ -189,38 +194,61 @@ export function ConditionOutputs({
       focus(neighbour ? { ruleId: neighbour.id, field: "remove" } : "add");
     },
   };
+  const target = (exitId: string, label: string) => (
+    <TargetSelect
+      graph={graph}
+      source={{ kind: "exit", sourceBlockId: block.id, exitId }}
+      label={label}
+      onChange={onChange}
+    />
+  );
+  // Block-level issues name Otherwise; rule issues name their rule.
+  const otherwiseTag = issues.some(
+    (item) => item.field === "" && item.issue.code === "condition_output_unconnected",
+  )
+    ? "Not connected"
+    : null;
   return (
     <section aria-label="Outputs" className="grid gap-2">
-      <h3 className="text-xs font-semibold text-muted-foreground">
-        Outputs · {rules.length.toLocaleString("en-US")} {rules.length === 1 ? "rule" : "rules"},
-        then Otherwise
-      </h3>
-      <p className="text-xs text-muted-foreground">
-        Order rules from the highest arrival number down; each needs a distinct output name and an
-        arrival number of 2 or more. Every connected block receives the arrival; with no connection
-        the branch ends.
-      </p>
-      {rules.length > 0 && (
-        <ol
-          ref={setList}
-          aria-label="Rules"
-          className="relative"
-          style={{ height: rules.length * RULE_ROW }}
+      <PanelHeading>Outputs</PanelHeading>
+      <div className="grid overflow-hidden rounded-lg border">
+        {rules.length > 0 && (
+          <ol
+            ref={setList}
+            aria-label="Rules"
+            className="relative border-b"
+            style={{ height: rules.length * RULE_ROW }}
+          >
+            {rules.slice(start, end).map((rule, offset) => (
+              <RuleRow
+                key={rule.id}
+                rule={rule}
+                index={start + offset}
+                count={rules.length}
+                entry={editing.entries.get(rule.id)}
+                tag={fieldIssue(issues, `rules.${start + offset}`)}
+                target={target(rule.id, `output ${rule.name || "unnamed"}`)}
+                actions={actions}
+              />
+            ))}
+          </ol>
+        )}
+        <div
+          role="group"
+          aria-label={`Output ${CONDITION_OTHERWISE.name}`}
+          className="grid gap-2 px-3 py-2.5"
         >
-          {rules.slice(start, end).map((rule, offset) => (
-            <RuleRow
-              key={rule.id}
-              rule={rule}
-              index={start + offset}
-              count={rules.length}
-              entry={editing.entries.get(rule.id)}
-              graph={graph}
-              blockId={block.id}
-              actions={actions}
-            />
-          ))}
-        </ol>
-      )}
+          <span className="flex items-center gap-2 text-sm">
+            {CONDITION_OTHERWISE.name}
+            {otherwiseTag && (
+              <StatusBadge kind="error" className="ml-auto">
+                {otherwiseTag}
+              </StatusBadge>
+            )}
+          </span>
+          {target(CONDITION_OTHERWISE.id, `output ${CONDITION_OTHERWISE.name}`)}
+        </div>
+      </div>
       <Button
         variant="outline"
         size="sm"
@@ -234,33 +262,9 @@ export function ConditionOutputs({
       >
         <Plus aria-hidden /> Add rule
       </Button>
-      <div
-        role="group"
-        aria-label={`Output ${CONDITION_OTHERWISE.name}`}
-        className="grid gap-1 rounded-lg border bg-muted px-3 py-2.5"
-      >
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 font-mono text-xs">{CONDITION_OTHERWISE.name}</span>
-          <Lock aria-label="Locked" className="size-3 shrink-0 text-muted-foreground" />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          When no rule matches. Always last; it cannot be renamed, moved or removed.
-        </p>
-        <p className="break-words text-xs text-muted-foreground">
-          {recipients(graph, block.id, CONDITION_OTHERWISE.id)}
-        </p>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        The canvas draws a port for every connected output, Otherwise and the first{" "}
-        {CONDITION_UNWIRED_PORTS} unconnected rules. To connect a later rule, move it up.
-      </p>
     </section>
   );
 }
-
-/** Where an output's arrivals go. */
-const recipients = (graph: FlowGraph, blockId: string, exitId: string) =>
-  `→ ${exitRecipients(graph, blockId, exitId).join(", ") || "finish here"}`;
 
 interface RuleActions {
   readonly rename: (index: number, name: string) => void;
@@ -274,8 +278,8 @@ function RuleRow({
   index,
   count,
   entry,
-  graph,
-  blockId,
+  tag,
+  target,
   actions,
 }: {
   rule: ConditionRule;
@@ -283,8 +287,9 @@ function RuleRow({
   count: number;
   /** Invalid arrival-number text shown instead of the rule's threshold. */
   entry: string | undefined;
-  graph: FlowGraph;
-  blockId: string;
+  /** The rule's readiness issue, such as an output that is not connected. */
+  tag: string | null;
+  target: ReactNode;
   actions: RuleActions;
 }) {
   const id = useId();
@@ -296,8 +301,8 @@ function RuleRow({
       aria-posinset={position}
       aria-setsize={count}
       data-rule-id={rule.id}
-      className="absolute inset-x-0 grid content-start gap-1.5 rounded-lg border bg-muted p-2.5"
-      style={{ top: index * RULE_ROW, height: RULE_ROW - 8 }}
+      className="absolute inset-x-0 grid content-start gap-2 border-b px-3 py-2.5 last:border-b-0"
+      style={{ top: index * RULE_ROW, height: RULE_ROW }}
     >
       <div className="flex items-center gap-1">
         <span className="min-w-6 shrink-0 font-mono text-2xs text-muted-foreground">
@@ -306,7 +311,7 @@ function RuleRow({
         <Input
           aria-label={`${label} output name`}
           data-rule-field="name"
-          className="h-7 font-mono text-xs"
+          className="h-7 text-sm"
           placeholder="Output name"
           value={rule.name}
           onChange={(event) => actions.rename(index, event.target.value)}
@@ -336,28 +341,28 @@ function RuleRow({
         <Input
           aria-label={`${label} from arrival`}
           aria-invalid={entry !== undefined || undefined}
-          aria-describedby={`${id}-detail`}
+          aria-describedby={entry === undefined ? undefined : `${id}-detail`}
           data-rule-field="fromArrival"
           inputMode="numeric"
-          className="h-7 w-28 font-mono text-xs"
+          className="h-7 w-16 text-sm"
           placeholder="none"
           value={entry ?? (rule.fromArrival === null ? "" : String(rule.fromArrival))}
           onChange={(event) => actions.threshold(index, event.target.value)}
         />
         <span>onward</span>
-      </div>
-      <p
-        id={`${id}-detail`}
-        role={entry === undefined ? undefined : "alert"}
-        className={cn(
-          "truncate pl-7 text-xs",
-          entry === undefined ? "text-muted-foreground" : "text-destructive",
+        {entry !== undefined ? (
+          <StatusBadge id={`${id}-detail`} role="alert" kind="error" className="ml-auto">
+            1 to {maximum}
+          </StatusBadge>
+        ) : (
+          tag && (
+            <StatusBadge kind="error" className="ml-auto">
+              {tag}
+            </StatusBadge>
+          )
         )}
-      >
-        {entry === undefined
-          ? recipients(graph, blockId, rule.id)
-          : `Use a whole number from 1 to ${maximum}.`}
-      </p>
+      </div>
+      <div className="pl-7">{target}</div>
     </li>
   );
 }

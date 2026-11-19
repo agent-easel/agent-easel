@@ -1,11 +1,18 @@
-import { useId } from "react";
 import type { FlowWorkspace } from "@t3-factory/contracts";
-import { GitBranch } from "lucide-react";
+import { ChevronDown, GitBranch } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 /** The workspace in one line; a custom ref appears exactly. */
 function workspaceSummary(workspace: FlowWorkspace) {
@@ -14,7 +21,10 @@ function workspaceSummary(workspace: FlowWorkspace) {
   return `New worktree · ${workspace.base.ref.trim() || "custom ref"}`;
 }
 
-/** The Flow's workspace setting, edited as part of the unsaved Flow draft. */
+/**
+ * The Flow's workspace setting, edited as part of the unsaved Flow draft: Project checkout, or
+ * New worktree with its Base submenu (Default branch, or Custom ref with its ref field).
+ */
 export function FlowWorkspaceControl({
   workspace,
   disabled,
@@ -24,81 +34,81 @@ export function FlowWorkspaceControl({
   disabled: boolean;
   onChange: (workspace: FlowWorkspace) => void;
 }) {
-  const modeId = useId();
-  const baseId = useId();
-  const refId = useId();
   const summary = workspaceSummary(workspace);
+  const worktree = workspace.mode === "worktree";
+  const base = worktree ? workspace.base : null;
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button variant="outline" disabled={disabled} aria-label={`Workspace: ${summary}`}>
-          <GitBranch aria-hidden />
-          <span className="max-w-56 truncate">{summary}</span>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled}
+          aria-label={`Workspace: ${summary}`}
+          className="h-8 max-w-80 justify-start gap-1.5 bg-card pr-2 pl-3 font-normal has-[>svg]:pr-2 has-[>svg]:pl-3 data-[state=open]:border-ring"
+        >
+          <GitBranch aria-hidden className="size-3.5 text-muted-foreground" />
+          <span className="text-subtle-foreground">Workspace:</span>
+          <span className="min-w-0 truncate font-medium">{summary}</span>
+          <ChevronDown aria-hidden className="ml-auto size-3 text-muted-foreground" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="grid w-80 gap-4">
-        <div className="grid gap-1.5">
-          <Label htmlFor={modeId}>Workspace</Label>
-          <NativeSelect
-            id={modeId}
-            value={workspace.mode}
-            onChange={(e) =>
-              onChange(
-                e.target.value === "checkout"
-                  ? { mode: "checkout" }
-                  : { mode: "worktree", base: { kind: "default" } },
-              )
-            }
-          >
-            <NativeSelectOption value="worktree">New worktree</NativeSelectOption>
-            <NativeSelectOption value="checkout">Project checkout</NativeSelectOption>
-          </NativeSelect>
-          <p className="text-xs text-muted-foreground">
-            {workspace.mode === "worktree"
-              ? "Each Run gets its own worktree, shared by all of its workers."
-              : "Workers edit the selected project's checkout, shared with other Runs."}
-          </p>
-        </div>
-        {workspace.mode === "worktree" && (
-          <div className="grid gap-1.5">
-            <Label htmlFor={baseId}>Base</Label>
-            <NativeSelect
-              id={baseId}
-              value={workspace.base.kind}
-              onChange={(e) =>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuRadioGroup
+          value={workspace.mode}
+          onValueChange={(mode) => {
+            if (mode === "checkout") onChange({ mode: "checkout" });
+          }}
+        >
+          <DropdownMenuRadioItem value="checkout" indicatorPosition="right">
+            Project checkout
+          </DropdownMenuRadioItem>
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className={cn(worktree && "font-medium")}>
+            New worktree
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-60">
+            <DropdownMenuRadioGroup
+              aria-label="Base"
+              value={base?.kind ?? ""}
+              onValueChange={(kind) =>
                 onChange({
                   mode: "worktree",
-                  base: e.target.value === "ref" ? { kind: "ref", ref: "" } : { kind: "default" },
+                  base: kind === "ref" ? { kind: "ref", ref: "" } : { kind: "default" },
                 })
               }
             >
-              <NativeSelectOption value="default">Default branch</NativeSelectOption>
-              <NativeSelectOption value="ref">Custom ref</NativeSelectOption>
-            </NativeSelect>
-            {workspace.base.kind === "ref" && (
-              <>
-                <Label htmlFor={refId} className="sr-only">
-                  Custom ref
-                </Label>
+              <DropdownMenuRadioItem value="default" indicatorPosition="right">
+                Default branch
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem
+                value="ref"
+                indicatorPosition="right"
+                // Keeps the submenu open so the ref can be typed.
+                onSelect={(event) => event.preventDefault()}
+              >
+                Custom ref
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+            {base?.kind === "ref" && (
+              <div className="px-2 pt-1 pb-1.5">
                 <Input
-                  id={refId}
+                  aria-label="Custom ref"
                   placeholder="develop"
-                  value={workspace.base.ref}
-                  onChange={(e) =>
-                    onChange({ mode: "worktree", base: { kind: "ref", ref: e.target.value } })
+                  autoFocus
+                  value={base.ref}
+                  // Typing stays in the field rather than moving through the menu.
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onChange={(event) =>
+                    onChange({ mode: "worktree", base: { kind: "ref", ref: event.target.value } })
                   }
                 />
-              </>
+              </div>
             )}
-            <p className="text-xs text-muted-foreground">
-              {workspace.base.kind === "default"
-                ? "The project repository's origin default branch, such as origin/main."
-                : "A branch, tag or commit in the project repository."}{" "}
-              Start checks it in the selected project and launches nothing when it is missing.
-            </p>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

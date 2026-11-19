@@ -11,32 +11,29 @@ test("a Continuation added after an Agent names the thread it continues and keep
   // Arrange
   await createStudioFlow(app, screen, browser, "Grill then spec");
   await screen.getByRole("button", "Add Sample worker").tap();
-  await screen.getByLabel("Block name").fill("Grill");
-  await screen.getByLabel("X position").fill("320");
-  await screen.getByLabel("Y position").fill("60");
+  await screen.getByLabel("Name", { exact: true }).fill("Grill");
   await screen.getByRole("button", "Add Continuation").tap();
-  await screen.getByLabel("Block name").fill("Spec");
-  await screen.getByLabel("X position").fill("680");
-  await screen.getByLabel("Y position").fill("60");
-  await screen.getByRole("textbox", "Prompt required").fill("Write the spec from what we agreed.");
+  await screen.getByLabel("Name", { exact: true }).fill("Spec");
+  await screen.getByLabel("Prompt", { exact: true }).fill("Write the spec from what we agreed.");
+  await screen.getByRole("button", "Close block settings").tap();
+  await screen.getByRole("button", "Fit Flow").tap();
   await screen
     .getByRole("button", "Connect exit finish of Grill")
     .dragTo(screen.getByRole("article", "Block Spec"));
 
   // Act
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   // Reloading a Flow with unsaved changes opens the browser's leave prompt, so wait for the save.
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved");
   await expect(screen.getByRole("article", "Block Spec")).toContainText("Grill's thread");
-  await expect(screen.getByRole("region", "Conversation")).toContainText(
-    "Continues Grill's thread",
-  );
+  await screen.getByRole("button", "Continuation Spec", { exact: false }).tap();
+  await expect(screen.getByRole("region", "Continues")).toContainText("Grill's thread");
   await app.screenshot("continuation-authoring");
   await browser.reload();
   await screen.getByRole("button", "Continuation Spec", { exact: false }).tap();
-  await expect(screen.getByRole("textbox", "Prompt required")).toHaveValue(
+  await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Write the spec from what we agreed.",
   );
 });

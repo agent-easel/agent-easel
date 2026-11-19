@@ -23,6 +23,10 @@ export async function openEditedStudioFlow({ app, screen, browser }: StudioFixtu
   return id;
 }
 
+/** The Studio header breadcrumb's Flows link, which precedes the Studio navigation's own. */
+export const flowsBreadcrumb = (screen: Screen) =>
+  screen.getByRole("link", "Flows", { exact: true }).first();
+
 /** Each editor's actions menu: the Agent editor's More actions, the Flow editor's More Flow actions. */
 const actionsMenu = { Agent: "More actions", Flow: "More Flow actions" } as const;
 
@@ -38,16 +42,29 @@ export async function chooseFlowAction(screen: Screen, item: string) {
   await screen.getByRole("menuitem", item, { exact: true }).tap();
 }
 
-/** The Agent editor's status line names the saved revision `revision` with no unsaved changes. */
+/**
+ * The live readiness summary at the canvas's top left: the Ready badge, or the Not ready button
+ * whose name, such as "Not ready 2 issues", matches `readiness`.
+ */
+export const readinessSummary = (screen: Screen, readiness: "Ready" | RegExp) =>
+  readiness === "Ready"
+    ? screen.getByText("Ready", { exact: true })
+    : screen.getByRole("button", readiness);
+
 /** Saves the open Flow as revision 2 and expects its readiness summary, Ready or Not ready. */
-export async function saveFlowWithReadiness(screen: Screen, readiness: RegExp, revision = 2) {
-  await screen.getByRole("button", "Save Flow").tap();
+export async function saveFlowWithReadiness(
+  screen: Screen,
+  readiness: "Ready" | RegExp,
+  revision = 2,
+) {
+  await screen.getByRole("button", "Save", { exact: true }).tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText(
     `Saved · Revision ${revision}`,
   );
-  await expect(screen.getByRole("button", readiness)).toBeVisible();
+  await expect(readinessSummary(screen, readiness)).toBeVisible();
 }
 
+/** The Agent editor's status line names the saved revision `revision` with no unsaved changes. */
 export async function expectSavedAgentRevision(screen: Screen, revision: number) {
   await expect(screen.getByText(new RegExp(`^Saved · Revision ${revision} · `))).toBeVisible();
 }
@@ -80,9 +97,10 @@ export async function expectRetainedDefinition(
 
 /** A removed Agent exit leaves its existing wire visible as a broken connection. */
 export async function expectBrokenAgentWire(screen: Screen, exitId: string) {
+  // The removed exit's struck-through row names why for screen readers.
   await expect(
-    screen.getByRole("region", "Flow canvas").getByText("Agent · removed", { exact: true }),
-  ).toBeVisible();
+    screen.getByRole("region", "Flow canvas").getByText("removed", { exact: true }),
+  ).toHaveCount(1);
   await expect(
     screen.getByRole("button", `Connection ${exitId} from Worker to Review`, { exact: true }),
   ).toBeVisible();

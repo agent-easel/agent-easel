@@ -279,12 +279,10 @@ test("keeping a Flow draft against the newest revision sends no save", async ({
 }) => {
   // Arrange
   const state = await beforeReboundFlow({ app, screen, browser }, "reboundFlow");
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
 
   // Act
-  await comparison
-    .getByRole("button", "Keep local draft against revision 5", { exact: true })
-    .tap();
+  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
 
   // Assert
   await expectReboundFlow({ ...state });
@@ -299,7 +297,7 @@ test("Save commits the rebound Flow draft without a false external conflict", as
   const state = await beforeSavedFlow({ app, screen, browser }, "savedFlow");
 
   // Act
-  await screen.getByRole("button", "Save Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectSavedFlow({ ...state });
@@ -576,7 +574,7 @@ test("an Agent exit change invalidates an open dirty Flow readiness and retains 
   await expectChangedDirtyDependency({ ...state });
 });
 
-test("checking readiness reports the removed Agent exit", async ({ app, screen, browser }) => {
+test("the readiness issues report the removed Agent exit", async ({ app, screen, browser }) => {
   // Arrange
   const state = await beforeCheckedBrokenDependency(
     { app, screen, browser },
@@ -584,7 +582,7 @@ test("checking readiness reports the removed Agent exit", async ({ app, screen, 
   );
 
   // Act
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
+  await screen.getByRole("button", /^Not ready/).tap();
 
   // Assert
   await expectCheckedBrokenDependency({ ...state });

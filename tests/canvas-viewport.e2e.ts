@@ -10,14 +10,17 @@ import {
 import { liveStates, liveRun } from "./support/live.ts";
 import { renameFlow, saveFlowCopy } from "./support/flows.ts";
 
-test("resizing the Flow editor refits a manually zoomed view", async ({ app, screen, browser }) => {
+test("resizing the Flow editor keeps a manually zoomed view", async ({ app, screen, browser }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
   await app.open("/studio/flows");
   await screen.getByRole("link", "Demo · Focused change", { exact: false }).tap();
   const canvas = screen.getByRole("region", "Flow canvas");
-  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  // The editor opens at 100% with the Flow input near the canvas's left edge.
   await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  const surface = (await canvas.boundingBox())!;
+  const input = (await screen.getByRole("button", "Flow input", { exact: true }).boundingBox())!;
+  expect(input.x - surface.x).toBeLessThan(80);
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await expect(canvas).toHaveAttribute("data-zoom", "1.100");
   await app.screenshot("flow-manual-zoom");
@@ -29,10 +32,9 @@ test("resizing the Flow editor refits a manually zoomed view", async ({ app, scr
   await expect
     .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
     .toMatchObject({ x: 16, y: 16, width: 1888, height: 1048 });
-  await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  await expect(canvas).toHaveAttribute("data-zoom", "1.100");
   await expect(screen.getByRole("button", "Flow input", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("article", "Block Implement change")).toBeVisible();
-  await app.screenshot("flow-refitted-on-resize");
+  await app.screenshot("flow-zoom-kept-on-resize");
 });
 
 test("a fitted Run preserves manual pan and zoom through resize and live updates", async ({

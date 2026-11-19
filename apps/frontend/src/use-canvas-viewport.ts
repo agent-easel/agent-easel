@@ -9,7 +9,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { fitGraphView, type GraphBounds } from "./canvas-fit.ts";
+import { fitGraphView, revealView, type GraphBounds } from "./canvas-fit.ts";
 import { handleCanvasViewportKeyDown } from "./canvas-keyboard.ts";
 import { startCanvasPan, useCanvasWheelPan } from "./canvas-pan.ts";
 import { interpolateCanvasView, zoomCanvasBy, type CanvasView } from "./canvas-viewport.ts";
@@ -17,7 +17,7 @@ import { decideAutoFollow } from "./execution-focus.ts";
 
 type CanvasViewportOptions = {
   surface: RefObject<HTMLElement | null>;
-  /** Null until the canvas and its graph are ready. A new scope fits again. */
+  /** Null until the canvas and its graph are ready. A new scope opens at its entry view again. */
   scope: string | null;
   getBounds: () => GraphBounds;
   /** Whether this canvas is shown rather than covered by another screen. */
@@ -29,10 +29,6 @@ type CanvasViewportOptions = {
   /** Ids the focus view frames, in a stable order. Providing them enables following. */
   focusTargets?: readonly string[] | undefined;
   padding: { x: number; top: number; bottom: number };
-  /** Width a floating panel covers at the right; fit frames the graph beside it. */
-  reservedRight?: number;
-  /** Authoring refits on real size changes; a fitted Run keeps its view. */
-  resize: "refit" | "preserve";
   /** Accepted local layout identity, stable across status polls. */
   fitRevision?: object | null;
   onTap: () => void;
@@ -178,20 +174,20 @@ function useCanvasFollow(
   return { ...state, stopFollowing, followActive };
 }
 
-/** Entry framing, resize behavior and whole-graph fits. */
+/** Entry framing and whole-graph fits; a resize after the entry view keeps the view. */
 function useCanvasFit(
   options: CanvasViewportOptions,
   liveRef: { current: CanvasViewportOptions },
   setView: (view: CanvasView) => void,
   stopAnimation: () => void,
 ) {
-  const { surface, scope, resize, fitRevision } = options;
-  const lastFit = useRef<{ scope: string | null; width: number; height: number } | null>(null);
+  const { surface, scope, fitRevision } = options;
+  const lastFit = useRef<{ scope: string | null } | null>(null);
   const surfaceSize = useCallback(() => {
     const current = liveRef.current;
     const element = current.surface.current;
     if (!element) return null;
-    const width = element.clientWidth - (current.reservedRight ?? 0);
+    const width = element.clientWidth;
     const height = element.clientHeight;
     if (width < 40 || height < 40) return null;
     element.scrollTo(0, 0);
@@ -208,8 +204,7 @@ function useCanvasFit(
           ? current.getEntryView(size.width, size.height)
           : fitGraphView(bounds ?? current.getBounds(), size.width, size.height, current.padding),
       );
-      const rect = size.element.getBoundingClientRect();
-      lastFit.current = { scope: current.scope, width: rect.width, height: rect.height };
+      lastFit.current = { scope: current.scope };
     },
     [liveRef, surfaceSize, setView, stopAnimation],
   );
@@ -217,23 +212,16 @@ function useCanvasFit(
     const element = surface.current;
     if (scope === null || !element) return;
     fit(undefined, true);
+    // The entry view waits for a usable size; after it a resize never moves the view.
     const observer = new ResizeObserver(() => {
-      const previous = lastFit.current;
-      const rect = element.getBoundingClientRect();
-      if (
-        previous?.scope === scope &&
-        (resize === "preserve" ||
-          (rect.width === previous.width && rect.height === previous.height))
-      )
-        return;
-      fit();
+      if (lastFit.current?.scope !== scope) fit(undefined, true);
     });
     observer.observe(element);
     return () => {
       observer.disconnect();
       stopAnimation();
     };
-  }, [surface, scope, resize, fit, stopAnimation]);
+  }, [surface, scope, fit, stopAnimation]);
   useLayoutEffect(() => {
     if (scope !== null && fitRevision) fit();
   }, [scope, fitRevision, fit]);
@@ -279,6 +267,16 @@ export function useCanvasViewport(options: CanvasViewportOptions) {
     },
     [stopAnimation, stopFollowing],
   );
+  /** Pans the least distance that shows `bounds` whole; it keeps following as it is. */
+  const reveal = useCallback(
+    (bounds: GraphBounds) => {
+      const size = surfaceSize();
+      if (!size) return;
+      stopAnimation();
+      setView((current) => revealView(current, bounds, size));
+    },
+    [surfaceSize, stopAnimation],
+  );
   const fitFlow = useCallback(() => {
     stopFollowing();
     fit();
@@ -305,6 +303,7 @@ export function useCanvasViewport(options: CanvasViewportOptions) {
   return {
     view,
     fitFlow,
+    reveal,
     zoom,
     startPan,
     onKeyDown,

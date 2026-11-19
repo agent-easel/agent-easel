@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect, type Screen } from "e2e";
-import { readFlow, saveConditionAtSizeLimit, saveSingleAgentFlow } from "./support/flows.ts";
+import {
+  expectFlowBlocked,
+  readFlow,
+  saveConditionAtSizeLimit,
+  saveSingleAgentFlow,
+} from "./support/flows.ts";
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { prepareScenarios } from "./support/scenarios.ts";
 import { openOneRuleCondition, saveConditionFlow } from "./support/conditions.ts";
-import { chooseFlowAction, saveFlowWithReadiness } from "./support/studio.ts";
+import { chooseFlowAction, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 
-/** Adds a block from the library row `row` and names and places it in its configuration. */
-async function addBlock(screen: Screen, row: string, name: string, x: string, y: string) {
+/** Adds a block from the library row `row` at its default place and names it in its settings. */
+async function addBlock(screen: Screen, row: string, name: string) {
   await screen.getByRole("button", `Add ${row}`).tap();
-  await screen.getByLabel("Block name").fill(name);
-  await screen.getByLabel("X position").fill(x);
-  await screen.getByLabel("Y position").fill(y);
+  await screen.getByLabel("Name", { exact: true }).fill(name);
 }
 
 /** Captures the fitted Run canvas beside the inspector as `canvasShot`, then opens the Timeline. */
@@ -41,22 +44,22 @@ test("a Condition added from the library is ready once its Otherwise is connecte
     y: 60,
   });
   await app.open(`/studio/flows/${flowId}`);
-  await addBlock(screen, "Condition", "Escalate", "680", "60");
-  await screen.getByRole("button", "Agent Coder").tap();
+  await addBlock(screen, "Condition", "Escalate");
+  // Fit the blocks beside the open panel so each drop target stays in view.
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await screen
     .getByRole("button", "Connect exit finish of Coder")
     .dragTo(screen.getByRole("article", "Block Escalate"));
   await saveFlowWithReadiness(screen, /^Not ready/);
-  await expect(
-    screen.getByRole(
-      "button",
-      /Escalate: connect output "Otherwise"\. A Condition output cannot end a branch\./,
-    ),
-  ).toBeVisible();
+  await expectFlowBlocked(
+    screen,
+    /Escalate: connect output "Otherwise"\. A Condition output cannot end a branch\./,
+  );
+  await screen.getByRole("button", /^Not ready/).tap();
   await screen
     .getByRole("button", "Connect output Otherwise of Escalate")
     .dragTo(screen.getByRole("article", "Block Coder"));
-  await saveFlowWithReadiness(screen, /^Ready/, 3);
+  await saveFlowWithReadiness(screen, "Ready", 3);
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 1 output name").fill("Human");
@@ -64,15 +67,19 @@ test("a Condition added from the library is ready once its Otherwise is connecte
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 2 output name").fill("End branch");
   await screen.getByLabel("Rule 2 from arrival").fill("5");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 4");
   await expect(screen.getByRole("article", "Block Escalate")).toContainText(
     /from arrival 5 onward\s*End branch/,
   );
-  await screen.getByRole("button", "Close block configuration").tap();
+  await screen.getByRole("button", "Close block settings").tap();
+  await screen.getByRole("button", /^Not ready/).tap();
 
   // Act
-  await screen.getByRole("button", /rule 2 "End branch" is never selected/).tap();
+  await screen
+    .getByRole("list", "Readiness issues")
+    .getByRole("button", /rule 2 "End branch" is never selected/)
+    .tap();
 
   // Assert
   await expect(screen.getByLabel("Rule 2 from arrival")).toBeFocused();
@@ -120,14 +127,18 @@ test("reordering a rule by keyboard keeps its wire, and removing a rule removes 
 
   // Act
   await screen.getByRole("listitem", "Rule 2 Human").getByRole("button", "Remove rule").tap();
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
-  await expect(screen.getByRole("listitem", "Rule 1 End branch")).toContainText("→ Review");
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
+  await expect(
+    screen
+      .getByRole("listitem", "Rule 1 End branch")
+      .getByRole("button", "Targets of output End branch: Review"),
+  ).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   const saved = await readFlow(app.baseUrl, flowId);
   const condition = saved.graph.blocks.find((block) => block.id === "escalate");
   assert(condition?.kind === "condition");
@@ -146,20 +157,19 @@ test("an arrival number that is not a whole number from 1 stays shown as invalid
   // Arrange
   await openOneRuleCondition({ app, screen, browser }, "Invalid Condition threshold");
   await screen.getByLabel("Rule 1 output name").fill("Ask a person");
-  await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
+  await expect(screen.getByRole("button", "Save")).toBeEnabled();
 
   // Act
   await screen.getByLabel("Rule 1 from arrival").fill("2.5");
 
   // Assert
   await expect(screen.getByLabel("Rule 1 from arrival")).toHaveValue("2.5");
-  await expect(screen.getByRole("listitem", "Rule 1 Ask a person")).toContainText(
-    "Use a whole number from 1 to 9,007,199,254,740,991.",
+  await expect(screen.getByRole("listitem", "Rule 1 Ask a person").getByRole("alert")).toHaveText(
+    "1 to 9,007,199,254,740,991",
   );
-  await expect(screen.getByRole("button", "Save Flow")).toBeDisabled();
-  await expect(screen.getByRole("button", "Check readiness")).toBeDisabled();
+  await expect(screen.getByRole("button", "Save")).toBeDisabled();
   await screen.getByLabel("Rule 1 from arrival").fill("");
-  await expect(screen.getByRole("button", "Save Flow")).toBeEnabled();
+  await expect(screen.getByRole("button", "Save")).toBeEnabled();
 });
 
 test("leaving a Flow with only an invalid arrival number asks first, and Keep editing keeps the text", async ({
@@ -174,7 +184,7 @@ test("leaving a Flow with only an invalid arrival number asks first, and Keep ed
 
   // Act
   await screen
-    .getByRole("dialog", "Discard unsaved Flow changes?")
+    .getByRole("dialog", "Discard unsaved changes?")
     .getByRole("button", "Keep editing", { exact: true })
     .tap();
 
@@ -226,8 +236,8 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
     },
   );
   await app.open(`/studio/flows/${flowId}`);
-  await addBlock(screen, "Human step", "Review", "1040", "360");
-  await addBlock(screen, "Condition", "Escalate", "680", "60");
+  await addBlock(screen, "Human step", "Review");
+  await addBlock(screen, "Condition", "Escalate");
   await screen.getByRole("button", "Add rule").tap();
   await screen.getByLabel("Rule 1 output name").fill("Ask a person");
   await screen.getByLabel("Rule 1 from arrival").fill("3");
@@ -245,24 +255,28 @@ test("a Condition authored and wired in Studio routes a started Run's arrivals b
   await screen.getByRole("button", "Connect output Ask a person of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Otherwise of Escalate").dragTo(coder);
   await screen.getByRole("button", "Connect output Stop of Escalate").dragTo(coder);
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   const saveStatus = screen.getByRole("status", "Flow save status");
   await expect(saveStatus).toContainText("Saved · Revision 2");
-  await expect(screen.getByRole("button", /rule 2 "Stop" is never selected/)).toBeVisible();
+  await expectFlowBlocked(screen, /rule 2 "Stop" is never selected/);
   await app.screenshot("condition-authored-readiness-row");
   await screen.getByRole("button", "Condition Escalate").tap();
   await screen.getByRole("listitem", "Rule 2 Stop").getByRole("button", "Move rule up").tap();
   await screen.getByLabel("Rule 2 output name").fill("Ask a reviewer");
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
   await expect(saveStatus).toContainText("Saved · Revision 3");
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
-  await expect(screen.getByRole("listitem", "Rule 1 Stop")).toContainText("→ Coder");
-  await expect(screen.getByRole("listitem", "Rule 2 Ask a reviewer")).toContainText(
-    "→ Review, Coder",
-  );
-  await expect(screen.getByRole("group", "Output Otherwise")).toContainText("→ Coder");
+  await expect(screen.getByRole("button", "Targets of output Stop: Coder")).toBeVisible();
+  await expect(
+    screen.getByRole("button", "Targets of output Ask a reviewer: Coder, Review"),
+  ).toBeVisible();
+  await expect(
+    screen
+      .getByRole("group", "Output Otherwise")
+      .getByRole("button", "Targets of output Otherwise: Coder"),
+  ).toBeVisible();
   await app.screenshot("condition-authored-after-reload");
   const saved = await readFlow(app.baseUrl, flowId);
   const condition = saved.graph.blocks.find((block) => block.kind === "condition");
@@ -353,7 +367,7 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
 
   // Act
   await lastName.fill(`Route ${last} late`);
-  await screen.getByRole("button", "Save Flow").tap();
+  await screen.getByRole("button", "Save").tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
@@ -364,10 +378,11 @@ test("a Condition near the definition size limit opens, scrolls to its last rule
   expect(condition.rules.at(-1)).toMatchObject({ name: `Route ${last} late`, fromArrival: 2 });
   await browser.reload();
   await screen.getByRole("button", "Condition Escalate").tap();
-  await expect(screen.getByRole("heading", /^Outputs · /)).toHaveText(
-    `Outputs · ${last.toLocaleString("en-US")} rules, then Otherwise`,
+  const escalate = screen.getByRole("article", "Block Escalate");
+  await expect(escalate).toContainText(
+    `by arrival · ${last.toLocaleString("en-US")} rules, then Otherwise`,
   );
-  await expect(screen.getByRole("article", "Block Escalate")).toContainText(`Route ${last} late`);
+  await expect(escalate).toContainText(`Route ${last} late`);
   await app.screenshot("condition-size-limit-after-reload");
 });
 

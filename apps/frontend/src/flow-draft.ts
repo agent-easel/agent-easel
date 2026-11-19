@@ -19,13 +19,15 @@ export type FlowDraftOperations = Pick<typeof api, "validateFlow" | "getFlow">;
 
 export interface FlowDraftSnapshot extends RevisionedDraftState<FlowDraft, FlowContent> {
   readonly status: "loading" | "failed" | "loaded";
-  /** A save or readiness check is in flight; edits wait for it. */
+  /** A save is in flight; edits wait for it. */
   readonly busy: boolean;
   /** Null while readiness is unknown. */
   readonly readiness: FlowReadiness | null;
-  /** An Agent this unsaved draft places changed since readiness was last known; check again. */
-  readonly agentsChanged: boolean;
-  readonly canStartRun: boolean;
+  /**
+   * While the unsaved draft's readiness is unknown, a number that changes each time a shown or
+   * pending check stops applying; the editor checks again after it settles. Null otherwise.
+   */
+  readonly checkDue: number | null;
   /** This editor's removal was accepted, so nothing it shows can still be saved. */
   readonly removedHere: boolean;
 }
@@ -71,11 +73,13 @@ export function createFlowDraft(
 ) {
   const opened = created && !source.hasObserved("flows", created.id) ? created : null;
   let status: FlowDraftSnapshot["status"] = opened ? "loaded" : "loading";
-  let checking = false;
   let checked: FlowReadiness | null = null;
-  let agentsChanged = false;
   /** Advances whenever a pending readiness answer must no longer apply. */
   let readinessRequest = 0;
+  /** Advances whenever readiness becomes unknown, which asks for another check. */
+  let staleCount = 0;
+  /** The shown error came from a readiness check, so the next answered check clears it. */
+  let checkReported = false;
   /** Drags, wire gestures, Auto-arrange runs and text entry in progress; adoption waits for them. */
   let interactions = 0;
   /** This editor's removal was accepted; readiness is unknown even before Studio delivers it. */
@@ -89,6 +93,7 @@ export function createFlowDraft(
   function forgetCheck() {
     checked = null;
     ++readinessRequest;
+    ++staleCount;
   }
   const draft = createRevisionedDraft({
     saved: opened,
@@ -98,15 +103,12 @@ export function createFlowDraft(
     read: (flowId) => operations.getFlow(flowId),
     // Only adoption into a clean draft waits for an interaction; it would replace the graph.
     hold: () => interactions > 0,
-    onAdopt() {
-      agentsChanged = false;
-      forgetCheck();
-    },
+    onAdopt: forgetCheck,
     // Readiness judges the draft under the Flow's owner, which the validation answer does not name.
     onOwnerChange: forgetCheck,
     view(state): FlowDraftSnapshot {
       const loaded = status === "loaded";
-      const busy = state.saving || checking;
+      const busy = state.saving;
       const flow = latest();
       // A clean draft shows the saved readiness of its revision while Studio currently holds it.
       const savedReadiness =
@@ -124,9 +126,9 @@ export function createFlowDraft(
         status,
         busy: busy && !state.removed,
         readiness,
-        agentsChanged,
-        canSave: loaded && state.canSave && !checking,
-        canStartRun: loaded && !state.removed && !busy && !state.dirty && !!readiness?.ready,
+        checkDue:
+          loaded && state.dirty && !state.removed && !removedHere && !readiness ? staleCount : null,
+        canSave: loaded && state.canSave,
         removedHere,
       };
     },
@@ -141,16 +143,15 @@ export function createFlowDraft(
    * Flow is removed, Studio loses synchronization or an Agent the draft places changes, also
    * while adoption waits for an interaction (an owner change clears it through `onOwnerChange`).
    * A clean draft then shows the saved Flow's readiness, delivered with those Agents; an unsaved
-   * draft waits for another check.
+   * draft is checked again.
    */
   function observe() {
     const next = observed();
-    const { content, dirty } = draft.getSnapshot();
+    const { content } = draft.getSnapshot();
     const placed =
       seen.agents !== null &&
       next.agents !== null &&
       agentStamp(content.graph, seen.agents) !== agentStamp(content.graph, next.agents);
-    if (placed && dirty) agentsChanged = true;
     if (next.flow !== seen.flow || (seen.synchronized && !next.synchronized) || placed)
       forgetCheck();
     seen = next;
@@ -213,6 +214,7 @@ export function createFlowDraft(
     async save() {
       const { saved, content, canSave, owner } = draft.getSnapshot();
       if (!saved || !canSave) return;
+      checkReported = false;
       await draft.save({
         submitted: content,
         send: () =>
@@ -230,20 +232,20 @@ export function createFlowDraft(
      * Studio delivers the absence.
      */
     async remove() {
-      if (checking) return false;
       return draft.remove(async (flowId) => {
         await source.removeFlow(flowId);
         removedHere = true;
       }, "Could not remove Flow.");
     },
     clearRemovalError: draft.clearRemovalError,
-    /** Validates the content without saving it. */
+    /**
+     * Validates the content without saving it. Edits stay possible meanwhile; an answer for
+     * content that changed since is dropped.
+     */
     async check() {
       const { saved, content, removed, busy, owner } = draft.getSnapshot();
       if (!saved || removed || busy) return;
-      checking = true;
       const asked = ++readinessRequest;
-      draft.report("");
       try {
         const { agentRevisions, ...answer } = await operations.validateFlow(id, {
           ...content,
@@ -254,22 +256,21 @@ export function createFlowDraft(
         const shown = agentStamp(content.graph, source.getSnapshot().agents.value);
         if (asked !== readinessRequest || canonical(agentRevisions) !== shown) return;
         checked = answer;
-        agentsChanged = false;
+        if (checkReported) draft.report("");
+        checkReported = false;
       } catch (cause) {
-        if (asked === readinessRequest)
-          draft.report(
-            cause instanceof Error ? cause.message : "Could not check Flow.",
-            cause instanceof ApiError ? cause.detail.issues : [],
-          );
+        if (asked !== readinessRequest) return;
+        checkReported = true;
+        draft.report(
+          cause instanceof Error ? cause.message : "Could not check Flow.",
+          cause instanceof ApiError ? cause.detail.issues : [],
+        );
       } finally {
-        checking = false;
         draft.publish();
       }
     },
     /** Shows the latest saved Flow beside the local draft, which stays as it is. */
-    compareLatest() {
-      if (!checking) draft.compare();
-    },
+    compareLatest: draft.compare,
     /** Replaces the local draft with compared `revision` while it is still the one compared. */
     takeLatest: draft.takeLatest,
     acknowledgeOwner: draft.acknowledgeOwner,

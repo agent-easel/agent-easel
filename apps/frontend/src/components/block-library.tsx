@@ -1,24 +1,26 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronLeft, GripVertical, PanelLeftOpen, Plus, Search } from "lucide-react";
-import type { AgentDefinition, FactoryProject, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  FactoryProject,
+  FlowBlock,
+  FlowGraph,
+} from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { agentRuntimeMeta } from "@/lib/agent-display";
 import { StudioLink } from "../components/app-link.tsx";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { newBlock, type BlockPosition } from "../flow-graph.ts";
 import type { GrabOffset } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
 import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
-import { SectionLabel } from "./page.tsx";
 import { NeedsModel } from "./needs-model.tsx";
-import { ownerGroups, type StudioOwner } from "../studio-definitions.ts";
-
-function agentDetail({ execution }: AgentDefinition) {
-  return execution ? `${execution.providerInstanceId} · ${execution.modelId}` : <NeedsModel />;
-}
+import { ownerGroups } from "../studio-definitions.ts";
 
 const STEPS = [
   { kind: "human", name: "Human step", detail: "Asks a person" },
@@ -27,13 +29,37 @@ const STEPS = [
   { kind: "condition", name: "Condition", detail: "Routes by arrival number" },
 ] as const satisfies readonly { kind: FlowBlock["kind"]; name: string; detail: string }[];
 
+const headingClass = "text-label tracking-label text-muted-foreground";
+
+/** Agents with a model first, then those without, which can't be placed. */
+const modelFirst = (agents: readonly AgentDefinition[]) => [
+  ...agents.filter((agent) => agent.execution),
+  ...agents.filter((agent) => !agent.execution),
+];
+
+/** Opens the new Agent draft over this Flow; Create returns here. */
+export function NewAgentLink({ flowId, className }: { flowId: string; className?: string }) {
+  return (
+    <StudioLink
+      selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}
+      className={cn(
+        "inline-flex w-fit items-center gap-1 text-sm font-medium text-link no-underline hover:underline",
+        className,
+      )}
+    >
+      New Agent
+      <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
+    </StudioLink>
+  );
+}
+
 export function BlockLibrary({
   open,
   onOpenChange,
   flowId,
-  owner,
   agents,
   projects,
+  capabilities,
   agentError,
   onAdd,
   dropAt,
@@ -41,20 +67,21 @@ export function BlockLibrary({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   flowId: string;
-  /** The Flow's owner, which decides the Agents it may place. */
-  owner: StudioOwner;
   /** Only the Agents this Flow may place. */
   agents: readonly AgentDefinition[];
   projects: readonly FactoryProject[];
+  capabilities: AgentCapabilities | null;
   agentError: string;
   onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
+  const searching = query.trim() !== "";
   const matches = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
   const steps = STEPS.filter((step) => matches(step.name));
   const shown = agents.filter((agent) => matches(agent.name));
   const groups = ownerGroups(shown, projects, { kind: "all" });
+  const placeable = agents.some((agent) => agent.execution);
   if (!open)
     return (
       <div className="flex w-11 shrink-0 flex-col items-center border-r bg-sidebar py-3">
@@ -80,30 +107,11 @@ export function BlockLibrary({
       id="block-library"
       role="region"
       aria-label="Block library"
-      className="flex w-65 shrink-0 flex-col gap-2.5 overflow-y-auto border-r bg-sidebar px-3 pb-3.5"
+      className="flex w-66 shrink-0 flex-col gap-1 overflow-y-auto border-r bg-sidebar px-3 pb-3.5"
     >
-      {/* Bleeds over the panel's side padding so rows scrolled beneath it stay hidden; the
-          negative bottom margin keeps the panel gap below the search. */}
-      <div className="sticky top-0 z-10 -mx-3 -mb-2.5 grid gap-2.5 bg-sidebar px-3 pt-3.5 pb-2.5">
-        <div className="flex items-center justify-between">
-          <SectionLabel>Library</SectionLabel>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Collapse library"
-                aria-expanded
-                aria-controls="block-library"
-                onClick={() => onOpenChange(false)}
-              >
-                <ChevronLeft aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Collapse library</TooltipContent>
-          </Tooltip>
-        </div>
-        <div className="relative">
+      {/* Bleeds over the panel's side padding so rows scrolled beneath it stay hidden. */}
+      <div className="sticky top-0 z-10 -mx-3 flex items-center gap-2 bg-sidebar px-3 pt-3 pb-3">
+        <div className="relative min-w-0 flex-1">
           <Search
             aria-hidden
             className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -111,70 +119,86 @@ export function BlockLibrary({
           <Input
             aria-label="Search steps and Agents"
             placeholder="Search steps and Agents"
-            className="pl-8"
+            className="pl-8 placeholder:text-muted-foreground"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Collapse library"
+              aria-expanded
+              aria-controls="block-library"
+              onClick={() => onOpenChange(false)}
+            >
+              <PanelLeftClose aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Collapse library</TooltipContent>
+        </Tooltip>
       </div>
-      {steps.length > 0 && <SectionLabel>Steps</SectionLabel>}
-      {steps.map((step) => (
-        <LibraryItem
-          key={step.kind}
-          {...step}
-          dropAt={dropAt}
-          onAdd={(position) => onAdd(step.kind, undefined, position)}
-        />
-      ))}
+      {searching && !steps.length && !shown.length && (
+        <p className="px-1.5 text-sm text-muted-foreground">No matching steps or Agents</p>
+      )}
+      {steps.length > 0 && (
+        <section aria-label="Steps" className="flex flex-col gap-1">
+          <h3 className={cn(headingClass, "px-1.5 py-1")}>Steps</h3>
+          {steps.map((step) => (
+            <LibraryItem
+              key={step.kind}
+              {...step}
+              dropAt={dropAt}
+              onAdd={(position) => onAdd(step.kind, undefined, position)}
+            />
+          ))}
+        </section>
+      )}
       {agentError && (
         <p role="alert" className="text-xs text-destructive">
           {agentError}
         </p>
       )}
-      {!agents.length && (
-        <p className="text-xs text-muted-foreground">
-          Create an{" "}
-          <StudioLink selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}>
-            Agent definition
-          </StudioLink>
-          {owner.projectId === null ? "" : ` (Global or ${owner.title})`}, then return here.
-        </p>
-      )}
-      {agents.length > 0 && !shown.length && (
-        <p className="text-xs text-muted-foreground">No saved Agents match “{query.trim()}”.</p>
+      {!agents.length && !searching && (
+        <section aria-label="Agents" className="mt-3 flex flex-col gap-1.5 px-1.5">
+          <h3 className={headingClass}>Agents</h3>
+          <p className="text-sm text-muted-foreground">No Agents yet</p>
+          <NewAgentLink flowId={flowId} />
+        </section>
       )}
       {groups.map((group) => (
         <section
           key={group.owner.projectId ?? "global"}
           aria-label={`${group.owner.title} Agents`}
-          className="flex min-w-0 flex-col gap-2.5"
+          className="mt-3 flex min-w-0 flex-col gap-1"
         >
-          <div className="flex items-center gap-2">
-            <SectionLabel className="min-w-0 truncate">{group.owner.title} Agents</SectionLabel>
+          <div className="flex items-center gap-2 px-1.5 py-1">
+            <h3 className={cn(headingClass, "min-w-0 break-words")}>{group.owner.title}</h3>
             <span className="ml-auto text-2xs tracking-label text-subtle-foreground">
               {group.items.length}
             </span>
           </div>
-          {group.items.map((agent) => (
+          {modelFirst(group.items).map((agent) => (
             <LibraryItem
               key={agent.id}
               name={agent.name}
-              detail={agentDetail(agent)}
+              detail={
+                agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : <NeedsModel />
+              }
               kind="agent"
               agent={agent}
+              disabled={!agent.execution}
               dropAt={dropAt}
               onAdd={(position) => onAdd("agent", agent, position)}
             />
           ))}
         </section>
       ))}
-      <span className="flex-1" />
-      <StudioLink
-        selection={{ tab: "agents", agentId: "new", fromFlow: flowId }}
-        className="flex items-center gap-1.5 text-2xs font-medium no-underline hover:underline"
-      >
-        <Plus aria-hidden className="size-3" /> New Agent definition
-      </StudioLink>
+      {agents.length > 0 && !placeable && !searching && (
+        <NewAgentLink flowId={flowId} className="mt-1 px-1.5" />
+      )}
     </div>
   );
 }
@@ -185,7 +209,7 @@ const GHOST_GRAB: GrabOffset = { x: 28, y: 15 };
 type Ghost = { left: number; top: number; overCanvas: boolean };
 
 /**
- * Figma Editor/LibraryItem: the whole 52 px row drags onto the canvas; activating it adds.
+ * Figma Editor/LibraryItem: the whole row drags onto the canvas; activating it adds.
  * While dragged, a ghost of the new block follows the pointer, and a drop on the canvas
  * places the block exactly where its ghost was.
  */
@@ -194,6 +218,7 @@ function LibraryItem({
   detail,
   kind,
   agent,
+  disabled = false,
   dropAt,
   onAdd,
 }: {
@@ -201,17 +226,44 @@ function LibraryItem({
   detail: ReactNode;
   kind: FlowBlock["kind"];
   agent?: AgentDefinition;
+  /** An Agent without a model is listed but can't be placed. */
+  disabled?: boolean;
   dropAt: DropAt;
   onAdd: (position?: BlockPosition) => void;
 }) {
   const [ghost, setGhost] = useState<Ghost | null>(null);
   const { Icon } = BLOCK_KINDS[kind];
+  const icon = (
+    <span
+      aria-hidden
+      className={cn("grid size-7 shrink-0 place-items-center rounded-md", LIBRARY_ICON_TILES[kind])}
+    >
+      <Icon className="size-3.5" />
+    </span>
+  );
+  const text = (
+    <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+      <span className="text-sm font-medium break-words text-foreground">{name}</span>
+      <span className="text-xs tracking-label break-words text-muted-foreground">{detail}</span>
+    </span>
+  );
+  if (disabled)
+    return (
+      <div
+        aria-disabled
+        aria-label={name}
+        className="flex min-h-13 w-full shrink-0 items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 opacity-60"
+      >
+        {icon}
+        {text}
+      </div>
+    );
   return (
     <>
       {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} agent={agent} />}
       <DragButton
         aria-label={`Add ${name}`}
-        className="group flex h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
+        className="group flex min-h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
         onDragMove={(x, y) => {
           // Over the canvas the ghost sits where the block will land, clamping included.
           const placement = dropAt(x, y, GHOST_GRAB);
@@ -229,39 +281,12 @@ function LibraryItem({
         onDragCancel={() => setGhost(null)}
         onClick={() => onAdd()}
       >
-        <GripVertical
-          aria-hidden
-          className={cn("size-3.5 shrink-0 text-muted-foreground", ROW_ACTION_VISIBILITY)}
-        />
-        <span
-          aria-hidden
-          className={cn(
-            "grid size-7 shrink-0 place-items-center rounded-md",
-            LIBRARY_ICON_TILES[kind],
-          )}
-        >
-          <Icon className="size-3.5" />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate text-sm font-medium text-foreground">{name}</span>
-          <span className="truncate text-xs tracking-label text-muted-foreground">{detail}</span>
-        </span>
-        <span
-          aria-hidden
-          className={cn(
-            "flex h-7 shrink-0 items-center gap-1 rounded-md border bg-muted pr-2.5 pl-2 text-2xs font-medium text-muted-foreground group-hover:text-foreground",
-            ROW_ACTION_VISIBILITY,
-          )}
-        >
-          <Plus className="size-3" /> Add
-        </span>
+        {icon}
+        {text}
       </DragButton>
     </>
   );
 }
-
-/** Hidden at rest but never removed, so the row keeps its layout, name and keyboard action. */
-const ROW_ACTION_VISIBILITY = "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100";
 
 const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
   agent: "bg-brand-soft text-link",

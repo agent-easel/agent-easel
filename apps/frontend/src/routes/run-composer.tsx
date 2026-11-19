@@ -374,7 +374,7 @@ function FlowField({ model }: { model: Composer }) {
   const { draft, edit, locked, configured, card } = model;
   const state = flowFieldState(model);
   const busy = locked;
-  // No Flow is chosen without a Project; a Flow held from Start Run stays visible.
+  // No Flow is chosen without a Project.
   const disabled = state.choices.disabled || !configured;
   const describedBy = card.kind === "flow-not-ready" ? composerLaunchCardId : undefined;
   const [menuOpen, setMenuOpen] = useState(false);

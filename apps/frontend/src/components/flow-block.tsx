@@ -5,15 +5,6 @@ import type { EffectiveExit } from "@t3-factory/domain-validation";
 import { cn } from "@/lib/utils";
 import { BLOCK_KINDS, isSingleOutput } from "../block-kind.ts";
 
-const EXIT_SOURCE_LABELS: Record<EffectiveExit["source"], string> = {
-  agent: "Agent",
-  local: "local",
-  human: "fixed",
-  wait: "after the wait",
-  continuation: "output",
-  condition: "output",
-};
-
 const KIND_ICON_COLORS: Record<FlowBlock["kind"], string> = {
   agent: "text-link",
   human: "text-muted-foreground",
@@ -42,12 +33,6 @@ export function conditionRoute(block: FlowBlock, exitId: string) {
   return rule.fromArrival === null
     ? "no arrival number yet"
     : `from arrival ${rule.fromArrival.toLocaleString("en-US")} onward`;
-}
-
-/** Where an exit comes from, and whether finishing on it needs a message. */
-export function exitSourceLabel(exit: EffectiveExit) {
-  const source = EXIT_SOURCE_LABELS[exit.source];
-  return exit.messageRequired ? `${source} · message` : source;
 }
 
 /** The content of an authoring block's header and title rows: kind, name and what it runs. */

@@ -1,405 +1,370 @@
-import { useId, useState, type ComponentProps } from "react";
-import { CornerDownLeft, ExternalLink, Trash2 } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowGraph, WaitUnit } from "@t3-factory/contracts";
+import { useId, useState, type ReactNode } from "react";
+import { ChevronDown, CornerDownLeft } from "lucide-react";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  FlowBlock,
+  FlowGraph,
+  WaitUnit,
+} from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
+import { agentRuntimeMeta } from "@/lib/agent-display";
 import { StudioLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
+import { fieldIssue, type BlockIssue } from "./flow-readiness.tsx";
 import { NeedsModel } from "./needs-model.tsx";
+import { StatusBadge } from "./status-badge.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
 type WaitBlock = Extract<FlowBlock, { kind: "wait" }>;
 type ContinuationBlock = Extract<FlowBlock, { kind: "continuation" }>;
 
-/** Configuration of the selected block, shown in the editor's floating panel. */
+/** The Agents a block may name: every saved Agent, and those this Flow may place. */
+export type BlockAgents = {
+  readonly all: readonly AgentDefinition[];
+  readonly placeable: readonly AgentDefinition[];
+  readonly capabilities: AgentCapabilities | null;
+};
+
+/** Configuration of the selected block, shown in the editor's docked settings panel. */
 export function BlockConfiguration({
   block,
   graph,
   agents,
+  issues,
+  flowId,
   condition,
   onEdit,
-  onRemove,
+  onChange,
 }: {
   block: FlowBlock;
   graph: FlowGraph;
-  agents: readonly AgentDefinition[];
+  agents: BlockAgents;
+  /** The block's readiness issues; the field each names shows its tag. */
+  issues: readonly BlockIssue[];
+  /** The Flow an opened Agent returns to. */
+  flowId: string;
   /** The editor's part in a Condition's rule editing; used only for a Condition. */
   condition: ConditionEditing;
   onEdit: (block: FlowBlock) => void;
-  onRemove: () => void;
+  onChange: (graph: FlowGraph) => void;
 }) {
   const nameId = useId();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const tag = (field: string) => fieldIssue(issues, field);
   return (
-    <>
-      <div
-        ref={setScroller}
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
-      >
-        <h2 className="sr-only">Block configuration</h2>
-        <div className="grid gap-1.5">
-          <FieldLabel htmlFor={nameId}>Block name</FieldLabel>
-          <Input
-            id={nameId}
-            className="h-8.5 text-base font-semibold"
-            value={block.name}
-            onChange={(e) => onEdit({ ...block, name: e.target.value })}
-          />
-        </div>
-        {block.kind === "agent" && (
-          <AgentBlockSettings block={block} graph={graph} agents={agents} onEdit={onEdit} />
+    <div ref={setScroller} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
+      <Field id={nameId} label="Name" tag={tag("name")}>
+        <Input
+          id={nameId}
+          aria-invalid={tag("name") ? true : undefined}
+          value={block.name}
+          onChange={(e) => onEdit({ ...block, name: e.target.value })}
+        />
+      </Field>
+      {block.kind === "agent" && (
+        <AgentBlockSettings
+          block={block}
+          agents={agents}
+          tag={tag("agentId")}
+          flowId={flowId}
+          onEdit={onEdit}
+        />
+      )}
+      {block.kind === "wait" && (
+        <WaitBlockSettings block={block} tag={tag("duration")} onEdit={onEdit} />
+      )}
+      {block.kind === "continuation" && (
+        <ContinuationBlockSettings
+          block={block}
+          graph={graph}
+          tag={tag("prompt")}
+          onEdit={onEdit}
+        />
+      )}
+      {block.kind === "condition" ? (
+        <ConditionOutputs
+          block={block}
+          graph={graph}
+          scroller={scroller}
+          editing={condition}
+          issues={issues}
+          onEdit={onEdit}
+          onChange={onChange}
+        />
+      ) : (
+        <BlockExitConfiguration
+          block={block}
+          graph={graph}
+          agents={agents.all}
+          onEdit={onEdit}
+          onChange={onChange}
+        />
+      )}
+    </div>
+  );
+}
+
+/** A labelled field; a readiness issue shows its tag beside the label. */
+function Field({
+  id,
+  label,
+  tag,
+  children,
+}: {
+  id: string;
+  label: string;
+  tag: string | null;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex min-h-5 items-center gap-2">
+        <Label htmlFor={id} className="text-label font-normal tracking-label text-muted-foreground">
+          {label}
+        </Label>
+        {tag && (
+          <StatusBadge kind="error" className="ml-auto">
+            {tag}
+          </StatusBadge>
         )}
-        {block.kind === "human" && (
-          <p className="text-xs text-muted-foreground">
-            A Human step asks a person to Approve or Request changes. The Flow input connects only
-            to Agent blocks.
-          </p>
-        )}
-        {block.kind === "wait" && <WaitBlockSettings block={block} onEdit={onEdit} />}
-        {block.kind === "continuation" && (
-          <ContinuationBlockSettings block={block} graph={graph} onEdit={onEdit} />
-        )}
-        {block.kind === "condition" ? (
-          <>
-            <ArrivalNumbers />
-            <ConditionOutputs
-              block={block}
-              graph={graph}
-              scroller={scroller}
-              editing={condition}
-              onEdit={onEdit}
-            />
-          </>
-        ) : (
-          <BlockExitConfiguration block={block} graph={graph} agents={agents} onEdit={onEdit} />
-        )}
-        {block.kind === "continuation" && <OncePerRun />}
-        <PositionControls block={block} onEdit={onEdit} />
       </div>
-      <div className="flex items-center gap-2 border-t px-4 pt-3">
-        <Button variant="destructive" onClick={onRemove}>
-          <Trash2 aria-hidden /> Remove block
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The Agent picker: the Agents this Flow may place, each with its model summary; Agents without a
+ * model are listed last and can't be picked. A placed Agent the Flow can no longer place stays
+ * shown as chosen.
+ */
+function AgentPicker({
+  id,
+  block,
+  agents,
+  invalid,
+  onEdit,
+}: {
+  id: string;
+  block: AgentBlock;
+  agents: BlockAgents;
+  invalid: boolean;
+  onEdit: (block: FlowBlock) => void;
+}) {
+  const chosen = agents.all.find((agent) => agent.id === block.agentId);
+  const ready = agents.placeable.filter((agent) => agent.execution);
+  const modelless = agents.placeable.filter((agent) => !agent.execution);
+  const summary = (agent: AgentDefinition) =>
+    agent.execution ? agentRuntimeMeta(agent.execution, agents.capabilities) : "";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          aria-invalid={invalid || undefined}
+          className={cn("w-full justify-between font-normal", invalid && "border-destructive")}
+        >
+          <span className={cn("truncate", !chosen && "text-muted-foreground")}>
+            {chosen?.name ?? (block.agentId ? "Unavailable Agent" : "Choose an Agent")}
+          </span>
+          <ChevronDown aria-hidden className="text-muted-foreground" />
         </Button>
-        <span className="ml-auto text-xs text-muted-foreground">
-          Its connections are removed too.
-        </span>
-      </div>
-    </>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width)">
+        <DropdownMenuRadioGroup
+          value={block.agentId ?? ""}
+          onValueChange={(agentId) => onEdit({ ...block, agentId })}
+        >
+          {ready.map((agent) => (
+            <DropdownMenuRadioItem
+              key={agent.id}
+              value={agent.id}
+              indicatorPosition="right"
+              className="flex-col gap-0.5"
+            >
+              <span className="text-sm">{agent.name}</span>
+              <span className="text-xs text-muted-foreground">{summary(agent)}</span>
+            </DropdownMenuRadioItem>
+          ))}
+          {modelless.map((agent) => (
+            <DropdownMenuRadioItem
+              key={agent.id}
+              value={agent.id}
+              disabled
+              indicatorPosition="right"
+              className="flex-col items-start gap-1"
+            >
+              <span className="text-sm">{agent.name}</span>
+              <NeedsModel />
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {agents.placeable.length === 0 && (
+          <p className="px-3 py-1.5 text-sm text-muted-foreground">No Agents to place</p>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
-}
-
-/** Figma panel field label: 11.5 px secondary text. */
-function FieldLabel(props: ComponentProps<typeof Label>) {
-  return (
-    <Label className="text-label font-normal tracking-label text-muted-foreground" {...props} />
-  );
-}
-
-function agentSummary({ execution }: AgentDefinition) {
-  if (!execution) return <NeedsModel />;
-  const options = execution.modelOptions.map((o) => `${o.id} ${String(o.value)}`);
-  return [execution.providerInstanceId, execution.modelId, ...options].join(" · ");
 }
 
 function AgentBlockSettings({
   block,
-  graph,
   agents,
+  tag,
+  flowId,
   onEdit,
 }: {
   block: AgentBlock;
-  graph: FlowGraph;
-  agents: readonly AgentDefinition[];
+  agents: BlockAgents;
+  tag: string | null;
+  flowId: string;
   onEdit: (block: FlowBlock) => void;
 }) {
   const agentId = useId();
-  const agent = agents.find((a) => a.id === block.agentId);
-  const uses = graph.blocks.filter((b) => b.kind === "agent" && b.agentId === block.agentId).length;
+  const revisitId = useId();
+  const agent = agents.all.find((a) => a.id === block.agentId);
   return (
     <>
-      <div className="grid gap-1.5">
-        <FieldLabel htmlFor={agentId}>Saved Agent</FieldLabel>
-        <NativeSelect
-          id={agentId}
-          className="h-8.5"
-          value={block.agentId ?? ""}
-          onChange={(e) => onEdit({ ...block, agentId: e.target.value || null })}
-        >
-          <NativeSelectOption value="">Choose an Agent</NativeSelectOption>
-          {block.agentId && !agent && (
-            <NativeSelectOption value={block.agentId}>Unavailable Agent</NativeSelectOption>
-          )}
-          {agents.map((a) => (
-            <NativeSelectOption key={a.id} value={a.id}>
-              {a.name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+      <Field id={agentId} label="Agent" tag={tag}>
+        <AgentPicker id={agentId} block={block} agents={agents} invalid={!!tag} onEdit={onEdit} />
         {block.agentId && (
-          <p className="text-xs text-muted-foreground">
-            Saved Agent definition · used by {uses} {uses === 1 ? "block" : "blocks"} in this Flow
-          </p>
-        )}
-      </div>
-      {block.agentId && (
-        <div className="grid gap-1.5 rounded-lg border bg-muted px-3 py-2.5">
-          <div className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-xs text-emphasis-foreground">
-              {agent ? agentSummary(agent) : "This Agent definition is unavailable."}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {agent?.execution
+                ? agentRuntimeMeta(agent.execution, agents.capabilities)
+                : agent && <NeedsModel />}
             </span>
             <StudioLink
-              selection={{ tab: "agents", agentId: block.agentId }}
-              className="flex shrink-0 items-center gap-1 text-2xs font-medium"
+              selection={{ tab: "agents", agentId: block.agentId, fromFlow: flowId }}
+              className="shrink-0 font-medium"
             >
-              Edit Agent definition <ExternalLink aria-hidden className="size-3" />
+              Open Agent
             </StudioLink>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Prompt and execution settings live on the saved Agent — blocks never override them.
-            Duplicate the Agent to make a variant.
-          </p>
-        </div>
-      )}
-      <RevisitInstructionField block={block} onEdit={onEdit} />
+        )}
+      </Field>
+      <Field id={revisitId} label="Revisit instruction (optional)" tag={null}>
+        <Textarea
+          id={revisitId}
+          rows={3}
+          value={block.revisitInstruction}
+          onChange={(e) => onEdit({ ...block, revisitInstruction: e.target.value })}
+          className="min-h-18 text-sm"
+        />
+      </Field>
     </>
-  );
-}
-
-/** The block's one Flow-local instruction, edited like a Continuation's prompt but optional. */
-function RevisitInstructionField({
-  block,
-  onEdit,
-}: {
-  block: AgentBlock;
-  onEdit: (block: FlowBlock) => void;
-}) {
-  const id = useId();
-  return (
-    <div className="grid gap-1.5">
-      <FieldLabel htmlFor={id}>
-        Revisit instruction <span className="text-subtle-foreground">optional</span>
-      </FieldLabel>
-      <Textarea
-        id={id}
-        rows={6}
-        aria-describedby={`${id}-help`}
-        value={block.revisitInstruction}
-        onChange={(e) => onEdit({ ...block, revisitInstruction: e.target.value })}
-        className="min-h-32 bg-muted text-sm"
-      />
-      <p id={`${id}-help`} className="text-xs text-muted-foreground">
-        Sent on every visit to this block after the first, with the incoming message. The Agent
-        prompt still applies: this decides the visit&apos;s scope, but never waives the Agent&apos;s
-        criteria, a required check or a defect with evidence.
-      </p>
-    </div>
   );
 }
 
 const WAIT_UNITS: readonly WaitUnit[] = ["minutes", "hours", "days"];
 
-/** A fixed relative duration; an empty amount saves the draft without one. Readiness reports a
- * missing or out-of-range duration. */
+/** A fixed relative duration; an empty amount saves the draft without one. */
 function WaitBlockSettings({
   block,
+  tag,
   onEdit,
 }: {
   block: WaitBlock;
+  tag: string | null;
   onEdit: (block: FlowBlock) => void;
 }) {
   const amountId = useId();
-  const unitId = useId();
   const unit = block.duration?.unit ?? "minutes";
   return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="grid gap-1.5">
-          <FieldLabel htmlFor={amountId}>Wait for</FieldLabel>
-          <Input
-            id={amountId}
-            type="number"
-            step="any"
-            inputMode="decimal"
-            className="font-mono"
-            value={block.duration?.amount ?? ""}
-            onChange={(e) => {
-              // Any number saves; readiness reports an amount outside 1 minute to 7 days.
-              const amount = e.target.valueAsNumber;
-              onEdit({
-                ...block,
-                duration: Number.isFinite(amount) ? { amount, unit } : null,
-              });
-            }}
-          />
-        </div>
-        <div className="grid gap-1.5">
-          <FieldLabel htmlFor={unitId}>Unit</FieldLabel>
-          <NativeSelect
-            id={unitId}
-            className="h-8.5"
-            value={unit}
-            onChange={(e) =>
-              onEdit({
-                ...block,
-                duration: block.duration && {
-                  amount: block.duration.amount,
-                  unit: e.target.value as WaitUnit,
-                },
-              })
-            }
-          >
-            {WAIT_UNITS.map((option) => (
-              <NativeSelectOption key={option} value={option}>
-                {option}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-        </div>
+    <Field id={amountId} label="Wait for" tag={tag}>
+      <div className="grid grid-cols-[1fr_8rem] gap-2">
+        <Input
+          id={amountId}
+          type="number"
+          step="any"
+          inputMode="decimal"
+          aria-invalid={tag ? true : undefined}
+          value={block.duration?.amount ?? ""}
+          onChange={(e) => {
+            // Any number saves; readiness reports an amount outside 1 minute to 7 days.
+            const amount = e.target.valueAsNumber;
+            onEdit({ ...block, duration: Number.isFinite(amount) ? { amount, unit } : null });
+          }}
+        />
+        <NativeSelect
+          aria-label="Unit"
+          value={unit}
+          onChange={(e) =>
+            onEdit({
+              ...block,
+              duration: block.duration && {
+                amount: block.duration.amount,
+                unit: e.target.value as WaitUnit,
+              },
+            })
+          }
+        >
+          {WAIT_UNITS.map((option) => (
+            <NativeSelectOption key={option} value={option}>
+              {option}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Holds each arrival for 1 minute to 7 days, then passes its message on unchanged. A Wait has
-        no Agent or worker; the Flow input connects only to Agent blocks.
-      </p>
-    </div>
+    </Field>
   );
 }
 
 function ContinuationBlockSettings({
   block,
   graph,
+  tag,
   onEdit,
 }: {
   block: ContinuationBlock;
   graph: FlowGraph;
+  tag: string | null;
   onEdit: (block: FlowBlock) => void;
 }) {
   const promptId = useId();
   const reference = continuationReference(block, graph).inspector;
-  const continued = reference.tone === "continued";
   return (
     <>
-      <div className="grid gap-1.5">
-        <FieldLabel htmlFor={promptId}>
-          Prompt <span className="text-subtle-foreground">required</span>
-        </FieldLabel>
+      <Field id={promptId} label="Prompt" tag={tag}>
         <Textarea
           id={promptId}
           rows={6}
           required
-          aria-describedby={`${promptId}-help`}
+          aria-invalid={tag ? true : undefined}
           value={block.prompt}
           maxLength={120_000}
           onChange={(e) => onEdit({ ...block, prompt: e.target.value })}
-          className="min-h-32 bg-muted text-sm"
+          className="min-h-32 text-sm"
         />
-        <p id={`${promptId}-help`} className="text-xs text-muted-foreground">
-          Sent once, word for word, to the conversation that delivered the first message.
+      </Field>
+      <section aria-label="Continues" className="grid gap-1.5">
+        <h3 className="text-label tracking-label text-muted-foreground">Continues</h3>
+        <p className="flex items-center gap-1.5 text-sm">
+          <CornerDownLeft aria-hidden className="size-3.5 shrink-0 text-brand-cyan" />
+          <span
+            className={reference.tone === "continued" ? "text-foreground" : "text-muted-foreground"}
+          >
+            {reference.value}
+          </span>
         </p>
-      </div>
-      <section aria-label="Conversation" className="grid gap-2">
-        <h3 className="text-xs font-semibold text-muted-foreground">Conversation</h3>
-        <div className="grid gap-1 rounded-lg border bg-muted px-3 py-2.5">
-          <p className="flex flex-wrap items-baseline gap-x-1.5 text-sm">
-            <CornerDownLeft aria-hidden className="size-3.5 shrink-0 self-center text-brand-cyan" />
-            {continued ? (
-              <>
-                <span>{reference.label}</span>
-                <span className="text-brand-cyan">{reference.value}</span>
-                <span className="text-xs text-muted-foreground">
-                  · from the incoming connection
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground">{reference.value}</span>
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            {continued
-              ? "Same T3 conversation, model and workspace as the worker that sent the message. There is nothing to choose here."
-              : "Connect an Agent block, directly or through Human steps, Waits and Continuations, so there is a conversation to continue."}
-          </p>
-        </div>
       </section>
     </>
-  );
-}
-
-/** How a Continuation behaves across one Run, in the order it happens. */
-function OncePerRun() {
-  return (
-    <section aria-label="Once per Run" className="grid gap-2">
-      <h3 className="text-xs font-semibold text-muted-foreground">Once per Run</h3>
-      <ol className="grid list-inside list-decimal gap-1.5 text-xs text-muted-foreground marker:text-link">
-        <li>The first message sends the prompt to its thread and waits for finished.</li>
-        <li>Messages arriving meanwhile wait behind that response.</li>
-        <li>
-          After that every message passes straight through, with no second prompt, also in loops.
-        </li>
-      </ol>
-    </section>
-  );
-}
-
-/** How a Condition numbers its arrivals and picks the output for each. */
-function ArrivalNumbers() {
-  return (
-    <section aria-label="Arrival numbers" className="grid gap-2">
-      <h3 className="text-xs font-semibold text-muted-foreground">Arrival numbers</h3>
-      <ol className="grid list-inside list-decimal gap-1.5 text-xs text-muted-foreground marker:text-link">
-        <li>
-          Every message reaching this Condition gets the next number in this Run, counted together
-          over all its incoming connections. The first is arrival 1.
-        </li>
-        <li>
-          Rules are checked from the top; the first whose arrival number is reached selects its
-          output. A rule applies from its arrival onward (≥).
-        </li>
-        <li>When no rule matches, Otherwise is selected. It is the normal route, not an error.</li>
-        <li>
-          It counts arrivals at this block, not reviews or attempts, and never resets within a Run.
-        </li>
-      </ol>
-    </section>
-  );
-}
-
-function PositionControls({
-  block,
-  onEdit,
-}: {
-  block: FlowBlock;
-  onEdit: (block: FlowBlock) => void;
-}) {
-  const id = useId();
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {(["x", "y"] as const).map((axis) => (
-        <div key={axis} className="grid gap-1.5">
-          <FieldLabel htmlFor={`${id}-${axis}`}>{axis.toUpperCase()} position</FieldLabel>
-          <Input
-            id={`${id}-${axis}`}
-            type="number"
-            min="-10000"
-            max="10000"
-            className="font-mono"
-            value={block.position[axis]}
-            onChange={(e) =>
-              onEdit({
-                ...block,
-                position: {
-                  ...block.position,
-                  [axis]: Math.max(-10000, Math.min(10000, Number(e.target.value))),
-                },
-              })
-            }
-          />
-        </div>
-      ))}
-    </div>
   );
 }

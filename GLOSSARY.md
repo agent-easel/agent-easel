@@ -342,7 +342,7 @@ The full-page launch surface for choosing a Project, a Flow that may start there
 global Flow or a Flow owned by that Project) and the required initial prompt, with optional attached images. Its Flow
 picker offers no Flow until a Project is chosen, and a Flow that no longer fits the Project is cleared silently, keeping
 the prompt and images. It edits one Run draft at a time and opens a fresh composition from
-New Run or a Flow's Start Run; opening it does not start execution. Start always uses
+New Run only; opening it does not start execution. Start always uses
 the current saved Flow and Agent definitions.
 
 **Run draft**:

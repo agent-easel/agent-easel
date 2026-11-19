@@ -186,3 +186,29 @@ export function exitRecipients(graph: FlowGraph, blockId: string, exitId: string
     .filter((c) => c.sourceBlockId === blockId && c.exitId === exitId)
     .map((c) => graph.blocks.find((t) => t.id === c.targetBlockId)?.name);
 }
+
+/**
+ * Undoes a removal that turned `before` into `after` on the current graph: blocks and wires the
+ * removal took come back, edits made since are kept, and a wire returns only while both its ends
+ * exist.
+ */
+export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
+  const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
+  const blocks = [
+    ...current.blocks,
+    ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
+  ];
+  const exists = (id: string) => blocks.some((b) => b.id === id);
+  const restored = (graph: FlowGraph, wire: FlowWire) =>
+    !hasWire(after, wire) && !hasWire(graph, wire) && exists(wire.targetBlockId);
+  let next: FlowGraph = { ...current, blocks };
+  for (const targetBlockId of before.flowInput.targetBlockIds) {
+    const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
+    if (restored(next, wire)) next = addWire(next, wire);
+  }
+  for (const connection of before.connections) {
+    const wire = connectionWire(connection);
+    if (exists(connection.sourceBlockId) && restored(next, wire)) next = addWire(next, wire);
+  }
+  return next;
+}

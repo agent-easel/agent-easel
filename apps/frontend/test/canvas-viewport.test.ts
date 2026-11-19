@@ -4,7 +4,7 @@ import {
   selectEntryTargets,
   selectExecutionTargets,
 } from "../src/execution-focus.ts";
-import { entryView, fitGraphView } from "../src/canvas-fit.ts";
+import { authoringEntryView, entryView, fitGraphView } from "../src/canvas-fit.ts";
 import { expect, it } from "vite-plus/test";
 import {
   canvasWheelZoomFactor,
@@ -447,4 +447,31 @@ it("a Run without active work opens on the most recently changed finished Block"
 
   // Assert
   expect(targets).toStrictEqual(["review"]);
+});
+
+it("the Flow editor opens at 100 percent with the Flow input at the left margin and no Block cut", () => {
+  // Arrange
+  const flowInput = { x: 40, y: 50, width: 180, height: 70 };
+  const blocks = [
+    { x: 300, y: 40, width: 224, height: 100 },
+    { x: 600, y: 40, width: 224, height: 100 },
+    { x: 900, y: 40, width: 224, height: 100 },
+  ];
+  const graph = { minX: 40, minY: 40, width: 1084, height: 100 };
+  const padding = { x: 48, top: 0, bottom: 0 };
+
+  // Act
+  const view = authoringEntryView(flowInput, graph, [flowInput, ...blocks], surface, padding);
+
+  // Assert
+  const shown = (box: { x: number; width: number }): [number, number] => [
+    box.x + view.x,
+    box.x + box.width + view.x,
+  ];
+  expect(view.scale).toBe(1);
+  expect(shown(flowInput)[0]).toBeLessThanOrEqual(surface.width / 4 + padding.x);
+  for (const box of blocks) {
+    const [left, right] = shown(box);
+    expect(left >= surface.width || right <= surface.width).toBe(true);
+  }
 });

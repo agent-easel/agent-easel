@@ -606,7 +606,7 @@ test("a route while Studio has unsaved edits asks first, and Keep editing keeps 
   await screen.getByLabel("Flow name").fill("Launch ready Flow routed");
   const run = await findRun(app.baseUrl, nativeQuestionTitle);
   await routeWindow(browser, { kind: "run", runId: run.id, blockId: null });
-  await expect(screen.getByRole("dialog", "Discard unsaved Flow changes?")).toBeVisible();
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toBeVisible();
   await expect
     .poll(() =>
       browser.evaluate(

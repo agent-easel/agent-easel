@@ -2,6 +2,7 @@ import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow, removeFlowElsewhere } from "./support/flows.ts";
 import { removeAgentElsewhere } from "./support/agents.ts";
+import { flowsBreadcrumb } from "./support/studio.ts";
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1920, height: 1000 });
@@ -15,11 +16,11 @@ test("Back to a created Flow removed after its first live appearance shows not f
   // Arrange
   const name = "Creation recovery · Flow";
   await createStudioFlow(app, screen, browser, name);
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeVisible();
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(name);
   const path = new URL(await browser.url()).pathname;
   const id = path.split("/").at(-1)!;
-  await screen.getByRole("link", "All Flows", { exact: true }).tap();
+  await flowsBreadcrumb(screen).tap();
   await expect(screen.getByRole("link", /^Creation recovery · Flow /)).toBeVisible();
   await screen.getByRole("link", /^Launch ready Flow /).tap();
   await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue("Launch ready Flow");
@@ -34,8 +35,7 @@ test("Back to a created Flow removed after its first live appearance shows not f
   // Assert
   await expect(browser).toHaveURL(path);
   await expect(screen.getByText("Flow not found", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toHaveCount(0);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", "Save", { exact: true })).toHaveCount(0);
   await app.screenshot("created-flow-removed-before-back");
 });
 
