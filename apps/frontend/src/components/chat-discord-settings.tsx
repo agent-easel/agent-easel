@@ -48,6 +48,7 @@ import {
   type SecretChoice,
 } from "./chat-control-form.tsx";
 import { fieldAria, type FieldState } from "./field-state.ts";
+import { checkedBot, currentCheck } from "../discord-bot-identity.ts";
 
 /** The setup steps live in the documentation; the page links them until the first passing check. */
 const SETUP_GUIDE_URL =
@@ -318,10 +319,6 @@ const BADGES: Record<DiscordSettings["connectionStatus"], ReactNode> = {
   rejected: <StatusBadge kind="error">Rejected</StatusBadge>,
 };
 
-/** The latest check of the saved revision, the only one that describes the saved connection. */
-const currentCheck = ({ latestCheck, configuration }: DiscordSettings) =>
-  latestCheck?.revision === configuration.revision ? latestCheck : null;
-
 /** Until the first passing check the header links the setup steps. */
 const needsSetupGuide = (settings: DiscordSettings) =>
   settings.application === null && settings.latestCheck?.outcome !== "verified";
@@ -585,8 +582,7 @@ function BotCard({
   const publicKeyState: FieldState | undefined = page.publicKeyProblem
     ? { tone: "error", cardId: CARD.publicKey }
     : undefined;
-  const verified =
-    currentCheck(settings)?.outcome === "verified" || settings.connectionStatus === "connected";
+  const bot = checkedBot(settings);
   return (
     <>
       <SettingsGroup label="Bot">
@@ -628,11 +624,9 @@ function BotCard({
         {configuration.tokenConfigured && (
           <FieldRow
             label="Bot"
-            tag={verified && <StatusBadge kind="success">Gateway verified</StatusBadge>}
+            tag={bot.verified && <StatusBadge kind="success">Gateway verified</StatusBadge>}
           >
-            <span className="text-foreground">
-              {settings.botName ?? currentCheck(settings)?.botName ?? "—"}
-            </span>
+            <span className="text-foreground">{bot.name ?? "—"}</span>
           </FieldRow>
         )}
       </SettingsGroup>
