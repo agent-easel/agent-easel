@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import {
@@ -629,6 +630,48 @@ test("the Flow header's Save turns neutral and disabled once the Flow is saved",
   await expectFlowSaved(screen);
   await expectSaveNeutral(screen);
   await app.screenshot("flow-header-saved");
+});
+
+test("the Flow header's Save stays neutral and disabled while the Flow name is blank", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioFlowCopy({ app, screen, browser }, `Header blank name ${crypto.randomUUID()}`);
+
+  // Act
+  await screen.getByLabel("Flow name").fill("");
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveNeutral(screen);
+});
+
+test("the Flow header's Save stays neutral and disabled while Studio is offline", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const name = `Header offline ${crypto.randomUUID()}`;
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const id = await saveFlowCopy(app.baseUrl, "Demo · Grill, spec and tickets", name, {
+    mode: "checkout",
+  });
+  await openRemoteBrowser(app);
+  await openApproved(app, `/studio/flows/${id}`);
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+  await fixture.remoteAccess.offline();
+
+  // Act
+  await screen.getByLabel("Flow name").fill(`${name} edited`);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveNeutral(screen);
+  await app.screenshot("flow-header-offline-unsaved");
 });
 
 test("removing a Flow with unsaved changes returns to the Flow list without a discard dialog", async ({

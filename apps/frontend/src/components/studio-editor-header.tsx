@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { MutationGate } from "@/client-gate";
+import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -83,7 +83,7 @@ export function StudioEditorHeader(props: StudioEditorHeaderProps) {
     case "stacked": {
       const { title, status, controls, moreActions, save } = props;
       return (
-        <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-6 pt-5 pb-4">
+        <header className="flex min-w-0 shrink-0 flex-col gap-1.5 border-b px-6 pt-3 pb-4">
           <div className="flex flex-wrap items-center gap-2">
             <EditorTitle level={1}>{title}</EditorTitle>
             {/* The actions wrap together, so Save never leaves More actions behind. */}
@@ -151,7 +151,8 @@ export function StudioSaveStatus({
 
 /**
  * Save, the only primary action in a Studio editor: filled only while there are unsaved changes it
- * may send (or is sending), otherwise neutral and disabled. It reads "Saving…" while saving.
+ * may send (or is sending), otherwise neutral and disabled, including while the client is offline
+ * or catching up. It reads "Saving…" while saving.
  */
 export function StudioSaveButton({
   unsaved,
@@ -168,7 +169,8 @@ export function StudioSaveButton({
   /** The idle label, such as "Create Agent" for a new definition. */
   children?: string;
 }) {
-  const filled = unsaved && (ready || saving);
+  const mutationsAllowed = useMutationsAllowed();
+  const filled = mutationsAllowed && unsaved && (ready || saving);
   return (
     <MutationGate>
       <Button

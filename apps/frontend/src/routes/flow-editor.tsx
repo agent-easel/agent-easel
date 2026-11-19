@@ -1061,7 +1061,7 @@ function EditorToolbar({
       save={
         <StudioSaveButton
           unsaved={state.dirty}
-          ready={state.canSave && !invalidEntry && !readOnly}
+          ready={state.canSave && !invalidEntry && !readOnly && state.content.name.trim() !== ""}
           saving={state.saving}
           onClick={() => void draft.save()}
         />

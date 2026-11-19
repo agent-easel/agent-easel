@@ -304,12 +304,13 @@ test("Agents search with no match, and New Agent stays outline while the draft i
 }) => {
   await app.open("/studio/agents");
   await expect(screen.getByRole("region", "Agent editor")).toBeVisible();
+  await screen.getByRole("button", "New Agent", { exact: true }).tap();
+  await expect(screen.getByRole("button", "New Agent", { exact: true })).toBeVisible();
+  // An open saved Agent stays listed through a search, so the empty result shows with the draft.
   await screen.getByLabel("Search Agents", { exact: true }).fill("zzzz-no-such-agent");
   await expect(screen.getByText("No matching Agents", { exact: true })).toBeVisible();
   await shot(app, browser, "agents-search-no-match");
   await screen.getByLabel("Search Agents", { exact: true }).fill("");
-  await screen.getByRole("button", "New Agent", { exact: true }).tap();
-  await expect(screen.getByRole("button", "New Agent", { exact: true })).toBeVisible();
   const editor = screen.getByRole("region", "Agent editor");
   await expect(editor.getByRole("button", "Create Agent", { exact: true })).toBeDisabled();
   await shot(app, browser, "agents-new-draft");

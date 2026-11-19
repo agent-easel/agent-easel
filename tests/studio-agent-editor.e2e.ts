@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
-import { readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
+import { copyAgentDefinition, readAgentDefinition, saveAgentElsewhere } from "./support/agents.ts";
+import { namedAgent } from "./support/owners.ts";
 import {
   chooseAgentAction,
   expectSaveFilled,
@@ -254,21 +255,51 @@ test("the Agent header's Save turns neutral and disabled once the Agent is saved
   await app.screenshot("agent-header-saved");
 });
 
-test("a Project group heading in the Agents list says only that Project's Flows can place its Agent", async ({
+test("a Project group heading in the Agents list says only that Project's Flows can place its Agents", async ({
   app,
   screen,
 }) => {
   // Arrange
+  const { projectId } = await namedAgent(app.baseUrl, "Northwind QA");
+  const second = await copyAgentDefinition(
+    app.baseUrl,
+    "Sample worker",
+    `Northwind second ${crypto.randomUUID().slice(0, 8)}`,
+    { projectId },
+  );
   await app.open("/studio/agents");
   const northwind = screen.getByRole("region", "Northwind", { exact: true });
-  await expect(northwind.getByText("Northwind QA", { exact: true })).toBeVisible();
+  await expect(northwind.getByText(second.name, { exact: true })).toBeVisible();
 
   // Act
   await northwind.getByText("Northwind", { exact: true }).hover();
 
   // Assert
   await expect(screen.getByRole("tooltip")).toHaveText(
-    "Only Northwind Flows can place this Agent.",
+    "Only Northwind Flows can place these Agents.",
   );
   await app.screenshot("agents-placement-rule");
+});
+
+test("an open Project Agent stays listed under its Project while the search hides it", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const agent = await namedAgent(app.baseUrl, "Northwind QA");
+  await app.open(`/studio/agents/${agent.id}`);
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(agent.name);
+
+  // Act
+  await screen.getByLabel("Search Agents", { exact: true }).fill("Sample worker");
+
+  // Assert
+  const northwind = screen.getByRole("region", "Northwind", { exact: true });
+  await expect(northwind.getByText(agent.name, { exact: true })).toBeVisible();
+  await expect(screen.getByText("Launch worker", { exact: true })).toHaveCount(0);
+  await northwind.getByText("Northwind", { exact: true }).hover();
+  await expect(screen.getByRole("tooltip")).toHaveText(
+    "Only Northwind Flows can place this Agent.",
+  );
+  await app.screenshot("agents-open-agent-kept-in-search");
 });
