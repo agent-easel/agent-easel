@@ -177,3 +177,69 @@ await test("a No UI evidence heading without a reason still requires Before and 
   // Assert
   assert.deepEqual(missing, ["Before", "After"]);
 });
+
+await test("a header without a matching two-cell delimiter row is not an evidence table", () => {
+  // Arrange
+  const body = `## UI screenshots
+| Before | After |
+| --- |
+| ![before](https://example.com/before.png) | ![after](https://example.com/after.png) |
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, ["Before", "After"]);
+});
+
+await test("reversed or extra evidence columns are not an evidence table", () => {
+  // Arrange
+  const body = `## UI screenshots
+| After | Before |
+| --- | --- |
+| ![after](https://example.com/after.png) | ![before](https://example.com/before.png) |
+
+| Before | After | Notes |
+| --- | --- | --- |
+| ![before](https://example.com/before.png) | ![after](https://example.com/after.png) | |
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, ["Before", "After"]);
+});
+
+await test("Before and After images on separate rows do not form a pair", () => {
+  // Arrange
+  const body = `## UI screenshots
+| Before | After |
+| --- | --- |
+| ![before](https://example.com/before.png) | |
+| | ![after](https://example.com/after.png) |
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, ["After"]);
+});
+
+await test("an image label split across rows does not satisfy its column", () => {
+  // Arrange
+  const body = `## UI screenshots
+| Before | After |
+| --- | --- |
+| ![before | ![after](https://example.com/after.png) |
+| view](https://example.com/before.png) | |
+`;
+
+  // Act
+  const missing = checkUiEvidence(body);
+
+  // Assert
+  assert.deepEqual(missing, ["Before"]);
+});

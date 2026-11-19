@@ -104,8 +104,8 @@ documentation/review-only changes; see [PR journey check](testing.md#pr-journey-
 Release/beta journeys and the local pre-push gate are unchanged.
 
 For frontend changes, **UI evidence attachments** runs
-`scripts/check-ui-evidence.mjs --pr <number>` to check the image links in the
-Before and After columns of the PR body's screenshot table. A frontend change
+`scripts/check-ui-evidence.mjs --pr <number>` to check that a row of the PR body's
+Before | After screenshot table links both images. A frontend change
 without visible UI impact, which still triggers the check, states why under `### No UI evidence` instead; the check
 accepts any non-empty reason and leaves its judgment to review. Run the same check locally with
 `pnpm check:ui-evidence --body-file <path>` (`-` for stdin) or

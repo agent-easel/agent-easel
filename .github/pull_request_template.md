@@ -17,8 +17,8 @@ column; a click opens it full size.
 | ![Before: <view>](./before-<view>.png) | ![After: <view>](./after-<view>.png) |
 
 Upload the local images with `gh pr edit --body-file <file> --attach <image>`, then run
-`pnpm check:ui-evidence --pr <number>`; the UI evidence check only verifies an embedded HTTPS
-image in each column. Follow .agents/skills/verify-t3-factory/SKILL.md#evidence.
+`pnpm check:ui-evidence --pr <number>`; the UI evidence check only verifies that one row of
+this two-column table holds an embedded HTTPS image in both cells. Follow .agents/skills/verify-t3-factory/SKILL.md#evidence.
 When the change has no visible UI impact, replace the table with a ### No UI evidence
 heading followed by the reason; the check accepts any stated reason in place of images. -->
 
