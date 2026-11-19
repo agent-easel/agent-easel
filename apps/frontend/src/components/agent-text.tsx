@@ -103,7 +103,7 @@ const components = { card: markdownComponents("card"), reader: markdownComponent
  * One rendering of Agent-written text: CommonMark with GitHub tables and task lists. Raw HTML stays
  * literal text and links open outside Factory.
  */
-function AgentMarkdown({ text, density }: { text: string; density: Density }) {
+export function AgentMarkdown({ text, density }: { text: string; density: Density }) {
   return (
     <div
       className={cn("flex min-w-0 flex-col break-words", density === "card" ? "gap-2" : "gap-3")}

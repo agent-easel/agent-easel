@@ -1,4 +1,5 @@
 import { RunTextReaderLink } from "./run-result.tsx";
+import { AgentMarkdown } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -576,7 +577,14 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
           {attentionSubject(item)}
         </h3>
       </div>
-      {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
+      {item.message &&
+        // Only a conversation-waiting message is the Agent's own question; other kinds record
+        // Factory's reason.
+        (item.kind === "conversation-waiting" ? (
+          <AgentMarkdown text={item.message} density="card" />
+        ) : (
+          <p className="whitespace-pre-wrap">{item.message}</p>
+        ))}
       {exit && <p>Decision: {exit}</p>}
       <p>Resolved: {item.settlementReason}</p>
       {reply && (
