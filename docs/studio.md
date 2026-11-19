@@ -70,14 +70,15 @@ A save refused because Factory already holds a newer revision that Studio had no
 appends nothing, keeps the local work and raises the same notice.
 
 **Compare, load or keep.** **Compare latest revision** clears the error shown and places the local
-draft and saved revision N side by side as read-only text. When Studio does not hold N yet, as
+draft and saved revision N side by side as read-only text, with added, removed and moved lines tinted.
+The text includes each Block's settings for a Flow and the full Worker settings for an Agent.
+When Studio does not hold N yet, as
 after a refused save, the comparison opens once it arrives; if the list fails to load meanwhile,
 the editor says **Could not load the latest revision. Try again.** From the comparison, loading N
 discards the edits, while keeping the draft against N sends nothing and leaves it unsaved against
 N: keeping requires another explicit Save, which writes it as N+1 and can conflict again. Both act
 only on the revision shown: when N+1 arrives the comparison moves to it, an action for an older
-revision does nothing, and a removal dismisses the comparison. There is no merge, field-level diff
-or silent overwrite.
+revision does nothing, and a removal dismisses the comparison.
 
 **Own saves.** The editor's own saves never raise **saved elsewhere**, whether the save's reply or
 its delivery arrives first. Deliveries during a pending save wait for its reply, and a higher
@@ -306,7 +307,7 @@ arriving meanwhile moves the comparison to it, and a removal dismisses it.
 **Create outcome unknown.** Repeating a Create whose reply was lost could make a second Agent, so the new-Agent form keeps its
 draft and disables Create while Factory looks up the original request by the Agent ID that request would have created.
 The lookup finds the Agent even if its revision or owner changed. **Open Agent** opens its current revision.
-**Create again** is offered only when Factory confirms that no Agent exists for the request and its write window has expired.
+**Create again** is offered only when Factory confirms that no Agent was created for the request and its write window has expired.
 If Factory cannot confirm the result, **Check again** repeats the lookup. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
 **Duplicate…**, the opened Agent follows these rules even before Studio has delivered it.
 

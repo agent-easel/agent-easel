@@ -243,7 +243,7 @@ test("Import reviews a Flow file whose Agent needs a model, and rejects a file i
   const model = review.getByRole("button", /^Model for Northwind QA/);
   await expect(model).toHaveAttribute("aria-invalid", "true");
   const cardId = await model.getAttribute("aria-describedby");
-  await expect(review.locator(`[id=${JSON.stringify(cardId)}]`)).toContainText(
+  await expect(browser.locator(`[id=${JSON.stringify(cardId)}]`)).toContainText(
     "Choose a model here or in Studio after importing.",
   );
   await expect(review.getByRole("group", /Northwind QA/)).toContainText("Needs a model");

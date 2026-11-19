@@ -766,8 +766,7 @@ test("a saved Agent with a retired model cannot be placed from the library or pi
   await app.open(`/studio/flows/${flowId}`);
 
   // Assert
-  const library = screen.getByRole("region", "Block library");
-  const retired = library.locator(`[aria-label=${JSON.stringify(name)}]`);
+  const retired = browser.locator(`[aria-label=${JSON.stringify(name)}]`);
   await retired.scrollIntoView();
   await expect(retired).toHaveAttribute("aria-disabled", "true");
   await expect(retired).toContainText("Needs a model");

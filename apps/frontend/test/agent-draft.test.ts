@@ -1,5 +1,4 @@
 import { expect, it } from "vite-plus/test";
-import type { AgentDefinition } from "@t3-factory/contracts";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
 import { comparedAgentLines } from "../src/components/studio-agents/agent-revision-panel.tsx";

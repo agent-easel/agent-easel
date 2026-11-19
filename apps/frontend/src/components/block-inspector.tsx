@@ -149,7 +149,16 @@ function Field({
       </div>
       {children}
       {problem && (
-        <ProblemCard id={`${id}-problem`} tone="error" density="compact" title={problem.message} />
+        <ProblemCard
+          id={`${id}-problem`}
+          tone="error"
+          density="compact"
+          title={
+            problem.code === "block_name_required"
+              ? "Enter a name for this Block."
+              : problem.message
+          }
+        />
       )}
     </div>
   );
