@@ -63,6 +63,7 @@ test("Compare latest revision shows both the local Agent edits and the saved rev
   browser,
 }) => {
   // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
   const state = await beforeAgentComparison({ app, screen, browser }, "agentComparison");
 
   // Act
@@ -70,6 +71,7 @@ test("Compare latest revision shows both the local Agent edits and the saved rev
 
   // Assert
   await expectAgentComparison({ ...state });
+  await app.screenshot("after-agent-revision-comparison");
 });
 
 test("keeping Agent edits against a saved revision sends no implicit save", async ({

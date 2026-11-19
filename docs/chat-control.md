@@ -115,7 +115,9 @@ When the Bot save fails, Access is not sent and every edit is kept; the page say
 were not saved and the previous grants are still active. When Bot is saved and Access fails, the
 next Save sends only Access. Each save names the revision its edits started from, conflicts keep the
 page's edits, a lost answer is resolved by reading the current settings, and unsaved edits in either
-section are guarded as on the Language model page.
+section are guarded as on the Language model page. The settings never show the token, so a lost Bot
+save that replaced it cannot be confirmed by that read: it counts as failed, the token stays in the
+draft and Access is not sent.
 
 No Application ID is configured. Factory's application is the one Discord reports for the
 authenticated Gateway session; Factory never reads it from the token itself. Factory records the
@@ -140,7 +142,9 @@ otherwise. A model key, a passed Test or check and any Access entry are not requ
 admits nobody, and while On the page says so in one card. Turning On uses only saved configuration.
 While the switch cannot turn On it is disabled and the missing requirement sits beside it, for
 example "Save the bot token and a language model first", where "a language model" opens the
-Language model page over Discord; Esc or ✕ returns to Discord with its unsaved edits kept.
+Language model page over Discord; Esc or ✕ returns to Discord with its unsaved edits kept, and a
+model saved there clears the requirement. Until the page has read the Language model the switch
+stays disabled, and when that read fails it says "Couldn't read the language model".
 
 On is persisted: after a restart Factory reconnects by itself. While On, Factory runs exactly one
 Gateway connection. It logs in with the saved token and waits for a ready session; only once
@@ -200,15 +204,20 @@ lookup show no name until the next passing check or ready session.
 After the first Access save the section offers **Send access test** (**Send again** once a test was
 sent). It always tests the saved Access, so it is disabled with "Save first" while Users or Channels
 have unsaved edits, and with its reason while Chat control is Off; it needs the operating connection.
-The bot posts one message in each allowed channel that mentions every allowed user and asks them to
-reply; the message pings only those users. A list too long for one Discord message is split across
-several. Sending again replaces the previous test, so everyone it asks is **Waiting** again.
+The bot posts one message in each allowed channel that grants a Project, mentioning every allowed
+user and asking them to reply; the message pings only those users. A channel without a Project is
+not asked, since it admits no reply. A list too long for one Discord message is split across
+several. In a forum channel the test is one forum post, a thread, that asks each user to mention the
+bot there, since a forum takes no messages outside its posts. Sending again replaces the previous
+test, so everyone it asks is **Waiting** again.
 
-A reply from an allowed user to one of the test's messages takes the normal admission path of an
-[invocation](#invocations) (an allowed user, in an allowed channel that grants a Project), but it
-opens no thread or conversation and never reaches the Language model: the bot reacts ✅ and Factory
-records the user as **Reached** with the time. One reply in any allowed channel is enough. Waiting
-has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
+A reply from an allowed user to one of the test's messages, or an invocation in a test's forum post,
+takes the normal admission path of an [invocation](#invocations) (an allowed user, in an allowed
+channel that grants a Project), but it opens no thread or conversation and never reaches the
+Language model: the bot reacts ✅ and Factory records the user as **Reached** with the time. A
+test's messages count as soon as Discord accepts them, and an earlier test's messages keep counting
+after Send again, so a late reply to them also marks the user Reached. One reply in any allowed
+channel is enough. Waiting has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
 channels; a channel Discord no longer knows shows **Unknown channel** and one warning to remove it.
 The latest results stay visible while Off, and an Access save drops the results of the channels and
 users it removes.

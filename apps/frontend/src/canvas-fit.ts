@@ -88,8 +88,6 @@ function minimalShift(
   focus: GraphBounds,
   boxes: readonly BoundsRect[],
   surface: Size,
-  /** The largest horizontal shift allowed; the view stays as it is when no allowed shift works. */
-  maxShiftX = Infinity,
 ): CanvasView {
   const screen = boxes.map((box) => ({ ...box, x: box.x + view.x, y: box.y + view.y }));
   const shown = {
@@ -102,15 +100,13 @@ function minimalShift(
     screen.map((box) => box.x),
     screen.map((box) => box.x + box.width),
     surface.width,
-  )
-    .filter((dx) => Math.abs(dx) <= maxShiftX + EPSILON)
-    .flatMap((dx) =>
-      edgeShifts(
-        screen.map((box) => box.y),
-        screen.map((box) => box.y + box.height),
-        surface.height,
-      ).map((dy) => ({ dx, dy, distance: Math.hypot(dx, dy) })),
-    );
+  ).flatMap((dx) =>
+    edgeShifts(
+      screen.map((box) => box.y),
+      screen.map((box) => box.y + box.height),
+      surface.height,
+    ).map((dy) => ({ dx, dy, distance: Math.hypot(dx, dy) })),
+  );
   shifts.sort((a, b) => a.distance - b.distance);
   let best: { dx: number; dy: number; distance: number; shown: number } | undefined;
   for (const shift of shifts) {
@@ -146,8 +142,7 @@ export function entryView(
 /**
  * The view a Flow editor opens at: 100 %, the Flow input at the left margin and the graph centred
  * between the covered top and bottom (its top below the covered top when it is taller), then
- * moved by the minimal shift that cuts no box at the surface edge, within a quarter of the
- * surface width horizontally.
+ * moved by the minimal shift that cuts no box at the surface edge and keeps the Flow input visible.
  */
 export function authoringEntryView(
   flowInput: BoundsRect,
@@ -162,9 +157,7 @@ export function authoringEntryView(
     x: padding.x - flowInput.x,
     y: padding.top + Math.max(0, (available - graph.height) / 2) - graph.minY,
   };
-  // The Flow input stays near the left edge: a wide graph keeps it there rather than move it
-  // across the canvas to leave no Block cut.
-  return minimalShift(left, mergeGraphBounds(flowInput, []), boxes, surface, surface.width / 4);
+  return minimalShift(left, mergeGraphBounds(flowInput, []), boxes, surface);
 }
 
 /**

@@ -409,6 +409,9 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
       handle: ({ input }) => answer(() => factory.createAgent(input), 201),
     },
     getAgent: { handle: ({ parameters }) => answer(() => factory.getAgent(parameters.id)) },
+    getAgentCreateOutcome: {
+      handle: ({ parameters }) => answer(() => factory.getAgentCreateOutcome(parameters.id)),
+    },
     duplicateAgent: {
       body: standardBody,
       handle: ({ parameters, input }) =>

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useId, useRef } from "react";
 import { Bot, Workflow } from "lucide-react";
 import type { AgentCapabilities, FactoryProject, ImportResult } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ChoiceMenu } from "@/components/choice-menu";
-import { cn } from "@/lib/utils";
 import {
   importModelChoices,
   useDefinitionImport,
@@ -198,6 +197,7 @@ function ImportReviewContent({
   onConfirm: () => void;
 }) {
   const { rows, capabilities, flow } = review;
+  const missingModelCard = useId();
   const blocked = ownerPicker(state.target, projects).blocked;
   const blocks = importedBlockCount(state.file);
   return (
@@ -244,6 +244,16 @@ function ImportReviewContent({
       >
         Read them in Studio before you start a Run.
       </ProblemCard>
+      {rows.some((row) => !row.selection) && (
+        <ProblemCard
+          id={missingModelCard}
+          density="compact"
+          tone="attention"
+          title="Agents without a model"
+        >
+          Choose a model here or in Studio after importing.
+        </ProblemCard>
+      )}
       <section aria-labelledby="import-creates" className="grid gap-1.5">
         <h3 id="import-creates" className="text-2xs font-medium text-muted-foreground">
           Creates
@@ -268,6 +278,7 @@ function ImportReviewContent({
               model={model}
               row={row}
               capabilities={capabilities}
+              missingModelCard={missingModelCard}
               disabled={state.committing}
             />
           ))}
@@ -289,11 +300,13 @@ function ImportModelRow({
   model,
   row,
   capabilities,
+  missingModelCard,
   disabled,
 }: {
   model: DefinitionImportModel;
   row: ImportRow;
   capabilities: AgentCapabilities;
+  missingModelCard: string;
   disabled: boolean;
 }) {
   const choices = importModelChoices(capabilities);
@@ -314,7 +327,8 @@ function ImportModelRow({
       <ChoiceMenu
         id={pickerId}
         label={`Model for ${row.name}`}
-        className={cn("h-7.5 w-50 shrink-0 bg-card", !selection && "border-attention")}
+        className="h-7.5 w-50 shrink-0 bg-card"
+        describedBy={selection ? undefined : missingModelCard}
         value={selection ? choiceId(selection.providerInstanceId, selection.modelId) : ""}
         choices={[
           { id: "", label: "Needs a model" },

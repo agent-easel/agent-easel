@@ -70,14 +70,15 @@ A save refused because Factory already holds a newer revision that Studio had no
 appends nothing, keeps the local work and raises the same notice.
 
 **Compare, load or keep.** **Compare latest revision** clears the error shown and places the local
-draft and saved revision N side by side as read-only text. When Studio does not hold N yet, as
+draft and saved revision N side by side as read-only text, with added, removed and moved lines tinted.
+The text includes each Block's settings for a Flow and the full Worker settings for an Agent.
+When Studio does not hold N yet, as
 after a refused save, the comparison opens once it arrives; if the list fails to load meanwhile,
 the editor says **Could not load the latest revision. Try again.** From the comparison, loading N
 discards the edits, while keeping the draft against N sends nothing and leaves it unsaved against
 N: keeping requires another explicit Save, which writes it as N+1 and can conflict again. Both act
 only on the revision shown: when N+1 arrives the comparison moves to it, an action for an older
-revision does nothing, and a removal dismisses the comparison. There is no merge, field-level diff
-or silent overwrite.
+revision does nothing, and a removal dismisses the comparison.
 
 **Own saves.** The editor's own saves never raise **saved elsewhere**, whether the save's reply or
 its delivery arrives first. Deliveries during a pending save wait for its reply, and a higher
@@ -304,10 +305,10 @@ tinted. **Keep my edits** keeps the draft against revision N; **Load revision *N
 arriving meanwhile moves the comparison to it, and a removal dismisses it.
 
 **Create outcome unknown.** Repeating a Create whose reply was lost could make a second Agent, so the new-Agent form keeps its
-draft, disables Create and shows one Warning card while Factory reconciles the original request against Studio's next
-synchronized list: an Agent listed only since that Create, with the submitted content (whose exit ids are generated per draft)
-and owner, is the one it made, and the card's **Open Agent** opens it. **Create again** is offered only when that list confirms
-nothing was created. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
+draft and disables Create while Factory looks up the original request by the Agent ID that request would have created.
+The lookup finds the Agent even if its revision or owner changed. **Open Agent** opens its current revision.
+**Create again** is offered only when Factory confirms that no Agent was created for the request and its write window has expired.
+If Factory cannot confirm the result, **Check again** repeats the lookup. The new-Agent form otherwise ignores other Agents' changes; after its Create, or after
 **Duplicate…**, the opened Agent follows these rules even before Studio has delivered it.
 
 A Create or Duplicate answer bridges only the wait for its first appearance in Studio's current
@@ -447,7 +448,7 @@ on load only when the saved positions can be preserved, so blocks never move on 
 The canvas shares the Run canvas toolbar: icon-only zoom, **Fit Flow**, **Auto-arrange** and keyboard shortcuts, each with its tooltip, and no hint text. Scale is 20%–200%; **+**/**−** zoom around the viewport center and **0** fits (bare keys leave browser zoom alone; bindings in
 [Keyboard shortcuts](keyboard-shortcuts.md)); pinch or **Mod**+wheel (Command on macOS, Control elsewhere) zooms at the pointer, including Safari pinch; plain scroll, arrow keys and dragging
 empty canvas pan. Drag, drop and wire gestures follow the zoom level. The canvas opens readable: at 100 % with the Flow input at the left edge, then moved by the
-minimal-shift rule of the [Run canvas](runs.md) (within a quarter of the canvas width) so every block is either fully visible or fully outside. It is never fitted on
+minimal-shift rule of the [Run canvas](runs.md) while keeping the Flow input in view so every block is either fully visible or fully outside. It is never fitted on
 open or on resize; the view is preserved across edits, resizes and a switch to a revision saved elsewhere, and selecting a block only pans to reveal it. Zoom and pan
 never change saved positions. Such a switch closes a selection or the settings panel only when its block or wire
 no longer exists.

@@ -106,6 +106,16 @@ async function chatModelSettings(baseUrl: string | undefined) {
   return (await response.json()) as Result<ChatModelSettings>;
 }
 
+/** Fills the Language model's provider, base URL and model for the controlled provider. */
+async function fillChatModel(screen: Screen) {
+  const connection = screen.getByRole("region", "Connection");
+  await connection.getByRole("button", /^Provider: /).tap();
+  await screen.getByRole("menuitemradio", /^OpenAI-compatible/).tap();
+  await connection.getByLabel("Base URL").fill(provider.baseUrl);
+  await connection.getByLabel("Model").fill("ui-model");
+  return connection;
+}
+
 test("the host saves a keyed Language model, tests the saved connection and never sees the key again", async ({
   app,
   screen,
@@ -113,11 +123,7 @@ test("the host saves a keyed Language model, tests the saved connection and neve
 }) => {
   // Arrange
   await app.open("/settings/chat-control/model");
-  const connection = screen.getByRole("region", "Connection");
-  await connection.getByRole("button", /^Provider: /).tap();
-  await screen.getByRole("menuitemradio", /^OpenAI-compatible/).tap();
-  await connection.getByLabel("Base URL").fill(provider.baseUrl);
-  await connection.getByLabel("Model").fill("ui-model");
+  const connection = await fillChatModel(screen);
   await connection.getByLabel("API key").fill("sk-ui-journey");
   await screen.getByRole("button", "Save", { exact: true }).tap();
   await expect(connection.getByText("Stored", { exact: true })).toBeVisible();
@@ -289,6 +295,14 @@ test("the Discord page's language model link opens Language model, and Esc or �
   await expect(publicKey).toHaveValue("cd".repeat(32));
   await expect(screen.getByRole("dialog", /^Discard unsaved/)).toHaveCount(0);
   await app.screenshot("chat-discord-return-4-back-after-close");
+  // Saving the model there clears the switch's model reason on return.
+  await languageModel.tap();
+  await fillChatModel(screen);
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(screen.getByRole("button", "Discard", { exact: true })).toHaveCount(0);
+  await browser.keyboard.press("Escape");
+  await expect(publicKey).toHaveValue("cd".repeat(32));
+  await expect(languageModel).toHaveCount(0);
   await screen.getByRole("button", "Discard", { exact: true }).tap();
 });
 
@@ -403,27 +417,29 @@ test("the host turns Chat control On with the switch and sees the connection bad
 const TEST_USERS = ["200000000000000001", "200000000000000002"];
 const TEST_CHANNEL = "400000000000000002";
 const REFUSING_CHANNEL = "400000000000000003";
+/** A channel ID Discord does not know, as after the channel was deleted. */
+const GONE_CHANNEL = "400000000000000099";
 
 /**
  * Operating Chat control whose Access allows two users in two channels, where the second channel's
- * permissions refuse the bot's posts.
+ * permissions refuse the bot's posts, then in `extraChannels`.
  */
-async function accessTestReady(baseUrl: string | undefined) {
+async function accessTestReady(baseUrl: string | undefined, extraChannels: string[] = []) {
   await discord(baseUrl).posting({ channelId: REFUSING_CHANNEL, denied: true });
   await operatingChatControl(baseUrl, {
     users: TEST_USERS,
-    channels: [TEST_CHANNEL, REFUSING_CHANNEL],
+    channels: [TEST_CHANNEL, REFUSING_CHANNEL, ...extraChannels],
   });
 }
 
-test("sending the access test asks each allowed user to reply and names the channel the bot can't post in", async ({
+test("sending the access test asks each allowed user to reply and names the channels the bot can't post in or that are gone", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 900 });
-  await accessTestReady(app.baseUrl);
+  await accessTestReady(app.baseUrl, [GONE_CHANNEL]);
   await app.open("/settings/chat-control/discord");
   const accessCard = screen.getByRole("region", "Access");
   await expect(accessCard.getByRole("button", "Send access test")).toBeEnabled();
@@ -439,15 +455,19 @@ test("sending the access test asks each allowed user to reply and names the chan
   await app.screenshot("chat-discord-access-test-2-sent");
   const card = screen.getByText(/^Factory bot can’t post in /);
   await expect(card).toBeVisible();
-  // The card sits below the fold; bring it fully into view for the screenshot.
+  // A gone channel gets the card to remove it, also once Discord's name lookup marked it unknown.
+  await expect(screen.getByText(`${GONE_CHANNEL} no longer exists`, { exact: true })).toBeVisible();
+  await expect(screen.getByText("Remove it, then send again.", { exact: true })).toBeVisible();
+  await expect(screen.getByText("Fix the IDs, then save.", { exact: true })).toHaveCount(0);
+  // The cards sit below the fold; bring the last one fully into view for the screenshot.
   await browser.evaluate(() => {
     const alerts = Array.from(document.querySelectorAll('[role="status"]'));
     alerts
-      .find((alert) => alert.textContent.includes("can’t post in"))
+      .find((alert) => alert.textContent.includes("no longer exist"))
       ?.scrollIntoView({ block: "end" });
     return null;
   });
-  await app.screenshot("chat-discord-access-test-3-cant-post");
+  await app.screenshot("chat-discord-access-test-3-cant-post-and-gone");
 });
 
 test("a user who replied to the access test shows Reached, which stays while Chat control is Off", async ({

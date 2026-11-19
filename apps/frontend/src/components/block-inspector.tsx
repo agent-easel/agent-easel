@@ -5,6 +5,7 @@ import type {
   AgentDefinition,
   FlowBlock,
   FlowGraph,
+  ValidationIssue,
   WaitUnit,
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,9 @@ import { StudioLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
-import { fieldIssue, type BlockIssue } from "./flow-readiness.tsx";
+import { fieldAria } from "./field-state.ts";
+import { ProblemCard } from "./problem-card.tsx";
+import { fieldProblem, issueTag, type BlockIssue } from "./flow-readiness.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
@@ -65,13 +68,14 @@ export function BlockConfiguration({
 }) {
   const nameId = useId();
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
-  const tag = (field: string) => fieldIssue(issues, field);
+  const problem = (field: string) => fieldProblem(issues, field);
+  const nameProblem = problem("name");
   return (
     <div ref={setScroller} className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
-      <Field id={nameId} label="Name" tag={tag("name")}>
+      <Field id={nameId} label="Name" problem={nameProblem}>
         <Input
           id={nameId}
-          aria-invalid={tag("name") ? true : undefined}
+          {...fieldAria(nameProblem && `${nameId}-problem`)}
           value={block.name}
           onChange={(e) => onEdit({ ...block, name: e.target.value })}
         />
@@ -80,19 +84,19 @@ export function BlockConfiguration({
         <AgentBlockSettings
           block={block}
           agents={agents}
-          tag={tag("agentId")}
+          problem={problem("agentId")}
           flowId={flowId}
           onEdit={onEdit}
         />
       )}
       {block.kind === "wait" && (
-        <WaitBlockSettings block={block} tag={tag("duration")} onEdit={onEdit} />
+        <WaitBlockSettings block={block} problem={problem("duration")} onEdit={onEdit} />
       )}
       {block.kind === "continuation" && (
         <ContinuationBlockSettings
           block={block}
           graph={graph}
-          tag={tag("prompt")}
+          problem={problem("prompt")}
           onEdit={onEdit}
         />
       )}
@@ -123,12 +127,12 @@ export function BlockConfiguration({
 function Field({
   id,
   label,
-  tag,
+  problem,
   children,
 }: {
   id: string;
   label: string;
-  tag: string | null;
+  problem?: ValidationIssue | undefined;
   children: ReactNode;
 }) {
   return (
@@ -137,13 +141,25 @@ function Field({
         <Label htmlFor={id} className="text-label font-normal tracking-label text-muted-foreground">
           {label}
         </Label>
-        {tag && (
+        {problem && (
           <StatusBadge kind="error" className="ml-auto">
-            {tag}
+            {issueTag(problem)}
           </StatusBadge>
         )}
       </div>
       {children}
+      {problem && (
+        <ProblemCard
+          id={`${id}-problem`}
+          tone="error"
+          density="compact"
+          title={
+            problem.code === "block_name_required"
+              ? "Enter a name for this Block."
+              : problem.message
+          }
+        />
+      )}
     </div>
   );
 }
@@ -157,20 +173,22 @@ function AgentPicker({
   id,
   block,
   agents,
-  invalid,
+  describedBy,
   onEdit,
 }: {
   id: string;
   block: AgentBlock;
   agents: BlockAgents;
-  invalid: boolean;
+  describedBy: string | undefined;
   onEdit: (block: FlowBlock) => void;
 }) {
   const chosen = agents.all.find((agent) => agent.id === block.agentId);
-  const ready = agents.placeable.filter((agent) => agent.execution);
-  const modelless = agents.placeable.filter((agent) => !agent.execution);
-  const summary = (agent: AgentDefinition) =>
-    agent.execution ? agentRuntimeMeta(agent.execution, agents.capabilities) : "";
+  const choices = agents.placeable.map((agent) => ({
+    agent,
+    summary: agentRuntimeMeta(agent.execution, agents.capabilities),
+  }));
+  const ready = choices.filter(({ summary }) => summary);
+  const modelless = choices.filter(({ summary }) => !summary);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -178,8 +196,8 @@ function AgentPicker({
           id={id}
           type="button"
           variant="outline"
-          aria-invalid={invalid || undefined}
-          className={cn("w-full justify-between font-normal", invalid && "border-destructive")}
+          {...fieldAria(describedBy)}
+          className={cn("w-full justify-between font-normal", describedBy && "border-destructive")}
         >
           <span className={cn("truncate", !chosen && "text-muted-foreground")}>
             {chosen?.name ?? (block.agentId ? "Unavailable Agent" : "Choose an Agent")}
@@ -192,7 +210,7 @@ function AgentPicker({
           value={block.agentId ?? ""}
           onValueChange={(agentId) => onEdit({ ...block, agentId })}
         >
-          {ready.map((agent) => (
+          {ready.map(({ agent, summary }) => (
             <DropdownMenuRadioItem
               key={agent.id}
               value={agent.id}
@@ -200,10 +218,10 @@ function AgentPicker({
               className="flex-col gap-0.5"
             >
               <span className="text-sm">{agent.name}</span>
-              <span className="text-xs text-muted-foreground">{summary(agent)}</span>
+              <span className="text-xs text-muted-foreground">{summary}</span>
             </DropdownMenuRadioItem>
           ))}
-          {modelless.map((agent) => (
+          {modelless.map(({ agent }) => (
             <DropdownMenuRadioItem
               key={agent.id}
               value={agent.id}
@@ -227,30 +245,42 @@ function AgentPicker({
 function AgentBlockSettings({
   block,
   agents,
-  tag,
+  problem,
   flowId,
   onEdit,
 }: {
   block: AgentBlock;
   agents: BlockAgents;
-  tag: string | null;
+  problem: ValidationIssue | undefined;
   flowId: string;
   onEdit: (block: FlowBlock) => void;
 }) {
   const agentId = useId();
   const revisitId = useId();
   const agent = agents.all.find((a) => a.id === block.agentId);
+  const summary = agent && agentRuntimeMeta(agent.execution, agents.capabilities);
+  const workerProblem =
+    problem ??
+    (agent && !summary
+      ? {
+          code: "agent_model_required",
+          path: "agentId",
+          message: `Choose a model for ${agent.name} in the Agent editor or select another Agent.`,
+        }
+      : undefined);
   return (
     <>
-      <Field id={agentId} label="Agent" tag={tag}>
-        <AgentPicker id={agentId} block={block} agents={agents} invalid={!!tag} onEdit={onEdit} />
+      <Field id={agentId} label="Agent" problem={workerProblem}>
+        <AgentPicker
+          id={agentId}
+          block={block}
+          agents={agents}
+          describedBy={workerProblem && `${agentId}-problem`}
+          onEdit={onEdit}
+        />
         {block.agentId && (
           <div className="flex items-center gap-2 text-xs">
-            <span className="min-w-0 flex-1 truncate text-muted-foreground">
-              {agent?.execution
-                ? agentRuntimeMeta(agent.execution, agents.capabilities)
-                : agent && <NeedsModel />}
-            </span>
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">{summary}</span>
             <StudioLink
               selection={{ tab: "agents", agentId: block.agentId, fromFlow: flowId }}
               className="shrink-0 font-medium"
@@ -260,7 +290,7 @@ function AgentBlockSettings({
           </div>
         )}
       </Field>
-      <Field id={revisitId} label="Revisit instruction (optional)" tag={null}>
+      <Field id={revisitId} label="Revisit instruction (optional)">
         <Textarea
           id={revisitId}
           rows={3}
@@ -278,24 +308,24 @@ const WAIT_UNITS: readonly WaitUnit[] = ["minutes", "hours", "days"];
 /** A fixed relative duration; an empty amount saves the draft without one. */
 function WaitBlockSettings({
   block,
-  tag,
+  problem,
   onEdit,
 }: {
   block: WaitBlock;
-  tag: string | null;
+  problem: ValidationIssue | undefined;
   onEdit: (block: FlowBlock) => void;
 }) {
   const amountId = useId();
   const unit = block.duration?.unit ?? "minutes";
   return (
-    <Field id={amountId} label="Wait for" tag={tag}>
+    <Field id={amountId} label="Wait for" problem={problem}>
       <div className="grid grid-cols-[1fr_8rem] gap-2">
         <Input
           id={amountId}
           type="number"
           step="any"
           inputMode="decimal"
-          aria-invalid={tag ? true : undefined}
+          {...fieldAria(problem && `${amountId}-problem`)}
           value={block.duration?.amount ?? ""}
           onChange={(e) => {
             // Any number saves; readiness reports an amount outside 1 minute to 7 days.
@@ -305,6 +335,7 @@ function WaitBlockSettings({
         />
         <NativeSelect
           aria-label="Unit"
+          {...fieldAria(problem && `${amountId}-problem`)}
           value={unit}
           onChange={(e) =>
             onEdit({
@@ -330,24 +361,24 @@ function WaitBlockSettings({
 function ContinuationBlockSettings({
   block,
   graph,
-  tag,
+  problem,
   onEdit,
 }: {
   block: ContinuationBlock;
   graph: FlowGraph;
-  tag: string | null;
+  problem: ValidationIssue | undefined;
   onEdit: (block: FlowBlock) => void;
 }) {
   const promptId = useId();
   const reference = continuationReference(block, graph).inspector;
   return (
     <>
-      <Field id={promptId} label="Prompt" tag={tag}>
+      <Field id={promptId} label="Prompt" problem={problem}>
         <Textarea
           id={promptId}
           rows={6}
           required
-          aria-invalid={tag ? true : undefined}
+          {...fieldAria(problem && `${promptId}-problem`)}
           value={block.prompt}
           maxLength={120_000}
           onChange={(e) => onEdit({ ...block, prompt: e.target.value })}

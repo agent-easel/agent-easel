@@ -57,10 +57,10 @@ export async function expectAgentComparison(
   await expect(comparison.getByLabel("Revision 2", { exact: true })).toContainText(
     `Name  Live · ${prefix} · Dirty Agent renamed elsewhere`,
   );
-  // Display names only: the Worker reads as its provider, model and effort.
-  await expect(comparison.getByLabel("Revision 2", { exact: true })).toContainText(
-    "Worker  Codex · GPT 6.1 Sol · High",
-  );
+  const saved = comparison.getByLabel("Revision 2", { exact: true });
+  await expect(saved).toContainText("Provider  Codex");
+  await expect(saved).toContainText("Model  GPT 6.1 Sol");
+  await expect(saved).toContainText("Reasoning effort  High");
   await app.screenshot("agent-editor-compare-latest-revision");
   return { ...state };
 }

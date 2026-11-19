@@ -1,6 +1,6 @@
 import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
 import { CircleX, KeyRound, type LucideIcon } from "lucide-react";
 import { dayAndTime } from "../time-format.ts";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
+import { fieldAria } from "./field-state.ts";
 import { ProblemCard } from "./problem-card.tsx";
 import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
 import { StatusBadge, type SettingKind } from "./status-badge.tsx";
@@ -123,6 +124,7 @@ function RemoteAccessGroup({
   busy: boolean;
   onToggle: (enabled: boolean) => void;
 }) {
+  const problemId = useId();
   const fingerprint = remote?.enabled && !remote.problem ? remote.certificateFingerprint : null;
   const addresses = remote?.enabled && !remote.problem ? remote.addresses : [];
   return (
@@ -132,17 +134,14 @@ function RemoteAccessGroup({
           title={
             <span className="flex flex-wrap items-center gap-2">
               Allow approved devices on my LAN or tailnet
-              {remote?.problem && (
-                <StatusBadge kind="error" aria-hidden>
-                  Couldn’t start
-                </StatusBadge>
-              )}
+              {remote?.problem && <StatusBadge kind="error">Couldn’t start</StatusBadge>}
             </span>
           }
           control={(text) => (
             <MutationGate>
               <Switch
                 aria-labelledby={text.title}
+                {...fieldAria(remote?.problem ? problemId : undefined)}
                 checked={remote?.enabled ?? false}
                 disabled={busy || remote === null}
                 onCheckedChange={onToggle}
@@ -207,7 +206,12 @@ function RemoteAccessGroup({
         )}
       </SettingsGroup>
       {remote?.problem && (
-        <ProblemCard tone="error" title="Remote access couldn’t start" details={remote.problem}>
+        <ProblemCard
+          id={problemId}
+          tone="error"
+          title="Remote access couldn’t start"
+          details={remote.problem}
+        >
           Check the network and certificate settings, then turn remote access off and on.
         </ProblemCard>
       )}

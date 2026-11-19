@@ -55,6 +55,19 @@ const model = attentionStore<ChatModelSettings>(
 /** Records the latest Discord settings the host returned. */
 export const reportDiscordSettings = discord.report;
 export const useDiscordAttention = discord.useAttention;
+const modelListeners = new Set<(settings: ChatModelSettings) => void>();
+
 /** Records the latest Language model settings the host returned. */
-export const reportChatModelSettings = model.report;
+export const reportChatModelSettings = (settings: ChatModelSettings) => {
+  model.report(settings);
+  for (const listener of modelListeners) listener(settings);
+};
+
+/** Calls `listener` with every Language model settings the host returns from now on. */
+export const onChatModelSettings = (listener: (settings: ChatModelSettings) => void) => {
+  modelListeners.add(listener);
+  return () => {
+    modelListeners.delete(listener);
+  };
+};
 export const useChatModelAttention = model.useAttention;

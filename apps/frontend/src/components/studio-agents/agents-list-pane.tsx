@@ -20,7 +20,6 @@ import {
   type useStudioOwners,
 } from "../../studio-definitions.ts";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
-import { offeredExecution } from "../../agent-draft.ts";
 
 export function AgentsListColumn({
   agents,
@@ -189,9 +188,7 @@ function AgentRow({
 }) {
   const reporting = useReportingState();
   // A saved selection T3 no longer offers reads Needs a model, as the editor shows it.
-  const summary = agent.execution
-    ? agentRuntimeMeta(offeredExecution(agent.execution, capabilities), capabilities)
-    : "";
+  const summary = agentRuntimeMeta(agent.execution, capabilities);
   const status =
     agent.execution && summary
       ? agentReportingStatus(agent.execution.providerInstanceId, reporting)

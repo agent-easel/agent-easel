@@ -513,9 +513,30 @@ it("the Flow editor opens at 100 percent with the Flow input at the left margin 
     box.x + box.width + view.x,
   ];
   expect(view.scale).toBe(1);
-  expect(shown(flowInput)[0]).toBeLessThanOrEqual(surface.width / 4 + padding.x);
+  expect(shown(flowInput)[0]).toBeGreaterThanOrEqual(0);
+  expect(shown(flowInput)[1]).toBeLessThanOrEqual(surface.width);
   for (const box of blocks) {
     const [left, right] = shown(box);
     expect(left >= surface.width || right <= surface.width).toBe(true);
   }
+});
+
+it("the Flow editor can shift farther than a quarter width to clear a cut Block while keeping the input visible", () => {
+  // Arrange
+  const flowInput = { x: 16, y: 0, width: 180, height: 100 };
+  const cut = { x: 585, y: 0, width: 240, height: 100 };
+  const graph = { minX: 16, minY: 0, width: 809, height: 100 };
+  const padding = { x: 16, top: 0, bottom: 0 };
+
+  // Act
+  const view = authoringEntryView(
+    flowInput,
+    graph,
+    [flowInput, cut],
+    { width: 800, height: 600 },
+    padding,
+  );
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 215, y: 250 });
 });

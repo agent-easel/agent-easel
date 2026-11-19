@@ -46,7 +46,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { agentRuntimeMeta } from "@/lib/agent-display";
 import { api } from "../api.ts";
+import { comparedFlowLines } from "../flow-revision-content.ts";
+import { RevisionComparison } from "../components/revision-comparison.tsx";
 import { BLOCK_KINDS } from "../block-kind.ts";
 import { fixedShortcuts, matchesShortcut } from "../keyboard-shortcuts.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
@@ -80,7 +83,6 @@ import {
   removeBlock,
   removeWire,
   replaceBlock,
-  canvasGraph,
   undoRemoval,
   type BlockPosition,
   type FlowWire,
@@ -612,7 +614,8 @@ function graphEdits(draft: FlowDraftModel, graph: FlowGraph) {
 
 /** New Agent on the Flow input issue, while no placeable Agent has a model. */
 function NewAgentOffer({ agents, flowId }: { agents: BlockAgents; flowId: string }) {
-  if (agents.placeable.some((agent) => agent.execution)) return null;
+  if (agents.placeable.some((agent) => agentRuntimeMeta(agent.execution, agents.capabilities)))
+    return null;
   return <NewAgentLink flowId={flowId} className="shrink-0 pr-4" />;
 }
 
@@ -1297,71 +1300,6 @@ function newerRevision(conflict: FlowRevisionConflict) {
   return conflict.status === "detected" ? conflict.revision : null;
 }
 
-/** A Flow's content as comparable lines: its name, workspace, Blocks and connections. */
-function contentLines(content: FlowContent, agents: readonly AgentDefinition[]) {
-  const graph = canvasGraph(content.graph, agents);
-  const name = (id: string) => graph.blocks.find((b) => b.id === id)?.name || "Unnamed block";
-  const { workspace } = content;
-  const lines = [
-    `Name  ${content.name}`,
-    `Workspace  ${
-      workspace.mode === "checkout"
-        ? "Project checkout"
-        : `New worktree · ${workspace.base.kind === "default" ? "default branch" : workspace.base.ref}`
-    }`,
-    "",
-    "Blocks",
-    ...graph.blocks.map((b) => `  ${b.name || "Unnamed block"} · ${BLOCK_KINDS[b.kind].name}`),
-    "",
-    "Connections",
-    ...graph.flowInput.targetBlockIds.map((id) => `  Flow input → ${name(id)}`),
-    ...graph.connections.map((c) => {
-      const source = graph.blocks.find((b) => b.id === c.sourceBlockId);
-      const exit = source?.exits.find((e) => e.id === c.exitId);
-      const label =
-        exit?.source === "wait"
-          ? "after the wait"
-          : exit?.source === "continuation"
-            ? "response"
-            : exit?.name || name(c.sourceBlockId);
-      return `  ${label} → ${name(c.targetBlockId)}`;
-    }),
-  ];
-  return lines;
-}
-
-/** One side of the comparison; lines the other side lacks are tinted. */
-function ComparedLines({
-  title,
-  lines,
-  other,
-  tint,
-}: {
-  title: string;
-  lines: readonly string[];
-  other: readonly string[];
-  tint: string;
-}) {
-  return (
-    <div className="grid min-w-0 content-start gap-1.5">
-      <h3 className="text-xs text-muted-foreground">{title}</h3>
-      <pre className="max-h-[50vh] overflow-auto rounded-md border bg-background py-2 font-mono text-xs leading-relaxed">
-        {lines.map((line, index) => (
-          <span
-            key={index}
-            className={cn(
-              "block min-h-[1lh] px-3 whitespace-pre-wrap",
-              line.trim() && !other.includes(line) && tint,
-            )}
-          >
-            {line}
-          </span>
-        ))}
-      </pre>
-    </div>
-  );
-}
-
 /**
  * A newer saved revision than the unsaved draft's baseline: one Warning card whose Compare latest
  * revision opens the draft beside that revision. Keep my edits keeps the draft against it; Load
@@ -1386,8 +1324,6 @@ function ConflictNotice({
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const latest = conflict.status === "compared" ? conflict.latest : null;
   const revision = newerRevision(conflict);
-  const mine = contentLines(local, agents);
-  const theirs = latest ? contentLines(latest, agents) : [];
   return (
     <>
       <ProblemCard
@@ -1440,20 +1376,11 @@ function ConflictNotice({
               </>
             }
           >
-            <div className="grid grid-cols-2 gap-4 max-sm:grid-cols-1">
-              <ComparedLines
-                title="Your draft"
-                lines={mine}
-                other={theirs}
-                tint="bg-destructive/16"
-              />
-              <ComparedLines
-                title={`Revision ${latest.revision}`}
-                lines={theirs}
-                other={mine}
-                tint="bg-success/16"
-              />
-            </div>
+            <RevisionComparison
+              mine={comparedFlowLines(local, agents)}
+              theirs={comparedFlowLines(latest, agents)}
+              revision={latest.revision}
+            />
           </DialogContent>
         </Dialog>
       )}

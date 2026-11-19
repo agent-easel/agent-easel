@@ -16,6 +16,44 @@ const reviewExits = [
   { id: "fail", name: "fail", description: "Corrections are needed.", messageRequired: true },
 ];
 
+it("a delayed Create cannot write after Factory can confirm the request captured no Agent", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const requestId = "11111111-1111-4111-8111-111111111111-1700000000000";
+  const outcome = await factory.getAgentCreateOutcome(requestId);
+  expect(outcome).toStrictEqual({ ok: true, value: { status: "absent" } });
+
+  // Act
+  const result = await factory.createAgent({ ...sampleAgentInput(), requestId });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.code).toBe("conflict");
+  expect(await factory.listAgents()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("a Create outcome follows the request identity even after another client revises its Agent", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const requestId = `11111111-1111-4111-8111-111111111111-${Date.now() + 10_000}`;
+  const created = await factory.createAgent({ ...sampleAgentInput(), requestId });
+  assert(created.ok);
+  const revised = await factory.updateAgent(created.value.id, {
+    ...sampleAgentInput(),
+    name: "Renamed elsewhere",
+    expectedRevision: 1,
+    expectedProjectId: null,
+    projectOverrides: [],
+  });
+  assert(revised.ok);
+
+  // Act
+  const result = await factory.getAgentCreateOutcome(requestId);
+
+  // Assert
+  expect(result).toStrictEqual({ ok: true, value: { status: "created", agent: revised.value } });
+});
+
 it("saved Agent definitions survive restart with execution settings and exits intact", async (context) => {
   // Arrange
   const { harness, factory } = await openFactoryWithApprovedT3(context);

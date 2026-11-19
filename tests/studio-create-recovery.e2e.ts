@@ -1,7 +1,11 @@
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow, removeFlowElsewhere } from "./support/flows.ts";
-import { removeAgentElsewhere } from "./support/agents.ts";
+import {
+  listAgentDefinitions,
+  removeAgentElsewhere,
+  saveAgentElsewhere,
+} from "./support/agents.ts";
 import { flowsBreadcrumb } from "./support/studio.ts";
 
 beforeEach(async ({ browser }) => {
@@ -68,4 +72,39 @@ test("Back to a created Agent removed after its first live appearance shows not 
   await expect(screen.getByRole("button", "Save", { exact: true })).toHaveCount(0);
   await expect(screen.getByRole("button", "More actions", { exact: true })).toHaveCount(0);
   await app.screenshot("created-agent-removed-before-back");
+});
+
+test("a lost Create reply can open the Agent after another client has revised it", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  const original = "Creation recovery · Lost reply";
+  const revised = "Creation recovery · Revised after Create";
+  await app.open("/studio/agents/new");
+  await screen.getByLabel("Name", { exact: true }).fill(original);
+  await screen.getByLabel("Prompt", { exact: true }).fill("Review the change.");
+  await browser.route("**/api/agents", async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    await route.fetch();
+    const agent = (await listAgentDefinitions(app.baseUrl)).find(
+      (entry) => entry.name === original,
+    );
+    if (!agent) throw new Error("The Create did not reach Factory.");
+    await saveAgentElsewhere(app.baseUrl, agent, { name: revised });
+    await route.abort();
+  });
+
+  // Act
+  await screen.getByRole("button", "Create Agent", { exact: true }).tap();
+
+  // Assert
+  const open = screen.getByRole("button", "Open Agent", { exact: true });
+  await expect(open).toBeVisible();
+  await expect(screen.getByRole("button", "Create again", { exact: true })).toHaveCount(0);
+  await app.screenshot("after-agent-create-recovered");
+  await open.tap();
+  await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(revised);
 });

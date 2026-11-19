@@ -131,7 +131,16 @@ interface AgentContentInput {
   readonly exits: readonly BlockExit[];
 }
 
+/** Studio's identified Create attempts have a bounded window in which Factory can write. */
+export const AGENT_CREATE_WINDOW_MS = 15_000;
+
+export type AgentCreateOutcome =
+  | { readonly status: "created"; readonly agent: AgentDefinition }
+  | { readonly status: "removed" | "absent" | "unconfirmed" };
+
 export interface CreateAgentInput extends AgentContentInput {
+  /** An optional UUID followed by the write deadline in Unix milliseconds, used as the Agent id. */
+  readonly requestId?: string;
   /** The owning Project's Factory id, or null (the default when omitted) for a global Agent. */
   readonly projectId?: string | null;
   /** Omitted, the new Agent has none. */
@@ -170,6 +179,10 @@ export const agentOperations = {
     method: "POST",
     path: "/api/agents",
     body: "json",
+  }),
+  getAgentCreateOutcome: operation<never, AgentCreateOutcome>()({
+    method: "GET",
+    path: "/api/agents/:id/create-outcome",
   }),
   getAgent: operation<never, AgentDefinition>()({ method: "GET", path: "/api/agents/:id" }),
   duplicateAgent: operation<DuplicateAgentInput, AgentDefinition>()({

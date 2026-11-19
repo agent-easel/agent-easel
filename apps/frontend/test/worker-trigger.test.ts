@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { workerTrigger } from "../src/lib/agent-display.ts";
+import { agentRuntimeMeta, workerTrigger } from "../src/lib/agent-display.ts";
 import { capabilities } from "./support/agent-draft.ts";
 
 it("a Worker reads as its provider, model and reasoning effort by display name", () => {
@@ -18,7 +18,7 @@ it("a Worker reads as its provider, model and reasoning effort by display name",
   const trigger = workerTrigger(execution, capabilities);
 
   // Assert
-  expect(trigger).toStrictEqual({ state: "ok", label: "Primary · first · High" });
+  expect(trigger).toStrictEqual({ state: "ok", label: "Primary · First model · High" });
 });
 
 it("a Worker without a model reads Needs a model", () => {
@@ -50,5 +50,37 @@ it("a Worker without a chosen effort reads the model's default effort, as its se
   const trigger = workerTrigger(execution, capabilities);
 
   // Assert
-  expect(trigger).toStrictEqual({ state: "ok", label: "Primary · first · Low" });
+  expect(trigger).toStrictEqual({ state: "ok", label: "Primary · First model · Low" });
+});
+
+it("a saved Worker never exposes its provider or model identifier before T3 supplies display names", () => {
+  // Arrange
+  const execution = {
+    environmentId: "local",
+    providerInstanceId: "private-instance-id",
+    modelId: "private-model-id",
+    modelOptions: [],
+  };
+
+  // Act
+  const trigger = workerTrigger(execution, null);
+
+  // Assert
+  expect(trigger).toStrictEqual({ state: "unknown", label: "Worker details unavailable" });
+});
+
+it("a saved Worker whose model is gone has no runtime summary for Studio placement", () => {
+  // Arrange
+  const execution = {
+    environmentId: "local",
+    providerInstanceId: "primary",
+    modelId: "removed-model",
+    modelOptions: [],
+  };
+
+  // Act
+  const summary = agentRuntimeMeta(execution, capabilities);
+
+  // Assert
+  expect(summary).toBe("");
 });

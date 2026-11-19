@@ -326,10 +326,49 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
   );
 }
 
-/**
- * The last save's problem: a refused save, a save whose reply was lost, or a lost Create, which
- * Factory reconciles before it offers **Create again**.
- */
+const createOutcomeCopy = {
+  checking: "Factory may have created this Agent. Checking before it can be created again…",
+  created: "Factory created this Agent.",
+  removed: "Factory created this Agent and it was removed elsewhere. Your changes are kept.",
+  absent: "Factory didn’t create this Agent. Your changes are kept.",
+  unconfirmed: "Factory couldn’t confirm the outcome. Your changes are kept.",
+};
+
+function CreateOutcomeCard({
+  status,
+  draft,
+  onOpenCreated,
+}: {
+  status: keyof typeof createOutcomeCopy;
+  draft: AgentDraftModel;
+  onOpenCreated: (agent: AgentDefinition) => void;
+}) {
+  const actions = {
+    created: (
+      <ProblemCardButton
+        onClick={() => {
+          const made = draft.openCreated();
+          if (made) onOpenCreated(made);
+        }}
+      >
+        Open Agent
+      </ProblemCardButton>
+    ),
+    absent: <ProblemCardButton onClick={draft.createAgain}>Create again</ProblemCardButton>,
+    unconfirmed: (
+      <ProblemCardButton onClick={() => void draft.checkCreate()}>Check again</ProblemCardButton>
+    ),
+    checking: undefined,
+    removed: undefined,
+  };
+  return (
+    <ProblemCard tone="attention" title="Create outcome unknown" action={actions[status]}>
+      {createOutcomeCopy[status]}
+    </ProblemCard>
+  );
+}
+
+/** A refused save or one whose reply was lost. */
 function SaveOutcomeCard({
   draft,
   state,
@@ -339,34 +378,9 @@ function SaveOutcomeCard({
   state: AgentDraftSnapshot;
   onOpenCreated: (agent: AgentDefinition) => void;
 }) {
-  const check = state.createCheck;
-  if (check.status !== "none")
-    return (
-      <ProblemCard
-        tone="attention"
-        title="Create outcome unknown"
-        action={
-          check.status === "created" ? (
-            <ProblemCardButton
-              onClick={() => {
-                const made = draft.openCreated();
-                if (made) onOpenCreated(made);
-              }}
-            >
-              Open Agent
-            </ProblemCardButton>
-          ) : check.status === "absent" ? (
-            <ProblemCardButton onClick={draft.createAgain}>Create again</ProblemCardButton>
-          ) : undefined
-        }
-      >
-        {check.status === "checking"
-          ? "Factory may have created this Agent. Checking before it can be created again…"
-          : check.status === "created"
-            ? "Factory created this Agent."
-            : "Factory didn’t create this Agent. Your changes are kept."}
-      </ProblemCard>
-    );
+  const { status } = state.createCheck;
+  if (status !== "none")
+    return <CreateOutcomeCard status={status} draft={draft} onOpenCreated={onOpenCreated} />;
   if (!state.error) return null;
   if (state.saveOutcome === "unknown")
     return (

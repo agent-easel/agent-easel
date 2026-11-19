@@ -1,4 +1,4 @@
-import { DiscordAPIError, RESTJSONErrorCodes, Routes, type Client } from "discord.js";
+import { ChannelType, DiscordAPIError, RESTJSONErrorCodes, Routes, type Client } from "discord.js";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { DiscordAccessTest, DiscordAccessTestPost, Result } from "@t3-factory/contracts";
@@ -7,84 +7,120 @@ import { now } from "../time.ts";
 
 const REQUEST = "reply here to confirm you can use Factory.";
 const MESSAGE_LIMIT = 2000;
+const FORUM_POST_NAME = "Factory access test";
 
 /** The test's text: every allowed user mentioned, split across messages within Discord's length. */
-function accessTestMessages(users: readonly string[]) {
+function accessTestMessages(users: readonly string[], request: string) {
   const messages: string[] = [];
   let mentions = "";
   for (const mention of users.map((id) => `<@${id}>`)) {
     const next = mentions ? `${mentions} ${mention}` : mention;
-    if (`${next}, ${REQUEST}`.length > MESSAGE_LIMIT) {
-      messages.push(`${mentions}, ${REQUEST}`);
+    if (`${next}, ${request}`.length > MESSAGE_LIMIT) {
+      messages.push(`${mentions}, ${request}`);
       mentions = mention;
     } else mentions = next;
   }
-  messages.push(`${mentions}, ${REQUEST}`);
+  messages.push(`${mentions}, ${request}`);
   return messages;
 }
 
-/** What one refused post means for the channel: Discord does not know it, or refused the bot. */
+/** What one refused request means for the channel: Discord does not know it, or refused the bot. */
 const refusal = (error: unknown): DiscordAccessTestPost =>
   error instanceof DiscordAPIError && error.code === RESTJSONErrorCodes.UnknownChannel
     ? "unknown-channel"
     : "cant-post";
 
 /**
- * Posts the access test in every saved allowed channel, mentioning every saved allowed user, and
- * replaces the previous test: everyone it asks is Waiting again. Only the mentioned users are
- * pinged; the message mentions no role or everyone.
+ * Posts the test in one channel and records each message the moment Discord accepts it, so a
+ * reply to it is an answer even while later channels are still being posted in. A forum gets one
+ * forum post: a thread whose ID its starter message shares, which identifies the test there.
+ */
+const postInChannel = (
+  sql: SqlClient.SqlClient,
+  client: Client<true>,
+  channelId: string,
+  users: readonly string[],
+) =>
+  Effect.gen(function* (): Effect.fn.Return<DiscordAccessTestPost, unknown> {
+    const channel = yield* Effect.result(Effect.tryPromise(() => client.channels.fetch(channelId)));
+    if (channel._tag === "Failure") return refusal(channel.failure.cause);
+    const forum = channel.success?.type === ChannelType.GuildForum;
+    const request = forum
+      ? `mention <@${client.user.id}> in this post to confirm you can use Factory.`
+      : REQUEST;
+    const allowed_mentions = { parse: [], users };
+    let target = channelId;
+    for (const [index, content] of accessTestMessages(users, request).entries()) {
+      const startsPost = forum && index === 0;
+      const posted = yield* Effect.result(
+        Effect.tryPromise(
+          () =>
+            (startsPost
+              ? client.rest.post(Routes.threads(channelId), {
+                  body: { name: FORUM_POST_NAME, message: { content, allowed_mentions } },
+                })
+              : client.rest.post(Routes.channelMessages(target), {
+                  body: { content, allowed_mentions },
+                })) as Promise<{ id: string }>,
+        ),
+      );
+      if (posted._tag === "Failure") return refusal(posted.failure.cause);
+      // A forum post's later messages go into its thread, which alone identifies the test there.
+      if (forum && !startsPost) continue;
+      if (startsPost) target = posted.success.id;
+      yield* sql`INSERT INTO chat_access_test_messages (message_id,channel_id) VALUES (${posted.success.id},${channelId})`;
+    }
+    return "posted";
+  });
+
+/**
+ * Posts the access test in every saved allowed channel that grants a Project, mentioning every
+ * saved allowed user, and replaces the previous test: everyone it asks is Waiting again. Only the
+ * mentioned users are pinged; the message mentions no role or everyone. Earlier tests' messages
+ * stay recognised, so a late reply to them still answers instead of reaching ordinary admission.
  */
 export const sendAccessTest = (sql: SqlClient.SqlClient, client: Client<true>) =>
   Effect.gen(function* (): Effect.fn.Return<Result<undefined>, unknown> {
     const users = (yield* sql<{
       user_id: string;
     }>`SELECT user_id FROM chat_access_users ORDER BY position`).map((row) => row.user_id);
+    // A channel granting no Project Factory knows admits no reply, so it is not asked.
     const channels = (yield* sql<{
       channel_id: string;
-    }>`SELECT channel_id FROM chat_access_channels ORDER BY position`).map((row) => row.channel_id);
+    }>`SELECT c.channel_id FROM chat_access_channels c
+      WHERE EXISTS (SELECT 1 FROM chat_access_channel_projects g JOIN projects p ON p.id=g.project_id
+        WHERE g.channel_id=c.channel_id)
+      ORDER BY c.position`).map((row) => row.channel_id);
     if (users.length === 0 || channels.length === 0)
-      return failure("validation", "Save an allowed user and channel, then send the access test.");
-    const texts = accessTestMessages(users);
-    const posts: { channelId: string; outcome: DiscordAccessTestPost; messageIds: string[] }[] = [];
-    for (const channelId of channels) {
-      const messageIds: string[] = [];
-      let outcome: DiscordAccessTestPost = "posted";
-      for (const content of texts) {
-        const posted = yield* Effect.result(
-          Effect.tryPromise(
-            () =>
-              client.rest.post(Routes.channelMessages(channelId), {
-                body: { content, allowed_mentions: { parse: [], users } },
-              }) as Promise<{ id: string }>,
-          ),
-        );
-        if (posted._tag === "Failure") {
-          outcome = refusal(posted.failure.cause);
-          break;
-        }
-        messageIds.push(posted.success.id);
-      }
-      posts.push({ channelId, outcome, messageIds });
-    }
+      return failure(
+        "validation",
+        "Save an allowed user and a channel that grants a Project, then send the access test.",
+      );
+    yield* sql.withTransaction(
+      Effect.gen(function* () {
+        yield* sql`DELETE FROM chat_access_test_users`;
+        for (const userId of users)
+          yield* sql`INSERT INTO chat_access_test_users (user_id) VALUES (${userId})`;
+      }),
+    );
+    const posts: { channelId: string; outcome: DiscordAccessTestPost }[] = [];
+    for (const channelId of channels)
+      posts.push({ channelId, outcome: yield* postInChannel(sql, client, channelId, users) });
     const sentAt = yield* now;
     yield* sql.withTransaction(
       Effect.gen(function* () {
-        yield* sql`DELETE FROM chat_access_test_messages`;
         yield* sql`DELETE FROM chat_access_test_channels`;
-        yield* sql`DELETE FROM chat_access_test_users`;
-        for (const post of posts) {
+        for (const post of posts)
           yield* sql`INSERT INTO chat_access_test_channels (channel_id,outcome,sent_at) VALUES (${post.channelId},${post.outcome},${sentAt})`;
-          for (const messageId of post.messageIds)
-            yield* sql`INSERT INTO chat_access_test_messages (message_id,channel_id) VALUES (${messageId},${post.channelId})`;
-        }
-        for (const userId of users)
-          yield* sql`INSERT INTO chat_access_test_users (user_id) VALUES (${userId})`;
       }),
     );
     return { ok: true, value: undefined };
   });
 
-/** Whether `messageId` is one of the latest test's messages in `channelId`. */
+/**
+ * Whether `messageId` is one of the test's messages in `channelId`, this test's or an earlier
+ * one's; a forum's test is identified by its post's thread.
+ */
 export const isAccessTestMessage = (
   sql: SqlClient.SqlClient,
   channelId: string,

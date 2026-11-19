@@ -6,6 +6,7 @@ import {
   chatControlWorld,
   discordBot,
   discordGuild,
+  FORUM_CHANNEL,
   OTHER_CHANNEL,
   POSTS,
   THREADS,
@@ -15,24 +16,52 @@ import {
 const SECOND_USER = "200000000000000002";
 const OUTSIDER = "200000000000000099";
 const DELETED_CHANNEL = "400000000000000099";
+const UNGRANTED_CHANNEL = "400000000000000098";
+const BOT_MENTION = `<@${discordBot.applicationId}>`;
+const FORUM_POSTS = new RegExp(`^/api/v10/channels/${FORUM_CHANNEL}/threads$`);
 
-/** Operating Chat control whose Access allows two users in three channels. */
+/**
+ * Operating Chat control whose Access allows two users in four granting channels, a forum among
+ * them, and one channel that grants nothing.
+ */
 async function operating(c: Parameters<typeof chatControlWorld>[0]) {
   const world = await chatControlWorld(c);
   const access = await world.factory.updateDiscordAccess({
     revision: 1,
     users: [PARTICIPANT_ID, SECOND_USER],
-    channels: [ALLOWED_CHANNEL, OTHER_CHANNEL, DELETED_CHANNEL].map((channelId) => ({
-      channelId,
-      projectIds: [world.project.id],
-    })),
+    channels: [
+      ...[ALLOWED_CHANNEL, OTHER_CHANNEL, DELETED_CHANNEL, FORUM_CHANNEL].map((channelId) => ({
+        channelId,
+        projectIds: [world.project.id],
+      })),
+      { channelId: UNGRANTED_CHANNEL, projectIds: [] },
+    ],
   });
   assert(access.ok, JSON.stringify(access));
   await turnedOn(world.factory, world.discord);
   return world;
 }
 
-it("the access test mentions every allowed user in each allowed channel and records the channels it can't post in", async (c) => {
+/** A reply to the access test message `test` in the allowed channel. */
+const testReply = (test: { id: string; content: string }, id: string, authorId: string) =>
+  messageEvent({
+    bot: discordBot,
+    guildId: discordGuild.id,
+    channelId: ALLOWED_CHANNEL,
+    id,
+    authorId,
+    content: "here",
+    mention: false,
+    replyTo: {
+      id: test.id,
+      channelId: ALLOWED_CHANNEL,
+      authorId: discordBot.applicationId,
+      authorIsBot: true,
+      content: test.content,
+    },
+  });
+
+it("the access test mentions every allowed user in each granting channel and records the channels it can't post in", async (c) => {
   // Arrange
   const { factory, discord } = await operating(c);
   discord.setPostingDenied(OTHER_CHANNEL, true);
@@ -48,19 +77,30 @@ it("the access test mentions every allowed user in each allowed channel and reco
       [ALLOWED_CHANNEL]: "posted",
       [OTHER_CHANNEL]: "cant-post",
       [DELETED_CHANNEL]: "unknown-channel",
+      [FORUM_CHANNEL]: "posted",
     },
     users: { [PARTICIPANT_ID]: null, [SECOND_USER]: null },
   });
-  expect(discord.created.map(({ channelId, content }) => ({ channelId, content }))).toEqual([
-    {
-      channelId: ALLOWED_CHANNEL,
-      content: `<@${PARTICIPANT_ID}> <@${SECOND_USER}>, reply here to confirm you can use Factory.`,
-    },
+  const mentions = `<@${PARTICIPANT_ID}> <@${SECOND_USER}>`;
+  expect(discord.created.map(({ content }) => content)).toEqual([
+    `${mentions}, reply here to confirm you can use Factory.`,
+    `${mentions}, mention ${BOT_MENTION} in this post to confirm you can use Factory.`,
   ]);
+  expect(discord.created[0]!.channelId).toBe(ALLOWED_CHANNEL);
   // Only the allowed users are pinged, never a role or everyone.
+  const allowed_mentions = { parse: [], users: [PARTICIPANT_ID, SECOND_USER] };
   expect(discord.requested("POST", POSTS).map((request) => request.body)).toMatchObject(
-    Array(3).fill({ allowed_mentions: { parse: [], users: [PARTICIPANT_ID, SECOND_USER] } }),
+    Array(2).fill({ allowed_mentions }),
   );
+  expect(discord.requested("POST", FORUM_POSTS).map((request) => request.body)).toMatchObject([
+    { name: "Factory access test", message: { allowed_mentions } },
+  ]);
+  // A channel that grants no Project admits no reply, so the test asks nobody there.
+  expect(
+    discord.requests.filter(
+      (request) => request.method === "POST" && request.path.includes(UNGRANTED_CHANNEL),
+    ),
+  ).toEqual([]);
 });
 
 it("an allowed user's reply to the access test marks them Reached with a ✅ and never reaches the language model", async (c) => {
@@ -69,23 +109,7 @@ it("an allowed user's reply to the access test marks them Reached with a ✅ and
   const sent = await factory.sendDiscordAccessTest();
   assert(sent.ok, JSON.stringify(sent));
   const test = discord.created[0]!;
-  const reply = (id: string, authorId: string) =>
-    messageEvent({
-      bot: discordBot,
-      guildId: discordGuild.id,
-      channelId: ALLOWED_CHANNEL,
-      id,
-      authorId,
-      content: "here",
-      mention: false,
-      replyTo: {
-        id: test.id,
-        channelId: ALLOWED_CHANNEL,
-        authorId: discordBot.applicationId,
-        authorIsBot: true,
-        content: test.content,
-      },
-    });
+  const reply = (id: string, authorId: string) => testReply(test, id, authorId);
 
   // Act
   discord.deliver(reply("300000000000000001", OUTSIDER));
@@ -105,6 +129,79 @@ it("an allowed user's reply to the access test marks them Reached with a ✅ and
   // Only the later ordinary invocation opened a thread and asked the model.
   expect(discord.requested("POST", THREADS).map((request) => request.path)).toEqual([
     `/api/v10/channels/${ALLOWED_CHANNEL}/messages/300000000000000003/threads`,
+  ]);
+  await model.requested(1);
+  expect(model.requests).toHaveLength(1);
+});
+
+it("a reply to a test message answers the test while later channels are still posting, and still after Send again", async (c) => {
+  // Arrange
+  const { factory, discord, model } = await operating(c);
+  // The allowed channel's post is accepted at once; the next channel's waits.
+  discord.faultMessages("delivered", "paused");
+  const sending = factory.sendDiscordAccessTest();
+  await discord.request("POST", POSTS, 2);
+  const first = discord.created[0]!;
+
+  // Act
+  discord.deliver(testReply(first, "300000000000000001", PARTICIPANT_ID));
+  await afterEarlierEvents(discord, "300000000000000002");
+  discord.releaseMessages();
+  assert((await sending).ok);
+  const resent = await factory.sendDiscordAccessTest();
+  assert(resent.ok, JSON.stringify(resent));
+  discord.deliver(testReply(first, "300000000000000003", SECOND_USER));
+  await afterEarlierEvents(discord, "300000000000000004");
+
+  // Assert
+  expect(discord.reactions.map((reaction) => reaction.messageId)).toEqual([
+    "300000000000000001",
+    "300000000000000003",
+  ]);
+  // Send again asked the participant again; the late reply to the first test still answered.
+  const settings = await factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.access.test?.users).toEqual({
+    [PARTICIPANT_ID]: null,
+    [SECOND_USER]: expect.any(String),
+  });
+  // Only the two ordinary invocations opened threads and asked the model.
+  expect(discord.requested("POST", THREADS).map((request) => request.path)).toEqual([
+    `/api/v10/channels/${ALLOWED_CHANNEL}/messages/300000000000000002/threads`,
+    `/api/v10/channels/${ALLOWED_CHANNEL}/messages/300000000000000004/threads`,
+  ]);
+  await model.requested(2);
+  expect(model.requests).toHaveLength(2);
+});
+
+it("mentioning the bot in a forum channel's access test post marks the user Reached and never reaches the language model", async (c) => {
+  // Arrange
+  const { factory, discord, model } = await operating(c);
+  assert((await factory.sendDiscordAccessTest()).ok);
+  const post = discord.created.find((message) => message.content.includes("in this post"))!;
+
+  // Act
+  discord.deliver(
+    messageEvent({
+      bot: discordBot,
+      guildId: discordGuild.id,
+      channelId: post.channelId,
+      id: "300000000000000001",
+      authorId: SECOND_USER,
+      content: "here",
+    }),
+  );
+  await afterEarlierEvents(discord, "300000000000000002");
+
+  // Assert
+  const settings = await factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.access.test?.users).toEqual({
+    [PARTICIPANT_ID]: null,
+    [SECOND_USER]: expect.any(String),
+  });
+  expect(discord.reactions).toEqual([
+    { channelId: post.channelId, messageId: "300000000000000001", emoji: "✅" },
   ]);
   await model.requested(1);
   expect(model.requests).toHaveLength(1);

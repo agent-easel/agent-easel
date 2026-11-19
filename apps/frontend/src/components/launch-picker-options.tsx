@@ -19,23 +19,17 @@ export function ProjectOption({
   busy: boolean;
   peers: readonly string[];
 }) {
-  const available = project.availability === "available";
-  const availability = projectAvailabilityLabels[project.availability];
   return (
     <DropdownMenuRadioItem
       value={project.id}
       data-project-id={project.id}
       indicatorPosition="right"
       disabled={busy}
-      aria-label={`${project.title} · ${project.workspaceRoot} · ${availability}`}
+      aria-label={`${project.title} · ${project.workspaceRoot} · ${projectAvailabilityLabels.available}`}
       className="items-start py-1.5 pl-2"
     >
       <span className="mt-px">
-        <ProjectIcon
-          inline
-          icon={project.projectIcon}
-          faviconUrl={project.availability === "available" ? project.faviconUrl : null}
-        />
+        <ProjectIcon inline icon={project.projectIcon} faviconUrl={project.faviconUrl} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0">
@@ -48,11 +42,6 @@ export function ProjectOption({
         >
           <bdi dir="ltr">{project.workspaceRoot}</bdi>
         </span>
-        {!available && (
-          <span className="mt-1 block text-xs text-attention">
-            {availability} · New Runs blocked
-          </span>
-        )}
       </span>
     </DropdownMenuRadioItem>
   );
