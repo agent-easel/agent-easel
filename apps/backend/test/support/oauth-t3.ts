@@ -66,6 +66,7 @@ export async function oauthT3(
     threads?: (args: Record<string, unknown>) => unknown;
     wait?: (args: Record<string, unknown>) => unknown;
     readSchema?: Record<string, unknown>;
+    environmentOutputSchema?: () => Record<string, unknown>;
     runtimeActivity?: (args: Record<string, unknown>) => unknown;
     capabilities?: (args: Record<string, unknown>) => unknown;
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
@@ -214,6 +215,7 @@ export async function oauthT3(
     {
       name: "t3_environment_read",
       inputSchema: { type: invalidSchema ? "string" : "object", properties: {} },
+      outputSchema: options.environmentOutputSchema?.(),
     },
     ...(options.projects ? projectTools : []),
     ...(options.readSchema ? [{ name: "t3_thread_read", inputSchema: options.readSchema }] : []),
@@ -301,21 +303,14 @@ export async function oauthT3(
     ],
   ]);
   /** Any other tool answers as `t3_environment_read`. */
-  const readEnvironment = () => ({
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify(
-          invalidEnvironment
-            ? {}
-            : {
-                environmentId: "fixture-environment",
-                serverVersion: "future-compatible-version",
-              },
-        ),
-      },
-    ],
-  });
+  const readEnvironment = () => {
+    const environment = invalidEnvironment
+      ? {}
+      : { environmentId: "fixture-environment", serverVersion: "future-compatible-version" };
+    return options.environmentOutputSchema
+      ? { content: [], structuredContent: environment }
+      : { content: [{ type: "text", text: JSON.stringify(environment) }] };
+  };
   async function mcpResult(message: McpRequest): Promise<unknown> {
     if (message.method === "initialize")
       return {

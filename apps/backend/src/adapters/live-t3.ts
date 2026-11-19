@@ -22,11 +22,15 @@ import {
   SdkError,
   SdkErrorCode,
   ProtocolError,
+  type JsonSchemaType,
+  type JsonSchemaValidator,
+  type jsonSchemaValidator,
   type OAuthClientProvider,
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
   type OAuthDiscoveryState,
 } from "@modelcontextprotocol/client";
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import type {
   AttachmentUpload,
   AuthorizationResumption,
@@ -233,6 +237,25 @@ const closeConnection = (connection: Connection) =>
     (client) => client.close().catch(() => {}),
     () => {},
   );
+
+function t3OutputValidators(): jsonSchemaValidator {
+  const validators = new Map<string, JsonSchemaValidator<unknown>>();
+  const capacity = 128;
+  return {
+    getValidator<T>(schema: JsonSchemaType): JsonSchemaValidator<T> {
+      // MCP decodes new schema objects for every tools/list refresh. AJV caches by object
+      // identity and $id, so give each distinct schema its own engine and bound their lifetime.
+      const key = JSON.stringify(schema);
+      const cached = validators.get(key);
+      if (cached) return cached as JsonSchemaValidator<T>;
+      const validator = new AjvJsonSchemaValidator().getValidator<T>(schema);
+      const oldest = validators.keys().next();
+      if (validators.size === capacity && !oldest.done) validators.delete(oldest.value);
+      validators.set(key, validator);
+      return validator;
+    },
+  };
+}
 
 const markCallUnavailable = () => {
   const record = currentCall.getStore();
@@ -899,7 +922,10 @@ export class LiveT3Adapter implements T3Adapter {
   private connection(endpoint: string): Connection {
     const existing = this.connections.get(endpoint);
     if (existing) return existing;
-    const client = new Client({ name: "t3-factory", version: "0.0.0" });
+    const client = new Client(
+      { name: "t3-factory", version: "0.0.0" },
+      { jsonSchemaValidator: t3OutputValidators() },
+    );
     const connection: Connection = {
       client: classifiedCall(async () => {
         await client.connect(this.transport(endpoint, this.provider(endpoint, false)), {
