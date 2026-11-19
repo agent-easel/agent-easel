@@ -8,7 +8,7 @@ import type {
 } from "../packages/contracts/src/index.ts";
 import { archiveJourneyRun } from "./support/run-history.ts";
 import { saveFlowCopy, readFlow, saveFlowElsewhere } from "./support/flows.ts";
-import { expectSaveFilled, expectSaveNeutral } from "./support/studio.ts";
+import { expectSaveFilled, expectSaveNeutral, startHeldSave } from "./support/studio.ts";
 import { afterEach, beforeEach, test } from "./support/test.ts";
 
 /** Runs a journey's Trigger started, archived afterwards so later journeys do not list them. */
@@ -299,6 +299,39 @@ test("a saved Trigger's footer Save turns neutral and disabled once saved", asyn
   // Assert
   await expect(screen.getByRole("heading", `${name} edited`, { exact: true })).toBeVisible();
   await expectSaveNeutral(screen);
+});
+
+test("a saved Trigger's footer Save turns neutral when the Trigger is removed elsewhere during its save", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Removed while saving";
+  await openEditedTrigger({ app, screen, fixture }, name);
+  const listed = (await (await fetch(new URL("/api/triggers", app.baseUrl))).json()) as Result<
+    readonly TriggerDefinition[]
+  >;
+  assert(listed.ok);
+  const trigger = listed.value.find((entry) => entry.name === name);
+  assert(trigger);
+  const releaseSave = await startHeldSave(browser, screen, `/api/triggers/${trigger.id}`);
+
+  // Act
+  const removal = await fetch(new URL(`/api/triggers/${trigger.id}`, app.baseUrl), {
+    method: "DELETE",
+    headers: { "X-Factory-Request": "1" },
+  });
+
+  // Assert
+  assert.equal(removal.ok, true);
+  await expect(
+    screen.getByText("This Trigger was removed elsewhere", { exact: true }),
+  ).toBeVisible();
+  await expectSaveNeutral(screen);
+  await app.screenshot("trigger-footer-removed-while-saving");
+  releaseSave();
 });
 
 test("a Trigger and its Flow retain their drafts when an Agent opens over them", async ({

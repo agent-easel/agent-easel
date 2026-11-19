@@ -27,10 +27,12 @@ import {
   openStudioFlowCopy,
   readinessSummary,
   saveFlowWithReadiness,
+  startHeldSave,
 } from "./support/studio.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
+  removeFlowElsewhere,
   renameFlow,
   saveFlowCopy,
   saveSingleAgentFlow,
@@ -672,6 +674,28 @@ test("the Flow header's Save stays neutral and disabled while Studio is offline"
   await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
   await expectSaveNeutral(screen);
   await app.screenshot("flow-header-offline-unsaved");
+});
+
+test("the Flow header's Save turns neutral when the Flow is removed elsewhere during its save", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Header removed while saving ${crypto.randomUUID()}`;
+  const id = await openEditedStudioFlow({ app, screen, browser }, name);
+  const releaseSave = await startHeldSave(browser, screen, `/api/flows/${id}`);
+
+  // Act
+  await removeFlowElsewhere(app.baseUrl, id);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText(
+    "Removed elsewhere · draft kept",
+  );
+  await expectSaveNeutral(screen);
+  await app.screenshot("flow-header-removed-while-saving");
+  releaseSave();
 });
 
 test("removing a Flow with unsaved changes returns to the Flow list without a discard dialog", async ({

@@ -566,7 +566,8 @@ function EditorActions({
       <StudioSaveButton
         unsaved={creating || state.dirty}
         ready={canSave}
-        saving={state.saving}
+        // A removal delivered while a save is pending ends that save's claim on the button.
+        saving={state.saving && !state.removed}
         onClick={onSave}
       />
       {creating && (

@@ -1062,7 +1062,8 @@ function EditorToolbar({
         <StudioSaveButton
           unsaved={state.dirty}
           ready={state.canSave && !invalidEntry && !readOnly && state.content.name.trim() !== ""}
-          saving={state.saving}
+          // A removal delivered while a save is pending ends that save's claim on the button.
+          saving={state.saving && !state.removed}
           onClick={() => void draft.save()}
         />
       }
@@ -1078,10 +1079,10 @@ function FlowSaveStatus({ state }: { state: FlowDraftSnapshot }) {
       aria-label="Flow save status"
       unsaved={state.dirty || state.removed}
     >
-      {state.saving
-        ? "Saving…"
-        : state.removed
-          ? "Removed elsewhere · draft kept"
+      {state.removed
+        ? "Removed elsewhere · draft kept"
+        : state.saving
+          ? "Saving…"
           : state.dirty
             ? "Unsaved changes"
             : "Saved"}

@@ -19,6 +19,22 @@ export async function openEditedStudioAgent(fixtures: StudioFixtures, name: stri
   return agent;
 }
 
+/**
+ * Starts the open Studio editor's Save while its request to `path` is held, and returns the release.
+ * Something else, such as a removal elsewhere, can then reach the editor before the save replies.
+ */
+export async function startHeldSave(browser: Browser, screen: Screen, path: string) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await browser.route(`**${path}`, async (route) => {
+    if (route.request.method === "PUT") await held;
+    return route.continue();
+  });
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(screen.getByRole("button", "Saving…", { exact: true })).toBeVisible();
+  return release;
+}
+
 /** The open Studio editor's Save has unsaved changes to send: enabled and filled. */
 export async function expectSaveFilled(screen: Screen) {
   const save = screen.getByRole("button", "Save", { exact: true });
