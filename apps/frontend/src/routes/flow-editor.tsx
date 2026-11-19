@@ -663,14 +663,16 @@ const savedGraphOf = (saved: FlowDraft, id: string) => (saved.id === id ? saved.
 
 /**
  * Readiness as the editor shows it: the last known answer, and its Block marks; a missing Project
- * folder is the one reason and marks no Block.
+ * folder is the one reason and marks no Block, and a Project gone from T3 shows none.
  */
 function useEditorReadiness(
   checked: FlowDraftSnapshot["readiness"],
   owner: StudioOwner,
   graph: FlowGraph,
 ) {
-  const readiness = useShownReadiness(checked);
+  const shown = useShownReadiness(checked);
+  // A Project gone from T3 has its card instead; its Flow can't be judged ready.
+  const readiness = owner.gone ? null : shown;
   const folderMissing = owner.folderMissing ? owner.unavailable : null;
   return {
     readiness,

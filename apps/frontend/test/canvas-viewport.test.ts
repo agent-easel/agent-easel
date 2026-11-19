@@ -464,7 +464,10 @@ it("the Flow editor opens at 100 percent with the Flow input at the left margin 
   const view = authoringEntryView(flowInput, graph, [flowInput, ...blocks], surface, padding);
 
   // Assert
-  const shown = (box: { x: number; width: number }) => [box.x + view.x, box.x + box.width + view.x];
+  const shown = (box: { x: number; width: number }): [number, number] => [
+    box.x + view.x,
+    box.x + box.width + view.x,
+  ];
   expect(view.scale).toBe(1);
   expect(shown(flowInput)[0]).toBeLessThanOrEqual(surface.width / 4 + padding.x);
   for (const box of blocks) {
