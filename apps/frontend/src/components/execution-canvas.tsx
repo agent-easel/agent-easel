@@ -7,7 +7,12 @@ import { cn } from "@/lib/utils";
 import { pendingRecovery, reportRecoveryState } from "../attention-copy.ts";
 import { selectEntryTargets, selectExecutionTargets } from "../execution-focus.ts";
 import { BLOCK_KINDS, blockReference, type ReferenceTone } from "../block-kind.ts";
-import { capturedExits, exitRecipients, type CanvasBlock } from "../flow-graph.ts";
+import {
+  blockExitRecipients,
+  capturedExits,
+  exitRecipients,
+  type CanvasBlock,
+} from "../flow-graph.ts";
 import { blockStateKind, chosenExitIds } from "../run-block-state.ts";
 import { EXECUTION_DIMENSIONS } from "./canvas-dimensions.ts";
 import {
@@ -135,7 +140,10 @@ function continuationActivity(run: RunDetail, blockId: string, state: RunBlock["
     return `In ${owner ? `${owner}’s` : "its worker’s"} thread · since ${clockTime(prompt.arrivedAt)}`;
   }
   if (state !== "pass-through" || !prompt.forwardedAt) return null;
-  const recipients = exitRecipients(run.definitions.flow.graph)(blockId, "output").filter(Boolean);
+  const recipients = blockExitRecipients(
+    run.definitions.flow.graph,
+    blockId,
+  )("output").filter(Boolean);
   return `Passed on${recipients.length ? ` to ${recipients.join(", ")}` : ""} · ${clockTime(prompt.forwardedAt)}`;
 }
 

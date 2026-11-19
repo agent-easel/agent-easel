@@ -1,6 +1,6 @@
 import { RunTextReaderLink } from "./run-result.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
-import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   attentionPresentation,
   awaitsReviewInT3,
@@ -27,7 +27,7 @@ import {
   settlementCopy,
   settlementPrimary,
 } from "../attention-copy.ts";
-import { capturedExits, exitRecipients } from "../flow-graph.ts";
+import { blockExitRecipients, capturedExits } from "../flow-graph.ts";
 import { useLiveNavigation } from "../live/navigation.ts";
 import { cn } from "../lib/utils.ts";
 import { clockTime, dayAndTime } from "../time-format.ts";
@@ -607,11 +607,10 @@ function PendingHuman({ run, item }: { run: RunDetail; item: RunAttention }) {
 
 /** Figma RD18: each decision names where it leads, or that it ends the branch. */
 function decisionLabel(
-  recipientsOf: ReturnType<typeof exitRecipients>,
-  blockId: string,
+  recipientsOf: ReturnType<typeof blockExitRecipients>,
   exit: { id: string; name: string },
 ) {
-  const recipients = recipientsOf(blockId, exit.id).filter(Boolean);
+  const recipients = recipientsOf(exit.id).filter(Boolean);
   return recipients.length
     ? `${exit.name} → ${recipients.join(", ")}`
     : `${exit.name} — ends this branch`;
@@ -686,7 +685,10 @@ function HumanResponseForm({
   const online = useMutationsAllowed();
   const confirming = useStillBefore(occurrence.chatConfirmationUntil);
   const exits = capturedExits(run.definitions, occurrence.blockId);
-  const recipients = exitRecipients(run.definitions.flow.graph);
+  const recipients = useMemo(
+    () => blockExitRecipients(run.definitions.flow.graph, occurrence.blockId),
+    [run.definitions.flow.graph, occurrence.blockId],
+  );
   const selected = exits.find((exit) => exit.id === exitId);
   const messageRequired = !!selected?.messageRequired;
   const blocker = submitBlocker({
@@ -719,7 +721,7 @@ function HumanResponseForm({
         disabled={locked}
         options={exits.map((exit) => ({
           id: exit.id,
-          label: decisionLabel(recipients, occurrence.blockId, {
+          label: decisionLabel(recipients, {
             id: exit.id,
             name: exitDisplayName(exit),
           }),

@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { pendingRecovery } from "../attention-copy.ts";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { blockStateKind } from "../run-block-state.ts";
-import { capturedExits, exitRecipients } from "../flow-graph.ts";
+import { blockExitRecipients, capturedExits } from "../flow-graph.ts";
 import {
   blockVisits,
   continuationPromptVisit,
@@ -173,14 +173,14 @@ function ExitRow({
 }
 
 function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
-  const recipients = exitRecipients(run.definitions.flow.graph);
+  const recipients = blockExitRecipients(run.definitions.flow.graph, block.id);
   if (block.kind === "continuation")
     return (
       <InspectorSection title="Output">
         <ul className="flex flex-col gap-2.5">
           <ExitRow
             name="response, then pass-through"
-            recipients={recipients(block.id, CONTINUATION_EXIT.id)}
+            recipients={recipients(CONTINUATION_EXIT.id)}
           />
         </ul>
       </InspectorSection>
@@ -192,7 +192,7 @@ function BlockExits({ run, block }: { run: RunDetail; block: FlowBlock }) {
           <ExitRow
             key={exit.id}
             name={exitDisplayName(exit, "Output")}
-            recipients={recipients(block.id, exit.id)}
+            recipients={recipients(exit.id)}
           />
         ))}
       </ul>

@@ -200,6 +200,21 @@ export function exitRecipients(graph: FlowGraph) {
 }
 
 /**
+ * The names of the blocks each of one block's exits reaches, in graph order: a single pass that
+ * keeps only that block's connections, for views that show one block rather than the whole canvas.
+ */
+export function blockExitRecipients(graph: FlowGraph, blockId: string) {
+  const recipients = new Map<string, (string | undefined)[]>();
+  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
+    if (sourceBlockId !== blockId) continue;
+    const list = recipients.get(exitId) ?? [];
+    list.push(graph.blocks.find((block) => block.id === targetBlockId)?.name);
+    recipients.set(exitId, list);
+  }
+  return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
+}
+
+/**
  * Undoes a removal that turned `before` into `after` on the current graph: blocks and wires the
  * removal took come back, edits made since are kept, and a wire returns only while both its ends
  * exist.
