@@ -248,7 +248,7 @@ test("a Trigger and its Flow retain their drafts when an Agent opens over them",
   await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
   await expect(screen.getByRole("button", "Review and enable", { exact: true })).toBeDisabled();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
-  await screen.getByRole("button", "Open Flow", { exact: true }).tap();
+  await screen.getByRole("link", "Open Flow", { exact: true }).tap();
   await expect(screen.getByRole("button", "Back to Trigger", { exact: true })).toBeVisible();
 
   const flowDraftName = "Unsaved Flow repair";

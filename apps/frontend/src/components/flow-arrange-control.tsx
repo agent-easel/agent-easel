@@ -1,5 +1,6 @@
 import { LayoutGrid, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TextLink } from "@/components/ui/text-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Explicit Auto-arrange control with pending and error feedback. */
@@ -50,9 +51,9 @@ export function AutoArrangeStatus({
       className="pointer-events-auto max-w-sm rounded-lg border border-destructive/40 bg-card px-3 py-2 text-2xs text-destructive shadow-floating"
     >
       <p>{error}</p>
-      <button type="button" className="mt-1 underline underline-offset-2" onClick={onDismiss}>
+      <TextLink tone="neutral" className="mt-1" onClick={onDismiss}>
         Dismiss
-      </button>
+      </TextLink>
     </div>
   );
 }
