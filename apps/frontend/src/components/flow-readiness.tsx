@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
 import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
+import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
 import type { RuleFocus } from "./condition-rules.tsx";
@@ -141,13 +142,13 @@ export function IssueLink({
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      className="block rounded-sm text-left text-xs text-foreground underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    <TextLink
+      tone="neutral"
+      className="block text-left text-xs font-normal"
       onClick={() => selectIssue(issue, graph, onSelect)}
     >
       {children}
-    </button>
+    </TextLink>
   );
 }
 

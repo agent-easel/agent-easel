@@ -95,6 +95,47 @@ test("Start launches a top-level Block worker and no Run conversation", async ({
   await app.screenshot("direct-root-worker-after-reload");
 });
 
+test("Show full prompt expands a long Run prompt from the keyboard", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const prompt = `UI long prompt. ${"Tidy the spacing of the Atlas project picker and keep its keyboard order. ".repeat(4)}`;
+  await openComposerWithFlow(app, screen, "Demo · Focused change");
+  await screen.getByLabel("Initial prompt", { exact: false }).fill(prompt);
+  await screen.getByRole("button", "Start", { exact: true }).tap();
+  const input = screen.getByRole("region", "Run input");
+  const text = input.getByText(/^UI long prompt\./);
+  const showFull = input.getByRole("button", "Show full prompt", { exact: true });
+  await expect(showFull).toHaveAttribute("aria-expanded", "false");
+  const preview = await text.boundingBox();
+  await showFull.focus();
+
+  // Act
+  await browser.keyboard.press("Enter");
+
+  // Assert
+  const showLess = input.getByRole("button", "Show less", { exact: true });
+  await expect(showLess).toHaveAttribute("aria-expanded", "true");
+  await expect(showLess).toBeFocused();
+  expect((await text.boundingBox())!.height).toBeGreaterThan(preview!.height);
+  await app.screenshot("run-full-prompt-expanded");
+});
+
+test("the Run's Flow name opens that Flow in Studio", async ({ app, screen, browser }) => {
+  // Arrange
+  const { id } = await findRun(app.baseUrl, "Demo · Parallel review from one prompt");
+  const run = await readHistoryRun(app.baseUrl, id);
+  await app.open(`/runs/${id}`);
+
+  // Act
+  await screen.getByRole("link", `Flow for this Run: ${run.flowName}`, { exact: true }).tap();
+
+  // Assert
+  await expect(browser).toHaveURL(`/studio/flows/${run.flowId}`);
+});
+
 test("a worktree Run shows the worktree its workers share and creates no worker for a Block not yet reached", async ({
   app,
   screen,

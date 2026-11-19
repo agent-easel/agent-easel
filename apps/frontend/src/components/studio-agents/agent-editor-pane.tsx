@@ -47,7 +47,9 @@ import {
 } from "../studio-removal.tsx";
 import { useStudioNavigation } from "../../settings-navigation.ts";
 import type { StudioOwner } from "../../studio-definitions.ts";
-import { ProblemCard, ProblemCardButton, ProblemCardSettingsLink } from "../problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { SettingsLink } from "../app-link.tsx";
+import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
 
 /** A saved Agent's owner, or the owner choice of a new one. */
@@ -261,11 +263,7 @@ function OwnerGoneCard({ ownership, ownerGone, onChangeOwner }: CardProps) {
       tone="attention"
       icon={Unplug}
       title={`${ownership.owner.title} is no longer in T3`}
-      action={
-        onChangeOwner && (
-          <ProblemCardButton onClick={onChangeOwner}>Change owner…</ProblemCardButton>
-        )
-      }
+      action={onChangeOwner && <TextLink onClick={onChangeOwner}>Change owner…</TextLink>}
     >
       This Agent can’t be edited or placed until it has an owner in T3.
     </ProblemCard>
@@ -284,9 +282,9 @@ function OverridesCard({ draft, state, ownership, global }: CardProps) {
         tone="attention"
         title="Project overrides can’t be kept"
         action={
-          <ProblemCardButton onClick={draft.removeOverrides}>
+          <TextLink onClick={draft.removeOverrides}>
             {overrides === 1 ? "Remove override" : "Remove overrides"}
-          </ProblemCardButton>
+          </TextLink>
         }
       >
         This Agent is owned by {ownerName(ownership.owner)} now, and a Project Agent has no Project
@@ -317,9 +315,9 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
       tone="attention"
       title={reportingProblem.label}
       action={
-        <ProblemCardSettingsLink selection={{ tab: "agent-reporting" }}>
-          Open Agent reporting
-        </ProblemCardSettingsLink>
+        <TextLink asChild trailing="chevron">
+          <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
+        </TextLink>
       }
     >
       {reportingProblem.message}
@@ -346,19 +344,18 @@ function CreateOutcomeCard({
 }) {
   const actions = {
     created: (
-      <ProblemCardButton
+      <TextLink
+        trailing="chevron"
         onClick={() => {
           const made = draft.openCreated();
           if (made) onOpenCreated(made);
         }}
       >
         Open Agent
-      </ProblemCardButton>
+      </TextLink>
     ),
-    absent: <ProblemCardButton onClick={draft.createAgain}>Create again</ProblemCardButton>,
-    unconfirmed: (
-      <ProblemCardButton onClick={() => void draft.checkCreate()}>Check again</ProblemCardButton>
-    ),
+    absent: <TextLink onClick={draft.createAgain}>Create again</TextLink>,
+    unconfirmed: <TextLink onClick={() => void draft.checkCreate()}>Check again</TextLink>,
     checking: undefined,
     removed: undefined,
   };

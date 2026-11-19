@@ -73,7 +73,8 @@ import {
   definitionExportNotice,
 } from "../components/definition-export-control.tsx";
 import { useMenuActions } from "../components/menu-actions.ts";
-import { ProblemCard, ProblemCardButton } from "../components/problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { ProblemCard } from "../components/problem-card.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
@@ -1235,7 +1236,7 @@ function OwnerGoneNotice({
       title={`${owner.title} is no longer in T3`}
       action={
         <MutationGate>
-          <ProblemCardButton onClick={onChangeOwner}>Change owner…</ProblemCardButton>
+          <TextLink onClick={onChangeOwner}>Change owner…</TextLink>
         </MutationGate>
       }
     >
@@ -1341,14 +1342,14 @@ function ConflictNotice({
             : `Revision ${revision} was saved elsewhere`
         }
         action={
-          <ProblemCardButton
+          <TextLink
             onClick={() => {
               setComparisonOpen(true);
               onCompare();
             }}
           >
             Compare latest revision
-          </ProblemCardButton>
+          </TextLink>
         }
       >
         Your changes are kept. Compare them with the latest revision before you save.

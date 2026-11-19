@@ -5,6 +5,7 @@ import { formatShortcut, shortcutGroupEntries } from "../keyboard-shortcuts.ts";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
+import { TextLink } from "@/components/ui/text-link";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -58,17 +59,15 @@ export function CanvasShortcutsButton() {
         </dl>
         <span aria-hidden className="h-px bg-border" />
         <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            variant="link"
-            className="h-auto min-w-0 flex-1 justify-start p-0 text-xs font-medium"
+          <TextLink
+            className="mr-auto text-xs"
             onClick={() => {
               cheatSheetRequested.current = true;
               setOpen(false);
             }}
           >
             All keyboard shortcuts
-          </Button>
+          </TextLink>
           <KeyChip>{formatShortcut(bindings.shortcutsCheatSheet)}</KeyChip>
         </div>
       </PopoverContent>

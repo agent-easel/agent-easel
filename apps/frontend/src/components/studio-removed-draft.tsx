@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ProblemCard, ProblemCardButton } from "./problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { ProblemCard } from "./problem-card.tsx";
 import { Textarea } from "./ui/textarea";
 
 /**
@@ -25,7 +26,7 @@ export function StudioRemovedDraft({ kind, json }: { kind: "Agent" | "Flow"; jso
       title={`This ${kind} was removed elsewhere`}
       action={
         <div className="grid gap-2">
-          <ProblemCardButton onClick={() => void copy()}>Copy as JSON</ProblemCardButton>
+          <TextLink onClick={() => void copy()}>Copy as JSON</TextLink>
           {copied === json && <p role="status">Copied to clipboard.</p>}
           {fallback && (
             <div className="grid w-full gap-2">

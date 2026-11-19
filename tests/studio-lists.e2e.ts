@@ -355,7 +355,10 @@ test("Triggers with none yet, and Check now reports nothing ready, one Run, or s
   await fixture.github.issue({ number: 11, title: "Ship the toggle", labels: ["factory:ready"] });
   await screen.getByRole("button", `${name} actions`, { exact: true }).tap();
   await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
-  await expect(screen.getByRole("button", "1 Run", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", "1 Run", { exact: true })).toHaveAttribute(
+    "href",
+    /^\/runs\/[^/]+$/,
+  );
   await expect(screen.getByRole("link", new RegExp(name)).getByRole("button")).toHaveCount(0);
   await shot(app, browser, "triggers-started-one");
 

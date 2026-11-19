@@ -16,7 +16,8 @@ import { revisionExitLines, revisionLine, type RevisionLine } from "../../revisi
 import { RevisionComparison } from "../revision-comparison.tsx";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
-import { ProblemCard, ProblemCardButton } from "../problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { ProblemCard } from "../problem-card.tsx";
 
 const updatedNoticeMs = 4000;
 
@@ -172,14 +173,14 @@ export function AgentRevisionCard({
           conflict.status === "comparing" ? (
             <span role="status">Loading the latest revision…</span>
           ) : (
-            <ProblemCardButton
+            <TextLink
               onClick={() => {
                 setComparisonOpen(true);
                 draft.compare();
               }}
             >
               Compare latest revision
-            </ProblemCardButton>
+            </TextLink>
           )
         }
       >
