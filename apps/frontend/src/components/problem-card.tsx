@@ -1,8 +1,7 @@
-import type { ComponentProps, ReactNode } from "react";
-import { ChevronRight, ExternalLink, Info, TriangleAlert, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { Info, TriangleAlert, type LucideIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { SettingsLink, StudioLink } from "./app-link.tsx";
 import type { SettingKind } from "./status-badge.tsx";
 import { TechnicalDetails, type TechnicalDetail } from "./technical-details.tsx";
 
@@ -76,66 +75,5 @@ export function ProblemCard({
         </AlertDescription>
       )}
     </Alert>
-  );
-}
-
-const actionClass =
-  "inline-flex items-center gap-1 rounded-sm font-medium text-link underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50";
-
-const chevron = <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />;
-
-/** A card's next step that acts in place, such as Check again or Copy as JSON. */
-export function ProblemCardButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean | undefined;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(actionClass, "disabled:opacity-50")}
-    >
-      {children}
-      {chevron}
-    </button>
-  );
-}
-
-/** A card's next step in Settings. */
-export function ProblemCardSettingsLink({
-  children,
-  ...props
-}: ComponentProps<typeof SettingsLink>) {
-  return (
-    <SettingsLink {...props} className={actionClass}>
-      {children}
-      {chevron}
-    </SettingsLink>
-  );
-}
-
-/** A card's next step in Studio. */
-export function ProblemCardStudioLink({ children, ...props }: ComponentProps<typeof StudioLink>) {
-  return (
-    <StudioLink {...props} className={actionClass}>
-      {children}
-      {chevron}
-    </StudioLink>
-  );
-}
-
-/** Leaves Factory. The composer uses this only to open T3, and Factory takes no action there. */
-export function ProblemCardExternalLink({ href, children }: { href: string; children: ReactNode }) {
-  return (
-    <a href={href} target="_blank" rel="noreferrer" className={actionClass}>
-      {children}
-      <ExternalLink aria-hidden className="size-3.5" strokeWidth={1.5} />
-    </a>
   );
 }

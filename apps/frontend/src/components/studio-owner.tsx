@@ -14,7 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
-import { ProblemCard, ProblemCardButton } from "./problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { ProblemCard } from "./problem-card.tsx";
 import { fieldLabelClass, selectFieldClass } from "./page.tsx";
 import type { OwnerChange } from "../revisioned-draft.ts";
 import {
@@ -546,9 +547,7 @@ export function OwnerChangeNotice({
       }
       action={
         change.status === "changed" && (
-          <ProblemCardButton onClick={() => onAcknowledge(change.to)}>
-            Acknowledge new owner
-          </ProblemCardButton>
+          <TextLink onClick={() => onAcknowledge(change.to)}>Acknowledge new owner</TextLink>
         )
       }
     >

@@ -402,7 +402,7 @@ export const makeTriggers = (
       startTextRun: deps.startTextRun,
       startBlockers: deps.startBlockers,
     });
-    const { check, forget } = triggerCheck;
+    const { check } = triggerCheck;
 
     /**
      * A check's reads and admission rules for `settings`, on the saved Trigger `target` when given;
@@ -540,7 +540,6 @@ export const makeTriggers = (
         published(
           deleteTrigger(sql, id).pipe(
             Effect.andThen(schedule.follow(id, undefined)),
-            Effect.andThen(forget(id)),
             Effect.as({ ok: true as const, value: undefined }),
           ),
         ),

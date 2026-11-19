@@ -18,7 +18,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { conditionActivityText } from "../condition-arrivals.ts";
 import {
@@ -241,16 +241,9 @@ function InitialPrompt({ run }: { run: RunDetail }) {
     <InspectorSection title="Initial prompt" label="Run input">
       <RunInitialPrompt run={run} preview={collapsible && !full} />
       {collapsible && (
-        <Button
-          type="button"
-          variant="link"
-          size="xs"
-          className="w-fit text-label"
-          aria-expanded={full}
-          onClick={() => setFull(!full)}
-        >
+        <TextLink className="w-fit text-label" aria-expanded={full} onClick={() => setFull(!full)}>
           {full ? "Show less" : "Show full prompt"}
-        </Button>
+        </TextLink>
       )}
     </InspectorSection>
   );

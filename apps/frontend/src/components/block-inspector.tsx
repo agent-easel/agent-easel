@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { FlowAgentLink } from "../components/app-link.tsx";
@@ -282,9 +283,11 @@ function AgentBlockSettings({
         {block.agentId && (
           <div className="flex items-center gap-2 text-xs">
             <span className="min-w-0 flex-1 truncate text-muted-foreground">{summary}</span>
-            <FlowAgentLink agentId={block.agentId} flowId={flowId} className="shrink-0 font-medium">
-              Open Agent
-            </FlowAgentLink>
+            <TextLink asChild className="shrink-0">
+              <FlowAgentLink agentId={block.agentId} flowId={flowId}>
+                Open Agent
+              </FlowAgentLink>
+            </TextLink>
           </div>
         )}
       </Field>

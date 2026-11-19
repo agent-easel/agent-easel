@@ -29,13 +29,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChevronsUpDown, CircleHelp, CloudOff, Info, Play, Unplug, Workflow } from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
-import {
-  ProblemCard,
-  ProblemCardButton,
-  ProblemCardExternalLink,
-  ProblemCardSettingsLink,
-  ProblemCardStudioLink,
-} from "../components/problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { SettingsLink, StudioLink } from "../components/app-link.tsx";
+import { ProblemCard } from "../components/problem-card.tsx";
 import { selectFieldClass, toolbarPillClass } from "../components/page.tsx";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
@@ -558,12 +554,9 @@ function RefreshProjects({ model }: { model: Composer }) {
   const { projects } = model;
   return (
     <MutationGate>
-      <ProblemCardButton
-        disabled={projects.busy}
-        onClick={() => void projects.act(api.recheckProjects)}
-      >
+      <TextLink disabled={projects.busy} onClick={() => void projects.act(api.recheckProjects)}>
         Refresh projects
-      </ProblemCardButton>
+      </TextLink>
     </MutationGate>
   );
 }
@@ -571,26 +564,30 @@ function RefreshProjects({ model }: { model: Composer }) {
 function CauseLink({ cause }: { cause: StartCause }) {
   if (cause.destination === "reporting")
     return (
-      <ProblemCardSettingsLink selection={{ tab: "agent-reporting" }}>
-        Open Settings → Agent reporting
-      </ProblemCardSettingsLink>
+      <TextLink asChild trailing="chevron">
+        <SettingsLink selection={{ tab: "agent-reporting" }}>
+          Open Settings → Agent reporting
+        </SettingsLink>
+      </TextLink>
     );
   if (cause.destination === "connection")
     return (
-      <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-        Open T3 connection settings
-      </ProblemCardSettingsLink>
+      <TextLink asChild trailing="chevron">
+        <SettingsLink selection={{ tab: "connection" }}>Open T3 connection settings</SettingsLink>
+      </TextLink>
     );
   if (cause.destination === "flows")
     return (
-      <ProblemCardStudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
-        Open Studio → Flows
-      </ProblemCardStudioLink>
+      <TextLink asChild trailing="chevron">
+        <StudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
+          Open Studio → Flows
+        </StudioLink>
+      </TextLink>
     );
   return (
-    <ProblemCardStudioLink selection={{ tab: "agents" }}>
-      Open Studio → Agents
-    </ProblemCardStudioLink>
+    <TextLink asChild trailing="chevron">
+      <StudioLink selection={{ tab: "agents" }}>Open Studio → Agents</StudioLink>
+    </TextLink>
   );
 }
 
@@ -650,9 +647,9 @@ function connectionLaunchNotice(model: Composer) {
         icon={Info}
         title="Connect Factory to T3"
         action={
-          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-            Open T3 connection
-          </ProblemCardSettingsLink>
+          <TextLink asChild trailing="chevron">
+            <SettingsLink selection={{ tab: "connection" }}>Open T3 connection</SettingsLink>
+          </TextLink>
         }
       />
     );
@@ -664,9 +661,11 @@ function connectionLaunchNotice(model: Composer) {
         icon={Unplug}
         title="T3 is disconnected"
         action={
-          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-            Open T3 connection settings
-          </ProblemCardSettingsLink>
+          <TextLink asChild trailing="chevron">
+            <SettingsLink selection={{ tab: "connection" }}>
+              Open T3 connection settings
+            </SettingsLink>
+          </TextLink>
         }
       >
         Your draft is kept and Project and Flow show their last known values. Start is available
@@ -680,9 +679,11 @@ function connectionLaunchNotice(model: Composer) {
         tone="attention"
         title="Authorize Factory in T3"
         action={
-          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-            Open T3 connection settings
-          </ProblemCardSettingsLink>
+          <TextLink asChild trailing="chevron">
+            <SettingsLink selection={{ tab: "connection" }}>
+              Open T3 connection settings
+            </SettingsLink>
+          </TextLink>
         }
       >
         T3 is running but hasn’t granted this Factory access. Approve it in T3 — your draft stays
@@ -696,9 +697,11 @@ function connectionLaunchNotice(model: Composer) {
         tone="attention"
         title="T3 version is incompatible"
         action={
-          <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-            Open T3 connection settings
-          </ProblemCardSettingsLink>
+          <TextLink asChild trailing="chevron">
+            <SettingsLink selection={{ tab: "connection" }}>
+              Open T3 connection settings
+            </SettingsLink>
+          </TextLink>
         }
       >
         Update T3 and check again. Until then Factory can show history but can’t start Runs.
@@ -718,9 +721,9 @@ function outcomeLaunchNotice(model: Composer) {
         title="We couldn’t confirm the start"
         action={
           <MutationGate>
-            <ProblemCardButton disabled={draft.busy} onClick={() => void start()}>
+            <TextLink disabled={draft.busy} onClick={() => void start()}>
               Check now
-            </ProblemCardButton>
+            </TextLink>
           </MutationGate>
         }
       >
@@ -764,7 +767,9 @@ function setupLaunchNotice(model: Composer) {
         action={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
             <RefreshProjects model={model} />
-            <ProblemCardExternalLink href={T3_APP_URL}>Open T3</ProblemCardExternalLink>
+            <TextLink trailing="external" href={T3_APP_URL}>
+              Open T3
+            </TextLink>
           </span>
         }
       >
@@ -792,7 +797,9 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Create your first Agent"
         action={
-          <ProblemCardStudioLink selection={{ tab: "agents" }}>Go to Agents</ProblemCardStudioLink>
+          <TextLink asChild trailing="chevron">
+            <StudioLink selection={{ tab: "agents" }}>Go to Agents</StudioLink>
+          </TextLink>
         }
       />
     );
@@ -804,7 +811,9 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Set up an Agent"
         action={
-          <ProblemCardStudioLink selection={{ tab: "agents" }}>Go to Agents</ProblemCardStudioLink>
+          <TextLink asChild trailing="chevron">
+            <StudioLink selection={{ tab: "agents" }}>Go to Agents</StudioLink>
+          </TextLink>
         }
       />
     );
@@ -816,7 +825,9 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Create your first Flow"
         action={
-          <ProblemCardStudioLink selection={{ tab: "flows" }}>Go to Flows</ProblemCardStudioLink>
+          <TextLink asChild trailing="chevron">
+            <StudioLink selection={{ tab: "flows" }}>Go to Flows</StudioLink>
+          </TextLink>
         }
       >
         Your draft is kept while you are away.
@@ -829,9 +840,9 @@ function setupLaunchNotice(model: Composer) {
         tone="error"
         title={`No ready Flows for ${card.projectTitle}`}
         action={
-          <ProblemCardStudioLink selection={{ tab: "flows" }}>
-            Open Flows in Studio
-          </ProblemCardStudioLink>
+          <TextLink asChild trailing="chevron">
+            <StudioLink selection={{ tab: "flows" }}>Open Flows in Studio</StudioLink>
+          </TextLink>
         }
       />
     );
@@ -843,9 +854,11 @@ function setupLaunchNotice(model: Composer) {
         tone="error"
         title={`“${card.flowName}” isn’t ready to run`}
         action={
-          <ProblemCardStudioLink selection={{ tab: "flows", flowId: card.flowId }}>
-            Open {card.flowName} in Flows
-          </ProblemCardStudioLink>
+          <TextLink asChild trailing="chevron">
+            <StudioLink selection={{ tab: "flows", flowId: card.flowId }}>
+              Open {card.flowName} in Flows
+            </StudioLink>
+          </TextLink>
         }
       >
         {card.issues.length ? `${card.issues.join(" ")} ${flowStay}` : flowStay}

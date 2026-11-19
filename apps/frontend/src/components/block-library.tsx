@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -10,6 +10,7 @@ import type {
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TextLink } from "@/components/ui/text-link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
@@ -34,17 +35,11 @@ const headingClass = "text-label tracking-label text-muted-foreground";
 /** Opens the new Agent draft over this Flow; Create returns here. */
 export function NewAgentLink({ flowId, className }: { flowId: string; className?: string }) {
   return (
-    <FlowAgentLink
-      agentId="new"
-      flowId={flowId}
-      className={cn(
-        "inline-flex w-fit items-center gap-1 text-sm font-medium text-link no-underline hover:underline",
-        className,
-      )}
-    >
-      New Agent
-      <ChevronRight aria-hidden className="size-3.5" strokeWidth={1.5} />
-    </FlowAgentLink>
+    <TextLink asChild trailing="chevron" className={cn("w-fit text-sm", className)}>
+      <FlowAgentLink agentId="new" flowId={flowId}>
+        New Agent
+      </FlowAgentLink>
+    </TextLink>
   );
 }
 

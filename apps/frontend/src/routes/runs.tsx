@@ -10,7 +10,7 @@ import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/
 import { Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
-import { StudioLink } from "../components/app-link.tsx";
+import { SettingsLink, StudioLink } from "../components/app-link.tsx";
 import { StatusBadge } from "../components/status-badge.tsx";
 import { NotLiveMarker } from "../components/run-header-status.tsx";
 import {
@@ -23,7 +23,8 @@ import { GeneratingTitle } from "../components/run-title-generation.tsx";
 import { RunTimeline } from "../components/run-timeline.tsx";
 import { ExecutionCanvas } from "../components/execution-canvas.tsx";
 import { clockTime, dayAndTime } from "../time-format.ts";
-import { ProblemCard, ProblemCardSettingsLink } from "../components/problem-card.tsx";
+import { TextLink } from "@/components/ui/text-link";
+import { ProblemCard } from "../components/problem-card.tsx";
 import { useConnectionState } from "../connection-state.tsx";
 import { RunActionItems, runActions } from "../components/run-actions.tsx";
 import { useLiveNavigation } from "../live/navigation.ts";
@@ -347,12 +348,9 @@ function RunFlowName({ run }: { run: RunDetail }) {
   );
   if (run.currentFlowRevision === null) return <span className="truncate font-medium">{name}</span>;
   return (
-    <StudioLink
-      selection={{ tab: "flows", flowId: run.flowId }}
-      className="truncate font-medium text-subtle-foreground hover:text-foreground"
-    >
-      {name}
-    </StudioLink>
+    <TextLink asChild tone="neutral" className="block truncate">
+      <StudioLink selection={{ tab: "flows", flowId: run.flowId }}>{name}</StudioLink>
+    </TextLink>
   );
 }
 
@@ -457,9 +455,11 @@ function CanvasOverlay({
           title="T3 is disconnected"
           className="w-140"
           action={
-            <ProblemCardSettingsLink selection={{ tab: "connection" }}>
-              Open T3 connection settings
-            </ProblemCardSettingsLink>
+            <TextLink asChild trailing="chevron">
+              <SettingsLink selection={{ tab: "connection" }}>
+                Open T3 connection settings
+              </SettingsLink>
+            </TextLink>
           }
         >
           Showing what Factory last observed. Blocks won’t advance here until Factory reconnects;

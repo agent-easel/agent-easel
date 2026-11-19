@@ -21,6 +21,7 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import type * as SqlClient from "effect/sql/SqlClient";
+import { isSqlError } from "effect/sql/SqlError";
 import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
@@ -63,7 +64,7 @@ interface IngressSession {
   readonly operating: () => boolean;
   /** Creates the public thread for a parent-channel invocation; returns its ID. */
   readonly startThread: (channelId: string, messageId: string) => Promise<string>;
-  /** Hands an admitted message to Chat SDK, which calls `admitted` with its thread. */
+  /** Hands a message to Chat SDK and waits for its admission callback, if invoked, to finish. */
   readonly handOff: (threadId: string, message: Message) => Promise<void>;
   readonly encodeThreadId: (key: ConversationKey) => string;
   /** Publishes one Factory message in the conversation's thread, mentioning nobody. */
@@ -377,7 +378,24 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           thread?.type === ChannelType.PrivateThread,
         ),
       };
-      pending.set(message.id, { invocation, reservation: yield* interpreter.reserve(invocation) });
+      yield* Effect.acquireRelease(
+        Effect.map(interpreter.reserve(invocation), (reservation) => {
+          pending.set(message.id, { invocation, reservation });
+          return reservation;
+        }),
+        (reservation) =>
+          Effect.suspend(() =>
+            // Only an invocation still waiting for Chat SDK to hand it back owns this slot.
+            pending.delete(message.id) && reservation !== "busy"
+              ? Effect.catch(reservation.cancel, (error) =>
+                  Effect.logWarning(
+                    "Chat control could not clear an unclaimed message reservation.",
+                    { reason: isSqlError(error) ? error.reason._tag : "Unknown" },
+                  ),
+                )
+              : Effect.void,
+          ),
+      );
       return invocation;
     });
 
@@ -514,26 +532,24 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
      * access test only answers it.
      */
     message: (message: Message) =>
-      Effect.gen(function* () {
-        if (!session.operating() || !message.inGuild()) return;
-        const place = explicitInvocation(message, botUserId);
-        if (!place) return;
-        const { thread, parentId } = place;
-        const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
-        // The reaction is an external send, which never happens while Chat control is Off.
-        if (answered === "reached" && session.operating())
-          yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
-        if (answered) return;
-        const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
-        if (!invocation) return;
-        yield* Effect.promise(() =>
-          session.handOff(session.encodeThreadId(invocation.conversation), message),
-        );
-        const handled = pending.get(message.id);
-        pending.delete(message.id);
-        // Chat SDK did not hand the message to Factory's handler; its queue place is released.
-        if (handled && handled.reservation !== "busy") yield* handled.reservation.cancel;
-      }),
+      Effect.scoped(
+        Effect.gen(function* () {
+          if (!session.operating() || !message.inGuild()) return;
+          const place = explicitInvocation(message, botUserId);
+          if (!place) return;
+          const { thread, parentId } = place;
+          const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
+          // The reaction is an external send, which never happens while Chat control is Off.
+          if (answered === "reached" && session.operating())
+            yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
+          if (answered) return;
+          const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
+          if (!invocation) return;
+          yield* Effect.promise(() =>
+            session.handOff(session.encodeThreadId(invocation.conversation), message),
+          );
+        }),
+      ),
     /**
      * A Discord interaction; only `/factory reset` and confirmation buttons of this application
      * are handled.

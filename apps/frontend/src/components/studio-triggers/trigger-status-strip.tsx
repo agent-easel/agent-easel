@@ -31,7 +31,7 @@ function LatestCheck({
     <>
       Last check {clockTime(check.checkedAt)} ·{" "}
       {runs?.length ? (
-        <StartedRuns runs={runs} standalone />
+        <StartedRuns runs={runs} />
       ) : (
         `Started ${check.started} ${check.started === 1 ? "Run" : "Runs"}`
       )}

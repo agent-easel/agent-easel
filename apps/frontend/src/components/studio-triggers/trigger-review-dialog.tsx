@@ -6,6 +6,7 @@ import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { TextLink } from "@/components/ui/text-link";
 import { SharedRepositoryCard } from "./trigger-notices.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
@@ -196,14 +197,14 @@ function PreviewIssue({ issue }: { issue: TriggerPreviewIssue }) {
       <span className="w-12 shrink-0 font-mono text-label text-muted-foreground">
         #{issue.number}
       </span>
-      <a
+      <TextLink
         href={issue.url}
-        target="_blank"
-        rel="noreferrer"
-        className="min-w-0 flex-1 truncate text-sm text-foreground hover:underline"
+        tone="neutral"
+        trailing="external"
+        className="min-w-0 flex-1 text-sm font-normal"
       >
-        {issue.title}
-      </a>
+        <span className="min-w-0 truncate">{issue.title}</span>
+      </TextLink>
       <span className={`${captionClass} shrink-0`}>{openedAgo(issue.createdAt)}</span>
       {startsNow ? (
         <StatusBadge kind="info">Starts now</StatusBadge>

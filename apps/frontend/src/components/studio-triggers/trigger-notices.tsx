@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { TriggerDefinition, TriggerRepository } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
+import { TextLink } from "@/components/ui/text-link";
 import { api } from "../../api.ts";
-import { useStudioNavigation } from "../../settings-navigation.ts";
 import {
   matchingTriggerName,
   type TriggerDraftModel,
   type TriggerDraftSnapshot,
 } from "../../trigger-draft.ts";
+import { StudioLink } from "../app-link.tsx";
 import { ProblemCard } from "../problem-card.tsx";
 import { TechnicalDetails } from "../technical-details.tsx";
 import type { TriggerActions } from "./trigger-actions.ts";
@@ -95,7 +96,6 @@ export function TriggerFieldNotices({
   ghProblem: string | undefined;
   retry: () => void;
 }) {
-  const openStudio = useStudioNavigation();
   const { query, content, saved } = state;
   const repository = repositoryProblem && splitGuidance(repositoryProblem);
   const gh = ghProblem && splitGuidance(ghProblem);
@@ -144,18 +144,17 @@ export function TriggerFieldNotices({
           tone="error"
           title="The selected Flow isn’t ready"
           action={
-            <Button
-              variant="link"
-              onClick={() =>
-                void openStudio({
+            <TextLink asChild trailing="chevron">
+              <StudioLink
+                selection={{
                   tab: "flows",
                   flowId: content.flowId,
                   fromTrigger: saved?.id ?? "new",
-                })
-              }
-            >
-              Open Flow
-            </Button>
+                }}
+              >
+                Open Flow
+              </StudioLink>
+            </TextLink>
           }
         >
           {flowProblem}
@@ -184,11 +183,7 @@ export function TriggerFieldNotices({
               : "GitHub readiness needs attention"
           }
           details={gh.details}
-          action={
-            <Button variant="link" onClick={retry}>
-              Check again
-            </Button>
-          }
+          action={<TextLink onClick={retry}>Check again</TextLink>}
         >
           {gh.message}
         </ProblemCard>
@@ -229,11 +224,7 @@ export function EditorNotices({
               ? "A newer revision was saved elsewhere"
               : `Revision ${conflict.revision} was saved elsewhere`
           }
-          action={
-            <Button variant="link" onClick={draft.compare}>
-              Compare latest revision
-            </Button>
-          }
+          action={<TextLink onClick={draft.compare}>Compare latest revision</TextLink>}
         />
       )}
       {conflict.status === "comparing" && (
@@ -358,28 +349,20 @@ function recoveryMessage(
   if (lookedUp === "failed")
     return {
       message: "Factory couldn’t read the Trigger list. Your settings are still here.",
-      action: (
-        <Button variant="link" onClick={retryLookup}>
-          Check again
-        </Button>
-      ),
+      action: <TextLink onClick={retryLookup}>Check again</TextLink>,
     };
   const { found } = lookedUp;
   if (found)
     return {
       message: `A Trigger named “${found.name}” is already saved.`,
       action: (
-        <Button variant="link" onClick={() => onOpen(found)}>
+        <TextLink trailing="chevron" onClick={() => onOpen(found)}>
           Open Trigger
-        </Button>
+        </TextLink>
       ),
     };
   return {
     message: "No Trigger with this name was found. Your settings are still here.",
-    action: (
-      <Button variant="link" onClick={onRetry}>
-        Create again
-      </Button>
-    ),
+    action: <TextLink onClick={onRetry}>Create again</TextLink>,
   };
 }
