@@ -8,6 +8,7 @@ import {
 } from "./support/composer.ts";
 import { removeAgentElsewhere } from "./support/agents.ts";
 import { removeFlowElsewhere } from "./support/flows.ts";
+import { shortcutMod, startRunHint } from "./support/keyboard-shortcuts.ts";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 /** Launch states of the New Run composer after ticket #507. Dark, 1440×900. */
@@ -28,15 +29,17 @@ test("an empty prompt keeps Start disabled, and a ready prompt can start", async
   await expect(screen.getByText(/The first text line becomes the Run title/)).toHaveCount(0);
   await expect(screen.getByText("Enter an initial prompt to start the Run.")).toHaveCount(0);
   await expect(screen.getByRole("button", "Start", { exact: true })).toBeDisabled();
-  await expect(screen.getByRole("button", "Start", { exact: true })).not.toContainText("⌘↵");
+  await expect(screen.getByRole("button", "Start", { exact: true })).not.toContainText(
+    startRunHint,
+  );
   await screen.getByLabel("Initial prompt", { exact: false }).tap();
-  await browser.keyboard.press("Meta+Enter");
+  await browser.keyboard.press(`${shortcutMod}+Enter`);
   await expect(screen.getByText("Enter an initial prompt to start the Run.")).toHaveCount(0);
   await app.screenshot("after-empty");
 
   await fillReadyComposer(screen, "Ship the picker");
   await expect(screen.getByRole("button", "Start", { exact: true })).toBeEnabled();
-  await expect(screen.getByRole("button", "Start", { exact: true })).toContainText("⌘↵");
+  await expect(screen.getByRole("button", "Start", { exact: true })).toContainText(startRunHint);
   await app.screenshot("after-ready");
 });
 
