@@ -91,7 +91,9 @@ export async function openFittedFlowBlock(
     /** Selects the block by its name and waits for its inspector. */
     async selectByName() {
       await block.getByText(name, { exact: true }).first().tap();
-      await expect(screen.getByLabel("Block name")).toHaveValue(name);
+      await expect(
+        screen.getByRole("complementary", "Block settings").getByLabel("Name", { exact: true }),
+      ).toHaveValue(name);
     },
   };
 }

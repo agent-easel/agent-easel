@@ -15,6 +15,7 @@ import {
   expectRetainedDefinition,
   expectBrokenAgentWire,
   expectSavedAgentRevision,
+  readinessSummary,
 } from "./studio.ts";
 import { fixtureHandles } from "./fixture/handle.ts";
 import { openApproved, openRemoteBrowser } from "./remote-access.ts";
@@ -98,10 +99,7 @@ export async function beforeRenamedDependency(fixtures: StudioFixtures, prefix: 
   const library = screen.getByRole("region", "Block library");
   const canvas = screen.getByRole("region", "Flow canvas");
   await expect(library.getByRole("button", `Add ${agent.name}`, { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await screen.getByRole("button", "Human step Review", { exact: true }).tap();
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await canvas.press("ArrowRight");
@@ -147,7 +145,7 @@ export async function expectBrokenDependency(
   const { app, screen, agent, id, canvas, layer, view, zoom, flow } = state;
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, agent.exits[0]!.id);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 1");
   expect(await layer.getAttribute("style")).toContain(view);
   await expect(canvas).toHaveAttribute("data-zoom", zoom!);
@@ -172,8 +170,7 @@ export async function expectRestoredReadiness(
   state: Awaited<ReturnType<typeof beforeRestoredReadiness>>,
 ) {
   const { screen } = state;
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeEnabled();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   return { ...state };
 }
 
@@ -306,7 +303,7 @@ export async function expectDirtyFlow(
   },
 ) {
   const { screen } = state;
-  const flowPanel = screen.getByRole("region", "Reconcile Flow");
+  const flowPanel = screen.getByRole("alert").filter({ hasText: "was saved elsewhere" });
   await expect(flowPanel).toContainText("Revision 4 was saved elsewhere");
   return { ...state, flowPanel };
 }
@@ -330,13 +327,11 @@ export async function expectNewestFlowComparison(
     revision5: Awaited<ReturnType<typeof saveFlowElsewhere>>;
   },
 ) {
-  const { screen, revision5 } = state;
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
-  await expect(comparison.getByRole("heading", "Saved revision 5", { exact: true })).toBeVisible();
-  await expect(comparison).toContainText(revision5.name);
-  await expect(
-    comparison.getByRole("button", "Keep local draft against revision 4", { exact: true }),
-  ).toHaveCount(0);
+  const { screen } = state;
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
+  await expect(comparison.getByRole("heading", "Revision 5", { exact: true })).toBeVisible();
+  await expect(comparison.getByRole("button", "Load revision 5", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("dialog", "Compare with revision 4")).toHaveCount(0);
   return { ...state };
 }
 
@@ -362,8 +357,8 @@ export async function beforeSavedFlow(fixtures: StudioFixtures, prefix: string) 
   const previous = await beforeReboundFlow(fixtures, prefix);
   const { screen } = previous;
   await screen
-    .getByRole("dialog", "Compare latest revision")
-    .getByRole("button", "Keep local draft against revision 5", { exact: true })
+    .getByRole("dialog", "Compare with revision 5")
+    .getByRole("button", "Keep my edits", { exact: true })
     .tap();
   return expectReboundFlow({ ...previous });
 }
@@ -481,7 +476,7 @@ export async function expectRemovedFlow(state: Awaited<ReturnType<typeof beforeR
   await expectRetainedDefinition(
     screen,
     "Flow",
-    ["Save", "Start Run"],
+    ["Save"],
     ["Duplicate…", "Change owner…", "Export JSON", "Remove"],
   );
   return { ...state };
@@ -789,8 +784,7 @@ export async function beforeChangedDirtyDependency(fixtures: StudioFixtures, pre
   );
   await app.open(`/studio/flows/${flow}`);
   await screen.getByLabel("Flow name").fill(`Live · ${prefix} · Canvas Flow edited`);
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   const handoff = { id: "handoff", name: "handoff", description: "", messageRequired: false };
   return {
     app: fixtures.app,
@@ -809,14 +803,13 @@ export async function expectChangedDirtyDependency(
 ) {
   const { app, screen, prefix, wired } = state;
   const canvas = screen.getByRole("region", "Flow canvas");
-  await expect(screen.getByRole("button", /Agents changed — check readiness again/)).toBeVisible();
   await expect(canvas.getByText("handoff", { exact: true })).toBeVisible();
   await expectBrokenAgentWire(screen, wired.id);
   await expect(screen.getByRole("status", "Flow save status")).toContainText(
     "Unsaved changes · Revision 1",
   );
   await expect(screen.getByLabel("Flow name")).toHaveValue(`Live · ${prefix} · Canvas Flow edited`);
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
   await app.screenshot("studio-live-agent-changed-on-canvas");
   return { ...state, canvas };
 }
@@ -832,7 +825,11 @@ export async function expectCheckedBrokenDependency(
   state: Awaited<ReturnType<typeof beforeCheckedBrokenDependency>>,
 ) {
   const { app, screen } = state;
-  await expect(screen.getByText(/Worker: its Agent no longer has exit/)).toBeVisible();
+  await expect(
+    screen
+      .getByRole("list", "Readiness issues")
+      .getByRole("button", /Worker: its Agent no longer has exit/),
+  ).toBeVisible();
   await app.screenshot("studio-live-agent-changed-checked");
   return { ...state };
 }

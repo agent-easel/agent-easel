@@ -215,10 +215,12 @@ const CONNECTION_LIMIT = 5000;
 const saveBytes = (body: object) =>
   new TextEncoder().encode(JSON.stringify(saveRequestBound(body))).byteLength;
 
-/** A repairable graph issue names its cause and prevents opening the Run composer. */
+/** The Flow is not ready, and its expanded readiness issues name the repairable cause. */
 export async function expectFlowBlocked(screen: Screen, message: RegExp) {
-  await expect(screen.getByRole("button", message)).toBeVisible();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await screen.getByRole("button", /^Not ready/).tap();
+  await expect(
+    screen.getByRole("list", "Readiness issues").getByRole("button", message),
+  ).toBeVisible();
 }
 
 /** Opens Studio on a wide canvas and creates the named Flow through New Flow. */

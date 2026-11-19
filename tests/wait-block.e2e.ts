@@ -3,7 +3,7 @@ import type { FlowDraft, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
-import { saveFlowWithReadiness } from "./support/studio.ts";
+import { readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 
@@ -22,33 +22,35 @@ test("a Wait added from the library saves with a missing duration as a readiness
   });
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Add Wait").tap();
-  await screen.getByLabel("Block name").fill("Cool down");
-  await screen.getByLabel("X position").fill("680");
-  await screen.getByLabel("Y position").fill("60");
+  await screen.getByLabel("Name", { exact: true }).fill("Cool down");
   const wait = screen.getByRole("article", "Block Cool down");
-  await screen.getByRole("button", "Agent Coder").tap();
+  await screen.getByRole("button", "Close block settings").tap();
+  await screen.getByRole("button", "Fit Flow").tap();
   await screen.getByRole("button", "Connect exit finish of Coder").dragTo(wait);
-  await screen
-    .getByRole("button", "Connect Flow input")
-    .dragTo(screen.getByRole("article", "Block Coder"));
-  await saveFlowWithReadiness(screen, /^Not ready · 1 issue/);
-  await expect(screen.getByText("Enter how long Cool down waits.", { exact: false })).toBeVisible();
+  await saveFlowWithReadiness(screen, /^Not ready\s*1 issue$/);
+  await expect(wait).toContainText("No duration");
+  await screen.getByRole("button", /^Not ready/).tap();
+  await expect(screen.getByRole("list", "Readiness issues")).toContainText(
+    "Enter how long Cool down waits.",
+  );
   await app.screenshot("wait-readiness-missing-duration");
 
   // Act
   await screen.getByRole("button", "Wait Cool down").tap();
   await screen.getByLabel("Wait for").fill("90");
   await screen.getByLabel("Unit").selectOption("minutes");
-  await screen.getByRole("button", "Save").tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
-  await expect(screen.getByRole("button", /^Ready/)).toBeVisible();
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await browser.reload();
   await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 minutes");
   await screen.getByRole("button", "Wait Cool down").tap();
   await expect(screen.getByLabel("Wait for")).toHaveValue("90");
-  await expect(screen.getByRole("region", "Output")).toContainText("finish here");
+  await expect(
+    screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
+  ).toBeVisible();
   await app.screenshot("wait-configured-after-reload");
   const saved = (await (
     await fetch(new URL(`/api/flows/${flowId}`, app.baseUrl))

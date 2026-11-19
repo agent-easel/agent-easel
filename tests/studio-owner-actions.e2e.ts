@@ -7,7 +7,7 @@ import {
   readAgentDefinition,
 } from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
-import { chooseAgentAction, expectSavedAgentRevision } from "./support/studio.ts";
+import { chooseAgentAction, chooseFlowAction, expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
@@ -126,14 +126,12 @@ test("Flow Duplicate into Global keeps or copies global Agents, copies the Proje
   await screen.getByRole("button", "More Flow actions").tap();
   await screen.getByRole("menuitem", "Duplicate…").tap();
   const dialog = screen.getByRole("dialog", `Duplicate “${flow.name}”`);
-  await dialog.getByRole("button", "Target owner").tap();
-  await screen.getByRole("menuitemradio", /^Global/).tap();
-  await expect(
-    dialog.getByRole("radiogroup", shared.name).getByRole("radio", "Keep shared"),
-  ).toBeChecked();
-  await expect(dialog).toContainText("Copied into target");
-  await dialog.getByRole("radiogroup", shared.name).getByRole("radio", "Copy").tap();
-  await expect(dialog).toContainText("Creates 1 Flow and 2 Agents as global definitions.");
+  await dialog.getByRole("radio", "Global", { exact: true }).tap();
+  const sharedChoice = dialog.getByRole("radiogroup", shared.name);
+  await expect(sharedChoice.getByRole("radio", "Keep shared")).toBeChecked();
+  await expect(dialog).toContainText("Copied");
+  await sharedChoice.getByRole("radio", "Copy").tap();
+  await expect(sharedChoice.getByRole("radio", "Copy")).toBeChecked();
   await browser.evaluate(settled);
   await app.screenshot("flow-duplicate-plan");
 
@@ -233,15 +231,15 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
   const source = await ownedFlow(app.baseUrl, "Docs refresh");
   await app.open(`/studio/flows/${source.id}`);
-  await expect(screen.getByText("Docs site is unavailable — this Flow can’t start")).toBeVisible();
+  const gone = screen.getByText("Docs site is no longer in T3", { exact: true });
+  await expect(gone).toBeVisible();
   await app.screenshot("rescue-banner");
-  await screen.getByRole("button", "Duplicate to…", { exact: true }).tap();
+  await chooseFlowAction(screen, "Duplicate…");
   const dialog = screen.getByRole("dialog", "Duplicate “Docs refresh”");
-  await expect(dialog.getByText(/Choose Global or an available Project\./)).toBeVisible();
   await expect(dialog.getByRole("button", "Duplicate", { exact: true })).toBeDisabled();
-  await dialog.getByRole("button", "Target owner").tap();
+  await dialog.getByRole("button", "Owning Project", { exact: true }).tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
-  await expect(dialog).toContainText("Docs site Agent · can’t be placed in Northwind");
+  await expect(dialog).toContainText("Copied");
   await browser.evaluate(settled);
   await app.screenshot("rescue-plan");
 
@@ -256,7 +254,7 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   );
   assert.equal(copy.projectId, northwind);
   assert.equal((await readFlow(app.baseUrl, source.id)).projectId, source.projectId);
-  await expect(screen.getByText("Docs site is unavailable — this Flow can’t start")).toHaveCount(0);
+  await expect(gone).toHaveCount(0);
   await app.screenshot("rescue-opened");
 });
 
