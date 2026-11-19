@@ -5,6 +5,7 @@ import {
   selectExecutionTargets,
 } from "../src/execution-focus.ts";
 import { authoringEntryView, entryView, fitGraphView } from "../src/canvas-fit.ts";
+import { cutEntryGraph, distantAuthoringGraph } from "./support/entry-graphs.ts";
 import { expect, it } from "vite-plus/test";
 import {
   canvasWheelZoomFactor,
@@ -519,6 +520,96 @@ it("the Flow editor opens at 100 percent with the Flow input at the left margin 
     const [left, right] = shown(box);
     expect(left >= surface.width || right <= surface.width).toBe(true);
   }
+});
+
+it("a diagonal clearance keeps the minimal shift with every Block wholly in or out", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 200, height: 100 };
+  const boxes = [
+    { x: 0, y: 0, width: 200, height: 100 },
+    { x: 390, y: 20, width: 220, height: 80 },
+    { x: 40, y: 210, width: 180, height: 120 },
+  ];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 390, y: 250 });
+});
+
+it("a subpixel shift reveals a Block that was just outside the centred view", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 200, height: 100 };
+  const boxes = [
+    { x: 0, y: 0, width: 200, height: 100 },
+    { x: -400.0012, y: -240, width: 0.001, height: 20 },
+  ];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 400.0002, y: 250 });
+});
+
+it("an oversized target keeps the centred view when no shift can contain it", () => {
+  // Arrange
+  const focus = { minX: 0, minY: 0, width: 2000, height: 100 };
+  const boxes = [{ x: 0, y: 0, width: 2000, height: 100 }];
+
+  // Act
+  const view = entryView(focus, boxes, surface, noCover);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: -500, y: 250 });
+});
+
+it("the Flow editor shifts on both axes to clear a cut Block and keep the input visible", () => {
+  // Arrange
+  const flowInput = { x: 16, y: 0, width: 180, height: 100 };
+  const cut = { x: 200, y: 180, width: 240, height: 140 };
+  const boxes = [flowInput, cut];
+  const graph = { minX: 16, minY: 0, width: 424, height: 320 };
+  const padding = { x: 16, top: 24, bottom: 16 };
+
+  // Act
+  const view = authoringEntryView(flowInput, graph, boxes, { width: 800, height: 600 }, padding);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 0, y: 144 });
+});
+
+it("a 500-block entry view keeps the minimal shift and resolves quickly", () => {
+  // Arrange
+  const graph = cutEntryGraph(500);
+  const started = performance.now();
+
+  // Act
+  const view = entryView(graph.focus, graph.boxes, graph.surface, graph.padding);
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 330, y: 250 });
+  expect(performance.now() - started).toBeLessThan(100);
+});
+
+it("a 500-block Flow editor keeps the open placement and resolves quickly", () => {
+  // Arrange
+  const graph = distantAuthoringGraph(500);
+  const started = performance.now();
+
+  // Act
+  const view = authoringEntryView(
+    graph.flowInput,
+    graph.graph,
+    graph.boxes,
+    graph.surface,
+    graph.padding,
+  );
+
+  // Assert
+  expect(view).toStrictEqual({ scale: 1, x: 8, y: -50 });
+  expect(performance.now() - started).toBeLessThan(100);
 });
 
 it("the Flow editor can shift farther than a quarter width to clear a cut Block while keeping the input visible", () => {
