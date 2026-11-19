@@ -42,17 +42,17 @@ const committedRecipients = (
   channelId: string,
   users: readonly string[],
 ) =>
-  Effect.gen(function* () {
-    const granting = yield* sql`SELECT 1 FROM chat_access_channel_projects g
-      JOIN projects p ON p.id=g.project_id WHERE g.channel_id=${channelId}`;
-    if (granting.length === 0) return [];
-    const allowed = new Set(
-      (yield* sql<{ user_id: string }>`SELECT user_id FROM chat_access_users`).map(
-        (row) => row.user_id,
-      ),
-    );
-    return users.filter((userId) => allowed.has(userId));
-  });
+  // One statement reads the grant and the users from the same committed snapshot, so a save
+  // between two reads cannot pair a removed channel with the users it kept.
+  Effect.map(
+    sql<{ user_id: string }>`SELECT u.user_id FROM chat_access_users u
+      WHERE EXISTS (SELECT 1 FROM chat_access_channel_projects g
+        JOIN projects p ON p.id=g.project_id WHERE g.channel_id=${channelId})`,
+    (rows) => {
+      const allowed = new Set(rows.map((row) => row.user_id));
+      return users.filter((userId) => allowed.has(userId));
+    },
+  );
 
 /** How the test asks in `channelId`, which Discord looks up: a forum takes no messages outside its posts. */
 const channelRequest = (client: Client<true>, channelId: string) =>
