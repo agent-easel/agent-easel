@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
-import { expect } from "e2e";
+import { expect, type App, type Screen } from "e2e";
 import type {
   Result,
   RunTitleSetting,
@@ -28,20 +28,24 @@ async function runTitleSetting(baseUrl: string | undefined, input?: UpdateRunTit
   return result.value;
 }
 
+/** Run titles Settings opened with generation saved off. */
+async function openRunTitlesOff(app: App, screen: Screen) {
+  await runTitleSetting(app.baseUrl, { enabled: false, model: null });
+  await app.open("/settings/run-titles");
+  const generation = screen.getByRole("region", "Generation");
+  return { generation, toggle: generation.getByRole("switch", "Generate Run titles") };
+}
+
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 900 });
 });
 
-test("Run title generation enables locally and saves when the host chooses a provider", async ({
+test("turning on Run title generation without a provider stays on this page, unsaved", async ({
   app,
   screen,
-  browser,
 }) => {
   // Arrange
-  await runTitleSetting(app.baseUrl, { enabled: false, model: null });
-  await app.open("/settings/run-titles");
-  const generation = screen.getByRole("region", "Generation");
-  const toggle = generation.getByRole("switch", "Generate Run titles");
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
   await expect(generation.getByRole("combobox", /^Provider: /)).toHaveCount(0);
 
   // Act
@@ -51,15 +55,39 @@ test("Run title generation enables locally and saves when the host chooses a pro
   await expect(toggle).toBeChecked();
   await expect(screen.getByText("Not saved yet")).toBeVisible();
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
+});
+
+test("choosing a provider after turning Run title generation on saves it", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
+  await toggle.tap();
+  await expect(screen.getByText("Not saved yet")).toBeVisible();
   await generation.getByRole("combobox", /^Provider: /).tap();
+
+  // Act
   await screen.getByRole("option", "Codex", { exact: true }).tap();
+
+  // Assert
   await expect(screen.getByText("Not saved yet")).toHaveCount(0);
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({
     enabled: true,
     model: { providerInstanceId: "codex-main", modelId: "gpt-6.1-sol" },
   });
-  await browser.reload();
-  await expect(toggle).toBeChecked();
+});
+
+test("saved Run title generation opens on with its model", async ({ app, screen }) => {
+  // Arrange
+  await runTitleSetting(app.baseUrl, { enabled: true, model: titleModel });
+
+  // Act
+  await app.open("/settings/run-titles");
+
+  // Assert
+  const generation = screen.getByRole("region", "Generation");
+  await expect(generation.getByRole("switch", "Generate Run titles")).toBeChecked();
   await expect(generation.getByRole("combobox", /^Model: GPT /)).toBeVisible();
   await app.screenshot("run-titles-host-on");
 });

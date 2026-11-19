@@ -142,25 +142,49 @@ test("Flows, Agents and Triggers share one header, toolbar and group heading", a
   await shot(app, browser, "triggers-grouped");
 });
 
-test("the Flows owner filter, a search with no match, and Light", async ({
+test("the Flows owner filter lists All, Global and each Project", async ({
   app,
   screen,
   browser,
 }) => {
+  // Arrange
   await app.open("/studio/flows");
   await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
+
+  // Act
   await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
-  await expect(screen.getByRole("option", "All", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
+
+  // Assert
+  const owners = screen.getByRole("listbox", "Owner filter", { exact: true });
+  await expect(owners.getByRole("option", "All", { exact: true })).toBeVisible();
+  await expect(owners.getByRole("option", "Global", { exact: true })).toBeVisible();
+  await expect(owners.getByRole("option", /^Northwind/)).toBeVisible();
   await shot(app, browser, "flows-owner-filter");
-  await screen.getByRole("option", "All", { exact: true }).tap();
+});
+
+test("a Flows search with no match says so", async ({ app, screen, browser }) => {
+  // Arrange
+  await app.open("/studio/flows");
+  await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
+
+  // Act
   await screen.getByLabel("Search Flows", { exact: true }).fill("zzzz-no-such-flow");
+
+  // Assert
   await expect(screen.getByText("No matching Flows", { exact: true })).toBeVisible();
   await shot(app, browser, "flows-search-no-match");
+});
 
+test("the Flows list in Light", async ({ app, screen, browser }) => {
+  // Arrange
   await app.open("/settings/appearance");
   await screen.getByRole("radio", "Light", { exact: true }).tap();
+  await expect(screen.getByRole("radio", "Light", { exact: true })).toBeChecked();
+
+  // Act
   await app.open("/studio/flows");
+
+  // Assert
   await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
   await shot(app, browser, "flows-light");
 });
