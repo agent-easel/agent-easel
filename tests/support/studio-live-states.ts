@@ -303,7 +303,7 @@ export async function expectDirtyFlow(
   },
 ) {
   const { screen } = state;
-  const flowPanel = screen.getByRole("alert").filter({ hasText: "was saved elsewhere" });
+  const flowPanel = screen.getByRole("status").filter({ hasText: "was saved elsewhere" });
   await expect(flowPanel).toContainText("Revision 4 was saved elsewhere");
   return { ...state, flowPanel };
 }

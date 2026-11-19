@@ -431,9 +431,9 @@ export function DuplicateFlowDialog({
       }
     >
       {dirty && (
-        <SettingsProblemCard tone="info" title={`Copies saved revision ${revision}`}>
+        <ProblemCard tone="info" title={`Copies saved revision ${revision}`}>
           Your unsaved changes aren’t included.
-        </SettingsProblemCard>
+        </ProblemCard>
       )}
       <div className="grid gap-1.5">
         <label htmlFor="duplicate-flow-name" className={fieldLabelClass}>
