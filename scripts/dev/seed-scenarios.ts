@@ -155,6 +155,22 @@ See the [Atlas copy guide](https://example.com/atlas/copy-guide) for tone.
 
 <b>Raw HTML stays text</b> <img src="missing.png" onerror="window.resultHtmlRan = true">`;
 
+/** A long Markdown Working report from an Agent that asks in T3 before it changes anything. */
+const emptyStateQuestion = `I drafted three options for the empty state and need your pick before changing anything.
+
+### Options
+
+1. **Neutral** — “No results. Try fewer filters.”
+2. **Helpful** — “No results for “atlas”. Clear filters to see 12 matches.”
+3. **Minimal** — the illustration and a \`Reset filters\` button only.
+
+### Open questions
+
+- Should the button say **Reset filters** or **Clear all**?
+- Keep the filter chips visible when nothing matches?
+
+Reply in T3 with the option number and any wording changes.`;
+
 /** Stable keys, titles and creation order are shared with journeys and the scenario catalog.
  * Reading this list needs no Factory; callers supply the saved Flow ids when instantiating it. */
 export const seedScenarioList: readonly SeedScenario[] = [
@@ -221,7 +237,7 @@ export const seedScenarioList: readonly SeedScenario[] = [
     state: "working reported and idle",
     prompt:
       "Talk through the empty-state wording for Atlas search with me before changing anything.",
-    message: "Discussing the empty-state wording in T3: tone, filters and the button label.",
+    message: emptyStateQuestion,
     replies: 4,
   },
   {

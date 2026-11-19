@@ -6,12 +6,7 @@ import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
 import { clockTime } from "../time-format.ts";
 import type { TechnicalDetail } from "./technical-details.tsx";
-import {
-  AgentTextPreview,
-  AgentTextReader,
-  TextReader,
-  type ReaderHeading,
-} from "./agent-text.tsx";
+import { AgentTextPreview, AgentTextReader, type ReaderHeading } from "./agent-text.tsx";
 
 type RunReport = RunDetail["reports"][number];
 
@@ -191,45 +186,5 @@ export function ResultCard({
       />
       {children}
     </article>
-  );
-}
-
-export function RunTextReaderLink({
-  label,
-  title,
-  metadata,
-  text,
-  link,
-}: {
-  label: string;
-  title: string;
-  metadata: string;
-  text: string;
-  link: string | null;
-}) {
-  const [reading, setReading] = useState(false);
-  return (
-    <>
-      <Button
-        type="button"
-        variant="link"
-        size="xs"
-        className="h-auto w-fit p-0 text-label"
-        onClick={() => setReading(true)}
-      >
-        {label}
-      </Button>
-      {reading && (
-        <TextReader
-          title={title}
-          provenance={metadata}
-          t3Link={link}
-          text={text}
-          onClose={() => setReading(false)}
-        >
-          <p className="break-words whitespace-pre-wrap text-foreground">{text}</p>
-        </TextReader>
-      )}
-    </>
   );
 }

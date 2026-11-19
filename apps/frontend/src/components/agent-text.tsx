@@ -114,7 +114,7 @@ const components = {
  * One rendering of Agent-written text: CommonMark with GitHub tables and task lists, keeping single
  * line breaks. Raw HTML stays literal text and links open outside Factory.
  */
-function AgentMarkdown({ text, density }: { text: string; density: Density }) {
+export function AgentMarkdown({ text, density }: { text: string; density: Density }) {
   return (
     <div
       className={cn("flex min-w-0 flex-col break-words", density === "reader" ? "gap-3" : "gap-2")}
@@ -137,7 +137,7 @@ export type ReaderHeading = {
 };
 
 /** A reader uses the same actions for a result, Working report, or Human context. */
-export function TextReader({
+function TextReader({
   title,
   provenance,
   t3Link,

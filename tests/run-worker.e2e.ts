@@ -277,11 +277,16 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
 
   // Assert
   const block = screen.getByRole("article", "Block Implement change");
-  await expect(block).toContainText("Discussing the empty-state wording");
+  await expect(block).toContainText("I drafted three options for the empty state");
   await expect(block).toContainText("Needs input");
   const review = screen
     .getByRole("region", "Needs input")
     .getByRole("article", "Review Implement change in T3");
+  const report = review.getByRole("region", "Working report", { exact: true });
+  await expect(report.getByRole("heading", "Options", { exact: true })).toBeVisible();
+  await expect(report).toContainText("Neutral — “No results. Try fewer filters.”");
+  await expect(report).not.toContainText("**Neutral**");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
   await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   const after = await readHistoryRun(app.baseUrl, run.id);
@@ -292,6 +297,65 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
   await screen.getByRole("heading", "Work periods", { exact: true }).scrollIntoView();
   await expect(screen.getByText(/Report: accepted working/)).toBeVisible();
   await app.screenshot("worker-conversation-work-period");
+});
+
+async function openWorkingReportReader(app: App, screen: Screen) {
+  const found = await findRun(
+    app.baseUrl,
+    "UI worker · Discussing · Agent asked about empty-state wording",
+  );
+  await app.open(`/runs/${found.id}`);
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeVisible();
+  return {
+    review,
+    reader: screen.getByRole("dialog", "Implement change · Working report", { exact: true }),
+  };
+}
+
+test("Read full report opens the Agent's whole Working report with its visit and Open in T3", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { review, reader } = await openWorkingReportReader(app, screen);
+
+  // Act
+  await review.getByRole("button", "Read full report", { exact: true }).tap();
+
+  // Assert
+  await expect(reader).toContainText(/Visit 1 · waiting for your reply · since \d\d:\d\d/);
+  await expect(reader.getByRole("heading", "Open questions", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("listitem")).toHaveCount(5);
+  await expect(
+    reader.getByText("Reply in T3 with the option number and any wording changes.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(reader.getByRole("button", "Copy Markdown", { exact: true })).toBeVisible();
+  await expect(reader.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await app.screenshot("worker-conversation-working-report-reader");
+});
+
+test("Esc closes the Working report reader and returns focus to Read full report", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { review, reader } = await openWorkingReportReader(app, screen);
+  await review.getByRole("button", "Read full report", { exact: true }).tap();
+  await expect(reader).toBeVisible();
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(reader).toHaveCount(0);
+  await expect(review.getByRole("button", "Read full report", { exact: true })).toBeFocused();
+  await expect(review.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
 });
 
 test("a worker idle in working shows its message on the canvas and in its Run preview", async ({
@@ -534,24 +598,6 @@ test("a long Human context previews as Markdown on its card and opens in full in
   await expect(reader.getByRole("combobox")).toHaveCount(0);
   await expect(reader.getByRole("button", "Submit answer", { exact: true })).toHaveCount(0);
   await app.screenshot("human-context-reader");
-});
-
-test("Esc closes the Human context reader and returns focus to Read full context", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const { answer, reader } = await openLongContextAnswer(app, screen);
-  await answer.getByRole("button", "Read full context", { exact: true }).tap();
-  await expect(reader).toBeVisible();
-
-  // Act
-  await browser.keyboard.press("Escape");
-
-  // Assert
-  await expect(reader).toHaveCount(0);
-  await expect(answer.getByRole("button", "Read full context", { exact: true })).toBeFocused();
 });
 
 test("Tab skips the context links the clamped preview hides and reaches Read full context", async ({

@@ -28,10 +28,12 @@ import { exitDisplayName } from "./flow-block.tsx";
 import { DetailRow, InspectorSection } from "./inspector-section.tsx";
 import { RequestReport, ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
+import { fieldLabelClass } from "./page.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails } from "./technical-details.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
-import { ResultCard, RunTextReaderLink } from "./run-result.tsx";
+import { ResultCard } from "./run-result.tsx";
+import { AgentTextPreview } from "./agent-text.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
 import { ConditionArrivals } from "./condition-arrivals.tsx";
 
@@ -58,16 +60,16 @@ function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }
   if (recorded.state !== "working" && recorded.state !== "sent") return null;
   if (!recorded.workingMessage) return null;
   return (
-    <div className="flex flex-col gap-2.5">
-      <p className="text-sm break-words whitespace-pre-wrap text-foreground">
-        {recorded.workingMessage}
-      </p>
-      <RunTextReaderLink
-        label="Read working report"
-        title={`${recorded.name} · working report`}
-        metadata={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
+    <div className="flex min-w-0 flex-col gap-2.5">
+      <p className={fieldLabelClass}>Working report</p>
+      <AgentTextPreview
         text={recorded.workingMessage}
-        link={recorded.link}
+        readLabel="Read full report"
+        heading={{
+          title: `${recorded.name} · Working report`,
+          provenance: recorded.observedAt ? clockTime(recorded.observedAt) : "",
+          t3Link: recorded.link,
+        }}
       />
       {(awaitsReviewInT3(recorded) || pendingRecovery(run, recorded)) && (
         <RequestReport run={run} block={recorded} />

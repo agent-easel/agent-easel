@@ -1,4 +1,4 @@
-import { AgentTextPreview } from "./agent-text.tsx";
+import { AgentMarkdown, AgentTextPreview } from "./agent-text.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
@@ -125,7 +125,7 @@ function AttentionDetails({ run, blockId }: AttentionDetailsProps) {
       {(questions.length > 0 || reviews.length > 0) && (
         <section aria-label="Needs input" className="space-y-3">
           {reviews.map((block) => (
-            <ReviewInT3 key={block.blockId} block={block} compact={compact} />
+            <ReviewInT3 key={block.blockId} run={run} block={block} compact={compact} />
           ))}
           {questions.map((item) => (
             <QuestionMatter key={item.id} run={run} item={item} compact={compact} />
@@ -203,9 +203,21 @@ function AttentionCard({
 
 /**
  * Figma RD19: an Agent idle with a working report. It may be asking in chat or have stopped
- * without reporting, so the card never says it waits for a reply; the owner reviews in T3.
+ * without reporting, so its title never says it waits for a reply; the owner reviews in T3.
+ * RD43: without a report, only the title and Open in T3 remain.
  */
-function ReviewInT3({ block, compact }: { block: RunBlock; compact: boolean }) {
+function ReviewInT3({
+  run,
+  block,
+  compact,
+}: {
+  run: RunDetail;
+  block: RunBlock;
+  compact: boolean;
+}) {
+  const reportLabel = useId();
+  const visit = run.activations.filter((activation) => activation.blockId === block.blockId).length;
+  const since = block.observedAt ? ` · since ${clockTime(block.observedAt)}` : "";
   return (
     <AttentionCard
       tone="needs-input"
@@ -216,9 +228,20 @@ function ReviewInT3({ block, compact }: { block: RunBlock; compact: boolean }) {
       actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
       {block.workingMessage && (
-        <p className="text-sm break-words whitespace-pre-wrap text-muted-foreground">
-          {block.workingMessage}
-        </p>
+        <section aria-labelledby={reportLabel} className="flex min-w-0 flex-col gap-1.5">
+          <h4 id={reportLabel} className={fieldLabelClass}>
+            Working report
+          </h4>
+          <AgentTextPreview
+            text={block.workingMessage}
+            readLabel="Read full report"
+            heading={{
+              title: `${block.name} · Working report`,
+              provenance: `Visit ${visit} · waiting for your reply${since}`,
+              t3Link: block.link,
+            }}
+          />
+        </section>
       )}
     </AttentionCard>
   );
@@ -580,7 +603,14 @@ function SettledMatter({ run, item }: { run: RunDetail; item: RunAttention }) {
           {attentionSubject(item)}
         </h3>
       </div>
-      {item.message && <p className="whitespace-pre-wrap">{item.message}</p>}
+      {item.message &&
+        // Only a conversation-waiting message is the Agent's own question; other kinds record
+        // Factory's reason.
+        (item.kind === "conversation-waiting" ? (
+          <AgentMarkdown text={item.message} density="card" />
+        ) : (
+          <p className="whitespace-pre-wrap">{item.message}</p>
+        ))}
       {exit && <p>Decision: {exit}</p>}
       <p>Resolved: {item.settlementReason}</p>
       {reply && (

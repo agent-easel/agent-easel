@@ -492,9 +492,9 @@ fixed Human exits their old exits were mapped to.
   panel. The choice is kept per browser profile on this device across what is inspected, Runs and reload; until chosen, the
   inspector opens from 1280 px wide. While it is hidden, pending attention shows below the canvas.
 - **Agent-written text** is shown as Markdown wherever it appears: block results, the context a Human step received (on
-  its decision card in the Overview and the Block view, and as recorded in **Resolved attention**), the Working report
-  of a working Agent or a sent Continuation in the Block view, the Working report on an Agent's Needs input card, and
-  each Wait arrival's message. One renderer applies CommonMark with GitHub tables and task lists and keeps single line
+  its decision card in the Overview and the Block view), the Working report of a working Agent or a sent Continuation in
+  the Block view (with **Read full report**), the Working report on an Agent's Needs input card, each Wait arrival's
+  message, and an Agent's question recorded in **Resolved attention**. One renderer applies CommonMark with GitHub tables and task lists and keeps single line
   breaks, so short lines an Agent wrote stay on separate lines. Raw HTML is shown as text and never runs, links open
   outside Factory and images appear as links, so Agent text never loads remote content. Long words, URLs and code wrap
   or scroll inside their own block. Text a person or Factory wrote stays plain text exactly as entered: the initial

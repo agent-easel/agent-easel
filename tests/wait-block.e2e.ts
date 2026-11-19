@@ -76,13 +76,17 @@ test("a waiting arrival is held with its message and forwarded by the backend on
     key: "wait",
     flow: "pause",
   });
-  await applyRunState(app, runId, "result reported", "Ready after a short pause.");
+  await applyRunState(
+    app,
+    runId,
+    "result reported",
+    "## Ready after a short pause\n\n- Release notes checked",
+  );
   await applyRunState(app, runId, "result released to a Wait");
   await app.open(`/runs/${runId}`);
   await screen.getByRole("button", /^Wait Pause a minute, Waiting/).tap();
-  await expect(screen.getByRole("listitem", "Arrival 1, waiting")).toContainText(
-    "Ready after a short pause.",
-  );
+  const held = screen.getByRole("listitem", "Arrival 1, waiting");
+  await expect(held.getByRole("heading", "Ready after a short pause")).toBeVisible();
   await app.screenshot("wait-one-arrival-pending");
 
   // Act
