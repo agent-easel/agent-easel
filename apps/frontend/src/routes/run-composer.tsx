@@ -34,7 +34,7 @@ import { toolbarPillClass } from "../components/page.tsx";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "../components/ui/button.tsx";
 import { KeyChip } from "@/components/ui/key-chip";
-import { ChoiceMenu, type MenuChoice } from "../components/choice-menu.tsx";
+import { ChoiceMenu, type MenuChoice, type MenuGroup } from "../components/choice-menu.tsx";
 import { Label } from "../components/ui/label.tsx";
 import {
   AttachImagesButton,
@@ -266,7 +266,7 @@ export function RunComposer() {
 /** The Flow choices: Global, then the Project's; a not-ready Flow is listed but cannot be chosen. */
 function flowChoices({ flows, project }: Composer, listed: ReturnType<typeof composerFlows>) {
   const choice =
-    (group: string) =>
+    (group: MenuGroup) =>
     (flow: FlowDraft): MenuChoice => ({
       id: flow.id,
       label: flow.name,
@@ -275,35 +275,61 @@ function flowChoices({ flows, project }: Composer, listed: ReturnType<typeof com
       ...(!flowCanLaunch(flow) && { badge: "Not ready", badgeKind: "error", disabled: true }),
     });
   const choices = [
-    ...listed.global.map(choice("Global")),
-    ...listed.project.map(choice(project?.title ?? "")),
+    ...listed.global.map(choice({ id: "global", label: "Global" })),
+    ...listed.project.map(choice({ id: "project", label: project?.title ?? "" })),
   ];
   const empty = !flows ? "Loading Flows…" : "No Flows yet";
   return { choices, empty };
 }
 
+const flowNotReadyId = "launch-flow-not-ready";
+
+/**
+ * The Flow field's problem: the not-ready card, or, while another card has priority, a hidden
+ * explanation, so the field tagged Not ready stays invalid.
+ */
+function flowProblem(card: LaunchCard, flow: FlowDraft | undefined, tagged: boolean) {
+  if (card.kind === "flow-not-ready") return { describedBy: composerLaunchCardId };
+  if (!flow || !tagged) return { describedBy: undefined };
+  return { describedBy: flowNotReadyId, explanation: `“${flow.name}” isn’t ready to run.` };
+}
+
 function FlowField({ model }: { model: Composer }) {
-  const { draft, flows, edit, locked, configured, card } = model;
+  const { draft, flows, flow, edit, locked, configured, card } = model;
   const listed = composerFlows(flows ?? [], draft.projectId);
   const { choices, empty } = flowChoices(model, listed);
+  const tagged = !!choices.find((choice) => choice.id === draft.flowId)?.disabled;
+  const problem = flowProblem(card, flow, tagged);
   return (
     <>
       <Label htmlFor="launch-flow" className="sr-only">
         Flow
       </Label>
+      {problem.explanation && (
+        <span id={flowNotReadyId} className="sr-only">
+          {problem.explanation}
+        </span>
+      )}
       <ChoiceMenu
         id="launch-flow"
         label="Flow"
         value={draft.flowId}
+        // A Start awaiting its outcome keeps its submitted Flow, which may no longer be listed.
+        unlistedLabel={flow?.name}
         choices={choices}
         onChange={(flowId) => flowId !== draft.flowId && edit({ flowId })}
         // No Flow is chosen without a Project.
         disabled={listed.disabled || !configured}
         placeholder={flows?.length === 0 ? "No Flows yet" : "Choose a Flow"}
         empty={empty}
-        describedBy={card.kind === "flow-not-ready" ? composerLaunchCardId : undefined}
+        describedBy={problem.describedBy}
         problemTone="error"
-        composer={{ search: { label: "Search Flows", noMatch: "No matching Flows" }, busy: locked }}
+        composer={{
+          search: { label: "Search Flows", noMatch: "No matching Flows" },
+          busy: locked,
+          // A chosen Flow that is not ready is never checked in the list.
+          checked: flow && flowCanLaunch(flow) ? draft.flowId : null,
+        }}
         className={cn(toolbarPillClass, "w-55 **:data-[slot=choice-value]:font-medium")}
         popupClassName="w-80"
         trigger={{

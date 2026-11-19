@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
 import { test } from "./support/test.ts";
-import { expect } from "e2e";
+import { expect, type App, type Screen } from "e2e";
+import type { Browser } from "@e2e-dev/web";
 import {
   copyAgentDefinition,
   readAgentDefinition,
@@ -404,9 +405,9 @@ test("choosing another Agent for a block keeps its Revisit instruction and canva
   await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Agent Reviewer").tap();
   const panel = screen.getByRole("complementary", "Block settings");
+  await panel.getByRole("combobox", /^Agent: /).tap();
 
   // Act
-  await panel.getByRole("combobox", /^Agent: /).tap();
   await screen
     .getByRole("listbox", "Agent", { exact: true })
     .getByRole("option", "Demo · Product engineer", { exact: true })
@@ -780,25 +781,46 @@ test("a Flow reopened after discarding its edits on leaving shows its saved revi
   await expect(screen.getByLabel("Flow name")).toHaveValue(name);
 });
 
-test("a saved Agent with a retired model cannot be placed from the library or picked for a Block", async ({
-  app,
-  browser,
-  screen,
-}) => {
-  // Arrange
-  await browser.setViewport({ width: 1440, height: 900 });
-  const name = "Review · Retired model";
-  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", name);
+/** A copy of Sample worker named `name` whose saved model T3 no longer offers. */
+async function retiredModelAgent(baseUrl: string | undefined, name: string) {
+  const agent = await copyAgentDefinition(baseUrl, "Sample worker", name);
   assert(agent.execution);
-  await saveAgentElsewhere(app.baseUrl, agent, {
+  await saveAgentElsewhere(baseUrl, agent, {
     execution: { ...agent.execution, modelId: "retired-model" },
   });
-  const flowId = await saveSingleAgentFlow(app.baseUrl, "Review · Placement", "Sample worker", {
+  return agent;
+}
+
+/** A new Flow whose Worker block places the saved Agent `agentName`, at a 1440×900 viewport. */
+async function saveWorkerFlow(app: App, browser: Browser, flowName: string, agentName: string) {
+  await browser.setViewport({ width: 1440, height: 900 });
+  return saveSingleAgentFlow(app.baseUrl, flowName, agentName, {
     id: "worker",
     name: "Worker",
     x: 320,
     y: 60,
   });
+}
+
+/** A retired-model Agent, not placed, and a new Flow whose Worker block places Sample worker. */
+async function retiredBesideWorkerFlow(app: App, browser: Browser) {
+  const name = `Review · Retired model ${crypto.randomUUID().slice(0, 8)}`;
+  await retiredModelAgent(app.baseUrl, name);
+  return {
+    name,
+    flowId: await saveWorkerFlow(app, browser, "Review · Placement", "Sample worker"),
+  };
+}
+
+const blockAgentPicker = (screen: Screen) =>
+  screen.getByRole("complementary", "Block settings").getByRole("combobox", /^Agent: /);
+
+test("a saved Agent with a retired model cannot be placed from the library", async ({
+  app,
+  browser,
+}) => {
+  // Arrange
+  const { name, flowId } = await retiredBesideWorkerFlow(app, browser);
 
   // Act
   await app.open(`/studio/flows/${flowId}`);
@@ -809,13 +831,50 @@ test("a saved Agent with a retired model cannot be placed from the library or pi
   await expect(retired).toHaveAttribute("aria-disabled", "true");
   await expect(retired).toContainText("Needs a model");
   await app.screenshot("after-flow-library-retired-model");
+});
+
+test("a saved Agent with a retired model cannot be picked for a Block", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  const { name, flowId } = await retiredBesideWorkerFlow(app, browser);
+  await app.open(`/studio/flows/${flowId}`);
   await screen.getByRole("button", "Agent Worker").tap();
-  await screen
-    .getByRole("complementary", "Block settings")
-    .getByRole("combobox", /^Agent: /)
-    .tap();
+
+  // Act
+  await blockAgentPicker(screen).tap();
+
+  // Assert
   const option = screen.getByRole("option", new RegExp(name));
   await expect(option).toBeDisabled();
   await expect(option).toContainText("Needs a model");
   await app.screenshot("after-block-picker-retired-model");
+});
+
+test("a Block's configured Agent that needs a model stays checked, but not choosable, in the Agent list", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  const run = crypto.randomUUID().slice(0, 8);
+  const name = `Configured · Retired model ${run}`;
+  await retiredModelAgent(app.baseUrl, name);
+  const flowId = await saveWorkerFlow(app, browser, `Configured placement ${run}`, name);
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Agent Worker").tap();
+  const picker = blockAgentPicker(screen);
+  await expect(picker).toContainText(name);
+
+  // Act
+  await picker.tap();
+
+  // Assert
+  const option = screen.getByRole("option", `${name} Needs a model`, { exact: true });
+  await expect(option).toBeDisabled();
+  await expect(option).toHaveAttribute("data-state", "checked");
+  await expect(option).toHaveAttribute("aria-selected", "true");
+  await app.screenshot("after-block-picker-configured-retired-model");
 });

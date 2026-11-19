@@ -30,9 +30,15 @@ export interface MenuChoice {
   readonly description?: string;
   /** A glyph before the label in the list, such as a Project's icon. */
   readonly icon?: ReactNode;
-  /** The heading the choice is listed under; adjacent choices of one group share it. */
-  readonly group?: string;
+  /** The group the choice is listed under; adjacent choices of one group share its heading. */
+  readonly group?: MenuGroup;
   readonly disabled?: boolean;
+}
+
+/** A group of choices: its identity, and its heading, which another group may share. */
+export interface MenuGroup {
+  readonly id: string;
+  readonly label: string;
 }
 
 /** What the trigger shows beside the chosen label. */
@@ -69,12 +75,13 @@ interface ComposerMenu {
   readonly search: ChoiceSearch;
   /** A Start is pending: the trigger keeps focus and says so, but neither opens nor changes. */
   readonly busy: boolean;
+  /** The choice the list checks, which may differ from the value; null checks none. */
+  readonly checked: string | null;
 }
 
 /**
  * A single choice from a list: a select-only combobox whose list keeps unavailable choices
- * visible, unchoosable and explained. The trigger and the list carry the field's name. An
- * unavailable choice the value names shows on the trigger but is never checked in the list.
+ * visible, unchoosable and explained. The trigger and the list carry the field's name.
  */
 export function ChoiceMenu({
   id,
@@ -117,7 +124,7 @@ export function ChoiceMenu({
   composer?: ComposerMenu;
   trigger?: TriggerExtras;
 }) {
-  const { listValue, selected, shown } = chosen(choices, value, unlistedLabel);
+  const { listValue, selected, shown } = chosen(choices, value, composer?.checked, unlistedLabel);
   const names = choiceNames(
     label,
     labelledBy,
@@ -142,6 +149,7 @@ export function ChoiceMenu({
       <ChoiceList
         name={names.list}
         choices={choices}
+        listValue={listValue}
         empty={empty}
         className={popupClassName}
         opensDown={!!composer}
@@ -203,8 +211,8 @@ function ChoiceTrigger({
 }
 
 /**
- * Whether the list is open, its search, which starts empty on each opening, and choosing. A busy
- * field neither opens nor changes, including by the closed trigger's typeahead.
+ * Whether the list is open, its search, which is empty whenever the list opens or closes, and
+ * choosing. A busy field neither opens nor changes, including by the closed trigger's typeahead.
  */
 function useChoiceList({
   choices,
@@ -221,7 +229,8 @@ function useChoiceList({
   const onOpenChange = (next: boolean) => {
     if (next && busy) return;
     setOpen(next);
-    if (next) setQuery("");
+    // The closed trigger's typeahead also skips the rows a search hides.
+    setQuery("");
   };
   const onValueChange = (next: string) => {
     if (!busy) onChange(choices[Number(next)]!.id);
@@ -290,6 +299,7 @@ type ListName = ReturnType<typeof choiceNames>["list"];
 function ChoiceList({
   name,
   choices,
+  listValue,
   empty,
   className,
   opensDown,
@@ -297,6 +307,7 @@ function ChoiceList({
 }: {
   name: ListName;
   choices: readonly MenuChoice[];
+  listValue: string;
   empty: string | undefined;
   className: string | undefined;
   opensDown: boolean;
@@ -336,7 +347,7 @@ function ChoiceList({
         )}
         {/* Radix hides the list's scrollbar; a long list keeps it visible. */}
         <Select.Viewport ref={viewportRef} {...parts.list}>
-          <ChoiceRows choices={choices} shows={matches} />
+          <ChoiceRows choices={choices} listValue={listValue} shows={matches} />
           <ListStatus status={listStatus(choices, matches, empty, search?.noMatch)} />
         </Select.Viewport>
         {opensDown && <ListFade viewport={viewport} watch={`${query}:${choices.length}`} />}
@@ -456,13 +467,19 @@ function useSearchFocus(
   };
 }
 
-/** The chosen choice, its list value, and what the trigger shows for `value`. */
-function chosen(choices: readonly MenuChoice[], value: string, unlistedLabel: string | undefined) {
+/** The chosen choice, the list value it checks, and what the trigger shows for `value`. */
+function chosen(
+  choices: readonly MenuChoice[],
+  value: string,
+  checked: string | null | undefined,
+  unlistedLabel: string | undefined,
+) {
   // Radix reserves the empty value for "nothing chosen", which some choices use as their id.
-  const index = choices.findIndex((choice) => choice.id === value);
-  const selected = choices[index];
+  const index = (id: string | null) => choices.findIndex((choice) => choice.id === id);
+  const selected = choices[index(value)];
+  const listed = index(checked === undefined ? value : checked);
   return {
-    listValue: selected && !selected.disabled ? String(index) : "",
+    listValue: listed < 0 ? "" : String(listed),
     selected,
     shown: selected?.label ?? (value ? unlistedLabel : undefined),
   };
@@ -487,27 +504,30 @@ function choiceNames(
 
 const badgeSuffix = (choice: MenuChoice | undefined) => (choice?.badge ? `, ${choice.badge}` : "");
 
-/** Runs of adjacent choices that share a group; a choice's list value is its index. */
+/** Runs of adjacent choices of one group; a choice's list value is its index. */
 function groupChoices(choices: readonly MenuChoice[]) {
   return choices.reduce<
-    { title: string | undefined; rows: { choice: MenuChoice; at: number }[] }[]
+    { group: MenuGroup | undefined; rows: { choice: MenuChoice; at: number }[] }[]
   >((groups, choice, at) => {
     const last = groups.at(-1);
-    if (last && last.title === choice.group) last.rows.push({ choice, at });
-    else groups.push({ title: choice.group, rows: [{ choice, at }] });
+    if (last && last.group?.id === choice.group?.id) last.rows.push({ choice, at });
+    else groups.push({ group: choice.group, rows: [{ choice, at }] });
     return groups;
   }, []);
 }
 
 /**
- * The list's rows. A search hides the rows it does not match rather than removing them: Radix
- * moves focus to its checked row whenever that row mounts again, which would leave the search.
+ * The list's rows. A search hides and disables the rows it does not match rather than removing
+ * them: Radix moves focus to its checked row whenever that row mounts again, which would leave
+ * the search, and its typeahead and arrow keys pass over disabled rows.
  */
 function ChoiceRows({
   choices,
+  listValue,
   shows,
 }: {
   choices: readonly MenuChoice[];
+  listValue: string;
   shows: (choice: MenuChoice) => boolean;
 }) {
   const rowId = useId();
@@ -517,11 +537,12 @@ function ChoiceRows({
       choice={choice}
       at={at}
       id={`${rowId}-${at}`}
+      checked={String(at) === listValue}
       hidden={!shows(choice)}
     />
   );
-  return groupChoices(choices).flatMap(({ title, rows }) =>
-    title === undefined
+  return groupChoices(choices).flatMap(({ group, rows }) =>
+    group === undefined
       ? rows.map(row)
       : [
           <Select.Group
@@ -529,7 +550,7 @@ function ChoiceRows({
             hidden={!rows.some(({ choice }) => shows(choice))}
           >
             <Select.Label className="px-2 pt-2 pb-1 text-xs font-medium text-subtle-foreground">
-              {title}
+              {group.label}
             </Select.Label>
             {rows.map(row)}
           </Select.Group>,
@@ -537,16 +558,21 @@ function ChoiceRows({
   );
 }
 
-/** One choice: its label and badge name it; its description describes it. */
+/**
+ * One choice: its label and badge name it; its description describes it. A checked choice is
+ * selected for assistive technology wherever focus is; Radix marks it only while it has focus.
+ */
 function ChoiceRow({
   choice,
   at,
   id,
+  checked,
   hidden,
 }: {
   choice: MenuChoice;
   at: number;
   id: string;
+  checked: boolean;
   hidden: boolean;
 }) {
   const labelId = `${id}-label`;
@@ -555,8 +581,9 @@ function ChoiceRow({
   return (
     <Select.Item
       value={String(at)}
-      disabled={choice.disabled}
+      disabled={choice.disabled || hidden}
       hidden={hidden}
+      aria-selected={checked}
       aria-labelledby={choice.badge ? `${labelId} ${badgeId}` : labelId}
       aria-describedby={choice.description ? descriptionId : undefined}
       className="relative my-0.5 flex cursor-default items-start gap-2 rounded-md py-2 pr-8 pl-3 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[state=checked]:bg-brand-soft [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"

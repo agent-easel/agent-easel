@@ -7,7 +7,11 @@ import { promisify } from "node:util";
 import type { FlowDraft, ProjectCatalog, Result } from "../packages/contracts/src/index.ts";
 import { expect, type Screen } from "e2e";
 import { beforeEach, test } from "./support/test.ts";
-import { blockOnModelLessLaterReview, selectComposerProject } from "./support/composer.ts";
+import {
+  blockOnModelLessLaterReview,
+  selectComposerProject,
+  startLosingResponse,
+} from "./support/composer.ts";
 import {
   chooseComposerFlow,
   flowList,
@@ -16,7 +20,8 @@ import {
   pageString,
   readFactoryJson,
 } from "./support/composer-menus.ts";
-import { saveFlowCopy } from "./support/flows.ts";
+import { readFlow, saveFlowCopy } from "./support/flows.ts";
+import { changeFlowOwnerElsewhere, namedAgent, projectFlowPlacing } from "./support/owners.ts";
 
 /** Composer Flow and Project menus after ticket #508. Dark, 1440×900. */
 beforeEach(async ({ app, browser, screen }) => {
@@ -33,6 +38,12 @@ const settled =
   "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => null))).then(() => true)";
 
 const checkedChoices = `document.querySelectorAll('[role="option"][data-state="checked"]').length`;
+
+/** What the Flow field's description reads. */
+const flowDescription = `(() => {
+  const ids = document.getElementById("launch-flow")?.getAttribute("aria-describedby") ?? "";
+  return ids.split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+})()`;
 
 /** The Flow field's open popup, which its trigger controls. */
 const flowPopup = `document.getElementById(document.getElementById("launch-flow")?.getAttribute("aria-controls") ?? "")`;
@@ -342,6 +353,142 @@ test("long unbroken Flow names wrap in the list and keep the ending that tells t
   expect(ends[1]!.lines).toBeGreaterThan(1);
   await screen.getByRole("option", one, { exact: true }).scrollIntoView();
   await app.screenshot("after-flow-long-names");
+});
+
+test("the chosen Flow stays selected for assistive technology when focus returns to the search", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange — the newest ready Flow is the list's first row.
+  const name = `Chosen ${crypto.randomUUID().slice(0, 8)}`;
+  await saveFlowCopy(app.baseUrl, "Demo · Focused change", name, { mode: "checkout" });
+  await selectComposerProject(screen, "Northwind");
+  await chooseComposerFlow(screen, name);
+  await openFlowMenu(screen);
+  await browser.keyboard.press("ArrowDown");
+  const chosen = screen.getByRole("option", name, { exact: true });
+  await expect(chosen).toBeFocused();
+
+  // Act
+  await browser.keyboard.press("ArrowUp");
+
+  // Assert
+  await expect(screen.getByRole("searchbox", "Search Flows", { exact: true })).toBeFocused();
+  await expect(chosen).toHaveAttribute("aria-selected", "true");
+});
+
+test("a Project titled Global lists its Flows in its own group after the global Flows", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const project = await fixture.projects.add({ title: "Global" });
+  const worker = await namedAgent(app.baseUrl, "Sample worker");
+  await projectFlowPlacing(app.baseUrl, "Global's own release", project.id, [worker]);
+  await browser.reload();
+  await selectComposerProject(screen, "Global");
+
+  // Act
+  await openFlowMenu(screen);
+
+  // Assert
+  const groups = flowList(screen).getByRole("group", "Global", { exact: true });
+  await expect(groups).toHaveCount(2);
+  await expect(
+    groups.first().getByRole("option", "Demo · Focused change", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    groups.first().getByRole("option", "Global's own release", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    groups.last().getByRole("option", "Global's own release", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    groups.last().getByRole("option", "Demo · Focused change", { exact: true }),
+  ).toHaveCount(0);
+  await groups.last().scrollIntoView();
+  await app.screenshot("after-flow-project-titled-global");
+});
+
+test("typing a letter in a filtered Flow list moves only among the Flows it shows", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange — newest first: Alpha release, then the hidden Beta build, then Beta release.
+  const run = crypto.randomUUID().slice(0, 8);
+  const focused = "Demo · Focused change";
+  await saveFlowCopy(app.baseUrl, focused, `Beta release ${run}`, { mode: "checkout" });
+  await saveFlowCopy(app.baseUrl, focused, `Beta build ${run}`, { mode: "checkout" });
+  await saveFlowCopy(app.baseUrl, focused, `Alpha release ${run}`, { mode: "checkout" });
+  await selectComposerProject(screen, "Northwind");
+  await openFlowMenu(screen);
+  await screen.getByRole("searchbox", "Search Flows", { exact: true }).fill(`release ${run}`);
+  await browser.keyboard.press("ArrowDown");
+  await expect(screen.getByRole("option", `Alpha release ${run}`, { exact: true })).toBeFocused();
+
+  // Act
+  await browser.keyboard.press("b");
+
+  // Assert
+  await expect(screen.getByRole("option", `Beta release ${run}`, { exact: true })).toBeFocused();
+  await app.screenshot("after-flow-filtered-typeahead");
+});
+
+test("a reopened Start awaiting its outcome shows its submitted Flow after that Flow moved to another Project", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Submitted ${crypto.randomUUID().slice(0, 8)}`;
+  const flow = await readFlow(
+    app.baseUrl,
+    await saveFlowCopy(app.baseUrl, "Demo · Focused change", name, { mode: "checkout" }),
+  );
+  const catalog = await readFactoryJson<ProjectCatalog>(app.baseUrl, "/api/projects");
+  const atlas = catalog.projects.find((project) => project.title === "Atlas demo");
+  assert(atlas);
+  await selectComposerProject(screen, "Northwind");
+  await chooseComposerFlow(screen, name);
+  await screen.getByLabel("Initial prompt", { exact: false }).fill("Keep the submitted Flow");
+  await startLosingResponse(screen, browser);
+  await changeFlowOwnerElsewhere(app.baseUrl, flow, atlas.id);
+
+  // Act
+  await browser.reload();
+
+  // Assert
+  await expect(screen.getByRole("button", "Check same request", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("combobox", `Select Flow: ${name}`, { exact: true })).toBeVisible();
+  await app.screenshot("after-flow-locked-moved");
+});
+
+test("a chosen not-ready Flow stays invalid and explained while another card has priority", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await blockOnModelLessLaterReview(app, screen);
+  const flowPicker = screen.getByRole("combobox", /^Select Flow: /);
+  await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
+
+  // Act
+  await fixture.remoteAccess.t3Unavailable();
+
+  // Assert
+  await expect(screen.getByText("T3 is disconnected", { exact: true })).toBeVisible();
+  await expect(flowPicker).toContainText("Not ready");
+  await expect(flowPicker).toHaveAttribute("aria-invalid", "true");
+  expect(pageString(await browser.evaluate(flowDescription))).toBe(
+    "“Model-less later review” isn’t ready to run.",
+  );
+  await app.screenshot("after-flow-not-ready-disconnected");
 });
 
 test("the Project menu lists available projects and Refresh projects", async ({

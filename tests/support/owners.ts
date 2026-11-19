@@ -40,6 +40,18 @@ export const changeAgentOwnerElsewhere = (
     body: JSON.stringify({ expectedProjectId: agent.projectId, projectId }),
   });
 
+/** Another client changes the Flow's owning Project through the public API. */
+export const changeFlowOwnerElsewhere = (
+  baseUrl: string | undefined,
+  flow: FlowDraft,
+  projectId: string | null,
+) =>
+  call<FlowDraft>(baseUrl, `/api/flows/${flow.id}/owner`, {
+    method: "PUT",
+    headers: mutation,
+    body: JSON.stringify({ expectedProjectId: flow.projectId, projectId }),
+  });
+
 /** A Flow owned by `projectId` whose blocks place each of `agents`, in order. */
 export async function projectFlowPlacing(
   baseUrl: string | undefined,

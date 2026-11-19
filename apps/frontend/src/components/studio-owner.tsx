@@ -4,7 +4,7 @@ import { FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
+import { ChoiceMenu, type MenuChoice, type MenuGroup } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { ProblemCard } from "./problem-card.tsx";
@@ -88,7 +88,7 @@ const globalChoice: MenuChoice = {
  * Each Project owner as a choice with its repository path; one that became unavailable stays
  * listed, disabled, with its reason and `reason` appended.
  */
-function projectChoices(targets: OwnerTargets, reason: string, group?: string): MenuChoice[] {
+function projectChoices(targets: OwnerTargets, reason: string, group?: MenuGroup): MenuChoice[] {
   return targets.map(({ owner, disabled }) => {
     const why = owner.unavailable && `${owner.unavailable}${reason}`;
     return {
@@ -111,7 +111,7 @@ function projectChoices(targets: OwnerTargets, reason: string, group?: string): 
 /** Global, then the Project owners under their own heading. */
 const ownerChoices = (targets: OwnerTargets, reason: string) => [
   globalChoice,
-  ...projectChoices(targets.slice(1), reason, "Projects"),
+  ...projectChoices(targets.slice(1), reason, { id: "projects", label: "Projects" }),
 ];
 
 /**

@@ -6,7 +6,7 @@ import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ChoiceMenu, type MenuChoice } from "../choice-menu.tsx";
+import { ChoiceMenu, type MenuChoice, type MenuGroup } from "../choice-menu.tsx";
 import { ProjectIcon } from "../project-icon.tsx";
 import { fieldLabelClass } from "../page.tsx";
 import { SettingsRow } from "../settings-page.tsx";
@@ -262,7 +262,7 @@ function RepositoryValue({
 
 /** A Trigger's Flow choice; a not-ready Flow stays listed and can't be chosen. */
 const flowChoice =
-  (group: string) =>
+  (group: MenuGroup) =>
   (flow: FlowDraft): MenuChoice => ({
     id: flow.id,
     label: flow.name,
@@ -289,10 +289,12 @@ function FlowRow({
   const ordered = (group: readonly FlowDraft[]) =>
     group.toSorted((a, b) => Number(b.readiness.ready) - Number(a.readiness.ready));
   const choices = [
-    ...ordered(offered.filter((entry) => !entry.projectId)).map(flowChoice("Global")),
+    ...ordered(offered.filter((entry) => !entry.projectId)).map(
+      flowChoice({ id: "global", label: "Global" }),
+    ),
     ...(project
       ? ordered(offered.filter((entry) => entry.projectId === project.id)).map(
-          flowChoice(project.title),
+          flowChoice({ id: project.id, label: project.title }),
         )
       : []),
   ];
