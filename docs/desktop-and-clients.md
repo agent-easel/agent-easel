@@ -200,7 +200,7 @@ non-temporary location, so a package run from a temporary folder badges but cann
 
 ## Native window appearance
 
-The sidebar title area drags the desktop window while macOS keeps its native traffic-light controls and the content uses the full window height. Studio opens in an inset dialog below the native controls with the Settings-style header. Product controls, dialogs and canvases stay
+The sidebar title area drags the desktop window while macOS keeps its native traffic-light controls and the content uses the full window height. Studio's inset dialog header leaves room at the left for the native controls. Product controls, dialogs and canvases stay
 outside the draggable region, fullscreen and window controls stay native, and the background matches the application canvas of the chosen [appearance](#appearance) while content loads. Browser clients keep their layout without desktop chrome.
 
 ## Appearance

@@ -1,13 +1,15 @@
 import { expect, it } from "vite-plus/test";
+import type { AgentDefinition } from "@t3-factory/contracts";
 import { validateCreateAgent } from "@t3-factory/domain-validation";
 import { createShapedContent } from "../src/agent-draft.ts";
-import { comparedPresentation } from "../src/components/studio-agents/agent-revision-panel.tsx";
+import { comparedLines } from "../src/components/studio-agents/agent-revision-panel.tsx";
 import { OfflineError } from "../src/transport.ts";
 import { capabilities, savedAgent } from "./support/agent-draft.ts";
 import { factoryProject } from "./support/studio-definitions.ts";
 import {
   agentDraft,
   comparedAgent,
+  deliver,
   editedAgent,
   ownerChangedElsewhere,
   pendingSave,
@@ -89,7 +91,59 @@ it("an Agent saved without a model opens with no Worker choice preselected", () 
   });
 });
 
-it("saved worker settings that T3 no longer offers are kept without substitution", () => {
+it("a saved model T3 no longer offers opens cleared, reading Needs a model without a change to save", () => {
+  // Arrange
+  const agent = savedAgent({
+    execution: {
+      environmentId: "local",
+      providerInstanceId: "primary",
+      modelId: "gone-model",
+      modelOptions: [{ id: "effort", value: "high" }],
+    },
+  });
+
+  // Act
+  const { draft } = agentDraft(agent);
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    content: {
+      execution: {
+        environmentId: "local",
+        providerInstanceId: "primary",
+        modelId: "",
+        modelOptions: [],
+      },
+    },
+    needsModel: true,
+    dirty: false,
+  });
+});
+
+it("a saved environment T3 no longer offers clears the whole Worker selection", () => {
+  // Arrange
+  const agent = savedAgent({
+    execution: {
+      environmentId: "gone",
+      providerInstanceId: "primary",
+      modelId: "first",
+      modelOptions: [],
+    },
+  });
+
+  // Act
+  const { draft } = agentDraft(agent);
+
+  // Assert
+  expect(draft.getSnapshot().content.execution).toStrictEqual({
+    environmentId: "",
+    providerInstanceId: "",
+    modelId: "",
+    modelOptions: [],
+  });
+});
+
+it("a saved selection is kept as saved while T3's capabilities are unavailable", () => {
   // Arrange
   const agent = savedAgent({
     execution: {
@@ -101,14 +155,10 @@ it("saved worker settings that T3 no longer offers are kept without substitution
   });
 
   // Act
-  const { draft } = agentDraft(agent);
+  const { draft } = agentDraft(agent, null);
 
   // Assert
   expect(draft.getSnapshot().content.execution).toStrictEqual(agent.execution);
-  expect(draft.getSnapshot()).toMatchObject({
-    dirty: false,
-    choices: { providers: [], selectedProvider: undefined, selectedModel: undefined },
-  });
 });
 
 it("a model-less Agent removed elsewhere recovers as a valid create request without a model", () => {
@@ -237,10 +287,10 @@ it("a new Agent saves without a model when no provider supports Factory reportin
   });
 });
 
-it("clearing the Worker selection saves the Agent without a model", async () => {
+it("removing the Worker saves the Agent without a model", async () => {
   // Arrange
   const { draft, factory } = agentDraft();
-  draft.clearWorker();
+  draft.removeWorker();
 
   // Act
   await draft.save();
@@ -253,10 +303,9 @@ it("clearing the Worker selection saves the Agent without a model", async () => 
   expect(draft.getSnapshot()).toMatchObject({ saved: { execution: null }, dirty: false });
 });
 
-it("loading the latest revision after confirmation leaves a clean draft of that revision", () => {
+it("loading the compared revision leaves a clean draft of that revision", () => {
   // Arrange
   const { draft } = comparedAgent();
-  draft.requestLoadLatest(4);
 
   // Act
   draft.loadLatest(4);
@@ -267,45 +316,13 @@ it("loading the latest revision after confirmation leaves a clean draft of that 
     content: { name: "Saved elsewhere" },
     dirty: false,
     conflict: { status: "none" },
-    confirmingLoad: null,
     canSave: true,
   });
 });
 
-it("loading the latest revision without confirmation keeps the draft", () => {
-  // Arrange
-  const { draft } = comparedAgent();
-
-  // Act
-  draft.loadLatest(4);
-
-  // Assert
-  expect(draft.getSnapshot()).toMatchObject({
-    content: { name: "Edited" },
-    conflict: { status: "compared", latest: { revision: 4 } },
-  });
-});
-
-it("a revision arriving during the Load latest confirmation closes it and moves the comparison to that revision", () => {
+it("loading a revision that is no longer the newest changes nothing", () => {
   // Arrange
   const setup = comparedAgent();
-  setup.draft.requestLoadLatest(4);
-
-  // Act
-  savedElsewhere(setup, { name: "Revision 5" });
-
-  // Assert
-  expect(setup.draft.getSnapshot()).toMatchObject({
-    confirmingLoad: null,
-    conflict: { status: "compared", latest: { revision: 5, name: "Revision 5" } },
-    content: { name: "Edited" },
-  });
-});
-
-it("confirming Load latest for a revision that is no longer the newest changes nothing", () => {
-  // Arrange
-  const setup = comparedAgent();
-  setup.draft.requestLoadLatest(4);
   savedElsewhere(setup, { name: "Revision 5" });
 
   // Act
@@ -319,10 +336,9 @@ it("confirming Load latest for a revision that is no longer the newest changes n
   });
 });
 
-it("a removal elsewhere dismisses the comparison and its confirmation and keeps the draft", () => {
+it("a removal elsewhere dismisses the comparison and keeps the draft", () => {
   // Arrange
   const setup = comparedAgent();
-  setup.draft.requestLoadLatest(4);
 
   // Act
   removedElsewhere(setup);
@@ -331,7 +347,6 @@ it("a removal elsewhere dismisses the comparison and its confirmation and keeps 
   expect(setup.draft.getSnapshot()).toMatchObject({
     removed: true,
     conflict: { status: "none" },
-    confirmingLoad: null,
     content: { name: "Edited" },
     dirty: true,
   });
@@ -342,14 +357,17 @@ it("an Agent Duplicate creates the copy in the chosen target owner and returns i
   const setup = agentDraft();
 
   // Act
-  const copy = await setup.draft.duplicate("northwind");
+  const copy = await setup.draft.duplicate("northwind", "Reviewer copy");
 
   // Assert
-  expect(setup.factory.duplicateAgent).toHaveBeenCalledWith("agent", { projectId: "northwind" });
+  expect(setup.factory.duplicateAgent).toHaveBeenCalledWith("agent", {
+    projectId: "northwind",
+    name: "Reviewer copy",
+  });
   expect(copy).toMatchObject({ id: "copy", name: "Reviewer copy" });
 });
 
-it("a Create whose reply is lost blocks another Create until the Agent list has been checked", async () => {
+it("a Create whose reply is lost blocks another Create while Factory is checked", async () => {
   // Arrange
   const { draft, factory } = agentDraft(null);
   draft.edit({ name: "New reviewer", prompt: "Review the change." });
@@ -364,22 +382,80 @@ it("a Create whose reply is lost blocks another Create until the Agent list has 
     content: { name: "New reviewer" },
     saveOutcome: "unknown",
     canSave: false,
-    error: expect.stringContaining("check the Agent list before creating it again"),
+    createCheck: { status: "checking" },
   });
 });
 
-it("confirming the Agent list was checked after a lost Create allows Create again", async () => {
+it("a lost Create that made nothing offers Create again once Studio's next delivery confirms it", async () => {
   // Arrange
-  const { draft, factory } = agentDraft(null);
-  draft.edit({ name: "New reviewer", prompt: "Review the change." });
-  factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
-  await draft.save();
+  const setup = agentDraft(null);
+  setup.draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  setup.factory.createAgent.mockRejectedValueOnce(new OfflineError("unknown"));
+  await setup.draft.save();
+  deliver(setup, [savedAgent({ id: "unrelated", name: "Unrelated" })]);
 
   // Act
-  draft.allowCreateAgain();
+  setup.draft.createAgain();
 
   // Assert
-  expect(draft.getSnapshot()).toMatchObject({ canSave: true, error: "", saveOutcome: null });
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    canSave: true,
+    error: "",
+    saveOutcome: null,
+    createCheck: { status: "none" },
+  });
+});
+
+it("a lost Create that made the Agent opens it instead of offering Create again", async () => {
+  // Arrange
+  const setup = agentDraft(null);
+  setup.draft.edit({ name: "New reviewer", prompt: "Review the change." });
+  let made: AgentDefinition | undefined;
+  setup.factory.createAgent.mockImplementationOnce(async (content) => {
+    made = savedAgent({ ...content, id: "made", revision: 1 });
+    throw new OfflineError("unknown");
+  });
+  await setup.draft.save();
+  deliver(setup, [made!]);
+
+  // Act
+  const opened = setup.draft.openCreated();
+
+  // Assert
+  expect(opened).toMatchObject({ id: "made" });
+  expect(setup.draft.getSnapshot()).toMatchObject({
+    saved: { id: "made" },
+    dirty: false,
+    error: "",
+    createCheck: { status: "none" },
+  });
+  setup.draft.createAgain();
+  expect(setup.factory.createAgent).toHaveBeenCalledTimes(1);
+});
+
+it("two exits with one name are tagged Duplicate and block Save before any request", async () => {
+  // Arrange
+  const { draft, factory } = agentDraft();
+  const exits = [
+    { id: "a", name: "Ready for review", description: "", messageRequired: false },
+    { id: "b", name: " Ready for review ", description: "", messageRequired: true },
+    { id: "c", name: "", description: "", messageRequired: false },
+  ];
+  draft.edit({ exits });
+
+  // Act
+  await draft.save();
+
+  // Assert
+  const snapshot = draft.getSnapshot();
+  expect(snapshot.canSave).toBe(false);
+  expect(Object.fromEntries(snapshot.exitProblems!.tags)).toStrictEqual({
+    a: "Duplicate",
+    b: "Duplicate",
+    c: "Required",
+  });
+  expect(snapshot.exitProblems!.card.title).toBe("Two exits are named “Ready for review”");
+  expect(factory.updateAgent).not.toHaveBeenCalled();
 });
 
 it("an Agent removed elsewhere refuses Duplicate", async () => {
@@ -388,7 +464,7 @@ it("an Agent removed elsewhere refuses Duplicate", async () => {
   removedElsewhere(setup);
 
   // Act
-  const copy = await setup.draft.duplicate(null);
+  const copy = await setup.draft.duplicate(null, "Copy");
 
   // Assert
   expect(copy).toBeUndefined();
@@ -438,13 +514,14 @@ it("two Agent revisions that differ only in a Project override read differently 
   });
 
   // Act
-  const shown = [comparedPresentation(base, []), comparedPresentation(overridden, [])];
+  const shown = [
+    comparedLines(base, [], capabilities),
+    comparedLines(overridden, [], capabilities),
+  ];
 
   // Assert
-  expect(shown[0]).not.toBe(shown[1]);
-  expect(shown[1]).toContain(
-    "Unknown Project (northwind): local · primary · other-first · effort=low, old=true",
-  );
+  expect(shown[0]).not.toStrictEqual(shown[1]);
+  expect(shown[1]).toContain("  Unknown Project  Primary · other-first");
 });
 
 it("a refused Create for a Project keeps the Project overrides in the draft", async () => {
@@ -471,10 +548,13 @@ it("Agent revisions giving the same settings to two Projects with one title read
   const second = savedAgent({ projectOverrides: [{ projectId: "atlas-2", execution }] });
 
   // Act
-  const shown = [comparedPresentation(first, projects), comparedPresentation(second, projects)];
+  const shown = [
+    comparedLines(first, projects, capabilities),
+    comparedLines(second, projects, capabilities),
+  ];
 
   // Assert
-  expect(shown[0]).not.toBe(shown[1]);
+  expect(shown[0]).not.toStrictEqual(shown[1]);
 });
 
 it("acknowledging a move to a Project elsewhere keeps the draft's Project overrides and blocks Save", () => {

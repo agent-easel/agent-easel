@@ -133,6 +133,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** Reads the saved definition from Factory now, after a refusal Studio may not have caught up with. */
   readonly read: (id: string) => Promise<D>;
   readonly view: (state: RevisionedDraftState<D, C>) => S;
+  /** When this editor's conflict responses can also report unrelated save refusals. */
+  readonly isRevisionConflict?: (cause: ApiError) => boolean;
   /** While true, a clean draft waits to adopt a newer revision; `reconcile` adopts it later. */
   readonly hold?: () => boolean;
   /** Runs whenever a saved revision replaces the draft. */
@@ -257,7 +259,9 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     if (isStaleOwner(cause)) {
       ownerChange = { status: "waiting" };
       waitingSince = unknownBoundary;
-    } else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
+    } else if (cause.detail.code === "conflict" && (config.isRevisionConflict?.(cause) ?? true)) {
+      conflict = { status: "detected", revision: null };
+    }
   }
   /** A read bounding a stale-owner refusal is in flight. */
   let boundingRefusal = false;

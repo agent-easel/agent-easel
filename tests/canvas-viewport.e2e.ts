@@ -26,11 +26,12 @@ test("resizing the Flow editor keeps a manually zoomed view", async ({ app, scre
   await app.screenshot("flow-manual-zoom");
 
   // Act
-  // Crossing the height breakpoint changes the Studio canvas dimensions.
-  await browser.setViewport({ width: 1800, height: 999 });
+  await browser.setViewport({ width: 1920, height: 1080 });
 
   // Assert
-  await expect.poll(async () => (await canvas.boundingBox())!.width).not.toBe(surface.width);
+  await expect
+    .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
+    .toMatchObject({ x: 16, y: 16, width: 1888, height: 1048 });
   await expect(canvas).toHaveAttribute("data-zoom", "1.100");
   await expect(screen.getByRole("button", "Flow input", { exact: true })).toBeVisible();
   await app.screenshot("flow-zoom-kept-on-resize");

@@ -32,8 +32,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   browser,
 }) => {
   // Arrange
-  // Keep the large authoring canvas for port drags within the inset Studio layout.
-  await browser.setViewport({ width: 1920, height: 999 });
+  await browser.setViewport({ width: 1920, height: 1000 });
   await app.open("/studio/flows");
 
   // Act
@@ -187,7 +186,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
 }) => {
   // Arrange
   const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", "UI exit worker");
-  await browser.setViewport({ width: 1600, height: 999 });
+  await browser.setViewport({ width: 1600, height: 1000 });
   await app.open("/studio/flows");
   await screen.getByRole("button", "New Flow").tap();
   await screen.getByLabel("Flow name").fill("Block exit configuration");
@@ -457,7 +456,7 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await screen
     .getByLabel("Exit 2 description", { exact: true })
     .fill("Explain the changes needed before this work can continue.");
-  await screen.getByRole("checkbox", "Exit 2 message required", { exact: true }).tap();
+  await screen.getByRole("switch", "Exit 2 message required", { exact: true }).tap();
   await screen.getByRole("button", "Create Agent", { exact: true }).tap();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeVisible();
   const agentId = new URL(await browser.url()).pathname.split("/").at(-1)!;
@@ -534,12 +533,12 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   await app.screenshot("agent-exit-renamed-wire");
   await screen.getByRole("link", "Agents", { exact: true }).tap();
   await screen.getByRole("link", /Exit journey worker/).tap();
-  await screen.getByRole("button", "Remove exit 1", { exact: true }).tap();
+  await screen.getByRole("button", "Remove exit ready-for-review", { exact: true }).tap();
   await screen.getByRole("button", "Save", { exact: true }).tap();
   await expectSavedAgentRevision(screen, 3);
   await expect(screen.getByLabel("Exit 1 name", { exact: true })).toHaveValue("changes-needed");
   await expect(
-    screen.getByRole("checkbox", "Exit 1 message required", { exact: true }),
+    screen.getByRole("switch", "Exit 1 message required", { exact: true }),
   ).toBeChecked();
   await screen.getByRole("link", "Flows", { exact: true }).tap();
   await screen.getByRole("link", /Agent exit journey/).tap();
@@ -607,9 +606,8 @@ test("an exported Flow imported through the review arrives as a new Flow with a 
   await screen.getByLabel("Choose a Factory export file").setInputFiles([download.absolutePath]);
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText(name);
-  await expect(review).toContainText(
-    "Imported prompts run with your T3 permissions — Read them in Studio before you start a Run.",
-  );
+  await expect(review).toContainText("Imported prompts run with your T3 permissions");
+  await expect(review).toContainText("Read them in Studio before you start a Run.");
   await browser.evaluate(
     "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))",
   );

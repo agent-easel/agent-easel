@@ -570,14 +570,14 @@ export async function beforeComparedAgent(fixtures: StudioFixtures, prefix: stri
   const agent4 = await saveAgentElsewhere(app.baseUrl, cleanAgent, {
     prompt: `Acceptance · ${prefix} · Saved prompt 4`,
   });
-  const agentPanel = screen.getByRole("region", "Reconcile Agent");
+  const agentPanel = screen.getByText(/^Revision \d+ was saved elsewhere$/);
   return { ...state, agent4, agentPanel };
 }
 
 export async function expectComparedAgent(state: Awaited<ReturnType<typeof beforeComparedAgent>>) {
   const { screen } = state;
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
-  await expect(comparison.getByLabel("Your local draft", { exact: true })).toContainText(
+  const comparison = screen.getByRole("dialog", "Compare with revision 4");
+  await expect(comparison.getByLabel("Your draft", { exact: true })).toContainText(
     "My retained prompt",
   );
   return { ...state };
@@ -586,16 +586,10 @@ export async function expectComparedAgent(state: Awaited<ReturnType<typeof befor
 export async function beforeInvalidatedAgentConfirmation(fixtures: StudioFixtures, prefix: string) {
   const state = await (async () => {
     const previous = await beforeComparedAgent(fixtures, prefix);
-    const { agentPanel } = previous;
-    await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+    const { screen } = previous;
+    await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
     return expectComparedAgent({ ...previous });
   })();
-  const { screen } = state;
-  await screen
-    .getByRole("dialog", "Compare latest revision")
-    .getByRole("button", "Load latest revision", { exact: true })
-    .tap();
-  await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toBeVisible();
   return { ...state };
 }
 
@@ -603,11 +597,12 @@ export async function expectInvalidatedAgentConfirmation(
   state: Awaited<ReturnType<typeof beforeInvalidatedAgentConfirmation>>,
 ) {
   const { screen } = state;
-  await expect(screen.getByRole("alertdialog", "Load revision 4?", { exact: true })).toHaveCount(0);
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
-  await expect(comparison.getByLabel("Saved revision 5", { exact: true })).toContainText(
+  // The open comparison moves to the newer revision, so Load can never apply an unseen one.
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
+  await expect(comparison.getByLabel("Revision 5", { exact: true })).toContainText(
     "Saved prompt 5",
   );
+  await expect(comparison.getByRole("button", "Load revision 4", { exact: true })).toHaveCount(0);
   return { ...state };
 }
 
@@ -630,8 +625,8 @@ export async function beforeSavedAgent(fixtures: StudioFixtures, prefix: string)
   const previous = await beforeReboundAgent(fixtures, prefix);
   const { screen } = previous;
   await screen
-    .getByRole("dialog", "Compare latest revision")
-    .getByRole("button", "Keep my edits against revision 5", { exact: true })
+    .getByRole("dialog", "Compare with revision 5")
+    .getByRole("button", "Keep my edits", { exact: true })
     .tap();
   return expectReboundAgent({ ...previous });
 }
@@ -664,14 +659,14 @@ export async function beforeRemovedAgent(fixtures: StudioFixtures, prefix: strin
     await browser.reload();
     return expectReloadedAgent({ ...previous });
   })();
-  const { app, screen, agentPanel, savedAgent } = state;
+  const { app, screen, savedAgent } = state;
   await screen
     .getByLabel("Prompt", { exact: true })
     .fill(`Acceptance · ${prefix} · Recovery prompt`);
   await saveAgentElsewhere(app.baseUrl, savedAgent, {
     prompt: `Acceptance · ${prefix} · Saved prompt 7`,
   });
-  await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
   return { ...state };
 }
 
@@ -679,12 +674,8 @@ export async function expectRemovedAgent(state: Awaited<ReturnType<typeof before
   const { screen, studio, agentsBefore, agentPanel } = state;
   await expect(agentPanel).toHaveCount(0);
   await expect(studio.getByRole("link", "Agents")).toContainText(String(agentsBefore.length));
-  await expectRetainedDefinition(
-    screen,
-    "Agent",
-    ["Save"],
-    ["Duplicate", "Change owner…", "Export JSON", "Remove"],
-  );
+  // Save and More actions are disabled as a whole while the Agent no longer exists.
+  await expectRetainedDefinition(screen, "Agent", ["Save", "More actions"]);
   return { ...state };
 }
 

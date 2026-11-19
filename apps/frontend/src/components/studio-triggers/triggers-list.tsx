@@ -1,16 +1,11 @@
+import { otherRepositoryWatchers } from "./trigger-notices.tsx";
+import { StartedRuns } from "./started-runs.tsx";
 import { useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Pencil, Play, Trash2, Zap } from "lucide-react";
+import { ChevronRight, Pencil, RefreshCw, Trash2, Zap } from "lucide-react";
 import type { FactoryProject, TriggerDefinition, TriggerStartedRun } from "@t3-factory/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "../status-badge.tsx";
 import { RemoveTriggerDialog } from "./remove-trigger-dialog.tsx";
@@ -35,11 +30,12 @@ const enableReview = (
   names: TriggerNames,
   actions: TriggerActions,
   changed: boolean,
+  triggers: readonly TriggerDefinition[] | null,
 ): TriggerReview => ({
   title: `Enable “${trigger.name}”?`,
   summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
-  query: trigger.github.query,
-  readyLabel: trigger.github.readyLabel,
+  repository: trigger.github.repository.nameWithOwner,
+  watchers: otherRepositoryWatchers(triggers, trigger.github.repository, trigger.id),
   confirmLabel: "Enable and check",
   load: () => actions.preview(trigger),
   ...(changed && {
@@ -51,7 +47,11 @@ const enableReview = (
  * The review before enabling a saved Trigger; Enable and check confirms the revision it showed.
  * When another revision was saved after that, the review opens again on the current settings.
  */
-export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
+export function useEnableReview(
+  names: TriggerNames,
+  actions: TriggerActions,
+  triggers: readonly TriggerDefinition[] | null,
+) {
   const [reviewing, setReviewing] = useState<{
     readonly trigger: TriggerDefinition;
     readonly review: TriggerReview;
@@ -59,7 +59,7 @@ export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   const busy = reviewing !== null && actions.state.pending.get(reviewing.trigger.id) === "enable";
   /** Opens the review of `trigger`; `changed` says another revision replaced the reviewed one. */
   const open = (trigger: TriggerDefinition, changed = false) =>
-    setReviewing({ trigger, review: enableReview(trigger, names, actions, changed) });
+    setReviewing({ trigger, review: enableReview(trigger, names, actions, changed, triggers) });
   /** Enable and check `trigger` at the reviewed `revision`, or review it again if it changed. */
   const enable = (trigger: TriggerDefinition, revision: number) =>
     actions
@@ -250,7 +250,7 @@ function TriggerRow({
       meta={<TriggerMeta trigger={trigger} names={names} checking={checking} started={started} />}
       reason={problem}
       badge={problem ? <StatusBadge kind="problem" /> : undefined}
-      leading={
+      control={
         gone ? undefined : (
           <MutationGate>
             <Switch
@@ -278,7 +278,7 @@ function TriggerRow({
         gone ? null : (
           <ChevronRight
             aria-hidden
-            className="size-4 shrink-0 text-subtle-foreground"
+            className="size-4 shrink-0 text-muted-foreground"
             strokeWidth={1.5}
           />
         )
@@ -304,60 +304,6 @@ function TriggerMeta({
     return <StartedRuns runs={started} />;
   }
   return `GitHub Issues · ${triggerRoute(trigger, names)} · ${scheduleText(trigger.schedule)}`;
-}
-
-/** “N Runs” opens the one Run, or a menu of them. The check itself stays on the list. */
-function StartedRuns({ runs }: { runs: readonly TriggerStartedRun[] }) {
-  const navigate = useNavigate();
-  const label = `${runs.length} ${runs.length === 1 ? "Run" : "Runs"}`;
-  const open = (id: string) =>
-    void navigate({ to: "/runs/$runId", params: { runId: id }, search: {} });
-  const className = "relative z-10 text-link hover:underline";
-  if (runs.length === 1) {
-    const run = runs[0]!;
-    return (
-      <>
-        Started{" "}
-        <button
-          type="button"
-          className={className}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            open(run.id);
-          }}
-        >
-          {label}
-        </button>
-      </>
-    );
-  }
-  return (
-    <>
-      Started{" "}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={className}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-          >
-            {label}
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {runs.map((run) => (
-            <DropdownMenuItem key={run.id} onSelect={() => open(run.id)}>
-              {run.number === null ? run.title || "Run" : `#${run.number} ${run.title}`}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </>
-  );
 }
 
 function TriggerRowMenu({
@@ -391,7 +337,7 @@ function TriggerRowMenu({
             description={trigger.enabled ? undefined : "Turn the Trigger on to check it."}
             onSelect={onCheck}
           >
-            <Play aria-hidden strokeWidth={1.5} />
+            <RefreshCw aria-hidden strokeWidth={1.5} />
             Check now
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onEdit}>

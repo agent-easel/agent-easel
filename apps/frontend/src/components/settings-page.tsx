@@ -199,6 +199,7 @@ export function SettingsTechnicalDetails({ details }: { details: string }) {
 /** One explanation and next step for a Settings problem. */
 export function SettingsProblemCard({
   id,
+  label,
   tone,
   title,
   children,
@@ -208,6 +209,8 @@ export function SettingsProblemCard({
 }: {
   /** Lets a field tag point at this card with `aria-describedby`. */
   id?: string;
+  /** Names the card's live region where its title alone is ambiguous on the page. */
+  label?: string;
   tone: "error" | "warning" | "info" | "neutral";
   title: ReactNode;
   children?: ReactNode;
@@ -223,7 +226,12 @@ export function SettingsProblemCard({
   } as const;
   const Icon = icon ?? (tone === "error" || tone === "warning" ? TriangleAlert : Info);
   return (
-    <Alert id={id} variant={variant[tone]} role={tone === "error" ? "alert" : "status"}>
+    <Alert
+      id={id}
+      aria-label={label}
+      variant={variant[tone]}
+      role={tone === "error" ? "alert" : "status"}
+    >
       <Icon aria-hidden strokeWidth={1.5} />
       <AlertTitle>{title}</AlertTitle>
       {(children || details || action) && (
@@ -234,31 +242,5 @@ export function SettingsProblemCard({
         </AlertDescription>
       )}
     </Alert>
-  );
-}
-
-/** The heading and introduction used in Studio Trigger views. */
-export function StudioPage({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description: ReactNode;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="grid gap-5">
-      <header className="grid gap-1.5">
-        <div className="flex min-h-8 items-center justify-between gap-2">
-          <h2 className="text-lg leading-tight font-semibold">{title}</h2>
-          {action}
-        </div>
-        <p className="text-sm leading-tight text-muted-foreground">{description}</p>
-      </header>
-      {children}
-    </div>
   );
 }

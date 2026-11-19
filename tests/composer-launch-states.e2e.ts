@@ -11,6 +11,10 @@ import { removeFlowElsewhere } from "./support/flows.ts";
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 
 /** Launch states of the New Run composer after ticket #507. Dark, 1440×900. */
+
+// A cancelled animation rejects `finished` with AbortError. A shot still waits for the rest.
+const settled =
+  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => null))).then(() => true)";
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 900 });
 });
@@ -125,9 +129,12 @@ test("losing Factory shows Factory offline and does not send the owner to T3 set
 test("a chosen Flow that is not ready carries its reason on the one error card", async ({
   app,
   screen,
+  browser,
 }) => {
   const { agent, flow } = await blockOnModelLessLaterReview(app, screen);
   await expect(screen.getByText("Not ready", { exact: true })).toBeVisible();
+  // The field's error border fades in; capture it once the transition ends.
+  await browser.evaluate(settled);
   await app.screenshot("after-flow-not-ready");
   await removeFlowElsewhere(app.baseUrl, flow);
   await removeAgentElsewhere(app.baseUrl, agent.id);

@@ -19,7 +19,8 @@ import { api, ApiError } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { useClientScope } from "../client-scope.ts";
 import { useSettingsNavigation } from "../settings-navigation.ts";
-import { modelOptionChoices, ModelOptionSelect } from "./execution-settings-fields.tsx";
+import { ModelOptionSelect } from "./execution-settings-fields.tsx";
+import { modelOptionChoices } from "@/lib/agent-display";
 import { dayAndTime } from "./execution-state.tsx";
 import {
   SettingsDetailRow,

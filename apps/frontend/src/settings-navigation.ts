@@ -1,5 +1,4 @@
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
-import type { TriggerKind } from "@t3-factory/contracts";
 
 const settingsTabs = [
   "connection",
@@ -23,12 +22,13 @@ export type SettingsSelection = { tab: SettingsTab; from?: SettingsTab };
 function settingsTab(value: unknown): SettingsTab | undefined {
   return settingsTabs.find((tab) => tab === value);
 }
+type TriggerSelection = { tab: "triggers"; triggerId?: string };
+
 export type StudioSelection =
-  | { tab: "flows"; flowId?: string }
+  | { tab: "flows"; flowId?: string; fromTrigger?: string }
   /** `fromFlow`: the Flow whose editor asked for a new Agent, whose owner it defaults to. */
   | { tab: "agents"; agentId?: string; fromFlow?: string }
-  /** `triggerId: "new"` picks the type; adding `kind` opens that type's create form. */
-  | { tab: "triggers"; triggerId?: string; kind?: TriggerKind };
+  | TriggerSelection;
 export type AppSearch = { settings?: SettingsSelection; studio?: StudioSelection };
 
 function searchRecord(value: unknown): Record<string, unknown> {
@@ -39,7 +39,10 @@ function studioSelection(value: unknown): StudioSelection | undefined {
   if (selection.tab === "flows")
     return {
       tab: "flows",
-      ...(typeof selection.flowId === "string" ? { flowId: selection.flowId } : {}),
+      ...(typeof selection.flowId === "string" && {
+        flowId: selection.flowId,
+        ...(typeof selection.fromTrigger === "string" && { fromTrigger: selection.fromTrigger }),
+      }),
     };
   if (selection.tab === "agents")
     return {
@@ -48,10 +51,10 @@ function studioSelection(value: unknown): StudioSelection | undefined {
       ...(typeof selection.fromFlow === "string" ? { fromFlow: selection.fromFlow } : {}),
     };
   if (selection.tab === "triggers") {
-    if (typeof selection.triggerId !== "string") return { tab: "triggers" };
-    return selection.triggerId === "new" && selection.kind === "github_issues"
-      ? { tab: "triggers", triggerId: "new", kind: "github_issues" }
-      : { tab: "triggers", triggerId: selection.triggerId };
+    return {
+      tab: "triggers",
+      ...(typeof selection.triggerId === "string" && { triggerId: selection.triggerId }),
+    };
   }
   return undefined;
 }
@@ -75,7 +78,7 @@ export function studioMask(selection: StudioSelection) {
     return selection.agentId
       ? { to: "/studio/agents/$agentId" as const, params: { agentId: selection.agentId } }
       : { to: "/studio/agents" as const };
-  if (selection.kind) return { to: "/studio/triggers/new/github-issues" as const };
+  if (selection.triggerId === "new") return { to: "/studio/triggers/new/github-issues" as const };
   return selection.triggerId
     ? { to: "/studio/triggers/$triggerId" as const, params: { triggerId: selection.triggerId } }
     : { to: "/studio/triggers" as const };

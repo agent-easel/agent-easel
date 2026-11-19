@@ -28,12 +28,20 @@ export function Notice({
   className?: string;
 }) {
   return (
-    <Alert id={id} variant={tone} className={cn("gap-y-1 px-5 py-3.5", className)}>
+    // Run/InlineAlert geometry: 12 × 10 padding, 10 px icon gap, 4 px rows, 12.5 px text at normal leading.
+    <Alert
+      id={id}
+      variant={tone}
+      className={cn(
+        "gap-y-1 px-3 py-2.5 leading-[normal] has-[>svg]:gap-x-2.5 [&>svg]:translate-y-0",
+        className,
+      )}
+    >
       <Icon aria-hidden strokeWidth={1.5} />
-      <AlertTitle>{title}</AlertTitle>
+      <AlertTitle className="min-h-0">{title}</AlertTitle>
       {(children || action) && (
-        <AlertDescription className="gap-1.5">
-          {children && <p className="leading-snug">{children}</p>}
+        <AlertDescription className="gap-1 [&_p]:leading-[normal] [&>:not(p)]:pt-0.5">
+          {children && <p>{children}</p>}
           {action}
         </AlertDescription>
       )}

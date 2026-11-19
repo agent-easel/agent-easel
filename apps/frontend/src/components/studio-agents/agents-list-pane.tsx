@@ -20,6 +20,7 @@ import {
   type useStudioOwners,
 } from "../../studio-definitions.ts";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
+import { offeredExecution } from "../../agent-draft.ts";
 
 export function AgentsListColumn({
   agents,
@@ -46,7 +47,7 @@ export function AgentsListColumn({
 }) {
   const groups = shownGroups(agents, query, owners);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2 md:w-[300px] md:shrink-0">
+    <div className="flex w-full min-w-0 flex-col gap-2 md:w-100 md:shrink-0">
       {creatingNew && (
         <StudioListRow
           icon={
@@ -187,12 +188,16 @@ function AgentRow({
   onRemove: () => void;
 }) {
   const reporting = useReportingState();
-  const status = agent.execution
-    ? agentReportingStatus(agent.execution.providerInstanceId, reporting)
-    : undefined;
+  // A saved selection T3 no longer offers reads Needs a model, as the editor shows it.
+  const summary = agent.execution
+    ? agentRuntimeMeta(offeredExecution(agent.execution, capabilities), capabilities)
+    : "";
+  const status =
+    agent.execution && summary
+      ? agentReportingStatus(agent.execution.providerInstanceId, reporting)
+      : undefined;
   const attention = status?.state === "attention" ? status : undefined;
   const overrides = projectOverridesLabel(agent.projectOverrides.length);
-  const summary = agent.execution ? agentRuntimeMeta(agent.execution, capabilities) : "";
   const meta = attention ? (
     <span
       id={`agent-reporting-${agent.id}`}
@@ -218,7 +223,7 @@ function AgentRow({
       wrap
       selected={selected}
       trailing={
-        <span className="shrink-0 text-2xs font-medium text-muted-foreground">
+        <span className="shrink-0 text-2xs text-subtle-foreground">
           {flowUsageLabel(placingFlows(flows, agent.id).length)}
         </span>
       }

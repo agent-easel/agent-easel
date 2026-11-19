@@ -16,8 +16,6 @@ import {
   beforeSavedAgentEdits,
   expectReloadedAgentEdits,
   beforeReloadedAgentEdits,
-  expectAgentLoadConfirmation,
-  beforeAgentLoadConfirmation,
   expectLoadedAgentRevision,
   beforeLoadedAgentRevision,
 } from "./support/studio-editor-states.ts";
@@ -66,10 +64,9 @@ test("Compare latest revision shows both the local Agent edits and the saved rev
 }) => {
   // Arrange
   const state = await beforeAgentComparison({ app, screen, browser }, "agentComparison");
-  const { panel } = state;
 
   // Act
-  await panel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
 
   // Assert
   await expectAgentComparison({ ...state });
@@ -82,10 +79,10 @@ test("keeping Agent edits against a saved revision sends no implicit save", asyn
 }) => {
   // Arrange
   const state = await beforeKeptAgentEdits({ app, screen, browser }, "keptAgentEdits");
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
+  const comparison = screen.getByRole("dialog", "Compare with revision 2");
 
   // Act
-  await comparison.getByRole("button", "Keep my edits against revision 2", { exact: true }).tap();
+  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
 
   // Assert
   await expectKeptAgentEdits({ ...state });
@@ -113,26 +110,7 @@ test("saved Agent edits survive reload", async ({ app, screen, browser }) => {
   await expectReloadedAgentEdits({ ...state });
 });
 
-test("Load latest revision asks for confirmation with Keep editing focused", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeAgentLoadConfirmation(
-    { app, screen, browser },
-    "agentLoadConfirmation",
-  );
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
-
-  // Act
-  await comparison.getByRole("button", "Load latest revision", { exact: true }).tap();
-
-  // Assert
-  await expectAgentLoadConfirmation({ ...state });
-});
-
-test("confirming Load latest revision replaces Agent edits with the saved revision", async ({
+test("Load revision replaces Agent edits with the saved revision at once", async ({
   app,
   screen,
   browser,
@@ -177,12 +155,14 @@ test("a Worker change made in the model picker marks the draft dirty and Save st
     { app, screen, browser },
     `Model picker ${crypto.randomUUID().slice(0, 8)}`,
   );
-  const picker = screen.getByRole("button", "Worker: GPT 6.1 Sol · High", { exact: true });
+  const picker = screen.getByRole("button", "Worker: Codex · GPT 6.1 Sol · High", {
+    exact: true,
+  });
   await picker.tap();
   const settings = screen.getByRole("dialog", "Worker");
   await settings.getByRole("button", "Reasoning effort: High", { exact: true }).tap();
   await screen.getByRole("menuitemradio", "Low", { exact: true }).tap();
-  await expect(screen.getByText(/^Unsaved changes · rev 1 · /)).toBeVisible();
+  await expect(screen.getByText(/^Unsaved changes · Revision 1 · /)).toBeVisible();
   await settings.press("Escape");
 
   // Act
@@ -191,7 +171,7 @@ test("a Worker change made in the model picker marks the draft dirty and Save st
   // Assert
   await expectSavedAgentRevision(screen, 2);
   await expect(
-    screen.getByRole("button", "Worker: GPT 6.1 Sol · Low", { exact: true }),
+    screen.getByRole("button", "Worker: Codex · GPT 6.1 Sol · Low", { exact: true }),
   ).toBeVisible();
   const saved = await readAgentDefinition(app.baseUrl, agent.id);
   assert.deepEqual(
@@ -213,7 +193,7 @@ test("Escape closes only the model picker and returns focus to it", async ({
   const picker = screen.getByRole("button", /^Worker: /);
   await picker.tap();
   const settings = screen.getByRole("dialog", "Worker");
-  await expect(settings.getByRole("button", "Clear worker selection")).toBeFocused();
+  await expect(settings.getByRole("button", /^Environment: /)).toBeFocused();
 
   // Act
   await settings.press("Escape");

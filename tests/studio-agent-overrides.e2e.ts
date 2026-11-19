@@ -93,18 +93,15 @@ test("unsaved Project overrides of an Agent moved to a Project elsewhere stay vi
   );
   await dialog.getByRole("button", "Apply", { exact: true }).tap();
   await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
-  await screen
-    .getByRole("status", "Owner changed elsewhere")
-    .getByRole("button", "Acknowledge new owner", { exact: true })
-    .tap();
-  const stranded = screen.getByRole("alert", "Project overrides this Agent cannot keep");
-  await expect(stranded).toContainText("Northwind");
+  await screen.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
+  const stranded = screen.getByText("Project overrides can’t be kept", { exact: true });
+  await expect(screen.getByText(/owned by Northwind now/)).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await browser.evaluate(settled);
   await app.screenshot("stranded-overrides");
 
   // Act
-  await stranded.getByRole("button", "Remove Project overrides from draft", { exact: true }).tap();
+  await screen.getByRole("button", "Remove override", { exact: true }).tap();
 
   // Assert
   // The owner move is already saved. Dropping the unsaved override leaves nothing to save.

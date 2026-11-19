@@ -21,12 +21,8 @@ export async function expectRetainedCleanAgent(
     0,
   );
   await expect(browser).toHaveURL(`/studio/agents/${agent.id}`);
-  await expectRetainedDefinition(
-    screen,
-    "Agent",
-    ["Save"],
-    ["Duplicate", "Change owner…", "Export JSON", "Remove"],
-  );
+  // Save and More actions are disabled as a whole while the Agent no longer exists.
+  await expectRetainedDefinition(screen, "Agent", ["Save", "More actions"]);
   await app.screenshot("agent-removed-retained");
   return { ...state };
 }

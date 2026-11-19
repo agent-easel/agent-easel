@@ -1,3 +1,4 @@
+import { FlowGroup } from "../components/launch-picker-options.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ScreenLayout } from "../components/screen-layout.tsx";
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
@@ -46,13 +47,9 @@ import { Button } from "../components/ui/button.tsx";
 import { KeyChip } from "@/components/ui/key-chip";
 import {
   DropdownMenu,
-  DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu.tsx";
-import { MenuName } from "../components/menu-name.tsx";
 import {
   PickerMenuContent,
   PickerMenuList,
@@ -241,7 +238,7 @@ function StartButton({ model }: { model: Composer }) {
         disabled={!enabled}
         className={cn(
           "group/start ml-auto h-9 shrink-0 gap-2 pr-3 pl-3.5 font-semibold has-[>svg]:pr-3 has-[>svg]:pl-3.5",
-          !enabled && "bg-accent text-subtle-foreground hover:bg-accent disabled:opacity-100",
+          !enabled && "bg-border text-subtle-foreground hover:bg-border disabled:opacity-100",
         )}
       >
         <Play aria-hidden className="size-3" strokeWidth={2} />
@@ -258,7 +255,7 @@ function StartButton({ model }: { model: Composer }) {
 
 export function RunComposer() {
   const model = useComposer();
-  const { project, projectReady, start } = model;
+  const { project, start } = model;
   return (
     <ScreenLayout title="New Run">
       <main className="flex flex-1 items-center justify-center p-8 max-sm:px-4">
@@ -276,7 +273,8 @@ export function RunComposer() {
           }}
         >
           <h1 className="text-heading tracking-heading">
-            {projectReady ? `What should we work on in ${project?.title}?` : "Start a new Run"}
+            {/* A last-known Project keeps its heading while T3 is disconnected (R08a). */}
+            {project ? `What should we work on in ${project.title}?` : "Start a new Run"}
           </h1>
           <ComposerBox model={model} />
           <LaunchNotice model={model} />
@@ -315,74 +313,6 @@ function FlowFieldValue({
     <>
       <span className="min-w-0 truncate font-medium">{value}</span>
       {flow && !flowCanLaunch(flow) && <StatusBadge kind="error">Not ready</StatusBadge>}
-    </>
-  );
-}
-
-const flowRadioItemClass =
-  "my-0.5 rounded-md py-2 data-[state=checked]:bg-brand-soft data-[state=checked]:ring-1 data-[state=checked]:ring-brand-soft-border data-[state=checked]:ring-inset data-[state=checked]:focus:bg-brand-soft data-[state=checked]:focus-visible:ring-2 data-[state=checked]:focus-visible:ring-ring";
-
-function FlowChoice({
-  flow,
-  busy,
-  peers,
-}: {
-  flow: FlowDraft;
-  busy: boolean;
-  peers: readonly string[];
-}) {
-  return (
-    <DropdownMenuRadioItem
-      value={flow.id}
-      data-flow-id={flow.id}
-      indicatorPosition="right"
-      disabled={busy}
-      aria-label={flow.name}
-      className={flowRadioItemClass}
-    >
-      <MenuName name={flow.name} peers={peers} />
-    </DropdownMenuRadioItem>
-  );
-}
-
-/** A not-ready Flow stays visible and cannot be chosen, hovered, or checked. */
-function FlowUnavailable({ flow, peers }: { flow: FlowDraft; peers: readonly string[] }) {
-  return (
-    <DropdownMenuItem
-      disabled
-      data-flow-id={flow.id}
-      aria-label={`${flow.name} · Not ready`}
-      className="my-0.5 rounded-md py-2 data-[disabled]:opacity-100"
-    >
-      <MenuName name={flow.name} peers={peers} className="text-muted-foreground" />
-      <StatusBadge kind="error">Not ready</StatusBadge>
-    </DropdownMenuItem>
-  );
-}
-
-/** One heading and its Flows, ready first, or nothing when none match. */
-function FlowGroup({
-  title,
-  flows,
-  busy,
-  peers,
-}: {
-  title: string;
-  flows: readonly FlowDraft[];
-  busy: boolean;
-  peers: readonly string[];
-}) {
-  if (flows.length === 0) return null;
-  return (
-    <>
-      <DropdownMenuLabel className="normal-case">{title}</DropdownMenuLabel>
-      {flows.map((flow) =>
-        flowCanLaunch(flow) ? (
-          <FlowChoice key={flow.id} flow={flow} busy={busy} peers={peers} />
-        ) : (
-          <FlowUnavailable key={flow.id} flow={flow} peers={peers} />
-        ),
-      )}
     </>
   );
 }
@@ -664,10 +594,13 @@ function CauseLink({ cause }: { cause: StartCause }) {
 
 function StartCauseList({ causes }: { causes: readonly StartCause[] }) {
   return (
-    <ul aria-label="Start blockers" className="list-disc space-y-1 pl-4 text-foreground">
+    <ul aria-label="Start blockers" className="grid gap-1">
       {causes.map((cause, index) => (
-        <li key={`${cause.destination}:${cause.message}:${index}`} className="break-words">
-          <span className="block">{cause.message}</span>
+        <li
+          key={`${cause.destination}:${cause.message}:${index}`}
+          className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 break-words"
+        >
+          <span>{cause.message}</span>
           <CauseLink cause={cause} />
         </li>
       ))}

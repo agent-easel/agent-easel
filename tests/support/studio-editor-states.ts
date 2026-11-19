@@ -33,8 +33,8 @@ export async function expectDirtyAgentRevision(
   state: Awaited<ReturnType<typeof beforeDirtyAgentRevision>>,
 ) {
   const { screen } = state;
-  const panel = screen.getByRole("region", "Reconcile Agent");
-  await expect(panel).toContainText("Revision 2 was saved elsewhere. Your edits are kept.");
+  const panel = screen.getByText("Revision 2 was saved elsewhere", { exact: true });
+  await expect(panel).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   return { ...state, panel };
 }
@@ -52,12 +52,14 @@ export async function expectAgentComparison(
   state: Awaited<ReturnType<typeof beforeAgentComparison>>,
 ) {
   const { app, prefix, screen } = state;
-  const comparison = screen.getByRole("dialog", "Compare latest revision");
-  await expect(comparison.getByLabel("Your local draft", { exact: true })).toContainText(
-    editedPrompt,
+  const comparison = screen.getByRole("dialog", "Compare with revision 2");
+  await expect(comparison.getByLabel("Your draft", { exact: true })).toContainText(editedPrompt);
+  await expect(comparison.getByLabel("Revision 2", { exact: true })).toContainText(
+    `Name  Live · ${prefix} · Dirty Agent renamed elsewhere`,
   );
-  await expect(comparison.getByLabel("Saved revision 2", { exact: true })).toContainText(
-    `Name: Live · ${prefix} · Dirty Agent renamed elsewhere`,
+  // Display names only: the Worker reads as its provider, model and effort.
+  await expect(comparison.getByLabel("Revision 2", { exact: true })).toContainText(
+    "Worker  Codex · GPT 6.1 Sol · High",
   );
   await app.screenshot("agent-editor-compare-latest-revision");
   return { ...state };
@@ -65,8 +67,7 @@ export async function expectAgentComparison(
 
 export async function beforeKeptAgentEdits(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeAgentComparison(fixtures, prefix);
-  const { panel } = previous;
-  await panel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await previous.screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
   return expectAgentComparison({ ...previous });
 }
 
@@ -84,8 +85,8 @@ export async function beforeSavedAgentEdits(fixtures: StudioFixtures, prefix: st
   const previous = await beforeKeptAgentEdits(fixtures, prefix);
   const { screen } = previous;
   await screen
-    .getByRole("dialog", "Compare latest revision")
-    .getByRole("button", "Keep my edits against revision 2", { exact: true })
+    .getByRole("dialog", "Compare with revision 2")
+    .getByRole("button", "Keep my edits", { exact: true })
     .tap();
   return expectKeptAgentEdits({ ...previous });
 }
@@ -120,15 +121,16 @@ export async function expectReloadedAgentEdits(
   return { ...state };
 }
 
-export async function beforeAgentLoadConfirmation(fixtures: StudioFixtures, prefix: string) {
+export async function beforeLoadedAgentRevision(fixtures: StudioFixtures, prefix: string) {
   const { app, screen } = fixtures;
   const agent = await openStudioAgent(fixtures, `Live · ${prefix} · Load Agent`);
   await screen.getByLabel("Prompt", { exact: true }).fill(editedPrompt);
   await saveAgentElsewhere(app.baseUrl, agent, {
     name: `Live · ${prefix} · Load Agent renamed elsewhere`,
   });
-  const panel = screen.getByRole("region", "Reconcile Agent");
-  await panel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  const panel = screen.getByText("Revision 2 was saved elsewhere", { exact: true });
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await expect(screen.getByRole("dialog", "Compare with revision 2")).toBeVisible();
   return {
     app: fixtures.app,
     screen: fixtures.screen,
@@ -137,29 +139,6 @@ export async function beforeAgentLoadConfirmation(fixtures: StudioFixtures, pref
     agent,
     panel,
   };
-}
-
-export async function expectAgentLoadConfirmation(
-  state: Awaited<ReturnType<typeof beforeAgentLoadConfirmation>>,
-) {
-  const { app, screen, browser } = state;
-  const confirmation = screen.getByRole("alertdialog", "Load revision 2?");
-  await expect(confirmation.getByRole("button", "Keep editing", { exact: true })).toBeFocused();
-  await browser.evaluate(
-    "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)",
-  );
-  await app.screenshot("agent-editor-load-latest-confirmation");
-  return { ...state, confirmation };
-}
-
-export async function beforeLoadedAgentRevision(fixtures: StudioFixtures, prefix: string) {
-  const previous = await beforeAgentLoadConfirmation(fixtures, prefix);
-  const { screen } = previous;
-  await screen
-    .getByRole("dialog", "Compare latest revision")
-    .getByRole("button", "Load latest revision", { exact: true })
-    .tap();
-  return expectAgentLoadConfirmation({ ...previous });
 }
 
 export async function expectLoadedAgentRevision(

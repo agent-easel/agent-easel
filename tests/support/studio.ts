@@ -66,7 +66,7 @@ export async function saveFlowWithReadiness(
 
 /** The Agent editor's status line names the saved revision `revision` with no unsaved changes. */
 export async function expectSavedAgentRevision(screen: Screen, revision: number) {
-  await expect(screen.getByText(new RegExp(`^Saved · rev ${revision} · `))).toBeVisible();
+  await expect(screen.getByText(new RegExp(`^Saved · Revision ${revision} · `))).toBeVisible();
 }
 
 /**
@@ -81,7 +81,7 @@ export async function expectRetainedDefinition(
   menuItems: readonly string[] = [],
 ) {
   await expect(
-    screen.getByText(`This ${kind} was removed elsewhere. Your draft is kept.`, { exact: true }),
+    screen.getByText(`This ${kind} was removed elsewhere`, { exact: true }),
   ).toBeVisible();
   for (const name of actions)
     await expect(screen.getByRole("button", name, { exact: true })).toBeDisabled();

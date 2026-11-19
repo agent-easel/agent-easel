@@ -27,6 +27,10 @@ async function openProjectMenu(screen: Screen) {
   await expect(screen.getByRole("group", "Projects")).toBeVisible();
 }
 
+// A cancelled animation rejects `finished` with AbortError. A shot still waits for the rest.
+const settled =
+  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => null))).then(() => true)";
+
 const checkedRadios = `document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]').length`;
 
 /** The open animation slides the menu in from above, so geometry is read only once it has settled. */
@@ -355,10 +359,12 @@ test("Project search appears after more than seven projects and keeps the path e
     expect(path.dir).toBe("rtl");
     expect(path.title).toContain("factory-menu-evidence-");
     expect(path.text).toBe(path.title);
+    await browser.evaluate(settled);
     await app.screenshot("after-project-many");
     await search.fill("zzzz-no-such-project");
     await expect(screen.getByText("No matching projects", { exact: true })).toBeVisible();
     await expect(screen.getByRole("menuitem", "Refresh projects", { exact: true })).toBeVisible();
+    await browser.evaluate(settled);
     await app.screenshot("after-project-no-match");
   } finally {
     await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));

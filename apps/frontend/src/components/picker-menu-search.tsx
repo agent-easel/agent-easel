@@ -40,10 +40,10 @@ export function PickerMenuSearch({
   firstChoiceSelector: string;
 }) {
   return (
-    <div className="shrink-0 border-b p-2">
+    <div className="shrink-0 border-b p-1">
       <div className="relative">
         <SearchIcon
-          className="pointer-events-none absolute top-2.5 left-2.5 size-4 text-muted-foreground"
+          className="pointer-events-none absolute top-[9px] left-2.5 size-3.5 text-muted-foreground"
           aria-hidden
         />
         <Input
@@ -53,7 +53,7 @@ export function PickerMenuSearch({
           placeholder={placeholder}
           value={value}
           // muted-foreground clears 4.5:1 on the field; the tertiary placeholder color does not.
-          className="h-9 pl-8 placeholder:text-muted-foreground"
+          className="h-8 bg-muted pl-8 placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-0"
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") return;
@@ -135,7 +135,7 @@ export function PickerMenuContent({
       align="start"
       // Tracks the popper as the anchor moves, and leaves a 12px gap above the window edge.
       style={{ maxHeight: "calc(var(--radix-dropdown-menu-content-available-height) - 12px)" }}
-      className={cn("flex w-96 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0", className)}
+      className={cn("flex w-80 max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0", className)}
       {...menuHandlers}
     >
       {children}

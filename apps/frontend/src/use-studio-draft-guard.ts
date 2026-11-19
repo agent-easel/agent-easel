@@ -14,20 +14,15 @@ export type StudioDraftGuardInput = {
   triggerRef?: RefObject<StudioDraft | undefined>;
 };
 
-/** The draft a Trigger page edits: a saved Trigger's id, or `new:<kind>` for a create form. */
-export function triggerDraftId(selection: StudioSelection | undefined) {
-  if (selection?.tab !== "triggers") return undefined;
-  return selection.kind ? `new:${selection.kind}` : selection.triggerId;
-}
-
 const studioPathIds = { flows: "flowId", agents: "agentId", triggers: "triggerId" } as const;
 
 /** The Studio destination a masked `/studio/...` path names. */
 function studioSelectionFromPath(pathname: string): StudioSelection | undefined {
   if (pathname === "/studio/triggers/new/github-issues")
-    return { tab: "triggers", triggerId: "new", kind: "github_issues" };
+    return { tab: "triggers", triggerId: "new" };
   const [, root, tab, id, ...rest] = pathname.split("/");
   if (root !== "studio" || !tab || !(tab in studioPathIds) || rest.length) return undefined;
+  if (tab === "triggers" && id === "new") return undefined;
   const key = studioPathIds[tab as keyof typeof studioPathIds];
   return validateAppSearch({ studio: { tab, ...(id ? { [key]: id } : {}) } }).studio;
 }
@@ -51,7 +46,11 @@ function staysWithDraft(studio: StudioSelection | undefined, draft: StudioDraft)
       (studio.tab === "flows" && studio.flowId === draft.id) ||
       (studio.tab === "agents" && studio.fromFlow === draft.id)
     );
-  if (draft.kind === "trigger") return triggerDraftId(studio) === draft.id;
+  if (draft.kind === "trigger")
+    return (
+      (studio.tab === "triggers" && studio.triggerId === draft.id) ||
+      (studio.tab === "flows" && studio.fromTrigger === draft.id)
+    );
   return studio.tab === "agents" && studio.agentId === draft.id;
 }
 
@@ -64,7 +63,7 @@ function liveDrafts(input: StudioDraftGuardInput): StudioDraft[] {
   );
 }
 
-/** Only the shown page's editor has a draft, so a navigation leaves at most one. */
+/** A Flow opened from a Trigger keeps the Trigger draft while the Flow covers it. */
 export function useStudioDraftGuard(input: StudioDraftGuardInput) {
   const guarded = liveDrafts(input).length > 0;
   return useNavigationBlock(guarded, (location) => {
