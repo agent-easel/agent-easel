@@ -105,7 +105,8 @@ export function ChoiceMenu({
             >
               <span className="grid min-w-0 flex-1 gap-0.5">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="truncate">{choice.label}</span>
+                  {/* Wraps rather than truncates: a decision label names where the choice leads. */}
+                  <span className="min-w-0 break-words">{choice.label}</span>
                   {choice.badge && (
                     <StatusBadge kind={choice.badgeKind ?? "attention"}>{choice.badge}</StatusBadge>
                   )}
