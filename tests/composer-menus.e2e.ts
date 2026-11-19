@@ -185,7 +185,7 @@ test("an empty Flow field checks nothing in the menu", async ({ app, screen, bro
   await app.screenshot("after-flow-empty");
 });
 
-test("a not-ready Flow is a disabled row, and a chosen one stays in the field", async ({
+test("a chosen not-ready Flow is a disabled, unchecked row in the Flow menu", async ({
   app,
   screen,
   browser,
