@@ -1,5 +1,21 @@
 import { mergeGraphBounds } from "../../src/canvas-fit.ts";
 
+/** Focus and 499 distinct Block positions just beyond both edges of the centred view. */
+export function boundaryDenseEntryGraph() {
+  const surface = { width: 1000, height: 600 };
+  const focus = { minX: 0, minY: 0, width: 200, height: 100 };
+  const boxes = [
+    { x: 0, y: 0, width: focus.width, height: focus.height },
+    ...Array.from({ length: 499 }, (_, index) => ({
+      x: 600 + (index + 1) * 0.000001,
+      y: 350 + (index + 1) * 0.000001,
+      width: 200,
+      height: 100,
+    })),
+  ];
+  return { focus, boxes, surface, padding: { top: 0, bottom: 0 } };
+}
+
 /** Focus, one block cut by the centred right edge, then fully off-screen blocks with distinct edges. */
 export function cutEntryGraph(count: number) {
   const boxes = [
