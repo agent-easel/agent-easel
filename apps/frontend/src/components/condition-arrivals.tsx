@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { ConditionArrivalEvidence, RunDetail } from "@t3-factory/contracts";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Surface } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import {
@@ -75,47 +76,47 @@ function ArrivalItem({
   const output = conditionOutputName(run, blockId, arrival.outputId);
   const ends = arrival.recipients.length === 0;
   return (
-    <li
-      aria-label={`Arrival ${number}, ${output}${ends ? ", ends here" : ""}`}
-      className="flex flex-col gap-1.5 rounded-md border bg-muted px-3 py-2"
-    >
-      <div className="flex items-baseline gap-2">
-        <p className="min-w-0 flex-1 text-sm font-medium">Arrival {number}</p>
-        <time
-          dateTime={arrival.acceptedAt}
-          className="shrink-0 text-2xs tracking-label text-subtle-foreground"
-        >
-          accepted {dayAndTime(arrival.acceptedAt)}
-        </time>
-      </div>
-      <p className="text-xs break-words text-muted-foreground">
-        {arrival.rule ? (
-          <>
-            Matched rule <span className={monoClass}>{arrival.rule.name || "Unnamed output"}</span>
-          </>
-        ) : (
-          <>No rule matched</>
-        )}{" "}
-        · selected <span className={monoClass}>{output}</span>
-      </p>
-      <p className="text-xs break-words text-subtle-foreground">{provenance(run, arrival)}</p>
-      {ends ? (
-        <p className="text-xs text-muted-foreground">
-          Output not connected · this arrival ends here
+    <Surface tone="inset" asChild className="flex flex-col gap-1.5 px-3 py-2">
+      <li aria-label={`Arrival ${number}, ${output}${ends ? ", ends here" : ""}`}>
+        <div className="flex items-baseline gap-2">
+          <p className="min-w-0 flex-1 text-sm font-medium">Arrival {number}</p>
+          <time
+            dateTime={arrival.acceptedAt}
+            className="shrink-0 text-2xs tracking-label text-subtle-foreground"
+          >
+            accepted {dayAndTime(arrival.acceptedAt)}
+          </time>
+        </div>
+        <p className="text-xs break-words text-muted-foreground">
+          {arrival.rule ? (
+            <>
+              Matched rule{" "}
+              <span className={monoClass}>{arrival.rule.name || "Unnamed output"}</span>
+            </>
+          ) : (
+            <>No rule matched</>
+          )}{" "}
+          · selected <span className={monoClass}>{output}</span>
         </p>
-      ) : (
-        <ul aria-label={`Arrival ${number} recipients`} className="flex flex-col gap-1">
-          {arrival.recipients.map((recipient) => (
-            <li key={recipient.blockId} className="flex items-center gap-2 text-xs">
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                → {blockName(run, recipient.blockId)}
-              </span>
-              <ExecutionStateBadge state={recipient.disposition} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </li>
+        <p className="text-xs break-words text-subtle-foreground">{provenance(run, arrival)}</p>
+        {ends ? (
+          <p className="text-xs text-muted-foreground">
+            Output not connected · this arrival ends here
+          </p>
+        ) : (
+          <ul aria-label={`Arrival ${number} recipients`} className="flex flex-col gap-1">
+            {arrival.recipients.map((recipient) => (
+              <li key={recipient.blockId} className="flex items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 truncate text-foreground">
+                  → {blockName(run, recipient.blockId)}
+                </span>
+                <ExecutionStateBadge state={recipient.disposition} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    </Surface>
   );
 }
 
