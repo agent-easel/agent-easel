@@ -189,6 +189,17 @@ export function StudioListRow({
       {trailing}
     </>
   );
+  const content = rowSelection ? (
+    <StudioLink
+      selection={rowSelection}
+      aria-current={selected ? "page" : undefined}
+      className={cn("flex min-w-0 flex-1 items-center gap-3", studioRowLinkClass)}
+    >
+      {body}
+    </StudioLink>
+  ) : (
+    <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
+  );
   return (
     <div
       className={cn(
@@ -196,17 +207,7 @@ export function StudioListRow({
         selected && "border-primary bg-sidebar-accent",
       )}
     >
-      {rowSelection ? (
-        <StudioLink
-          selection={rowSelection}
-          aria-current={selected ? "page" : undefined}
-          className={cn("flex min-w-0 flex-1 items-center gap-3", studioRowLinkClass)}
-        >
-          {body}
-        </StudioLink>
-      ) : (
-        <div className="flex min-w-0 flex-1 items-center gap-3">{body}</div>
-      )}
+      {content}
       {control && <div className="relative z-10 shrink-0">{control}</div>}
       <div className="relative z-10 shrink-0">{menu}</div>
       {chevron}
