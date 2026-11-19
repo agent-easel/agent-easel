@@ -1,4 +1,5 @@
 import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
+import { Surface } from "@/components/ui/surface";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { InspectorHeading } from "./inspector-section.tsx";
 import { attentionLinkedThreads } from "../attention-copy.ts";
@@ -114,33 +115,32 @@ function Activation({
       : [],
   );
   return (
-    <article
-      aria-label={`${name} · Visit ${visit}`}
-      className="flex flex-col gap-2 rounded-md border bg-card px-3 py-2.5 text-xs break-words"
-    >
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
-        <span className="shrink-0 text-subtle-foreground">
-          <span className="sr-only"> · </span>Visit {visit}
-        </span>
-        <span className="flex-1" />
-        {workers.map((worker) => (
-          <OpenInT3 key={worker.id} href={worker.link} className="text-sm" />
-        ))}
-      </div>
-      {problem && <p className="text-xs text-attention">{problem}</p>}
-      {run.threadBindings
-        .filter(
-          (b) => b.blockId === activation.blockId && b.role === "descendant" && !linked(b.link),
-        )
-        .map((binding) => (
-          <div key={binding.id} className="flex flex-col gap-1 text-xs">
-            <BindingLink binding={binding} />
-            <span className="font-mono text-2xs break-all text-muted-foreground">
-              {binding.threadId}
-            </span>
-          </div>
-        ))}
-    </article>
+    <Surface asChild tone="raised" className="flex flex-col gap-2 px-3 py-2.5 text-xs break-words">
+      <article aria-label={`${name} · Visit ${visit}`}>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
+          <span className="shrink-0 text-subtle-foreground">
+            <span className="sr-only"> · </span>Visit {visit}
+          </span>
+          <span className="flex-1" />
+          {workers.map((worker) => (
+            <OpenInT3 key={worker.id} href={worker.link} className="text-sm" />
+          ))}
+        </div>
+        {problem && <p className="text-xs text-attention">{problem}</p>}
+        {run.threadBindings
+          .filter(
+            (b) => b.blockId === activation.blockId && b.role === "descendant" && !linked(b.link),
+          )
+          .map((binding) => (
+            <div key={binding.id} className="flex flex-col gap-1 text-xs">
+              <BindingLink binding={binding} />
+              <span className="font-mono text-2xs break-all text-muted-foreground">
+                {binding.threadId}
+              </span>
+            </div>
+          ))}
+      </article>
+    </Surface>
   );
 }
