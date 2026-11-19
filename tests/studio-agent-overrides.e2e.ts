@@ -89,6 +89,7 @@ test("removing a Global Worker explicitly removes its dependent Project override
   // Arrange
   await browser.setViewport(viewport);
   const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
+  assert(northwind);
   const sample = (await listAgentDefinitions(app.baseUrl)).find(
     (agent) => agent.name === "Sample worker",
   );
