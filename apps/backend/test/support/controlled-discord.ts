@@ -269,8 +269,9 @@ export async function startControlledDiscord() {
   const created: CreatedMessage[] = [];
   /** Messages by their author's application and the nonce Discord enforced for them. */
   const nonces = new Map<string, CreatedMessage>();
-  /** Answers paused creates once `releaseMessages` is called. */
+  /** Answers paused creates and channel lookups once `releaseMessages` is called. */
   const pausedCreates: (() => void)[] = [];
+  let channelLookupsPaused = false;
   /** Every text edit Discord applied, in order. */
   const edits: { readonly messageId: string; readonly content: string }[] = [];
   /** Every edit of a message's components Discord applied, in order. */
@@ -587,7 +588,8 @@ export async function startControlledDiscord() {
     [
       "GET",
       /^\/api\/v10\/channels\/(\d+)$/,
-      ({ match }) => {
+      ({ match, resumed }) => {
+        if (channelLookupsPaused && !resumed) return { status: 0, paused: true };
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
         if (thread) return { status: 200, body: threadPayload(thread) };
@@ -922,8 +924,13 @@ export async function startControlledDiscord() {
     faultMessages(...faults: MessageFault[]) {
       messageFaults.push(...faults);
     },
-    /** Discord handles and answers every paused create now. */
+    /** Later channel lookups wait, as paused creates do, until `releaseMessages`. */
+    pauseChannelLookups() {
+      channelLookupsPaused = true;
+    },
+    /** Discord handles and answers every paused create and channel lookup now. */
     releaseMessages() {
+      channelLookupsPaused = false;
       for (const answer of pausedCreates.splice(0)) answer();
     },
     /** Discord's few-minute nonce uniqueness window passed: earlier nonces return nothing. */

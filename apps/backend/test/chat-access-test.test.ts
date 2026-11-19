@@ -287,3 +287,95 @@ it("an Access save while the access test is posting applies to the later posts a
     { message: { allowed_mentions: { parse: [], users: [PARTICIPANT_ID] } } },
   ]);
 });
+
+it("an Access save during the access test's channel lookup applies to the post that follows it", async (c) => {
+  // Arrange
+  const { factory, discord, project } = await operating(c);
+  // A channel the Gateway has not announced, so Factory looks it up before posting there.
+  const lookedUp = "400000000000000097";
+  discord.addGuild({
+    id: "400000000000000096",
+    name: "Late",
+    channels: [{ id: lookedUp, name: "late" }],
+  });
+  const settings = await factory.getDiscordSettings();
+  assert(settings.ok, JSON.stringify(settings));
+  const channels = [{ channelId: lookedUp, projectIds: [project.id] }];
+  const access = await factory.updateDiscordAccess({
+    revision: settings.value.access.revision,
+    users: [PARTICIPANT_ID, SECOND_USER],
+    channels,
+  });
+  assert(access.ok, JSON.stringify(access));
+  discord.pauseChannelLookups();
+  const sending = factory.sendDiscordAccessTest();
+  await discord.request("GET", new RegExp(`^/api/v10/channels/${lookedUp}$`));
+
+  // Act
+  const saved = await factory.updateDiscordAccess({
+    revision: access.value.access.revision,
+    users: [PARTICIPANT_ID],
+    channels,
+  });
+  discord.releaseMessages();
+  const sent = await sending;
+
+  // Assert
+  assert(saved.ok, JSON.stringify(saved));
+  assert(sent.ok, JSON.stringify(sent));
+  expect(discord.requested("POST", POSTS).map((request) => request.body)).toEqual([
+    {
+      content: `<@${PARTICIPANT_ID}>, reply here to confirm you can use Factory.`,
+      allowed_mentions: { parse: [], users: [PARTICIPANT_ID] },
+    },
+  ]);
+});
+
+it("an Access save between the access test's split messages applies to the later messages", async (c) => {
+  // Arrange
+  const { factory, discord, project } = await operating(c);
+  // More allowed users than one message can mention, so the channel gets two messages.
+  const users = Array.from({ length: 100 }, (_, index) =>
+    String(210000000000000000n + BigInt(index)),
+  );
+  const settings = await factory.getDiscordSettings();
+  assert(settings.ok, JSON.stringify(settings));
+  const channels = [{ channelId: ALLOWED_CHANNEL, projectIds: [project.id] }];
+  const access = await factory.updateDiscordAccess({
+    revision: settings.value.access.revision,
+    users,
+    channels,
+  });
+  assert(access.ok, JSON.stringify(access));
+  discord.faultMessages("paused");
+  const sending = factory.sendDiscordAccessTest();
+  await discord.request("POST", POSTS, 1);
+  // The first message mentions the first 88 users; the save revokes users from both messages.
+  const kept = [...users.slice(0, 10), ...users.slice(90)];
+
+  // Act
+  const saved = await factory.updateDiscordAccess({
+    revision: access.value.access.revision,
+    users: kept,
+    channels,
+  });
+  discord.releaseMessages();
+  const sent = await sending;
+
+  // Assert
+  assert(saved.ok, JSON.stringify(saved));
+  assert(sent.ok, JSON.stringify(sent));
+  const posts = discord
+    .requested("POST", POSTS)
+    .map((request) => request.body as { allowed_mentions: { users: string[] } });
+  expect(posts).toHaveLength(2);
+  // The first message was in flight before the save; the second mentions only those still allowed.
+  expect(posts[0]!.allowed_mentions.users).toEqual(users.slice(0, 88));
+  expect(posts[1]).toEqual({
+    content: `${users
+      .slice(90)
+      .map((userId) => `<@${userId}>`)
+      .join(" ")}, reply here to confirm you can use Factory.`,
+    allowed_mentions: { parse: [], users: users.slice(90) },
+  });
+});

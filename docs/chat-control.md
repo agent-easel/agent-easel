@@ -123,7 +123,10 @@ No Application ID is configured. Factory's application is the one Discord report
 authenticated Gateway session; Factory never reads it from the token itself. Factory records the
 application its operating connection authenticated as, with the bot user's display name, when a
 session becomes ready; a check records the name with its result. The page's **Bot** row shows that
-name, with a **Gateway verified** tag after a passing check, or "—" until a session was ready. When a newly
+name, with a **Gateway verified** tag after a passing check, or "—" until a session was ready. While a
+passing check of the saved credentials names another bot than the recorded one, as after a token
+replacement, the row names and verifies the checked bot, also after turning On and through failed
+logins, until a session of that bot becomes ready. When a newly
 authenticated session reports another application, that is an **application replacement**: the
 shared conversations are cleared, the previous application's waiting consent ends for good, its
 messages are no longer edited and eligible Runs get new status cards from the new bot (see
@@ -220,7 +223,9 @@ after Send again, so a late reply to them also marks the user Reached. One reply
 channel is enough. Waiting has no timeout. A channel whose post Discord refused shows **Can't post** and one warning naming the
 channels; a channel Discord no longer knows shows **Unknown channel** and one warning to remove it.
 The latest results stay visible while Off, and an Access save drops the results of the channels and
-users it removes.
+users it removes. An Access save while the test is posting applies to every message not yet sent, so
+a later message mentions only the users the saved Access still allows, in channels that still grant a
+Project; a message already sent stays sent.
 
 ### Invocations
 
