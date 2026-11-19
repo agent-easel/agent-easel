@@ -316,16 +316,22 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   };
 
   /**
-   * A reply in a parent channel to one of the access test's messages there. An allowed user's
-   * reply is admitted as any invocation is, but answers the test instead of opening a
-   * conversation: Factory records the user as reached. Undefined when the message is no reply to
-   * the test.
+   * An answer to the access test: in a parent channel, a reply to one of the test's messages
+   * there; in a thread, any invocation in a test's forum post. An allowed user's answer is
+   * admitted as any invocation is, but opens no conversation: Factory records the user as
+   * reached. Undefined when the message answers no test.
    */
-  const answerAccessTest = (message: Message<true>, parentId: string) =>
+  const answerAccessTest = (
+    message: Message<true>,
+    thread: ThreadChannel | null,
+    parentId: string,
+  ) =>
     Effect.gen(function* () {
-      const repliedTo = message.reference?.messageId;
-      if (message.type !== MessageType.Reply || repliedTo === undefined) return undefined;
-      if (!(yield* isAccessTestMessage(sql, parentId, repliedTo))) return undefined;
+      const repliedTo =
+        message.type === MessageType.Reply ? message.reference?.messageId : undefined;
+      const testMessage = thread === null ? repliedTo : thread.id;
+      if (testMessage === undefined) return undefined;
+      if (!(yield* isAccessTestMessage(sql, parentId, testMessage))) return undefined;
       session.referenced(message.id);
       if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored";
       if (!(yield* firstDelivery(message.id))) return "ignored";
@@ -513,13 +519,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
         const place = explicitInvocation(message, botUserId);
         if (!place) return;
         const { thread, parentId } = place;
-        if (thread === null) {
-          const answered = yield* gate.withPermits(1)(answerAccessTest(message, parentId));
-          // The reaction is an external send, which never happens while Chat control is Off.
-          if (answered === "reached" && session.operating())
-            yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
-          if (answered) return;
-        }
+        const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
+        // The reaction is an external send, which never happens while Chat control is Off.
+        if (answered === "reached" && session.operating())
+          yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
+        if (answered) return;
         const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
         if (!invocation) return;
         yield* Effect.promise(() =>

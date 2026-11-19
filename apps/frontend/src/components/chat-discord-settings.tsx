@@ -13,9 +13,17 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
 import { api, ApiError } from "../api.ts";
-import { chatControlBlocker, type ChatControlBlocker } from "../chat-control-switch.ts";
+import {
+  chatControlBlocker,
+  type ChatControlBlocker,
+  type ModelState,
+} from "../chat-control-switch.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
-import { reportDiscordSettings } from "../chat-control-attention.ts";
+import {
+  onChatModelSettings,
+  reportChatModelSettings,
+  reportDiscordSettings,
+} from "../chat-control-attention.ts";
 import { useSettingsOptions } from "../settings-navigation.ts";
 import {
   AccessCard,
@@ -85,10 +93,16 @@ function isDirty(draft: ConnectionDraft, { configuration }: DiscordSettings) {
   );
 }
 
-/** Whether the host already holds exactly this save, so a lost acknowledgement was a success. */
+/**
+ * Whether the host's state proves this save committed, so a lost acknowledgement was a success.
+ * A read never shows the token, so another writer's revision is indistinguishable from a token
+ * replacement: a lost replacement stays unsaved with its draft kept.
+ */
 const committed = (input: UpdateDiscordConnectionInput, current: DiscordSettings) =>
+  input.token.kind !== "replace" &&
   current.configuration.revision === input.revision + 1 &&
-  current.configuration.publicKey === input.publicKey;
+  current.configuration.publicKey === input.publicKey &&
+  (input.token.kind === "keep" || !current.configuration.tokenConfigured);
 
 // While On, the running connection's state changes without any action on this page.
 const STATUS_REFRESH_MS = 5_000;
@@ -96,20 +110,29 @@ const STATUS_REFRESH_MS = 5_000;
 /** Which section a one-Save attempt stopped at; the next Save sends only what is still unsaved. */
 type SaveStop = "bot" | "access" | "access-after-bot" | null;
 
-/** Whether the Language model's provider, base URL and model are saved, as the switch needs. */
-function useModelComplete() {
-  const [complete, setComplete] = useState(true);
+/**
+ * Whether the Language model's provider, base URL and model are saved, as the switch needs. The
+ * page stays mounted while the owner follows its Language model link, so every model settings
+ * the host returns later, such as that page's save, updates it.
+ */
+function useModelState() {
+  const [state, setState] = useState<ModelState>("reading");
   useEffect(() => {
-    // The host refuses On without a complete model anyway, so an unread model gates nothing.
-    api.getChatModelSettings().then(
-      ({ configuration }) =>
-        setComplete(
-          Boolean(configuration.providerKind && configuration.baseUrl && configuration.model),
-        ),
-      () => undefined,
+    const unsubscribe = onChatModelSettings(({ configuration }) =>
+      setState(
+        configuration.providerKind && configuration.baseUrl && configuration.model
+          ? "complete"
+          : "incomplete",
+      ),
     );
+    api
+      .getChatModelSettings()
+      .then(reportChatModelSettings, () =>
+        setState((current) => (current === "reading" ? "unread" : current)),
+      );
+    return unsubscribe;
   }, []);
-  return complete;
+  return state;
 }
 
 /** One host action at a time with its failure message; the answer goes to `onAnswer`. */
@@ -214,7 +237,7 @@ function useDiscordPage() {
     name: "the bot",
   });
   const access = useAccessSection();
-  const modelComplete = useModelComplete();
+  const modelState = useModelState();
   const { settings, setSettings } = bot;
   useEffect(() => {
     if (settings) reportDiscordSettings(settings);
@@ -261,7 +284,7 @@ function useDiscordPage() {
     draft: bot.draft,
     botDirty: oneSave.botCheck.dirty,
     publicKeyProblem: oneSave.botCheck.publicKeyProblem,
-    modelComplete,
+    modelState,
     setSettings: answer,
     // A lost read changed nothing on the host, unlike the lost answer chatControlError describes.
     refreshError: !failure
@@ -429,7 +452,9 @@ function HeaderActions({ page, settings }: { page: DiscordPage; settings: Discor
 
 /** The one persisted On/Off switch; while it cannot turn On, the reason sits beside it. */
 function ChatControlRow({ page, settings }: { page: DiscordPage; settings: DiscordSettings }) {
-  const blocker = chatControlBlocker(settings, page.modelComplete);
+  const blocker = chatControlBlocker(settings, page.modelState);
+  // While the model is still being read the switch only waits, without a reason.
+  const reason = blocker !== null && !(blocker.kind === "model" && blocker.state === "reading");
   return (
     <>
       <div className="overflow-hidden rounded-lg border bg-muted">
@@ -437,14 +462,14 @@ function ChatControlRow({ page, settings }: { page: DiscordPage; settings: Disco
           title="Chat control"
           control={(text) => (
             <>
-              {blocker && (
+              {reason && (
                 <span id={`${text.title}-reason`} className="text-sm text-muted-foreground">
                   <BlockerReason blocker={blocker} />
                 </span>
               )}
               <Switch
                 aria-labelledby={text.title}
-                aria-describedby={blocker ? `${text.title}-reason` : undefined}
+                aria-describedby={reason ? `${text.title}-reason` : undefined}
                 checked={settings.chatControlEnabled}
                 disabled={page.switching || blocker !== null}
                 onCheckedChange={(on) => void page.turn(on)}
@@ -479,6 +504,16 @@ function BlockerReason({ blocker }: { blocker: ChatControlBlocker }) {
   const modelOptions = useSettingsOptions({ tab: "chat-model", from: "chat-discord" });
   if (blocker.kind === "rejected") return "Replace the rejected token first";
   if (blocker.kind === "intent") return "Turn on Message Content Intent first";
+  // Opening Language model reads the model again, and its answer reaches this page.
+  if (blocker.kind === "model")
+    return (
+      <>
+        Couldn’t read{" "}
+        <Link {...modelOptions} className="text-link underline underline-offset-2">
+          the language model
+        </Link>
+      </>
+    );
   const model = blocker.model && (
     <Link {...modelOptions} className="text-link underline underline-offset-2">
       a language model

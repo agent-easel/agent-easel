@@ -92,6 +92,8 @@ export type MessageFault =
  */
 export const unproven = (fault: "lost" | "failed"): MessageFault[] => [fault, fault, fault];
 
+const FORUM = 15;
+
 /** A message Discord created, with its components, as it shows it now. */
 export interface CreatedMessage {
   readonly id: string;
@@ -289,6 +291,8 @@ export async function startControlledDiscord() {
     user(bot.userId ?? bot.applicationId, bot.username ?? "Factory bot", true);
   const parentOf = (channelId: string) =>
     guilds.find((guild) => guild.channels.some((channel) => channel.id === channelId));
+  const channelType = (channelId: string) =>
+    parentOf(channelId)?.channels.find((channel) => channel.id === channelId)?.type ?? 0;
 
   const gatewayUrl = () => `ws://127.0.0.1:${(server.address() as AddressInfo).port}/gateway`;
   const send = (socket: WebSocket, payload: Record<string, unknown>) =>
@@ -454,6 +458,38 @@ export async function startControlledDiscord() {
     ],
     [
       "POST",
+      /^\/api\/v10\/channels\/(\d+)\/threads$/,
+      ({ match, fields, bot }) => {
+        // A forum post: a thread whose starter message shares its ID.
+        const guild = parentOf(match[1]!);
+        if (!guild) return unknownChannel;
+        if (postingDenied.has(match[1]!))
+          return { status: 403, body: { message: "Missing Permissions", code: 50013 } };
+        const id = mintId();
+        const starter = (fields.message ?? {}) as Fields;
+        created.push({
+          id,
+          channelId: id,
+          content: typeof starter.content === "string" ? starter.content : "",
+          components: [],
+          applicationId: bot.applicationId,
+          deleted: false,
+        });
+        const thread: ControlledDiscordThread = {
+          id,
+          guildId: guild.id,
+          parentId: match[1]!,
+          name: typeof fields.name === "string" ? fields.name : "post",
+          private: false,
+          members: new Set(),
+        };
+        threads.set(id, thread);
+        deliver({ t: "THREAD_CREATE", d: { ...threadPayload(thread), newly_created: true } });
+        return { status: 201, body: threadPayload(thread) };
+      },
+    ],
+    [
+      "POST",
       /^\/api\/v10\/channels\/(\d+)\/messages$/,
       ({ match, fields, bot, resumed }) => {
         const fault = resumed ? undefined : messageFaults.shift();
@@ -465,6 +501,11 @@ export async function startControlledDiscord() {
         if (!thread && !parentOf(match[1]!)) return unknownChannel;
         if (postingDenied.has(match[1]!))
           return { status: 403, body: { message: "Missing Permissions", code: 50013 } };
+        if (!thread && channelType(match[1]!) === FORUM)
+          return {
+            status: 400,
+            body: { message: "Cannot send messages in a non-text channel", code: 50008 },
+          };
         if (thread?.locked && !bot.manageThreads) return locked;
         // A post Discord accepts reopens an archived thread, locked ones included.
         if (thread) thread.archived = false;
@@ -556,7 +597,7 @@ export async function startControlledDiscord() {
               status: 200,
               body: {
                 id: match[1],
-                type: guild.channels.find((channel) => channel.id === match[1])!.type ?? 0,
+                type: channelType(match[1]!),
                 guild_id: guild.id,
                 name: "channel",
                 permission_overwrites: [...(hiddenChannels.get(match[1]!) ?? [])].map((id) => ({
