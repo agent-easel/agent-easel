@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { TriggerDefinition, TriggerRepository } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
@@ -144,7 +145,7 @@ export function TriggerFieldNotices({
           tone="error"
           title="The selected Flow isn’t ready"
           action={
-            <TextLink asChild trailing="chevron">
+            <TextLink asChild trailingIcon={ChevronRight}>
               <StudioLink
                 selection={{
                   tab: "flows",
@@ -356,7 +357,7 @@ function recoveryMessage(
     return {
       message: `A Trigger named “${found.name}” is already saved.`,
       action: (
-        <TextLink trailing="chevron" onClick={() => onOpen(found)}>
+        <TextLink trailingIcon={ChevronRight} onClick={() => onOpen(found)}>
           Open Trigger
         </TextLink>
       ),

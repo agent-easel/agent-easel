@@ -8,7 +8,7 @@ import type {
   FlowDraft,
 } from "@t3-factory/contracts";
 import { fieldLabelClass } from "@/components/page";
-import { Copy, FolderGit2, MoreHorizontal, Unplug } from "lucide-react";
+import { ChevronRight, Copy, FolderGit2, MoreHorizontal, Unplug } from "lucide-react";
 import { agentReportingStatus, useReportingState } from "../../reporting-state.tsx";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
@@ -328,7 +328,7 @@ function WorkerCard({ state, ownerGone, reportingProblem }: CardProps) {
       tone="attention"
       title={reportingProblem.label}
       action={
-        <TextLink asChild trailing="chevron">
+        <TextLink asChild trailingIcon={ChevronRight}>
           <SettingsLink selection={{ tab: "agent-reporting" }}>Open Agent reporting</SettingsLink>
         </TextLink>
       }
@@ -358,7 +358,7 @@ function CreateOutcomeCard({
   const actions = {
     created: (
       <TextLink
-        trailing="chevron"
+        trailingIcon={ChevronRight}
         onClick={() => {
           const made = draft.openCreated();
           if (made) onOpenCreated(made);

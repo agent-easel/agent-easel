@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -35,7 +35,7 @@ const headingClass = "text-label tracking-label text-muted-foreground";
 /** Opens the new Agent draft over this Flow; Create returns here. */
 export function NewAgentLink({ flowId, className }: { flowId: string; className?: string }) {
   return (
-    <TextLink asChild trailing="chevron" className={cn("w-fit text-sm", className)}>
+    <TextLink asChild trailingIcon={ChevronRight} className={cn("w-fit text-sm", className)}>
       <FlowAgentLink agentId="new" flowId={flowId}>
         New Agent
       </FlowAgentLink>

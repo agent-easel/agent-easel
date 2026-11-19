@@ -1,8 +1,9 @@
 import { useState, type ReactNode } from "react";
+import { Maximize2 } from "lucide-react";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import type { RunDetail } from "@t3-factory/contracts";
-import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
+import { TextLink } from "@/components/ui/text-link";
 import { isSingleOutput } from "../block-kind.ts";
 import { capturedExits } from "../flow-graph.ts";
 import { clockTime } from "../time-format.ts";
@@ -138,15 +139,13 @@ export function ResultCard({
           {firstLine && (
             <p className="break-words text-sm font-medium">{firstLine.replace(/^#{1,6}\s+/, "")}</p>
           )}
-          <Button
-            type="button"
-            variant="link"
-            size="xs"
-            className="h-auto w-fit p-0 text-label"
+          <TextLink
+            trailingIcon={Maximize2}
+            className="w-fit p-0 text-label"
             onClick={() => setReading(true)}
           >
             Read result
-          </Button>
+          </TextLink>
           {children}
           {reading && (
             <AgentTextReader

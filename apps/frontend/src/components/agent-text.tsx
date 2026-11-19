@@ -3,7 +3,6 @@ import { Maximize2 } from "lucide-react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -12,6 +11,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { CopyButton } from "./copy-button.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
@@ -91,15 +91,20 @@ function markdownComponents(density: Density): Components {
     ),
     th: styled("th", "border px-2 py-1 text-left font-semibold text-foreground"),
     td: styled("td", "border px-2 py-1 align-top"),
-    a: ({ node: _node, ...props }) => (
-      <a {...props} className="text-link hover:underline" target="_blank" rel="noreferrer" />
-    ),
+    a: ({ href, title, children }) =>
+      href === undefined ? (
+        children
+      ) : (
+        <TextLink href={href} title={title} className="inline p-0 [font-weight:inherit]">
+          {children}
+        </TextLink>
+      ),
     // Agent text never fetches remote images: an image reads as a link to it.
     img: ({ src, alt }) =>
       typeof src === "string" ? (
-        <a className="text-link hover:underline" href={src} target="_blank" rel="noreferrer">
+        <TextLink href={src} className="inline p-0 [font-weight:inherit]">
           {alt || src}
-        </a>
+        </TextLink>
       ) : null,
     input: ({ checked }) => (
       <Checkbox
@@ -331,17 +336,14 @@ export function AgentTextPreview({
         <footer className="flex min-w-0 items-center gap-1.5">
           {footer}
           {opens && (
-            <Button
-              type="button"
-              variant="link"
-              size="xs"
+            <TextLink
+              trailingIcon={Maximize2}
               // Figma RD42: alone on its row, the link lines up with the text above it.
-              className={cn("text-label", !footer && "h-auto py-0.5 has-[>svg]:px-0")}
+              className={cn("shrink-0 text-label whitespace-nowrap", !footer && "px-0 py-0.5")}
               onClick={() => setReading(opens)}
             >
               {opens === "text" ? readLabel : "Technical details"}
-              <Maximize2 aria-hidden />
-            </Button>
+            </TextLink>
           )}
         </footer>
       )}

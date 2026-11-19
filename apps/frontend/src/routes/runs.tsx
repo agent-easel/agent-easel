@@ -7,7 +7,7 @@ import { useSettings, useStudio } from "../settings-navigation.ts";
 import { useLocation } from "@tanstack/react-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FactoryProject, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
-import { Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
+import { ChevronRight, Ellipsis, Info, Moon, PanelRight, Unplug, Workflow } from "lucide-react";
 import { attentionPending, RunAttentionDetails } from "../components/run-attention.tsx";
 import { RunNumber } from "../components/run-number.tsx";
 import { SettingsLink, StudioLink } from "../components/app-link.tsx";
@@ -455,7 +455,7 @@ function CanvasOverlay({
           title="T3 is disconnected"
           className="w-140"
           action={
-            <TextLink asChild trailing="chevron">
+            <TextLink asChild trailingIcon={ChevronRight}>
               <SettingsLink selection={{ tab: "connection" }}>
                 Open T3 connection settings
               </SettingsLink>
