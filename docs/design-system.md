@@ -185,11 +185,11 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Empty state**: EmptyState, always in a dashed frame. Large is for a whole list or preview
   that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
   title, an optional body and an optional action; on a muted surface, such as Studio, the icon tile
-  takes the card fill so it stays distinct. Compact is for a panel list that is empty for a
-  reason worth explaining, such as a Run sidebar title search with no match: a left-aligned title
-  and a short body. A one-line hint without an explanation stays plain status text, not an
-  EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and list loading,
-  no-match and error lines.
+  takes the accent fill, which every palette keeps distinct from muted. Compact is for a panel list
+  that is empty for a reason worth explaining, such as a Run sidebar title search with no match: a
+  left-aligned title and a short body. A one-line hint without an explanation stays plain status
+  text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
+  list loading, no-match and error lines.
 - **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
   NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
   stays visible.

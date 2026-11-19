@@ -6,7 +6,11 @@ type EmptyStateProps =
   | {
       /** A whole list or preview is empty. */
       size: "large";
-      /** The surface the frame sits on. On a muted surface the icon tile takes the card fill. */
+      /**
+       * The surface the frame sits on. On a muted surface the icon tile takes the accent fill:
+       * inherited palettes derive accent and muted from the canvas in different steps, so they
+       * always differ, while card may coincide with muted.
+       */
       surface?: "muted";
       icon: LucideIcon;
       title: string;
@@ -41,7 +45,7 @@ export function EmptyState(props: EmptyStateProps) {
       <span
         className={cn(
           "flex size-9 items-center justify-center rounded-lg text-muted-foreground",
-          surface === "muted" ? "bg-card" : "bg-muted",
+          surface === "muted" ? "bg-accent" : "bg-muted",
         )}
       >
         <Icon aria-hidden className="size-4" strokeWidth={1.5} />
