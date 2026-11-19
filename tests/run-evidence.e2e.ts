@@ -10,7 +10,7 @@ beforeEach(async ({ app }) => {
   await prepareScenarios(app);
 });
 
-test("long native identities remain readable in the selected Block's Needs input after reload", async ({
+test("a selected Block's Needs input names the request plainly, and its long native identities stay readable in its Technical details after reload", async ({
   app,
   screen,
   browser,
@@ -34,8 +34,12 @@ test("long native identities remain readable in the selected Block's Needs input
 
   // Assert
   const input = screen.getByRole("region", "Needs input");
-  await expect(input).toContainText(worker.threadId);
-  await expect(input).toContainText(worker.executionId);
+  await expect(input).toContainText("Implement change needs permission in T3");
+  await expect(input).not.toContainText(worker.threadId);
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await inspector.getByRole("button", "Technical details", { exact: true }).tap();
+  await expect(inspector).toContainText(worker.threadId);
+  await expect(inspector).toContainText(worker.executionId);
   await expect(input.getByRole("link", "Open in T3", { exact: true })).toHaveAttribute(
     "href",
     run.attention.find((item) => item.kind === "native-request" && !item.settledAt)!.link!,
@@ -43,7 +47,7 @@ test("long native identities remain readable in the selected Block's Needs input
   await expect
     .poll(() =>
       browser.evaluate(
-        `Array.from(document.querySelectorAll('[aria-label="Needs input"]')).every(el => el.scrollWidth <= el.clientWidth)`,
+        `Array.from(document.querySelectorAll('[aria-label="Run inspector"] dl')).every(el => el.scrollWidth <= el.clientWidth)`,
       ),
     )
     .toBe(true);
@@ -72,8 +76,8 @@ test("a worker whose own turn ended while its subagents still run stays working 
 
   // Assert
   const activations = screen.getByRole("region", "Block activations");
-  await expect(activations).toContainText("Worker active");
-  await expect(activations.getByRole("link", "Open worker in T3", { exact: true })).toBeVisible();
+  await expect(activations).toContainText("Implement change · Visit 1");
+  await expect(activations.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
   await expect(screen.getByRole("region", "Problem")).toHaveCount(0);
   await app.screenshot("working-delegated-subagents");
 });
@@ -197,7 +201,7 @@ test("Key events collapses a discussing worker's repeated T3 status updates into
     "aria-selected",
     "true",
   );
-  await expect(timeline).toContainText("3 key events · 12 total");
+  await expect(timeline).toContainText("3 key events");
   await expect(timeline.getByRole("listitem")).toHaveCount(4);
   await expect(timeline).toContainText("started");
   await expect(timeline).toContainText("entered · new T3 thread");
@@ -254,7 +258,11 @@ async function openSettledResultCard(app: App, screen: Screen, browser: Browser)
   const card = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("article", settledResultCard, { exact: true });
-  return { found, card, reader: screen.getByRole("dialog", settledResultCard, { exact: true }) };
+  return {
+    found,
+    card,
+    reader: screen.getByRole("dialog", "Implement change · result", { exact: true }),
+  };
 }
 
 async function openSettledResultReader(app: App, screen: Screen, browser: Browser) {
@@ -263,7 +271,7 @@ async function openSettledResultReader(app: App, screen: Screen, browser: Browse
   return opened;
 }
 
-test("a completed Run's Final result renders as collapsed Markdown in the inspector and never renders its raw HTML", async ({
+test("a Settled Run’s activation shows the result title and the reader action", async ({
   app,
   screen,
   browser,
@@ -282,20 +290,10 @@ test("a completed Run's Final result renders as collapsed Markdown in the inspec
   const card = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("article", settledResultCard, { exact: true });
-  await expect(card.getByRole("heading", "Welcome copy updated", { exact: true })).toBeVisible();
-  await expect(card.getByRole("listitem")).toHaveCount(4);
-  await expect(card.getByRole("table")).toBeAttached();
-  await expect(card.getByText('const body = t("welcome.recentProjects");')).toBeAttached();
-  await expect(card.getByRole("link", "Atlas copy guide", { exact: true })).toHaveAttribute(
-    "target",
-    "_blank",
-  );
-  await expect(card).toContainText('<b>Raw HTML stays text</b> <img src="missing.png"');
-  expect(
-    await browser.evaluate(
-      `[...document.querySelectorAll('[aria-label="${settledResultCard}"]')].every(card => !card.querySelector("img, b") && card.querySelector("[data-result-preview]").scrollHeight > card.querySelector("[data-result-preview]").clientHeight) && window.resultHtmlRan === undefined`,
-    ),
-  ).toBe(true);
+  await expect(card.getByText("Welcome copy updated", { exact: true })).toBeVisible();
+  await expect(card.getByRole("link", "Open in T3", { exact: true })).toBeVisible();
+  await expect(card.getByRole("button", "Read result", { exact: true })).toBeVisible();
+  await expect(card.getByRole("listitem")).toHaveCount(0);
   await app.screenshot("final-result-card");
 });
 
@@ -311,7 +309,7 @@ test("Read result opens the full rendered result with its block, exit and time i
   await card.getByRole("button", "Read result", { exact: true }).tap();
 
   // Assert
-  await expect(reader).toContainText(/Report accepted · exit Done · \d\d:\d\d/);
+  await expect(reader).toContainText(/Visit 1 · → Done · \d\d:\d\d/);
   await expect(reader.getByRole("heading", "Welcome copy updated", { exact: true })).toBeVisible();
   await expect(reader.getByRole("heading", "Changes", { exact: true })).toBeVisible();
   await expect(reader.getByRole("cell", "Your recent projects are in the sidebar.")).toBeVisible();

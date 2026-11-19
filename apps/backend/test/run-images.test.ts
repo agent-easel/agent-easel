@@ -510,7 +510,10 @@ it("an image an Active Run attached after it was listed is skipped and keeps its
   const deleted = await f.f.deleteRunImages({ sha256: [red, green] });
 
   // Assert
-  expect(deleted).toStrictEqual({ ok: true, value: { deleted: [red], skipped: [green] } });
+  expect(deleted).toStrictEqual({
+    ok: true,
+    value: { deleted: [red], skipped: [green], keptForActiveRuns: [green] },
+  });
   const kept = await f.f.getRunImage(green);
   assert(kept.ok);
   expect(Buffer.from(kept.value.data).equals(Buffer.from(screenshots.green.data))).toBe(true);

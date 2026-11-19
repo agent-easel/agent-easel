@@ -1,8 +1,14 @@
 import { Button } from "../components/ui/button";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
-import type { AgentCapabilities, AgentDefinition, FactoryProject } from "@t3-factory/contracts";
-import { useStudioNavigation } from "../settings-navigation.ts";
+import type {
+  AgentCapabilities,
+  AgentDefinition,
+  FactoryProject,
+  FlowDraft,
+  ValidationIssue,
+} from "@t3-factory/contracts";
+import { useStudioNavigation, type StudioSelection } from "../settings-navigation.ts";
 import {
   createAgentDraft,
   useAgentDraftSnapshot,
@@ -20,12 +26,34 @@ import {
   type StudioDefinitions,
   type StudioDefinitionsSnapshot,
 } from "../studio-definitions.ts";
-import { ownerHint } from "../components/studio-owner.tsx";
 import { ChangeOwnerDialog, DuplicateAgentDialog } from "../components/studio-owner-dialogs.tsx";
 import { useActiveView } from "../use-active-view.ts";
-import { AgentsListPane } from "../components/studio-agents/agents-list-pane.tsx";
+import {
+  AgentsListColumn,
+  agentsListEmpty,
+  firstOpenAgent,
+} from "../components/studio-agents/agents-list-pane.tsx";
 import { AgentEditorPane } from "../components/studio-agents/agent-editor-pane.tsx";
-import { flowUsageCount } from "@/lib/agent-display";
+import { placingFlows } from "@/lib/agent-display";
+import { DefinitionImportControl } from "../components/definition-import-control.tsx";
+import {
+  StudioListEmpty,
+  StudioListHeader,
+  StudioListMessage,
+  studioListClass,
+} from "../components/studio-list.tsx";
+import { OwnerFilter } from "../components/studio-owner.tsx";
+import {
+  CantRemoveDialog,
+  flowBlockers,
+  namedBlockers,
+  racedBlockers,
+} from "../components/studio-removal.tsx";
+import { Dialog, DialogContent } from "../components/ui/dialog.tsx";
+import { MutationGate } from "@/client-gate";
+import { ProblemCard } from "../components/problem-card.tsx";
+import { ApiError } from "../api.ts";
+import { Bot } from "lucide-react";
 import { useReportingState } from "../reporting-state.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { openImported } from "../definition-import.ts";
@@ -56,7 +84,7 @@ function useShownLists(definitions: StudioDefinitions) {
     (shown?.agents !== agents || shown.flows !== flows)
   )
     setShown({ agents, flows });
-  const error = agentsRead.error || flowsRead.error ? "Factory could not load Agents." : "";
+  const error = agentsRead.error || flowsRead.error ? "Couldn’t load Agents." : "";
   return { shown, error };
 }
 
@@ -92,82 +120,419 @@ function useAgentsLibrary(definitions: StudioDefinitions) {
   };
 }
 
-/** New Agent's owner: preselected from the asking Flow, else from the owner filter. */
+type FlowSelection = Extract<StudioSelection, { tab: "flows" }>;
+
+/**
+ * New Agent's context: the owner, preselected from the asking Flow, else from the owner filter,
+ * and that Flow, which Create Agent returns to.
+ */
 function useNewAgentOwner(
   definitions: StudioDefinitions,
   flows: ShownLists["flows"] | null,
-  fromFlow: string | undefined,
+  returnToFlow: FlowSelection | undefined,
 ) {
   const { projects, filter } = useStudioOwners(definitions);
-  const flow = fromFlow ? flows?.find((entry) => entry.id === fromFlow) : undefined;
-  return {
-    projects,
-    initial: defaultOwner(filter, flow),
-    hint: ownerHint(filter, projects, "Agents", flow),
-  };
+  const flow = flows?.find((entry) => entry.id === returnToFlow?.flowId);
+  return { projects, initial: defaultOwner(filter, flow), returnTo: returnToFlow };
+}
+
+/**
+ * With no Agent opened, the Agents page opens the first Agent in the visible list.
+ */
+function useAgentsNavigation(agentId: string | undefined, firstId: string | undefined) {
+  const openStudio = useStudioNavigation();
+  const openRef = useRef(openStudio);
+  useEffect(() => {
+    openRef.current = openStudio;
+  }, [openStudio]);
+  useEffect(() => {
+    if (agentId !== undefined || !firstId) return;
+    void openRef.current({ tab: "agents", agentId: firstId });
+  }, [agentId, firstId]);
+  return openStudio;
 }
 
 export function StudioAgentsPage({
   agentId,
-  fromFlow,
+  returnToFlow,
   definitions,
   reportAgentDraft,
 }: {
   agentId: string | undefined;
-  /** The Flow whose editor asked for a new Agent. */
-  fromFlow: string | undefined;
+  /** The Flow whose editor asked for a new Agent; Create Agent and Esc return to it. */
+  returnToFlow: FlowSelection | undefined;
   definitions: StudioDefinitions;
   reportAgentDraft: ReportDraft;
 }) {
-  const openStudio = useStudioNavigation();
   const library = useAgentsLibrary(definitions);
   const owners = useStudioOwners(definitions);
-  const newOwner = useNewAgentOwner(definitions, library.flows, fromFlow);
+  const newOwner = useNewAgentOwner(definitions, library.flows, returnToFlow);
   const serverId = useServerId();
   const [query, setQuery] = useState("");
+  const [rowAction, setRowAction] = useState<AgentRowAction | null>(null);
   // This window's own Create or Duplicate, answered before Studio may have delivered it.
   const [acknowledged, setAcknowledged] = useState<AgentDefinition | null>(null);
+  const creating = agentId === "new";
+  const firstId = firstOpenAgent(library.agents, query, owners);
+  const openStudio = useAgentsNavigation(agentId, firstId);
+  const empty = agentsListEmpty(library.agents, creating, owners.filter, query);
+  const showEditor = agentId !== undefined;
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
-      <AgentsListPane
+    <div className={`min-h-0 flex-1 overflow-auto ${studioListClass}`}>
+      <StudioListHeader
+        title="Agents"
+        count={library.agents ? library.agents.length : null}
+        query={query}
+        onQueryChange={setQuery}
+        onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
+        createLabel="New Agent"
+        createVariant={creating ? "outline" : "default"}
+        importer={
+          <DefinitionImportControl
+            projects={owners.projects}
+            onImported={(result) => void openImported(result, definitions, openStudio)}
+          />
+        }
+        filter={
+          <OwnerFilter
+            filter={owners.filter}
+            projects={owners.projects}
+            onChange={owners.setFilter}
+          />
+        }
+      />
+      <AgentsBoard
+        library={library}
+        owners={owners}
+        empty={empty}
+        agentId={agentId}
+        creating={creating}
+        query={query}
+        serverId={serverId}
+        acknowledged={acknowledged}
+        onAcknowledged={setAcknowledged}
+        reportDraft={reportAgentDraft}
+        newOwner={newOwner}
+        showEditor={showEditor}
+        onChangeOwner={(agent) => setRowAction({ kind: "owner", agent })}
+        onRemove={(agent) => setRowAction({ kind: "remove", agent })}
+      />
+      <AgentListDialogs
+        action={rowAction}
+        definitions={definitions}
+        projects={owners.projects}
+        flows={library.flows ?? []}
+        onClose={() => setRowAction(null)}
+        onDuplicate={(agent, target) => setRowAction({ kind: "duplicate", agent, target })}
+        onRemoved={(agent) => {
+          setRowAction(null);
+          if (agentId === agent.id) void openStudio({ tab: "agents" });
+        }}
+      />
+    </div>
+  );
+}
+
+function AgentsBoard({
+  library,
+  owners,
+  empty,
+  agentId,
+  creating,
+  query,
+  serverId,
+  acknowledged,
+  onAcknowledged,
+  reportDraft,
+  newOwner,
+  showEditor,
+  onChangeOwner,
+  onRemove,
+}: {
+  library: ReturnType<typeof useAgentsLibrary>;
+  owners: ReturnType<typeof useStudioOwners>;
+  empty: boolean;
+  agentId: string | undefined;
+  creating: boolean;
+  query: string;
+  serverId: string | null;
+  acknowledged: AgentDefinition | null;
+  onAcknowledged: (agent: AgentDefinition) => void;
+  reportDraft: ReportDraft;
+  newOwner: ReturnType<typeof useNewAgentOwner>;
+  showEditor: boolean;
+  onChangeOwner: (agent: AgentDefinition) => void;
+  onRemove: (agent: AgentDefinition) => void;
+}) {
+  if (library.error && !library.agents)
+    return <StudioListMessage tone="error">Couldn’t load Agents.</StudioListMessage>;
+  if (empty && agentId === undefined)
+    return (
+      <StudioListEmpty
+        icon={<Bot aria-hidden className="size-8" strokeWidth={1.5} />}
+        title="No Agents yet"
+      />
+    );
+  return (
+    <div className="flex min-w-0 items-start gap-4">
+      <AgentsListColumn
         agents={library.agents}
         flows={library.flows}
         capabilities={library.capabilities ?? null}
         owners={owners}
         selectedId={agentId}
-        creatingNew={agentId === "new"}
+        creatingNew={creating}
         query={query}
-        onQueryChange={setQuery}
-        onCreate={() => void openStudio({ tab: "agents", agentId: "new" })}
-        onImported={(result) => void openImported(result, definitions, openStudio)}
         error={library.error}
-        loading={library.agents === null || library.flows === null}
+        onChangeOwner={onChangeOwner}
+        onRemove={onRemove}
       />
-      <section
-        aria-label="Agent editor"
-        className="flex min-h-0 min-w-0 flex-1 flex-col bg-background"
-      >
-        {agentId ? (
-          <SelectedAgentEditor
-            // An editor never outlives its server, so a pending reply from another one is discarded.
-            key={`${serverId ?? ""}:${agentId}`}
-            agentId={agentId}
-            library={library}
-            acknowledged={acknowledged?.id === agentId ? acknowledged : null}
-            onAcknowledged={setAcknowledged}
-            reportDraft={reportAgentDraft}
-            projects={owners.projects}
-            newOwner={newOwner}
-          />
-        ) : (
-          <div className="flex flex-1 items-center justify-center p-8 text-center">
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Select an Agent from the list to edit it here, or add a new Agent definition.
-            </p>
-          </div>
-        )}
-      </section>
+      <OpenedAgentSection
+        showEditor={showEditor}
+        agentId={agentId}
+        serverId={serverId}
+        library={library}
+        acknowledged={acknowledged}
+        onAcknowledged={onAcknowledged}
+        reportDraft={reportDraft}
+        projects={owners.projects}
+        newOwner={newOwner}
+      />
     </div>
+  );
+}
+
+function OpenedAgentSection({
+  showEditor,
+  agentId,
+  serverId,
+  library,
+  acknowledged,
+  onAcknowledged,
+  reportDraft,
+  projects,
+  newOwner,
+}: {
+  showEditor: boolean;
+  agentId: string | undefined;
+  serverId: string | null;
+  library: ReturnType<typeof useAgentsLibrary>;
+  acknowledged: AgentDefinition | null;
+  onAcknowledged: (agent: AgentDefinition) => void;
+  reportDraft: ReportDraft;
+  projects: readonly FactoryProject[];
+  newOwner: ReturnType<typeof useNewAgentOwner>;
+}) {
+  if (!showEditor || agentId === undefined) return null;
+  const known = acknowledged?.id === agentId ? acknowledged : null;
+  return (
+    <section
+      aria-label="Agent editor"
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border"
+    >
+      <SelectedAgentEditor
+        key={`${serverId ?? ""}:${agentId}`}
+        agentId={agentId}
+        library={library}
+        acknowledged={known}
+        onAcknowledged={onAcknowledged}
+        reportDraft={reportDraft}
+        projects={projects}
+        newOwner={newOwner}
+      />
+    </section>
+  );
+}
+
+type AgentRowAction =
+  | { readonly kind: "owner"; readonly agent: AgentDefinition }
+  | { readonly kind: "duplicate"; readonly agent: AgentDefinition; readonly target: string | null }
+  | { readonly kind: "remove"; readonly agent: AgentDefinition };
+
+function AgentListDialogs({
+  action,
+  definitions,
+  projects,
+  flows,
+  onClose,
+  onDuplicate,
+  onRemoved,
+}: {
+  action: AgentRowAction | null;
+  definitions: StudioDefinitions;
+  projects: readonly FactoryProject[];
+  flows: readonly FlowDraft[];
+  onClose: () => void;
+  onDuplicate: (agent: AgentDefinition, target: string | null) => void;
+  onRemoved: (agent: AgentDefinition) => void;
+}) {
+  if (!action) return null;
+  const subject = {
+    id: action.agent.id,
+    name: action.agent.name,
+    projectId: action.agent.projectId,
+  };
+  if (action.kind === "owner")
+    return (
+      <ChangeOwnerDialog
+        kind="Agent"
+        subject={subject}
+        definitions={definitions}
+        onClose={onClose}
+        onChanged={onClose}
+        onDuplicateInstead={(target) => onDuplicate(action.agent, target)}
+      />
+    );
+  if (action.kind === "duplicate")
+    return (
+      <AgentDuplicateFromList
+        agent={action.agent}
+        target={action.target}
+        subject={subject}
+        definitions={definitions}
+        projects={projects}
+        onClose={onClose}
+      />
+    );
+  return (
+    <AgentRemoveFromList
+      agent={action.agent}
+      definitions={definitions}
+      projects={projects}
+      flows={flows}
+      onClose={onClose}
+      onRemoved={onRemoved}
+    />
+  );
+}
+
+function AgentDuplicateFromList({
+  agent,
+  target,
+  subject,
+  definitions,
+  projects,
+  onClose,
+}: {
+  agent: AgentDefinition;
+  target: string | null;
+  subject: { id: string; name: string; projectId: string | null };
+  definitions: StudioDefinitions;
+  projects: readonly FactoryProject[];
+  onClose: () => void;
+}) {
+  const openStudio = useStudioNavigation();
+  const [duplicating, setDuplicating] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <DuplicateAgentDialog
+      source={subject}
+      projects={projects}
+      initialTarget={target}
+      duplicating={duplicating}
+      error={error}
+      onClose={onClose}
+      onDuplicate={(next, name) => {
+        setDuplicating(true);
+        setError("");
+        void definitions
+          .duplicateAgent(agent.id, { projectId: next, name })
+          .then((copy) => {
+            onClose();
+            void openStudio({ tab: "agents", agentId: copy.id });
+          })
+          .catch((cause: unknown) => {
+            setError(
+              cause instanceof Error ? cause.message : "Factory could not duplicate this Agent.",
+            );
+            setDuplicating(false);
+          });
+      }}
+    />
+  );
+}
+
+function AgentRemoveFromList({
+  agent,
+  definitions,
+  projects,
+  flows,
+  onClose,
+  onRemoved,
+}: {
+  agent: AgentDefinition;
+  definitions: StudioDefinitions;
+  projects: readonly FactoryProject[];
+  flows: readonly FlowDraft[];
+  onClose: () => void;
+  onRemoved: (agent: AgentDefinition) => void;
+}) {
+  const openStudio = useStudioNavigation();
+  const [removing, setRemoving] = useState(false);
+  const [issues, setIssues] = useState<readonly ValidationIssue[]>([]);
+  const [error, setError] = useState("");
+  const placing = placingFlows(flows, agent.id);
+  const raced = namedBlockers(issues, "agent_in_use").filter(
+    (blocker) => !placing.some((flow) => flow.id === blocker.id),
+  );
+  const openFlow = (id: string) => void openStudio({ tab: "flows", flowId: id });
+  if (placing.length > 0 || raced.length > 0)
+    return (
+      <CantRemoveDialog open name={agent.name} label="Flows" onClose={onClose}>
+        {flowBlockers(placing, projects, openFlow)}
+        {racedBlockers(raced, "Flow", openFlow)}
+      </CantRemoveDialog>
+    );
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next && !removing) onClose();
+      }}
+    >
+      <DialogContent
+        title={<>Remove “{agent.name}”?</>}
+        description="Runs that used it keep the revision they started with."
+        closeDisabled={removing}
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={removing}
+                onClick={() => {
+                  setRemoving(true);
+                  void definitions
+                    .removeAgent(agent.id)
+                    .then(() => onRemoved(agent))
+                    .catch((cause: unknown) => {
+                      setIssues(cause instanceof ApiError ? cause.detail.issues : []);
+                      setError(
+                        cause instanceof Error
+                          ? cause.message
+                          : "Factory could not remove this Agent.",
+                      );
+                      setRemoving(false);
+                    });
+                }}
+              >
+                {removing ? "Removing…" : "Remove Agent"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+      >
+        {error && (
+          <ProblemCard tone="error" title="Couldn’t remove the Agent">
+            {error}
+          </ProblemCard>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -216,7 +581,8 @@ function SelectedAgentEditor({
     if (!active.current) return;
     if (value.id === agentId) return;
     onAcknowledged(value);
-    void openStudio({ tab: "agents", agentId: value.id });
+    if (agentId === "new" && newOwner.returnTo) void openStudio(newOwner.returnTo);
+    else void openStudio({ tab: "agents", agentId: value.id });
   };
   const deleted = () => {
     void library.refreshReporting();
@@ -247,7 +613,8 @@ function SelectedAgentEditor({
       capabilities={library.capabilities}
       source={library.definitions}
       agentId={agentId}
-      flowUsage={flowUsageCount(library.flows ?? [], agentId)}
+      flowUsage={placingFlows(library.flows ?? [], agentId).length}
+      flows={library.flows ?? []}
       projects={projects}
       newOwner={newOwner}
       reportDraft={reportDraft}
@@ -277,7 +644,6 @@ function useAgentOwnership(
     chosen,
     initial: newOwner.initial,
     projects,
-    hint: newOwner.hint,
     blocked: ownerPicker(chosen, projects).blocked,
     onChange: (owner: string | null) => setPicked({ owner }),
   } as const;
@@ -324,12 +690,12 @@ function useAgentOwnerDialogs(
       setDialog(null);
       setError("");
     },
-    async duplicate(target: string | null) {
+    async duplicate(target: string | null, name: string) {
       if (duplicating) return;
       setDuplicating(true);
       setError("");
       await draft
-        .duplicate(target)
+        .duplicate(target, name)
         .then((copy) => {
           if (!copy) return;
           setDialog(null);
@@ -371,9 +737,6 @@ function AgentOwnerDialogs({
         onClose={dialogs.close}
         onChanged={draft.ownerChangedHere}
         onDuplicateInstead={(target) => dialogs.open({ kind: "duplicate", target })}
-        duplicateBlocked={
-          state.dirty ? "Save your changes before duplicating this Agent." : undefined
-        }
       />
     );
   return (
@@ -381,10 +744,11 @@ function AgentOwnerDialogs({
       source={subject}
       projects={projects}
       initialTarget={dialog.target}
+      unsavedRevision={state.dirty ? saved.revision : undefined}
       duplicating={dialogs.duplicating}
       error={dialogs.error}
       onClose={dialogs.close}
-      onDuplicate={(target) => void dialogs.duplicate(target)}
+      onDuplicate={(target, name) => void dialogs.duplicate(target, name)}
     />
   );
 }
@@ -411,6 +775,7 @@ function OpenedAgentEditor({
   onSaved: (agent: AgentDefinition) => void;
   onDuplicated: (agent: AgentDefinition) => void;
   flowUsage: number;
+  flows: readonly FlowDraft[];
   onDeleted: () => void;
 }) {
   const { draft, state } = useOpenedAgentDraft(agent, capabilities, source, agentId, reportDraft);
@@ -438,6 +803,7 @@ function OpenedAgentEditor({
         ownership={ownership}
         exporter={agentId === "new" ? undefined : exporter}
         onSave={save}
+        onOpenCreated={onSaved}
         duplicating={dialogs.duplicating}
         onDuplicate={agent ? () => dialogs.open({ kind: "duplicate" }) : undefined}
         onChangeOwner={agent ? () => dialogs.open({ kind: "change-owner" }) : undefined}

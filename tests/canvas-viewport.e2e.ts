@@ -10,26 +10,31 @@ import {
 import { liveStates, liveRun } from "./support/live.ts";
 import { renameFlow, saveFlowCopy } from "./support/flows.ts";
 
-test("resizing the Flow editor refits a manually zoomed view", async ({ app, screen, browser }) => {
+test("resizing the Flow editor keeps a manually zoomed view", async ({ app, screen, browser }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
   await app.open("/studio/flows");
-  await screen.getByRole("heading", "Demo · Focused change", { exact: true }).tap();
+  await screen.getByRole("link", "Demo · Focused change", { exact: false }).tap();
   const canvas = screen.getByRole("region", "Flow canvas");
-  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  // The editor opens at 100% with the Flow input near the canvas's left edge.
   await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  const surface = (await canvas.boundingBox())!;
+  const input = (await screen.getByRole("button", "Flow input", { exact: true }).boundingBox())!;
+  expect(input.x - surface.x).toBeLessThan(80);
   await screen.getByRole("button", "Zoom in", { exact: true }).tap();
   await expect(canvas).toHaveAttribute("data-zoom", "1.100");
   await app.screenshot("flow-manual-zoom");
 
   // Act
-  await browser.setViewport({ width: 1800, height: 1000 });
+  await browser.setViewport({ width: 1920, height: 1080 });
 
   // Assert
-  await expect(canvas).toHaveAttribute("data-zoom", "1.000");
+  await expect
+    .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
+    .toMatchObject({ x: 16, y: 16, width: 1888, height: 1048 });
+  await expect(canvas).toHaveAttribute("data-zoom", "1.100");
   await expect(screen.getByRole("button", "Flow input", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("article", "Block Implement change")).toBeVisible();
-  await app.screenshot("flow-refitted-on-resize");
+  await app.screenshot("flow-zoom-kept-on-resize");
 });
 
 test("a fitted Run preserves manual pan and zoom through resize and live updates", async ({
@@ -58,27 +63,31 @@ test("a fitted Run preserves manual pan and zoom through resize and live updates
   await app.screenshot("run-view-preserved-after-resize-and-live-update");
 });
 
-test("opening a working Run centers the active Block without enlarging it", async ({
+test("opening a working Run at 100% shifts just enough to show the next Block", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  const run = await liveRun(app, "entry-focus");
+  const run = await liveRun(app, "entry-focus", "review");
 
   // Act
   await app.open(`/runs/${run}`);
 
   // Assert
-  await expect
-    .poll(async () => {
-      const offset = await runCanvasCenterOffset(screen, "Implement change");
-      return Math.max(Math.abs(offset.x), Math.abs(offset.y));
-    })
-    .toBeLessThan(2);
   const canvas = screen.getByRole("region", "Execution canvas");
-  expect(Number(await canvas.getAttribute("data-zoom"))).toBeLessThanOrEqual(1);
+  await expect(canvas.getByRole("status", "Zoom level", { exact: true })).toHaveText("100%");
+  const surface = (await canvas.boundingBox())!;
+  const next = (await canvas
+    .getByRole("article", "Block Review implementation", { exact: true })
+    .boundingBox())!;
+  // At this width, centering Implement change would clip the reviewer on the right.
+  // The smallest shift puts the reviewer's right edge flush with the canvas edge.
+  expect(next.x + next.width).toBeCloseTo(surface.x + surface.width);
+  const activeOffset = await runCanvasCenterOffset(screen, "Implement change");
+  expect(activeOffset.x).toBeLessThan(0);
+  expect(Math.abs(activeOffset.y)).toBeLessThan(2);
   await app.screenshot("working-run-entry-focus");
 });
 

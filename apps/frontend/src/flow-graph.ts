@@ -181,8 +181,61 @@ export function continuedThread(graph: FlowGraph, blockId: string): string | nul
   return agent ? `${agent.name || "Unnamed block"}'s thread` : null;
 }
 
-export function exitRecipients(graph: FlowGraph, blockId: string, exitId: string) {
-  return graph.connections
-    .filter((c) => c.sourceBlockId === blockId && c.exitId === exitId)
-    .map((c) => graph.blocks.find((t) => t.id === c.targetBlockId)?.name);
+/**
+ * The names of the blocks each exit's connections reach, in graph order, indexed once per graph
+ * since a canvas asks for every exit row; undefined for a target the graph lacks.
+ */
+export function exitRecipients(graph: FlowGraph) {
+  const names = new Map<string, string>();
+  for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
+  const recipients = new Map<string, (string | undefined)[]>();
+  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
+    const key = JSON.stringify([sourceBlockId, exitId]);
+    const list = recipients.get(key) ?? [];
+    list.push(names.get(targetBlockId));
+    recipients.set(key, list);
+  }
+  return (blockId: string, exitId: string): readonly (string | undefined)[] =>
+    recipients.get(JSON.stringify([blockId, exitId])) ?? [];
+}
+
+/**
+ * The names of the blocks each of one block's exits reaches, in graph order: a single pass that
+ * keeps only that block's connections, for views that show one block rather than the whole canvas.
+ */
+export function blockExitRecipients(graph: FlowGraph, blockId: string) {
+  const recipients = new Map<string, (string | undefined)[]>();
+  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
+    if (sourceBlockId !== blockId) continue;
+    const list = recipients.get(exitId) ?? [];
+    list.push(graph.blocks.find((block) => block.id === targetBlockId)?.name);
+    recipients.set(exitId, list);
+  }
+  return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
+}
+
+/**
+ * Undoes a removal that turned `before` into `after` on the current graph: blocks and wires the
+ * removal took come back, edits made since are kept, and a wire returns only while both its ends
+ * exist.
+ */
+export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
+  const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
+  const blocks = [
+    ...current.blocks,
+    ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
+  ];
+  const exists = (id: string) => blocks.some((b) => b.id === id);
+  const restored = (graph: FlowGraph, wire: FlowWire) =>
+    !hasWire(after, wire) && !hasWire(graph, wire) && exists(wire.targetBlockId);
+  let next: FlowGraph = { ...current, blocks };
+  for (const targetBlockId of before.flowInput.targetBlockIds) {
+    const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
+    if (restored(next, wire)) next = addWire(next, wire);
+  }
+  for (const connection of before.connections) {
+    const wire = connectionWire(connection);
+    if (exists(connection.sourceBlockId) && restored(next, wire)) next = addWire(next, wire);
+  }
+  return next;
 }

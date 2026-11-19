@@ -25,6 +25,7 @@ it("a Condition with descending rules between an Agent and a Human step saves re
     blocks: [draft.coder, gate, draft.review],
     connections: [
       connection("coder", "done", "gate"),
+      connection("gate", "end", "human"),
       connection("gate", "ask", "human"),
       connection("gate", OTHERWISE, "coder"),
     ],
@@ -76,7 +77,10 @@ it("a Condition with more rules than an Agent may have exits saves ready, bounde
   // Act
   const saved = await draft.save({
     blocks: [draft.coder, conditionBlock("gate", "Many routes", rules)],
-    connections: [connection("coder", "done", "gate")],
+    connections: [
+      connection("coder", "done", "gate"),
+      ...[...rules.map((rule) => rule.id), OTHERWISE].map((id) => connection("gate", id, "coder")),
+    ],
   });
 
   // Assert
@@ -100,7 +104,12 @@ it("an unfinished Condition saves, and readiness names each rule row that blocks
   // Act
   const saved = await draft.save({
     blocks: [draft.coder, gate],
-    connections: [connection("coder", "done", "gate")],
+    connections: [
+      connection("coder", "done", "gate"),
+      ...[...gate.rules.map((rule) => rule.id), OTHERWISE].map((id) =>
+        connection("gate", id, "coder"),
+      ),
+    ],
   });
 
   // Assert
@@ -115,6 +124,76 @@ it("an unfinished Condition saves, and readiness names each rule row that blocks
     ["condition_rule_name_duplicate", "graph.blocks.1.rules.4.name"],
     ["condition_threshold_first_arrival", "graph.blocks.1.rules.5.fromArrival"],
   ]);
+});
+
+it("an unconnected Condition output, Otherwise included, saves but is not ready, naming the output", async (c) => {
+  // Arrange
+  const draft = await conditionDraft(c);
+  const gate = conditionBlock("gate", "Escalate", [conditionRule("ask", "Ask a person", 3)]);
+
+  // Act
+  const saved = await draft.save({
+    blocks: [draft.coder, gate, draft.review],
+    connections: [connection("coder", "done", "gate"), connection("gate", "ask", "human")],
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.readiness).toStrictEqual({
+    ready: false,
+    issues: [
+      {
+        code: "condition_output_unconnected",
+        path: "graph.blocks.1",
+        message: 'Escalate: connect output "Otherwise". A Condition output cannot end a branch.',
+      },
+    ],
+  });
+});
+
+it("unconnected Agent and Human step exits still end their branch and stay ready", async (c) => {
+  // Arrange
+  const draft = await conditionDraft(c);
+
+  // Act
+  const saved = await draft.save({
+    blocks: [draft.coder, draft.review],
+    connections: [connection("coder", "done", "human")],
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.readiness).toStrictEqual({ ready: true, issues: [] });
+});
+
+it("Start refuses a saved Flow with an unconnected Condition output and creates no Run", async (c) => {
+  // Arrange
+  const { f, flow, agent, input, project } = await prepared(c);
+  const saved = await f.updateFlow(flow.id, {
+    name: flow.name,
+    expectedRevision: flow.revision,
+    expectedProjectId: flow.projectId,
+    workspace: flow.workspace,
+    graph: {
+      flowInput: flowInput("worker"),
+      blocks: [
+        agentBlock("worker", "Entry worker", agent.id),
+        conditionBlock("gate", "Escalate", [conditionRule("ask", "Ask", 3)]),
+      ],
+      connections: [connection("worker", "done", "gate"), connection("gate", "ask", "worker")],
+    },
+  });
+  assert(saved.ok);
+
+  // Act
+  const started = await f.startRun(input);
+
+  // Assert
+  assert(!started.ok);
+  expect(started.error.issues.map((issue) => issue.code)).toStrictEqual([
+    "condition_output_unconnected",
+  ]);
+  expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
 });
 
 it.for([
@@ -159,7 +238,11 @@ it("a Condition threshold of the largest exact integer saves unchanged", async (
   // Act
   const saved = await draft.save({
     blocks: [draft.coder, gate],
-    connections: [connection("coder", "done", "gate")],
+    connections: [
+      connection("coder", "done", "gate"),
+      connection("gate", "ask", "coder"),
+      connection("gate", OTHERWISE, "coder"),
+    ],
   });
 
   // Assert
@@ -331,7 +414,11 @@ it("a Flow save after Start leaves the Run on the Condition rules it captured", 
       conditionBlock("gate", "Escalate", [conditionRule("ask", "Ask", fromArrival)]),
       humanStep("review", "Review"),
     ],
-    connections: [connection("worker", "done", "gate"), connection("gate", "ask", "review")],
+    connections: [
+      connection("worker", "done", "gate"),
+      connection("gate", "ask", "review"),
+      connection("gate", OTHERWISE, "worker"),
+    ],
   });
   const first = await f.updateFlow(flow.id, {
     name: flow.name,

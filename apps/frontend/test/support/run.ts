@@ -1,4 +1,10 @@
-import type { RunAttention, RunBlock, RunDetail, RunNavigationEntry } from "@t3-factory/contracts";
+import type {
+  RunAttention,
+  RunBlock,
+  RunDetail,
+  RunNavigationEntry,
+  RunSettlementWorker,
+} from "@t3-factory/contracts";
 
 /** A pending attention matter of `kind` on `blockId`. */
 export const attention = (blockId: string, kind: RunAttention["kind"]): RunAttention => ({
@@ -139,8 +145,35 @@ export function runEntry(): RunNavigationEntry {
     },
     lifecycle: "active",
     settlement: null,
+    pendingWork: false,
     blocks: [],
     presentation: { snoozed: false, woke: false },
     attention: { needsInput: false, problem: false, matters: [] },
   };
 }
+
+/** A worker an unresolved settlement could not stop, with how T3 answered its Stop. */
+export const blockedWorker = (
+  blockId: string,
+  stopOutcome: RunSettlementWorker["stopOutcome"],
+): RunSettlementWorker => ({
+  blockId,
+  blockName: blockId,
+  threadId: `thread-${blockId}`,
+  link: `t3://threads/thread-${blockId}`,
+  state: "unresolved",
+  stopRequestedAt: null,
+  stopOutcome,
+  problem: "Not stopped.",
+});
+
+/** A confirmed Settle whose current attempt could not resolve `workers`. */
+export const unresolvedSettlement = (
+  workers: readonly RunSettlementWorker[],
+): NonNullable<RunDetail["settlement"]> => ({
+  state: "unresolved",
+  requestedAt: "2026-11-08T22:20:00Z",
+  attempt: 1,
+  attemptedAt: "2026-11-08T22:20:00Z",
+  workers,
+});

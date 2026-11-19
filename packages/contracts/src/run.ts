@@ -52,6 +52,8 @@ export interface DeleteRunImagesInput {
 export interface RunImageDeletion {
   readonly deleted: readonly string[];
   readonly skipped: readonly string[];
+  /** Skipped digests whose file is still stored and referenced by an Active Run. */
+  readonly keptForActiveRuns?: readonly string[];
 }
 /** The initial prompt in order: text, and references to images of the manifest. */
 export type PromptSegment =
@@ -277,6 +279,12 @@ export interface RunSettlementWorker {
   readonly state: "executing" | "stopping" | "finished" | "unresolved";
   /** When Factory requested T3 Stop for this worker in the current attempt. */
   readonly stopRequestedAt: string | null;
+  /**
+   * How T3 answered this attempt's Stop: `unsupported` when the connected T3 cannot stop worker
+   * threads, so only the owner can stop the worker in T3; `failed` when T3 refused the request or
+   * Factory could not send it, which a retry may repair. Null before an answer.
+   */
+  readonly stopOutcome: "acknowledged" | "failed" | "unsupported" | null;
   /** What keeps the worker from counting as finished, or why it could not be stopped. */
   readonly problem: string | null;
 }
@@ -368,6 +376,8 @@ export interface RunNavigationEntry {
   /** A confirmed manual settlement in progress; see `RunDetail.settlement`. */
   readonly settlement: RunSettlement["state"] | null;
   readonly blocks: readonly Pick<RunBlock, "state" | "freshness" | "workingMessage">[];
+  /** Factory still owes delivery, an answer, or another local operation. */
+  readonly pendingWork: boolean;
   /** Pending attention only. Reading this summary does not settle any matter. */
   readonly attention: RunAttentionSummary;
   readonly presentation: RunPresentation;
@@ -594,6 +604,8 @@ export interface RunAttentionMatter {
 }
 
 export interface RunAttentionSummary {
+  /** A pending Needs input matter, or an Agent Block that {@link awaitsReviewInT3}; never during
+   * a confirmed Settle. */
   readonly needsInput: boolean;
   readonly problem: boolean;
   readonly matters: readonly RunAttentionMatter[];
@@ -612,6 +624,22 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
     case "settlement-unresolved":
       return "problem";
   }
+}
+
+/**
+ * An Agent visit whose worker thread is idle while its current report is still `working`: the
+ * Agent ended its turn, usually with a question in chat, or stopped without reporting. Both leave
+ * the same evidence and Factory never parses chat, so the owner reviews the thread in T3. It is
+ * Needs input on the Block and the Run without being an attention matter.
+ */
+export function awaitsReviewInT3(
+  block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus">,
+): boolean {
+  return (
+    block.state === "working" &&
+    block.reportStatus === "working" &&
+    block.engineStatus === "completed"
+  );
 }
 
 /**
@@ -658,6 +686,11 @@ export interface HumanOccurrence {
   readonly appearedAt: string;
   readonly settledAt: string | null;
   readonly exitId: string | null;
+  /**
+   * When the latest Discord review proposing an answer to this pending occurrence stops being
+   * confirmable; null when there is none. While it lasts, the Run's own answer form waits.
+   */
+  readonly chatConfirmationUntil: string | null;
 }
 
 /**
@@ -754,10 +787,22 @@ export interface ConditionArrivalPage {
   readonly nextCursor: string | null;
 }
 
+export interface ArchivedRunMatch {
+  readonly id: string;
+  readonly number: number | null;
+  readonly title: string;
+  readonly projectTitle: string;
+}
+
 export const runOperations = {
   listRunNavigation: operation<never, readonly RunNavigationEntry[]>()({
     method: "GET",
     path: "/api/run-navigation",
+  }),
+  searchArchivedRuns: operation<never, readonly ArchivedRunMatch[]>()({
+    method: "GET",
+    path: "/api/runs/archived-search",
+    query: ["query"],
   }),
   startRun: operation<StartRunInput, RunDetail>()({
     method: "POST",

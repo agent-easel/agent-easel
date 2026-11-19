@@ -273,8 +273,9 @@ worker reports.
   until its next report; it withdraws neither the result nor its handoffs, but it keeps the Run
   from settling automatically. A later accepted report settles earlier missing-report and
   execution-failed attention on the Block.
-- A question in chat is ordinary conversation: it creates no Needs input and wakes no Snoozed
-  Run. Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
+- A question in chat is ordinary conversation: it creates no attention matter and wakes no
+  Snoozed Run. While the worker thread is idle and the report is still `working`, the Run shows
+  the Block as Needs input to review in T3 ([Runs](runs.md#reports-and-attention)). Unfinished discussion keeps the Block on `working`, so the next Block cannot start on
   unanswered questions. Native T3 questions and permissions and Human steps keep their own
   attention.
 - `waiting` is retired: `factory_update_block` answers it with `WAITING_RETIRED` and guidance to
@@ -495,7 +496,7 @@ numbered arrival selects the first rule whose threshold the number reaches, else
 number, the matched captured rule (none for Otherwise), acceptance time and the Handoff's [worker provenance](#worker-provenance),
 never a copy of the rules; creates one Handoff to every recipient of the selected output, released from creation and carrying
 the unchanged text, including empty text, and provenance; acknowledges the incoming Handoff; moves the count; and appends
-one `condition-selected` event. An unwired selection counts and ends that arrival without cancelling other work or the Run.
+one `condition-selected` event. An unwired selection, possible only in a Run captured before Start required every Condition output to be connected, counts and ends that arrival without cancelling other work or the Run.
 A Condition creates no worker, prompt or report, and no attention except its integrity Problem; it shows waiting while a
 delivery is pending there and finished once every delivery has been numbered.
 

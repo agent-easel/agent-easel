@@ -1,23 +1,12 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { api } from "../api.ts";
 import { upgradeScope, type UpgradeFailure, type UpgradeTarget } from "../use-upgrade.ts";
 
 function targetTitle(target: UpgradeTarget) {
   if (target.kind === "client") return "Client · This device";
   return target.local || !target.host ? "Server · This device" : `Server · ${target.host}`;
-}
-
-function TargetChange({ target }: { target: UpgradeTarget }) {
-  return (
-    <section aria-label={targetTitle(target)} className="grid gap-1 text-sm">
-      <h3 className="text-muted-foreground">{targetTitle(target)}</h3>
-      <p className="break-all text-muted-foreground">
-        {target.current} →<br />
-        <span className="text-foreground">{target.update.version}</span>
-      </p>
-    </section>
-  );
 }
 
 /** Open Runs on the server being replaced; they wait and reconcile, they are never stopped. */
@@ -50,30 +39,31 @@ export function UpgradeReview({
   const ready = targets.filter((target) => target.update.state === "downloaded");
   const server = ready.find((target) => target.kind === "server");
   const openRuns = useOpenRunCount(server);
+  const version = ready[0]?.update.version ?? "the downloaded version";
+  const title = ready.length > 1 ? `Upgrade ${upgradeScope(targets)}?` : `Upgrade to ${version}?`;
+  const description =
+    ready.length > 1
+      ? "The server updates before the client restarts."
+      : server
+        ? openRuns
+          ? `Factory restarts while ${openRuns} open Run${openRuns === 1 ? "" : "s"} keep going.`
+          : "Factory restarts and open Runs keep going."
+        : "The desktop app restarts to apply the update.";
   return (
-    <div className="grid w-80 max-w-[calc(100vw-2rem)] gap-3">
-      <h2 className="text-base text-foreground">Upgrade {upgradeScope(targets)}?</h2>
-      {ready.map((target) => (
-        <TargetChange key={target.kind} target={target} />
-      ))}
-      {ready.length > 1 && (
-        <p className="text-sm text-muted-foreground">
-          {server?.local ? "The server" : "Remote server"} updates first. Client restarts after.
-        </p>
-      )}
-      {openRuns !== null && openRuns > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {openRuns} open Run{openRuns === 1 ? "" : "s"} keep going and reconcile after the server
-          restarts.
-        </p>
-      )}
-      <div className="flex gap-2">
-        <Button variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button onClick={onConfirm}>Upgrade</Button>
-      </div>
-    </div>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent
+        title={title}
+        description={description}
+        actions={
+          <>
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button onClick={onConfirm}>Upgrade</Button>
+          </>
+        }
+      />
+    </Dialog>
   );
 }
 

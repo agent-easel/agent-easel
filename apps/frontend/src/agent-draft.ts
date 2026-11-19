@@ -1,10 +1,14 @@
 import { useSyncExternalStore } from "react";
 import type {
   AgentCapabilities,
+  AgentCreateOutcome,
+  CreateAgentInput,
   AgentDefinition,
   AgentExecutionSettings,
+  AgentModelOptionDescriptor,
   AgentModelOptionValue,
   AgentEnvironment,
+  BlockExit,
   AgentProjectOverride,
   AgentProviderCapability,
   AgentModelCapability,
@@ -15,6 +19,7 @@ import {
   validateUpdateAgent,
 } from "@t3-factory/domain-validation";
 import type { api } from "./api.ts";
+import { OfflineError } from "./transport.ts";
 import { randomId } from "./lib/ids.ts";
 import type { StudioDefinitions } from "./studio-definitions.ts";
 import {
@@ -26,7 +31,13 @@ import {
 /** Factory writes used by one Agent draft; the HTTP client in the app, fakes in Node tests. */
 export type AgentDraftOperations = Pick<
   typeof api,
-  "createAgent" | "updateAgent" | "removeAgent" | "duplicateAgent" | "getAgent"
+  | "reserveAgentCreate"
+  | "createAgent"
+  | "getAgentCreateOutcome"
+  | "updateAgent"
+  | "removeAgent"
+  | "duplicateAgent"
+  | "getAgent"
 >;
 
 /** Studio's saved definitions as one Agent draft follows them, and the writes it sends. */
@@ -126,11 +137,46 @@ export const executionEdits = {
     ...execution,
     modelOptions: withOptionValue(execution.modelOptions, id, value),
   }),
-  removeOption: (execution: AgentExecutionSettings, id: string): AgentExecutionSettings => ({
-    ...execution,
-    modelOptions: execution.modelOptions.filter((option) => option.id !== id),
-  }),
 };
+
+/** Whether T3 offers `value` for option `descriptor`. */
+function offersValue(
+  descriptor: AgentModelOptionDescriptor,
+  value: AgentModelOptionValue["value"],
+) {
+  if (descriptor.values) return descriptor.values.includes(value);
+  if (descriptor.type === "boolean") return typeof value === "boolean";
+  return descriptor.choices?.some((choice) => choice.id === value) ?? false;
+}
+
+/**
+ * `execution` without the parts T3 no longer offers: a gone environment clears the selection, a
+ * gone provider or model clears it from there, and options the model does not offer are dropped.
+ * Without T3's capabilities nothing is known to be gone, so nothing is cleared.
+ */
+export function offeredExecution(
+  execution: AgentExecutionSettings,
+  capabilities: AgentCapabilities | null,
+): AgentExecutionSettings {
+  if (capabilities?.state !== "ready" || !execution.environmentId) return execution;
+  if (!capabilities.environments.some((entry) => entry.environmentId === execution.environmentId))
+    return NO_WORKER;
+  if (!execution.providerInstanceId) return execution;
+  const provider = capabilities.providers.find(
+    (entry) => entry.providerInstanceId === execution.providerInstanceId,
+  );
+  if (!provider) return { ...NO_WORKER, environmentId: execution.environmentId };
+  if (!execution.modelId) return execution;
+  const model = provider.models.find((entry) => entry.id === execution.modelId);
+  if (!model) return { ...execution, modelId: "", modelOptions: [] };
+  const modelOptions = execution.modelOptions.filter((option) => {
+    const descriptor = model.options?.find((entry) => entry.id === option.id);
+    return descriptor !== undefined && offersValue(descriptor, option.value);
+  });
+  return modelOptions.length === execution.modelOptions.length
+    ? execution
+    : { ...execution, modelOptions };
+}
 
 function initialExecution(capabilities: AgentCapabilities | null): AgentExecutionSettings {
   // A provider without Factory reporting cannot run, so it is never preselected.
@@ -144,12 +190,15 @@ function initialExecution(capabilities: AgentCapabilities | null): AgentExecutio
   };
 }
 
-/** A model-less Agent opens with nothing chosen; only a new Agent preselects a provider. */
-function contentOf(agent: AgentDefinition): AgentContent {
+/**
+ * A model-less Agent opens with nothing chosen; only a new Agent preselects a provider. A saved
+ * selection T3 no longer offers opens cleared, so the stored Agent changes only on Save.
+ */
+function contentOf(agent: AgentDefinition, capabilities: AgentCapabilities | null): AgentContent {
   return {
     name: agent.name,
     prompt: agent.prompt,
-    execution: agent.execution ?? NO_WORKER,
+    execution: offeredExecution(agent.execution ?? NO_WORKER, capabilities),
     exits: agent.exits,
     projectOverrides: agent.projectOverrides,
   };
@@ -161,6 +210,7 @@ function saveRequest(
   operations: AgentDraftOperations,
   /** The owning Project a save expects, or the one a create gives the new Agent. */
   owner: string | null,
+  create: (input: CreateAgentInput) => Promise<AgentDefinition>,
 ): { error: string } | SaveRequest<AgentDefinition, AgentContent> {
   const content = createShapedContent(draft);
   // Submitted content is compared with saved revisions, which open a model-less Agent unchosen.
@@ -172,7 +222,7 @@ function saveRequest(
     execution: input.execution ?? NO_WORKER,
     projectOverrides: input.projectOverrides ?? [],
   });
-  const fallback = "Could not save this Agent. Your edits are still here.";
+  const fallback = "Your changes are kept. Try saving again.";
   if (agent) {
     const validation = validateUpdateAgent({
       ...content,
@@ -185,7 +235,7 @@ function saveRequest(
       submitted: asContent(submitted),
       send: () => operations.updateAgent(agent.id, validation.value),
       unknownMessage:
-        "Save outcome unknown. Factory may have saved this Agent; your edits are kept and nothing is retried.",
+        "Factory may have saved this Agent. Your changes are kept and nothing is retried.",
       fallback,
     };
   }
@@ -194,12 +244,48 @@ function saveRequest(
   const { projectId: _, ...input } = validation.value;
   return {
     submitted: asContent(input),
-    send: () => operations.createAgent(validation.value),
-    unknownMessage:
-      "Save outcome unknown. Factory may have created this Agent; check the Agent list before creating it again.",
+    send: () => create(validation.value),
+    unknownMessage: "Factory may have created this Agent. Checking before it can be created again…",
     fallback,
   };
 }
+
+/** A name problem an exit's field shows as its tag. */
+export type ExitProblem = "Duplicate" | "Required";
+
+/**
+ * The exits' name problems, checked live as the server checks them on save: each named exit by id
+ * with its tag, and the card that explains the first problem. Null when every name is usable.
+ */
+function exitProblems(exits: readonly BlockExit[]) {
+  const tags = new Map<string, ExitProblem>();
+  const counts = new Map<string, number>();
+  for (const exit of exits) {
+    const name = exit.name.trim();
+    if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  let card: { readonly title: string; readonly body: string } | null = null;
+  for (const exit of exits) {
+    const name = exit.name.trim();
+    if (!name) {
+      tags.set(exit.id, "Required");
+      card ??= { title: "An exit has no name", body: "Name the exit or remove it." };
+    } else if ((counts.get(name) ?? 0) > 1) {
+      tags.set(exit.id, "Duplicate");
+      card ??= { title: `Two exits are named “${name}”`, body: "Give each exit its own name." };
+    }
+  }
+  return card ? { tags, card } : null;
+}
+
+/**
+ * After a Create whose reply was lost, only Factory's confirmed `absent` outcome allows
+ * another Create. A failed lookup leaves the original request available to check again.
+ */
+export type CreateCheck =
+  | { readonly status: "none" }
+  | { readonly status: "checking" }
+  | AgentCreateOutcome;
 
 export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition, AgentContent> {
   readonly choices: {
@@ -215,27 +301,29 @@ export interface AgentDraftSnapshot extends RevisionedDraftState<AgentDefinition
    * overrides, which only a global Agent has; Save waits until they are removed or it is global.
    */
   readonly strandedOverrides: boolean;
-  /** The compared revision **Load latest revision** is waiting to be confirmed for. */
-  readonly confirmingLoad: number | null;
+  /** Duplicate or empty exit names; Save waits until they are fixed. */
+  readonly exitProblems: ReturnType<typeof exitProblems>;
+  readonly createCheck: CreateCheck;
 }
 
 /**
  * One opened Agent on the shared revision protocol: editable content and worker choices, the
- * Create gate after an unknown Create outcome, Duplicate and the confirmation before **Load
- * latest revision**. The new-Agent form follows nothing until its own Create. A draft belongs to
- * one Studio session and server, so replies reaching a discarded draft change nothing shown.
+ * reconciliation of a Create whose reply was lost, Duplicate and loading a compared revision. The
+ * new-Agent form follows nothing until its own Create. A draft belongs to one Studio session and
+ * server, so replies reaching a discarded draft change nothing shown.
  */
 export function createAgentDraft(
   agent: AgentDefinition | null,
   capabilities: AgentCapabilities | null,
   source: AgentDraftSource,
 ) {
-  /** Shown only while this revision is the compared one, so a newer revision closes it. */
-  let confirmingLoad: number | null = null;
+  const opened = (definition: AgentDefinition) => contentOf(definition, capabilities);
+  let createCheck: CreateCheck = { status: "none" };
+  let lostCreateId: string | undefined;
   const draft = createRevisionedDraft({
     saved: agent,
     content: agent
-      ? contentOf(agent)
+      ? opened(agent)
       : {
           name: "",
           prompt: "",
@@ -243,27 +331,36 @@ export function createAgentDraft(
           exits: [{ id: randomId(), name: "done", description: "", messageRequired: false }],
           projectOverrides: [],
         },
-    contentOf,
+    contentOf: opened,
     list: () => source.getSnapshot().agents,
     read: (id) => source.getAgent(id),
     view(state): AgentDraftSnapshot {
-      const { conflict } = state;
       const unknownCreate = !state.saved && state.saveOutcome === "unknown";
       const strandedOverrides =
         state.saved !== null && state.owner !== null && state.content.projectOverrides.length > 0;
+      const problems = exitProblems(state.content.exits);
       return {
         ...state,
-        canSave: state.canSave && !unknownCreate && !strandedOverrides,
+        canSave: state.canSave && !unknownCreate && !strandedOverrides && !problems,
         strandedOverrides,
+        exitProblems: problems,
         choices: executionChoices(capabilities, state.content.execution),
         needsModel: savedExecution(state.content.execution) === null,
-        confirmingLoad:
-          conflict.status === "compared" && conflict.latest.revision === confirmingLoad
-            ? confirmingLoad
-            : null,
+        createCheck: unknownCreate ? createCheck : { status: "none" },
       };
     },
   });
+  async function checkLostCreate() {
+    if (!lostCreateId || createCheck.status === "checking") return;
+    createCheck = { status: "checking" };
+    draft.publish();
+    try {
+      createCheck = await source.getAgentCreateOutcome(lostCreateId);
+    } catch {
+      createCheck = { status: "unconfirmed" };
+    }
+    draft.publish();
+  }
   function edit(change: Partial<AgentContent>) {
     const { saving, removed, removing } = draft.getSnapshot();
     if ((saving && !removed) || removing) return;
@@ -283,11 +380,14 @@ export function createAgentDraft(
       return unsubscribe;
     },
     edit,
-    /** Copies the saved revision into target `projectId`: a Project, or null for Global. */
-    async duplicate(projectId: string | null) {
-      const { saved, removed, dirty, saving, removing } = draft.getSnapshot();
-      if (removed || !saved || dirty || saving || removing) return;
-      return source.duplicateAgent(saved.id, { projectId });
+    /**
+     * Copies the saved revision, never the draft's unsaved changes, as `name` into target
+     * `projectId`: a Project, or null for Global.
+     */
+    async duplicate(projectId: string | null, name: string) {
+      const { saved, removed, saving, removing } = draft.getSnapshot();
+      if (removed || !saved || saving || removing) return;
+      return source.duplicateAgent(saved.id, { projectId, name });
     },
     setEnvironmentId(id: string) {
       editExecution((current) => executionEdits.environment(current, id));
@@ -308,12 +408,13 @@ export function createAgentDraft(
     removeOverrides() {
       edit({ projectOverrides: [] });
     },
-    clearWorker() {
-      edit({ execution: NO_WORKER });
+    /** Remove the Worker and the Project overrides that depend on it from this draft. */
+    removeWorker() {
+      edit({ execution: NO_WORKER, projectOverrides: [] });
     },
     dismissUpdate: draft.dismissUpdate,
     clearRemovalError: draft.clearRemovalError,
-    remove: () => draft.remove(source.removeAgent, "Factory could not delete this Agent."),
+    remove: () => draft.remove(source.removeAgent, "Factory could not remove this Agent."),
     /**
      * Validates and sends the draft against its saved revision, or creates it owned by `owner`
      * (null for a global Agent); a save never changes the owner.
@@ -325,42 +426,53 @@ export function createAgentDraft(
       // A Project Agent has no Project overrides, so the editor says Create leaves them out. Only
       // the request omits them: the draft keeps them until a Create succeeds.
       const submitted = !saved && owner !== null ? { ...content, projectOverrides: [] } : content;
-      const request = saveRequest(saved, submitted, source, saved ? snapshot.owner : owner);
-      if (!("error" in request)) return draft.save(request);
-      draft.report(request.error);
-      return undefined;
+      let requestId: string | undefined;
+      const create = async (input: CreateAgentInput) => {
+        try {
+          requestId = await source.reserveAgentCreate();
+        } catch (cause) {
+          // Losing the reservation reply cannot create an Agent.
+          if (cause instanceof OfflineError) throw new OfflineError("not-sent");
+          throw cause;
+        }
+        return source.createAgent({ ...input, requestId });
+      };
+      const request = saveRequest(saved, submitted, source, saved ? snapshot.owner : owner, create);
+      if ("error" in request) {
+        draft.report(request.error);
+        return undefined;
+      }
+      const result = await draft.save(request);
+      if (requestId && draft.getSnapshot().saveOutcome === "unknown") {
+        lostCreateId = requestId;
+        await checkLostCreate();
+      }
+      return result;
     },
     compare: draft.compare,
     acknowledgeOwner: draft.acknowledgeOwner,
     ownerChangedHere: draft.ownerChangedHere,
-    /** Asks to confirm replacing the draft with `revision`, the revision the comparison shows. */
-    requestLoadLatest(revision: number) {
-      const { conflict } = draft.getSnapshot();
-      if (conflict.status !== "compared" || conflict.latest.revision !== revision) return;
-      confirmingLoad = revision;
-      draft.publish();
-    },
-    cancelLoadLatest() {
-      confirmingLoad = null;
-      draft.publish();
-    },
-    /** Replaces the draft with `revision` if it is still the compared one and was confirmed. */
-    loadLatest(revision: number) {
-      if (draft.getSnapshot().confirmingLoad !== revision) return;
-      confirmingLoad = null;
-      draft.takeLatest(revision);
-    },
+    /** Replaces the draft with `revision` while it is still the compared one. */
+    loadLatest: draft.takeLatest,
     keepEdits: draft.keep,
-    /** The user checked the Agent list after an unknown Create, so Create may be sent again. */
-    allowCreateAgain() {
-      if (draft.getSnapshot().saved) return;
+    /** Opens the Agent a lost Create made, as saved, so leaving the new-Agent form loses nothing. */
+    openCreated() {
+      if (createCheck.status !== "created") return undefined;
+      const made = createCheck.agent;
+      draft.load(made);
+      draft.acknowledgeUnknownSave();
+      return made;
+    },
+    /** Factory confirmed a lost Create made nothing, so Create may be sent again. */
+    checkCreate: checkLostCreate,
+    createAgain() {
+      if (createCheck.status !== "absent") return;
+      createCheck = { status: "none" };
+      lostCreateId = undefined;
       draft.acknowledgeUnknownSave();
     },
     setOption(id: string, value: AgentModelOptionValue["value"]) {
       editExecution((current) => executionEdits.option(current, id, value));
-    },
-    removeOption(id: string) {
-      editExecution((current) => executionEdits.removeOption(current, id));
     },
     chooseModel(id: string) {
       const { choices } = draft.getSnapshot();

@@ -279,10 +279,10 @@ test("keeping a Flow draft against the newest revision sends no save", async ({
 }) => {
   // Arrange
   const state = await beforeReboundFlow({ app, screen, browser }, "reboundFlow");
-  const { flowPanel } = state;
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
 
   // Act
-  await flowPanel.getByRole("button", "Keep local draft against revision 5", { exact: true }).tap();
+  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
 
   // Assert
   await expectReboundFlow({ ...state });
@@ -297,7 +297,7 @@ test("Save commits the rebound Flow draft without a false external conflict", as
   const state = await beforeSavedFlow({ app, screen, browser }, "savedFlow");
 
   // Act
-  await screen.getByRole("button", "Save Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectSavedFlow({ ...state });
@@ -426,20 +426,15 @@ test("the Agent editor adopts an external revision in the same Studio history", 
 test("an Agent comparison shows the retained local prompt", async ({ app, screen, browser }) => {
   // Arrange
   const state = await beforeComparedAgent({ app, screen, browser }, "comparedAgent");
-  const { agentPanel } = state;
 
   // Act
-  await agentPanel.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
 
   // Assert
   await expectComparedAgent({ ...state });
 });
 
-test("a newer Agent revision invalidates the open Load confirmation", async ({
-  app,
-  screen,
-  browser,
-}) => {
+test("a newer Agent revision moves the open comparison to it", async ({ app, screen, browser }) => {
   // Arrange
   const state = await beforeInvalidatedAgentConfirmation(
     { app, screen, browser },
@@ -463,10 +458,10 @@ test("keeping Agent edits against the newest revision sends no save", async ({
 }) => {
   // Arrange
   const state = await beforeReboundAgent({ app, screen, browser }, "reboundAgent");
-  const { agentPanel } = state;
+  const comparison = screen.getByRole("dialog", "Compare with revision 5");
 
   // Act
-  await agentPanel.getByRole("button", "Keep my edits against revision 5", { exact: true }).tap();
+  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
 
   // Assert
   await expectReboundAgent({ ...state });
@@ -579,7 +574,7 @@ test("an Agent exit change invalidates an open dirty Flow readiness and retains 
   await expectChangedDirtyDependency({ ...state });
 });
 
-test("checking readiness reports the removed Agent exit", async ({ app, screen, browser }) => {
+test("the readiness issues report the removed Agent exit", async ({ app, screen, browser }) => {
   // Arrange
   const state = await beforeCheckedBrokenDependency(
     { app, screen, browser },
@@ -587,7 +582,7 @@ test("checking readiness reports the removed Agent exit", async ({ app, screen, 
   );
 
   // Act
-  await screen.getByRole("button", "Check readiness", { exact: true }).tap();
+  await screen.getByRole("button", /^Not ready/).tap();
 
   // Assert
   await expectCheckedBrokenDependency({ ...state });

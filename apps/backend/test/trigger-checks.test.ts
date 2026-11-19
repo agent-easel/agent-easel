@@ -39,6 +39,10 @@ it("a check starts the oldest ready issues, ties by number, up to the free slots
   assert(checked.ok);
   expect(checked.value.latestCheck).toMatchObject({ started: 2, waiting: 1, notStarted: [] });
   expect(checked.value.error).toBeNull();
+  expect(checked.value.startedRuns.map((run) => run.title)).toStrictEqual([
+    "factory-maintainer/atlas#4: Same time, lower number",
+    "factory-maintainer/atlas#5: Same time, higher number",
+  ]);
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([4, 5]);
 });
 

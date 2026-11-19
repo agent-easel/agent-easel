@@ -1,22 +1,30 @@
-import { Eye, Plus, ShieldOff, Trash2 } from "lucide-react";
+import { ChevronsUpDown, Trash2 } from "lucide-react";
 import type {
+  DiscordAccessTest,
   DiscordSettings,
   FactoryProject,
   UpdateDiscordAccessInput,
 } from "@t3-factory/contracts";
 import { validateUpdateDiscordAccess } from "@t3-factory/domain-validation";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { fieldLabelClass } from "@/components/page";
+import { selectFieldClass } from "@/components/page";
+import { StatusBadge } from "@/components/status-badge";
+import { cn } from "@/lib/utils";
 import { api } from "../api.ts";
 import { useProjects } from "../use-projects.ts";
+import { timeAgo } from "../time-format.ts";
 import { randomId } from "../lib/ids.ts";
-import { Notice } from "./notice.tsx";
-import { SectionSaveBar, useChatControlSection } from "./chat-control-form.tsx";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsGroup } from "./settings-page.tsx";
+import { FieldRow, useChatControlSection } from "./chat-control-form.tsx";
+import { fieldAria, fieldBorder, type FieldState } from "./field-state.ts";
 
 interface ChannelDraft {
   /** Stable while the owner edits the row's channel ID. */
@@ -26,22 +34,34 @@ interface ChannelDraft {
 }
 
 export interface AccessDraft {
-  /** One user ID per line, as typed. */
+  /** Comma-separated user IDs as typed; one ID per line is accepted too. */
   readonly users: string;
   readonly channels: readonly ChannelDraft[];
 }
 
+/** Projects Factory no longer knows are dropped from the draft, so the next save removes them. */
+const knownProjects = (projectIds: readonly string[], access: DiscordSettings["access"]) =>
+  projectIds.filter((projectId) => !access.unresolvedProjectIds.includes(projectId));
+
 const draftOf = ({ access }: DiscordSettings): AccessDraft => ({
-  users: access.users.join("\n"),
-  channels: access.channels.map((channel) => ({ ...channel, key: randomId() })),
+  users: access.users.join(", "),
+  channels: access.channels.map((channel) => ({
+    key: randomId(),
+    channelId: channel.channelId,
+    projectIds: knownProjects(channel.projectIds, access),
+  })),
 });
+
+/** The user IDs a draft lists, split on commas and line breaks. */
+const userIds = (users: string) =>
+  users
+    .split(/[\s,]+/)
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
 
 const saveInput = (draft: AccessDraft, settings: DiscordSettings): UpdateDiscordAccessInput => ({
   revision: settings.access.revision,
-  users: draft.users
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0),
+  users: userIds(draft.users),
   channels: draft.channels.map(({ channelId, projectIds }) => ({
     channelId: channelId.trim(),
     projectIds,
@@ -52,13 +72,38 @@ const sameAccess = (
   input: Pick<UpdateDiscordAccessInput, "users" | "channels">,
   saved: DiscordSettings["access"],
 ) =>
-  JSON.stringify([input.users, input.channels]) === JSON.stringify([saved.users, saved.channels]);
+  JSON.stringify([input.users, input.channels]) ===
+  JSON.stringify([
+    saved.users,
+    saved.channels.map((channel) => ({
+      channelId: channel.channelId,
+      projectIds: knownProjects(channel.projectIds, saved),
+    })),
+  ]);
 
 /** Whether the host already holds exactly this save, so a lost acknowledgement was a success. */
 const committed = (input: UpdateDiscordAccessInput, current: DiscordSettings) =>
   current.access.revision === input.revision + 1 && sameAccess(input, current.access);
 
-/** The Access section's saved state and draft, independent of the connection section. */
+/** Channels this save grants their first Project: everyone who can read them sees the replies. */
+export const firstGrants = (input: UpdateDiscordAccessInput, saved: DiscordSettings["access"]) =>
+  input.channels
+    .filter(
+      (channel) =>
+        channel.projectIds.length > 0 &&
+        !saved.channels.some(
+          (before) => before.channelId === channel.channelId && before.projectIds.length > 0,
+        ),
+    )
+    .map((channel) => channel.channelId);
+
+/** Where a draft breaks the Access rules, if anywhere; repeated IDs are refused, not merged. */
+function draftProblem(input: UpdateDiscordAccessInput) {
+  const validated = validateUpdateDiscordAccess(input);
+  return validated.ok ? "" : validated.error.message;
+}
+
+/** The Access section's saved state and draft; the page saves it after the bot. */
 export function useAccessSection() {
   const section = useChatControlSection({
     read: api.getDiscordSettings,
@@ -68,49 +113,98 @@ export function useAccessSection() {
     name: "Access",
   });
   const { settings, draft } = section;
-  return {
-    ...section,
-    dirty:
-      settings !== null &&
-      draft !== null &&
-      !sameAccess(saveInput(draft, settings), settings.access),
-  };
-}
-
-/** Where a draft breaks the Access rules, if anywhere; repeated IDs are refused, not merged. */
-function draftProblem(input: UpdateDiscordAccessInput) {
-  const validated = validateUpdateDiscordAccess(input);
-  return validated.ok ? "" : validated.error.message;
+  const input = settings && draft ? saveInput(draft, settings) : null;
+  const dirty = settings !== null && input !== null && !sameAccess(input, settings.access);
+  const problem = dirty && input ? draftProblem(input) : "";
+  return { ...section, input, dirty, problem };
 }
 
 /**
- * Who may invoke Chat control and where. Saved on its own, so revoking access never waits for
- * unsaved connection or model edits; a save is in effect when it returns.
+ * The draft IDs Discord does not know, by the names the latest lookup recorded. A channel the
+ * access test found gone has its own card instead.
  */
-export function AccessForm({
+function unknownIds(
+  draft: AccessDraft,
+  access: DiscordSettings["access"],
+  test: DiscordAccessTest | null,
+) {
+  return {
+    users: userIds(draft.users).filter((id) => access.userNames[id] === null),
+    channels: draft.channels.filter(
+      (channel) =>
+        access.channelNames[channel.channelId.trim()] === null &&
+        test?.channels[channel.channelId.trim()] !== "unknown-channel",
+    ),
+  };
+}
+
+const PROBLEM = "discord-access-problem";
+const UNKNOWN = "discord-access-unknown";
+const GONE = "discord-access-gone";
+
+/** Sending the access test from the "Add channel" row; absent before the first Access save. */
+export interface AccessTestAction {
+  readonly label: string;
+  /** Why it cannot be sent now; empty when it can. */
+  readonly reason: string;
+  readonly busy: boolean;
+  readonly onSend: () => void;
+}
+
+/** The draft's channels the latest access test could not post in: refused, or gone. */
+function testProblems(draft: AccessDraft, test: DiscordAccessTest | null) {
+  const outcome = (channel: ChannelDraft) => test?.channels[channel.channelId.trim()];
+  return {
+    cantPost: draft.channels.filter((channel) => outcome(channel) === "cant-post"),
+    gone: draft.channels.filter((channel) => outcome(channel) === "unknown-channel"),
+  };
+}
+
+/** "#name" for a channel Discord named, otherwise its ID. */
+const channelLabel = (channelId: string, access: DiscordSettings["access"]) => {
+  const name = access.channelNames[channelId];
+  return name ? `#${name}` : channelId;
+};
+
+/** The latest access test's state of one allowed user, if the test asked or heard from them. */
+function TestBadge({ reachedAt }: { reachedAt: string | null | undefined }) {
+  if (reachedAt === undefined) return null;
+  return reachedAt === null ? (
+    <StatusBadge kind="checking">Waiting</StatusBadge>
+  ) : (
+    <StatusBadge kind="success">Reached · {timeAgo(reachedAt)}</StatusBadge>
+  );
+}
+
+/**
+ * Who may invoke Chat control and where: allowed users, then each allowed channel with the
+ * Projects it grants. Names Discord reported show under the IDs once a check passed.
+ */
+export function AccessCard({
   settings,
   draft,
-  dirty,
-  saving,
-  saveError,
+  problem,
+  disabled,
+  test,
+  sendTest,
   onChange,
-  onSave,
-  onDiscard,
 }: {
   settings: DiscordSettings;
   draft: AccessDraft;
-  dirty: boolean;
-  saving: boolean;
-  saveError: string;
+  problem: string;
+  disabled: boolean;
+  /** The latest access test, as the page's most recent read shows it. */
+  test: DiscordAccessTest | null;
+  sendTest: AccessTestAction | undefined;
   onChange: (draft: AccessDraft) => void;
-  onSave: (input: UpdateDiscordAccessInput) => void;
-  onDiscard: () => void;
 }) {
   const projects = useProjects();
-  const input = saveInput(draft, settings);
-  const problem = draftProblem(input);
-  const empty =
-    input.users.length === 0 || !input.channels.some((channel) => channel.projectIds.length > 0);
+  const { userNames, channelNames } = settings.access;
+  const unknown = unknownIds(draft, settings.access, test);
+  const users = userIds(draft.users);
+  const usersState: FieldState | undefined = unknown.users.length
+    ? { tone: "attention", cardId: UNKNOWN }
+    : undefined;
   const setChannel = (key: string, change: Partial<ChannelDraft>) =>
     onChange({
       ...draft,
@@ -119,51 +213,41 @@ export function AccessForm({
       ),
     });
   return (
-    <section aria-label="Access" className="grid gap-4 border-t pt-5">
-      <div className="grid gap-1">
-        <h3 className="text-sm font-semibold text-foreground">Access</h3>
-        <p className="text-sm text-muted-foreground">
-          Chat control answers only an allowed user who mentions the bot or replies to it in an
-          allowed channel, or in a thread of one, about the Projects that channel grants. Server
-          membership, roles and administrator status grant nothing.
-        </p>
-      </div>
-      {!dirty && empty && (
-        <Notice tone="neutral" icon={ShieldOff} title="Nobody can use Chat control yet">
-          Allow at least one user and one channel that grants a Project. A channel without Projects
-          grants nothing.
-        </Notice>
-      )}
-      <div className="grid gap-1.5">
-        <Label htmlFor="discord-access-users" className={fieldLabelClass}>
-          Allowed user IDs
-        </Label>
-        <Textarea
-          id="discord-access-users"
-          value={draft.users}
-          placeholder="One Discord user ID per line"
-          spellCheck={false}
-          disabled={saving}
-          aria-describedby="discord-access-users-hint"
-          onChange={(event) => onChange({ ...draft, users: event.target.value })}
-        />
-        <p id="discord-access-users-hint" className="text-sm text-muted-foreground">
-          In Discord, turn on Developer Mode and choose Copy User ID. Names are not used.
-        </p>
-      </div>
-      <div className="grid gap-3">
-        <p className={fieldLabelClass}>Allowed channels</p>
-        {draft.channels.length === 0 && (
-          <p className="text-sm text-muted-foreground">No channel is allowed.</p>
-        )}
+    <>
+      <SettingsGroup label="Access">
+        <FieldRow
+          label="Users"
+          htmlFor="discord-access-users"
+          secondary={userNamesLine(users, userNames, test)}
+        >
+          <Input
+            id="discord-access-users"
+            value={draft.users}
+            placeholder="Discord user IDs"
+            autoComplete="off"
+            spellCheck={false}
+            disabled={disabled}
+            className={cn("flex-1 bg-muted font-mono text-label", fieldBorder(usersState?.tone))}
+            {...fieldAria(usersState?.cardId)}
+            onChange={(event) => onChange({ ...draft, users: event.target.value })}
+            onPaste={(event) => {
+              // One ID per line is accepted and shown as the comma-separated list.
+              const pasted = event.clipboardData.getData("text");
+              if (!pasted.includes("\n")) return;
+              event.preventDefault();
+              onChange({ ...draft, users: userIds(`${draft.users}\n${pasted}`).join(", ") });
+            }}
+          />
+        </FieldRow>
         {draft.channels.map((channel, index) => (
           <ChannelRow
             key={channel.key}
             index={index}
             channel={channel}
+            name={channelNames[channel.channelId.trim()]}
+            post={test?.channels[channel.channelId.trim()]}
             projects={projects}
-            unresolved={settings.access.unresolvedProjectIds}
-            disabled={saving}
+            disabled={disabled}
             onChange={(change) => setChannel(channel.key, change)}
             onRemove={() =>
               onChange({
@@ -173,156 +257,304 @@ export function AccessForm({
             }
           />
         ))}
-        <div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={saving}
-            onClick={() =>
-              onChange({
-                ...draft,
-                channels: [...draft.channels, { key: randomId(), channelId: "", projectIds: [] }],
-              })
-            }
-          >
-            <Plus aria-hidden strokeWidth={1.5} />
-            Add channel
-          </Button>
-        </div>
-      </div>
-      <Notice
-        tone="neutral"
-        icon={Eye}
-        title="Everyone who can read a channel sees the bot's posts"
-      >
-        Replies, reviews and reports in an allowed channel or its threads are visible to every
-        Discord member who can read it, also people not allowed here. Match each channel's
-        visibility to its Projects. Access does not change Discord permissions and gives no one
-        access to Factory itself; approving a Factory client grants no Chat control access.
-      </Notice>
-      {dirty && problem && (
-        <p role="alert" className="text-sm text-destructive">
+        <AddChannelRow
+          first={draft.channels.length === 0}
+          disabled={disabled}
+          sendTest={sendTest}
+          onAdd={() =>
+            onChange({
+              ...draft,
+              channels: [...draft.channels, { key: randomId(), channelId: "", projectIds: [] }],
+            })
+          }
+        />
+      </SettingsGroup>
+      {problem && (
+        <ProblemCard id={PROBLEM} tone="error" title="Access isn’t valid">
           {problem}
-        </p>
+        </ProblemCard>
       )}
-      {saveError && (
-        <Alert variant="destructive">
-          <AlertDescription>{saveError}</AlertDescription>
-        </Alert>
+      {(unknown.users.length > 0 || unknown.channels.length > 0) && (
+        <ProblemCard id={UNKNOWN} tone="attention" title={unknownTitle(unknown)}>
+          Fix the IDs, then save.
+        </ProblemCard>
       )}
-      <SectionSaveBar
-        saved={settings.access}
-        dirty={dirty}
-        saving={saving}
-        onSave={dirty && !problem ? () => onSave(input) : undefined}
-        onDiscard={onDiscard}
-      />
-    </section>
+      <AccessTestProblems settings={settings} draft={draft} test={test} />
+    </>
+  );
+}
+
+/**
+ * Allowed users by name; while an access test covers them, one per line with its state. Null
+ * before Discord named any of them.
+ */
+function userNamesLine(
+  users: readonly string[],
+  userNames: DiscordSettings["access"]["userNames"],
+  test: DiscordAccessTest | null,
+) {
+  const name = (id: string) =>
+    userNames[id] === null ? (
+      <StatusBadge kind="attention">Unknown user</StatusBadge>
+    ) : (
+      (userNames[id] ?? id)
+    );
+  if (test && users.some((id) => id in test.users))
+    return users.map((id) => (
+      <span key={id} className="flex basis-full items-center gap-2">
+        {name(id)}
+        <TestBadge reachedAt={test.users[id]} />
+      </span>
+    ));
+  if (!users.some((id) => id in userNames)) return null;
+  return users.map((id, index) => (
+    <span key={id}>
+      {name(id)}
+      {userNames[id] !== null && index < users.length - 1 && ","}
+    </span>
+  ));
+}
+
+/** The row under the channels: Add channel and, once Access was saved, the access test. */
+function AddChannelRow({
+  first,
+  disabled,
+  sendTest,
+  onAdd,
+}: {
+  first: boolean;
+  disabled: boolean;
+  sendTest: AccessTestAction | undefined;
+  onAdd: () => void;
+}) {
+  const reasonId = "discord-access-test-reason";
+  return (
+    <FieldRow
+      label={first ? "Channels" : ""}
+      secondary={
+        sendTest?.reason && (
+          <span id={reasonId} className="ml-auto">
+            {sendTest.reason}
+          </span>
+        )
+      }
+    >
+      <Button type="button" variant="outline" disabled={disabled} onClick={onAdd}>
+        Add channel
+      </Button>
+      {sendTest && (
+        <Button
+          type="button"
+          variant="outline"
+          className="ml-auto"
+          disabled={sendTest.busy || sendTest.reason !== ""}
+          aria-describedby={sendTest.reason ? reasonId : undefined}
+          onClick={sendTest.onSend}
+        >
+          {sendTest.label}
+        </Button>
+      )}
+    </FieldRow>
+  );
+}
+
+/** One card for the channels the access test couldn't post in and one for those that are gone. */
+function AccessTestProblems({
+  settings,
+  draft,
+  test,
+}: {
+  settings: DiscordSettings;
+  draft: AccessDraft;
+  test: DiscordAccessTest | null;
+}) {
+  const { cantPost, gone } = testProblems(draft, test);
+  const labels = (channels: readonly ChannelDraft[]) =>
+    channels.map((channel) => channelLabel(channel.channelId.trim(), settings.access)).join(", ");
+  return (
+    <>
+      {cantPost.length > 0 && (
+        <ProblemCard
+          tone="attention"
+          title={`${settings.botName ?? "The bot"} can’t post in ${labels(cantPost)}`}
+        >
+          Allow it to send messages there, then send again.
+        </ProblemCard>
+      )}
+      {gone.length > 0 && (
+        <ProblemCard
+          id={GONE}
+          tone="attention"
+          title={`${labels(gone)} no longer exist${gone.length === 1 ? "s" : ""}`}
+        >
+          Remove {gone.length === 1 ? "it" : "them"}, then send again.
+        </ProblemCard>
+      )}
+    </>
+  );
+}
+
+const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+function unknownTitle(unknown: ReturnType<typeof unknownIds>) {
+  const parts = [
+    ...(unknown.users.length ? [count(unknown.users.length, "user")] : []),
+    ...(unknown.channels.length ? [count(unknown.channels.length, "channel")] : []),
+  ];
+  return `Discord doesn’t know ${parts.join(" and ")}`;
+}
+
+type TestPost = DiscordAccessTest["channels"][string];
+
+/** A channel ID Discord doesn't know, by the access test's post or its name lookup. */
+function channelState(
+  name: string | null | undefined,
+  post: TestPost | undefined,
+): FieldState | undefined {
+  if (post === "unknown-channel") return { tone: "attention", cardId: GONE };
+  if (name === null) return { tone: "attention", cardId: UNKNOWN };
+  return undefined;
+}
+
+/** The channel's name with the access test's problem there; null when there is neither. */
+function channelName(name: string | null | undefined, post: TestPost | undefined) {
+  if (name === null || post === "unknown-channel")
+    return <StatusBadge kind="attention">Unknown channel</StatusBadge>;
+  if (!name && post !== "cant-post") return null;
+  return (
+    <>
+      {name && `#${name}`}
+      {post === "cant-post" && <StatusBadge kind="attention">Can’t post</StatusBadge>}
+    </>
   );
 }
 
 function ChannelRow({
   index,
   channel,
+  name,
+  post,
   projects,
-  unresolved,
   disabled,
   onChange,
   onRemove,
 }: {
   index: number;
   channel: ChannelDraft;
+  /** The name Discord reported; null when unknown, undefined before a lookup. */
+  name: string | null | undefined;
+  /** What the latest access test's post here did, if it was sent here. */
+  post: TestPost | undefined;
   projects: readonly FactoryProject[] | undefined;
-  unresolved: readonly string[];
   disabled: boolean;
   onChange: (change: Partial<ChannelDraft>) => void;
   onRemove: () => void;
 }) {
   const id = `discord-access-channel-${channel.key}`;
-  const choices = [
-    ...(projects ?? []).map((project) => ({
-      id: project.id,
-      label: project.title,
-      detail: project.workspaceRoot,
-    })),
-    // A granted Project Factory no longer knows stays visible, grants nothing and can be removed.
-    ...channel.projectIds
-      .filter((projectId) => unresolved.includes(projectId))
-      .map((projectId) => ({
-        id: projectId,
-        label: "Unknown Project",
-        detail: `${projectId} · grants nothing`,
-      })),
-  ];
-  const toggle = (projectId: string, granted: boolean) =>
-    onChange({
-      projectIds: granted
-        ? [...channel.projectIds, projectId]
-        : channel.projectIds.filter((granted) => granted !== projectId),
-    });
+  const state = channelState(name, post);
   return (
-    <div
-      role="group"
-      aria-label={`Allowed channel ${index + 1}`}
-      className="grid gap-3 rounded-md border p-3"
-    >
-      <div className="flex items-end gap-2">
-        <div className="grid flex-1 gap-1.5">
-          <Label htmlFor={id} className={fieldLabelClass}>
-            Channel ID
-          </Label>
-          <Input
-            id={id}
-            value={channel.channelId}
-            placeholder="Copy Channel ID in Discord"
-            autoComplete="off"
-            spellCheck={false}
-            inputMode="numeric"
-            disabled={disabled}
-            onChange={(event) => onChange({ channelId: event.target.value })}
-          />
-        </div>
+    <FieldRow label={index === 0 ? "Channels" : ""} secondary={channelName(name, post)}>
+      <Input
+        id={id}
+        aria-label={`Channel ${index + 1} ID`}
+        value={channel.channelId}
+        placeholder="Channel ID"
+        autoComplete="off"
+        spellCheck={false}
+        inputMode="numeric"
+        disabled={disabled}
+        className={cn(
+          "w-auto min-w-0 flex-1 basis-40 bg-muted font-mono text-label",
+          fieldBorder(state?.tone),
+        )}
+        {...fieldAria(state?.cardId)}
+        onChange={(event) => onChange({ channelId: event.target.value })}
+      />
+      <ProjectsSelect
+        label={`Channel ${index + 1} Projects`}
+        selected={channel.projectIds}
+        projects={projects}
+        disabled={disabled}
+        onChange={(projectIds) => onChange({ projectIds })}
+      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label={`Remove channel ${index + 1}`}
+        disabled={disabled}
+        onClick={onRemove}
+      >
+        <Trash2 aria-hidden strokeWidth={1.5} />
+      </Button>
+    </FieldRow>
+  );
+}
+
+/** The Projects a channel grants; more than one reads "N Projects" while closed. */
+function ProjectsSelect({
+  label,
+  selected,
+  projects,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  selected: readonly string[];
+  projects: readonly FactoryProject[] | undefined;
+  disabled: boolean;
+  onChange: (projectIds: readonly string[]) => void;
+}) {
+  const titles = selected.map((id) => projects?.find((project) => project.id === id)?.title ?? id);
+  const shown =
+    selected.length === 0
+      ? "Choose Projects"
+      : selected.length === 1
+        ? titles[0]!
+        : `${selected.length} Projects`;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
           type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Remove allowed channel ${index + 1}`}
-          disabled={disabled}
-          onClick={onRemove}
+          variant="outline"
+          aria-label={`${label}: ${selected.length ? titles.join(", ") : "none"}`}
+          className={cn(selectFieldClass, "h-8 w-32 shrink-0 disabled:opacity-50")}
         >
-          <Trash2 aria-hidden strokeWidth={1.5} />
+          <span
+            className={cn("min-w-0 truncate", selected.length === 0 && "text-muted-foreground")}
+          >
+            {shown}
+          </span>
+          <span className="flex-1" />
+          <ChevronsUpDown
+            aria-hidden
+            className="size-4 shrink-0 text-muted-foreground"
+            strokeWidth={1.5}
+          />
         </Button>
-      </div>
-      <fieldset className="grid gap-2">
-        <legend className={`${fieldLabelClass} pb-1`}>Projects this channel grants</legend>
-        {projects === undefined && choices.length === 0 && (
-          <p className="text-sm text-muted-foreground">Reading Factory's Projects…</p>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-(--radix-dropdown-menu-trigger-width)">
+        {projects === undefined && (
+          <p className="px-3 py-2 text-sm text-muted-foreground">Reading Factory’s Projects…</p>
         )}
-        {projects !== undefined && choices.length === 0 && (
-          <p className="text-sm text-muted-foreground">Factory has no Projects to grant yet.</p>
+        {projects?.length === 0 && (
+          <p className="px-3 py-2 text-sm text-muted-foreground">Factory has no Projects yet.</p>
         )}
-        {choices.map((choice) => (
-          <div key={choice.id} className="flex items-start gap-2 text-sm">
-            <Checkbox
-              id={`${id}-${choice.id}`}
-              className="mt-0.5"
-              aria-describedby={`${id}-${choice.id}-detail`}
-              checked={channel.projectIds.includes(choice.id)}
-              disabled={disabled}
-              onCheckedChange={(checked) => toggle(choice.id, checked === true)}
-            />
-            <span className="grid">
-              <Label htmlFor={`${id}-${choice.id}`} className="font-normal text-foreground">
-                {choice.label}
-              </Label>
-              <span id={`${id}-${choice.id}-detail`} className="text-muted-foreground">
-                {choice.detail}
-              </span>
-            </span>
-          </div>
+        {projects?.map((project) => (
+          <DropdownMenuCheckboxItem
+            key={project.id}
+            checked={selected.includes(project.id)}
+            onCheckedChange={(checked) =>
+              onChange(
+                checked ? [...selected, project.id] : selected.filter((id) => id !== project.id),
+              )
+            }
+          >
+            {project.title}
+          </DropdownMenuCheckboxItem>
         ))}
-      </fieldset>
-    </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

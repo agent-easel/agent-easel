@@ -2,7 +2,6 @@ import { StudioRemovedDraft } from "../components/studio-removed-draft.tsx";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import { CanvasLayout } from "../components/screen-layout.tsx";
-import { useComposerNavigation } from "../run-draft.ts";
 import type { OwnerMove } from "../revisioned-draft.ts";
 import {
   useCallback,
@@ -11,9 +10,11 @@ import {
   useRef,
   useState,
   type FocusEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import type {
+  AgentCapabilities,
   AgentDefinition,
   FactoryProject,
   FlowBlock,
@@ -22,22 +23,19 @@ import type {
 } from "@t3-factory/contracts";
 import {
   Check,
+  CircleAlert,
   CircleDot,
   Copy,
   FolderGit2,
-  ListChecks,
   MoreHorizontal,
   RefreshCw,
-  Save,
-  Trash2,
+  TextCursorInput,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { KeyChip } from "@/components/ui/key-chip";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -46,23 +44,27 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { agentRuntimeMeta } from "@/lib/agent-display";
 import { api } from "../api.ts";
+import { comparedFlowLines } from "../flow-revision-content.ts";
+import { RevisionComparison } from "../components/revision-comparison.tsx";
 import { BLOCK_KINDS } from "../block-kind.ts";
-import { StudioBackLink } from "../components/app-link.tsx";
+import { fixedShortcuts, matchesShortcut } from "../keyboard-shortcuts.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
-import { BlockConfiguration } from "../components/block-inspector.tsx";
-import { BlockLibrary } from "../components/block-library.tsx";
-import { FlowCanvas, type DropAt } from "../components/flow-canvas.tsx";
-import { IssueLink, ReadinessPanel, type IssueSelect } from "../components/flow-readiness.tsx";
+import { BlockConfiguration, type BlockAgents } from "../components/block-inspector.tsx";
+import { PanelHeading, TargetSelect } from "../components/block-exit-configuration.tsx";
+import { BlockLibrary, NewAgentLink } from "../components/block-library.tsx";
+import { FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
+import {
+  IssueLink,
+  ReadinessPanel,
+  readinessMarks,
+  useShownReadiness,
+  type BlockIssue,
+  type IssueSelect,
+} from "../components/flow-readiness.tsx";
 import type { ConditionEditing, RuleFocus } from "../components/condition-rules.tsx";
 import { FlowWorkspaceControl } from "../components/flow-workspace-control.tsx";
 import {
@@ -71,14 +73,18 @@ import {
   definitionExportNotice,
 } from "../components/definition-export-control.tsx";
 import { useMenuActions } from "../components/menu-actions.ts";
+import { ProblemCard, ProblemCardButton } from "../components/problem-card.tsx";
+import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
+  addWire,
   hasWire,
   newBlock,
   removeBlock,
   removeWire,
   replaceBlock,
+  undoRemoval,
   type BlockPosition,
   type FlowWire,
 } from "../flow-graph.ts";
@@ -99,6 +105,13 @@ import {
   type StudioOwner,
 } from "../studio-definitions.ts";
 import { OwnerBadge, OwnerChangeNotice } from "../components/studio-owner.tsx";
+import {
+  CantRemoveDialog,
+  RemoveMenuItem,
+  namedBlockers,
+  racedBlockers,
+  triggerBlockers,
+} from "../components/studio-removal.tsx";
 import { ChangeOwnerDialog, DuplicateFlowDialog } from "../components/studio-owner-dialogs.tsx";
 
 /** This editor's Flow draft, following the Flow through Studio's saved definitions. */
@@ -112,7 +125,9 @@ function useOpenedFlowDraft(
   );
   useEffect(() => draft.open(), [draft]);
   const interactions = useInteractionReports(draft);
-  return { draft, state: useFlowDraftSnapshot(draft), interactions };
+  const state = useFlowDraftSnapshot(draft);
+  useLiveReadiness(draft, state.checkDue);
+  return { draft, state, interactions };
 }
 
 /** Whether focus in `target` means the user is typing into a field. */
@@ -180,27 +195,6 @@ function useInteractionReports(draft: FlowDraftModel) {
   };
 }
 
-/** Keeps the last selected block rendered while the floating panel plays its close motion. */
-function usePanelBlock(block: FlowBlock | undefined) {
-  const [panel, setPanel] = useState<{ block: FlowBlock | undefined; closing: FlowBlock | null }>({
-    block,
-    closing: null,
-  });
-  if (panel.block !== block) {
-    setPanel({ block, closing: block ? null : (panel.block ?? panel.closing) });
-  }
-  const { closing } = panel;
-  useEffect(() => {
-    if (!closing) return;
-    const timer = window.setTimeout(
-      () => setPanel((current) => ({ ...current, closing: null })),
-      PANEL_CLOSE_MS,
-    );
-    return () => window.clearTimeout(timer);
-  }, [closing]);
-  return closing;
-}
-
 /** Whether a key press belongs to a text field or other form control rather than the canvas. */
 function isEditing(target: EventTarget | null) {
   return (
@@ -216,7 +210,8 @@ const DIALOG = '[role="dialog"],[role="alertdialog"]';
  * (such as a discard confirmation), whose focused buttons must not edit the draft behind it.
  */
 function inEditorLayer(scope: HTMLElement | null, target: EventTarget | null) {
-  const own = scope?.closest(DIALOG) ?? null;
+  if (!scope || scope.closest("[inert]")) return false;
+  const own = scope.closest(DIALOG);
   const at = target instanceof Element ? target.closest(DIALOG) : null;
   return at === own || target === document.body;
 }
@@ -248,14 +243,54 @@ function useDeleteKey(
   }, [enabled, scope]);
 }
 
+/** A removal ⌘Z can undo: the graph before and after it. */
+type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
+
 /**
- * The canvas selection: one block (its panel open) or one wire, never both. A selected wire
- * that is no longer in the graph counts as unselected. Escape clears the selection, and Delete or
- * Backspace removes the selected wire.
+ * Structural edits ⌘Z undoes until Save: a removed Block together with its wires, or a removed
+ * wire. Undo brings back what the last removal took and keeps every edit made since; a field
+ * keeps its own text undo.
+ */
+function useStructuralUndo(
+  scope: RefObject<HTMLElement | null>,
+  draft: { graph: FlowGraph; dirty: boolean; busy: boolean; change: (next: FlowGraph) => void },
+) {
+  const [removals, setRemovals] = useState<readonly Removal[]>([]);
+  if (!draft.dirty && removals.length) setRemovals([]);
+  const latest = useRef({ ...draft, removals });
+  useEffect(() => {
+    latest.current = { ...draft, removals };
+  });
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!matchesShortcut(event, fixedShortcuts.undoFlowEdit)) return;
+      if (event.defaultPrevented || isEditing(event.target)) return;
+      if (!inEditorLayer(scope.current, event.target)) return;
+      const { graph, busy, change, removals: stack } = latest.current;
+      const last = stack.at(-1);
+      if (busy || !last) return;
+      event.preventDefault();
+      setRemovals(stack.slice(0, -1));
+      change(undoRemoval(graph, last.before, last.after));
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [scope]);
+  /** Applies a removal that ⌘Z can undo. */
+  return (after: FlowGraph) => {
+    setRemovals((stack) => [...stack, { before: draft.graph, after }]);
+    draft.change(after);
+  };
+}
+
+/**
+ * The canvas selection: one block or the Flow input (its panel open), or one wire, never both. A
+ * selected wire or block that is no longer in the graph counts as unselected. Escape clears the
+ * selection, and Delete or Backspace removes the selected wire.
  */
 function useCanvasSelection(
   canvas: RefObject<HTMLElement | null>,
-  draft: { graph: FlowGraph; busy: boolean; change: (next: FlowGraph) => void },
+  draft: { graph: FlowGraph; busy: boolean; remove: (next: FlowGraph) => void },
   registerEscape: (handler: () => void) => () => void,
 ) {
   const { graph } = draft;
@@ -264,8 +299,13 @@ function useCanvasSelection(
   const wire = selectedWire && hasWire(graph, selectedWire) ? selectedWire : null;
   if (selectedWire && !wire) setSelectedWire(null);
   // A newer revision adopted while clean may no longer have the selected block.
-  if (selected !== null && !graph.blocks.some((block) => block.id === selected)) setSelected(null);
-  /** Selects a block, or with null clears every selection. */
+  if (
+    selected !== null &&
+    selected !== FLOW_INPUT &&
+    !graph.blocks.some((block) => block.id === selected)
+  )
+    setSelected(null);
+  /** Selects a block or the Flow input, or with null clears every selection. */
   const select = useCallback((blockId: string | null) => {
     setSelected(blockId);
     setSelectedWire(null);
@@ -280,7 +320,7 @@ function useCanvasSelection(
     return registerEscape(() => select(null));
   }, [hasSelection, registerEscape, select]);
   function deleteWire(removed: FlowWire) {
-    draft.change(removeWire(graph, removed));
+    draft.remove(removeWire(graph, removed));
     setSelectedWire(null);
     // The focused wire or delete button unmounts; keep keyboard focus on the canvas.
     canvas.current?.focus({ preventScroll: true });
@@ -288,7 +328,12 @@ function useCanvasSelection(
   useDeleteKey(canvas, !draft.busy && wire !== null, () => {
     if (wire) deleteWire(wire);
   });
-  return { selected, wire, select, selectWire, deleteWire };
+  /** Removes a block with its wires and closes its settings. */
+  function deleteBlock(blockId: string) {
+    draft.remove(removeBlock(graph, blockId));
+    select(null);
+  }
+  return { selected, wire, select, selectWire, deleteWire, deleteBlock };
 }
 
 const noAgents: readonly AgentDefinition[] = [];
@@ -344,11 +389,22 @@ function useFlowDraftGuard(
   useDraftGuard(guarded, id, reportDraft);
 }
 
-/** The Flow's owner in words, under its canvas. */
-const ownerNote = (owner: StudioOwner) =>
-  owner.projectId === null
-    ? "Global Flow · usable in every project"
-    : `Project Flow · owned by ${owner.title}`;
+/** The Agent capabilities that name each Agent's provider and model; null until read or unread. */
+function useAgentCapabilities() {
+  const [capabilities, setCapabilities] = useState<AgentCapabilities | null>(null);
+  useEffect(() => {
+    let active = true;
+    void api.getAgentCapabilities().then(
+      (value) => active && setCapabilities(value),
+      // Summaries fall back to the saved provider id.
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  return capabilities;
+}
 
 /**
  * Studio's saved Agents for the canvas, and for the block library only those the Flow's owner
@@ -357,16 +413,28 @@ const ownerNote = (owner: StudioOwner) =>
 function useLibraryAgents(definitions: StudioDefinitions, projectId: string | null) {
   const { value, error } = useStudioRead(definitions, "agents");
   const { projects } = useStudioOwners(definitions);
+  const capabilities = useAgentCapabilities();
   const agents = value ?? noAgents;
-  const owner = studioOwner(projectId, projects);
+  const placeable = placeableAgents(agents, { projectId });
   return {
     agents,
     agentError: error ? "Could not load saved Agents. Reopen this Flow to try again." : "",
-    owner,
+    owner: studioOwner(projectId, projects),
     projects,
-    library: { owner, projects, agents: placeableAgents(agents, { projectId }) },
+    blockAgents: { all: agents, placeable, capabilities } satisfies BlockAgents,
   };
 }
+
+/** Checks the unsaved draft's readiness once edits pause, and again after each change. */
+function useLiveReadiness(draft: FlowDraftModel, due: number | null) {
+  useEffect(() => {
+    if (due === null) return;
+    const timer = window.setTimeout(() => void draft.check(), READINESS_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, due]);
+}
+
+const READINESS_DEBOUNCE_MS = 400;
 
 /**
  * Selecting a block or a readiness issue; an issue about a Condition rule also focuses that rule
@@ -395,11 +463,14 @@ function useRuleFocus(
   };
 }
 
-const PANEL_WIDTH = 344;
-/** The canvas width the open block panel covers, kept clear when fitting the view. */
-const panelReserve = (block: FlowBlock | undefined) => (block ? PANEL_WIDTH + 24 : 0);
-/** Matches `--duration-panel-out`; the reduced-motion fade is shorter and ends first. */
-const PANEL_CLOSE_MS = 140;
+/** The selected Block and the next one it connects to, which the canvas keeps in view. */
+function revealed(graph: FlowGraph, selected: string | null): readonly string[] {
+  if (selected === null || selected === FLOW_INPUT) return [];
+  const next = graph.connections.find((c) => c.sourceBlockId === selected)?.targetBlockId;
+  return next && next !== selected ? [selected, next] : [selected];
+}
+
+const noIssues: readonly BlockIssue[] = [];
 
 export function FlowDetail({
   id,
@@ -416,36 +487,35 @@ export function FlowDetail({
   created: FlowDraft | undefined;
 }) {
   const canvas = useRef<HTMLElement>(null);
-  const placement = useRef<DropAt | null>(null);
   const { draft, state, interactions } = useOpenedFlowDraft(id, definitions, created);
   const exporter = useDefinitionExport(() => api.exportFlow(id));
-  const { saved, error, readiness } = state;
-  const { agents, agentError, owner, projects, library } = useLibraryAgents(
+  const { saved, error } = state;
+  const { agents, agentError, owner, projects, blockAgents } = useLibraryAgents(
     definitions,
     state.owner,
   );
   const ownerDialogs = useOwnerDialogs(definitions);
   const [libraryOpen, setLibraryOpen] = useState(true);
   const { graph, name } = state.content;
-  const change = (next: FlowGraph) => draft.edit({ graph: next });
-  const editBlock = (next: FlowBlock) => change(replaceBlock(graph, next));
-  const { selected, select, wire, selectWire, deleteWire } = useCanvasSelection(
+  const { change, editBlock } = graphEdits(draft, graph);
+  const remove = useStructuralUndo(canvas, {
+    graph,
+    dirty: state.dirty,
+    busy: state.busy,
+    change,
+  });
+  const { selected, select, wire, selectWire, deleteWire, deleteBlock } = useCanvasSelection(
     canvas,
-    { graph, busy: state.busy, change },
+    { graph, busy: state.busy, remove },
     registerEscape,
   );
   const thresholds = useThresholdEntries(graph);
   useFlowDraftGuard(draft, id, reportDraft, thresholds.invalid);
   const { selectBlock, selectIssue, conditionEditing } = useRuleFocus(select, thresholds);
-  const block = graph.blocks.find((b) => b.id === selected);
-  const closing = usePanelBlock(block);
-  const reservedRight = panelReserve(block);
-  function add(kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) {
-    const next = newBlock(graph, kind, agent, position);
-    change({ ...graph, blocks: [...graph.blocks, next] });
-    selectBlock(next.id);
-  }
-  const dropAt: DropAt = (x, y, grab) => placement.current?.(x, y, grab) ?? null;
+  const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
+  // A Project that left T3 leaves its Flow read-only until it is moved or removed.
+  const readOnly = owner.gone;
+  const { add, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
   if (!saved) return <FlowLoadState error={error} />;
   return (
     <CanvasLayout>
@@ -456,19 +526,31 @@ export function FlowDetail({
         revision={saved.revision}
         flowId={id}
         owner={owner}
+        readOnly={readOnly}
         exporter={exporter}
         fields={interactions.fields}
         invalidEntry={thresholds.invalid}
         onOwnerDialog={ownerDialogs.open}
+        definitions={definitions}
       />
       <ExportNotice notice={definitionExportNotice(exporter.state)} />
-      <DraftProblems draft={draft} state={state} projects={projects} onSelect={selectIssue} />
-      <div inert={state.busy} className="flex min-h-0 flex-1" {...interactions.gestures}>
+      <DraftProblems
+        draft={draft}
+        state={state}
+        owner={owner}
+        projects={projects}
+        agents={agents}
+        onSelect={selectIssue}
+        onChangeOwner={ownerDialogs.changeOwner}
+      />
+      <EditorBody busy={state.busy} readOnly={readOnly} gestures={interactions.gestures}>
         <BlockLibrary
           open={libraryOpen}
           onOpenChange={setLibraryOpen}
           flowId={id}
-          {...library}
+          agents={blockAgents.placeable}
+          projects={projects}
+          capabilities={blockAgents.capabilities}
           agentError={agentError}
           onAdd={add}
           dropAt={dropAt}
@@ -478,11 +560,12 @@ export function FlowDetail({
             ref={canvas}
             graph={graph}
             agents={agents}
+            marks={marks}
             selected={selected}
             selectedWire={wire}
-            reservedRight={reservedRight}
-            flow={{ id, ownerNote: ownerNote(owner) }}
-            savedGraph={saved.id === id ? saved.graph : undefined}
+            reveal={revealed(graph, selected)}
+            flowId={id}
+            savedGraph={savedGraphOf(saved, id)}
             busy={state.busy}
             placementRef={placement}
             onSelect={selectBlock}
@@ -492,28 +575,30 @@ export function FlowDetail({
             onChange={change}
             onArranging={interactions.reportArranging}
           />
-          <UnavailableOwnerNotice
-            owner={owner}
-            onRescue={() => ownerDialogs.open({ kind: "duplicate" })}
-          />
           <ReadinessPanel
             readiness={readiness}
-            agentsChanged={state.agentsChanged}
+            folderMissing={folderMissing}
             graph={graph}
             onSelect={selectIssue}
-          />
-          <EditorSelectionPanel
-            block={block}
-            closing={closing}
-            graph={graph}
-            agents={agents}
-            condition={conditionEditing}
-            onEdit={editBlock}
-            onChange={change}
-            select={selectBlock}
+            newAgent={<NewAgentOffer agents={blockAgents} flowId={id} />}
           />
         </div>
-      </div>
+        <EditorSettings
+          selected={selected}
+          graph={graph}
+          agents={blockAgents}
+          marks={marks}
+          flowId={id}
+          condition={conditionEditing}
+          onClose={select}
+          onEdit={editBlock}
+          onWireChange={(wire, connected) => {
+            if (connected) change(addWire(graph, wire));
+            else remove(removeWire(graph, wire));
+          }}
+          onRemove={deleteBlock}
+        />
+      </EditorBody>
       <FlowOwnerDialogs
         dialogs={ownerDialogs}
         subject={{ id, name: saved.name, projectId: state.owner }}
@@ -523,6 +608,206 @@ export function FlowDetail({
         onChanged={draft.ownerChangedHere}
       />
     </CanvasLayout>
+  );
+}
+
+/** Graph edits of the draft: the whole graph, or one block in it. */
+function graphEdits(draft: FlowDraftModel, graph: FlowGraph) {
+  const change = (next: FlowGraph) => draft.edit({ graph: next });
+  return { change, editBlock: (next: FlowBlock) => change(replaceBlock(graph, next)) };
+}
+
+/** New Agent on the Flow input issue, while no placeable Agent has a model. */
+function NewAgentOffer({ agents, flowId }: { agents: BlockAgents; flowId: string }) {
+  if (agents.placeable.some((agent) => agentRuntimeMeta(agent.execution, agents.capabilities)))
+    return null;
+  return <NewAgentLink flowId={flowId} className="shrink-0 pr-4" />;
+}
+
+/** The library, canvas and settings; inert while saving, and dimmed while read-only. */
+function EditorBody({
+  busy,
+  readOnly,
+  gestures,
+  children,
+}: {
+  busy: boolean;
+  readOnly: boolean;
+  gestures: ReturnType<typeof useInteractionReports>["gestures"];
+  children: ReactNode;
+}) {
+  return (
+    <div
+      inert={busy || readOnly}
+      className={cn("flex min-h-0 flex-1", readOnly && "opacity-50")}
+      {...gestures}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Adding a library block, at a drop point or at the default place, and selecting it. */
+function useBlockAdding(
+  graph: FlowGraph,
+  change: (next: FlowGraph) => void,
+  select: (blockId: string) => void,
+) {
+  /** The canvas fills it with the placement of a drop point. */
+  const placement = useRef<DropAt | null>(null);
+  return {
+    placement,
+    add(kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) {
+      const next = newBlock(graph, kind, agent, position);
+      change({ ...graph, blocks: [...graph.blocks, next] });
+      select(next.id);
+    },
+    dropAt: ((x, y, grab) => placement.current?.(x, y, grab) ?? null) satisfies DropAt,
+  };
+}
+
+/** The saved graph of the Flow this editor opened, once Studio holds it. */
+const savedGraphOf = (saved: FlowDraft, id: string) => (saved.id === id ? saved.graph : undefined);
+
+/**
+ * Readiness as the editor shows it: the last known answer, and its Block marks; a missing Project
+ * folder is the one reason and marks no Block, and a Project gone from T3 shows none.
+ */
+function useEditorReadiness(
+  checked: FlowDraftSnapshot["readiness"],
+  owner: StudioOwner,
+  graph: FlowGraph,
+) {
+  const shown = useShownReadiness(checked);
+  // A Project gone from T3 has its card instead; its Flow can't be judged ready.
+  const readiness = owner.gone ? null : shown;
+  const folderMissing = owner.folderMissing ? owner.unavailable : null;
+  return {
+    readiness,
+    folderMissing,
+    marks: readinessMarks(folderMissing ? null : readiness, graph),
+  };
+}
+
+/** The selected Block's or the Flow input's docked settings; nothing while neither is selected. */
+function EditorSettings({
+  selected,
+  graph,
+  agents,
+  marks,
+  flowId,
+  condition,
+  onClose,
+  onEdit,
+  onWireChange,
+  onRemove,
+}: {
+  selected: string | null;
+  graph: FlowGraph;
+  agents: BlockAgents;
+  marks: ReturnType<typeof readinessMarks>;
+  flowId: string;
+  condition: (blockId: string) => ConditionEditing;
+  /** Called with null to close the settings. */
+  onClose: (selection: null) => void;
+  onEdit: (block: FlowBlock) => void;
+  onWireChange: (wire: FlowWire, connected: boolean) => void;
+  onRemove: (blockId: string) => void;
+}) {
+  const close = () => onClose(null);
+  if (selected === FLOW_INPUT)
+    return (
+      <SettingsPanel
+        label="Flow input settings"
+        title="Flow input"
+        icon={TextCursorInput}
+        onClose={close}
+      >
+        <section aria-label="Starts" className="grid gap-2 p-4">
+          <PanelHeading>Starts</PanelHeading>
+          <TargetSelect
+            graph={graph}
+            source={{ kind: "flow-input" }}
+            label="the Flow input"
+            onWireChange={onWireChange}
+          />
+        </section>
+      </SettingsPanel>
+    );
+  const block = graph.blocks.find((b) => b.id === selected);
+  if (!block) return null;
+  return (
+    <SettingsPanel
+      label="Block settings"
+      title={BLOCK_KINDS[block.kind].name}
+      icon={BLOCK_KINDS[block.kind].Icon}
+      onClose={close}
+      footer={
+        <Button
+          variant="outline"
+          className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => onRemove(block.id)}
+        >
+          Remove block
+        </Button>
+      }
+    >
+      <BlockConfiguration
+        key={block.id}
+        block={block}
+        graph={graph}
+        agents={agents}
+        issues={marks.blocks.get(block.id) ?? noIssues}
+        flowId={flowId}
+        condition={condition(block.id)}
+        onEdit={onEdit}
+        onWireChange={onWireChange}
+      />
+    </SettingsPanel>
+  );
+}
+
+/** The settings panel docked at the editor's right: kind and name, Esc, ✕, body and footer. */
+function SettingsPanel({
+  label,
+  title,
+  icon: Icon,
+  onClose,
+  footer,
+  children,
+}: {
+  /** The panel's accessible name: Block settings, or Flow input settings. */
+  label: string;
+  title: string;
+  icon: typeof X;
+  onClose: () => void;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <aside aria-label={label} className="flex w-90 shrink-0 flex-col border-l bg-card">
+      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+        <Icon aria-hidden className="size-4 text-link" />
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="flex-1" />
+        <KeyChip>Esc</KeyChip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close block settings"
+              onClick={onClose}
+            >
+              <X aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent shortcut="Esc">Close</TooltipContent>
+        </Tooltip>
+      </div>
+      {children}
+      {footer && <div className="mt-auto shrink-0 border-t p-4">{footer}</div>}
+    </aside>
   );
 }
 
@@ -537,6 +822,7 @@ function useOwnerDialogs(definitions: StudioDefinitions) {
   return {
     dialog,
     open: setDialog,
+    changeOwner: () => setDialog({ kind: "change-owner" }),
     close: () => setDialog(null),
     async opened(flow: FlowDraft) {
       setDialog(null);
@@ -599,11 +885,15 @@ function FlowMoreActions({
   state,
   exporter,
   onOwnerDialog,
+  definitions,
+  flowId,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
   exporter: ReturnType<typeof useDefinitionExport>;
   onOwnerDialog: (dialog: FlowOwnerDialog) => void;
+  definitions: StudioDefinitions;
+  flowId: string;
 }) {
   const { trigger, queue, onCloseAutoFocus } = useMenuActions();
   const [confirmingRemove, setConfirmingRemove] = useState(false);
@@ -654,9 +944,7 @@ function FlowMoreActions({
             onSelect={() => queue(() => void exporter.model.request(state.dirty))}
           />
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            aria-label="Remove"
+          <RemoveMenuItem
             disabled={!writable || state.removing}
             description={reason}
             onSelect={() =>
@@ -666,10 +954,7 @@ function FlowMoreActions({
                 setConfirmingRemove(true);
               })
             }
-          >
-            <Trash2 aria-hidden />
-            Remove…
-          </DropdownMenuItem>
+          />
         </DropdownMenuContent>
       </DropdownMenu>
       <DefinitionExportDialog {...exporter} />
@@ -677,6 +962,8 @@ function FlowMoreActions({
         open={confirmingRemove}
         draft={draft}
         state={state}
+        definitions={definitions}
+        flowId={flowId}
         onClose={() => setConfirmingRemove(false)}
       />
     </>
@@ -700,188 +987,76 @@ function FlowLoadState({ error }: { error: string }) {
   );
 }
 
-function EditorSelectionPanel({
-  block,
-  closing,
-  graph,
-  agents,
-  condition,
-  onEdit,
-  onChange,
-  select,
-}: {
-  block: FlowBlock | undefined;
-  closing: FlowBlock | null;
-  graph: FlowGraph;
-  agents: readonly AgentDefinition[];
-  condition: (blockId: string) => ConditionEditing;
-  onEdit: (block: FlowBlock) => void;
-  onChange: (graph: FlowGraph) => void;
-  select: (id: string | null) => void;
-}) {
-  const displayed = block ?? closing;
-  if (!displayed) return null;
-  return (
-    <BlockPanel
-      block={displayed}
-      closing={!block}
-      graph={graph}
-      agents={agents}
-      condition={condition(displayed.id)}
-      onClose={() => select(null)}
-      onEdit={onEdit}
-      onRemove={(removed) => {
-        onChange(removeBlock(graph, removed.id));
-        select(null);
-      }}
-    />
-  );
-}
-
-/** Editor top row: back link, editable Flow name, save status and the explicit actions. */
+/**
+ * Editor top row: owner badge, editable Flow name and save status, then Workspace, More Flow
+ * actions and Save, the only primary, which is filled only while there are unsaved changes.
+ */
 function EditorToolbar({
   draft,
   state,
   revision,
   flowId,
   owner,
+  readOnly,
   exporter,
   fields,
   invalidEntry,
   onOwnerDialog,
+  definitions,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
   revision: number;
   flowId: string;
   owner: StudioOwner;
+  /** The owning Project left T3: nothing can be edited or saved. */
+  readOnly: boolean;
   exporter: ReturnType<typeof useDefinitionExport>;
   /** Reports typing in the toolbar's fields, which a newer revision waits for. */
   fields: ReturnType<typeof useInteractionReports>["fields"];
-  /** A shown Condition arrival number is invalid, so neither the check nor a save would match it. */
+  /** A shown Condition arrival number is invalid, so a save would not match it. */
   invalidEntry: boolean;
   onOwnerDialog: (dialog: FlowOwnerDialog) => void;
+  definitions: StudioDefinitions;
 }) {
-  const invalidTitle = invalidEntry
-    ? "Correct or clear the arrival number marked invalid first."
-    : undefined;
+  const filled = state.dirty && !state.removed && !readOnly;
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2.5 border-b px-4" {...fields}>
-      <StudioBackLink selection={{ tab: "flows" }}>All Flows</StudioBackLink>
-      <span aria-hidden className="text-subtle-foreground">
-        /
-      </span>
+    <div className="flex h-13 shrink-0 items-center gap-2.5 border-b px-4" {...fields}>
+      <OwnerBadge owner={owner} />
+      {readOnly && <StatusBadge kind="neutral">Not in T3</StatusBadge>}
       <Input
         aria-label="Flow name"
-        className="field-sizing-content h-8 w-auto max-w-80 min-w-24 border-transparent bg-transparent text-base font-semibold hover:border-border focus-visible:border-ring"
+        className="field-sizing-content h-8 w-auto max-w-80 min-w-24 border-transparent bg-transparent px-1.5 text-base font-semibold hover:border-border focus-visible:border-ring"
         value={state.content.name}
-        disabled={state.busy}
+        disabled={state.busy || readOnly}
         onChange={(e) => draft.edit({ name: e.target.value })}
       />
+      <FlowSaveStatus state={state} revision={revision} />
+      <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
+      <span className="flex-1" />
       <FlowWorkspaceControl
         workspace={state.content.workspace}
-        disabled={state.busy}
+        disabled={state.busy || readOnly}
         onChange={(workspace) => draft.edit({ workspace })}
       />
-      <span className="flex-1" />
-      {owner.projectId !== null && <OwnerBadge owner={owner} />}
-      <UpdatedNotice revision={state.removed ? null : state.updatedTo} />
-      <FlowSaveStatus state={state} revision={revision} />
-      <Separator orientation="vertical" className="h-5!" />
-      <Button
-        variant="outline"
-        disabled={state.busy || state.removed || invalidEntry}
-        title={state.removed ? "This Flow was removed elsewhere." : invalidTitle}
-        onClick={() => void draft.check()}
-      >
-        <ListChecks aria-hidden /> Check readiness
-      </Button>
-      <MutationGate>
-        <Button
-          title={
-            state.removed
-              ? "This Flow was removed elsewhere."
-              : state.ownerChange.status !== "none"
-                ? "Acknowledge the owner changed elsewhere before saving."
-                : invalidTitle
-          }
-          disabled={!state.canSave || invalidEntry}
-          onClick={() => void draft.save()}
-        >
-          <Save aria-hidden /> Save Flow
-        </Button>
-      </MutationGate>
-      <StartRunAction draft={draft} state={state} flowId={flowId} owner={owner} />
       <FlowMoreActions
         draft={draft}
         state={state}
         exporter={exporter}
         onOwnerDialog={onOwnerDialog}
+        definitions={definitions}
+        flowId={flowId}
       />
+      <MutationGate>
+        <Button
+          variant={filled ? "default" : "outline"}
+          disabled={!state.canSave || !state.dirty || invalidEntry || readOnly}
+          onClick={() => void draft.save()}
+        >
+          {state.saving ? "Saving…" : "Save"}
+        </Button>
+      </MutationGate>
     </div>
-  );
-}
-
-/** Start Run opens a composition with this Flow once it is ready and its owning Project available. */
-function StartRunAction({
-  draft,
-  state,
-  flowId,
-  owner,
-}: {
-  draft: FlowDraftModel;
-  state: FlowDraftSnapshot;
-  flowId: string;
-  owner: StudioOwner;
-}) {
-  const { openFlowComposer } = useComposerNavigation();
-  const unavailable =
-    owner.unavailable && `${owner.title}: ${owner.unavailable}. This Flow can’t start.`;
-  return (
-    <MutationGate>
-      <Button
-        title={state.removed ? "This Flow was removed elsewhere." : unavailable || undefined}
-        disabled={!state.canStartRun || Boolean(unavailable)}
-        onClick={() => {
-          if (draft.getSnapshot().canStartRun && !unavailable)
-            openFlowComposer({ id: flowId, projectId: owner.projectId });
-        }}
-      >
-        Start Run
-      </Button>
-    </MutationGate>
-  );
-}
-
-/** Over the canvas while the owning Project is unavailable: the Flow stays editable but can't start. */
-function UnavailableOwnerNotice({
-  owner,
-  onRescue,
-}: {
-  owner: StudioOwner;
-  /** Opens Duplicate, which copies this Flow and its Agents into an available owner. */
-  onRescue: () => void;
-}) {
-  if (!owner.unavailable) return null;
-  return (
-    <Alert
-      variant="attention"
-      className="absolute top-4 left-1/2 z-10 w-140 max-w-[calc(100%-2rem)] -translate-x-1/2"
-    >
-      <TriangleAlert aria-hidden />
-      <AlertTitle>{owner.title} is unavailable — this Flow can’t start</AlertTitle>
-      <AlertDescription>
-        <p>
-          {owner.unavailable}. You can still edit, export or remove this Flow; Start Run returns
-          once the Project is available again.
-        </p>
-        <MutationGate>
-          <Button type="button" variant="outline" size="sm" className="mt-1.5" onClick={onRescue}>
-            Duplicate to…
-          </Button>
-        </MutationGate>
-      </AlertDescription>
-    </Alert>
   );
 }
 
@@ -892,19 +1067,18 @@ function FlowSaveStatus({ state, revision }: { state: FlowDraftSnapshot; revisio
     <span
       role="status"
       aria-label="Flow save status"
-      className={cn(
-        "flex items-center gap-1.5 px-2 text-2xs font-medium whitespace-nowrap",
-        attention ? "text-attention" : "text-muted-foreground",
-      )}
+      className="flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground"
     >
       {attention ? (
-        <CircleDot aria-hidden className="size-3.5" />
+        <CircleDot aria-hidden className="size-3 text-attention" />
       ) : (
         <Check aria-hidden className="size-3.5 text-success" />
       )}
-      {state.removed
-        ? "Removed elsewhere · retained draft"
-        : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${revision}`}
+      {state.saving
+        ? "Saving…"
+        : state.removed
+          ? "Removed elsewhere · draft kept"
+          : `${state.dirty ? "Unsaved changes" : "Saved"} · Revision ${revision}`}
     </span>
   );
 }
@@ -942,25 +1116,43 @@ function UpdatedNotice({ revision }: { revision: number | null }) {
   );
 }
 
-/** Remove… confirms; it closes on a removal elsewhere. */
+/** Remove… confirms, or lists the Triggers that still start this Flow. */
 function RemoveFlowDialog({
   open,
   draft,
   state,
+  definitions,
+  flowId,
   onClose,
 }: {
   open: boolean;
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
+  definitions: StudioDefinitions;
+  flowId: string;
   onClose: () => void;
 }) {
   const navigate = useStudioNavigation();
-  const { removing, removalError, dirty, content } = state;
+  const triggers = useStudioRead(definitions, "triggers").value ?? [];
+  const { projects } = useStudioOwners(definitions);
+  const { removing, removalError, removalIssues, dirty, content } = state;
+  const live = triggers.filter((trigger) => trigger.flowId === flowId);
+  const raced = namedBlockers(removalIssues, "flow_in_use").filter(
+    (blocker) => !live.some((trigger) => trigger.id === blocker.id),
+  );
   async function confirmRemove() {
     if (!(await draft.remove())) return;
     onClose();
     void navigate({ tab: "flows" });
   }
+  if (live.length > 0 || raced.length > 0)
+    return (
+      <CantRemoveDialog open={open} name={content.name} label="Triggers" onClose={onClose}>
+        {triggerBlockers(live, projects, (id) => void navigate({ tab: "triggers", triggerId: id }))}
+        {racedBlockers(raced, "Trigger", (id) => void navigate({ tab: "triggers", triggerId: id }))}
+      </CantRemoveDialog>
+    );
+  const inUse = removalIssues.some((issue) => issue.code === "flow_in_use");
   return (
     <Dialog
       open={open}
@@ -969,174 +1161,140 @@ function RemoveFlowDialog({
       }}
     >
       <DialogContent
+        title={<>Remove “{content.name}”?</>}
+        description={
+          dirty
+            ? "Removing this Flow discards your unsaved edits and keeps the saved revisions for existing Runs."
+            : "Removing this Flow keeps its saved revisions for existing Runs."
+        }
+        actions={
+          <>
+            <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
+              Cancel
+            </Button>
+            <MutationGate>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={removing || state.removed}
+                onClick={() => void confirmRemove()}
+              >
+                {removing ? "Removing…" : "Remove Flow"}
+              </Button>
+            </MutationGate>
+          </>
+        }
+        closeDisabled={removing}
         onKeyDownCapture={(event) => {
           if (event.key === "Escape" && !removing) event.stopPropagation();
         }}
       >
-        <DialogHeader>
-          <DialogTitle>Remove “{content.name}”?</DialogTitle>
-          <DialogDescription asChild>
-            <div className="grid gap-2 text-sm text-muted-foreground">
-              <p>
-                This removes the Flow from Studio with no restore. Its saved revisions are kept, so
-                existing Runs and their history keep the Flow they started with.
-              </p>
-              {dirty && (
-                <p className="text-attention">
-                  You have unsaved changes in this editor. Removing the Flow discards them.
-                </p>
-              )}
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-        {removalError && (
+        {removalError && !inUse && (
           <p role="alert" className="text-sm text-destructive">
             {removalError}
           </p>
         )}
-        <DialogFooter>
-          <Button type="button" variant="outline" disabled={removing} onClick={onClose}>
-            Cancel
-          </Button>
-          <MutationGate>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={removing || state.removed}
-              onClick={() => void confirmRemove()}
-            >
-              {removing ? "Removing…" : "Remove Flow"}
-            </Button>
-          </MutationGate>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
 
-/** Save/validation errors and revision-conflict reconciliation above the canvas. */
+/** Couldn't save (Error), or the save outcome is unknown (Warning); refused issues select their Block. */
+function SaveProblem({ state, onSelect }: { state: FlowDraftSnapshot; onSelect: IssueSelect }) {
+  const unknown = state.saveOutcome === "unknown";
+  return (
+    <ProblemCard
+      tone={unknown ? "attention" : "error"}
+      density="compact"
+      icon={unknown ? TriangleAlert : CircleAlert}
+      title={unknown ? "Save outcome unknown" : state.error}
+    >
+      {unknown && state.error}
+      {state.issues.map((issue, i) => (
+        <IssueLink key={i} issue={issue} graph={state.content.graph} onSelect={onSelect}>
+          {issue.message}
+        </IssueLink>
+      ))}
+    </ProblemCard>
+  );
+}
+
+/** The owning Project left T3: the Flow is read-only until it is moved or removed. */
+function OwnerGoneNotice({
+  owner,
+  onChangeOwner,
+}: {
+  owner: StudioOwner;
+  onChangeOwner: () => void;
+}) {
+  return (
+    <ProblemCard
+      tone="attention"
+      density="compact"
+      icon={TriangleAlert}
+      title={`${owner.title} is no longer in T3`}
+      action={
+        <MutationGate>
+          <ProblemCardButton onClick={onChangeOwner}>Change owner…</ProblemCardButton>
+        </MutationGate>
+      }
+    >
+      This Flow can’t be edited or started. Move it to another owner or remove it.
+    </ProblemCard>
+  );
+}
+
+/**
+ * Page-level problems, one card each under the toolbar: the Project left T3, removed elsewhere,
+ * owner changed elsewhere, couldn't save or save outcome unknown, and a revision saved elsewhere.
+ */
 function DraftProblems({
   draft,
   state,
+  owner,
   projects,
+  agents,
   onSelect,
+  onChangeOwner,
 }: {
   draft: FlowDraftModel;
   state: FlowDraftSnapshot;
+  owner: StudioOwner;
   projects: readonly FactoryProject[];
+  agents: readonly AgentDefinition[];
   onSelect: IssueSelect;
+  onChangeOwner: () => void;
 }) {
-  const { conflict } = state;
-  if (state.removed)
-    return <StudioRemovedDraft kind="Flow" json={JSON.stringify(state.content, null, 2)} />;
-  return (
-    <>
+  const live = !state.removed;
+  const cards = [
+    owner.gone && <OwnerGoneNotice key="gone" owner={owner} onChangeOwner={onChangeOwner} />,
+    state.removed && (
+      <StudioRemovedDraft key="removed" kind="Flow" json={JSON.stringify(state.content, null, 2)} />
+    ),
+    live && state.ownerChange.status !== "none" && (
       <OwnerChangeNotice
+        key="owner"
         kind="Flow"
         change={state.ownerChange}
         projects={projects}
         onAcknowledge={draft.acknowledgeOwner}
-        className="rounded-none border-x-0 border-t-0"
       />
-      {state.error && (
-        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
-          <AlertTitle>{state.error}</AlertTitle>
-          {state.issues.length > 0 && (
-            <AlertDescription>
-              {state.issues.map((issue, i) => (
-                <IssueLink key={i} issue={issue} graph={state.content.graph} onSelect={onSelect}>
-                  {issue.path}: {issue.message}
-                </IssueLink>
-              ))}
-            </AlertDescription>
-          )}
-        </Alert>
-      )}
-      {conflict.status !== "none" && (
-        <ConflictPanel
-          local={state.content}
-          conflict={conflict}
-          onCompare={draft.compareLatest}
-          onTakeLatest={draft.takeLatest}
-          onKeepLocal={draft.keepLocal}
-        />
-      )}
-    </>
-  );
-}
-
-/** The floating configuration panel: anchored to the canvas's right edge, only while selected. */
-function BlockPanel({
-  block,
-  closing,
-  graph,
-  agents,
-  condition,
-  onClose,
-  onEdit,
-  onRemove,
-}: {
-  block: FlowBlock;
-  closing: boolean;
-  graph: FlowGraph;
-  agents: readonly AgentDefinition[];
-  condition: ConditionEditing;
-  onClose: () => void;
-  onEdit: (block: FlowBlock) => void;
-  onRemove: (block: FlowBlock) => void;
-}) {
-  return (
-    <aside
-      aria-label="Block configuration"
-      aria-hidden={closing || undefined}
-      inert={closing}
-      data-state={closing ? "closed" : "open"}
-      className={cn(
-        "absolute top-3 right-3 bottom-3 z-10 flex max-w-[calc(100%-24px)] flex-col gap-3 rounded-xl border border-border-strong bg-card py-3.5 shadow-panel",
-        // Reduced motion keeps only the fade; durations come from the motion tokens.
-        "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-(--duration-panel-in) data-[state=open]:ease-panel-in motion-safe:data-[state=open]:slide-in-from-right-4",
-        "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-(--duration-panel-out) data-[state=closed]:ease-panel-out motion-safe:data-[state=closed]:slide-out-to-right-4",
-      )}
-      style={{ width: PANEL_WIDTH }}
-    >
-      <div className="flex items-center gap-2 px-4">
-        <Badge variant="default" className="rounded-md px-2 py-1 font-medium">
-          {BLOCK_KINDS[block.kind].panelLabel}
-        </Badge>
-        <span className="flex-1" />
-        <kbd className="rounded-sm border border-border-strong bg-accent px-1.25 font-mono text-2xs text-muted-foreground">
-          Esc
-        </kbd>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="bg-muted"
-              aria-label="Close block configuration"
-              onClick={onClose}
-            >
-              <X aria-hidden />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Close · Esc</TooltipContent>
-        </Tooltip>
-      </div>
-      <div
-        key={block.id}
-        className="flex min-h-0 flex-1 flex-col gap-3 animate-in duration-(--duration-fast) fade-in-0"
-      >
-        <BlockConfiguration
-          block={block}
-          graph={graph}
-          agents={agents}
-          condition={condition}
-          onEdit={onEdit}
-          onRemove={() => onRemove(block)}
-        />
-      </div>
-    </aside>
-  );
+    ),
+    live && state.error && <SaveProblem key="error" state={state} onSelect={onSelect} />,
+    live && state.conflict.status !== "none" && (
+      <ConflictNotice
+        key="conflict"
+        local={state.content}
+        agents={agents}
+        conflict={state.conflict}
+        onCompare={draft.compareLatest}
+        onTakeLatest={draft.takeLatest}
+        onKeepLocal={draft.keepLocal}
+      />
+    ),
+  ].filter(Boolean);
+  if (!cards.length) return null;
+  return <div className="grid shrink-0 gap-2 border-b p-4">{cards}</div>;
 }
 
 type FlowRevisionConflict = Exclude<RevisionConflict<FlowDraft>, { status: "none" }>;
@@ -1148,75 +1306,89 @@ function newerRevision(conflict: FlowRevisionConflict) {
 }
 
 /**
- * A newer saved revision than the unsaved draft's baseline. Its actions name the revision they
- * show, and the draft ignores them once another revision or a removal replaced it.
+ * A newer saved revision than the unsaved draft's baseline: one Warning card whose Compare latest
+ * revision opens the draft beside that revision. Keep my edits keeps the draft against it; Load
+ * revision N replaces the draft at once. The draft ignores either once another revision or a
+ * removal replaced the compared one.
  */
-function ConflictPanel({
+function ConflictNotice({
   local,
+  agents,
   conflict,
   onCompare,
   onTakeLatest,
   onKeepLocal,
 }: {
   local: FlowContent;
+  agents: readonly AgentDefinition[];
   conflict: FlowRevisionConflict;
   onCompare: () => void;
   onTakeLatest: (revision: number) => void;
   onKeepLocal: (revision: number) => void;
 }) {
+  const [comparisonOpen, setComparisonOpen] = useState(false);
   const latest = conflict.status === "compared" ? conflict.latest : null;
   const revision = newerRevision(conflict);
   return (
-    <section
-      aria-label="Reconcile Flow"
-      className="grid gap-3 border-b border-attention/40 bg-attention/5 px-4 py-3"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <p role="status" className="text-sm text-foreground">
-          {revision !== null && (
-            <span className="font-medium">Revision {revision} was saved elsewhere. </span>
-          )}
-          Your local draft is preserved. Load the latest revision to compare before choosing what to
-          save.
-        </p>
-        <Button variant="outline" size="sm" onClick={onCompare}>
-          Compare latest revision
-        </Button>
-      </div>
-      {latest && (
-        <>
-          <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-            <div className="min-w-0">
-              <h3 className="mb-1.5 text-base font-semibold">Your local draft</h3>
-              <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs">
-                {JSON.stringify(local, null, 2)}
-              </pre>
-            </div>
-            <div className="min-w-0">
-              <h3 className="mb-1.5 text-base font-semibold">Saved revision {latest.revision}</h3>
-              <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs">
-                {JSON.stringify(
-                  { name: latest.name, workspace: latest.workspace, graph: latest.graph },
-                  null,
-                  2,
-                )}
-              </pre>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onTakeLatest(latest.revision)}>
-              Use latest saved Flow
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => onKeepLocal(latest.revision)}>
-              Keep local draft against revision {latest.revision}
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Keeping your draft requires another explicit Save Flow. Reconcile any differences
-              first.
-            </p>
-          </div>
-        </>
+    <>
+      <ProblemCard
+        tone="attention"
+        density="compact"
+        icon={TriangleAlert}
+        title={
+          revision === null
+            ? "A newer revision was saved elsewhere"
+            : `Revision ${revision} was saved elsewhere`
+        }
+        action={
+          <ProblemCardButton
+            onClick={() => {
+              setComparisonOpen(true);
+              onCompare();
+            }}
+          >
+            Compare latest revision
+          </ProblemCardButton>
+        }
+      >
+        Your changes are kept. Compare them with the latest revision before you save.
+      </ProblemCard>
+      {comparisonOpen && latest && (
+        <Dialog open onOpenChange={(open) => !open && setComparisonOpen(false)}>
+          <DialogContent
+            title={`Compare with revision ${latest.revision}`}
+            size="wide"
+            actions={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    onKeepLocal(latest.revision);
+                    setComparisonOpen(false);
+                  }}
+                >
+                  Keep my edits
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    onTakeLatest(latest.revision);
+                    setComparisonOpen(false);
+                  }}
+                >
+                  Load revision {latest.revision}
+                </Button>
+              </>
+            }
+          >
+            <RevisionComparison
+              mine={comparedFlowLines(local, agents)}
+              theirs={comparedFlowLines(latest, agents)}
+              revision={latest.revision}
+            />
+          </DialogContent>
+        </Dialog>
       )}
-    </section>
+    </>
   );
 }

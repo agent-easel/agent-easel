@@ -1,21 +1,18 @@
 import { clientAccessServerOperations, operationPath } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type ReactNode } from "react";
 import type { ClientAccessStatus, FactoryClient, RemoteAccessStatus } from "@t3-factory/contracts";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CircleX, KeyRound, type LucideIcon } from "lucide-react";
+import { dayAndTime } from "../time-format.ts";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { api } from "../api.ts";
 import { useRefreshSchedule } from "../refresh-schedule.ts";
-import {
-  SettingsDetailRow,
-  SettingsDisclosure,
-  SettingsGroup,
-  SettingsPage,
-  SettingsRow,
-  StatusPill,
-  type StatusTone,
-} from "./settings-page.tsx";
+import { fieldAria } from "./field-state.ts";
+import { ProblemCard } from "./problem-card.tsx";
+import { SettingsDetailRow, SettingsGroup, SettingsPage, SettingsRow } from "./settings-page.tsx";
+import { StatusBadge, type SettingKind } from "./status-badge.tsx";
 
 type Decision = "approve" | "deny" | "revoke";
 
@@ -43,7 +40,10 @@ const decisionOperations = {
 export function DeviceAccessProvider({ children }: { children: ReactNode }) {
   const [remote, setRemote] = useState<RemoteAccessStatus | null>(null);
   const [clients, setClients] = useState<readonly FactoryClient[]>([]);
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useState<{
+    kind: "listener" | "device";
+    details: string;
+  }>();
   const [busy, setBusy] = useState(false);
   const { failure, refresh } = useRefreshSchedule({
     read: () => Promise.all([api.getRemoteAccess(), api.listClients()]),
@@ -58,25 +58,33 @@ export function DeviceAccessProvider({ children }: { children: ReactNode }) {
     : failure.cause instanceof Error
       ? failure.cause.message
       : "Access status unavailable.";
-  const act = async (operation: () => Promise<unknown>) => {
+  const act = async (kind: "listener" | "device", operation: () => Promise<unknown>) => {
     setBusy(true);
-    setActionError("");
+    setActionError(undefined);
     return await operation()
-      .then(() => refresh())
-      .catch((cause: unknown) => {
-        setActionError(cause instanceof Error ? cause.message : "The change could not be saved.");
-      })
+      .then(
+        () => refresh(),
+        async (cause: unknown) => {
+          // Starting the listener can update its persisted status even when the request fails.
+          await refresh();
+          setActionError({ kind, details: String(cause) });
+        },
+      )
       .finally(() => {
         setBusy(false);
       });
   };
+  const error =
+    actionError?.kind === "listener" && remote?.problem
+      ? readError
+      : (actionError?.details ?? readError);
   const access: DeviceAccess = {
     remote,
     clients,
-    error: actionError || readError,
+    error,
     busy,
-    setRemoteAccess: (enabled) => void act(() => api.setRemoteAccess({ enabled })),
-    decide: (id, decision) => void act(() => api[decisionOperations[decision]](id)),
+    setRemoteAccess: (enabled) => void act("listener", () => api.setRemoteAccess({ enabled })),
+    decide: (id, decision) => void act("device", () => api[decisionOperations[decision]](id)),
   };
   return <DeviceAccessContext.Provider value={access}>{children}</DeviceAccessContext.Provider>;
 }
@@ -97,14 +105,9 @@ function useDeviceAccess() {
 export function AccessSettings() {
   const { remote, clients, error, busy, setRemoteAccess, decide } = useDeviceAccess();
   return (
-    <SettingsPage
-      title="Devices & access"
-      description="Other computers and browsers reach this server only over its secure address, after you approve them. T3 credentials stay on this host."
-    >
+    <SettingsPage title="Devices & access">
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" title="Couldn’t update devices and access" details={error} />
       )}
       <RemoteAccessGroup remote={remote} busy={busy} onToggle={setRemoteAccess} />
       <DeviceList clients={clients} busy={busy} onDecide={decide} />
@@ -121,24 +124,24 @@ function RemoteAccessGroup({
   busy: boolean;
   onToggle: (enabled: boolean) => void;
 }) {
-  const fingerprint = remote?.certificateFingerprint;
-  const addresses = remote?.enabled ? remote.addresses : [];
+  const problemId = useId();
+  const fingerprint = remote?.enabled && !remote.problem ? remote.certificateFingerprint : null;
+  const addresses = remote?.enabled && !remote.problem ? remote.addresses : [];
   return (
     <>
       <SettingsGroup label="Remote access">
         <SettingsRow
-          title="Allow approved devices on my LAN or tailnet"
-          description={
-            <>
-              Approving a device gives it full Factory access.
-              {remote?.problem && <span className="block text-destructive">{remote.problem}</span>}
-            </>
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              Allow approved devices on my LAN or tailnet
+              {remote?.problem && <StatusBadge kind="error">Couldn’t start</StatusBadge>}
+            </span>
           }
           control={(text) => (
             <MutationGate>
               <Switch
                 aria-labelledby={text.title}
-                aria-describedby={text.description}
+                {...fieldAria(remote?.problem ? problemId : undefined)}
                 checked={remote?.enabled ?? false}
                 disabled={busy || remote === null}
                 onCheckedChange={onToggle}
@@ -157,16 +160,30 @@ function RemoteAccessGroup({
         ))}
         {fingerprint && (
           <SettingsDetailRow
-            label={remote.certificateSource === "factory" ? "CA fingerprint" : "Fingerprint"}
-            value={fingerprint}
+            label={remote?.certificateSource === "factory" ? "CA fingerprint" : "Fingerprint"}
+            value={
+              <span className="wrap-normal">
+                {fingerprint.split(":").map((part, index) => (
+                  <span key={index}>
+                    {index > 0 && (
+                      <>
+                        <span>:</span>
+                        <wbr />
+                      </>
+                    )}
+                    {part}
+                  </span>
+                ))}
+              </span>
+            }
             mono
             copy={fingerprint}
           />
         )}
-        {fingerprint && remote.addresses[0] && (
+        {fingerprint && remote?.addresses[0] && (
           <SettingsDetailRow
             label="Desktop link"
-            value={desktopLink(remote.addresses[0], fingerprint)}
+            value={<DesktopLink address={remote.addresses[0]} fingerprint={fingerprint} />}
             mono
             copy={desktopLink(remote.addresses[0], fingerprint)}
           />
@@ -174,7 +191,6 @@ function RemoteAccessGroup({
         {fingerprint && (
           <SettingsRow
             title="Browser certificate"
-            description="Install it on a browser device, or use a trusted certificate such as Tailscale’s."
             control={
               <Button variant="outline" asChild>
                 <a
@@ -189,13 +205,15 @@ function RemoteAccessGroup({
           />
         )}
       </SettingsGroup>
-      {fingerprint && (
-        <SettingsDisclosure label="How it works">
-          <p>
-            Paste the desktop link into a desktop client to verify this certificate automatically,
-            or compare the fingerprint when it asks.
-          </p>
-        </SettingsDisclosure>
+      {remote?.problem && (
+        <ProblemCard
+          id={problemId}
+          tone="error"
+          title="Remote access couldn’t start"
+          details={remote.problem}
+        >
+          Check the network and certificate settings, then turn remote access off and on.
+        </ProblemCard>
       )}
     </>
   );
@@ -205,12 +223,33 @@ function RemoteAccessGroup({
 const desktopLink = (address: string, fingerprint: string) =>
   `${address}#sha256=${fingerprint.replaceAll(":", "")}`;
 
+function DesktopLink({ address, fingerprint }: { address: string; fingerprint: string }) {
+  const link = desktopLink(address, fingerprint);
+  return (
+    <span className="flex whitespace-nowrap">
+      <span className="truncate">{link.slice(0, address.length + 16)}…</span>
+      <span className="shrink-0">{link.slice(-8)}</span>
+    </span>
+  );
+}
+
 const deviceStatus = {
-  pending: { tone: "attention", label: "Pending" },
-  approved: { tone: "success", label: "Approved" },
-  denied: { tone: "neutral", label: "Denied" },
-  revoked: { tone: "neutral", label: "Revoked" },
-} as const satisfies Record<ClientAccessStatus, { tone: StatusTone; label: string }>;
+  pending: { kind: "attention", label: "Waiting", icon: KeyRound },
+  approved: { kind: "success", label: "Approved" },
+  denied: { kind: "neutral", label: "Denied", icon: CircleX },
+  revoked: { kind: "neutral", label: "Revoked", icon: CircleX },
+} as const satisfies Record<
+  ClientAccessStatus,
+  { kind: SettingKind; label: string; icon?: LucideIcon }
+>;
+
+function deviceTime(client: FactoryClient) {
+  if (client.status === "revoked" && client.decidedAt)
+    return ` · revoked ${dayAndTime(client.decidedAt)}`;
+  if (client.status === "denied" && client.decidedAt)
+    return ` · denied ${dayAndTime(client.decidedAt)}`;
+  return client.lastSeenAt ? ` · last seen ${dayAndTime(client.lastSeenAt)}` : "";
+}
 
 /** Requests waiting for the owner come first, then devices that can still be revoked. */
 const listOrder: Record<ClientAccessStatus, number> = {
@@ -229,10 +268,11 @@ function DeviceList({
   busy: boolean;
   onDecide: (id: string, decision: Decision) => void;
 }) {
+  const [revoking, setRevoking] = useState<FactoryClient | null>(null);
   const ordered = clients.toSorted((a, b) => listOrder[a.status] - listOrder[b.status]);
   return (
     <SettingsGroup label="Devices">
-      {ordered.length === 0 && <SettingsRow description="No device has requested access." />}
+      {ordered.length === 0 && <SettingsRow description="No devices yet" />}
       {ordered.map((client) => {
         const status = deviceStatus[client.status];
         return (
@@ -241,23 +281,33 @@ function DeviceList({
               title={
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate">{client.label}</span>
-                  <StatusPill tone={status.tone}>{status.label}</StatusPill>
+                  <StatusBadge
+                    kind={status.kind}
+                    {...("icon" in status ? { icon: status.icon } : {})}
+                  >
+                    {status.label}
+                  </StatusBadge>
                 </span>
               }
               description={
                 <>
-                  {client.kind === "browser" ? "Browser profile" : "Desktop app"} · code{" "}
-                  <span className="font-mono">{client.verificationCode}</span>
-                  {client.lastSeenAt &&
-                    ` · last seen ${new Date(client.lastSeenAt).toLocaleString()}`}
+                  {client.kind === "browser" ? "Browser" : "Desktop app"}
+                  {client.status === "pending" ? (
+                    <>
+                      {" "}
+                      · code{" "}
+                      <span className="font-mono">
+                        {client.verificationCode.replace(/^(\d{3})(\d{3})$/, "$1 $2")}
+                      </span>
+                    </>
+                  ) : (
+                    deviceTime(client)
+                  )}
                 </>
               }
               control={
                 client.status === "pending" ? (
                   <MutationGate>
-                    <Button disabled={busy} onClick={() => onDecide(client.id, "approve")}>
-                      Approve
-                    </Button>
                     <Button
                       variant="outline"
                       disabled={busy}
@@ -265,15 +315,18 @@ function DeviceList({
                     >
                       Deny
                     </Button>
+                    <Button disabled={busy} onClick={() => onDecide(client.id, "approve")}>
+                      Approve
+                    </Button>
                   </MutationGate>
                 ) : client.status === "approved" ? (
                   <MutationGate>
                     <Button
                       variant="destructive"
                       disabled={busy}
-                      onClick={() => onDecide(client.id, "revoke")}
+                      onClick={() => setRevoking(client)}
                     >
-                      Revoke
+                      Revoke…
                     </Button>
                   </MutationGate>
                 ) : undefined
@@ -282,6 +335,33 @@ function DeviceList({
           </div>
         );
       })}
+      {revoking && (
+        <Dialog open onOpenChange={(open) => !open && setRevoking(null)}>
+          <DialogContent
+            title={<>Revoke “{revoking.label}”?</>}
+            description="It loses access now, including open windows."
+            actions={
+              <>
+                <Button variant="outline" onClick={() => setRevoking(null)}>
+                  Cancel
+                </Button>
+                <MutationGate>
+                  <Button
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => {
+                      onDecide(revoking.id, "revoke");
+                      setRevoking(null);
+                    }}
+                  >
+                    Revoke
+                  </Button>
+                </MutationGate>
+              </>
+            }
+          />
+        </Dialog>
+      )}
     </SettingsGroup>
   );
 }

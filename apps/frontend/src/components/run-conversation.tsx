@@ -1,7 +1,7 @@
 import type { RunDetail } from "@t3-factory/contracts";
-import { CircleHelp, ExternalLink, MessageCircle, TriangleAlert } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Notice } from "./notice.tsx";
+import { CircleHelp, MessageCircle } from "lucide-react";
+import { ProblemCard } from "./problem-card.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
 
 /** Public launch problems can contain protocol details; explain the actionable limit instead. */
 function launchProblem(problem: string) {
@@ -22,18 +22,19 @@ export function RunConversationNotice({
   if (state === "acknowledged" && !problem) return null;
   if (state === "acknowledged")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Run coordination needs attention"
         className="w-140 max-w-full"
       >
         Factory could not confirm some work in this Run. Check the block details and Run history.
-      </Notice>
+      </ProblemCard>
     );
   if (state === "cancelled")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="neutral"
         icon={MessageCircle}
         title="Run conversation launch cancelled"
@@ -41,41 +42,42 @@ export function RunConversationNotice({
       >
         This launch was cancelled. The Run’s recorded status determines whether all work has
         stopped.
-      </Notice>
+      </ProblemCard>
     );
   if (state === "uncertain")
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Run conversation launch uncertain"
         className="w-140 max-w-full"
       >
         {launchProblem(problem ?? "")} It may already exist in T3. Check this Run’s history before
         starting another Run.
-      </Notice>
+      </ProblemCard>
     );
   if (problem)
     return (
-      <Notice
+      <ProblemCard
+        density="compact"
         tone="attention"
-        icon={TriangleAlert}
         title="Run conversation unavailable"
         className="w-140 max-w-full"
       >
         {launchProblem(problem)} The conversation link is not available. Check the T3 connection and
         this Run’s history.
-      </Notice>
+      </ProblemCard>
     );
   return (
-    <Notice
+    <ProblemCard
+      density="compact"
       tone="info"
       icon={CircleHelp}
       title="Opening Run conversation"
       className="w-140 max-w-full"
     >
       The Run has been accepted. Its conversation link will appear once T3 confirms the launch.
-    </Notice>
+    </ProblemCard>
   );
 }
 
@@ -92,25 +94,5 @@ function preferredLink(run: RunDetail) {
 
 export function RunConversationAction({ run }: { run: RunDetail }) {
   const link = preferredLink(run);
-  if (!link) return null;
-  if (run.runCoordinator)
-    return (
-      <Button asChild>
-        <a href={link} target="_blank" rel="noreferrer">
-          Open Run conversation
-          <ExternalLink aria-hidden className="size-3" strokeWidth={1.75} />
-        </a>
-      </Button>
-    );
-  return (
-    <a
-      className="inline-flex items-center gap-1 rounded-sm text-sm font-medium whitespace-nowrap text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      href={link}
-      target="_blank"
-      rel="noreferrer"
-    >
-      Open in T3
-      <ExternalLink aria-hidden className="size-3" strokeWidth={1.75} />
-    </a>
-  );
+  return link ? <OpenInT3 href={link} className="text-sm" /> : null;
 }

@@ -84,6 +84,8 @@ export interface RevisionedDraftState<D, C> {
   readonly removed: boolean;
   readonly removing: boolean;
   readonly removalError: string;
+  /** Issues behind a refused removal, such as a Flow or Trigger that still uses the definition. */
+  readonly removalIssues: readonly ValidationIssue[];
   /** Nothing in the shared protocol blocks a save; an editor may add its own conditions. */
   readonly canSave: boolean;
 }
@@ -131,6 +133,8 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** Reads the saved definition from Factory now, after a refusal Studio may not have caught up with. */
   readonly read: (id: string) => Promise<D>;
   readonly view: (state: RevisionedDraftState<D, C>) => S;
+  /** When this editor's conflict responses can also report unrelated save refusals. */
+  readonly isRevisionConflict?: (cause: ApiError) => boolean;
   /** While true, a clean draft waits to adopt a newer revision; `reconcile` adopts it later. */
   readonly hold?: () => boolean;
   /** Runs whenever a saved revision replaces the draft. */
@@ -172,6 +176,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   /** This draft's own removal was accepted; nothing is followed afterwards. */
   let removedHere = false;
   let removalError = "";
+  let removalIssues: readonly ValidationIssue[] = [];
   let dirty = { content, baseline, value: false };
   const listeners = new Set<() => void>();
 
@@ -198,6 +203,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       removed,
       removing,
       removalError,
+      removalIssues,
       canSave:
         !removed &&
         !saving &&
@@ -253,7 +259,13 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     if (isStaleOwner(cause)) {
       ownerChange = { status: "waiting" };
       waitingSince = unknownBoundary;
-    } else if (cause.detail.code === "conflict") conflict = { status: "detected", revision: null };
+    } else if (
+      saved &&
+      cause.detail.code === "conflict" &&
+      (config.isRevisionConflict?.(cause) ?? true)
+    ) {
+      conflict = { status: "detected", revision: null };
+    }
   }
   /** A read bounding a stale-owner refusal is in flight. */
   let boundingRefusal = false;
@@ -300,6 +312,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     updatedTo = null;
     showError("");
     removalError = "";
+    removalIssues = [];
     return true;
   }
   /** A save whose reply was lost reached Factory after all if `latest` holds its content. */
@@ -497,6 +510,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       if (!saved || removed || removing || lastSave?.outcome === "pending") return false;
       removing = true;
       removalError = "";
+      removalIssues = [];
       publish();
       try {
         await send(saved.id);
@@ -505,6 +519,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
         return true;
       } catch (cause) {
         removalError = cause instanceof Error ? cause.message : fallback;
+        removalIssues = cause instanceof ApiError ? cause.detail.issues : [];
         return false;
       } finally {
         removing = false;
@@ -514,6 +529,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     },
     clearRemovalError() {
       removalError = "";
+      removalIssues = [];
       publish();
     },
     /** The transient "Updated to revision N" notice has been shown long enough. */

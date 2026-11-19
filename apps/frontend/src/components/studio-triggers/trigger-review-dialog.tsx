@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
-import { CircleX, Info, TriangleAlert } from "lucide-react";
-import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
+import { CirclePause, CircleX } from "lucide-react";
+import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { ProblemCard } from "../problem-card.tsx";
+import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { sectionLabelClass } from "../page.tsx";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { SharedRepositoryCard } from "./trigger-notices.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
 /** What one review shows and how it commits. */
@@ -21,13 +15,13 @@ export interface TriggerReview {
   readonly title: string;
   /** Project · repository · Flow · schedule · limit. */
   readonly summary: string;
-  readonly query: string;
-  readonly readyLabel: string;
+  readonly repository: string;
+  readonly watchers: readonly TriggerDefinition[];
   readonly confirmLabel: "Enable and check" | "Apply and check";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
   /** Create offers saving without enabling instead. */
-  readonly saveDisabled?: () => void;
+  readonly saveOff?: () => void;
   /** Why the review opened again, such as settings saved elsewhere after the last one. */
   readonly notice?: string;
 }
@@ -47,11 +41,15 @@ const captionClass = "text-2xs leading-tight tracking-label text-subtle-foregrou
 export function TriggerReviewDialog({
   review,
   busy,
+  blocked = false,
+  saveBlocked = false,
   onConfirm,
   onCancel,
 }: {
   review: TriggerReview | null;
   busy: boolean;
+  blocked?: boolean;
+  saveBlocked?: boolean;
   /** Commits the review; `preview` is what it showed. */
   onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
@@ -64,9 +62,14 @@ export function TriggerReviewDialog({
       }}
     >
       {review && (
-        <DialogContent showCloseButton={false} className="gap-3.5 px-5.5 py-5 sm:max-w-155">
-          <ReviewBody review={review} busy={busy} onConfirm={onConfirm} onCancel={onCancel} />
-        </DialogContent>
+        <ReviewBody
+          review={review}
+          busy={busy}
+          blocked={blocked}
+          saveBlocked={saveBlocked}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
       )}
     </Dialog>
   );
@@ -75,62 +78,59 @@ export function TriggerReviewDialog({
 function ReviewBody({
   review,
   busy,
+  blocked,
+  saveBlocked,
   onConfirm,
   onCancel,
 }: {
   review: TriggerReview;
   busy: boolean;
+  blocked: boolean;
+  saveBlocked: boolean;
   onConfirm: (preview: TriggerPreview) => void;
   onCancel: () => void;
 }) {
   const read = usePreview(review.load);
+  const confirmDisabled = busy || blocked || read.status !== "answered";
   return (
-    <>
-      <DialogTitle className="text-sm leading-tight tracking-tight">{review.title}</DialogTitle>
-      <DialogDescription className="leading-tight text-subtle-foreground">
-        {review.summary}
-      </DialogDescription>
-      {review.notice && (
-        <Alert variant="attention" role="status">
-          <TriangleAlert aria-hidden />
-          <AlertDescription className="text-foreground">{review.notice}</AlertDescription>
-        </Alert>
-      )}
-      {read.status === "loading" && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Checking which issues would start…
-        </p>
-      )}
-      {read.status === "failed" && (
-        <Alert variant="critical">
-          <CircleX aria-hidden />
-          <AlertDescription className="text-foreground">{read.message}</AlertDescription>
-        </Alert>
-      )}
-      {read.status === "answered" && <PreviewResult review={review} preview={read.preview} />}
-      <p className={captionClass}>
-        Later saved revisions of the Flow and its Agents are used without asking again, like New
-        Run.
-      </p>
-      <DialogFooter className="gap-2">
-        <Button variant="outline" disabled={busy} onClick={onCancel}>
-          Cancel
-        </Button>
-        <MutationGate>
-          {review.saveDisabled && (
-            <Button variant="outline" disabled={busy} onClick={review.saveDisabled}>
-              Save disabled
-            </Button>
-          )}
-          <Button
-            disabled={busy || read.status !== "answered"}
-            onClick={() => read.status === "answered" && onConfirm(read.preview)}
-          >
-            {busy ? "Checking…" : review.confirmLabel}
+    <DialogContent
+      title={review.title}
+      description={review.summary}
+      closeDisabled={busy}
+      size="wide"
+      actions={
+        <>
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
+            Cancel
           </Button>
-        </MutationGate>
-      </DialogFooter>
-    </>
+          <MutationGate>
+            {review.saveOff && (
+              <Button variant="outline" disabled={busy || saveBlocked} onClick={review.saveOff}>
+                {busy ? "Saving…" : "Save"}
+              </Button>
+            )}
+            <Button
+              variant={confirmDisabled ? "outline" : "default"}
+              className={confirmDisabled ? "bg-muted" : undefined}
+              disabled={confirmDisabled}
+              onClick={() => read.status === "answered" && onConfirm(read.preview)}
+            >
+              {busy ? "Checking…" : review.confirmLabel}
+            </Button>
+          </MutationGate>
+        </>
+      }
+    >
+      {review.notice && <ProblemCard tone="attention" title={review.notice} />}
+      <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
+      {read.status === "loading" && (
+        <div role="status" className="rounded-lg border bg-background px-3.5 py-2.5">
+          <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
+        </div>
+      )}
+      {read.status === "failed" && <ProblemCard tone="error" icon={CircleX} title={read.message} />}
+      {read.status === "answered" && <PreviewResult preview={read.preview} />}
+    </DialogContent>
   );
 }
 
@@ -159,31 +159,25 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
   return read?.load === load ? read.read : { status: "loading" };
 }
 
-function PreviewResult({ review, preview }: { review: TriggerReview; preview: TriggerPreview }) {
+function PreviewResult({ preview }: { preview: TriggerPreview }) {
   const { problem, issues } = preview;
   return (
     <>
-      <AuthorFilterNotice review={review} preview={preview} />
       {problem ? (
-        <Alert variant="critical">
-          <CircleX aria-hidden />
-          <AlertTitle>{problemHeadline(problem)}</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            {problem.message} The check will show this problem and start nothing until it is fixed.
-          </AlertDescription>
-        </Alert>
+        <ProblemCard tone="error" icon={CircleX} title={problemHeadline(problem)}>
+          {problem.message} The check will show this problem and start nothing until it is fixed.
+        </ProblemCard>
       ) : (
         <section aria-labelledby="trigger-review-issues" className="grid gap-3.5">
-          <h3 id="trigger-review-issues" className={sectionLabelClass}>
+          <h3 id="trigger-review-issues" className="text-xs text-muted-foreground">
             {issues.length === 0
               ? "No issues ready"
-              : `${issues.length} ${issues.length === 1 ? "issue" : "issues"} ready · oldest first`}
+              : `${issues.length} ${issues.length === 1 ? "issue" : "issues"} ready`}
           </h3>
           <ul className="divide-y overflow-hidden rounded-lg border bg-background">
             {issues.length === 0 ? (
               <li className="px-3.5 py-3 text-sm text-muted-foreground">
-                No open issue matches right now. Issues that get {review.readyLabel} later start at
-                the next check.
+                No open issue matches right now.
               </li>
             ) : (
               issues.map((issue) => <PreviewIssue key={issue.issue} issue={issue} />)
@@ -192,42 +186,6 @@ function PreviewResult({ review, preview }: { review: TriggerReview; preview: Tr
         </section>
       )}
     </>
-  );
-}
-
-/** The query's author filter, or the warning that it is missing on a public repository. */
-function AuthorFilterNotice({
-  review,
-  preview,
-}: {
-  review: TriggerReview;
-  preview: TriggerPreview;
-}) {
-  const title = (
-    <AlertTitle>
-      Only issues matching <span className="font-mono text-label">{review.query}</span> can start
-    </AlertTitle>
-  );
-  const [warning] = preview.warnings;
-  if (warning)
-    return (
-      <Alert variant="attention">
-        <TriangleAlert aria-hidden />
-        {title}
-        <AlertDescription className="text-muted-foreground">{warning.message}</AlertDescription>
-      </Alert>
-    );
-  const me =
-    preview.login && review.query.includes("@me") ? `Right now @me is ${preview.login}. ` : "";
-  return (
-    <Alert variant="info">
-      <Info aria-hidden />
-      {title}
-      <AlertDescription className="text-muted-foreground">
-        {me}Without an author filter, anyone whose issue gets {review.readyLabel} could start Runs
-        on this host — on a public repository that includes issue templates.
-      </AlertDescription>
-    </Alert>
   );
 }
 
@@ -247,13 +205,13 @@ function PreviewIssue({ issue }: { issue: TriggerPreviewIssue }) {
         {issue.title}
       </a>
       <span className={`${captionClass} shrink-0`}>{openedAgo(issue.createdAt)}</span>
-      <Badge
-        variant={startsNow ? "default" : "secondary"}
-        className={`gap-1.25 border-transparent py-0.5 pr-2 pl-1.75 ${startsNow ? "" : "text-subtle-foreground"}`}
-      >
-        <span aria-hidden className="size-1.5 rounded-full bg-current" />
-        {startsNow ? "Starts now" : "Waits"}
-      </Badge>
+      {startsNow ? (
+        <StatusBadge kind="info">Starts now</StatusBadge>
+      ) : (
+        <StatusBadge kind="neutral" icon={CirclePause}>
+          Waits
+        </StatusBadge>
+      )}
     </li>
   );
 }

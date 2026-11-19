@@ -24,6 +24,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import type { DiscordCommandSetup } from "@t3-factory/contracts";
 import { now } from "../time.ts";
 import { grantedProjects } from "./access.ts";
+import { isAccessTestMessage, recordReached } from "./access-test.ts";
 import { isConfirmation, type ClickAnswer, type ConfirmationClick } from "./actions.ts";
 import { buttonRow } from "./confirmation-buttons.ts";
 import type { ConversationGenerations, ConversationKey } from "./conversations.ts";
@@ -315,6 +316,30 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   };
 
   /**
+   * An answer to the access test: in a parent channel, a reply to one of the test's messages
+   * there; in a thread, any invocation in a test's forum post. An allowed user's answer is
+   * admitted as any invocation is, but opens no conversation: Factory records the user as
+   * reached. Undefined when the message answers no test.
+   */
+  const answerAccessTest = (
+    message: Message<true>,
+    thread: ThreadChannel | null,
+    parentId: string,
+  ) =>
+    Effect.gen(function* () {
+      const repliedTo =
+        message.type === MessageType.Reply ? message.reference?.messageId : undefined;
+      const testMessage = thread === null ? repliedTo : thread.id;
+      if (testMessage === undefined) return undefined;
+      if (!(yield* isAccessTestMessage(sql, parentId, testMessage))) return undefined;
+      session.referenced(message.id);
+      if (!(yield* permittedProjects(message.author.id, parentId))) return "ignored";
+      if (!(yield* firstDelivery(message.id))) return "ignored";
+      yield* recordReached(sql, message.author.id);
+      return "reached";
+    });
+
+  /**
    * Authorizes and records an invocation, creating its thread, and queues it in its conversation;
    * the conversation, or nothing when it was not admitted.
    */
@@ -496,7 +521,10 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
   const gate = Semaphore.makeUnsafe(1);
 
   return {
-    /** A Discord message; only explicit authorized invocations go further. */
+    /**
+     * A Discord message; only explicit authorized invocations go further, and a reply to the
+     * access test only answers it.
+     */
     message: (message: Message) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -504,6 +532,11 @@ export function makeIngress(session: IngressSession, interpreter: Interpreter) {
           const place = explicitInvocation(message, botUserId);
           if (!place) return;
           const { thread, parentId } = place;
+          const answered = yield* gate.withPermits(1)(answerAccessTest(message, thread, parentId));
+          // The reaction is an external send, which never happens while Chat control is Off.
+          if (answered === "reached" && session.operating())
+            yield* Effect.ignore(Effect.tryPromise(() => message.react("✅")));
+          if (answered) return;
           const invocation = yield* gate.withPermits(1)(admitMessage(message, thread, parentId));
           if (!invocation) return;
           yield* Effect.promise(() =>

@@ -58,4 +58,14 @@ function ContextMenuItem({
   );
 }
 
-export { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem };
+function ContextMenuSeparator() {
+  return <ContextMenuPrimitive.Separator className="-mx-1 my-1 h-px bg-border" />;
+}
+
+export {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+};

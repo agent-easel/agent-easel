@@ -135,6 +135,9 @@ function runRoutes(factory: Factory): RouteEntries<typeof runOperations> {
     listRunNavigation: {
       handle: () => answer(() => factory.listRunNavigation()),
     },
+    searchArchivedRuns: {
+      handle: ({ parameters }) => answer(() => factory.searchArchivedRuns(parameters.query)),
+    },
     startRun: {
       body: { bytes: 131_072, message: "Send valid Start JSON up to 128 KiB." },
       handle: ({ input }) => answer(() => factory.startRun(input), 201),
@@ -308,6 +311,10 @@ function chatControlRoutes(factory: Factory): RouteEntries<typeof chatControlOpe
       body: standardBody,
       handle: ({ input }) => answer(() => factory.updateDiscordAccess(input)),
     },
+    sendDiscordAccessTest: {
+      hostOnly: true,
+      handle: () => answer(() => factory.sendDiscordAccessTest()),
+    },
     setChatControlEnabled: {
       hostOnly: true,
       body: standardBody,
@@ -397,11 +404,15 @@ function agentRoutes(factory: Factory): RouteEntries<typeof agentOperations> {
   return {
     getAgentCapabilities: { handle: () => answer(() => factory.getAgentCapabilities()) },
     listAgents: { handle: () => answer(() => factory.listAgents()) },
+    reserveAgentCreate: { handle: () => answer(() => factory.reserveAgentCreate()) },
     createAgent: {
       body: definitionBody,
       handle: ({ input }) => answer(() => factory.createAgent(input), 201),
     },
     getAgent: { handle: ({ parameters }) => answer(() => factory.getAgent(parameters.id)) },
+    getAgentCreateOutcome: {
+      handle: ({ parameters }) => answer(() => factory.getAgentCreateOutcome(parameters.id)),
+    },
     duplicateAgent: {
       body: standardBody,
       handle: ({ parameters, input }) =>

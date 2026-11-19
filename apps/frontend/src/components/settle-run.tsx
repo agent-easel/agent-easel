@@ -1,53 +1,24 @@
-import { DialogHeader, DialogFooter } from "./ui/dialog";
-import { useLayoutEffect, useRef, useState } from "react";
-import type {
-  RunSettlement,
-  RunSettlementOutcome,
-  RunSettlementWorker,
-} from "@t3-factory/contracts";
+import { useRef, useState } from "react";
+import type { RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
 import { api } from "../api.ts";
 import { MutationGate } from "../client-gate.tsx";
 import { Button } from "./ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "./ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent } from "./ui/alert-dialog";
 
-const WORKER_STATE_LABEL: Record<RunSettlementWorker["state"], string> = {
-  executing: "still running",
-  stopping: "stopping",
-  finished: "finished",
-  unresolved: "not resolved",
-};
-
-function SettlementWorkers({ workers }: { workers: readonly RunSettlementWorker[] }) {
-  return (
-    <ul className="max-h-60 space-y-2 overflow-auto text-sm">
-      {workers.map((worker, index) => (
-        <li key={worker.threadId ?? `${worker.blockId}:${index}`} className="break-words">
-          {worker.link ? (
-            <a className="text-link underline" href={worker.link}>
-              {worker.blockName}
-            </a>
-          ) : (
-            worker.blockName
-          )}
-          {" · "}
-          {WORKER_STATE_LABEL[worker.state]}
-          {worker.problem && <p className="text-muted-foreground">{worker.problem}</p>}
-        </li>
-      ))}
-    </ul>
-  );
+/** Figma RD53: one sentence on what happens to the workers T3 still runs. */
+function settleDescription(workers: readonly RunSettlementWorker[]) {
+  const working = workers.filter((worker) => worker.state !== "finished").length;
+  return working === 1
+    ? "Factory asks T3 to stop the working Agent and ends the Run once T3 confirms it stopped."
+    : `Factory asks T3 to stop the ${working} working Agents and ends the Run once T3 confirms they stopped.`;
 }
 
 /** Every Settle entry point waits for explicit authorization before stopping workers. */
 export function useSettleRun() {
   const [confirmation, setConfirmation] =
     useState<Extract<RunSettlementOutcome, { outcome: "confirmation-required" }>>();
+  // The last confirmation shown keeps the dialog's text while it closes.
+  const [shown, setShown] = useState(confirmation);
   const answer = useRef<(outcome: RunSettlementOutcome | undefined) => void>(() => undefined);
   const requesting = useRef<(running: boolean) => void>(() => undefined);
   const [busy, setBusy] = useState(false);
@@ -82,6 +53,7 @@ export function useSettleRun() {
         ? opener
         : document.getElementById(`run-row-${id}`);
     setConfirmation(outcome);
+    setShown(outcome);
     requesting.current = onRequesting;
     onRequesting(false);
     return new Promise<RunSettlementOutcome | undefined>((resolve) => {
@@ -117,137 +89,32 @@ export function useSettleRun() {
         }}
       >
         <AlertDialogContent
+          title={<>Settle “{shown?.run.title}”?</>}
+          description={shown ? settleDescription(shown.workers) : ""}
+          actions={
+            <>
+              <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+              <MutationGate>
+                <Button disabled={busy} onClick={() => void confirm()}>
+                  {busy ? "Settling…" : "Settle Run"}
+                </Button>
+              </MutationGate>
+            </>
+          }
+          closeDisabled={busy}
           onCloseAutoFocus={(event) => {
             if (!returnFocus.current?.isConnected) return;
             event.preventDefault();
             returnFocus.current.focus();
           }}
         >
-          <DialogHeader>
-            <AlertDialogTitle>Stop the work and settle this Run?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Confirming stops every worker and its delegated work, cancels remaining automatic work
-              and ends this Run. Factory waits until every worker is confirmed finished.
-            </AlertDialogDescription>
-          </DialogHeader>
-          {confirmation && <SettlementWorkers workers={confirmation.workers} />}
           {error && (
             <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           )}
-          <DialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
-            <MutationGate>
-              <Button disabled={busy} onClick={() => void confirm()}>
-                {busy ? "Settling…" : "Settle"}
-              </Button>
-            </MutationGate>
-          </DialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     ),
   };
-}
-
-/** Run detail's settlement progress. A confirmed retry removes Retry once the settlement shows
- * the workers stopping; the section keeps the focus that would otherwise fall to the page. Only a
- * Retry that still holds focus, or whose attempt is still settling, claims that fallback. */
-export function RunSettlementSection({
-  id,
-  settlement,
-}: {
-  id: string;
-  settlement: RunSettlement;
-}) {
-  const section = useRef<HTMLElement>(null);
-  const retryFocused = useRef(false);
-  const unresolved = settlement.state === "unresolved";
-  useLayoutEffect(() => {
-    if (unresolved || !retryFocused.current) return;
-    retryFocused.current = false;
-    if (document.activeElement === document.body) section.current?.focus();
-  }, [unresolved]);
-  return (
-    <section
-      ref={section}
-      tabIndex={-1}
-      data-focus-fallback={id}
-      onFocus={(event) => {
-        retryFocused.current = event.target.id === RETRY_ID;
-      }}
-      onBlur={(event) => {
-        const retry = event.target;
-        if (retry.id !== RETRY_ID) return;
-        if (event.relatedTarget) {
-          retryFocused.current = false;
-          return;
-        }
-        // Focus falling to the page while Retry stays usable is the user leaving it; Retry
-        // removed by the stopping transition, or disabled by its attempt, keeps the claim.
-        queueMicrotask(() => {
-          if (retry.isConnected && retry.matches(":enabled")) retryFocused.current = false;
-        });
-      }}
-      aria-label="Run settlement"
-      className="max-h-72 space-y-3 overflow-auto border-t px-4 py-3 outline-none focus:ring-2 focus:ring-ring focus:ring-inset"
-    >
-      <h2 className="text-sm font-semibold">
-        {unresolved ? "Settlement unresolved" : "Stopping workers…"} · Attempt {settlement.attempt}
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Automatic work is held until every worker is confirmed finished.
-      </p>
-      <SettlementWorkers workers={settlement.workers} />
-      {unresolved && (
-        <RetryRunSettlement
-          id={id}
-          onAttemptFailed={() => {
-            retryFocused.current = document.activeElement?.id === RETRY_ID;
-          }}
-        />
-      )}
-    </section>
-  );
-}
-
-const RETRY_ID = "settlement-retry";
-
-/** Run detail can retry even when navigation filters out its Run. */
-function RetryRunSettlement({ id, onAttemptFailed }: { id: string; onAttemptFailed: () => void }) {
-  const { settle, dialog } = useSettleRun();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  async function retry() {
-    if (busy) return;
-    setBusy(true);
-    setError("");
-    let settling = false;
-    return await settle(id, true)
-      .then((outcome) => {
-        settling = outcome?.outcome === "stopping" || outcome?.outcome === "settled";
-      })
-      .catch((cause: unknown) => {
-        setError(cause instanceof Error ? cause.message : "Could not settle the Run.");
-      })
-      .finally(() => {
-        setBusy(false);
-        if (!settling) onAttemptFailed();
-      });
-  }
-  return (
-    <>
-      <MutationGate>
-        <Button id={RETRY_ID} disabled={busy} onClick={() => void retry()}>
-          {busy ? "Settling…" : "Retry"}
-        </Button>
-      </MutationGate>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      {dialog}
-    </>
-  );
 }

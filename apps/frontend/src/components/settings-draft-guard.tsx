@@ -1,15 +1,16 @@
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { settingsTabAt, type SettingsSelection } from "../settings-navigation.ts";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { settingsKeepsTab, type SettingsSelection } from "../settings-navigation.ts";
 import { useNavigationBlock } from "../use-navigation-block.ts";
 
 /**
  * Asks before leaving `tab`, closing Settings or unloading the page while `drafts`, the titles of
- * that page's sections with unsaved edits, is not empty. Each section keeps its own Save/Discard.
+ * that page's sections with unsaved edits, is not empty. Opening a section over `tab` keeps it
+ * open, so it does not ask. Each section keeps its own Save/Discard.
  */
 export function useSettingsDraftGuard(tab: SettingsSelection["tab"], drafts: readonly string[]) {
   return useNavigationBlock(drafts.length > 0, (location) =>
-    drafts.length && settingsTabAt(location) !== tab ? drafts : undefined,
+    drafts.length && !settingsKeepsTab(location, tab) ? drafts : undefined,
   );
 }
 
@@ -29,24 +30,23 @@ export function SettingsDraftDialog({
       }}
     >
       <DialogContent
+        title={`Discard unsaved ${names} changes?`}
+        description="Discard your edits to continue with the saved settings."
+        actions={
+          <>
+            <Button variant="outline" onClick={decision.reset}>
+              Keep editing
+            </Button>
+            <Button variant="destructive" onClick={decision.proceed}>
+              Discard changes
+            </Button>
+          </>
+        }
         onEscapeKeyDown={(event) => {
           event.preventDefault();
           decision.reset();
         }}
-      >
-        <DialogTitle>Discard unsaved {names} changes?</DialogTitle>
-        <DialogDescription>
-          Keep editing to save them, or discard them to continue. Saved settings stay as they are.
-        </DialogDescription>
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={decision.reset}>
-            Keep editing
-          </Button>
-          <Button variant="destructive" onClick={decision.proceed}>
-            Discard changes
-          </Button>
-        </div>
-      </DialogContent>
+      ></DialogContent>
     </Dialog>
   );
 }

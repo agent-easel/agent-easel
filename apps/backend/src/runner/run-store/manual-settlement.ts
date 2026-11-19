@@ -103,6 +103,7 @@ function unresolvedLaunchWorker(launch: UnresolvedLaunch): RunSettlementWorker {
     link: null,
     state: "unresolved",
     stopRequestedAt: null,
+    stopOutcome: null,
     problem:
       "Factory has not confirmed whether T3 launched this worker. It keeps searching and stops the worker it finds.",
   };
@@ -167,8 +168,9 @@ export function readRunSettlement(
       link: string | null;
       state: "stopping" | "finished" | "unresolved";
       stop_requested_at: string | null;
+      stop_outcome: RunSettlementWorker["stopOutcome"];
       problem: string | null;
-    }>`SELECT w.block_id,b.name,w.thread_id,t.link,w.state,w.stop_requested_at,w.problem FROM run_settlement_workers w JOIN run_blocks b ON b.run_id=w.run_id AND b.block_id=w.block_id LEFT JOIN run_thread_bindings t ON t.run_id=w.run_id AND t.thread_id=w.thread_id WHERE w.run_id=${run.id} AND w.attempt=${row.attempt} ORDER BY b.rowid`;
+    }>`SELECT w.block_id,b.name,w.thread_id,t.link,w.state,w.stop_requested_at,w.stop_outcome,w.problem FROM run_settlement_workers w JOIN run_blocks b ON b.run_id=w.run_id AND b.block_id=w.block_id LEFT JOIN run_thread_bindings t ON t.run_id=w.run_id AND t.thread_id=w.thread_id WHERE w.run_id=${run.id} AND w.attempt=${row.attempt} ORDER BY b.rowid`;
     const launches = yield* unresolvedLaunchRows(sql, run.id);
     return {
       state: settlementState(
@@ -186,6 +188,7 @@ export function readRunSettlement(
           link: threadHref(worker.link),
           state: worker.state,
           stopRequestedAt: worker.stop_requested_at,
+          stopOutcome: worker.stop_outcome,
           problem: worker.problem,
         })),
         ...launches.map(unresolvedLaunchWorker),

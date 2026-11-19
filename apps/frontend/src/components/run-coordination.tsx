@@ -1,7 +1,8 @@
 import type { RunActivation, RunDetail, RunThreadBinding } from "@t3-factory/contracts";
-import { sectionLabelClass } from "./page.tsx";
+import { OpenInT3 } from "./open-in-t3.tsx";
+import { InspectorHeading } from "./inspector-section.tsx";
+import { attentionLinkedThreads } from "../attention-copy.ts";
 import { ResultCard } from "./run-result.tsx";
-import { cn } from "../lib/utils.ts";
 
 export const bindingRole: Record<RunThreadBinding["role"], string> = {
   worker: "Worker",
@@ -11,53 +12,80 @@ export const bindingRole: Record<RunThreadBinding["role"], string> = {
 export function BindingLink({ binding }: { binding: RunThreadBinding }) {
   const role = bindingRole[binding.role];
   return binding.link ? (
-    <a className="text-link hover:underline" href={binding.link} target="_blank" rel="noreferrer">
-      Open {role.toLowerCase()} in T3
-    </a>
+    <OpenInT3 href={binding.link} className="text-xs" />
   ) : (
     <span>{role} link unavailable</span>
   );
 }
 
-const phaseLabel: Record<RunActivation["phase"], string> = {
-  delegating: "Delegating",
-  assessing: "Assessing worker result",
-  reported: "Report accepted",
-  finished: "Activation completed",
-};
-
-export function CoordinatorActivations({ run, blockId }: { run: RunDetail; blockId?: string }) {
+export function CoordinatorActivations({
+  run,
+  blockId,
+  conciseResults = false,
+}: {
+  run: RunDetail;
+  blockId?: string;
+  conciseResults?: boolean;
+}) {
   const activations = run.activations.filter((a) => !blockId || a.blockId === blockId);
   if (!activations.length) return null;
   return (
     <section aria-label="Block activations" className="flex flex-col gap-2.5">
-      <h2 className={cn(sectionLabelClass, "px-2 pt-1.5 pb-1")}>Activations</h2>
+      <InspectorHeading title="Activations" />
       {activations.map((activation) => (
-        <Activation key={activation.id} run={run} activation={activation} />
+        <Activation
+          key={activation.id}
+          run={run}
+          activation={activation}
+          conciseResult={conciseResults}
+        />
       ))}
     </section>
   );
 }
 
-function activationStateLabel(run: RunDetail, activation: RunActivation) {
-  if (run.lifecycle === "archived") return "Archived";
-  return activation.phase === "assessing" ? "Worker active" : phaseLabel[activation.phase];
-}
-
-function Activation({ run, activation }: { run: RunDetail; activation: RunActivation }) {
+function Activation({
+  run,
+  activation,
+  conciseResult,
+}: {
+  run: RunDetail;
+  activation: RunActivation;
+  conciseResult: boolean;
+}) {
   const visit =
     run.activations
       .filter((a) => a.blockId === activation.blockId)
       .findIndex((a) => a.id === activation.id) + 1;
   const report = run.reports.findLast((r) => r.activationId === activation.id);
-  const block = run.blocks.find((b) => b.blockId === activation.blockId);
+  const name = run.blocks.find((b) => b.blockId === activation.blockId)?.name ?? activation.blockId;
+  // A thread a pending Attention card already opens gets no second link here. Another binding
+  // on the same Block keeps its own link. The card states the visit's problem.
+  const linkedThreads = attentionLinkedThreads(run);
+  const linked = (link: string | null) => link !== null && linkedThreads.has(link);
+  const problem =
+    run.lifecycle !== "archived" &&
+    !run.attention.some((item) => item.blockId === activation.blockId && !item.settledAt) &&
+    activation.problem;
+  if (report && conciseResult) {
+    const worker = run.threadBindings.find(
+      (binding) => binding.blockId === activation.blockId && binding.role === "worker",
+    );
+    return (
+      <ResultCard
+        run={run}
+        report={report}
+        titleOnly={{
+          workerLink: worker?.link && linked(worker.link) ? null : (worker?.link ?? null),
+        }}
+      />
+    );
+  }
   const coordination = (
     <>
-      {run.lifecycle !== "archived" && activation.problem && (
-        <p className="text-xs text-attention">{activation.problem}</p>
-      )}
+      {problem && <p className="text-xs text-attention">{problem}</p>}
       {run.threadBindings
-        .filter((b) => b.blockId === activation.blockId)
+        .filter((b) => b.blockId === activation.blockId && !linked(b.link))
         .map((binding) => (
           <div key={binding.id} className="flex flex-col gap-1 text-xs">
             <BindingLink binding={binding} />
@@ -77,13 +105,42 @@ function Activation({ run, activation }: { run: RunDetail; activation: RunActiva
         {coordination}
       </ResultCard>
     );
+  const workers = run.threadBindings.flatMap((binding) =>
+    binding.blockId === activation.blockId &&
+    binding.role === "worker" &&
+    binding.link &&
+    !linked(binding.link)
+      ? [{ id: binding.id, link: binding.link }]
+      : [],
+  );
   return (
-    <article className="flex flex-col gap-2 rounded-md border bg-muted p-3 text-xs break-words">
-      <h3 className="font-semibold">
-        {block?.name ?? activation.blockId} · Visit {visit} ·{" "}
-        {activationStateLabel(run, activation)}
-      </h3>
-      {coordination}
+    <article
+      aria-label={`${name} · Visit ${visit}`}
+      className="flex flex-col gap-2 rounded-md border bg-card px-3 py-2.5 text-xs break-words"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="min-w-0 truncate text-sm font-semibold">{name}</span>
+        <span className="shrink-0 text-subtle-foreground">
+          <span className="sr-only"> · </span>Visit {visit}
+        </span>
+        <span className="flex-1" />
+        {workers.map((worker) => (
+          <OpenInT3 key={worker.id} href={worker.link} className="text-sm" />
+        ))}
+      </div>
+      {problem && <p className="text-xs text-attention">{problem}</p>}
+      {run.threadBindings
+        .filter(
+          (b) => b.blockId === activation.blockId && b.role === "descendant" && !linked(b.link),
+        )
+        .map((binding) => (
+          <div key={binding.id} className="flex flex-col gap-1 text-xs">
+            <BindingLink binding={binding} />
+            <span className="font-mono text-2xs break-all text-muted-foreground">
+              {binding.threadId}
+            </span>
+          </div>
+        ))}
     </article>
   );
 }

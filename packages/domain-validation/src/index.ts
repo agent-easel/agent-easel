@@ -376,6 +376,35 @@ function connectionReadiness(
   });
 }
 
+/**
+ * A Condition cannot end a branch: every output, Otherwise included, needs a wire. Unconnected exits
+ * of Agents and Human steps, and an unconnected Wait or Continuation output, still end the branch.
+ */
+function conditionOutputReadiness(graph: FlowGraphInput, add: IssueReporter) {
+  const wired = new Set(
+    graph.connections.map((edge) => `${edge.sourceBlockId}\u0000${edge.exitId}`),
+  );
+  graph.blocks.forEach((block, i) => {
+    if (block.kind !== "condition") return;
+    const unconnected = (exitId: string) => !wired.has(`${block.id}\u0000${exitId}`);
+    const label = blockLabel(block);
+    block.rules.forEach((rule, j) => {
+      if (unconnected(rule.id))
+        add(
+          "condition_output_unconnected",
+          `graph.blocks.${i}.rules.${j}`,
+          `${label}: connect output "${rule.name.trim() || `rule ${j + 1}`}". A Condition output cannot end a branch.`,
+        );
+    });
+    if (unconnected(CONDITION_OTHERWISE.id))
+      add(
+        "condition_output_unconnected",
+        `graph.blocks.${i}`,
+        `${label}: connect output "${CONDITION_OTHERWISE.name}". A Condition output cannot end a branch.`,
+      );
+  });
+}
+
 /** Every block must be reachable from a Flow input target. */
 function reachabilityReadiness(graph: FlowGraphInput, add: IssueReporter) {
   const reached = new Set(graph.flowInput.targetBlockIds);
@@ -505,6 +534,7 @@ export function flowReadiness(
     blockReadiness(block, `graph.blocks.${i}`, agents, flowProject, add),
   );
   connectionReadiness(graph, agents, add);
+  conditionOutputReadiness(graph, add);
   conditionCycleReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
   return { ready: issues.length === 0, issues };
@@ -643,6 +673,8 @@ export {
 } from "./chat-control.ts";
 export {
   parseTriggerQuery,
+  validateTriggerLimit,
+  validateTriggerSchedule,
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
   validateSetTriggerEnabled,

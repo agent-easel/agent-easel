@@ -1,4 +1,4 @@
-import { chooseFlowAction, type StudioFixtures } from "./studio.ts";
+import { chooseFlowAction, flowsBreadcrumb, type StudioFixtures } from "./studio.ts";
 import { expect, type Screen } from "e2e";
 import { saveSingleAgentFlow, removeFlowElsewhere, readFlow } from "./flows.ts";
 function retainedFlowGuard(screen: Screen) {
@@ -43,12 +43,9 @@ export async function expectRetainedCleanFlow(
 ) {
   const { app, screen, browser, name, id } = state;
   await expect(screen.getByRole("dialog", `Remove “${name}”?`, { exact: true })).toHaveCount(0);
-  await expect(
-    screen.getByText("This Flow was removed elsewhere. Your draft is kept.", { exact: true }),
-  ).toBeVisible();
+  await expect(screen.getByText("This Flow was removed elsewhere", { exact: true })).toBeVisible();
   await expect(browser).toHaveURL(`/studio/flows/${id}`);
-  await expect(screen.getByRole("button", "Save Flow", { exact: true })).toBeDisabled();
-  await expect(screen.getByRole("button", "Start Run", { exact: true })).toBeDisabled();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await screen.getByRole("button", "More Flow actions", { exact: true }).tap();
   await expect(screen.getByRole("menuitem", "Remove", { exact: true })).toBeDisabled();
   await screen.getByRole("menu").press("Escape");
@@ -100,7 +97,7 @@ export async function expectLeftRetainedFlow(
 export async function beforeDiscardedRetainedFlow(fixtures: StudioFixtures, prefix: string) {
   const previous = await beforeLeftRetainedFlow(fixtures, prefix);
   const { screen } = previous;
-  await screen.getByRole("link", "All Flows", { exact: true }).tap();
+  await flowsBreadcrumb(screen).tap();
   return expectLeftRetainedFlow({ ...previous });
 }
 

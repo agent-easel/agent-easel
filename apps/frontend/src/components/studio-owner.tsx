@@ -2,7 +2,6 @@ import { useId } from "react";
 import type { FactoryProject } from "@t3-factory/contracts";
 import { ChevronDown, ChevronsUpDown, FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { StatusBadge } from "./status-badge.tsx";
+import { ProblemCard, ProblemCardButton } from "./problem-card.tsx";
 import { fieldLabelClass, selectFieldClass } from "./page.tsx";
 import type { OwnerChange } from "../revisioned-draft.ts";
 import {
@@ -23,9 +24,9 @@ import {
   type StudioOwnerFilter,
 } from "../studio-definitions.ts";
 
-/** The owner's name as one line: "Global", or the Project title and why it is unavailable. */
+/** The owner's name: "Global", or the Project title. */
 export function ownerName(owner: StudioOwner) {
-  return owner.unavailable ? `${owner.title} · unavailable` : owner.title;
+  return owner.title;
 }
 
 /** Figma Studio/OwnerBadge: Global, an owning Project, or an unavailable owning Project. */
@@ -45,43 +46,31 @@ export function OwnerBadge({ owner }: { owner: StudioOwner }) {
 }
 
 /**
- * Figma Studio/OwnerGroupHeader: one owner's group in a Studio list, with its repository path,
- * the availability reason of an unavailable Project and the group's count.
+ * One owner's group: icon, name, repository path and count. A Project gone from T3 keeps its name
+ * and a Not in T3 tag, and no path.
  */
-export function OwnerGroupHeader({
-  owner,
-  count,
-  consequence,
-}: {
-  owner: StudioOwner;
-  count: string;
-  /** What unavailability means for this list, such as "Flows here can't start." */
-  consequence: string;
-}) {
+export function OwnerGroupHeader({ owner, count }: { owner: StudioOwner; count: string }) {
   const Icon = owner.projectId === null ? Workflow : FolderGit2;
   return (
-    <h2 className="flex min-w-0 items-center gap-2 pt-2.5 pb-1.5 text-base leading-none font-semibold tracking-tight">
+    <h2 className="flex min-w-0 items-center gap-2 pt-2.5 pb-1.5 text-base leading-none font-semibold">
       <Icon
         aria-hidden
         className={cn(
           "size-3.25 shrink-0",
-          owner.projectId === null
-            ? "text-muted-foreground"
-            : owner.unavailable
-              ? "text-attention"
-              : "text-brand-cyan",
+          owner.gone || owner.projectId === null ? "text-muted-foreground" : "text-brand-cyan",
         )}
         strokeWidth={1.5}
       />
       <span className="shrink-0">{owner.title}</span>
-      <OwnerPath
-        path={owner.detail ?? "Usable in every project"}
-        className="text-2xs leading-none font-normal tracking-label text-subtle-foreground"
-      />
-      {owner.unavailable && (
-        <span className="min-w-0 truncate text-2xs leading-none font-medium tracking-normal text-attention">
-          {owner.unavailable}. {consequence}
-        </span>
+      {owner.gone ? (
+        <StatusBadge kind="neutral">Not in T3</StatusBadge>
+      ) : (
+        owner.detail && (
+          <OwnerPath
+            path={owner.detail}
+            className="text-2xs leading-none font-normal tracking-label text-subtle-foreground"
+          />
+        )
       )}
       <span className="ml-auto shrink-0 text-2xs leading-none font-normal tracking-label text-subtle-foreground">
         {count}
@@ -134,7 +123,7 @@ export function OwnerFilter({
           <ChevronDown aria-hidden className="ml-auto size-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-72 max-w-[calc(100vw-1rem)]">
+      <DropdownMenuContent align="start" className="w-56 max-w-[calc(100vw-1rem)]">
         <DropdownMenuRadioGroup
           value={filterValue(filter)}
           onValueChange={(value) =>
@@ -145,10 +134,11 @@ export function OwnerFilter({
             )
           }
         >
-          <DropdownMenuRadioItem value="all" indicatorPosition="right">
+          <DropdownMenuRadioItem value="all" indicatorPosition="right" className="pl-2">
             All owners
           </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="global" indicatorPosition="right">
+          <DropdownMenuRadioItem value="global" indicatorPosition="right" className="pl-2">
+            <Workflow aria-hidden strokeWidth={1.5} className="text-muted-foreground" />
             Global
           </DropdownMenuRadioItem>
           {targets.length > 1 && <DropdownMenuSeparator />}
@@ -159,8 +149,9 @@ export function OwnerFilter({
               disabled={disabled !== null}
               indicatorPosition="right"
               aria-label={`${owner.title} · ${owner.detail}${owner.unavailable ? ` · ${owner.unavailable}` : ""}`}
-              className="items-start"
+              className="items-start pl-2"
             >
+              <FolderGit2 aria-hidden strokeWidth={1.5} className="mt-0.5 text-muted-foreground" />
               <OwnerOptionText owner={owner} />
             </DropdownMenuRadioItem>
           ))}
@@ -190,20 +181,12 @@ function OwnerOptionText({ owner, reason }: { owner: StudioOwner; reason?: strin
 }
 
 const ownerKindClass =
-  "group flex w-full items-start gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
+  "group flex w-full items-center gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
 
-/** What each owner kind means for a new Flow or Agent. */
+/** What a caller may pass as `kind`, for the owning-Project menu's wording. */
 const ownerKindText = {
-  Flow: {
-    global: "Usable in every project. Can place only Global Agents.",
-    project: "Runs only in its owning Project. Can place Global Agents and that Project’s Agents.",
-    plural: "Flows",
-  },
-  Agent: {
-    global: "Usable in every project. Any Flow can place it.",
-    project: "Only Flows of its owning Project can place it.",
-    plural: "Agents",
-  },
+  Flow: { plural: "Flows" },
+  Agent: { plural: "Agents" },
 } as const;
 
 type DefinitionKind = keyof typeof ownerKindText;
@@ -221,16 +204,19 @@ export function OwnerPicker({
   kind,
   initial,
   hint,
+  quietStatus,
 }: {
   chosen: string | null;
   projects: readonly FactoryProject[];
   onChange: (owner: string | null) => void;
   disabled: boolean;
-  /** Whether a Flow or an Agent is created, for the option descriptions. */
+  /** Whether a Flow or an Agent is created, for the owning-Project menu. */
   kind: DefinitionKind;
   /** The preselected owner; `hint` says where it came from while it is still chosen. */
   initial: string | null;
   hint: string;
+  /** The caller shows a blocked owner beside its own action, so the picker stays quiet. */
+  quietStatus?: boolean;
 }) {
   const id = useId();
   const picker = ownerPicker(chosen, projects);
@@ -247,13 +233,12 @@ export function OwnerPicker({
         value={chosen === null ? "global" : "project"}
         disabled={disabled}
         onValueChange={(value) => onChange(value === "global" ? null : (firstAvailable ?? null))}
-        className="grid gap-1.5"
+        className="grid grid-cols-2 gap-2"
       >
-        <OwnerKind value="global" title="Global" description={text.global} />
+        <OwnerKind value="global" title="Global" />
         <OwnerKind
           value="project"
           title="Project"
-          description={text.project}
           disabled={disabled || (chosen === null && !firstAvailable)}
         />
       </RadioGroup.Root>
@@ -267,10 +252,12 @@ export function OwnerPicker({
           onChange={onChange}
         />
       )}
-      <OwnerPickerStatus
-        blocked={picker.blocked && `${picker.chosen.title}: ${picker.blocked}`}
-        note={chosen === initial ? hint : `Only available Projects can own new ${text.plural}.`}
-      />
+      {!quietStatus && (
+        <OwnerPickerStatus
+          blocked={picker.blocked && `${picker.chosen.title}: ${picker.blocked}`}
+          note={chosen === initial ? hint : ""}
+        />
+      )}
     </div>
   );
 }
@@ -279,26 +266,21 @@ export function OwnerPicker({
 function OwnerKind({
   value,
   title,
-  description,
   disabled,
 }: {
   value: string;
   title: string;
-  description: string;
   disabled?: boolean;
 }) {
   return (
     <RadioGroup.Item value={value} disabled={disabled} className={ownerKindClass}>
       <OwnerRadioMark />
-      <span className="grid min-w-0 flex-1 gap-0.5">
-        <span className="text-sm font-medium">{title}</span>
-        <span className="text-2xs tracking-label text-subtle-foreground">{description}</span>
-      </span>
+      <span className="text-sm font-medium">{title}</span>
     </RadioGroup.Item>
   );
 }
 
-/** The chosen owner's problem, or where its default came from. */
+/** The chosen owner's problem, or where its default came from. An empty note says nothing. */
 function OwnerPickerStatus({ blocked, note }: { blocked: string | null; note: string }) {
   if (blocked)
     return (
@@ -306,6 +288,7 @@ function OwnerPickerStatus({ blocked, note }: { blocked: string | null; note: st
         {blocked}. Choose Global or an available Project.
       </p>
     );
+  if (!note) return null;
   return <p className="text-2xs tracking-label text-subtle-foreground">{note}</p>;
 }
 
@@ -338,7 +321,10 @@ function OwningProjectMenu({
             aria-labelledby={labelId}
             aria-describedby={`${labelId}-value`}
             aria-invalid={chosen.unavailable ? true : undefined}
-            className={cn(selectFieldClass, "disabled:opacity-50")}
+            className={cn(
+              selectFieldClass,
+              "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-[3px] data-[state=open]:ring-ring/50",
+            )}
           >
             <FolderGit2
               aria-hidden
@@ -416,27 +402,12 @@ function OwnerRadioMark() {
 }
 
 /** A repository path truncated from its start, so the distinguishing end stays visible. */
-export function OwnerPath({ path, className }: { path: string; className?: string }) {
+function OwnerPath({ path, className }: { path: string; className?: string }) {
   return (
     <span className={cn("min-w-0 truncate text-left", className)} title={path} dir="rtl">
       <bdi dir="ltr">{path}</bdi>
     </span>
   );
-}
-
-/** Where New Flow's or New Agent's preselected owner came from. */
-export function ownerHint(
-  filter: StudioOwnerFilter,
-  projects: readonly FactoryProject[],
-  kind: "Flows" | "Agents",
-  fromFlow?: { readonly name: string; readonly projectId: string | null },
-) {
-  const rule = `Only available Projects can own new ${kind}.`;
-  if (fromFlow)
-    return `Prefilled from the Flow “${fromFlow.name}” (${studioOwner(fromFlow.projectId, projects).title}), so it can place this Agent. ${rule}`;
-  if (filter.kind === "all") return `Starts Global while the Owner filter shows All. ${rule}`;
-  const title = filter.kind === "global" ? "Global" : studioOwner(filter.projectId, projects).title;
-  return `Prefilled from the Owner filter (${title}). ${rule}`;
 }
 
 /**
@@ -548,60 +519,42 @@ export function OwnerTargetMenu({
 }
 
 /**
- * An editor's notice that another client changed its definition's owning Project while it had
- * unsaved changes: the edits stay, and saving waits until the new owner is acknowledged.
+ * Figma SA06m: another client changed the definition's owning Project while it had unsaved
+ * changes; the edits stay, and saving waits until the new owner is acknowledged.
  */
 export function OwnerChangeNotice({
   kind,
   change,
   projects,
   onAcknowledge,
-  className,
 }: {
   kind: "Flow" | "Agent";
   change: OwnerChange;
   projects: readonly FactoryProject[];
   onAcknowledge: (owner: string | null) => void;
-  className?: string;
 }) {
   if (change.status === "none") return null;
   const to = change.status === "changed" ? studioOwner(change.to, projects) : null;
   return (
-    <Alert
-      role="status"
-      aria-label="Owner changed elsewhere"
-      variant="attention"
-      className={className}
-    >
-      <RefreshCw aria-hidden />
-      <AlertTitle>
-        {to
+    <ProblemCard
+      tone="info"
+      icon={RefreshCw}
+      title={
+        to
           ? `This ${kind} is now ${to.projectId === null ? "Global" : `owned by ${ownerName(to)}`}`
-          : `This ${kind}’s owning Project changed elsewhere`}
-      </AlertTitle>
-      <AlertDescription>
-        {change.status === "changed" ? (
-          <>
-            <p>
-              Another client moved it from {studioOwner(change.from, projects).title}. Your unsaved
-              changes are kept; acknowledge the new owner before saving them.
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-1.5"
-              onClick={() => onAcknowledge(change.to)}
-            >
-              Acknowledge new owner
-            </Button>
-          </>
-        ) : (
-          <p>
-            Nothing was saved and your changes are kept. Waiting for Studio to show the new owner…
-          </p>
-        )}
-      </AlertDescription>
-    </Alert>
+          : `This ${kind}’s owner changed elsewhere`
+      }
+      action={
+        change.status === "changed" && (
+          <ProblemCardButton onClick={() => onAcknowledge(change.to)}>
+            Acknowledge new owner
+          </ProblemCardButton>
+        )
+      }
+    >
+      {change.status === "changed"
+        ? "Your changes are kept. Acknowledge the new owner before saving."
+        : "Your changes are kept. Waiting for Studio to show the new owner…"}
+    </ProblemCard>
   );
 }

@@ -21,6 +21,7 @@ import {
   nextLaunch,
   nextSend,
   observeFor,
+  OTHERWISE,
   parallelConditionFlow,
   report,
   resultHeld,
@@ -146,6 +147,7 @@ it("a repeated report keeps its one arrival, and an unwired selection ends it an
   // Arrange
   const f = await prepared(c, terminalConditionFlow);
   const worker = await workerAtWork(f.world, f.input);
+  await f.reopenWithCapturedOutputUnwired("gate", OTHERWISE);
   await resultReported(f.world, worker, { message: "Once." });
   await arrivalsNumbered(f.world, worker.runId, 1);
   await settled(f.world, worker);
@@ -171,6 +173,7 @@ it("a Run that returns to Active continues its Condition count", async (c) => {
   // Arrange
   const f = await prepared(c, terminalConditionFlow);
   const worker = await workerAtWork(f.world, f.input);
+  await f.reopenWithCapturedOutputUnwired("gate", OTHERWISE);
   await resultReported(f.world, worker, { message: "First pass." });
   await settled(f.world, worker);
   const later = turnBegins(f.world, worker, "later-execution");
@@ -437,6 +440,7 @@ it("a repeated report of an arrival numbered at the largest safe number keeps it
   // Arrange
   const f = await prepared(c, terminalConditionFlow);
   const worker = await workerAtWork(f.world, f.input);
+  await f.reopenWithCapturedOutputUnwired("gate", OTHERWISE);
   await resultReported(f.world, worker, { message: "Once." });
   await arrivalsNumbered(f.world, worker.runId, 1);
   await settled(f.world, worker);
@@ -554,6 +558,7 @@ it("manual Settle settles a Condition integrity Problem and cancels its waiting 
   // Arrange
   const f = await prepared(c, terminalConditionFlow);
   const worker = await workerAtWork(f.world, f.input);
+  await f.reopenWithCapturedOutputUnwired("gate", OTHERWISE);
   await integrityProblemLatched(f.world, f.h.databasePath, worker);
 
   // Act

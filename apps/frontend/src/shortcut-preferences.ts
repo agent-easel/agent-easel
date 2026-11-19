@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import {
   getDefaultShortcutBindings,
   getShortcutPlatform,
-  shortcutHint,
+  formatShortcut,
   parseShortcutStorage,
   validateShortcutBinding,
   type ParsedShortcutStorage,
@@ -100,7 +100,7 @@ export function useShortcutPreferences() {
   );
   return {
     ...state,
-    hint: (id: ShortcutId) => shortcutHint(state.bindings[id]),
+    hint: (id: ShortcutId) => formatShortcut(state.bindings[id]),
     isConflict: (id: ShortcutId) => state.conflicts.includes(id),
   };
 }

@@ -1,6 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
+import { KeyChip } from "@/components/ui/key-chip";
 import { DialogDescription, DialogTitle } from "./ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -9,22 +11,29 @@ export function WorkspaceDialogHeader({
   title,
   parents = [],
   section,
+  escChip = true,
   description,
   onClose,
   closeLabel = "Close",
   closeDisabled = false,
+  className,
 }: {
-  title: string;
+  title: ReactNode;
   /** Links to the pages above `section`, outermost first. */
   parents?: readonly { label: string; link: ReactNode }[];
   section: string;
+  /** False while a panel inside the page shows its own Esc chip. */
+  escChip?: boolean;
   description: string;
   onClose: () => void;
   closeLabel?: string;
   closeDisabled?: boolean;
+  className?: string;
 }) {
   return (
-    <header className="flex h-13 shrink-0 items-center gap-2 border-b pr-3 pl-5 text-sm">
+    <header
+      className={cn("flex h-13 shrink-0 items-center gap-2 border-b pr-3 pl-5 text-sm", className)}
+    >
       <DialogTitle className="text-sm leading-none font-normal text-muted-foreground">
         {title}
       </DialogTitle>
@@ -37,12 +46,8 @@ export function WorkspaceDialogHeader({
       ))}
       <span className="truncate font-medium text-foreground">{section}</span>
       <DialogDescription className="sr-only">{description}</DialogDescription>
-      <kbd
-        aria-hidden
-        className="ml-auto rounded-sm border px-1.5 py-0.5 font-sans text-2xs leading-none font-medium text-subtle-foreground"
-      >
-        Esc
-      </kbd>
+      <span className="flex-1" />
+      {escChip && <KeyChip aria-hidden>Esc</KeyChip>}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -56,7 +61,7 @@ export function WorkspaceDialogHeader({
             <X aria-hidden className="size-4" strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{closeLabel} (Esc)</TooltipContent>
+        <TooltipContent shortcut="Esc">{closeLabel}</TooltipContent>
       </Tooltip>
     </header>
   );

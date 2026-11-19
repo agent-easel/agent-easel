@@ -19,6 +19,7 @@ const ungranted = (channels: Channels, parentChannelId: string, projectIdsJson: 
  * a regrant revives nothing. Undelivered messages to a destination that no longer grants their
  * Projects are cancelled; a message already being sent may finish, and the action it reports stays
  * recorded. Notices of the affected chat-started Runs restart from a baseline after a regrant.
+ * Returns the ended proposals, whose Runs the caller hints once the transaction committed.
  */
 export const applyAccessRevocation = (
   sql: SqlClient.SqlClient,
@@ -66,13 +67,19 @@ export const applyAccessRevocation = (
       yield* sql`INSERT INTO chat_run_reporting (run_id,baseline) VALUES ${sql.csv(
         revoked.map((row) => sql`(${row.run_id},1)`),
       )} ON CONFLICT(run_id) DO UPDATE SET baseline=1,final=0`;
+    return voided.map((row) => row.id);
   });
 
 /**
  * Retires the live proposals of an application being replaced: its buttons can never confirm
  * again, even if that application operates again later. Owed receipts stay owed. Call inside the
- * transaction that records the replacing application.
+ * transaction that records the replacing application; returns the retired proposals, whose Runs
+ * the caller hints once it committed.
  */
 export const retireApplicationProposals = (sql: SqlClient.SqlClient, applicationId: string) =>
-  sql`UPDATE chat_proposals SET state='ended',ended_reason='application'
-    WHERE application_id=${applicationId} AND state IN ('preparing','presented','accepting')`;
+  Effect.map(
+    sql<{ id: string }>`UPDATE chat_proposals SET state='ended',ended_reason='application'
+      WHERE application_id=${applicationId} AND state IN ('preparing','presented','accepting')
+      RETURNING id`,
+    (rows) => rows.map((row) => row.id),
+  );

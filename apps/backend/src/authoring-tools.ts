@@ -394,7 +394,7 @@ export const authoringTools: Tool[] = [
   {
     name: "factory_check_flow",
     description:
-      "Check readiness of a Flow's latest saved revision, as Studio's Check readiness does. Fix the listed issue paths before a Run is started.",
+      "Check readiness of a Flow's latest saved revision, the same live graph and saved-Agent check Studio shows. It does not check an unsaved draft or live execution readiness. Fix the listed issue paths before a Run is started.",
     inputSchema: {
       type: "object",
       properties: { flowId },

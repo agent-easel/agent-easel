@@ -1,19 +1,49 @@
-import { expect, it } from "vite-plus/test";
+import { afterEach, expect, it, vi } from "vite-plus/test";
 import {
-  canvasShortcutHelp,
+  formatShortcut,
   getDefaultShortcutBindings,
   parseShortcutStorage,
   shortcutDefinitions,
-  shortcutHint,
   type ShortcutBinding,
   type ShortcutPlatform,
   validateShortcutBinding,
-  withShortcutHint,
 } from "../src/keyboard-shortcuts.ts";
 
 function modKey(key: string, extra: Partial<ShortcutBinding> = {}): ShortcutBinding {
   return { key, mod: true, alt: false, shift: false, ...extra };
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+it.each([
+  { binding: modKey("ArrowUp", { alt: true }), keys: "⌥⌘↑" },
+  { binding: modKey("Backspace"), keys: "⌘⌫" },
+  { binding: modKey("Enter"), keys: "⌘↵" },
+  { binding: modKey("s", { alt: true, shift: true }), keys: "⌥⇧⌘S" },
+])("displays the Mac chord as $keys", ({ binding, keys }) => {
+  // Arrange
+  vi.stubGlobal("navigator", { platform: "MacIntel" });
+
+  // Act
+  const label = formatShortcut(binding);
+
+  // Assert
+  expect(label).toBe(keys);
+});
+
+it("keeps Windows and Linux shortcut modifiers readable in Ctrl-plus notation", () => {
+  // Arrange
+  vi.stubGlobal("navigator", { platform: "Linux x86_64" });
+  const binding = modKey("n", { alt: true, shift: true });
+
+  // Act
+  const label = formatShortcut(binding);
+
+  // Assert
+  expect(label).toBe("Ctrl+Alt+Shift+N");
+});
 
 const v1Defaults = {
   palette: modKey("k"),
@@ -176,35 +206,13 @@ it("null stored bindings produce a visible recovery issue", () => {
   expect(restored?.storageIssue).toMatch(/could not be restored/i);
 });
 
-it("an unbound command shows its tooltip text without a hint", () => {
+it("an unbound command produces no shortcut hint", () => {
   // Arrange
   const binding = null;
 
   // Act
-  const text = withShortcutHint("Archive Run…", shortcutHint(binding));
+  const label = formatShortcut(binding);
 
   // Assert
-  expect(text).toBe("Archive Run…");
-});
-
-it("a bound command shows its tooltip text with the formatted binding", () => {
-  // Arrange
-  const binding: ShortcutBinding = { key: "F2", mod: false, alt: false, shift: false };
-
-  // Act
-  const text = withShortcutHint("Rename", shortcutHint(binding));
-
-  // Assert
-  expect(text).toBe("Rename · F2");
-});
-
-it("the canvas helper line leaves out an unbound canvas command", () => {
-  // Arrange
-  const hints = { zoomIn: "+ / =", zoomOut: undefined, fit: undefined };
-
-  // Act
-  const help = canvasShortcutHelp(hints);
-
-  // Assert
-  expect(help).toBe("+ / = zoom; arrows pan");
+  expect(label).toBeUndefined();
 });

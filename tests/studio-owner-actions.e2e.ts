@@ -7,7 +7,7 @@ import {
   readAgentDefinition,
 } from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
-import { chooseAgentAction, expectSavedAgentRevision } from "./support/studio.ts";
+import { chooseAgentAction, chooseFlowAction, expectSavedAgentRevision } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
@@ -21,8 +21,9 @@ import {
 const viewport = { width: 1440, height: 900 };
 const unique = () => crypto.randomUUID().slice(0, 8);
 /** Settles dialog and menu transitions before a screenshot. */
+// allSettled: a focus transition that a later style change cancels rejects its `finished`.
 const settled =
-  "Promise.all(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished))";
+  "Promise.allSettled(document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished)).then(() => null)";
 
 const agentEditor = (screen: Screen) => screen.getByRole("region", "Agent editor");
 
@@ -99,7 +100,7 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   await app.screenshot("change-owner-refused");
   await refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }).tap();
   const duplicate = screen.getByRole("dialog", `Duplicate “${agent.name}”`);
-  await expect(duplicate.getByRole("button", "Target owner")).toContainText("Northwind");
+  await expect(duplicate.getByRole("button", "Owning Project")).toContainText("Northwind");
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused-duplicate");
   // The Duplicate that replaced the refusal still returns focus to the menu that opened the chain.
@@ -126,14 +127,12 @@ test("Flow Duplicate into Global keeps or copies global Agents, copies the Proje
   await screen.getByRole("button", "More Flow actions").tap();
   await screen.getByRole("menuitem", "Duplicate…").tap();
   const dialog = screen.getByRole("dialog", `Duplicate “${flow.name}”`);
-  await dialog.getByRole("button", "Target owner").tap();
-  await screen.getByRole("menuitemradio", /^Global/).tap();
-  await expect(
-    dialog.getByRole("radiogroup", shared.name).getByRole("radio", "Keep shared"),
-  ).toBeChecked();
-  await expect(dialog).toContainText("Copied into target");
-  await dialog.getByRole("radiogroup", shared.name).getByRole("radio", "Copy").tap();
-  await expect(dialog).toContainText("Creates 1 Flow and 2 Agents as global definitions.");
+  await dialog.getByRole("radio", "Global", { exact: true }).tap();
+  const sharedChoice = dialog.getByRole("radiogroup", shared.name);
+  await expect(sharedChoice.getByRole("radio", "Keep shared")).toBeChecked();
+  await expect(dialog).toContainText("Copied");
+  await sharedChoice.getByRole("radio", "Copy").tap();
+  await expect(sharedChoice.getByRole("radio", "Copy")).toBeChecked();
   await browser.evaluate(settled);
   await app.screenshot("flow-duplicate-plan");
 
@@ -165,18 +164,18 @@ test("Import creates the file's definitions in the chosen target Project", async
   const file = await exportDefinitionFile(app.baseUrl, "flow", northwind.id);
   await app.open("/studio/flows");
   // The list heading renders before the connection is current; a delivered row means it is.
-  await expect(screen.getByRole("heading", "Northwind release", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", /Northwind release/)).toBeVisible();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
-  const review = screen.getByRole("dialog", "Review the import");
-  await expect(review.getByRole("button", "Target owner")).toContainText("Global");
-  await review.getByRole("button", "Target owner").tap();
+  const review = screen.getByRole("dialog", /^Import “/);
+  await review.getByRole("radio", "Project", { exact: true }).tap();
+  await review.getByRole("button", "Owning Project", { exact: true }).tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
   await browser.evaluate(settled);
   await app.screenshot("import-target");
   const before = new Set((await listFlows(app.baseUrl)).map((flow) => flow.id));
 
   // Act
-  await review.getByRole("button", "Confirm import", { exact: true }).tap();
+  await review.getByRole("button", "Import", { exact: true }).tap();
 
   // Assert
   await expect(screen.getByLabel("Flow name")).toHaveValue("Northwind release");
@@ -186,7 +185,7 @@ test("Import creates the file's definitions in the chosen target Project", async
   await app.screenshot("import-target-opened");
 });
 
-test("Import… in the New Agent menu creates the file's Agent and opens it", async ({
+test("Import on the Agents list creates the file's Agent and opens it", async ({
   app,
   screen,
   browser,
@@ -197,7 +196,7 @@ test("Import… in the New Agent menu creates the file's Agent and opens it", as
   const file = await exportDefinitionFile(app.baseUrl, "agent", source.id);
   await app.open("/studio/agents");
   // A delivered row means the connection is current.
-  await expect(screen.getByRole("link", source.name, { exact: true })).toBeVisible();
+  await expect(screen.getByRole("link", source.name, { exact: false })).toBeVisible();
   // Records that Import… opens the file chooser; the test supplies the chosen file below.
   await browser.evaluate(
     `document.querySelector('input[aria-label="Choose a Factory export file"]').addEventListener("click", (event) => { event.preventDefault(); document.body.dataset.chooserOpened = "true"; }, { once: true })`,
@@ -205,14 +204,12 @@ test("Import… in the New Agent menu creates the file's Agent and opens it", as
   const before = new Set((await listAgentDefinitions(app.baseUrl)).map((agent) => agent.id));
 
   // Act
-  await screen.getByRole("button", "Other ways to add an Agent").tap();
-  await browser.evaluate(settled);
-  await app.screenshot("new-agent-menu");
-  await screen.getByRole("menuitem", "Import", { exact: true }).tap();
+  await app.screenshot("agents-import");
+  await screen.getByRole("button", "Import", { exact: true }).tap();
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
   await screen
-    .getByRole("dialog", "Review the import")
-    .getByRole("button", "Confirm import", { exact: true })
+    .getByRole("dialog", /^Import “/)
+    .getByRole("button", "Import", { exact: true })
     .tap();
 
   // Assert
@@ -235,15 +232,15 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   const northwind = (await ownedFlow(app.baseUrl, "Northwind release")).projectId;
   const source = await ownedFlow(app.baseUrl, "Docs refresh");
   await app.open(`/studio/flows/${source.id}`);
-  await expect(screen.getByText("Docs site is unavailable — this Flow can’t start")).toBeVisible();
+  const gone = screen.getByText("Docs site is no longer in T3", { exact: true });
+  await expect(gone).toBeVisible();
   await app.screenshot("rescue-banner");
-  await screen.getByRole("button", "Duplicate to…", { exact: true }).tap();
+  await chooseFlowAction(screen, "Duplicate…");
   const dialog = screen.getByRole("dialog", "Duplicate “Docs refresh”");
-  await expect(dialog.getByText(/Choose Global or an available Project\./)).toBeVisible();
   await expect(dialog.getByRole("button", "Duplicate", { exact: true })).toBeDisabled();
-  await dialog.getByRole("button", "Target owner").tap();
+  await dialog.getByRole("button", "Owning Project", { exact: true }).tap();
   await screen.getByRole("menuitemradio", /^Northwind/).tap();
-  await expect(dialog).toContainText("Docs site Agent · can’t be placed in Northwind");
+  await expect(dialog).toContainText("Copied");
   await browser.evaluate(settled);
   await app.screenshot("rescue-plan");
 
@@ -258,7 +255,7 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   );
   assert.equal(copy.projectId, northwind);
   assert.equal((await readFlow(app.baseUrl, source.id)).projectId, source.projectId);
-  await expect(screen.getByText("Docs site is unavailable — this Flow can’t start")).toHaveCount(0);
+  await expect(gone).toHaveCount(0);
   await app.screenshot("rescue-opened");
 });
 
@@ -271,8 +268,8 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   const { northwind, agent } = await openGlobalAgent({ app, browser }, "Dirty owner");
   await screen.getByLabel("Prompt", { exact: true }).fill("Edited while the owner moves.");
   await changeAgentOwnerElsewhere(app.baseUrl, agent, northwind);
-  const notice = screen.getByRole("status", "Owner changed elsewhere");
-  await expect(notice).toContainText("This Agent is now owned by Northwind");
+  const notice = screen.getByText("This Agent is now owned by Northwind", { exact: true });
+  await expect(notice).toBeVisible();
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await expect(screen.getByLabel("Prompt", { exact: true })).toHaveValue(
     "Edited while the owner moves.",
@@ -280,7 +277,7 @@ test("a dirty Agent editor acknowledges an owner changed elsewhere before saving
   await app.screenshot("dirty-owner-notice");
 
   // Act
-  await notice.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
+  await screen.getByRole("button", "Acknowledge new owner", { exact: true }).tap();
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert

@@ -4,7 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /** Icon button that copies `text`; its tooltip and a polite status report the outcome. */
-export function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({
+  text,
+  label,
+  showLabel = false,
+}: {
+  text: string;
+  label: string;
+  showLabel?: boolean;
+}) {
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
   async function copy() {
     try {
@@ -24,11 +32,13 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
           <Button
             type="button"
             variant="ghost"
-            size="icon-sm"
+            size={showLabel ? "sm" : "icon-sm"}
+            className={showLabel ? "w-fit" : undefined}
             aria-label={label}
             onClick={() => void copy()}
           >
             {copied === "copied" ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {showLabel && tip}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{tip}</TooltipContent>

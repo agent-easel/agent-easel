@@ -1,7 +1,7 @@
 import type { ELK, ElkExtendedEdge, ElkNode } from "elkjs/lib/elk-api.js";
 import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { isCanvasPosition } from "@t3-factory/domain-validation";
-import { incomingPortIndex, incomingWires, wireRouteKey } from "./graph.ts";
+import { exitRows, incomingIndex, wireRouteKey, type IncomingIndex } from "./graph.ts";
 
 /** Exits must include unavailable wired endpoints, in the same order the canvas draws them. */
 export type LayoutBlock = FlowBlock & {
@@ -62,11 +62,11 @@ function flowInputPortId() {
 
 function blockPorts<B extends LayoutBlock>(
   block: B,
-  graph: LayoutGraph<B>,
+  index: IncomingIndex,
   dims: FlowLayoutDimensions<B>,
 ) {
   const { ports } = dims;
-  const incoming = incomingWires(graph, block.id);
+  const incoming = index.wires(block.id);
   const inputPorts =
     incoming.length > 0
       ? incoming.map((_wire, index) => ({
@@ -162,7 +162,7 @@ function flowInputNode<B extends LayoutBlock>(dims: FlowLayoutDimensions<B>): El
 
 function blockNode<B extends LayoutBlock>(
   block: B,
-  graph: LayoutGraph<B>,
+  incoming: IncomingIndex,
   dims: FlowLayoutDimensions<B>,
 ): ElkNode {
   const node: ElkNode = {
@@ -170,29 +170,36 @@ function blockNode<B extends LayoutBlock>(
     width: dims.blockWidth,
     height: dims.blockHeight(block),
     layoutOptions: { "org.eclipse.elk.portConstraints": "FIXED_POS" },
-    ports: blockPorts(block, graph, dims),
+    ports: blockPorts(block, incoming, dims),
   };
   return node;
 }
 
-/** A Continuation's single output is unnamed, so its wires carry no label to reserve room for. */
-function edgeLabels<B extends LayoutBlock>(
-  graph: LayoutGraph<B>,
-  connection: FlowGraph["connections"][number],
-  dims: FlowLayoutDimensions<B>,
-) {
-  const source = graph.blocks.find((block) => block.id === connection.sourceBlockId);
-  if (!dims.labels || source?.kind === "continuation") return [];
-  const target = graph.blocks.find((block) => block.id === connection.targetBlockId);
-  const exit = source?.exits.find((item) => item.id === connection.exitId)?.name || "exit";
-  const text = `${exit} → ${target?.name || "Unnamed block"}`;
-  return [{ text, ...dims.labelSize(text) }];
+/**
+ * Each wire's label from its exit's and target's names, looked up once per graph. A
+ * Continuation's single output is unnamed, so its wires carry no label to reserve room for.
+ */
+function edgeLabeller<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayoutDimensions<B>) {
+  const blocks = new Map<string, B>();
+  for (const block of graph.blocks) if (!blocks.has(block.id)) blocks.set(block.id, block);
+  const rows = exitRows(graph.blocks);
+  return (connection: FlowGraph["connections"][number]) => {
+    const source = blocks.get(connection.sourceBlockId);
+    if (!dims.labels || source?.kind === "continuation") return [];
+    const target = blocks.get(connection.targetBlockId);
+    const row = rows(connection.sourceBlockId, connection.exitId);
+    const exit = (row === undefined ? undefined : source?.exits[row]?.name) || "exit";
+    const text = `${exit} → ${target?.name || "Unnamed block"}`;
+    return [{ text, ...dims.labelSize(text) }];
+  };
 }
 
 function buildEdges<B extends LayoutBlock>(
   graph: LayoutGraph<B>,
+  incoming: IncomingIndex,
   dims: FlowLayoutDimensions<B>,
 ): ElkExtendedEdge[] {
+  const edgeLabels = edgeLabeller(graph, dims);
   const edges: ElkExtendedEdge[] = [];
   for (const targetBlockId of graph.flowInput.targetBlockIds) {
     const id = wireRouteKey({ kind: "flow-input" }, targetBlockId);
@@ -200,22 +207,19 @@ function buildEdges<B extends LayoutBlock>(
       id,
       sources: [flowInputPortId()],
       targets: [
-        elkInputPortId(
-          targetBlockId,
-          incomingPortIndex(graph, targetBlockId, { kind: "flow-input" }),
-        ),
+        elkInputPortId(targetBlockId, incoming.portIndex(targetBlockId, { kind: "flow-input" })),
       ],
     });
   }
   for (const connection of graph.connections) {
     const { sourceBlockId, exitId, targetBlockId } = connection;
     const id = wireRouteKey({ kind: "exit", sourceBlockId, exitId }, targetBlockId);
-    const index = incomingPortIndex(graph, targetBlockId, { kind: "exit", sourceBlockId, exitId });
+    const index = incoming.portIndex(targetBlockId, { kind: "exit", sourceBlockId, exitId });
     edges.push({
       id,
       sources: [exitPortId(connection.sourceBlockId, connection.exitId)],
       targets: [elkInputPortId(connection.targetBlockId, index)],
-      labels: edgeLabels(graph, connection, dims),
+      labels: edgeLabels(connection),
     });
   }
   return edges;
@@ -225,14 +229,15 @@ export function buildElkGraph<B extends LayoutBlock>(
   graph: LayoutGraph<B>,
   dims: FlowLayoutDimensions<B>,
 ): ElkNode {
+  const incoming = incomingIndex(graph);
   return {
     id: "root",
     layoutOptions: ROOT_LAYOUT,
     children: [
       flowInputNode(dims),
-      ...orderedBlocks(graph).map((block) => blockNode(block, graph, dims)),
+      ...orderedBlocks(graph).map((block) => blockNode(block, incoming, dims)),
     ],
-    edges: buildEdges(graph, dims),
+    edges: buildEdges(graph, incoming, dims),
   };
 }
 
@@ -284,8 +289,7 @@ export {
 export {
   canvasGraph,
   CONDITION_UNWIRED_PORTS,
-  incomingPortIndex,
-  incomingWires,
+  exitRows,
   type CanvasBlock,
   type CanvasGraph,
   wireRouteKey,

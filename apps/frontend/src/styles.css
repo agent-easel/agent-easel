@@ -126,7 +126,7 @@
   --border-hover: #a1a1aa;
   --input: #d4d4d8;
   --ring: #6366f1;
-  --overlay: rgb(24 24 27 / 0.28);
+  --overlay: rgb(24 24 27 / 0.56);
 
   /* Status */
   --destructive: #dc2626;
@@ -138,7 +138,7 @@
 
   /* Elevation */
   --shadow-floating: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 10px rgb(0 0 0 / 0.06);
-  --shadow-panel: 0 1px 3px rgb(0 0 0 / 0.06), 0 16px 40px rgb(0 0 0 / 0.12);
+  --shadow-panel: 0 2px 6px rgb(0 0 0 / 0.16), 0 16px 40px rgb(0 0 0 / 0.28);
   --shadow-lift: 0 14px 20px rgb(0 0 0 / 0.16);
 }
 
@@ -170,9 +170,9 @@
   width: 280px;
 }
 
-/* Keep the native window controls outside the inset Studio dialog. */
-html[data-desktop="true"] [data-studio] {
-  top: 48px;
+/* Clear the native window controls where the Studio header meets the title bar. */
+html[data-desktop="true"] [data-studio] > header {
+  padding-left: 80px;
 }
 
 @media (prefers-reduced-motion: reduce) {

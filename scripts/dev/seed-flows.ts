@@ -152,8 +152,8 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
 }
 
 /** Review rounds that return changes to the worker until arrival 3 escalates to you, parallel
- * approvals where only the first reaches your decision, and a saved Condition draft whose rules
- * block Start. */
+ * approvals where only the first reaches your decision and later ones go into the release notes,
+ * and a saved Condition draft whose rules block Start. */
 async function createConditionFlows(factory: Factory, agents: DemoAgents) {
   const graph = (rules: Parameters<typeof conditionBlock>[2]) => ({
     flowInput: flowInput(["worker"], { x: 40, y: 180 }),
@@ -198,11 +198,13 @@ async function createConditionFlows(factory: Factory, agents: DemoAgents) {
         x: 700,
         y: 180,
       }),
+      agentBlock("notes", "Note the extra approval", agents.releaseNotes, { x: 1080, y: 20 }),
       humanStep("decision", "Your decision", { x: 1080, y: 180 }),
     ],
     connections: [
       connection("reviewer", "approved", "first"),
       connection("accessibility", "approved", "first"),
+      connection("first", "later", "notes"),
       connection("first", OTHERWISE, "decision"),
     ],
   });

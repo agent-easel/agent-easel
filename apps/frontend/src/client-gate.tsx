@@ -24,6 +24,7 @@ import { api, ApiError } from "./api.ts";
 import { AppearanceSourceContext, ScopeContext, ServerIdContext } from "./client-scope.ts";
 import { forgetColors, profileStorage } from "./inherited-colors-cache.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
+import { clockTimeWithSeconds } from "./time-format.ts";
 import { desktopBridge } from "./desktop-bridge.ts";
 import { transport, useLiveDelivery, useTransport } from "./transport.ts";
 
@@ -312,7 +313,7 @@ export function MutationGate({ children }: { children: ReactNode }) {
 }
 
 function OfflineBanner({ observedAt }: { observedAt: number | null }) {
-  const time = observedAt === null ? "an earlier check" : new Date(observedAt).toLocaleTimeString();
+  const time = observedAt === null ? "an earlier check" : clockTimeWithSeconds(observedAt);
   return (
     <ConnectivityBanner label="Offline" icon={CloudOff}>
       <strong className="font-medium">Offline.</strong> Showing the state last observed at {time}.

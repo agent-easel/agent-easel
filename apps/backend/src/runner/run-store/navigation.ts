@@ -1,5 +1,7 @@
 import {
   attentionPresentation,
+  awaitsReviewInT3,
+  type ArchivedRunMatch,
   type Result,
   type RunAttention,
   type RunNavigationEntry,
@@ -8,6 +10,7 @@ import * as Effect from "effect/Effect";
 import { currentWorkingMessages } from "./current-report.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { readRunSettlementStates } from "./manual-settlement.ts";
+import { pendingRunWork } from "./settlement.ts";
 import { runLifecycle } from "./lifecycle.ts";
 import { failure } from "../../result.ts";
 import { readWorkerRepositories } from "./worker-repositories.ts";
@@ -33,19 +36,23 @@ export function openRunNavigation(database: RunnerDatabase) {
             creation_key: string;
             settled_at: string | null;
             archived_at: null;
+            pending_work: number;
             snoozed: number | null;
             woke: number | null;
             project_id: string;
             project_title: string;
             workspace_root: string;
             availability: RunNavigationEntry["project"]["availability"];
-          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,
+            workspace_state: "preparing" | "bound" | "failed" | null;
+          }>`SELECT r.id,r.number,r.title,r.title_provenance,r.created_at,r.creation_key,r.settled_at,r.archived_at,rp.snoozed,rp.woke,w.state AS workspace_state,
           COALESCE((SELECT MAX(e.observed_at) FROM run_events e WHERE e.run_id=r.id AND e.kind IN ('execution-observed','report-accepted','working-reported','human-answered','attention-appeared','handoff-released','continuation-passed','run-settled','run-activated')),r.started_at) AS last_activity_at,
+          CASE WHEN r.settled_at IS NULL THEN EXISTS(${pendingRunWork(sql, sql`r.id`)}) ELSE 0 END AS pending_work,
           f.name AS flow_name,p.project_icon_json,p.favicon_path,
           p.id AS project_id,p.title AS project_title,p.workspace_root,p.availability
           FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
           JOIN flow_revisions f ON f.id=r.flow_revision_id
-          LEFT JOIN run_presentation rp ON rp.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
+          LEFT JOIN run_presentation rp ON rp.run_id=r.id
+          LEFT JOIN run_workspaces w ON w.run_id=r.id WHERE r.archived_at IS NULL ORDER BY r.created_at DESC,r.creation_key`;
           const settlements = yield* readRunSettlementStates(sql, rows);
           const origins = yield* readRunOrigins(sql);
           const titleGenerations = yield* readTitleGenerations(
@@ -57,7 +64,9 @@ export function openRunNavigation(database: RunnerDatabase) {
             block_id: string;
             state: RunNavigationEntry["blocks"][number]["state"];
             freshness: RunNavigationEntry["blocks"][number]["freshness"];
-          }>`SELECT run_id,block_id,state,freshness FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
+            report_status: "working" | "finished" | null;
+            engine_status: string | null;
+          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
           const working = new Map(
             (yield* currentWorkingMessages(sql)).map((row) => [
               `${row.run_id}/${row.block_id}`,
@@ -65,6 +74,17 @@ export function openRunNavigation(database: RunnerDatabase) {
             ]),
           );
           const byRun = new Map<string, RunNavigationEntry["blocks"][number][]>();
+          const reviewInT3 = new Set(
+            blocks
+              .filter((block) =>
+                awaitsReviewInT3({
+                  state: block.state,
+                  reportStatus: block.report_status,
+                  engineStatus: block.engine_status,
+                }),
+              )
+              .map((block) => block.run_id),
+          );
           const repositories = new Map<string, RunNavigationEntry["repositories"][number][]>();
           for (const { runId, ...worker } of yield* readWorkerRepositories(sql)) {
             const entries = repositories.get(runId) ?? [];
@@ -145,17 +165,41 @@ export function openRunNavigation(database: RunnerDatabase) {
                   snoozed: active && !!row.snoozed,
                   woke: active && !!row.woke,
                 },
+                pendingWork: !!row.pending_work,
                 attention: {
                   needsInput:
                     settlement === null &&
-                    matters.some((matter) => matter.presentation === "needs-input"),
-                  problem: matters.some((matter) => matter.presentation === "problem"),
+                    (reviewInT3.has(row.id) ||
+                      matters.some((matter) => matter.presentation === "needs-input")),
+                  problem:
+                    (active && row.workspace_state === "failed") ||
+                    matters.some((matter) => matter.presentation === "problem"),
                   matters,
                 },
               };
             }),
           };
         }),
+      );
+    },
+    searchArchivedRuns(query: string): Effect.Effect<Result<readonly ArchivedRunMatch[]>, unknown> {
+      const search = query.trim().toLowerCase();
+      if (!search || search.startsWith(">")) return Effect.succeed({ ok: true, value: [] });
+      const number = /^#?(\d+)$/.exec(search)?.[1];
+      return database.transaction((sql) =>
+        Effect.map(
+          sql<ArchivedRunMatch>`SELECT r.id,r.number,r.title,p.title AS projectTitle
+            FROM runs r JOIN tasks t ON t.id=r.task_id JOIN projects p ON p.id=t.project_id
+            WHERE r.archived_at IS NOT NULL ${number === undefined ? sql`` : sql`AND CAST(r.number AS TEXT)=${number}`}
+            ORDER BY r.created_at DESC,r.creation_key`,
+          (rows) => ({
+            ok: true as const,
+            value:
+              number === undefined
+                ? rows.filter((row) => row.title.toLowerCase().includes(search))
+                : rows,
+          }),
+        ),
       );
     },
     renameRun(id: string, title: string): Effect.Effect<Result<void>, unknown> {

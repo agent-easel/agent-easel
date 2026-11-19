@@ -498,16 +498,18 @@ export function openRunnerStart(
             message: `Agent ${id}: ${agent.error.message}`,
           });
       }
-      // An Agent saved after the Flow read is what this Run captures, so recheck the graph against
-      // it once every Agent was read; this reports a model-less Agent as `agent_model_required`.
-      if (read.length === ids.size)
-        issues.push(
-          ...flowReadiness(
-            flow.graph,
-            read.map((agent) => readinessAgent(agent, new Map())),
-            flow.projectId,
-          ).issues,
-        );
+      // Recheck the graph against the Agents this Start could read. A model-less Agent reports
+      // `agent_model_required` even when another referenced Agent could not be read. An unread
+      // Agent stays the single `agent_unavailable` above; its block's "choose a saved Agent"
+      // finding would only repeat that.
+      const readIds = new Set(read.map((agent) => agent.id));
+      issues.push(
+        ...flowReadiness(
+          flow.graph,
+          read.map((agent) => readinessAgent(agent, new Map())),
+          flow.projectId,
+        ).issues.filter((issue) => !unreadAgentIssue(flow, issue.path, readIds)),
+      );
       for (const saved of read) {
         // A model-less Agent has no settings to check, so it never also reports them unavailable.
         // It has no Project overrides either, so its own null settings decide that.
@@ -535,4 +537,13 @@ export function openRunnerStart(
     });
   }
   return { start, startText, startBlockers };
+}
+
+/** A graph issue on an Agent block this Start could not read. Those blocks already report
+ * `agent_unavailable`. */
+function unreadAgentIssue(flow: FlowDraft, path: string, readIds: ReadonlySet<string>) {
+  const index = /^graph\.blocks\.(\d+)(?:\.|$)/.exec(path);
+  if (!index) return false;
+  const block = flow.graph.blocks[Number(index[1])];
+  return block?.kind === "agent" && block.agentId !== null && !readIds.has(block.agentId);
 }

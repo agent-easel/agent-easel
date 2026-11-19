@@ -1,21 +1,22 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type {
+  AgentCapabilities,
   AgentDefinition,
   AgentExecutionSettings,
+  AgentModelOptionDescriptor,
+  AgentModelOptionValue,
   FactoryProject,
 } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { DialogFooter, DialogHeader } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { optionValue, resolveAgentModel } from "@t3-factory/domain-validation";
+import { modelOptionLabel } from "@/lib/agent-display";
+import { revisionExitLines, revisionLine, type RevisionLine } from "../../revision-diff.ts";
+import { RevisionComparison } from "../revision-comparison.tsx";
 import type { AgentContent, AgentDraftModel, AgentDraftSnapshot } from "../../agent-draft.ts";
 import { studioOwner } from "../../studio-definitions.ts";
+import { ProblemCard, ProblemCardButton } from "../problem-card.tsx";
 
 const updatedNoticeMs = 4000;
 
@@ -24,96 +25,134 @@ type ComparedContent = Omit<AgentContent, "execution"> & {
   readonly execution: AgentContent["execution"] | null;
 };
 
-const optionList = (execution: AgentExecutionSettings | null) =>
-  (execution?.modelOptions ?? []).map(({ id, value }) => `${id}=${String(value)}`).join(", ") ||
-  "(none)";
+function workerOptionLines(
+  options: readonly AgentModelOptionValue[],
+  descriptors: readonly AgentModelOptionDescriptor[],
+): RevisionLine[] {
+  const byId = new Map(descriptors.map((descriptor) => [descriptor.id, descriptor]));
+  const saved = new Set(options.map((option) => option.id));
+  return [
+    ...options.map((option) => {
+      const descriptor = byId.get(option.id);
+      const value = descriptor ? modelOptionLabel(descriptor, option.value) : String(option.value);
+      return revisionLine(`  ${descriptor?.label ?? "Unknown option"}  ${value}`, option);
+    }),
+    ...descriptors
+      .filter((descriptor) => !saved.has(descriptor.id))
+      .map((descriptor) => {
+        const value = optionValue(options, descriptor);
+        return revisionLine(
+          `  ${descriptor.label}  ${modelOptionLabel(descriptor, value)} · Default`,
+          descriptor.id,
+        );
+      }),
+  ];
+}
 
-/** How one side of the comparison reads: every saved field, read-only, prompt last. */
-export function comparedPresentation(
-  { name, prompt, execution, exits, projectOverrides }: ComparedContent,
-  projects: readonly FactoryProject[],
-) {
-  // Two Projects may share a title, so the comparison also names each by its Factory id.
-  const projectName = (projectId: string) =>
-    projects.some((project) => project.id === projectId)
-      ? `${studioOwner(projectId, projects).title} (${projectId})`
-      : `Unknown Project (${projectId})`;
-  const overrideLines = projectOverrides.map(
-    ({ projectId, execution: settings }) =>
-      `  ${projectName(projectId)}: ${settings.environmentId} · ${settings.providerInstanceId} · ${settings.modelId} · ${optionList(settings)}`,
-  );
-  const exitLines = exits.map(
-    (exit) =>
-      `  ${exit.name || "(unnamed)"}${exit.messageRequired ? " · message required" : ""}${exit.description ? ` — ${exit.description}` : ""}`,
+/** Display every saved Worker setting, including options missing from the current catalog. */
+function workerLines(
+  settings: AgentExecutionSettings | null,
+  capabilities: AgentCapabilities | null,
+): RevisionLine[] {
+  if (!settings || (!settings.environmentId && !settings.providerInstanceId && !settings.modelId))
+    return ["  Needs a model"];
+  const catalog = capabilities?.state === "ready" ? capabilities : null;
+  const { provider, model } = resolveAgentModel(settings, catalog);
+  const environment = catalog?.environments.find(
+    (item) => item.environmentId === settings.environmentId,
   );
   return [
-    `Name: ${name}`,
-    `Environment: ${execution?.environmentId || "(none)"}`,
-    `Provider: ${execution?.providerInstanceId || "(none)"}`,
-    `Model: ${execution?.modelId || "(none)"}`,
-    `Options: ${optionList(execution)}`,
-    `Project overrides:${overrideLines.length ? "" : " (none)"}`,
-    ...overrideLines,
-    `Exits:${exitLines.length ? "" : " (none)"}`,
-    ...exitLines,
-    "Prompt:",
-    prompt,
-  ].join("\n");
+    revisionLine(
+      `  Environment  ${environment?.label ?? "Unknown environment"}`,
+      settings.environmentId,
+    ),
+    revisionLine(
+      `  Provider  ${provider?.displayName ?? "Unknown provider"}`,
+      settings.providerInstanceId,
+    ),
+    revisionLine(`  Model  ${model?.label ?? "Unknown model"}`, settings.modelId),
+    ...workerOptionLines(settings.modelOptions, model?.options ?? []),
+  ];
 }
 
-function Presentation({
-  title,
-  content,
-  projects,
-}: {
-  title: string;
-  content: ComparedContent;
-  projects: readonly FactoryProject[];
-}) {
-  return (
-    <div className="min-w-0">
-      <h3 className="mb-1.5 text-base font-semibold">{title}</h3>
-      <pre
-        aria-label={title}
-        className="max-h-64 overflow-auto rounded-md border bg-muted p-2 font-mono text-2xs whitespace-pre-wrap break-words"
-      >
-        {comparedPresentation(content, projects)}
-      </pre>
-    </div>
-  );
+/** One side of the comparison, using labels for its stored references. */
+export function comparedAgentLines(
+  { name, prompt, execution, exits, projectOverrides }: ComparedContent,
+  projects: readonly FactoryProject[],
+  capabilities: AgentCapabilities | null,
+): RevisionLine[] {
+  const projectName = (projectId: string) => {
+    const owner = studioOwner(projectId, projects);
+    const alike = projects.filter(
+      (project) => studioOwner(project.id, projects).title === owner.title,
+    );
+    return alike.length > 1 && owner.detail ? `${owner.title} (${owner.detail})` : owner.title;
+  };
+  return [
+    `Name  ${name}`,
+    "",
+    "Worker",
+    ...workerLines(execution, capabilities),
+    ...(projectOverrides.length
+      ? [
+          "",
+          "Project overrides",
+          ...projectOverrides.flatMap((override) => [
+            revisionLine(projectName(override.projectId), override.projectId),
+            ...workerLines(override.execution, capabilities),
+          ]),
+        ]
+      : []),
+    "",
+    "Exits",
+    ...exits.flatMap((exit) => revisionExitLines(exit, "  ")),
+    "",
+    "Prompt",
+    ...prompt.split("\n").map((line) => `  ${line}`),
+  ];
 }
 
-/**
- * The Agent editor's revision notices: a clean draft's brief "Updated to revision N", and for a
- * draft whose edits are kept while Factory holds a newer revision (saved elsewhere, or found by
- * a stale save) the comparison with that revision. Every action names the revision it shows.
- */
-export function AgentRevisionPanel({
+/** A clean draft's brief "Updated to revision N" after it followed a revision saved elsewhere. */
+export function AgentUpdatedNotice({
   draft,
   state,
-  projects,
 }: {
   draft: AgentDraftModel;
   state: AgentDraftSnapshot;
-  /** Names each Project override in the comparison. */
-  projects: readonly FactoryProject[];
 }) {
-  const { conflict, updatedTo } = state;
+  const { updatedTo } = state;
   useEffect(() => {
     if (updatedTo === null) return;
     const timer = setTimeout(() => draft.dismissUpdate(), updatedNoticeMs);
     return () => clearTimeout(timer);
   }, [draft, updatedTo]);
-  if (conflict.status === "none")
-    return updatedTo === null ? null : (
-      <p
-        role="status"
-        className="flex shrink-0 items-center gap-1.5 px-4 pt-3 text-2xs text-muted-foreground sm:px-6 md:px-8"
-      >
-        <RefreshCw aria-hidden className="size-3.5 text-link" />
-        Updated to revision {updatedTo}
-      </p>
-    );
+  if (updatedTo === null) return null;
+  return (
+    <p role="status" className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+      <RefreshCw aria-hidden className="size-3.5 text-link" />
+      Updated to revision {updatedTo}
+    </p>
+  );
+}
+
+/**
+ * Figma SA06k: a draft whose edits are kept while Factory holds a newer revision (saved
+ * elsewhere, or found by a stale save). Save waits until the revision is compared.
+ */
+export function AgentRevisionCard({
+  draft,
+  state,
+  projects,
+  capabilities,
+}: {
+  draft: AgentDraftModel;
+  state: AgentDraftSnapshot;
+  projects: readonly FactoryProject[];
+  capabilities: AgentCapabilities | null;
+}) {
+  const { conflict } = state;
+  const [comparisonOpen, setComparisonOpen] = useState(false);
+  if (conflict.status === "none") return null;
   const revision =
     conflict.status === "compared"
       ? conflict.latest.revision
@@ -121,94 +160,99 @@ export function AgentRevisionPanel({
         ? conflict.revision
         : null;
   return (
-    <section
-      aria-label="Reconcile Agent"
-      className="grid shrink-0 gap-3 border-b border-attention/40 bg-attention/5 px-4 py-3 sm:px-6 md:px-8"
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <p role="status" className="text-sm text-foreground">
-          <span className="font-medium">
-            {revision !== null
-              ? `Revision ${revision} was saved elsewhere.`
-              : "Factory holds a newer revision of this Agent."}
-          </span>{" "}
-          Your edits are kept.
-        </p>
-        {conflict.status === "detected" && (
-          <Button type="button" variant="outline" size="sm" onClick={draft.compare}>
-            Compare latest revision
-          </Button>
-        )}
-        {conflict.status === "comparing" && (
-          <p role="status" className="text-sm text-muted-foreground">
-            Loading the latest revision…
-          </p>
-        )}
-      </div>
-      {conflict.status === "compared" && (
-        <Comparison draft={draft} state={state} latest={conflict.latest} projects={projects} />
+    <>
+      <ProblemCard
+        tone="attention"
+        title={
+          revision === null
+            ? "A newer revision was saved elsewhere"
+            : `Revision ${revision} was saved elsewhere`
+        }
+        action={
+          conflict.status === "comparing" ? (
+            <span role="status">Loading the latest revision…</span>
+          ) : (
+            <ProblemCardButton
+              onClick={() => {
+                setComparisonOpen(true);
+                draft.compare();
+              }}
+            >
+              Compare latest revision
+            </ProblemCardButton>
+          )
+        }
+      >
+        Your changes are kept. Compare them before saving.
+      </ProblemCard>
+      {comparisonOpen && conflict.status === "compared" && (
+        <CompareDialog
+          draft={draft}
+          content={state.content}
+          latest={conflict.latest}
+          projects={projects}
+          capabilities={capabilities}
+          onClose={() => setComparisonOpen(false)}
+        />
       )}
-    </section>
+    </>
   );
 }
 
-function Comparison({
+/**
+ * Figma SA06y: the draft beside the compared revision in the wide dialog, changed lines tinted.
+ * **Load revision N** replaces the draft at once; **Keep my edits** keeps it against revision N.
+ */
+function CompareDialog({
   draft,
-  state,
+  content,
   latest,
   projects,
+  capabilities,
+  onClose,
 }: {
   draft: AgentDraftModel;
-  state: AgentDraftSnapshot;
+  content: AgentContent;
   latest: AgentDefinition;
   projects: readonly FactoryProject[];
+  capabilities: AgentCapabilities | null;
+  onClose: () => void;
 }) {
   const { revision } = latest;
+  const mine = comparedAgentLines(content, projects, capabilities);
+  const theirs = comparedAgentLines(latest, projects, capabilities);
   return (
-    <>
-      <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
-        <Presentation title="Your local draft" content={state.content} projects={projects} />
-        <Presentation title={`Saved revision ${revision}`} content={latest} projects={projects} />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => draft.requestLoadLatest(revision)}
-        >
-          Load latest revision
-        </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => draft.keepEdits(revision)}>
-          Keep my edits against revision {revision}
-        </Button>
-        <p className="text-xs text-muted-foreground">
-          Keeping your edits requires another explicit Save. Reconcile any differences first.
-        </p>
-      </div>
-      {/* Bound to the revision shown: a newer one closes it, so it never applies unseen. */}
-      <AlertDialog
-        open={state.confirmingLoad === revision}
-        onOpenChange={(open) => {
-          if (!open) draft.cancelLoadLatest();
-        }}
-      >
-        <AlertDialogContent>
-          <DialogHeader>
-            <AlertDialogTitle>Load revision {revision}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Your unsaved edits to this Agent are discarded and replaced with saved revision{" "}
-              {revision}.
-            </AlertDialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
-            <Button type="button" onClick={() => draft.loadLatest(revision)}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        size="wide"
+        title={`Compare with revision ${revision}`}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                draft.keepEdits(revision);
+                onClose();
+              }}
+            >
+              Keep my edits
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                draft.loadLatest(revision);
+                onClose();
+              }}
+            >
               Load revision {revision}
             </Button>
-          </DialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+          </>
+        }
+      >
+        <RevisionComparison mine={mine} theirs={theirs} revision={revision} />
+      </DialogContent>
+    </Dialog>
   );
 }

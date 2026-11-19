@@ -4,6 +4,7 @@ import { useId, type ReactNode } from "react";
 import {
   ConnectionStateDot,
   connectionFooterText,
+  connectionIsConfigured,
   connectionStatusLabel,
   useConnectionState,
   type ConnectionPresentation,
@@ -19,7 +20,6 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useShortcutPreferences } from "../shortcut-preferences.ts";
-import { withShortcutHint } from "../keyboard-shortcuts.ts";
 import { reportingSummary, useReportingState } from "../reporting-state.tsx";
 import { useLiveStudio } from "../live/studio.ts";
 import { triggersInError } from "./studio-triggers/trigger-health.tsx";
@@ -28,13 +28,23 @@ import { triggersInError } from "./studio-triggers/trigger-health.tsx";
 function settingsIndicator(
   connection: ConnectionPresentation,
   reporting: ReturnType<typeof reportingSummary>,
+  configured: boolean,
 ) {
+  if (!configured)
+    return {
+      label: "",
+      text: "",
+      dotClass: "",
+      tab: "connection" as const,
+      signal: false,
+    };
   if (connection !== "ready" || reporting.state === "installed")
     return {
       label: connectionStatusLabel(connection),
       text: connectionFooterText(connection),
       dotClass: "",
       tab: "connection" as const,
+      signal: true,
     };
   const needsAttention = reporting.state === "attention";
   return {
@@ -42,6 +52,7 @@ function settingsIndicator(
     text: reporting.message,
     dotClass: needsAttention ? "bg-attention" : "bg-muted-foreground/60",
     tab: needsAttention ? ("agent-reporting" as const) : ("connection" as const),
+    signal: true,
   };
 }
 
@@ -50,10 +61,12 @@ export function SidebarFooter() {
   const settings = useSettings();
   const studio = useStudio();
   const studioOptions = useStudioOptions({ tab: "flows" });
-  const { presentation } = useConnectionState();
-  const indicator = settingsIndicator(presentation, reportingSummary(useReportingState()));
-  const settingsOptions = useSettingsOptions({ tab: indicator.tab });
-  const statusLabel = indicator.label;
+  const { presentation, connection } = useConnectionState();
+  const indicator = settingsIndicator(
+    presentation,
+    reportingSummary(useReportingState()),
+    connectionIsConfigured(connection, presentation),
+  );
   const statusText = indicator.text;
   // Trigger problems mark only the Studio entry, never Runs, notifications or the Dock badge.
   const failingTriggers =
@@ -64,21 +77,12 @@ export function SidebarFooter() {
       aria-label="Sidebar footer"
       className="mt-auto flex h-12 shrink-0 items-center gap-1 border-t border-border bg-sidebar px-3"
     >
-      <FooterIcon
-        label={`Settings, ${statusLabel}`}
+      <SettingsFooterLink
+        presentation={presentation}
+        indicator={indicator}
         shortcut={hint("settings")}
         active={!!settings}
-      >
-        <Link {...settingsOptions} aria-label={`Settings, ${statusLabel}`}>
-          <Settings aria-hidden className="size-4" strokeWidth={1.5} />
-          <ConnectionStateDot
-            presentation={presentation}
-            label={statusLabel}
-            className={indicator.dotClass}
-            overlay
-          />
-        </Link>
-      </FooterIcon>
+      />
       <FooterIcon
         label={failingTriggers ? `Studio, ${triggersInError(failingTriggers)}` : "Studio"}
         shortcut={hint("studio")}
@@ -115,6 +119,36 @@ export function SidebarFooter() {
   );
 }
 
+function SettingsFooterLink({
+  presentation,
+  indicator,
+  shortcut,
+  active,
+}: {
+  presentation: ConnectionPresentation;
+  indicator: ReturnType<typeof settingsIndicator>;
+  shortcut: string | undefined;
+  active: boolean;
+}) {
+  const statusLabel = indicator.label ? `Settings, ${indicator.label}` : "Settings";
+  const settingsOptions = useSettingsOptions({ tab: indicator.tab });
+  return (
+    <FooterIcon label={statusLabel} shortcut={shortcut} active={active}>
+      <Link {...settingsOptions} aria-label={statusLabel}>
+        <Settings aria-hidden className="size-4" strokeWidth={1.5} />
+        {indicator.signal && (
+          <ConnectionStateDot
+            presentation={presentation}
+            label={indicator.label}
+            className={indicator.dotClass}
+            overlay
+          />
+        )}
+      </Link>
+    </FooterIcon>
+  );
+}
+
 function FooterIcon({
   label,
   shortcut,
@@ -143,7 +177,9 @@ function FooterIcon({
           {children}
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="top">{withShortcutHint(label, shortcut)}</TooltipContent>
+      <TooltipContent side="top" shortcut={shortcut}>
+        {label}
+      </TooltipContent>
     </Tooltip>
   );
 }

@@ -75,22 +75,58 @@ export function wireRouteKey(source: WireSource, targetBlockId: string) {
   return `${source.sourceBlockId}:${source.exitId}:${targetBlockId}`;
 }
 
-/** A block's incoming wires in input-port order: the Flow input first, then connections in graph order. */
-export function incomingWires(graph: FlowGraph, targetBlockId: string): readonly WireSource[] {
-  const wires: WireSource[] = [];
-  if (graph.flowInput.targetBlockIds.includes(targetBlockId)) wires.push({ kind: "flow-input" });
-  for (const { sourceBlockId, exitId, targetBlockId: target } of graph.connections) {
-    if (target === targetBlockId) wires.push({ kind: "exit", sourceBlockId, exitId });
-  }
-  return wires;
+/** A source's identity among one block's incoming wires; ids are free text, so the key is JSON. */
+function sourceKey(source: WireSource) {
+  return source.kind === "flow-input" ? "" : JSON.stringify([source.sourceBlockId, source.exitId]);
 }
 
-/** The input port a wire from `source` attaches to; port 0 when the block has no such wire yet. */
-export function incomingPortIndex(graph: FlowGraph, targetBlockId: string, source: WireSource) {
-  const index = incomingWires(graph, targetBlockId).findIndex((wire) =>
-    wire.kind === "flow-input" || source.kind === "flow-input"
-      ? wire.kind === source.kind
-      : wire.sourceBlockId === source.sourceBlockId && wire.exitId === source.exitId,
-  );
-  return Math.max(index, 0);
+/** Every block's incoming wires and the input port each source attaches to. */
+export type IncomingIndex = {
+  /** A block's incoming wires in input-port order: the Flow input first, then connections in graph order. */
+  readonly wires: (targetBlockId: string) => readonly WireSource[];
+  /** The input port a wire from `source` attaches to; port 0 when the block has no such wire yet. */
+  readonly portIndex: (targetBlockId: string, source: WireSource) => number;
+};
+
+/**
+ * The graph's incoming wires, indexed in one pass. A canvas asks for a port per wire and a block
+ * may have thousands of incoming wires, so a lookup must not rescan the connections.
+ */
+export function incomingIndex(graph: FlowGraph): IncomingIndex {
+  const incoming = new Map<string, { wires: WireSource[]; ports: Map<string, number> }>();
+  const add = (targetBlockId: string, source: WireSource) => {
+    let target = incoming.get(targetBlockId);
+    if (!target) incoming.set(targetBlockId, (target = { wires: [], ports: new Map() }));
+    const key = sourceKey(source);
+    if (!target.ports.has(key)) target.ports.set(key, target.wires.length);
+    target.wires.push(source);
+  };
+  for (const targetBlockId of new Set(graph.flowInput.targetBlockIds))
+    add(targetBlockId, { kind: "flow-input" });
+  for (const { sourceBlockId, exitId, targetBlockId } of graph.connections)
+    add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
+  return {
+    wires: (targetBlockId) => incoming.get(targetBlockId)?.wires ?? [],
+    portIndex: (targetBlockId, source) =>
+      incoming.get(targetBlockId)?.ports.get(sourceKey(source)) ?? 0,
+  };
+}
+
+/**
+ * Where each exit sits in its block's rows, by block and exit id; the first block and row win
+ * where an id repeats. Undefined for an exit the block does not draw.
+ */
+export function exitRows(
+  blocks: readonly { readonly id: string; readonly exits: readonly { readonly id: string }[] }[],
+) {
+  const rows = new Map<string, Map<string, number>>();
+  for (const block of blocks) {
+    if (rows.has(block.id)) continue;
+    const exits = new Map<string, number>();
+    block.exits.forEach((exit, index) => {
+      if (!exits.has(exit.id)) exits.set(exit.id, index);
+    });
+    rows.set(block.id, exits);
+  }
+  return (blockId: string, exitId: string) => rows.get(blockId)?.get(exitId);
 }

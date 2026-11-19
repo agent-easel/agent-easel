@@ -1,12 +1,9 @@
 import { Sparkle } from "lucide-react";
 import type { RunTitleGeneration, RunTitleGenerationState } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
-import { StatePill } from "./execution-state.tsx";
+import { StatusBadge, type RunStateKind } from "./status-badge.tsx";
 
-const STOPPED = {
-  pill: "border-status-stopped [&>span]:bg-status-stopped",
-  text: "text-subtle-foreground",
-};
+const STOPPED = { kind: "stopped", text: "text-subtle-foreground" } as const;
 
 /**
  * Run title generation is not Flow work: pending uses the working colour, applied success, and
@@ -14,18 +11,10 @@ const STOPPED = {
  */
 const STATES: Record<
   RunTitleGenerationState,
-  { readonly label: string; readonly pill: string; readonly text: string }
+  { readonly label: string; readonly kind: RunStateKind; readonly text: string }
 > = {
-  pending: {
-    label: "generating",
-    pill: "border-status-working [&>span]:bg-status-working",
-    text: "text-status-working",
-  },
-  applied: {
-    label: "applied",
-    pill: "border-success [&>span]:bg-success",
-    text: "text-foreground",
-  },
+  pending: { label: "generating", kind: "working", text: "text-status-working" },
+  applied: { label: "applied", kind: "finished", text: "text-foreground" },
   dropped: { label: "dropped", ...STOPPED },
   "timed-out": { label: "timed out", ...STOPPED },
   cancelled: { label: "cancelled", ...STOPPED },
@@ -40,8 +29,9 @@ export function titleOutcome(generation: RunTitleGeneration) {
   return generation.state === "applied" ? generation.generatedTitle : generation.reason;
 }
 
-export function TitleStatePill({ state }: { state: RunTitleGenerationState }) {
-  return <StatePill state={STATES[state].label} className={STATES[state].pill} />;
+export function TitleStateBadge({ state }: { state: RunTitleGenerationState }) {
+  const { kind, label } = STATES[state];
+  return <StatusBadge kind={kind}>{label.charAt(0).toUpperCase() + label.slice(1)}</StatusBadge>;
 }
 
 /** The Run's ✦ mark: title generation acts for the Run, never as a Block. */

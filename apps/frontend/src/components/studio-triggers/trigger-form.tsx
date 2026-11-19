@@ -1,102 +1,132 @@
 import type { ReactNode } from "react";
-import { CircleCheck, CircleDashed, CircleX } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { FactoryProject, FlowDraft, TriggerReadiness } from "@t3-factory/contracts";
-import { Badge } from "@/components/ui/badge";
+import { mayStartFlow } from "@t3-factory/domain-validation";
+import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
-import { SettingsGroup, SettingsRow } from "../settings-page.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FlowGroup, ProjectOption } from "../launch-picker-options.tsx";
+import { fieldLabelClass, selectFieldClass } from "../page.tsx";
+import { SettingsRow } from "../settings-page.tsx";
+import { fieldAria } from "../field-state.ts";
+import { cn } from "@/lib/utils";
 import {
   triggerFlows,
   type IntervalUnit,
   type TriggerDraftModel,
   type TriggerDraftSnapshot,
 } from "../../trigger-draft.ts";
-import type { useTriggerReadiness } from "./use-trigger-readiness.ts";
 
-export type ReadinessRead = ReturnType<typeof useTriggerReadiness>;
+const inputClass = "h-7.5 border-border bg-muted";
+const rowClass = "[&>div]:min-h-13.5 [&>div]:py-3";
 
-const captionClass = "text-2xs leading-tight tracking-label text-subtle-foreground";
+export const triggerProblemIds = {
+  name: "trigger-name-problem",
+  query: "trigger-query-problem",
+  repository: "trigger-repository-problem",
+  flow: "trigger-flow-problem",
+  interval: "trigger-interval-problem",
+  limit: "trigger-limit-problem",
+} as const;
 
-/**
- * Figma T03/T05/T08: the GitHub Issues fields shared by create and edit. The repository is
- * detected from the Project and confirmed by saving; the ready label and `@me` are derived.
- */
+/** The Flow remains named in its field when live Studio changes make it unusable. */
+export function chosenFlowProblem(
+  content: TriggerDraftSnapshot["content"],
+  flows: readonly FlowDraft[] | null,
+) {
+  if (!content.flowId || !flows) return undefined;
+  const flow = flows.find((entry) => entry.id === content.flowId);
+  if (!flow) return "Choose a saved Flow.";
+  if (!mayStartFlow(flow.projectId, content.projectId))
+    return "Choose a global Flow or a Flow of the Trigger’s Project.";
+  return flow.readiness.ready
+    ? undefined
+    : flow.readiness.issues.map((issue) => issue.message).join(" ");
+}
+
+/** Figma T03/T05/T08: the GitHub Issues fields shared by create and edit. */
 export function TriggerFields({
   draft,
   state,
   projects,
   flows,
   readiness,
+  flowProblem,
+  repositoryProblem,
+  movedRepository,
 }: {
   draft: TriggerDraftModel;
   state: TriggerDraftSnapshot;
-  projects: readonly FactoryProject[] | undefined;
+  projects: readonly FactoryProject[];
   flows: readonly FlowDraft[] | null;
-  readiness: ReadinessRead;
+  readiness: TriggerReadiness | undefined;
+  flowProblem: string | undefined;
+  repositoryProblem: string | undefined;
+  movedRepository: TriggerDraftSnapshot["content"]["repository"];
 }) {
   const { content } = state;
+  const project = projects.find((entry) => entry.id === content.projectId);
+
   return (
     <>
-      <SettingsGroup label="Source">
+      <TriggerGroup label="Source" id="trigger-source">
         <SettingsRow
           title="Name"
           control={(text) => (
-            <Input
-              aria-labelledby={text.title}
-              className="w-60 font-mono text-label"
-              value={content.name}
-              onChange={(event) => draft.edit({ name: event.target.value })}
-            />
+            <>
+              {state.nameTaken && <StatusBadge kind="error">Already used</StatusBadge>}
+              <Input
+                aria-labelledby={text.title}
+                {...fieldAria(state.nameTaken && triggerProblemIds.name)}
+                className={cn(inputClass, "w-60")}
+                maxLength={200}
+                value={content.name}
+                onChange={(event) => draft.edit({ name: event.target.value })}
+              />
+            </>
           )}
         />
-        <SettingsRow
-          title="Project"
-          description="Triggers work with local Projects on the Factory host."
-          control={(text) => (
-            <Choice
-              labelledBy={text.title}
-              value={content.projectId}
-              placeholder="Choose a Project"
-              options={projects?.map((project) => ({ value: project.id, label: project.title }))}
-              onChange={(projectId) => draft.chooseProject(projectId, flows ?? [])}
-            />
-          )}
+        <ProjectRow
+          project={project}
+          projects={projects}
+          projectId={content.projectId}
+          onChange={(projectId) => draft.chooseProject(projectId, flows ?? [])}
         />
         <SettingsRow
           title="Repository"
-          description="Detected from the Project. Confirm it is the repository whose issues should start Runs."
-          control={<RepositoryValue draft={draft} state={state} readiness={readiness} />}
+          control={
+            <RepositoryValue
+              state={state}
+              detecting={!readiness}
+              problem={repositoryProblem}
+              moved={movedRepository}
+              onConfirm={draft.confirmRepository}
+            />
+          }
         />
         <QueryRow draft={draft} state={state} readiness={readiness} />
-      </SettingsGroup>
-      <SettingsGroup label="Run">
-        <SettingsRow
-          title="Flow"
-          description="Each Start uses the Flow's current saved revision, like New Run."
-          control={(text) => (
-            <Choice
-              labelledBy={text.title}
-              value={content.flowId}
-              placeholder="Choose a Flow"
-              options={
-                flows
-                  ? triggerFlows(flows, content.projectId, content.flowId).map((flow) => ({
-                      value: flow.id,
-                      label: flow.name,
-                    }))
-                  : undefined
-              }
-              onChange={(flowId) => draft.edit({ flowId })}
-            />
-          )}
+      </TriggerGroup>
+      <TriggerGroup label="Run" id="trigger-run">
+        <FlowRow
+          content={content}
+          project={project}
+          flows={flows}
+          problem={flowProblem}
+          onChange={(flowId) => draft.edit({ flowId })}
         />
         <SettingsRow
           title="Run on a schedule"
-          description="When off, the Trigger runs only when you choose Run in the ⋯ menu. Missed checks are not replayed."
           control={(text) => (
             <>
+              {state.intervalError && <StatusBadge kind="error">Out of range</StatusBadge>}
               <Switch
                 aria-labelledby={text.title}
                 checked={content.scheduleEnabled}
@@ -105,17 +135,19 @@ export function TriggerFields({
               <span className="text-sm text-muted-foreground">every</span>
               <Input
                 aria-label="Check interval"
+                {...fieldAria(state.intervalError && triggerProblemIds.interval)}
                 inputMode="numeric"
-                className="w-13 font-mono text-label"
+                className={cn(inputClass, "w-13 font-mono text-label")}
                 value={content.interval}
-                disabled={!content.scheduleEnabled}
+                disabled={!content.scheduleEnabled && !state.intervalError}
                 onChange={(event) => draft.edit({ interval: event.target.value })}
               />
               <NativeSelect
                 aria-label="Interval unit"
+                className={cn(inputClass, "focus:border-primary")}
                 wrapperClassName="w-28"
                 value={content.unit}
-                disabled={!content.scheduleEnabled}
+                disabled={!content.scheduleEnabled && !state.intervalError}
                 onChange={(event) => draft.edit({ unit: event.target.value as IntervalUnit })}
               >
                 <NativeSelectOption value="minutes">minutes</NativeSelectOption>
@@ -126,132 +158,240 @@ export function TriggerFields({
         />
         <SettingsRow
           title="Max active Runs"
-          description="How many Runs from this Trigger may be in progress at once. Other matching issues wait for the next check."
           control={(text) => (
-            <Input
-              aria-labelledby={text.title}
-              inputMode="numeric"
-              className="w-16 font-mono text-label"
-              value={content.maxActiveRuns}
-              onChange={(event) => draft.edit({ maxActiveRuns: event.target.value })}
-            />
+            <>
+              {state.limitError && <StatusBadge kind="error">Out of range</StatusBadge>}
+              <Input
+                aria-labelledby={text.title}
+                {...fieldAria(state.limitError && triggerProblemIds.limit)}
+                inputMode="numeric"
+                className={cn(inputClass, "w-16 font-mono text-label")}
+                value={content.maxActiveRuns}
+                onChange={(event) => draft.edit({ maxActiveRuns: event.target.value })}
+              />
+            </>
           )}
         />
-      </SettingsGroup>
+      </TriggerGroup>
     </>
   );
 }
 
-function Choice({
-  labelledBy,
-  value,
-  placeholder,
-  options,
+function ProjectRow({
+  project,
+  projects,
+  projectId,
   onChange,
 }: {
-  labelledBy: string;
-  value: string;
-  placeholder: string;
-  options: readonly { value: string; label: string }[] | undefined;
-  onChange: (value: string) => void;
+  project: FactoryProject | undefined;
+  projects: readonly FactoryProject[];
+  projectId: string;
+  onChange: (id: string) => void;
 }) {
+  const available = projects.filter((entry) => entry.availability === "available");
+  const projectNames = available.map((entry) => entry.title);
   return (
-    <NativeSelect
-      aria-labelledby={labelledBy}
-      wrapperClassName="w-50"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    >
-      {!value && (
-        <NativeSelectOption value="">{options ? placeholder : "Loading…"}</NativeSelectOption>
+    <SettingsRow
+      title="Project"
+      control={(text) => (
+        <ChoiceMenu
+          labelledBy={text.title}
+          value={projectId}
+          label={project?.title ?? (projectId ? "Project unavailable" : undefined)}
+          placeholder="Choose a Project"
+          width="w-80"
+          onChange={onChange}
+        >
+          {available.map((entry) => (
+            <ProjectOption key={entry.id} project={entry} busy={false} peers={projectNames} />
+          ))}
+          {!available.length && <EmptyChoices>No available Projects</EmptyChoices>}
+        </ChoiceMenu>
       )}
-      {options?.map((option) => (
-        <NativeSelectOption key={option.value} value={option.value}>
-          {option.label}
-        </NativeSelectOption>
-      ))}
-    </NativeSelect>
+    />
   );
-}
-
-/** Factory's answer about the chosen Project's repository, once it is for the current choice. */
-function repositoryProblem(state: TriggerDraftSnapshot, readiness: ReadinessRead) {
-  if (state.content.repository || !state.content.projectId) return null;
-  if (readiness.status === "failed") return readiness.message;
-  const repository = readiness.status === "answered" ? readiness.readiness.repository : null;
-  return repository && !repository.ready ? repository.problem : null;
-}
-
-/** The repository the Project's folder names now, when it is not the one the form holds. */
-function movedRepository(state: TriggerDraftSnapshot, readiness: ReadinessRead) {
-  if (readiness.status !== "answered" || !state.content.repository) return null;
-  const answer = readiness.readiness.repository;
-  return answer?.ready && answer.repository.nodeId !== state.content.repository.nodeId
-    ? answer.repository
-    : null;
 }
 
 function RepositoryValue({
-  draft,
   state,
-  readiness,
+  detecting,
+  problem,
+  moved,
+  onConfirm,
 }: {
-  draft: TriggerDraftModel;
   state: TriggerDraftSnapshot;
-  readiness: ReadinessRead;
+  detecting: boolean;
+  problem: string | undefined;
+  moved: TriggerDraftSnapshot["content"]["repository"];
+  onConfirm: (repository: NonNullable<typeof moved>) => void;
 }) {
-  const { repository, projectId } = state.content;
-  const problem = repositoryProblem(state, readiness);
-  const moved = movedRepository(state, readiness);
+  const repository = moved ?? state.content.repository;
+  if (problem)
+    return (
+      <div role="group" aria-label="Repository" {...fieldAria(triggerProblemIds.repository)}>
+        <StatusBadge kind="error">Can’t read</StatusBadge>
+      </div>
+    );
   if (!repository)
     return (
-      <p
-        className={problem ? "max-w-60 text-sm text-destructive" : "text-sm text-muted-foreground"}
-      >
-        {problem ?? (projectId ? "Detecting…" : "Choose a Project first")}
-      </p>
-    );
-  if (moved)
-    return (
-      <div className="grid max-w-80 justify-items-end gap-1.5">
-        <div className="flex items-center gap-2">
-          <Badge variant="attention" className="gap-1.25 py-0.5 pr-2 pl-1.75">
-            <span aria-hidden className="size-1.5 rounded-full bg-current" />
-            Detected now
-          </Badge>
-          <span className="text-sm font-medium text-foreground">{moved.nameWithOwner}</span>
-        </div>
-        <p className="text-right text-2xs leading-tight tracking-label text-attention">
-          This Trigger confirmed {repository.nameWithOwner}, so its checks stop. Confirm{" "}
-          {moved.nameWithOwner} only if its issues should start Runs.
-        </p>
-        <Button variant="outline" size="sm" onClick={() => draft.confirmRepository(moved)}>
-          Confirm this repository
-        </Button>
-      </div>
+      <span className="text-sm text-muted-foreground">
+        {state.content.projectId && detecting ? "Detecting…" : "—"}
+      </span>
     );
   return (
-    <div className="grid justify-items-end gap-0.75">
-      <div className="flex items-center gap-2">
-        <Badge className="gap-1.25 border-transparent py-0.5 pr-2 pl-1.75">
-          <span aria-hidden className="size-1.5 rounded-full bg-current" />
-          Detected
-        </Badge>
-        <span className="text-sm font-medium text-foreground">{repository.nameWithOwner}</span>
-      </div>
-      <p className={captionClass}>GitHub Issues · read with gh on the Factory host · no AI</p>
-    </div>
+    <>
+      <StatusBadge kind={moved ? "attention" : "info"}>
+        {moved ? "Detected now" : "Detected"}
+      </StatusBadge>
+      <span className="text-sm">{repository.nameWithOwner}</span>
+      {moved && (
+        <Button
+          variant="outline"
+          size="sm"
+          aria-describedby="trigger-status-detail"
+          onClick={() => onConfirm(moved)}
+        >
+          Confirm
+        </Button>
+      )}
+    </>
   );
 }
 
-/** The repository visibility Factory reported for the repository the form holds, if any. */
-function publicRepository(state: TriggerDraftSnapshot, readiness: ReadinessRead) {
-  if (readiness.status !== "answered") return false;
-  const answer = readiness.readiness.repository;
+function FlowRow({
+  content,
+  project,
+  flows,
+  problem,
+  onChange,
+}: {
+  content: TriggerDraftSnapshot["content"];
+  project: FactoryProject | undefined;
+  flows: readonly FlowDraft[] | null;
+  problem: string | undefined;
+  onChange: (id: string) => void;
+}) {
+  const flow = flows?.find((entry) => entry.id === content.flowId);
+  const offered = flows ? triggerFlows(flows, content.projectId) : [];
+  const flowNames = offered.map((entry) => entry.name);
+  const ordered = (group: readonly FlowDraft[]) =>
+    group.toSorted((a, b) => Number(b.readiness.ready) - Number(a.readiness.ready));
   return (
-    !!answer?.ready &&
-    answer.repository.nodeId === state.content.repository?.nodeId &&
-    answer.repository.visibility === "public"
+    <SettingsRow
+      title="Flow"
+      control={(text) => (
+        <>
+          {problem && <StatusBadge kind="error">Not ready</StatusBadge>}
+          <ChoiceMenu
+            labelledBy={text.title}
+            value={content.flowId}
+            label={flow?.name ?? (content.flowId ? "Flow unavailable" : undefined)}
+            placeholder="Choose a Flow"
+            width="w-75"
+            problemId={problem ? triggerProblemIds.flow : undefined}
+            onChange={onChange}
+          >
+            <FlowGroup
+              title="Global"
+              flows={ordered(offered.filter((entry) => !entry.projectId))}
+              busy={false}
+              peers={flowNames}
+            />
+            {project && (
+              <FlowGroup
+                title={project.title}
+                flows={ordered(offered.filter((entry) => entry.projectId === project.id))}
+                busy={false}
+                peers={flowNames}
+              />
+            )}
+            {!offered.length && (
+              <EmptyChoices>{flows ? "No Flows available" : "Loading Flows…"}</EmptyChoices>
+            )}
+          </ChoiceMenu>
+        </>
+      )}
+    />
+  );
+}
+
+function TriggerGroup({ label, id, children }: { label: string; id: string; children: ReactNode }) {
+  return (
+    <section aria-labelledby={id} className="grid gap-2">
+      <h3 id={id} className={cn(fieldLabelClass, "pl-0.5")}>
+        {label}
+      </h3>
+      <div className={cn("divide-y rounded-lg border", rowClass)}>{children}</div>
+    </section>
+  );
+}
+
+function EmptyChoices({ children }: { children: ReactNode }) {
+  return (
+    <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
+function ChoiceMenu({
+  labelledBy,
+  value,
+  label,
+  placeholder,
+  width,
+  problemId,
+  onChange,
+  children,
+}: {
+  labelledBy: string;
+  value: string;
+  label: string | undefined;
+  placeholder: string;
+  width: string;
+  problemId?: string | undefined;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          aria-labelledby={labelledBy}
+          {...fieldAria(problemId)}
+          className={cn(selectFieldClass, "h-7.5 w-50 justify-between border-border")}
+        >
+          <span className={cn("truncate", !label && "text-subtle-foreground")}>
+            {label ?? placeholder}
+          </span>
+          <ChevronDown aria-hidden className="size-4 text-muted-foreground" strokeWidth={1.5} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className={cn(
+          width,
+          "max-h-[var(--radix-dropdown-menu-content-available-height)] max-w-[calc(100vw-2rem)] overflow-y-auto",
+        )}
+      >
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {children}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function queryWarning(state: TriggerDraftSnapshot, readiness: TriggerReadiness | undefined) {
+  const repository = readiness?.repository;
+  return (
+    !("error" in state.query) &&
+    !state.query.authorFilter &&
+    repository?.ready === true &&
+    repository.repository.visibility === "public" &&
+    repository.repository.nodeId === state.content.repository?.nodeId
   );
 }
 
@@ -262,161 +402,56 @@ function QueryRow({
 }: {
   draft: TriggerDraftModel;
   state: TriggerDraftSnapshot;
-  readiness: ReadinessRead;
+  readiness: TriggerReadiness | undefined;
 }) {
-  const { query } = state;
-  const gitHub = readiness.status === "answered" ? readiness.readiness.gitHub : null;
-  const login = gitHub?.ready ? ` · @me is ${gitHub.login} right now` : "";
-  const repository = state.content.repository?.nameWithOwner ?? "<repository>";
+  const { query, content } = state;
+  const error = "error" in query;
+  const missingLabel = error && query.code === "trigger_query_label_missing";
+  const warning = queryWarning(state, readiness);
+  const login = readiness?.gitHub.ready ? readiness.gitHub.login : undefined;
+  const hint = "trigger-query-label";
+  const description = error
+    ? triggerProblemIds.query
+    : warning
+      ? `${triggerProblemIds.query} ${hint}`
+      : hint;
   return (
-    <div className="grid gap-1.5 px-4 py-3 text-sm leading-tight">
-      <label htmlFor="trigger-query" className="font-medium text-foreground">
-        GitHub issue query
-      </label>
-      <p id="trigger-query-description" className="text-muted-foreground">
-        Issues that match start a Run. It must contain one label: — that is the ready label. Keep it
-        narrow on public repositories: issue templates can add labels for anyone.
-      </p>
+    <div className="grid gap-1.5 px-4 text-sm leading-tight">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label htmlFor="trigger-query" className="font-medium">
+          GitHub issue query
+        </label>
+        {error && (
+          <StatusBadge kind="error">
+            {missingLabel ? "No ready label" : "Invalid query"}
+          </StatusBadge>
+        )}
+        {warning && <StatusBadge kind="attention">No author filter</StatusBadge>}
+      </div>
       <Input
         id="trigger-query"
-        aria-describedby="trigger-query-description trigger-query-label"
-        aria-invalid={"error" in query}
-        className="font-mono text-label"
-        value={state.content.query}
+        aria-invalid={error}
+        aria-describedby={description}
+        className={cn(
+          inputClass,
+          "font-mono text-label",
+          warning &&
+            "border-attention focus-visible:border-attention focus-visible:ring-attention/25",
+        )}
+        value={content.query}
         onChange={(event) => draft.edit({ query: event.target.value })}
       />
-      <p
-        id="trigger-query-label"
-        className={
-          "error" in query ? "text-2xs leading-tight tracking-label text-destructive" : captionClass
-        }
-      >
-        {"error" in query
-          ? query.error
-          : `Ready label: ${query.readyLabel} — the worker removes it when it claims the issue${login}`}
-      </p>
-      {"authorFilter" in query && !query.authorFilter && publicRepository(state, readiness) && (
-        <p className="text-2xs leading-tight tracking-label text-attention">
-          No author filter on a public repository: anyone&apos;s issue that gets the ready label can
-          start a Run.
+      {!error && (
+        <p id={hint} className="text-xs text-muted-foreground">
+          Ready label <code>{query.readyLabel}</code>
+          {login && (
+            <>
+              {" "}
+              · <code>@me</code> is <code>{login}</code>
+            </>
+          )}
         </p>
       )}
-      <p className={captionClass}>
-        Always added: repo:{repository} is:issue is:open · Examples: author:alice · -label:wontfix ·
-        reactions:&gt;=3
-      </p>
     </div>
-  );
-}
-
-function ReadinessItem({
-  ready,
-  label,
-  detail,
-}: {
-  ready: boolean | null;
-  label: string;
-  detail: ReactNode;
-}) {
-  return (
-    <li className="flex gap-2 py-1 text-sm leading-tight">
-      <ReadinessIcon ready={ready} />
-      <span className="grid min-w-0 gap-0.5">
-        <span className="font-medium text-foreground">{label}</span>
-        <span className={ready === false ? "text-destructive" : "text-muted-foreground"}>
-          {detail}
-        </span>
-      </span>
-    </li>
-  );
-}
-
-function ReadinessIcon({ ready }: { ready: boolean | null }) {
-  if (ready === null)
-    return (
-      <CircleDashed
-        aria-hidden
-        className="size-4 shrink-0 text-subtle-foreground"
-        strokeWidth={1.5}
-      />
-    );
-  return ready ? (
-    <CircleCheck aria-label="Ready" className="size-4 shrink-0 text-success" strokeWidth={1.5} />
-  ) : (
-    <CircleX
-      aria-label="Not ready"
-      className="size-4 shrink-0 text-destructive"
-      strokeWidth={1.5}
-    />
-  );
-}
-
-function readinessItems(
-  readiness: TriggerReadiness,
-  state: TriggerDraftSnapshot,
-  flows: readonly FlowDraft[] | null,
-) {
-  const { gitHub, repository, flow } = readiness;
-  const flowName = flows?.find((entry) => entry.id === state.content.flowId)?.name ?? "";
-  return [
-    gitHub.ready
-      ? {
-          ready: true,
-          label: `gh found · signed in as ${gitHub.login}`,
-          detail: "GitHub CLI on the Factory host, as the host user",
-        }
-      : { ready: false, label: "gh is not ready", detail: gitHub.problem },
-    repository === null
-      ? { ready: null, label: "Repository", detail: "Choose a Project to check its repository." }
-      : repository.ready
-        ? {
-            ready: true,
-            label: `${repository.repository.nameWithOwner} readable`,
-            detail: "Repository matches the Project remote",
-          }
-        : { ready: false, label: "Repository not readable", detail: repository.problem },
-    flow === null
-      ? { ready: null, label: "Flow", detail: "Choose a Flow to check it can start." }
-      : flow.ready
-        ? {
-            ready: true,
-            label: `Flow ${flowName} is ready`,
-            detail: "A Start would pass the same preflight as New Run",
-          }
-        : {
-            ready: false,
-            label: `Flow ${flowName} is not ready`,
-            detail: flow.issues.map((issue) => issue.message).join(" "),
-          },
-  ];
-}
-
-/** Figma T03: what the host needs before the Trigger can check, on create only. */
-export function TriggerReadinessList({
-  readiness,
-  state,
-  flows,
-}: {
-  readiness: ReadinessRead;
-  state: TriggerDraftSnapshot;
-  flows: readonly FlowDraft[] | null;
-}) {
-  return (
-    <SettingsGroup label="Readiness">
-      {readiness.status === "answered" ? (
-        <ul className="grid gap-1.5 px-4 py-3">
-          {readinessItems(readiness.readiness, state, flows).map((item) => (
-            <ReadinessItem key={item.label} {...item} />
-          ))}
-        </ul>
-      ) : (
-        <p
-          role={readiness.status === "failed" ? "alert" : "status"}
-          className={`px-4 py-3 text-sm ${readiness.status === "failed" ? "text-destructive" : "text-muted-foreground"}`}
-        >
-          {readiness.status === "failed" ? readiness.message : "Checking the Factory host…"}
-        </p>
-      )}
-    </SettingsGroup>
   );
 }

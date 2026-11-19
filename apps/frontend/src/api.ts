@@ -1,5 +1,6 @@
 import { OfflineError, protocolHeaders, transport, unreachableHeader } from "./transport.ts";
 import {
+  AGENT_CREATE_WINDOW_MS,
   agentOperations,
   definitionImportOperations,
   flowOperations,
@@ -98,6 +99,7 @@ function requestInit(definition: OperationDefinition, input: unknown): RequestIn
 function operationCalls<Definitions extends Record<string, OperationDefinition>>(
   definitions: Definitions,
   admitted = false,
+  timeoutMs?: Partial<Record<keyof Definitions, number>>,
 ): OperationCalls<Definitions> {
   const calls: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   for (const [name, definition] of Object.entries(definitions)) {
@@ -106,18 +108,21 @@ function operationCalls<Definitions extends Record<string, OperationDefinition>>
     calls[name] = (...args) => {
       const values = definition.body === "none" ? args : args.slice(0, -1);
       const path = operationPath(definition, ...(values as string[]));
-      return request(
-        path,
-        requestInit(definition, definition.body === "none" ? undefined : args.at(-1)),
-        admitted,
-      );
+      const init = requestInit(definition, definition.body === "none" ? undefined : args.at(-1));
+      const limit = timeoutMs?.[name];
+      if (limit !== undefined) init.signal = AbortSignal.timeout(limit);
+      return request(path, init, admitted);
     };
   }
   return calls as OperationCalls<Definitions>;
 }
 
 export const api = {
-  ...operationCalls(agentOperations),
+  ...operationCalls(agentOperations, false, {
+    reserveAgentCreate: 5_000,
+    createAgent: AGENT_CREATE_WINDOW_MS + 5_000,
+    getAgentCreateOutcome: AGENT_CREATE_WINDOW_MS + 5_000,
+  }),
   ...operationCalls(flowOperations),
   ...operationCalls(definitionImportOperations),
   ...operationCalls(projectOperations),

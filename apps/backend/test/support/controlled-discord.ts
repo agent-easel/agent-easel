@@ -92,6 +92,8 @@ export type MessageFault =
  */
 export const unproven = (fault: "lost" | "failed"): MessageFault[] => [fault, fault, fault];
 
+const FORUM = 15;
+
 /** A message Discord created, with its components, as it shows it now. */
 export interface CreatedMessage {
   readonly id: string;
@@ -251,6 +253,14 @@ export async function startControlledDiscord() {
   /** Users who left every server; Discord answers Unknown Member for them. */
   const departed = new Set<string>();
   const hiddenChannels = new Map<string, Set<string>>();
+  /** Parent channels whose permissions deny the bot Send Messages. */
+  const postingDenied = new Set<string>();
+  /** Every reaction the bot added, in order. */
+  const reactions: {
+    readonly channelId: string;
+    readonly messageId: string;
+    readonly emoji: string;
+  }[] = [];
   let gatewayAvailable = true;
   let typingAvailable = true;
   let commandsAvailable = true;
@@ -259,8 +269,9 @@ export async function startControlledDiscord() {
   const created: CreatedMessage[] = [];
   /** Messages by their author's application and the nonce Discord enforced for them. */
   const nonces = new Map<string, CreatedMessage>();
-  /** Answers paused creates once `releaseMessages` is called. */
+  /** Answers paused creates and channel lookups once `releaseMessages` is called. */
   const pausedCreates: (() => void)[] = [];
+  let channelLookupsPaused = false;
   /** Every text edit Discord applied, in order. */
   const edits: { readonly messageId: string; readonly content: string }[] = [];
   /** Every edit of a message's components Discord applied, in order. */
@@ -281,6 +292,8 @@ export async function startControlledDiscord() {
     user(bot.userId ?? bot.applicationId, bot.username ?? "Factory bot", true);
   const parentOf = (channelId: string) =>
     guilds.find((guild) => guild.channels.some((channel) => channel.id === channelId));
+  const channelType = (channelId: string) =>
+    parentOf(channelId)?.channels.find((channel) => channel.id === channelId)?.type ?? 0;
 
   const gatewayUrl = () => `ws://127.0.0.1:${(server.address() as AddressInfo).port}/gateway`;
   const send = (socket: WebSocket, payload: Record<string, unknown>) =>
@@ -446,6 +459,38 @@ export async function startControlledDiscord() {
     ],
     [
       "POST",
+      /^\/api\/v10\/channels\/(\d+)\/threads$/,
+      ({ match, fields, bot }) => {
+        // A forum post: a thread whose starter message shares its ID.
+        const guild = parentOf(match[1]!);
+        if (!guild) return unknownChannel;
+        if (postingDenied.has(match[1]!))
+          return { status: 403, body: { message: "Missing Permissions", code: 50013 } };
+        const id = mintId();
+        const starter = (fields.message ?? {}) as Fields;
+        created.push({
+          id,
+          channelId: id,
+          content: typeof starter.content === "string" ? starter.content : "",
+          components: [],
+          applicationId: bot.applicationId,
+          deleted: false,
+        });
+        const thread: ControlledDiscordThread = {
+          id,
+          guildId: guild.id,
+          parentId: match[1]!,
+          name: typeof fields.name === "string" ? fields.name : "post",
+          private: false,
+          members: new Set(),
+        };
+        threads.set(id, thread);
+        deliver({ t: "THREAD_CREATE", d: { ...threadPayload(thread), newly_created: true } });
+        return { status: 201, body: threadPayload(thread) };
+      },
+    ],
+    [
+      "POST",
       /^\/api\/v10\/channels\/(\d+)\/messages$/,
       ({ match, fields, bot, resumed }) => {
         const fault = resumed ? undefined : messageFaults.shift();
@@ -454,10 +499,30 @@ export async function startControlledDiscord() {
         if (faulted) return faulted;
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
+        if (!thread && !parentOf(match[1]!)) return unknownChannel;
+        if (postingDenied.has(match[1]!))
+          return { status: 403, body: { message: "Missing Permissions", code: 50013 } };
+        if (!thread && channelType(match[1]!) === FORUM)
+          return {
+            status: 400,
+            body: { message: "Cannot send messages in a non-text channel", code: 50008 },
+          };
         if (thread?.locked && !bot.manageThreads) return locked;
         // A post Discord accepts reopens an archived thread, locked ones included.
         if (thread) thread.archived = false;
         return { status: 200, body: createdOnce(match[1]!, fields, bot), lost: fault === "lost" };
+      },
+    ],
+    [
+      "PUT",
+      /^\/api\/v10\/channels\/(\d+)\/messages\/(\d+)\/reactions\/([^/]+)\/(?:@|%40)me$/,
+      ({ match }) => {
+        reactions.push({
+          channelId: match[1]!,
+          messageId: match[2]!,
+          emoji: decodeURIComponent(match[3]!),
+        });
+        return { status: 204 };
       },
     ],
     [
@@ -523,7 +588,8 @@ export async function startControlledDiscord() {
     [
       "GET",
       /^\/api\/v10\/channels\/(\d+)$/,
-      ({ match }) => {
+      ({ match, resumed }) => {
+        if (channelLookupsPaused && !resumed) return { status: 0, paused: true };
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
         if (thread) return { status: 200, body: threadPayload(thread) };
@@ -533,7 +599,7 @@ export async function startControlledDiscord() {
               status: 200,
               body: {
                 id: match[1],
-                type: guild.channels.find((channel) => channel.id === match[1])!.type ?? 0,
+                type: channelType(match[1]!),
                 guild_id: guild.id,
                 name: "channel",
                 permission_overwrites: [...(hiddenChannels.get(match[1]!) ?? [])].map((id) => ({
@@ -546,6 +612,14 @@ export async function startControlledDiscord() {
             }
           : unknownChannel;
       },
+    ],
+    [
+      "GET",
+      /^\/api\/v10\/users\/(\d+)$/,
+      ({ match }) =>
+        departed.has(match[1]!)
+          ? { status: 404, body: { message: "Unknown User", code: 10013 } }
+          : { status: 200, body: user(match[1]!, "participant", false) },
     ],
     [
       "GET",
@@ -837,14 +911,26 @@ export async function startControlledDiscord() {
       hidden.add(userId);
       hiddenChannels.set(channelId, hidden);
     },
+    /** The channel's permissions stop, or again let, the bot post there. */
+    setPostingDenied(channelId: string, denied: boolean) {
+      if (denied) postingDenied.add(channelId);
+      else postingDenied.delete(channelId);
+    },
+    /** Every reaction the bot added, in order. */
+    reactions,
     /** Messages Discord created, in order. */
     created,
     /** Later message creates meet these faults in order, one each. */
     faultMessages(...faults: MessageFault[]) {
       messageFaults.push(...faults);
     },
-    /** Discord handles and answers every paused create now. */
+    /** Later channel lookups wait, as paused creates do, until `releaseMessages`. */
+    pauseChannelLookups() {
+      channelLookupsPaused = true;
+    },
+    /** Discord handles and answers every paused create and channel lookup now. */
     releaseMessages() {
+      channelLookupsPaused = false;
       for (const answer of pausedCreates.splice(0)) answer();
     },
     /** Discord's few-minute nonce uniqueness window passed: earlier nonces return nothing. */

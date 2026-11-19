@@ -1,5 +1,6 @@
 import { Trash2 } from "lucide-react";
-import { incomingPortIndex, wireRouteKey } from "@t3-factory/flow-layout";
+import { wireRouteKey } from "@t3-factory/flow-layout";
+import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -26,8 +27,8 @@ type WireSelection = {
 };
 
 /**
- * How a canvas presents its wires: curved with exit labels and selectable, or orthogonal and
- * unlabelled. `label` names the wires for assistive technology.
+ * How a canvas presents its wires: curved and selectable, or orthogonal. Neither draws labels;
+ * `label` names the wires for assistive technology.
  */
 export type WirePresentation =
   | ({ readonly kind: "curved"; readonly label: string } & WireSelection)
@@ -57,40 +58,46 @@ type Wire = {
   readonly key: string;
   readonly wire: FlowWire;
   readonly path: { d: string; label: { x: number; y: number } | null };
-  /** The exit's name; Flow input and Continuation wires are unnamed and carry no label. */
+  /** The exit's name for its accessible name; Flow input and Continuation wires are unnamed. */
   readonly exit: string | null;
   readonly source: string;
   readonly target: string;
 };
 
-function exitWires(
+/** The graph's blocks by id, the first block where an id repeats. */
+function blocksById(graph: CanvasGraph) {
+  const blocks = new Map<string, CanvasBlock>();
+  for (const block of graph.blocks) if (!blocks.has(block.id)) blocks.set(block.id, block);
+  return blocks;
+}
+
+/** Every connection's wire, in graph order; a wire whose source or target is missing is not drawn. */
+export function exitWires(
   graph: CanvasGraph,
   kind: WirePresentation["kind"],
   geometry: Geometry,
   routes: ReadonlyMap<string, WireRoute> | undefined,
 ): Wire[] {
+  const blocks = blocksById(graph);
   return graph.connections.flatMap((connection): Wire[] => {
-    const source = graph.blocks.find((block) => block.id === connection.sourceBlockId);
-    const target = graph.blocks.find((block) => block.id === connection.targetBlockId);
+    const source = blocks.get(connection.sourceBlockId);
+    const target = blocks.get(connection.targetBlockId);
     if (!source || !target) return [];
-    const key = wireRouteKey(connectionWire(connection).source, connection.targetBlockId);
+    const wire = connectionWire(connection);
+    const key = wireRouteKey(wire.source, connection.targetBlockId);
     const routed = routes?.get(key);
     const from = geometry.exitPoint(source, connection.exitId);
     const fromBottom = source.position.y + geometry.blockHeight(source);
-    const incomingIndex = incomingPortIndex(graph, connection.targetBlockId, {
-      kind: "exit",
-      sourceBlockId: connection.sourceBlockId,
-      exitId: connection.exitId,
-    });
+    const incomingIndex = geometry.incomingPortIndex(connection.targetBlockId, wire.source);
     return [
       {
         key,
-        wire: connectionWire(connection),
+        wire,
         path: routed ?? routedPath(kind, geometry, from, fromBottom, target, incomingIndex),
         exit:
           source.kind === "continuation"
             ? null
-            : source.exits.find((item) => item.id === connection.exitId)?.name || "exit",
+            : geometry.exit(source, connection.exitId)?.name || "exit",
         source: source.name || "Unnamed block",
         target: target.name || "Unnamed block",
       },
@@ -105,12 +112,13 @@ function flowInputWires(
   routes: ReadonlyMap<string, WireRoute> | undefined,
 ): Wire[] {
   const from = geometry.flowInputPoint;
+  const blocks = blocksById(graph);
   return graph.flowInput.targetBlockIds.flatMap((targetBlockId): Wire[] => {
-    const target = graph.blocks.find((block) => block.id === targetBlockId);
+    const target = blocks.get(targetBlockId);
     if (!target) return [];
     const key = wireRouteKey({ kind: "flow-input" }, targetBlockId);
     const routed = routes?.get(key);
-    const incomingIndex = incomingPortIndex(graph, targetBlockId, { kind: "flow-input" });
+    const incomingIndex = geometry.incomingPortIndex(targetBlockId, { kind: "flow-input" });
     return [
       {
         key,
@@ -125,9 +133,8 @@ function flowInputWires(
 }
 
 /**
- * Configured connections and the Flow input's wires in one neutral style. Labels name the
- * exit; they do not mark traversal. Curved wires and their labels select that wire, and the
- * selected one offers a delete action.
+ * Configured connections and the Flow input's wires in one neutral style, without labels.
+ * Curved wires are selectable, and the selected one offers a delete action at its midpoint.
  */
 export function FlowWires({
   graph,
@@ -215,27 +222,6 @@ export function FlowWires({
           ),
         )}
       </svg>
-      {selection &&
-        wires.map(
-          (wire) =>
-            wire.path.label &&
-            wire.exit !== null && (
-              <span
-                key={wire.key}
-                aria-hidden
-                className={cn(
-                  "pointer-events-auto absolute flex -translate-x-1/2 -translate-y-1/2 cursor-pointer items-center gap-1 rounded-sm border bg-background px-1.5 py-0.5 text-2xs whitespace-nowrap hover:border-border-hover",
-                  wire === selected && "border-primary hover:border-primary",
-                )}
-                style={{ left: wire.path.label.x, top: wire.path.label.y }}
-                onClick={() => selection.onSelect(wire.wire)}
-              >
-                <span className="font-mono font-medium text-foreground">{wire.exit}</span>
-                <span className="text-muted-foreground">→</span>
-                <span className="text-emphasis-foreground">{wire.target}</span>
-              </span>
-            ),
-        )}
       {selected?.path.label && (
         <DeleteConnection
           at={selected.path.label}
@@ -321,7 +307,9 @@ function DeleteConnection({
           <Trash2 aria-hidden />
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Delete connection · Del</TooltipContent>
+      <TooltipContent shortcut={formatShortcut(fixedShortcuts.deleteConnection)}>
+        Delete connection
+      </TooltipContent>
     </Tooltip>
   );
 }

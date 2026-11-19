@@ -1,10 +1,10 @@
 import { createLink } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
 import { forwardRef, type ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 import {
   useSettingsOptions,
   useStudioOptions,
+  useStudio,
   type StudioSelection,
   type SettingsSelection,
 } from "../settings-navigation.ts";
@@ -52,20 +52,18 @@ export function StudioLink({ selection, ...props }: StudioLinkProps) {
   return <AppLink {...options} {...props} />;
 }
 
-/** A Studio page's way back to its parent page, such as "All Flows" or "All Triggers". */
-export function StudioBackLink({
-  selection,
-  children,
-}: {
-  selection: StudioSelection;
-  children: React.ReactNode;
-}) {
+/** Opens an Agent over the current Flow and any Trigger that opened that Flow. */
+export function FlowAgentLink({
+  agentId,
+  flowId,
+  ...props
+}: Omit<StudioLinkProps, "selection"> & { agentId: string; flowId: string }) {
+  const studio = useStudio();
+  const fromTrigger = studio?.tab === "flows" ? studio.fromTrigger : undefined;
   return (
     <StudioLink
-      selection={selection}
-      className="flex w-fit shrink-0 items-center gap-1 text-xs text-muted-foreground no-underline hover:text-foreground"
-    >
-      <ArrowLeft aria-hidden className="size-3.5" /> {children}
-    </StudioLink>
+      selection={{ tab: "agents", agentId, fromFlow: flowId, ...(fromTrigger && { fromTrigger }) }}
+      {...props}
+    />
   );
 }

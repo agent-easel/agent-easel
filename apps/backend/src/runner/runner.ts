@@ -238,6 +238,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     readFactoryTool: openBlockTools(store, getRun, images),
     ...openRunNavigation(store),
     listRunNavigation: store.listRunNavigation,
+    searchArchivedRuns: store.searchArchivedRuns,
     snoozeRun: store.snoozeRun,
     restoreRun: store.restoreRun,
     markRunWokeSeen: store.markRunWokeSeen,
