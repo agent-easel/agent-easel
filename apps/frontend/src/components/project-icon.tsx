@@ -93,7 +93,7 @@ export function ProjectIcon({
       className={cn(
         "grid shrink-0 place-items-center",
         inline
-          ? "size-4 rounded-sm [&_[data-slot=project-emoji]]:text-sm [&_[data-slot=project-monogram]]:px-0 [&_[data-slot=project-monogram]]:text-2xs"
+          ? "size-4 rounded-sm [&_[data-slot=project-emoji]]:text-sm [&_[data-slot=project-monogram]]:px-0 [&_[data-slot=project-monogram]]:text-3xs"
           : "size-7 rounded-md border bg-muted",
         color,
       )}
