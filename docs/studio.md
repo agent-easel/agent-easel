@@ -494,7 +494,7 @@ outcome unknown** (Warning), **Revision N was saved elsewhere** (Warning, Save d
 
 When another client, tab or Factory MCP saves the open Flow, the editor follows it by the [shared revision rules](#following-saved-revisions). A clean draft's switch to the newer revision waits while a block or library item is dragged, a wire is drawn, Auto-arrange runs or a draft field has focus or text
 composition, and happens afterwards only if the draft is still clean; a draft with unsaved changes names the newer revision at once. **Compare latest revision**
-opens a wide dialog with **Your draft** beside **Revision N** as workspace, block and connection lines, the changed lines tinted. **Keep my edits** keeps the
+opens a wide dialog with **Your draft** beside **Revision N** as name, workspace, block and connection lines, the changed lines tinted. **Keep my edits** keeps the
 draft against revision N (Save is enabled again) and **Load revision N** replaces the draft at once, without a second confirmation.
 
 ### Removing a Flow

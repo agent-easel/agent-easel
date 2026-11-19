@@ -1295,12 +1295,13 @@ function newerRevision(conflict: FlowRevisionConflict) {
   return conflict.status === "detected" ? conflict.revision : null;
 }
 
-/** A Flow's content as comparable lines: its workspace, Blocks and connections. */
+/** A Flow's content as comparable lines: its name, workspace, Blocks and connections. */
 function contentLines(content: FlowContent, agents: readonly AgentDefinition[]) {
   const graph = canvasGraph(content.graph, agents);
   const name = (id: string) => graph.blocks.find((b) => b.id === id)?.name || "Unnamed block";
   const { workspace } = content;
   const lines = [
+    `Name  ${content.name}`,
     `Workspace  ${
       workspace.mode === "checkout"
         ? "Project checkout"
