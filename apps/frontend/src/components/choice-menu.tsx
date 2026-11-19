@@ -23,6 +23,16 @@ export interface MenuChoice {
   readonly disabled?: boolean;
 }
 
+/** What the trigger shows beside the chosen label. */
+interface TriggerExtras {
+  /** Visible words before the value, such as "Owner:". */
+  readonly prefix?: string;
+  /** The chosen choice's icon before its label. */
+  readonly icon?: boolean;
+  /** A quiet line after the label, such as where the choice lives. */
+  readonly detail?: string;
+}
+
 /** The field's name: a label the trigger prefixes to its value, or the id of a visible label. */
 type ChoiceName = { label: string; labelledBy?: never } | { labelledBy: string; label?: never };
 
@@ -46,6 +56,7 @@ export function ChoiceMenu({
   describedBy,
   problemTone = "attention",
   required,
+  trigger = {},
 }: ChoiceName & {
   id: string;
   value: string;
@@ -66,6 +77,7 @@ export function ChoiceMenu({
   problemTone?: FieldState["tone"];
   /** The value must be chosen; the placeholder is never one of the choices. */
   required?: boolean;
+  trigger?: TriggerExtras;
 }) {
   const { listValue, selected, shown } = chosen(choices, value, unlistedLabel);
   const names = choiceNames(label, labelledBy, `${shown ?? placeholder}${badgeSuffix(selected)}`);
@@ -92,7 +104,12 @@ export function ChoiceMenu({
             fieldBorder(describedBy ? problemTone : undefined),
           )}
         >
-          <ChoiceValue shown={shown} placeholder={placeholder} selected={selected} />
+          <ChoiceValue
+            shown={shown}
+            placeholder={placeholder}
+            selected={selected}
+            extras={trigger}
+          />
           <ChevronsUpDown
             aria-hidden
             className="size-4 shrink-0 text-muted-foreground"
@@ -105,26 +122,44 @@ export function ChoiceMenu({
   );
 }
 
-/** The trigger's text: the chosen label and its badge, or the placeholder. */
+/** The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder. */
 function ChoiceValue({
   shown,
   placeholder,
   selected,
+  extras: { prefix, icon, detail },
 }: {
   shown: string | undefined;
   placeholder: string;
   selected: MenuChoice | undefined;
+  extras: TriggerExtras;
 }) {
   return (
     <>
+      {prefix && <span className="shrink-0 text-subtle-foreground">{prefix}</span>}
+      {icon && selected?.icon && <span className="flex shrink-0">{selected.icon}</span>}
       <span className={cn("min-w-0 truncate", !shown && "text-muted-foreground")}>
         {shown ?? placeholder}
       </span>
       {selected?.badge && (
         <StatusBadge kind={selected.badgeKind ?? "attention"}>{selected.badge}</StatusBadge>
       )}
-      <span className="flex-1" />
+      <TriggerDetail detail={detail} />
     </>
+  );
+}
+
+/** The detail fills the trigger's free width, truncated from its start so a path keeps its end. */
+function TriggerDetail({ detail }: { detail: string | undefined }) {
+  if (!detail) return <span className="flex-1" />;
+  return (
+    <span
+      title={detail}
+      dir="rtl"
+      className="w-0 flex-1 truncate text-left text-2xs tracking-label text-subtle-foreground"
+    >
+      <bdi dir="ltr">{detail}</bdi>
+    </span>
   );
 }
 

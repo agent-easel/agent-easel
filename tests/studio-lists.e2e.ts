@@ -149,11 +149,11 @@ test("the Flows owner filter, a search with no match, and Light", async ({
 }) => {
   await app.open("/studio/flows");
   await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
-  await screen.getByRole("button", "Owner filter: All", { exact: true }).tap();
-  await expect(screen.getByRole("menuitemradio", "All owners", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("menuitemradio", /^Northwind/)).toBeVisible();
+  await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
+  await expect(screen.getByRole("option", "All", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
   await shot(app, browser, "flows-owner-filter");
-  await screen.getByRole("menuitemradio", "All owners", { exact: true }).tap();
+  await screen.getByRole("option", "All", { exact: true }).tap();
   await screen.getByLabel("Search Flows", { exact: true }).fill("zzzz-no-such-flow");
   await expect(screen.getByText("No matching Flows", { exact: true })).toBeVisible();
   await shot(app, browser, "flows-search-no-match");
@@ -197,10 +197,10 @@ test("New Flow stays quiet until a name is entered, and one card reports a faile
   await expect(dialog.getByRole("radio", "Global", { exact: true })).toBeChecked();
   await shot(app, browser, "new-flow-blank");
   await dialog.getByRole("radio", "Project", { exact: true }).tap();
-  await dialog.getByRole("button", "Owning Project", { exact: true }).tap();
-  await expect(screen.getByRole("menuitemradio", /^Northwind/)).toBeVisible();
+  await dialog.getByRole("combobox", "Owning Project", { exact: true }).tap();
+  await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
   await shot(app, browser, "new-flow-owner");
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+  await screen.getByRole("option", /^Northwind/).tap();
 
   await browser.route("**/api/flows", async (route) => {
     if (route.request.method !== "POST") return route.continue();
@@ -324,7 +324,7 @@ test("Triggers with none yet, and Check now reports nothing ready, one Run, or s
   await app.open("/studio/triggers");
   await expect(screen.getByRole("heading", "No Triggers yet", { exact: true })).toBeVisible();
   await expect(screen.getByLabel("Search Triggers", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", "Owner filter: All")).toHaveCount(0);
+  await expect(screen.getByRole("combobox", "Owner filter: All")).toHaveCount(0);
   await shot(app, browser, "triggers-empty");
 
   const name = "Journey · Check feedback";

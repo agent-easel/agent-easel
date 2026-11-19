@@ -48,8 +48,8 @@ test("Change owner moves an Agent into a Project without a new revision, also af
   const { northwind, agent } = await openGlobalAgent({ app, browser }, "Owner move");
   await chooseAgentAction(screen, "Change owner…");
   const dialog = screen.getByRole("dialog", `Change owner of “${agent.name}”`);
-  await dialog.getByRole("button", "New owner").tap();
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+  await dialog.getByRole("combobox", "New owner").tap();
+  await screen.getByRole("option", /^Northwind/).tap();
   await browser.evaluate(settled);
   await app.screenshot("change-owner-dialog");
 
@@ -85,8 +85,8 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   });
   await app.open(`/studio/agents/${agent.id}`);
   await chooseAgentAction(screen, "Change owner…");
-  await screen.getByRole("button", "New owner").tap();
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+  await screen.getByRole("combobox", "New owner").tap();
+  await screen.getByRole("option", /^Northwind/).tap();
 
   // Act
   await screen.getByRole("button", "Change owner", { exact: true }).tap();
@@ -100,7 +100,7 @@ test("a refused Change owner names the blocking Flow and offers Duplicate into t
   await app.screenshot("change-owner-refused");
   await refusal.getByRole("button", "Duplicate to Northwind…", { exact: true }).tap();
   const duplicate = screen.getByRole("dialog", `Duplicate “${agent.name}”`);
-  await expect(duplicate.getByRole("button", "Owning Project")).toContainText("Northwind");
+  await expect(duplicate.getByRole("combobox", "Owning Project")).toContainText("Northwind");
   await browser.evaluate(settled);
   await app.screenshot("change-owner-refused-duplicate");
   // The Duplicate that replaced the refusal still returns focus to the menu that opened the chain.
@@ -168,8 +168,8 @@ test("Import creates the file's definitions in the chosen target Project", async
   await screen.getByLabel("Choose a Factory export file").setInputFiles([file]);
   const review = screen.getByRole("dialog", /^Import “/);
   await review.getByRole("radio", "Project", { exact: true }).tap();
-  await review.getByRole("button", "Owning Project", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+  await review.getByRole("combobox", "Owning Project", { exact: true }).tap();
+  await screen.getByRole("option", /^Northwind/).tap();
   await browser.evaluate(settled);
   await app.screenshot("import-target");
   const before = new Set((await listFlows(app.baseUrl)).map((flow) => flow.id));
@@ -238,8 +238,11 @@ test("a Flow of an unavailable Project is rescued by duplicating it and its Agen
   await chooseFlowAction(screen, "Duplicate…");
   const dialog = screen.getByRole("dialog", "Duplicate “Docs refresh”");
   await expect(dialog.getByRole("button", "Duplicate", { exact: true })).toBeDisabled();
-  await dialog.getByRole("button", "Owning Project", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+  const owner = dialog.getByRole("combobox", "Owning Project", { exact: true });
+  await expect(owner).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByRole("alert")).toContainText("Docs site: Project unavailable");
+  await owner.tap();
+  await screen.getByRole("option", /^Northwind/).tap();
   await expect(dialog).toContainText("Copied");
   await browser.evaluate(settled);
   await app.screenshot("rescue-plan");
