@@ -201,23 +201,26 @@ non-temporary location, so a package run from a temporary folder badges but cann
 ## Native window appearance
 
 The sidebar title area drags the desktop window while macOS keeps its native traffic-light controls and the content uses the full window height. Studio's inset dialog header leaves room at the left for the native controls. Product controls, dialogs and canvases stay
-outside the draggable region, fullscreen and window controls stay native, and the background matches the application canvas of the chosen [appearance](#appearance) while content loads. Browser clients keep their layout without desktop chrome.
+outside the draggable region, fullscreen and window controls stay native, and the background matches the application canvas of the effective [appearance](#appearance) while content loads. Browser clients keep their layout without desktop chrome.
 
 ## Appearance
 
-Each desktop installation, and each browser profile per Factory address, has its own
-**Light** or **Dark** appearance, chosen in **Settings → Appearance**. It is
-Dark until chosen. The choice is never sent to or synchronized through the Factory server,
-so clients of the same server can use different modes, and changing the server, role, T3
-endpoint or authorization does not reset it. Every connection and startup gate keeps its
-**Application settings** entry, in browsers too (where it holds only Appearance), and the
-choice works while offline. Visual rules are in the [design system](design-system.md#light-and-dark).
+**Settings → Appearance** offers **System**, **Light** and **Dark**. System is the default
+and follows the device's Light or Dark appearance from the first frame, including changes
+while Factory is open. Light and Dark keep their selected mode when the device changes.
+An upgrade keeps any saved Light or Dark value, including Dark saved as the former desktop
+default. A profile or installation without a saved value uses System.
+
+Each desktop installation and each browser profile per Factory address saves its own
+preference locally. Changing the server, role, T3 endpoint or authorization keeps that preference.
+Every connection and startup gate has an **Application settings** entry, including in
+browsers, and the preference works while offline. Visual rules are in the
+[design system](design-system.md#light-and-dark).
 
 When the T3 connection shares [T3 theme colors](t3-integration.md#theme-colors), the server delivers one
 presentation with a Light and a Dark half to approved clients and the host panel through live
-delivery; each client shows the half of its own mode, so two clients of the same server can show the
-same T3 theme in different modes. A missing or rejected half shows Factory's colors for that mode,
-and the mode choice itself never changes. The **Appearance** header shows **Following T3** when
+delivery. Each client uses the palette for its effective mode and falls back to Factory's
+colors when that palette is missing or rejected. The **Appearance** header shows **Following T3** when
 at least one mode uses T3 colors, **Checking** during the read, and **Factory colors** otherwise.
 The **T3 theme** card shows the theme name and which modes use its colors. Connection and access
 gates and unapproved clients
@@ -232,23 +235,24 @@ sanitized presentation; after another T3 source it shows Factory's colors until 
 stays open through a reconnect: when the access check after it declares another source, the colors
 it was showing end there and return only with a later delivery from the server, not with the one
 the client already held. A matching snapshot is shown
-until live delivery answers and while offline, and switching Light and Dark stays immediate. Whatever the server publishes next replaces the snapshot, and a
+until live delivery answers and while offline. Appearance changes switch palettes immediately.
+Whatever the server publishes next replaces the snapshot, and a
 presentation without colors (another T3 source, no inherited theme) removes it. A client whose Factory access is missing, pending, denied or revoked deletes it without
 reading it. The first paint, every gate screen and the desktop window background always use
-Factory's colors for the chosen mode, because access is not established yet. A browser cannot open
+Factory's colors for the effective mode. A browser cannot open
 at all while its Factory server is unreachable; the desktop app opens its unreachable screen in
 Factory's colors.
 
-- **Desktop**: the mode is saved with the other desktop settings of the installation. The
-  main process applies it to native chrome and dialogs and to the window background before
-  the window is created, and serves the bundled page with the mode already set, so the first
-  frame and every reload use it. A change applies to the page, native appearance and window
-  background at once, without a restart; if it cannot be saved, the previous mode stays and
-  Settings shows why. Settings saved before appearance existed open Dark.
-- **Browser**: the mode is saved in that profile's storage for the Factory address. A
-  blocking script in the page head applies it before the stylesheet paints, and the browser
-  `theme-color` follows the mode; other tabs of the same profile follow a change. If the
-  browser blocks storage, the choice applies until the tab closes and Settings says so.
+- On **desktop**, Factory saves the preference with the installation's other settings.
+  The effective mode drives native window chrome, dialogs and the window background.
+  The bundled page opens and reloads with the effective mode already applied. If a
+  preference change fails to save, Factory restores the previous preference and appearance
+  and shows the error in Settings.
+- In the **browser**, the profile saves the preference for the Factory address. The
+  page applies the effective mode to its colors and the browser theme color before
+  the stylesheet paints. Other tabs of that profile follow saved preference changes.
+  If the browser blocks storage, the preference applies until the tab closes and Settings
+  explains why.
 
 ## Application menu
 

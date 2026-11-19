@@ -82,7 +82,8 @@ the current one and keep mismatches unresolved: reauthorization is never permiss
 
 Factory uses the color palette of the **environment default theme** of the T3 connection's environment
 (`t3 theme set`), not the theme an individual T3 window shows. Each client keeps its own
-[Light or Dark choice](desktop-and-clients.md#appearance) and shows that mode's half of the palette.
+[appearance preference](desktop-and-clients.md#appearance) and uses the T3 palette for its
+effective Light or Dark mode.
 T3 keeps owning theme selection and editing; Factory has no theme catalog or editor.
 
 **Reading the default.** Factory reads the theme with T3's `t3_theme_read` MCP tool over the authorized T3
@@ -129,7 +130,7 @@ Support limits of published definitions:
 
 **Fallbacks.** An empty default, an unsupported or removed definition, a rejected mode, a T3 without
 `t3_theme_read`, a connection whose authorization T3 rejected (even before a new authorization replaces its context)
-and a mismatched environment all use Factory’s colors for the selected mode. Appearance explains
+and a mismatched environment all use Factory’s colors for the effective mode. Appearance explains
 an unreadable theme or a connection problem and identifies each mode’s color source when the theme is applied.
 During a transient outage the last presentation of the same endpoint and environment stays.
 A changed endpoint or connection environment discards it at once. Theme colors

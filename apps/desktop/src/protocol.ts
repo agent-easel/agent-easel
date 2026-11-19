@@ -1,7 +1,7 @@
 import { clientAccessOperations, operationPath } from "@t3-factory/contracts";
 import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
-import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
+import type { Appearance, AppearancePreference } from "@t3-factory/contracts/desktop-bridge";
 import type { ApprovedConnection } from "./approved-client.ts";
 
 /** Bundled UI origin. Remote servers supply data only; they never provide executable content. */
@@ -51,34 +51,35 @@ const unreachable = () =>
     },
   );
 
-/**
- * The page's stylesheet keys every color off `data-appearance` on `<html>`. Serving the entry
- * in the installation's mode paints it from the first frame; the bundled UI ships Dark.
- */
-function withAppearance(html: Buffer, appearance: Appearance): string {
-  return html.toString("utf8").replace('data-appearance="dark"', `data-appearance="${appearance}"`);
+interface PageAppearance {
+  readonly mode: Appearance;
+  readonly preference: AppearancePreference;
 }
 
-async function serveStatic(
-  uiDirectory: string,
-  pathname: string,
-  appearance: Appearance,
-): Promise<Response> {
-  const root = resolve(uiDirectory);
+/** The entry carries the resolved mode so its stylesheet can paint before JavaScript. */
+function withAppearance(html: Buffer, { mode, preference }: PageAppearance): string {
+  return html
+    .toString("utf8")
+    .replace('data-appearance="dark"', `data-appearance="${mode}"`)
+    .replace('data-appearance-preference="system"', `data-appearance-preference="${preference}"`);
+}
+
+async function serveStatic(pathname: string, options: ProtocolOptions): Promise<Response> {
+  const root = resolve(options.uiDirectory);
   const target = resolve(root, "." + decodeURIComponent(pathname));
   if (target !== root && !target.startsWith(root + sep)) return new Response(null, { status: 404 });
   // Client routes have no extension and use the SPA entry; missing assets stay 404.
   const file = extname(target) === "" ? resolve(root, "index.html") : target;
   try {
     const body = await readFile(file);
+    const extension = extname(file);
+    const isHtml = extension === ".html";
     return new Response(
-      extname(file) === ".html" ? withAppearance(body, appearance) : new Uint8Array(body),
+      isHtml ? withAppearance(body, options.appearance()) : new Uint8Array(body),
       {
         headers: {
-          "content-type": contentTypes[extname(file)] ?? "application/octet-stream",
-          ...(extname(file) === ".html"
-            ? { "content-security-policy": contentSecurityPolicy }
-            : {}),
+          "content-type": contentTypes[extension] ?? "application/octet-stream",
+          ...(isHtml ? { "content-security-policy": contentSecurityPolicy } : {}),
         },
       },
     );
@@ -90,7 +91,7 @@ async function serveStatic(
 export interface ProtocolOptions {
   readonly uiDirectory: string;
   readonly target: () => ApiTarget;
-  readonly appearance: () => Appearance;
+  readonly appearance: () => PageAppearance;
 }
 
 function outgoingHeaders(request: Request): Record<string, string> {
@@ -160,8 +161,7 @@ export function factoryProtocolHandler(options: ProtocolOptions) {
     // WHATWG URL reports an opaque origin for custom schemes, so compare scheme and host.
     if (url.protocol !== "factory:" || url.host !== "app")
       return new Response(null, { status: 404 });
-    if (!url.pathname.startsWith("/api/"))
-      return serveStatic(options.uiDirectory, url.pathname, options.appearance());
+    if (!url.pathname.startsWith("/api/")) return serveStatic(url.pathname, options);
     const initiator = (request as Request & { initiatorOrigin?: string | null }).initiatorOrigin;
     if (initiator !== undefined && initiator !== appOrigin)
       return new Response(null, { status: 403 });
