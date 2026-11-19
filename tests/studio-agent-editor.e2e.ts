@@ -205,3 +205,52 @@ test("Escape closes only the model picker and returns focus to it", async ({
   await expect(screen.getByRole("dialog", "Studio")).toBeVisible();
   await expect(picker).toBeFocused();
 });
+
+test("the Agent header's Save is filled only with unsaved changes and turns neutral and disabled once saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioAgent(
+    { app, screen, browser },
+    `Header save state ${crypto.randomUUID().slice(0, 8)}`,
+  );
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expectSavedAgentRevision(screen, 1);
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
+  await screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
+  await expect(screen.getByText(/^Unsaved changes · Revision 1 · Unused$/)).toBeVisible();
+  await expect(save).toBeEnabled();
+  await expect(save).toHaveAttribute("data-variant", "default");
+  await app.screenshot("agent-header-unsaved");
+
+  // Act
+  await save.tap();
+
+  // Assert
+  await expectSavedAgentRevision(screen, 2);
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
+  await app.screenshot("agent-header-saved");
+});
+
+test("a Project group heading in the Agents list says only that Project's Flows can place its Agent", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await app.open("/studio/agents");
+  const northwind = screen.getByRole("region", "Northwind", { exact: true });
+  await expect(northwind.getByText("Northwind QA", { exact: true })).toBeVisible();
+
+  // Act
+  await northwind.getByText("Northwind", { exact: true }).hover();
+
+  // Assert
+  await expect(screen.getByRole("tooltip")).toHaveText(
+    "Only Northwind Flows can place this Agent.",
+  );
+  await app.screenshot("agents-placement-rule");
+});
