@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: report_reporting_execution
+-- Newest applied migration: first_run_setup
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -504,6 +504,11 @@ CREATE TABLE "effect_sql_migrations" (
 CREATE TABLE factory_server (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   id TEXT NOT NULL
+);
+
+CREATE TABLE first_run_setup (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+  completed INTEGER NOT NULL CHECK (completed IN (0, 1))
 );
 
 CREATE TABLE "flow_revision_blocks" (

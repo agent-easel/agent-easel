@@ -16,7 +16,7 @@ import {
 import { controlledDiscord, messageEvent, PARTICIPANT_ID } from "./support/controlled-discord.ts";
 import { controlledModelProvider } from "./support/controlled-model.ts";
 
-it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, with their execution settings in the project checkout, with an empty Revisit instruction on every Agent block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run, leaves Generate Run titles off and starts Chat control Off with an empty Language model and Discord connection", async (c) => {
+it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, with their execution settings in the project checkout, with an empty Revisit instruction on every Agent block, settles Finished, archives Stopped and pending Stop with their history and titles as legacy without title generation, removes the open Run, leaves Generate Run titles off starts Chat control Off with an empty Language model and Discord connection and treats the saved T3 endpoint as First-run setup already completed", async (c) => {
   // Arrange
   const fixture = await releasedUpgradeData(c);
   expect(fixture.pendingStop.closedAt).toBeNull();
@@ -79,6 +79,9 @@ it("upgrading v0.2.0 keeps clients and definitions, as global Flows and Agents, 
     ok: true,
     value: { enabled: false, model: null, diagnostic: null },
   });
+  const setup = await factory.getFirstRunSetup();
+  assert(setup.ok);
+  expect(setup.value.completed).toBe(true);
   expect(await factory.getChatModelSettings()).toStrictEqual({
     ok: true,
     value: {

@@ -306,7 +306,7 @@ export const makeConnection = (
     };
   });
 
-function parseEndpoint(input: unknown): Result<string> {
+export function parseEndpoint(input: unknown): Result<string> {
   try {
     if (
       typeof input !== "object" ||

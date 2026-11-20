@@ -268,6 +268,12 @@ function connectionRoutes(factory: Factory): RouteEntries<typeof connectionOpera
       // the consent page, state and tokens stay on the host.
       handle: () => answer(() => factory.openConnectionAuthorization()),
     },
+    // Approved clients poll the status while the host's setup is incomplete.
+    getFirstRunSetup: { handle: () => answer(() => factory.getFirstRunSetup()) },
+    completeFirstRunSetup: {
+      hostOnly: true,
+      handle: () => answer(() => factory.completeFirstRunSetup()),
+    },
   };
 }
 

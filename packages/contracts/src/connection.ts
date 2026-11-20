@@ -60,6 +60,21 @@ export interface T3Connection {
   readonly contract: T3Contract | null;
 }
 
+/** A T3 found running on the Factory host's computer; a suggestion until the connection check proves it. */
+export interface DetectedT3 {
+  readonly endpoint: string;
+  /** T3's runtime file does not always state its version. */
+  readonly serverVersion: string | null;
+}
+/**
+ * First-run setup is completed once, durably, by the host. Step progress is not part of it: the
+ * steps read the connection and reporting installations.
+ */
+export interface FirstRunSetup {
+  readonly completed: boolean;
+  readonly detectedT3: DetectedT3 | null;
+}
+
 export interface ConfigureConnectionInput {
   readonly endpoint: string;
 }
@@ -105,5 +120,12 @@ export const connectionOperations = {
   openConnectionAuthorization: operation<never, T3Connection>()({
     method: "POST",
     path: "/api/connection/authorization/open",
+  }),
+  /** Whether First-run setup is completed, and the T3 running on this computer, if any. */
+  getFirstRunSetup: operation<never, FirstRunSetup>()({ method: "GET", path: "/api/setup" }),
+  /** Host only: records that First-run setup is completed. */
+  completeFirstRunSetup: operation<never, FirstRunSetup>()({
+    method: "POST",
+    path: "/api/setup/complete",
   }),
 };

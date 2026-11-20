@@ -41,6 +41,7 @@ and the non-secret [Chat control](chat-control.md) configuration, live in `facto
 | `FACTORY_PORT` | `config.json` port | 0–65535; 0 picks a free port, printed at startup |
 | `FACTORY_REMOTE_ACCESS` | `remoteAccess.enabled` (off) | `1` starts the approved-client HTTPS listener for this process |
 | `FACTORY_REMOTE_HOST` / `FACTORY_REMOTE_PORT` | `0.0.0.0` / 4312 | Approved-client listener binding; port 0 picks one |
+| `FACTORY_T3_STATE_DIRECTORY` | `~/.t3/userdata` | T3's state directory; steers both [agent reporting discovery](t3-integration.md#reporting-installation) and [T3 address detection](t3-integration.md#first-run-setup) |
 
 Every request, including UI assets, must use the bound port and an allowed Host: loopback bindings accept `localhost`, `127.0.0.1` and `[::1]`; other bindings accept IP literals and listed DNS names
 (for example `FACTORY_ALLOWED_HOSTS=factory.tail.example`); anything else gets HTTP 421. Every method except GET/HEAD needs `X-Factory-Request: 1`, and a present `Origin` must equal `http://` plus the

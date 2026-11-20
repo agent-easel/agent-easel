@@ -7,6 +7,9 @@ T3 Factory lets users compose and run their own software development workflows.
 **Release**:
 One T3 Factory product version, identified by a `vX.Y.Z` tag on a fixed commit and published only by the controlled `publish` job. macOS packaging is part of the Release; see [Release](docs/release.md).
 
+**First-run setup**:
+The host's one-time checklist (connect to T3, install in agents) that must be completed before the application opens; once completed it is never shown again. See [First-run setup](docs/t3-integration.md#first-run-setup).
+
 **Beta build**:
 A signed prerelease of `main`, tagged `vX.Y.(Z+1)-beta.N`, built nightly when `main` changed or on demand. It is not a Release: it skips the release PR and maintainer qualification. Installations on the **beta update channel** receive beta builds and newer Releases; the **stable channel** receives Releases only. See [Release](docs/release.md#beta-builds).
 

@@ -65,6 +65,12 @@ Connected does **not** prove project availability, provider/model availability, 
 correlation; those execution gates are checked separately at [Start](runs.md). Version differences alone do not reject a
 connection and Factory launches no onboarding workload.
 
+## First-run setup
+
+**First-run setup** is the host's one-time checklist before the application opens. Whether it is completed is durable installation state in `factory.sqlite`, never derived from the live connection, so a later T3 outage does not gate the application again. A fresh home starts not completed; an installation that already has a saved T3 endpoint is recorded as completed when it upgrades. The development demo seed records completion. The status read returns the completion flag and the detected T3 (`endpoint`, `serverVersion`) or none; step progress is not duplicated there, because steps read the connection and [reporting installations](#reporting-installation).
+
+Detection exists because T3 offers no supported way to discover its MCP endpoint: its MCP tools need an existing authorized connection, and T3 documents only copying the MCP URL from **Settings → Connections**. Factory therefore reads T3's internal `server-runtime.json` from the same T3 state directory as reporting discovery (`FACTORY_T3_STATE_DIRECTORY`, otherwise `~/.t3/userdata`). The file is untrusted and not a published contract: only its `origin` and optional `serverVersion` are read, unknown fields are ignored, and the proposal `<origin>/mcp` must pass the same endpoint validation as a typed address (HTTPS, or HTTP on loopback; no credentials, query or fragment). A missing, unreadable, malformed or differently shaped file, or an origin that fails validation, means no running T3 was found and the user enters the address manually. A file without a server version still proposes the address, with no version. The proposal is only a suggestion; the connection check after saving it is what proves it, so a stale file left by a crashed T3 fails there. A T3 release that changes the file's shape needs the same adjustment here.
+
 ## Credentials and reauthorization
 
 OAuth registration, tokens, discovery, PKCE and pending callback state live in `credentials/t3-<endpoint SHA-256>.json`
@@ -252,6 +258,8 @@ in a native client remains a live compatibility check.
 | `POST /api/connection/recheck` | Check again |
 | `POST /api/connection/authorize` | Start authorization (host only) |
 | `POST /api/connection/authorization/open` | Open consent on the host for the saved endpoint (host and approved clients) |
+| `GET /api/setup` | Read [First-run setup](#first-run-setup) status (host and approved clients) |
+| `POST /api/setup/complete` | Record that First-run setup is completed (host only) |
 
 Theme-color status and presentation reach clients through live delivery only.
 
