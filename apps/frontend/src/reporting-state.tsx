@@ -1,5 +1,7 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { CircleDashed, type LucideIcon } from "lucide-react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
+import type { SettingKind } from "./components/status-badge.tsx";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
@@ -30,10 +32,15 @@ export function agentReportingStatus(
       launchSkill: null,
     };
   if (!targets)
-    return { state: "checking", label: "Checking reporting…", message: "", launchSkill: null };
+    return {
+      state: "checking",
+      label: "Checking reporting…",
+      message: "",
+      launchSkill: null,
+    };
   const target =
     targets.find((target) => target.instances.includes(providerInstanceId)) ??
-    targets.find((target) => target.instances.length === 0 && target.status === "needs-attention");
+    targets.find((target) => target.kind !== "instance");
   if (!target)
     return {
       state: "attention",
@@ -58,6 +65,9 @@ export function agentReportingStatus(
   };
 }
 
+/** One request for the list to answer for `key`; every request is its own read generation. */
+type ScopeRequest = { readonly key: string };
+
 type ReportingInstallState = {
   running: string | null;
   failures: Readonly<Record<string, string>>;
@@ -65,7 +75,21 @@ type ReportingInstallState = {
 };
 
 const ReportingStateContext = createContext<
-  | (ReportingReads & ReportingInstallState & { refresh: () => Promise<void>; readDetails: string })
+  | (ReportingReads &
+      ReportingInstallState & {
+        refresh: () => Promise<void>;
+        /**
+         * Reads the list again for `key`, such as the ready T3 connection and the harnesses it
+         * keeps off; null means nothing the list can answer for yet. Each call is a new request,
+         * so an answer read for an earlier call never counts for a later one, even with the same key.
+         */
+        refreshFor: (key: string | null) => Promise<void>;
+        /** The key of the latest request, once a read started under that request has applied. */
+        answeredFor: string | null;
+        /** A read requested since `targets` applied is outstanding, so they may be out of date. */
+        refreshing: boolean;
+        readDetails: string;
+      })
   | null
 >(null);
 
@@ -74,13 +98,37 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
+  const [requested, setRequested] = useState<ScopeRequest | null>(null);
+  const [answered, setAnswered] = useState<ScopeRequest | null>(null);
   const installing = useRef(false);
+  const latestRequest = useRef<ScopeRequest | null>(null);
   const agents = useLiveStudio().value?.agents ?? null;
-  const { failure, refresh, supersede } = useRefreshSchedule({
-    read: api.getReportingInstallations,
-    apply: setTargets,
+  const {
+    failure,
+    pending: refreshing,
+    refresh,
+    supersede,
+  } = useRefreshSchedule({
+    read: async () => {
+      const readFor = latestRequest.current;
+      return { readFor, targets: await api.getReportingInstallations() };
+    },
+    apply: ({ readFor, targets }) => {
+      setTargets(targets);
+      setAnswered(readFor === latestRequest.current ? readFor : null);
+    },
     intervalMs: 30_000,
   });
+  const refreshFor = useCallback(
+    async (key: string | null) => {
+      const request = key === null ? null : { key };
+      latestRequest.current = request;
+      setRequested(request);
+      if (request) await refresh();
+    },
+    [refresh],
+  );
+  const answeredFor = answered !== null && answered === requested ? answered.key : null;
   const reads: ReportingReads = failure
     ? {
         targets: null,
@@ -122,7 +170,17 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const readDetails = failure ? String(failure.cause) : "";
   return (
     <ReportingStateContext.Provider
-      value={{ ...reads, refresh, readDetails, running, failures, install }}
+      value={{
+        ...reads,
+        refresh,
+        refreshFor,
+        answeredFor,
+        refreshing,
+        readDetails,
+        running,
+        failures,
+        install,
+      }}
     >
       {children}
     </ReportingStateContext.Provider>
@@ -165,5 +223,56 @@ export function reportingSummary(reads: ReportingReads): ReportingStatus {
         message: "Agent reporting needs attention",
         launchSkill: null,
       }
-    : { state: "installed", label: "Reporting installed", message: "", launchSkill: null };
+    : {
+        state: "installed",
+        label: "Reporting installed",
+        message: "",
+        launchSkill: null,
+      };
+}
+
+const providerNames: Record<string, string> = {
+  claudeAgent: "Claude",
+  codex: "Codex",
+  cursor: "Cursor",
+  grok: "Grok",
+};
+
+/** A harness's name in Factory, from its T3 provider driver. */
+export const providerName = (provider: string) => providerNames[provider] ?? provider;
+
+/** A target the reporting install can act on now: Install, or Repair of Factory's own entry. */
+export const installable = (target: ReportingInstallation) =>
+  target.actions.install || target.actions.repair;
+
+export interface TargetStatus {
+  kind: SettingKind;
+  label: string;
+  badge?: { icon: LucideIcon };
+}
+
+const statuses: Record<ReportingInstallation["status"], TargetStatus> = {
+  "not-installed": {
+    label: "Not installed",
+    kind: "attention",
+    badge: { icon: CircleDashed },
+  },
+  installed: { label: "Installed", kind: "success" },
+  "needs-attention": { label: "Needs attention", kind: "attention" },
+  unsupported: { label: "Not available", kind: "neutral" },
+};
+
+/** A harness row's status badge, including an install running or failed in this session. */
+export function targetStatus(
+  target: ReportingInstallation,
+  running: boolean,
+  failed: boolean,
+): TargetStatus {
+  if (running)
+    return {
+      kind: "checking",
+      label: target.actions.repair ? "Repairing…" : "Installing…",
+    };
+  if (failed) return { kind: "error", label: "Install failed" };
+  return statuses[target.status];
 }

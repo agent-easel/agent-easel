@@ -7,7 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
-import type { T3Authorization, T3ConnectionReason } from "./t3/connection.ts";
+import {
+  isApprovalPending,
+  type T3Authorization,
+  type T3ConnectionReason,
+} from "./t3/connection.ts";
 import {
   NO_T3_SUPPORT,
   type T3ContractReader,
@@ -37,6 +41,8 @@ const explanations: Record<T3ConnectionReason, string> = {
     "Approve access in T3 by opening authorization on the Factory host; consent happens in that computer's browser. No token copying is needed.",
   "approval-pending":
     "Approve access in the browser opened on the backend host. Factory will recheck automatically.",
+  "approval-reopen-failed":
+    "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
   "browser-unavailable":
     "Factory could not open the backend-host browser. Check its desktop/browser setup and choose Authorize again.",
   "callback-unavailable":
@@ -96,6 +102,8 @@ export const makeConnection = (
       checkedAt: null,
       authorizationContext: current ? contextValue(current) : null,
       authorizationPending: false,
+      authorizationOpenFailed: false,
+      readyGeneration: null,
       contract: null,
     };
     /** The support answers of the check that set `status`. */
@@ -158,13 +166,22 @@ export const makeConnection = (
           }
         }
         support = observation.support;
+        // Kept while the connection stays ready for the same authorization context.
+        const sameReady =
+          before.readyGeneration !== null && before.authorizationContext?.id === current?.id;
+        let readyGeneration: string | null = null;
+        if (observation.state === "ready")
+          readyGeneration = sameReady ? before.readyGeneration : yield* newId;
         status = {
           endpoint,
           state: observation.state,
           explanation: explanations[observation.reason],
           checkedAt: yield* now,
           authorizationContext: current ? contextValue(current) : null,
-          authorizationPending: observation.reason === "approval-pending",
+          // The pending attempt owns both, so a resumed attempt reports them as before.
+          authorizationPending: isApprovalPending(observation.reason),
+          authorizationOpenFailed: observation.reason === "approval-reopen-failed",
+          readyGeneration,
           contract: observation.contract ?? null,
         };
         publishCheck(before);
@@ -172,6 +189,7 @@ export const makeConnection = (
           status = {
             ...status,
             state: "incompatible",
+            readyGeneration: null,
             explanation:
               "T3 did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
           };
@@ -187,6 +205,8 @@ export const makeConnection = (
               state: "unavailable",
               checkedAt: yield* now,
               authorizationPending: false,
+              authorizationOpenFailed: false,
+              readyGeneration: null,
               contract: null,
               explanation:
                 "T3 is unavailable. Start T3 or check the endpoint and network. Factory will reconnect automatically.",
@@ -209,6 +229,8 @@ export const makeConnection = (
         ...status,
         authorizationContext: null,
         authorizationPending: false,
+        authorizationOpenFailed: false,
+        readyGeneration: null,
         contract: null,
         state: "authorization-required",
       };
@@ -258,7 +280,14 @@ export const makeConnection = (
           ON CONFLICT(singleton) DO UPDATE SET endpoint = excluded.endpoint, context_id = NULL`;
               saved = { endpoint, context_id: null };
               current = undefined;
-              status = { ...status, endpoint, authorizationContext: null, contract: null };
+              status = {
+                ...status,
+                endpoint,
+                authorizationContext: null,
+                authorizationOpenFailed: false,
+                readyGeneration: null,
+                contract: null,
+              };
               changes.connectionChanged();
             }
             return yield* check();
@@ -289,16 +318,8 @@ export const makeConnection = (
             const resumed = yield* Effect.tryPromise(() =>
               authorization.resumeAuthorization({ endpoint: endpoint.endpoint }),
             ).pipe(Effect.option);
-            if (resumed._tag === "None") {
-              status = {
-                ...status,
-                explanation:
-                  "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
-              };
-              changes.connectionChanged();
-              return value();
-            }
-            if (resumed.value !== "none") return yield* check();
+            // A failed open is recorded on the pending attempt, which the check reports.
+            if (resumed._tag === "None" || resumed.value !== "none") return yield* check();
             return yield* startAuthorization(endpoint);
           }),
         ),
@@ -306,7 +327,7 @@ export const makeConnection = (
     };
   });
 
-function parseEndpoint(input: unknown): Result<string> {
+export function parseEndpoint(input: unknown): Result<string> {
   try {
     if (
       typeof input !== "object" ||

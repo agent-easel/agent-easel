@@ -29,34 +29,45 @@ export interface RefreshReads<T> {
   readonly apply: (value: T) => void;
   /** Called with a failed read, and with null once a later read succeeds. */
   readonly failed: (failure: RefreshFailure | null) => void;
+  /** Called when a read whose answer may still apply starts being, or stops being, outstanding. */
+  readonly pending: (pending: boolean) => void;
 }
 
 /**
  * Periodic reads of server state that has no live scope. Only the newest read may apply its
  * answer, so a slower earlier read never replaces a later one; nothing applies after `close`.
  */
-export function createRefreshSchedule<T>({ read, apply, failed }: RefreshReads<T>) {
+export function createRefreshSchedule<T>({ read, apply, failed, pending }: RefreshReads<T>) {
   let latest = 0;
   let closed = false;
   let failing = false;
+  let outstanding = false;
 
   function recovered() {
     if (failing) failed(null);
     failing = false;
   }
 
+  function settle(next: boolean) {
+    if (outstanding !== next) pending(next);
+    outstanding = next;
+  }
+
   async function refresh() {
     const ticket = ++latest;
     const current = () => !closed && ticket === latest;
+    settle(true);
     await read().then(
       (value) => {
         if (!current()) return;
         apply(value);
+        settle(false);
         recovered();
       },
       (cause: unknown) => {
         if (!current()) return;
         failing = true;
+        settle(false);
         failed({ cause });
       },
     );
@@ -89,6 +100,7 @@ export function createRefreshSchedule<T>({ read, apply, failed }: RefreshReads<T
     /** A newer answer, such as an action's, applied: drops reads in flight and the failure. */
     supersede: () => {
       latest++;
+      settle(false);
       recovered();
     },
     close: () => {
@@ -101,7 +113,8 @@ type RefreshSchedule = ReturnType<typeof createRefreshSchedule>;
 
 /**
  * Holds a refresh schedule while the calling component is mounted. It reads every `intervalMs`
- * while `watching`; `refresh` reads once at any time. The failure clears after a later success.
+ * while `watching`; `refresh` reads once at any time. The failure clears after a later success;
+ * `pending` holds while a read whose answer may still apply is outstanding.
  */
 export function useRefreshSchedule<T>({
   read,
@@ -115,6 +128,7 @@ export function useRefreshSchedule<T>({
   watching?: boolean;
 }) {
   const [failure, setFailure] = useState<RefreshFailure | null>(null);
+  const [pending, setPending] = useState(false);
   const readNow = useEffectEvent(read);
   const applyAnswer = useEffectEvent(apply);
   const schedule = useRef<RefreshSchedule | null>(null);
@@ -123,6 +137,7 @@ export function useRefreshSchedule<T>({
       read: () => readNow(),
       apply: (value: T) => applyAnswer(value),
       failed: setFailure,
+      pending: setPending,
     });
     schedule.current = created;
     return () => {
@@ -136,5 +151,5 @@ export function useRefreshSchedule<T>({
   );
   const refresh = useCallback(async () => await schedule.current?.refresh(), []);
   const supersede = useCallback(() => schedule.current?.supersede(), []);
-  return { failure, refresh, supersede };
+  return { failure, pending, refresh, supersede };
 }

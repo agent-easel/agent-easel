@@ -9,6 +9,7 @@ import type { FactoryOperations, OperationError, Result, RunDetail } from "@t3-f
 import type { EffectOperations } from "./effect-operations.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { makeConnection } from "./connection.ts";
+import { makeFirstRunSetup } from "./first-run-setup.ts";
 import { makeAppearance } from "./appearance/appearance.ts";
 import { makeProjects } from "./projects.ts";
 import { makeDefinitions } from "./definitions.ts";
@@ -131,12 +132,15 @@ export const makeFactoryService = (
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
+    const t3StateDirectory =
+      options.reportingStateDirectory ??
+      process.env.FACTORY_T3_STATE_DIRECTORY ??
+      join(homedir(), ".t3", "userdata");
+    const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
     const reportingContext = yield* Layer.build(
       ReportingInstaller.ReportingInstallerLayer(
         dirname(options.databasePath),
-        options.reportingStateDirectory ??
-          process.env.FACTORY_T3_STATE_DIRECTORY ??
-          join(homedir(), ".t3", "userdata"),
+        t3StateDirectory,
         connection.getConnection,
         () => `${runtimeBackendUrl}/mcp`,
       ),
@@ -314,6 +318,8 @@ export const makeFactoryService = (
       recheckConnection: () => connection.recheckConnection(),
       authorizeConnection: () => connection.authorizeConnection(),
       openConnectionAuthorization: () => connection.openConnectionAuthorization(),
+      getFirstRunSetup: () => firstRunSetup.getFirstRunSetup(),
+      completeFirstRunSetup: () => firstRunSetup.completeFirstRunSetup(),
       requestClientAccess: (input) => clients.requestClientAccess(input),
       getClientAccess: (credential) => clients.getClientAccess(credential),
       getServerId: () => clients.getServerId(),

@@ -19,9 +19,18 @@ export interface ReportingInstallationActions {
 }
 export interface ReportingInstallation {
   readonly id: string;
+  /**
+   * `instance`: one harness home of the listed T3 provider instances. A discovery result is the
+   * only target in its list and stands for no instance: `discovery-refused` when discovery could
+   * not list T3's provider instances (its message names the blocker and the recovery), and
+   * `none-enabled` when it read T3's settings and found no instance on.
+   */
+  readonly kind: "instance" | "discovery-refused" | "none-enabled";
   readonly provider: string;
   readonly instances: readonly string[];
   readonly path: string | null;
+  /** The harness skills folder Factory writes its skills into, beside `path`. */
+  readonly skillsPath: string | null;
   /** `unsupported`: the provider has no Factory reporting yet; there is nothing to install. */
   readonly status: "not-installed" | "installed" | "needs-attention" | "unsupported";
   readonly message: string;
@@ -57,7 +66,38 @@ export interface T3Connection {
   readonly authorizationContext: AuthorizationContext | null;
   /** An approval started on the host is waiting for consent in the host's browser. */
   readonly authorizationPending: boolean;
+  /**
+   * The host's browser could not open the pending approval's page again; `explanation` says so
+   * until a later open succeeds or the approval ends. It is kept with the pending approval
+   * itself, so a backend restart that resumes the approval reports it too.
+   */
+  readonly authorizationOpenFailed: boolean;
+  /**
+   * Which ready connection this is: a new opaque value each time the connection becomes ready, or
+   * becomes ready for another authorization context, and null while it is not ready. Every
+   * connect, reauthorization, reconnect after an outage, endpoint change and backend restart
+   * therefore yields a new value; later checks of the same ready connection keep it. Anything
+   * read for an earlier value was read for another connection.
+   */
+  readonly readyGeneration: string | null;
   readonly contract: T3Contract | null;
+}
+
+/** A T3 found running on the Factory host's computer; a suggestion until the connection check proves it. */
+export interface DetectedT3 {
+  readonly endpoint: string;
+  /** T3's runtime file does not always state its version. */
+  readonly serverVersion: string | null;
+}
+/**
+ * First-run setup is completed once, durably, by the host. Step progress is not part of it: the
+ * steps read the connection and reporting installations.
+ */
+export interface FirstRunSetup {
+  readonly completed: boolean;
+  readonly detectedT3: DetectedT3 | null;
+  /** Provider drivers Factory can install into that T3 keeps off, for the install step's caption. */
+  readonly harnessesOffInT3: readonly string[];
 }
 
 export interface ConfigureConnectionInput {
@@ -105,5 +145,12 @@ export const connectionOperations = {
   openConnectionAuthorization: operation<never, T3Connection>()({
     method: "POST",
     path: "/api/connection/authorization/open",
+  }),
+  /** Whether First-run setup is completed, and the T3 running on this computer, if any. */
+  getFirstRunSetup: operation<never, FirstRunSetup>()({ method: "GET", path: "/api/setup" }),
+  /** Host only: records that First-run setup is completed. */
+  completeFirstRunSetup: operation<never, FirstRunSetup>()({
+    method: "POST",
+    path: "/api/setup/complete",
   }),
 };

@@ -81,7 +81,10 @@ to its local panel. The T3 endpoint and host reauthorization remain host-only: r
 clients see their status and the "Managed on the Factory host" chip.
 When T3 needs approval, a remote client can choose **Authorize** or
 **Open the page again** for the saved endpoint. Both open the host's browser.
-See [T3 connection](t3-integration.md#authorizing). Lifecycle and approvals are host-local
+See [T3 connection](t3-integration.md#authorizing). While the host's
+[First-run setup](t3-integration.md#first-run-setup) is incomplete, an approved client waits
+read-only on **Finish setup on the Factory host** and opens the application once the host
+completes it. Lifecycle and approvals are host-local
 only; an approved client may check, download and install the server's own update
 ([updates](#updates)).
 
@@ -412,14 +415,26 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **20**. A server accepts clients from protocol **17**. The current client
-requires a protocol **20** server for the `workerFinished` field in Run detail. That field lets
-the client distinguish a completed turn from a finished worker thread when offering **Request report**.
-Older clients ignore the field and the server still checks their requests before dispatch.
+The current protocol is **21**. A server accepts clients from protocol **21**, and the current
+client requires a protocol **21** server, so only protocol 21 peers interoperate.
 
-Protocol **19** adds [Agent Create reservations](studio.md#agent-definitions).
-Clients on protocols 17 and 18 can still create Agents without a reservation. A protocol 19 client
-shows the server update gate when the server does not support reservations.
+Protocol 21 adds the [First-run setup](t3-integration.md#first-run-setup) status read
+(`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the
+status before it opens the application and waits on the setup screen until the host completes it.
+A protocol 20 or older server lacks the read, so a current client shows the server update gate
+instead of waiting for a status that never comes. A protocol 20 or older client never reads the
+status and would open the application while the host's setup is incomplete, so the server refuses
+it at the handshake and it shows the client update gate; its approved credentials and stored data
+are kept. This is an intentional transport break; it needs no stored-data migration of its own.
+
+Protocol 20 added the `workerFinished` field in Run detail. That field lets the client distinguish
+a completed turn from a finished worker thread when offering **Request report**. Protocol 20
+clients required a protocol 20 server for it; older clients ignored the field and the server still
+checked their requests before dispatch.
+
+Protocol 19 added [Agent Create reservations](studio.md#agent-definitions). Clients on protocols
+17 and 18 could still create Agents without a reservation, and a protocol 19 client showed the
+server update gate when the server did not support reservations.
 
 Protocol 18 adds the [Trigger operations](studio.md#trigger-http-api)
 over the product HTTP API, a `triggers` list to the Studio live subscription (snapshots and change

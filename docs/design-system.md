@@ -237,6 +237,17 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
   relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the
   full local date and time for tooltips and accessible names.
+- **Full-window state**: GateScreen, the one screen before the application (connecting, access,
+  incompatible versions, First-run setup), with the desktop titlebar and local application
+  controls. Default is the narrow card with a large state icon; Wide is the First-run setup
+  checklist card with the product name beside a small brand icon.
+- **Setup step**: SetupStepHeader (Figma Setup/StepHeader) for each First-run setup step: a
+  numbered indicator that is Current in the primary colour, Upcoming greyed out and Done as a
+  success check, then the title and its one-sentence reason. The heading names the state, so it
+  is announced without colour.
+- **Setup harness**: HarnessRow (Figma Setup/HarnessRow) for one agent harness in First-run
+  setup: the harness name, the configuration paths Factory writes, the installation's own message
+  and its install status badge, as a group named after the harness. Rows sit in a grouped Surface.
 - **Canvas**: the canvas surface, which owns block geometry, ports, wires and the dot grid for
   both the Flow editor and the execution canvas.
 

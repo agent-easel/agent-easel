@@ -1,8 +1,9 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
 import { appearanceFixture } from "./fixture/appearance.ts";
 import { definitionsFixture } from "./fixture/definitions.ts";
+import { firstRunSetupFixture } from "./fixture/first-run-setup.ts";
 import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
 import { githubFixture, startJourneyGitHub } from "./fixture/github.ts";
 import { startHost } from "./fixture/host.ts";
@@ -23,14 +24,17 @@ const host = await startHost({
   applicationUpdates: serverUpdates.applicationUpdates,
 });
 const remoteAccess = await remoteAccessFixture(host, serverUpdates, () => live.snapshotDelayMs());
-const live = liveFixture(host.server.address.port, remoteAccess.liveSocketCount);
+const firstRunSetup = firstRunSetupFixture(host, remoteAccess);
+const live = liveFixture(firstRunSetup.hostPort, remoteAccess.liveSocketCount);
 const scenarios = await scenariosFixture(host);
 
 /**
- * Every fixture module, in shared reset order: the host's T3 connection comes back first, since
- * the other modules' resets need it available and authorized.
+ * Every fixture module, in shared reset order: browsers return from a fresh first-run host and
+ * the host's T3 connection comes back first, since the other modules' resets need it available
+ * and authorized.
  */
 const modules = {
+  firstRunSetup,
   remoteAccess,
   live,
   discord: discordFixture(discord, host),
@@ -96,6 +100,13 @@ const proxy = createServer((incoming, outgoing) => {
       });
     return;
   }
+  const held = firstRunSetup.heldRead(incoming);
+  if (held) void held.then(() => route(incoming, outgoing, url));
+  else route(incoming, outgoing, url);
+});
+
+/** Relays a browser request to the server it reaches. */
+function route(incoming: IncomingMessage, outgoing: ServerResponse, url: URL) {
   live.record(incoming, url.pathname);
   if (remoteAccess.relay(incoming, outgoing)) return;
   if (isFixturePath(url.pathname)) {
@@ -103,8 +114,8 @@ const proxy = createServer((incoming, outgoing) => {
     outgoing.end(`Unknown fixture route ${url.pathname}`);
     return;
   }
-  proxyFixture(incoming, outgoing, host.server.address.port);
-});
+  proxyFixture(incoming, outgoing, firstRunSetup.hostPort());
+}
 proxy.on("upgrade", (incoming: IncomingMessage, socket: Duplex) => {
   if (!remoteAccess.relayUpgrade(incoming, socket)) live.relayHostUpgrade(incoming, socket);
 });
@@ -112,7 +123,7 @@ await new Promise<void>((resolve) => proxy.listen(host.port, "127.0.0.1", resolv
 
 async function shutdown() {
   proxy.close();
-  await Promise.all([host.close(), remoteAccess.close()]);
+  await Promise.all([host.close(), remoteAccess.close(), firstRunSetup.close()]);
   process.exit(0);
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const)

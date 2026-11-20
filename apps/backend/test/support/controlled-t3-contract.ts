@@ -43,7 +43,11 @@ export class ControlledT3Contract implements T3ContractReader {
     if (!this.connection.authorized)
       return {
         state: "authorization-required",
-        reason: this.connection.pendingApproval ? "approval-pending" : "approval-required",
+        reason: !this.connection.pendingApproval
+          ? "approval-required"
+          : this.connection.reopenFailed
+            ? "approval-reopen-failed"
+            : "approval-pending",
         support: NO_T3_SUPPORT,
       };
     return {

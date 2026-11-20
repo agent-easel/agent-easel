@@ -38,6 +38,19 @@ export async function recheckConnection(factory: Factory): Promise<T3Connection>
   return result.value;
 }
 
+/** A host whose saved T3 endpoint is ready, with its first ready generation. */
+export async function readyConnection(context: TestContext) {
+  const harness = await factoryHarness(context);
+  const t3 = new ControlledT3();
+  t3.connection.authorized = true;
+  const factory = await harness.open({ t3, connectionRetryMs: 60_000 });
+  await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
+  const ready = await readConnection(factory);
+  expect(ready.state).toBe("ready");
+  expect(ready.readyGeneration).toEqual(expect.any(String));
+  return { t3, factory, ready };
+}
+
 export async function authorizedLiveOAuth(
   c: TestContext,
   options: Parameters<typeof oauthT3>[0] = {},

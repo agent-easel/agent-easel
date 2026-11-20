@@ -41,11 +41,14 @@ and the non-secret [Chat control](chat-control.md) configuration, live in `facto
 | `FACTORY_PORT` | `config.json` port | 0–65535; 0 picks a free port, printed at startup |
 | `FACTORY_REMOTE_ACCESS` | `remoteAccess.enabled` (off) | `1` starts the approved-client HTTPS listener for this process |
 | `FACTORY_REMOTE_HOST` / `FACTORY_REMOTE_PORT` | `0.0.0.0` / 4312 | Approved-client listener binding; port 0 picks one |
+| `FACTORY_T3_STATE_DIRECTORY` | `~/.t3/userdata` | T3's state directory; steers both [agent reporting discovery](t3-integration.md#reporting-installation) and [T3 address detection](t3-integration.md#first-run-setup) |
 
 Every request, including UI assets, must use the bound port and an allowed Host: loopback bindings accept `localhost`, `127.0.0.1` and `[::1]`; other bindings accept IP literals and listed DNS names
 (for example `FACTORY_ALLOWED_HOSTS=factory.tail.example`); anything else gets HTTP 421. Every method except GET/HEAD needs `X-Factory-Request: 1`, and a present `Origin` must equal `http://` plus the
 Host; failures return HTTP 403 before any operation. Factory sends no CORS headers. The UI and shipped fixtures send the header; custom API clients must too. This blocks cross-site
 mutation and DNS rebinding. Factory MCP (`/mcp`) is the one exception: harnesses send no custom header, so it refuses any present `Origin` other than its own instead.
+
+A fresh data home opens on the [First-run setup](t3-integration.md#first-run-setup) screen until the host completes it. Its first step connects to T3: it proposes the T3 running on the same computer as the same user, found through the T3 state directory above, and otherwise asks for the address. Its second step installs Factory MCP and its skills into the harnesses T3 has on, with one action, and names the installable harnesses T3 keeps off. When both pass, a ready screen reminds you to open a new agent session, and **Open Factory** records setup as completed. The screen is then never shown again, even after a reload or a later T3 outage; **Settings → T3 connection** and **Settings → Agent reporting** remain the places to repair problems. An upgraded installation that already has a saved T3 endpoint skips it.
 
 This listener is the **host-local** surface: it answers only requests whose socket peer is loopback (others get 403 `host_only`), even when bound to `0.0.0.0`. Other devices use secure remote access
 (approved, revocable clients over TLS on a separate listener) enabled in **Settings → Devices & access** or `"remoteAccess": { "enabled": true }`; see [desktop and approved clients](desktop-and-clients.md) and [Release](release.md).

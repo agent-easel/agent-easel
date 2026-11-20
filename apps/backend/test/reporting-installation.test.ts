@@ -89,6 +89,7 @@ it.for([
       runtimeEvidence: "UNVERIFIED",
     });
     expect(result.value.path).toBe(join(await realpath(home), config));
+    expect(result.value.skillsPath).toBe(join(await realpath(home), skills));
     expect(await readFile(join(home, config), "utf8")).toBe(after);
     expect(await readFile(join(home, skills, "factory-block", "SKILL.md"), "utf8")).toBe(
       FACTORY_BLOCK_SKILL,
@@ -128,6 +129,7 @@ it("a configured Claude config directory keeps its config and skills directly in
   assert(result.ok);
   expect(result.value.status).toBe("installed");
   expect(result.value.path).toBe(join(await realpath(configDirectory), ".claude.json"));
+  expect(result.value.skillsPath).toBe(join(await realpath(configDirectory), "skills"));
   expect(await readFile(join(configDirectory, "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
     FACTORY_BLOCK_SKILL,
   );
@@ -182,6 +184,38 @@ it("a provider without Factory reporting is listed as unsupported with nothing t
       actions: { install: false, repair: false, reinstall: false },
     },
   ]);
+});
+
+it("a provider instance whose key matches a discovery result's id is still a per-instance target", async (context) => {
+  // Arrange
+  const { factory } = await driverHomes(context, { unavailable: { driver: "pi", config: {} } });
+
+  // Act
+  const targets = await factory.getReportingInstallations();
+
+  // Assert
+  assert(targets.ok);
+  expect(targets.value).toMatchObject([
+    { kind: "instance", provider: "pi", instances: ["unavailable"], status: "unsupported" },
+  ]);
+});
+
+it("an unreadable T3 settings file refuses discovery and names where Factory reads T3's state", async (context) => {
+  // Arrange
+  await isolatedUserHome(context);
+  const { factory, state } = await reportingFixture(context);
+  await writeFile(join(state, "settings.json"), "{ not json");
+
+  // Act
+  const targets = await factory.getReportingInstallations();
+
+  // Assert
+  assert(targets.ok);
+  expect(targets.value).toHaveLength(1);
+  expect(targets.value[0]).toMatchObject({ kind: "discovery-refused", instances: [] });
+  expect(targets.value[0]!.message).toMatch(
+    /^Cannot discover local T3 configuration: .+\. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory\.$/,
+  );
 });
 
 it("a conflicting configuration target exposes no repair action", async (context) => {

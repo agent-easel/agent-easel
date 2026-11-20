@@ -191,6 +191,8 @@ export async function seedDevelopment(
       targetId: targets.find((target) => target.instances.includes("codex-main"))!.id,
     }),
   );
+  // The demo opens straight into the application; the first-run screen is covered by the e2e fixture.
+  requireSuccess(await factory.completeFirstRunSetup());
   const project = await createDemoProject(factory, t3, home);
   const agents = await createDemoAgents(factory, t3);
   const flows = await createDemoFlows(factory, agents);

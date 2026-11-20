@@ -34,14 +34,23 @@ export class T3Failure extends Error {
 export const isT3Refusal = (error: unknown) =>
   error instanceof T3Failure && error.kind === "refused";
 
+/**
+ * `approval-pending`: an approval attempt waits for consent in the backend host's browser;
+ * `approval-reopen-failed`: the same, but the host's browser could not open its page again. The
+ * failure belongs to that attempt, so it lasts exactly as long as the attempt does.
+ */
 export type T3ConnectionReason =
   | "connected"
   | "approval-required"
   | "approval-pending"
+  | "approval-reopen-failed"
   | "browser-unavailable"
   | "callback-unavailable"
   | "approval-expired"
   | "contract-missing";
+/** An approval attempt is still waiting for consent in the backend host's browser. */
+export const isApprovalPending = (reason: T3ConnectionReason) =>
+  reason === "approval-pending" || reason === "approval-reopen-failed";
 export type AuthorizationResumption = "reopened" | "completing" | "none";
 
 /** Backend-host OAuth approval of Factory by one T3 endpoint. Calls reject only with a `T3Failure`. */
@@ -52,7 +61,8 @@ export interface T3Authorization {
    * Reopens a live pending approval's own authorization page in the backend-host browser,
    * keeping its state and verifier. `completing`: a callback is being exchanged; `none`:
    * no live attempt exists (never started, expired, denied or completed). Throws when
-   * the browser cannot open. The page address never leaves the connection.
+   * the browser cannot open, and the attempt then inspects as `approval-reopen-failed` until a
+   * later reopen opens its page. The page address never leaves the connection.
    */
   resumeAuthorization(target: T3Endpoint): Promise<AuthorizationResumption>;
 }

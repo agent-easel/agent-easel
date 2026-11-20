@@ -26,12 +26,18 @@ function expandHomePath(value: string, home: string): string {
   return value;
 }
 
-const unknownTarget = (message: string): ReportingInstallation =>
+/** The only target of a list that names no instance: discovery refused or found none on. */
+const discoveryResult = (
+  kind: "discovery-refused" | "none-enabled",
+  message: string,
+): ReportingInstallation =>
   withReportingInstallationActions({
-    id: "unavailable",
+    id: kind === "discovery-refused" ? "unavailable" : "none-enabled",
+    kind,
     provider: "Unknown",
     instances: [],
     path: null,
+    skillsPath: null,
     status: "needs-attention",
     message,
     launchSkill: null,
@@ -128,6 +134,34 @@ function disabledInstances(settings: Record<string, unknown>): Set<string> {
   );
 }
 
+/**
+ * Reporting drivers with no instance T3 keeps on, by the same settings and enablement rule as
+ * discovery. A missing or unreadable settings file names none.
+ */
+export async function reportingDriversOffInT3(stateDirectory: string): Promise<string[]> {
+  try {
+    const settings = record(
+      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
+    );
+    const disabled = disabledInstances(settings);
+    const instances = Object.entries(record(settings.providerInstances));
+    const on = new Set(
+      instances
+        .filter(([id]) => !disabled.has(id))
+        .map(([, instance]) => field(instance, "driver")),
+    );
+    return [
+      ...new Set(
+        instances
+          .map(([, instance]) => field(instance, "driver"))
+          .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
+      ),
+    ].map(String);
+  } catch {
+    return [];
+  }
+}
+
 const targetFor = Effect.fn(function* (
   id: string,
   raw: unknown,
@@ -137,9 +171,11 @@ const targetFor = Effect.fn(function* (
   if (!isReportingDriver(driver))
     return withReportingInstallationActions({
       id,
+      kind: "instance",
       provider: String(driver),
       instances: [id],
       path: null,
+      skillsPath: null,
       status: "unsupported",
       message: providerReporting(driver).explanation,
       launchSkill: null,
@@ -148,6 +184,7 @@ const targetFor = Effect.fn(function* (
   const profile = HARNESS_PROFILES[driver];
   const base = {
     id,
+    kind: "instance" as const,
     provider: String(driver),
     instances: [id],
     launchSkill: null,
@@ -172,6 +209,7 @@ const targetFor = Effect.fn(function* (
         ...base,
         id: createHash("sha256").update(path).digest("hex"),
         path,
+        skillsPath: profile.skillsFolder(resolved),
         status: "not-installed",
         message: profile.home.message,
       });
@@ -185,6 +223,7 @@ const targetFor = Effect.fn(function* (
       ...base,
       id: createHash("sha256").update(path).digest("hex"),
       path,
+      skillsPath: profile.skillsFolder(directory),
       status: "not-installed",
       message: resolved.assumedDefault
         ? "Using the standard home for this OS user. If T3 inherits a custom configuration directory at launch, verify that directory manually before installing."
@@ -197,6 +236,7 @@ const targetFor = Effect.fn(function* (
         withReportingInstallationActions({
           ...base,
           path: null,
+          skillsPath: null,
           status: "needs-attention" as const,
           message: `Restore the accessible harness home or use manual setup. ${error instanceof Error ? error.message : "Configuration unavailable."}`,
         }),
@@ -228,16 +268,23 @@ export const discoverReporting = Effect.fn(function* (
   connection: T3Connection,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation[], never> {
   if (connection.state !== "ready" || !connection.authorizationContext)
-    return [unknownTarget("Connect and authorize T3 before discovering installation targets.")];
+    return [
+      discoveryResult(
+        "discovery-refused",
+        "Connect and authorize T3 before discovering installation targets.",
+      ),
+    ];
   if (!isLocalEndpoint(connection.authorizationContext.endpoint))
     return [
-      unknownTarget(
+      discoveryResult(
+        "discovery-refused",
         "Remote execution hosts require manual installation on that host. Factory will not configure its own home for a remote host.",
       ),
     ];
   if (process.platform === "win32" || (yield* managedHost()))
     return [
-      unknownTarget(
+      discoveryResult(
+        "discovery-refused",
         "Managed or unsupported host configuration requires administrator-reviewed manual installation. Factory will not infer effective provider settings.",
       ),
     ];
@@ -250,9 +297,12 @@ export const discoverReporting = Effect.fn(function* (
       readFile(join(stateDirectory, "environment-id"), "utf8"),
     )).trim();
     if (environment !== connection.authorizationContext!.environmentId)
-      throw Error(
-        "Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
-      );
+      return [
+        discoveryResult(
+          "discovery-refused",
+          "Cannot discover local T3 configuration: Connected T3 identity does not match local state. Set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory; remote provisioning is unsupported.",
+        ),
+      ];
     const settings = record(
       JSON.parse(yield* boundary(() => readFile(join(stateDirectory, "settings.json"), "utf8"))),
     );
@@ -274,13 +324,19 @@ export const discoverReporting = Effect.fn(function* (
     }
     return grouped.size
       ? [...grouped.values()]
-      : [unknownTarget("No enabled provider instances found in local T3 settings.")];
+      : [
+          discoveryResult(
+            "none-enabled",
+            "No enabled provider instances found in local T3 settings.",
+          ),
+        ];
   }).pipe(
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);
       return Effect.succeed([
-        unknownTarget(
-          `Cannot discover local T3 configuration: ${error instanceof Error ? error.message : "unavailable"}`,
+        discoveryResult(
+          "discovery-refused",
+          `Cannot discover local T3 configuration: ${error instanceof Error ? error.message.replace(/\.$/, "") : "unavailable"}. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory.`,
         ),
       ]);
     }),

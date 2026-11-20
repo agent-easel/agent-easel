@@ -4,7 +4,8 @@ import { proxyFixtureUpgrade } from "../proxy.ts";
 
 /** What browsers sent through the fixture and the live sockets it relays for them. */
 export function liveFixture(
-  hostPort: number,
+  /** The host-surface server browsers currently reach. */
+  hostPort: () => number,
   /** Live sockets currently relayed for remote browsers. */
   remoteSocketCount: () => number,
 ) {
@@ -39,7 +40,7 @@ export function liveFixture(
     relayHostUpgrade(incoming: IncomingMessage, socket: Duplex) {
       hostSockets.add(socket);
       socket.on("close", () => hostSockets.delete(socket));
-      proxyFixtureUpgrade(incoming, socket, hostPort, undefined, snapshotDelayMs);
+      proxyFixtureUpgrade(incoming, socket, hostPort(), undefined, snapshotDelayMs);
     },
   };
 }

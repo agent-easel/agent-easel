@@ -31,6 +31,7 @@ import {
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
 import {
   T3Failure,
+  isApprovalPending,
   type AuthorizationResumption,
   type T3Authorization,
   type T3Calls,
@@ -56,8 +57,17 @@ type Credentials = {
   discovery?: OAuthDiscoveryState;
   verifier?: string;
   state?: string;
-  /** `authorizationUrl` lets the host reopen the same consent page; it never leaves this file. */
-  pending?: { expiresAt: number; redirectUrl: string; authorizationUrl?: string };
+  /**
+   * The approval attempt waiting for consent; a restarted backend resumes it from here.
+   * `authorizationUrl` lets the host reopen the same consent page; it never leaves this file.
+   * `reopenFailed`: the host's browser could not open that page again.
+   */
+  pending?: {
+    expiresAt: number;
+    redirectUrl: string;
+    authorizationUrl?: string;
+    reopenFailed?: true;
+  };
   reason?: T3ConnectionReason;
 };
 export interface LiveT3ConnectionOptions {
@@ -614,7 +624,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     const pending = await this.resumePendingApproval(endpoint);
     if (this.completing) return "completing";
     // An expired, denied, completed or unbound attempt is gone; only a new attempt can follow.
-    if (pending?.reason !== "approval-pending") return "none";
+    if (!pending || !isApprovalPending(pending.reason)) return "none";
     const data = this.read(endpoint);
     // A claimed state means the callback arrived; its exchange decides the outcome.
     if (!data.state) return "completing";
@@ -629,8 +639,10 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     try {
       await (this.options.openBrowser ?? browser)(page);
     } catch {
+      this.markReopen(endpoint, true);
       throw new T3Failure("unavailable", "Backend browser unavailable");
     }
+    this.markReopen(endpoint, false);
     return "reopened";
   }
   probe<A, B>(
@@ -710,7 +722,18 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
       this.expire(endpoint, "callback-unavailable");
       return { status: "authorization-required", reason: "callback-unavailable" };
     }
-    return { status: "authorization-required", reason: "approval-pending" };
+    return {
+      status: "authorization-required",
+      reason: pending.reopenFailed ? "approval-reopen-failed" : "approval-pending",
+    };
+  }
+  /** Records on the pending attempt whether its page could be opened again. */
+  private markReopen(endpoint: string, failed: boolean) {
+    const data = this.read(endpoint);
+    if (!data.pending) return;
+    if (failed) data.pending.reopenFailed = true;
+    else delete data.pending.reopenFailed;
+    this.save(data);
   }
   private async answer<A>(
     endpoint: string,
