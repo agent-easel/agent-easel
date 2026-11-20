@@ -63,6 +63,20 @@ function watching(
   } satisfies CreateTriggerInput;
 }
 
+/**
+ * A saved, disabled Trigger named `name` on a second Project whose folder names the world's
+ * repository, so it watches the repository the world's own Trigger input does.
+ */
+export async function otherProjectWatcher(
+  world: Pick<Awaited<ReturnType<typeof triggerWorld>>, "f" | "github" | "triggerInput">,
+  name: string,
+) {
+  const other = await world.f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  world.github.repositories.set("/repos/other", atlasRepository);
+  return triggerSaved(world.f, { ...world.triggerInput, name, projectId: other.value.id });
+}
+
 /** The prepared Project as T3 lists it once the connection points at a remote T3. */
 export async function remoteProject(f: Factory) {
   assert((await f.configureConnection({ endpoint: "https://t3.example/mcp" })).ok);

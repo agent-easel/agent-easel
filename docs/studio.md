@@ -568,7 +568,7 @@ The repository and Flow fields show their own readiness. A problem with `gh` has
 **Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
 page, and **Review and enable**, which stays neutral; Save follows the
 [one Save rule](design-system.md#components-and-interaction). When another Trigger already watches the same repository, the
-form warns before saving and the warning also appears in the review. Saving is still available.
+form warns before saving; the review's warning comes from the backend preview. Saving is still available.
 
 **Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
 check, its health, started Runs, issues waiting for a slot, and the next scheduled check, or the
@@ -589,7 +589,7 @@ revision.
 Enabling a Trigger, and saving an edit that widens what an enabled Trigger can start, first opens a review: the matching
 issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
 already started left out, a warning when another Trigger watches the repository, and any problem
-a check would hit. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
+a check would hit. The backend preview raises that warning for any Project, disabled Triggers included and the edited Trigger excluded, so Studio and [Factory MCP's preview](t3-integration.md#trigger-tools) warn identically. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
 its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
 showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
@@ -622,7 +622,7 @@ an issue that failed to start appears only in the status strip and leaves the Tr
 
 The Trigger screens use these routes, available to the host and every approved client with the protocol and mutation
 headers described in [Run HTTP API](runs.md#run-http-api). Bodies carry typed Trigger fields only; unknown fields are
-refused. There are no Factory MCP tools for Triggers.
+refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, read and preview Triggers.
 
 | HTTP | Purpose |
 | --- | --- |

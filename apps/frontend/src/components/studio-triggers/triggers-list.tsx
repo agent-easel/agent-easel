@@ -1,4 +1,3 @@
-import { otherRepositoryWatchers } from "./trigger-notices.tsx";
 import { StartedRuns } from "./started-runs.tsx";
 import { useRef, useState } from "react";
 import { ChevronRight, Pencil, RefreshCw, Trash2, Zap } from "lucide-react";
@@ -30,12 +29,10 @@ const enableReview = (
   names: TriggerNames,
   actions: TriggerActions,
   changed: boolean,
-  triggers: readonly TriggerDefinition[] | null,
 ): TriggerReview => ({
   title: `Enable “${trigger.name}”?`,
   summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
   repository: trigger.github.repository.nameWithOwner,
-  watchers: otherRepositoryWatchers(triggers, trigger.github.repository, trigger.id),
   confirmLabel: "Enable and check",
   load: () => actions.preview(trigger),
   ...(changed && {
@@ -47,11 +44,7 @@ const enableReview = (
  * The review before enabling a saved Trigger; Enable and check confirms the revision it showed.
  * When another revision was saved after that, the review opens again on the current settings.
  */
-export function useEnableReview(
-  names: TriggerNames,
-  actions: TriggerActions,
-  triggers: readonly TriggerDefinition[] | null,
-) {
+export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   const [reviewing, setReviewing] = useState<{
     readonly trigger: TriggerDefinition;
     readonly review: TriggerReview;
@@ -59,7 +52,7 @@ export function useEnableReview(
   const busy = reviewing !== null && actions.state.pending.get(reviewing.trigger.id) === "enable";
   /** Opens the review of `trigger`; `changed` says another revision replaced the reviewed one. */
   const open = (trigger: TriggerDefinition, changed = false) =>
-    setReviewing({ trigger, review: enableReview(trigger, names, actions, changed, triggers) });
+    setReviewing({ trigger, review: enableReview(trigger, names, actions, changed) });
   /** Enable and check `trigger` at the reviewed `revision`, or review it again if it changed. */
   const enable = (trigger: TriggerDefinition, revision: number) =>
     actions

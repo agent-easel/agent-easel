@@ -196,6 +196,21 @@ const sharedRepositoryWarning = (name: string, trigger: TriggerDefinition): Vali
   message: `Trigger ${name} already watches ${trigger.github.repository.nameWithOwner}. Each Trigger starts its own Runs for the issues it matches.`,
 });
 
+/** One warning naming every other saved Trigger on `repository`, or none when none watches it. */
+const sharedRepositoryPreviewWarnings = (
+  names: readonly string[],
+  repository: GitHubRepository,
+): ValidationIssue[] =>
+  names.length === 0
+    ? []
+    : [
+        {
+          code: "trigger_repository_shared",
+          path: "projectId",
+          message: `${names.length === 1 ? "Trigger" : "Triggers"} ${names.join(", ")} already ${names.length === 1 ? "watches" : "watch"} ${repository.nameWithOwner}. Each Trigger starts its own Runs for the issues it matches.`,
+        },
+      ];
+
 /** A Project refusal or GitHub's answer for the Project's folder. */
 function repositoryReadiness(
   repository: GitHubRead<GitHubRepository> | Result<never>,
@@ -438,12 +453,20 @@ export const makeTriggers = (
         const login = repository
           ? yield* Effect.promise(() => github.readiness(repository.host))
           : null;
+        const watching = repository
+          ? yield* triggersWatching(sql, repository.nodeId, target?.id ?? null)
+          : [];
         return {
           ok: true,
           value: {
             issues: planned.issues,
             problem: planned.problem,
-            warnings: repository ? authorFilterWarnings(repository, authorFilter) : [],
+            warnings: repository
+              ? [
+                  ...authorFilterWarnings(repository, authorFilter),
+                  ...sharedRepositoryPreviewWarnings(watching, repository),
+                ]
+              : [],
             login: login?.ok ? login.value.login : null,
             revision: saved && previewsSaved(saved, settings) ? saved.revision : null,
           },

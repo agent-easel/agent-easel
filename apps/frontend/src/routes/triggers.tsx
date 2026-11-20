@@ -66,7 +66,7 @@ export function StudioTriggersPage({
   };
   const actions = useTriggerActions(definitions);
   // Shared by the list's switches and Create, and kept open when Create opens the new Trigger.
-  const enabling = useEnableReview(names, actions, triggers.value);
+  const enabling = useEnableReview(names, actions);
   const serverId = useServerId();
   // This window's own Create, answered before Studio may have delivered it.
   const [created, setCreated] = useState<TriggerDefinition | null>(null);
@@ -264,7 +264,6 @@ function useTriggerEditor({
     definitions,
     names,
     repositoryName,
-    watchers,
     enabled: shown?.enabled === true,
     saveOff,
   });
@@ -427,13 +426,12 @@ function visibleCheck(checked: TriggerCheckReply | undefined, shown: TriggerDefi
   return checked;
 }
 
-/** A review captures the proposal to preview, while the repository warning follows Studio. */
+/** A review captures the proposal to preview; its repository warning comes from the preview. */
 function useDraftReview({
   draft,
   definitions,
   names,
   repositoryName,
-  watchers,
   enabled,
   saveOff,
 }: {
@@ -441,11 +439,10 @@ function useDraftReview({
   definitions: StudioDefinitions;
   names: TriggerNames;
   repositoryName: string;
-  watchers: readonly TriggerDefinition[];
   enabled: boolean;
   saveOff: () => void;
 }) {
-  const [review, setReview] = useState<Omit<TriggerReview, "watchers"> | null>(null);
+  const [review, setReview] = useState<TriggerReview | null>(null);
   function reviewDraft() {
     const proposal = draft.proposal();
     const { saved } = draft.getSnapshot();
@@ -479,7 +476,7 @@ function useDraftReview({
   }
 
   return {
-    review: review && { ...review, watchers },
+    review,
     reviewDraft,
     closeReview: () => setReview(null),
   };

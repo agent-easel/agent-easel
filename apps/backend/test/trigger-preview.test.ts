@@ -1,9 +1,10 @@
 import { assert, expect, it } from "@effect/vitest";
 import type { TriggerPreview } from "@t3-factory/contracts";
-import { triggerChecked } from "./support/scenarios.ts";
+import { triggerChecked, triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,
   checkingWorld,
+  otherProjectWatcher,
   reviewingWorld,
   startedIssues,
   triggerEdit,
@@ -108,6 +109,57 @@ it("previewing a new Trigger on a public repository without an author filter car
     "trigger_author_filter_removed",
   ]);
   expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("previewing a new Trigger warns that a disabled Trigger of another Project watches the same repository", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  await otherProjectWatcher(world, "Other Project watcher");
+
+  // Act
+  const preview = await world.f.previewNewTrigger(world.triggerInput);
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value.warnings).toStrictEqual([
+    {
+      code: "trigger_repository_shared",
+      path: "projectId",
+      message:
+        "Trigger Other Project watcher already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+    },
+  ]);
+});
+
+it("previewing an edit warns about every other Trigger on the repository and never about the edited one", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  await otherProjectWatcher(world, "Docs issues");
+
+  // Act
+  const preview = await world.f.previewTrigger(world.trigger.id, triggerEdit(world.trigger, {}));
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value.warnings.map((warning) => warning.message)).toStrictEqual([
+    "Trigger Docs issues already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+  ]);
+});
+
+it("a preview names several other Triggers on the repository in one warning", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  await otherProjectWatcher(world, "Docs issues");
+  await triggerSaved(world.f, { ...world.triggerInput, name: "Bug issues" });
+
+  // Act
+  const preview = await world.f.previewNewTrigger({ ...world.triggerInput, name: "Third" });
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value.warnings.map((warning) => warning.message)).toStrictEqual([
+    "Triggers Bug issues, Docs issues, Ready issues already watch factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+  ]);
 });
 
 it("a preview while T3 cannot launch reports the check's problem and starts no issue now", async (c) => {

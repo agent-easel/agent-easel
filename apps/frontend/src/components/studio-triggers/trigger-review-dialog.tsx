@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { CirclePause, CircleX, ExternalLink } from "lucide-react";
-import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
+import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TextLink } from "@/components/ui/text-link";
-import { SharedRepositoryCard } from "./trigger-notices.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
 /** What one review shows and how it commits. */
@@ -17,7 +16,6 @@ export interface TriggerReview {
   /** Project · repository · Flow · schedule · limit. */
   readonly summary: string;
   readonly repository: string;
-  readonly watchers: readonly TriggerDefinition[];
   readonly confirmLabel: "Enable and check" | "Apply and check";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
@@ -123,14 +121,18 @@ function ReviewBody({
       }
     >
       {review.notice && <ProblemCard tone="attention" title={review.notice} />}
-      <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
       {read.status === "loading" && (
         <div role="status" className="rounded-lg border bg-background px-3.5 py-2.5">
           <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
         </div>
       )}
       {read.status === "failed" && <ProblemCard tone="error" icon={CircleX} title={read.message} />}
-      {read.status === "answered" && <PreviewResult preview={read.preview} />}
+      {read.status === "answered" && (
+        <>
+          <SharedRepositoryWarning repository={review.repository} preview={read.preview} />
+          <PreviewResult preview={read.preview} />
+        </>
+      )}
     </DialogContent>
   );
 }
@@ -158,6 +160,22 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
     };
   }, [load]);
   return read?.load === load ? read.read : { status: "loading" };
+}
+
+/** The backend preview's warning that another saved Trigger watches the same repository. */
+function SharedRepositoryWarning({
+  repository,
+  preview,
+}: {
+  repository: string;
+  preview: TriggerPreview;
+}) {
+  const warning = preview.warnings.find((entry) => entry.code === "trigger_repository_shared");
+  return warning ? (
+    <ProblemCard tone="attention" title={`Another Trigger watches ${repository}`}>
+      {warning.message}
+    </ProblemCard>
+  ) : null;
 }
 
 function PreviewResult({ preview }: { preview: TriggerPreview }) {
