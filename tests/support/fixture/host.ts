@@ -49,6 +49,19 @@ export async function startHost(
     },
   );
   const factory = server.factory;
+  // The Flow list orders by creation time, then by random id. Flows the seed creates within one
+  // millisecond would otherwise swap places between runs, which Before/After evidence reads as UI
+  // change.
+  const createFlow = factory.createFlow.bind(factory);
+  let lastFlowMillisecond = 0;
+  factory.createFlow = async (input) => {
+    while (Date.now() <= lastFlowMillisecond) await new Promise((resolve) => setTimeout(resolve, 1));
+    try {
+      return await createFlow(input);
+    } finally {
+      lastFlowMillisecond = Date.now();
+    }
+  };
   factory.setRuntimeBackendUrl(`http://127.0.0.1:${server.address.port}`);
   const world = await seedDevelopment(factory, t3, doubles.github, home);
   t3.connection.approve();

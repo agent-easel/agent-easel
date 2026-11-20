@@ -61,12 +61,36 @@ function baseWorktree(repo, ref) {
   return dir;
 }
 
+// A screenshot taken while a CSS transition or fade runs captures a colour that depends on timing,
+// so identical builds differ. Playwright's own animations option does not cover these. Finishing
+// every running finite animation each frame captures the end state without touching DOM or CSS.
+const SETTLE_ANIMATIONS = `(() => {
+  const finish = () => {
+    for (const animation of document.getAnimations()) {
+      try { animation.finish(); } catch {}
+    }
+    requestAnimationFrame(finish);
+  };
+  requestAnimationFrame(finish);
+})();`;
+
 /** Runs the spec in one checkout with the project's own config, narrowed to that one file. */
 function runSpec(root, spec, resultsDir) {
   const specPath = relative(root, resolve(root, spec));
+  // The generated config is the one thing both builds share, so the settling applies to a base
+  // that predates it. It replaces each target's engine, which assumes the project's web engine
+  // takes no other options.
   writeFileSync(
     join(root, CONFIG_NAME),
-    `import base from "./e2e.config.ts";\nexport default { ...base, tests: ${JSON.stringify(specPath)} };\n`,
+    `import base from "./e2e.config.ts";
+import { web } from "@e2e-dev/web";
+const engine = web({ initScripts: [${JSON.stringify(SETTLE_ANIMATIONS)}] });
+export default {
+  ...base,
+  tests: ${JSON.stringify(specPath)},
+  targets: base.targets.map((target) => ({ ...target, engine })),
+};
+`,
   );
   try {
     rmSync(resultsDir, { recursive: true, force: true });
