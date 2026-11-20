@@ -126,7 +126,7 @@ it.effect("a repeated Continue now reports already forwarded and delivers nothin
     const after = yield* f.factory.getRun(worker.runId);
     assert(after.ok);
     expect(after.value.generation).toBe(before.value.generation);
-    expect(f.t3.launches.size).toBe(2);
+    expect(f.t3.threads.launches.size).toBe(2);
   }),
 );
 
@@ -162,7 +162,7 @@ it.effect("Continue now competing with the deadline forwards the arrival once", 
     expect(
       run.value.intents.filter((intent) => intent.waitArrivalId === waiting.arrival.id),
     ).toHaveLength(1);
-    expect(f.t3.launches.size).toBe(2);
+    expect(f.t3.threads.launches.size).toBe(2);
   }),
 );
 
@@ -187,7 +187,7 @@ it.effect("the original deadline after Continue now forwards nothing more", (c) 
     expect(
       run.value.events.filter((event) => event.kind.startsWith("wait-")).map((e) => e.kind),
     ).toStrictEqual(["wait-started", "wait-continued"]);
-    expect(f.t3.launches.size).toBe(2);
+    expect(f.t3.threads.launches.size).toBe(2);
   }),
 );
 
@@ -216,7 +216,7 @@ it.effect("a restart after Continue now neither forwards again nor revives the t
     expect(
       run.value.intents.filter((intent) => intent.waitArrivalId === waiting.arrival.id),
     ).toHaveLength(1);
-    expect(f.t3.launches.size).toBe(2);
+    expect(f.t3.threads.launches.size).toBe(2);
   }),
 );
 
@@ -239,7 +239,7 @@ it.effect("Continue now on an archived Run's arrival is refused and forwards not
     assert(run.ok);
     expect(run.value.waitArrivals[0]?.state).toBe("cancelled");
     expect(run.value.intents.filter((intent) => intent.blockId === "follow-up")).toStrictEqual([]);
-    expect(f.t3.launches.size).toBe(1);
+    expect(f.t3.threads.launches.size).toBe(1);
   }),
 );
 
@@ -269,7 +269,7 @@ it.effect("Archive racing Continue now leaves no forwarded work to deliver", (c)
         (intent) => intent.blockId === "follow-up" && intent.state !== "cancelled",
       ),
     ).toStrictEqual([]);
-    expect(f.t3.launches.size).toBe(1);
+    expect(f.t3.threads.launches.size).toBe(1);
   }),
 );
 
@@ -297,6 +297,6 @@ it.effect(
       expect(run.value.settlement?.state).toBe("stopping");
       expect(run.value.waitArrivals).toMatchObject([{ id: waiting.arrival.id, state: "pending" }]);
       expect(run.value.intents.filter((intent) => intent.waitArrivalId !== null)).toStrictEqual([]);
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
     }),
 );

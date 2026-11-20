@@ -46,7 +46,7 @@ it("archiving a working Run requests interruption of its worker thread without w
   expect(result.value.lifecycle).toBe("archived");
   expect(result.value.blocks[0]?.state).toBe("stopped");
   await interrupt;
-  expect(f.t3.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
+  expect(f.t3.threads.threadStops.map((stop) => stop.threadId)).toStrictEqual(["thread-1"]);
 });
 
 it("archiving cancels a pending Human occurrence and settles its attention", async (c) => {
@@ -115,7 +115,7 @@ it("Factory launches nothing for an archived Run on later reconciliation", async
   await f.f.reconcileRuns();
 
   // Assert
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker"]);

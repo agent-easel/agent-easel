@@ -1,7 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import { unnumberedRun } from "./support/navigation.ts";
-import { recordThreadFacts } from "./support/controlled-thread.ts";
 import {
   observeFor,
   repositoryFactsObserved,
@@ -77,7 +76,7 @@ it("an unavailable observation preserves last known worker repositories and mark
   const { f, t3, world, input } = await prepared(c);
   const launched = await workerLaunched(world, input);
   const { runId } = await repositoryFactsObserved(world, launched, repository);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   assert((await f.reconcileRuns()).ok);
@@ -328,7 +327,7 @@ it("a pending native request in navigation carries the worker's pending request 
   // Arrange
   const { f, world, input } = await prepared(c);
   const worker = await workerLaunched(world, input);
-  recordThreadFacts(world.t3, worker.threadId, { pendingRequestCount: 2 });
+  world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 2 });
   await observeFor("observe the native requests", world, worker.runId, (run) =>
     run.attention.some((matter) => matter.kind === "native-request" && !matter.settledAt),
   );
@@ -346,7 +345,7 @@ it("a pending native request in navigation carries the worker's pending request 
 it("a Run whose worktree creation failed is a Problem in navigation without an attention matter", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c, worktreeFanOutFlow);
-  t3.rejectLaunch = true;
+  t3.threads.rejectLaunch = true;
   const started = await f.startRun(input);
   assert(started.ok);
   await f.reconcileRuns();

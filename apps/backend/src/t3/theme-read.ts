@@ -1,4 +1,4 @@
-import type { PublishedT3Theme, T3ThemeColors, T3ThemeRead } from "./t3.ts";
+import type { PublishedT3Theme, T3ThemeColors, T3ThemeRead } from "./appearance.ts";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;

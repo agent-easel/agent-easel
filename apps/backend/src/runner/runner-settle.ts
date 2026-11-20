@@ -1,8 +1,8 @@
 import type { Result, RunSettlementOutcome, RunSettlementWorker } from "@t3-factory/contracts";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
-import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
-import { NO_T3_SUPPORT } from "../adapters/t3-contract.ts";
+import type { T3Threads } from "../t3/threads.ts";
+import { NO_T3_SUPPORT, type T3ContractSnapshot } from "../t3/contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import { threadHref } from "../thread-link.ts";
@@ -82,7 +82,7 @@ function progress(read: SettlementRead, stop: SettlementWorkerRecord | undefined
 
 export function openRunnerSettle(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   lifecycle: RunnerLifecycle,
   freshSnapshot: ContractSnapshots["fresh"],
   ownedThreads: OwnedThreads,

@@ -1,18 +1,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chmodSync, mkdirSync, readdirSync } from "node:fs";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { stat } from "node:fs/promises";
-import { isAbsolute, basename, join } from "node:path";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { threadRepository } from "./worker-repository.ts";
 import {
   credentialPath,
   readCredentialFile,
   removeCredentialFile,
   writeCredentialFile,
-} from "./credential-files.ts";
-import { themeListing, themeRead } from "./t3-theme-read.ts";
+} from "../adapters/credential-files.ts";
 import {
   Client,
   InMemoryResponseCacheStore,
@@ -32,36 +29,18 @@ import {
   type OAuthDiscoveryState,
 } from "@modelcontextprotocol/client";
 import { AjvJsonSchemaValidator } from "@modelcontextprotocol/client/validators/ajv";
-import type {
-  AttachmentUpload,
-  AuthorizationResumption,
-  T3Adapter,
-  T3Endpoint,
-  T3EnvironmentTarget,
-  T3Inspection,
-  T3Support,
-  T3ConnectionReason,
-  T3Project,
-  T3ProjectTarget,
-  ExecutionObservation,
-  LaunchDiscovery,
-  LaunchPayload,
-  LaunchReference,
-  LaunchSupport,
-  T3Target,
-  ThreadIdentityRead,
-  SendPayload,
-  SendReference,
-  T3ProviderCapability,
-} from "./t3.ts";
-import { contractSupport } from "./t3-contract.ts";
-import { discoverLaunches, threadIdentityRead } from "../launch-discovery.ts";
-import { T3Failure } from "./t3.ts";
-import type { AgentEnvironment } from "@t3-factory/contracts";
-import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
-import { readDelegatedSettlement } from "./delegated-settlement.ts";
-import { isLocalEndpoint } from "../endpoint-local.ts";
-import { parseProviderCapabilities } from "./t3-capabilities.ts";
+import {
+  T3Failure,
+  type AuthorizationResumption,
+  type T3Authorization,
+  type T3Calls,
+  type T3ConnectionReason,
+  type T3Endpoint,
+  type T3ListedTool,
+  type T3Probe,
+  type T3ServerIdentity,
+  type T3Session,
+} from "./connection.ts";
 import {
   listenOAuthCallback,
   type CallbackListener,
@@ -81,13 +60,9 @@ type Credentials = {
   pending?: { expiresAt: number; redirectUrl: string; authorizationUrl?: string };
   reason?: T3ConnectionReason;
 };
-export interface LiveT3Options {
+export interface LiveT3ConnectionOptions {
   readonly credentialsDirectory: string;
   readonly callbackPort?: number;
-  /** Integration-only proof of server continuity and request-key retention. No proof = no replay.
-   * The verifier must return a stable scope only while those conditions are established. */
-  readonly sendRecoveryScope?: (endpoint: string) => Promise<string | null>;
-  readonly launchRecoveryScope?: (endpoint: string) => Promise<string | null>;
   readonly openBrowser?: (url: string) => Promise<void>;
 }
 const browser = async (url: string) => {
@@ -106,12 +81,6 @@ const equalState = (leftState: string, rightState: string) => {
 };
 
 type ToolResult = Awaited<ReturnType<Client["callTool"]>>;
-type ListedTool = Pick<
-  Awaited<ReturnType<Client["listTools"]>>["tools"][number],
-  "name" | "inputSchema"
->;
-/** An inspection before its support answers are derived from the listed tools. */
-type Inspected = Omit<T3Inspection, "support">;
 
 /** Structured content, else the first text item that parses as JSON; undefined when neither exists. */
 function toolContent(result: ToolResult): unknown {
@@ -128,8 +97,11 @@ function toolContent(result: ToolResult): unknown {
 }
 
 /** Collects every tools/list page; repeated or runaway cursors fail with `invalidPagination`. */
-async function listAllTools(client: Client, invalidPagination: () => Error): Promise<ListedTool[]> {
-  const tools: ListedTool[] = [];
+async function listAllTools(
+  client: Client,
+  invalidPagination: () => Error,
+): Promise<T3ListedTool[]> {
+  const tools: T3ListedTool[] = [];
   let cursor: string | undefined;
   const seen = new Set<string>();
   do {
@@ -142,32 +114,23 @@ async function listAllTools(client: Client, invalidPagination: () => Error): Pro
   return tools;
 }
 
-const serverIdentity = (client: Client | undefined) => {
+const session = (client: Client, invalidPagination: () => Error): T3Session => ({
+  tools: () => listAllTools(client, invalidPagination),
+  call: async (name, args, timeout) => {
+    const result = await client.callTool({ name, arguments: args }, { timeout });
+    return { isError: Boolean(result.isError), content: toolContent(result) };
+  },
+});
+/** An inspection answers an invalid catalog as a contract failure. */
+const inspectedSession = (client: Client) =>
+  session(client, () => new SdkError(SdkErrorCode.InvalidResult, "Invalid tool pagination"));
+const authorizedSession = (client: Client) =>
+  session(client, () => new Error("Invalid pagination"));
+
+const serverIdentity = (client: Client | undefined): T3ServerIdentity => {
   const server = client?.getServerVersion();
   return { serverName: server?.name ?? "Unknown", serverVersion: server?.version ?? "Unknown" };
 };
-
-const hasEnvironmentIdentity = (body: unknown): body is { environmentId: string } =>
-  typeof body === "object" &&
-  body !== null &&
-  "environmentId" in body &&
-  typeof body.environmentId === "string" &&
-  body.environmentId !== "";
-
-function acceptsEmptyArguments(tool: ListedTool | undefined): boolean {
-  if (!tool || tool.inputSchema.type !== "object") return false;
-  const required = tool.inputSchema.required;
-  return !(Array.isArray(required) && required.length > 0);
-}
-
-async function readEnvironmentIdentity(client: Client): Promise<string | null> {
-  const result = await client.callTool(
-    { name: "t3_environment_read", arguments: {} },
-    { timeout: 10_000 },
-  );
-  const body = toolContent(result);
-  return !result.isError && hasEnvironmentIdentity(body) ? body.environmentId : null;
-}
 
 const isAuthorizationRejection = (error: unknown) =>
   error instanceof UnauthorizedError ||
@@ -183,7 +146,7 @@ const isContractFailure = (error: unknown) =>
       SdkErrorCode.CapabilityNotSupported,
     ].includes(error.code));
 
-/** What one adapter call's own requests met. The transport marks the current call, including an
+/** What one T3 call's own requests met. The transport marks the current call, including an
  * OAuth refresh the SDK makes inside it, so concurrent calls never see each other's failures. */
 interface CallRecord {
   unavailable: boolean;
@@ -209,7 +172,7 @@ function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
   return new T3Failure("unavailable", message);
 }
 
-/** Runs one adapter call with its own record; it rejects only with that call's classified failure. */
+/** Runs one T3 call with its own record; it rejects only with that call's classified failure. */
 async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Promise<A> {
   const record: CallRecord = { unavailable: false };
   try {
@@ -308,110 +271,9 @@ function marksLostBody(response: Response, record: CallRecord): Response {
   });
 }
 
-type ThreadExecutionRead = {
-  thread: {
-    threadId: string;
-    projectId: string;
-    activeRunId: string | null;
-    link: string | null;
-    worktreePath: string | null;
-    pendingRequestCount: number;
-    latestRunId?: string | null;
-    branch?: unknown;
-    pullRequests?: unknown;
-    linkedPullRequest?: unknown;
-  };
-  recentRuns: RecentRun[];
-};
-type RecentRun = {
-  runId: string;
-  status: string;
-  ordinal?: number;
-  requestedAt?: string | null;
-  startedAt?: string | null;
-  completedAt?: string | null;
-};
-
-const isNullableString = (value: unknown) => value === null || typeof value === "string";
-
-function isObservedThread(thread: ThreadExecutionRead["thread"] | undefined, threadId: string) {
-  return (
-    thread?.threadId === threadId &&
-    typeof thread.projectId === "string" &&
-    isNullableString(thread.activeRunId) &&
-    isNullableString(thread.link) &&
-    isNullableString(thread.worktreePath) &&
-    Number.isInteger(thread.pendingRequestCount) &&
-    thread.pendingRequestCount >= 0
-  );
-}
-
-const isRunReference = (value: unknown) => value === undefined || isNullableString(value);
-
-const isRecentRun = (recentRun: RecentRun) =>
-  typeof recentRun.runId === "string" &&
-  typeof recentRun.status === "string" &&
-  (recentRun.ordinal === undefined ||
-    (Number.isInteger(recentRun.ordinal) && recentRun.ordinal >= 1));
-
-function executionObservation(threadId: string, body: ThreadExecutionRead): ExecutionObservation {
-  const repository = threadRepository(body.thread);
-  return {
-    ...(repository ? { repository } : {}),
-    threadId,
-    projectId: body.thread.projectId,
-    activeRunId: body.thread.activeRunId,
-    link: body.thread.link,
-    workspaceRoot: body.thread.worktreePath,
-    pendingRequestCount: body.thread.pendingRequestCount,
-    ...(body.thread.latestRunId !== undefined ? { latestRunId: body.thread.latestRunId } : {}),
-    recentRuns: body.recentRuns.map((recentRun) => {
-      const source = recentRun.completedAt ?? recentRun.startedAt ?? recentRun.requestedAt;
-      return {
-        runId: recentRun.runId,
-        status: recentRun.status,
-        ...(recentRun.ordinal !== undefined ? { ordinal: recentRun.ordinal } : {}),
-        // T3 advertises a nullable start: null is a run that never started, absence is no evidence.
-        ...(recentRun.startedAt !== undefined ? { startedAt: recentRun.startedAt } : {}),
-        completedAt: recentRun.completedAt ?? null,
-        sourceAt: typeof source === "string" && Number.isFinite(Date.parse(source)) ? source : null,
-      };
-    }),
-  };
-}
-
-const PROJECT_TOOL_FIELDS = [
-  ["t3_project_list", ["environmentId", "cursor", "limit"]],
-  [
-    "t3_project_create",
-    ["environmentId", "title", "workspaceRoot", "createWorkspaceRootIfMissing"],
-  ],
-] as const;
-
-const projectFieldType = (field: string) =>
-  field === "cursor" || field === "limit"
-    ? "integer"
-    : field === "createWorkspaceRootIfMissing"
-      ? "boolean"
-      : "string";
-
-function supportsProjectTool(
-  tools: readonly ListedTool[],
-  name: string,
-  fields: readonly string[],
-): boolean {
-  const schema = tools.find((tool) => tool.name === name)?.inputSchema;
-  const properties = schema?.properties as Record<string, { type?: string }> | undefined;
-  if (schema?.type !== "object" || !properties) return false;
-  return (
-    fields.every((field) => properties[field]?.type === projectFieldType(field)) &&
-    (schema.required ?? []).every((field) => fields.includes(field))
-  );
-}
-
 /** OAuth files are endpoint-bound; only opaque grant lineage leaves this boundary. */
-export class LiveT3Adapter implements T3Adapter {
-  private readonly options: LiveT3Options;
+export class LiveT3Connection implements T3Authorization, T3Calls {
+  private readonly options: LiveT3ConnectionOptions;
   private callback: CallbackListener | undefined;
   private released: Promise<void> = Promise.resolve();
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -419,7 +281,7 @@ export class LiveT3Adapter implements T3Adapter {
   private completing = false;
   private completion: Promise<void> | undefined;
   private readonly connections = new Map<string, Connection>();
-  constructor(options: LiveT3Options) {
+  constructor(options: LiveT3ConnectionOptions) {
     this.options = options;
     mkdirSync(options.credentialsDirectory, { recursive: true, mode: 0o700 });
     chmodSync(options.credentialsDirectory, 0o700);
@@ -771,41 +633,20 @@ export class LiveT3Adapter implements T3Adapter {
     }
     return "reopened";
   }
-  inspect(target: T3Endpoint): Promise<T3Inspection> {
-    return classifiedCall(async (record) => {
-      const inspection = await this.inspectEndpoint(target.endpoint, record);
-      return { ...inspection, support: await this.support(target.endpoint, inspection) };
-    });
+  probe<A, B>(
+    target: T3Endpoint,
+    read: (session: T3Session) => Promise<A>,
+    finish: (probe: T3Probe<A>) => Promise<B>,
+  ): Promise<B> {
+    return classifiedCall(async (record) =>
+      finish(await this.probeEndpoint(target.endpoint, read, record)),
+    );
   }
-  /** Replay scopes are asked for only when the answer they would qualify is supported. A proof
-   * that cannot be established leaves only that answer unknown, never the whole inspection. */
-  private async support(endpoint: string, inspection: Inspected): Promise<T3Support> {
-    const support = contractSupport(inspection.state === "ready", inspection.contract?.tools ?? []);
-    const { checkout, worktree } = support.launch;
-    /** undefined: the proof was asked for and could not be established. */
-    const proven = async (proof: LiveT3Options["launchRecoveryScope"]) => {
-      try {
-        return (await proof?.(endpoint)) ?? null;
-      } catch {
-        return undefined;
-      }
-    };
-    // A supported worktree launch implies a supported checkout launch.
-    const launchScope = checkout.supported ? await proven(this.options.launchRecoveryScope) : null;
-    const sendScope = support.send.supported ? await proven(this.options.sendRecoveryScope) : null;
-    const scoped = (answer: LaunchSupport, retryScope: string | null | undefined) =>
-      !answer.supported
-        ? answer
-        : retryScope === undefined
-          ? { supported: false, retryScope: null, explanation: null }
-          : { ...answer, retryScope };
-    return {
-      ...support,
-      launch: { checkout: scoped(checkout, launchScope), worktree: scoped(worktree, launchScope) },
-      send: scoped(support.send, sendScope),
-    };
-  }
-  private async inspectEndpoint(endpoint: string, record: CallRecord): Promise<Inspected> {
+  private async probeEndpoint<A>(
+    endpoint: string,
+    read: (session: T3Session) => Promise<A>,
+    record: CallRecord,
+  ): Promise<T3Probe<A>> {
     if (this.endpoint !== endpoint) {
       await this.completion;
       this.stopCallback();
@@ -814,15 +655,15 @@ export class LiveT3Adapter implements T3Adapter {
     const pending = await this.resumePendingApproval(endpoint);
     if (pending) return pending;
     const latest = this.read(endpoint);
-    if (!latest.tokens) return this.inspectWithoutGrant(endpoint, latest.reason, record);
+    if (!latest.tokens) return this.probeWithoutGrant(endpoint, read, latest.reason, record);
     let client: Client | undefined;
     try {
       return await this.onConnection(endpoint, (connected) => {
         client = connected;
-        return this.inspectContract(endpoint, connected);
+        return this.answer(endpoint, connected, read);
       });
     } catch (error) {
-      return this.inspectionFailure(
+      return this.probeFailure(
         endpoint,
         latest.reason,
         serverIdentity(client),
@@ -832,17 +673,18 @@ export class LiveT3Adapter implements T3Adapter {
   }
   /** Without a grant there is nothing to reuse: the probe's own connection never becomes the
    * authorized one. */
-  private async inspectWithoutGrant(
+  private async probeWithoutGrant<A>(
     endpoint: string,
+    read: (session: T3Session) => Promise<A>,
     previousReason: T3ConnectionReason | undefined,
     record: CallRecord,
-  ): Promise<Inspected> {
+  ): Promise<T3Probe<A>> {
     const client = new Client({ name: "t3-factory", version: "0.0.0" });
     try {
       await client.connect(this.transport(endpoint), { timeout: 10_000 });
-      return await this.inspectContract(endpoint, client);
+      return await this.answer(endpoint, client, read);
     } catch (error) {
-      return this.inspectionFailure(
+      return this.probeFailure(
         endpoint,
         previousReason,
         serverIdentity(client),
@@ -853,7 +695,9 @@ export class LiveT3Adapter implements T3Adapter {
     }
   }
   /** Keeps a pending approval's callback listening; an expired approval falls through to inspection. */
-  private async resumePendingApproval(endpoint: string): Promise<Inspected | undefined> {
+  private async resumePendingApproval(
+    endpoint: string,
+  ): Promise<{ status: "authorization-required"; reason: T3ConnectionReason } | undefined> {
     const pending = this.read(endpoint).pending;
     if (!pending) return undefined;
     if (pending.expiresAt <= Date.now()) {
@@ -864,49 +708,34 @@ export class LiveT3Adapter implements T3Adapter {
       await this.listen(endpoint, Number(new URL(pending.redirectUrl).port));
     } catch {
       this.expire(endpoint, "callback-unavailable");
-      return { state: "authorization-required", reason: "callback-unavailable" };
+      return { status: "authorization-required", reason: "callback-unavailable" };
     }
-    return { state: "authorization-required", reason: "approval-pending" };
+    return { status: "authorization-required", reason: "approval-pending" };
   }
-  private async inspectContract(endpoint: string, client: Client): Promise<Inspected> {
-    const tools = await listAllTools(
-      client,
-      () => new SdkError(SdkErrorCode.InvalidResult, "Invalid tool pagination"),
-    );
-    const problems: string[] = [];
-    let environmentId: string | null = null;
-    if (!acceptsEmptyArguments(tools.find((tool) => tool.name === "t3_environment_read"))) {
-      problems.push("t3_environment_read must accept an empty object.");
-    } else {
-      environmentId = await readEnvironmentIdentity(client);
-      if (!environmentId)
-        problems.push("t3_environment_read did not return an environment identity.");
-    }
+  private async answer<A>(
+    endpoint: string,
+    client: Client,
+    read: (session: T3Session) => Promise<A>,
+  ): Promise<T3Probe<A>> {
+    const answer = await read(inspectedSession(client));
     const credentials = this.read(endpoint);
-    if (!credentials.tokens || !credentials.identity)
-      problems.push("An approved OAuth grant is required to bind authorization context.");
     return {
-      state: problems.length ? "incompatible" : "ready",
-      reason: problems.length ? "contract-missing" : "connected",
-      ...(credentials.identity ? { authorizationIdentity: credentials.identity } : {}),
-      contract: {
-        ...serverIdentity(client),
-        environmentId,
-        tools,
-        problems,
-        executionVerified: false,
-      },
+      status: "answered",
+      answer,
+      server: serverIdentity(client),
+      authorizationIdentity: credentials.identity,
+      approved: Boolean(credentials.tokens && credentials.identity),
     };
   }
-  /** Rejected grants require reauthorization and contract failures are incompatible; anything else
+  /** Rejected grants require reauthorization and contract failures are reported; anything else
    * throws. A rejection after this call met a transient failure, such as a token refresh answered
    * with a server error, keeps the grant. */
-  private inspectionFailure(
+  private probeFailure(
     endpoint: string,
     previousReason: T3ConnectionReason | undefined,
-    server: ReturnType<typeof serverIdentity>,
+    server: T3ServerIdentity,
     failure: T3Failure,
-  ): Inspected {
+  ): T3Probe<never> {
     if (failure.kind === "unavailable")
       throw new T3Failure("unavailable", "T3 is temporarily unavailable.");
     if (failure.kind === "authorization-required") {
@@ -918,26 +747,10 @@ export class LiveT3Adapter implements T3Adapter {
       revoked.reason = previousReason ?? "approval-required";
       this.save(revoked);
       void this.dropConnection(endpoint);
-      return { state: "authorization-required", reason: previousReason ?? "approval-required" };
+      return { status: "authorization-required", reason: previousReason ?? "approval-required" };
     }
     if (!(failure instanceof ContractFailure)) throw failure;
-    return {
-      state: "incompatible",
-      reason: "contract-missing",
-      contract: {
-        ...server,
-        environmentId: null,
-        tools: [],
-        problems: ["T3 returned an unsupported MCP protocol or invalid connection contract."],
-        executionVerified: false,
-      },
-    };
-  }
-  private structuredToolResult(result: ToolResult): unknown {
-    if (result.isError) throw new T3Failure("refused", "T3 tool returned isError");
-    const content = toolContent(result);
-    if (content === undefined) throw new Error("T3 tool returned no structured JSON");
-    return content;
+    return { status: "contract-failure", server };
   }
   /** The endpoint's connection with the saved grant, opened once and shared by concurrent callers.
    * The handshake runs as its own call, so every waiter receives the same classified failure. */
@@ -1005,355 +818,14 @@ export class LiveT3Adapter implements T3Adapter {
       if (connection.retired && connection.active === 0) void closeConnection(connection);
     }
   }
-  private withAuthorizedClient<A>(
-    target: T3Endpoint,
-    action: (client: Client) => Promise<A>,
-  ): Promise<A> {
+  authorized<A>(target: T3Endpoint, action: (session: T3Session) => Promise<A>): Promise<A> {
     return classifiedCall(async () => {
       await this.completion;
       const latest = this.read(target.endpoint);
       if (!latest.tokens)
         throw new T3Failure("authorization-required", "T3 authorization is required.");
-      return this.onConnection(target.endpoint, action);
+      return this.onConnection(target.endpoint, (client) => action(authorizedSession(client)));
     });
-  }
-  /** The upload URL is a signed capability on the MCP origin: it is sent without the OAuth bearer
-   * and never logged or included in errors. */
-  async uploadAttachment(
-    target: T3Endpoint,
-    upload: AttachmentUpload,
-    data: Uint8Array,
-  ): Promise<string> {
-    const prepared = await this.withAuthorizedClient(target, async (client) =>
-      this.structuredToolResult(
-        await client.callTool(
-          {
-            name: "t3_attachment_prepare_upload",
-            arguments: { upload: { type: "image", ...upload } },
-          },
-          { timeout: 30_000 },
-        ),
-      ),
-    ).catch((error: T3Failure) => {
-      throw new T3Failure(error.kind, "T3 did not prepare the upload.");
-    });
-    const { attachmentId, relativeUrl } = (prepared ?? {}) as Record<string, unknown>;
-    const origin = new URL(target.endpoint).origin;
-    const url = typeof relativeUrl === "string" ? URL.parse(relativeUrl, origin) : null;
-    if (typeof attachmentId !== "string" || !attachmentId || !url || url.origin !== origin)
-      throw new T3Failure("invalid-response", "T3 returned an invalid upload address.");
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": upload.mimeType },
-      body: Buffer.from(data),
-      signal: AbortSignal.timeout(60_000),
-    }).catch(() => {
-      throw new T3Failure("unavailable", "T3 upload is temporarily unavailable.");
-    });
-    await response.body?.cancel().catch(() => {});
-    if (!response.ok)
-      throw new T3Failure(
-        response.status >= 500 ? "unavailable" : "refused",
-        `T3 answered the upload with HTTP ${response.status}.`,
-      );
-    return attachmentId;
-  }
-  async launchThread(target: T3Endpoint, payload: LaunchPayload): Promise<LaunchReference> {
-    return this.withAuthorizedClient(target, async (client) => {
-      const result = await client.callTool(
-        { name: "t3_thread_launch", arguments: { ...payload } },
-        { timeout: 30_000 },
-      );
-      if (result.isError) throw new T3Failure("refused", "T3 rejected the worker launch");
-      const body = this.structuredToolResult(result) as LaunchReference | undefined;
-      if (
-        !body ||
-        !body.threadId ||
-        typeof body.threadId !== "string" ||
-        !body.runId ||
-        typeof body.runId !== "string" ||
-        typeof body.status !== "string" ||
-        body.projectId !== payload.projectId ||
-        !(body.link === null || typeof body.link === "string")
-      )
-        throw Error("Invalid launch reference; outcome is uncertain");
-      return {
-        projectId: body.projectId,
-        threadId: body.threadId,
-        runId: body.runId,
-        status: body.status,
-        link: body.link,
-      };
-    });
-  }
-  async discoverLaunchCandidates(target: T3Target, title: string): Promise<LaunchDiscovery> {
-    try {
-      return await this.withAuthorizedClient(target, async (client) =>
-        discoverLaunches(
-          async (name, args) =>
-            this.structuredToolResult(
-              await client.callTool({ name, arguments: args }, { timeout: 30_000 }),
-            ),
-          target.projectId,
-          title,
-        ),
-      );
-    } catch {
-      return { available: false };
-    }
-  }
-  async readThreadIdentity(target: T3Target, threadId: string): Promise<ThreadIdentityRead> {
-    return this.withAuthorizedClient(target, async (client) =>
-      threadIdentityRead(
-        this.structuredToolResult(
-          await client.callTool(
-            { name: "t3_thread_read", arguments: { threadId, runLimit: 50 } },
-            { timeout: 30_000 },
-          ),
-        ),
-        threadId,
-      ),
-    );
-  }
-  async settleThread(target: T3Endpoint, payload: { threadId: string }) {
-    await this.withAuthorizedClient(target, async (client) => {
-      const result = await client.callTool(
-        { name: "t3_thread_organize", arguments: { threadId: payload.threadId, action: "settle" } },
-        { timeout: 10_000 },
-      );
-      if (result.isError) throw new T3Failure("refused", "Thread settlement outcome unresolved");
-    });
-  }
-  async sendMessage(target: T3Endpoint, payload: SendPayload): Promise<SendReference> {
-    if (
-      payload.mode !== "queue" ||
-      !payload.clientRequestId ||
-      payload.clientRequestId.length > 256
-    )
-      throw new T3Failure("refused", "Invalid queue request");
-    return this.withAuthorizedClient(target, async (client) => {
-      const body = this.structuredToolResult(
-        await client.callTool(
-          { name: "t3_thread_send", arguments: { ...payload } },
-          { timeout: 30_000 },
-        ),
-      ) as SendReference;
-      if (
-        !body ||
-        body.threadId !== payload.threadId ||
-        typeof body.messageId !== "string" ||
-        !body.messageId ||
-        typeof body.runId !== "string" ||
-        !body.runId ||
-        typeof body.status !== "string" ||
-        !["started", "queued"].includes(body.delivery)
-      )
-        throw Error("Invalid send reference; outcome is uncertain");
-      return {
-        threadId: body.threadId,
-        messageId: body.messageId,
-        runId: body.runId,
-        status: body.status,
-        delivery: body.delivery,
-      };
-    });
-  }
-  async stopThread(target: T3Endpoint, payload: { threadId: string; clientRequestId: string }) {
-    await this.withAuthorizedClient(target, async (client) => {
-      const result = await client.callTool(
-        { name: "t3_thread_interrupt", arguments: { ...payload, stop: true } },
-        { timeout: 30_000 },
-      );
-      if (result.isError) throw new T3Failure("refused", "Thread Stop outcome unresolved");
-    });
-  }
-  async readExecution(target: T3Endpoint, threadId: string): Promise<ExecutionObservation> {
-    return this.withAuthorizedClient(target, async (client) => {
-      const body = this.structuredToolResult(
-        await client.callTool(
-          {
-            name: "t3_thread_read",
-            arguments: { threadId, limit: 1, maxCharsPerItem: 1, runLimit: 50 },
-          },
-          { timeout: 10_000 },
-        ),
-      ) as ThreadExecutionRead;
-      if (
-        !body ||
-        !isObservedThread(body.thread, threadId) ||
-        !Array.isArray(body.recentRuns) ||
-        !body.recentRuns.every(isRecentRun) ||
-        !isRunReference(body.thread.latestRunId)
-      )
-        throw Error("Invalid thread observation");
-      return executionObservation(threadId, body);
-    });
-  }
-  async readEnvironment(target: T3Endpoint): Promise<AgentEnvironment> {
-    return this.withAuthorizedClient(target, async (client) => {
-      const body = this.structuredToolResult(
-        await client.callTool({ name: "t3_environment_read", arguments: {} }, { timeout: 10_000 }),
-      );
-      if (!hasEnvironmentIdentity(body))
-        throw new Error("t3_environment_read did not return an environment identity.");
-      const label =
-        "label" in body && typeof body.label === "string" && body.label.trim()
-          ? body.label.trim()
-          : body.environmentId;
-      return { environmentId: body.environmentId, label };
-    });
-  }
-  async readTheme(target: T3Endpoint) {
-    return this.withAuthorizedClient(target, async (client) => {
-      const tools = await listAllTools(client, () => new Error("Invalid pagination"));
-      if (!tools.some((tool) => tool.name === "t3_theme_read")) return null;
-      const read = async (args: Record<string, string>) =>
-        this.structuredToolResult(
-          await client.callTool({ name: "t3_theme_read", arguments: args }, { timeout: 10_000 }),
-        );
-      const environmentId = await readEnvironmentIdentity(client);
-      const listing = themeListing(await read({}));
-      const file = listing.published.includes(listing.defaultTheme)
-        ? await read({ themeId: listing.defaultTheme })
-        : null;
-      return themeRead(environmentId, listing, file);
-    });
-  }
-  async orchestratorCapabilities(target: T3Endpoint): Promise<readonly T3ProviderCapability[]> {
-    return this.withAuthorizedClient(target, async (client) =>
-      parseProviderCapabilities(
-        this.structuredToolResult(
-          await client.callTool(
-            { name: "orchestrator_capabilities", arguments: {} },
-            {
-              timeout: 15_000,
-            },
-          ),
-        ),
-      ),
-    );
-  }
-  /** Every Project call first checks that T3 still lists both Project tools as Factory uses them. */
-  private withProjectContract<A>(
-    target: T3Endpoint,
-    action: (client: Client) => Promise<A>,
-  ): Promise<A> {
-    return this.withAuthorizedClient(target, async (client) => {
-      const tools = await listAllTools(client, () => new Error("Invalid pagination"));
-      for (const [name, fields] of PROJECT_TOOL_FIELDS)
-        if (!supportsProjectTool(tools, name, fields))
-          throw new T3Failure("refused", "Unsupported project contract");
-      return action(client);
-    });
-  }
-  private async projectCall(
-    client: Client,
-    name: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
-    const result = await client.callTool({ name, arguments: args }, { timeout: 10_000 });
-    if (result.isError) throw new T3Failure("refused", "T3 project operation failed.");
-    const content = toolContent(result);
-    if (content === undefined) throw new Error("Invalid project result.");
-    return content;
-  }
-  private async projectValue(endpoint: string, value: unknown): Promise<T3Project | null> {
-    if (!value || typeof value !== "object") throw new Error("Invalid project");
-    const project = value as Record<string, unknown>;
-    if (
-      typeof project.id !== "string" ||
-      !project.id ||
-      typeof project.title !== "string" ||
-      typeof project.workspaceRoot !== "string" ||
-      !isAbsolute(project.workspaceRoot)
-    )
-      throw new Error("Invalid project");
-    if (project.deletedAt || project.archivedAt) return null;
-    let available = false;
-    // Only local T3 paths can be checked on this backend host. Remote execution is unverified.
-    if (isLocalEndpoint(endpoint)) {
-      available = await stat(project.workspaceRoot).then(
-        (stats) => stats.isDirectory(),
-        () => false,
-      );
-    }
-    return {
-      projectId: project.id,
-      title: project.title,
-      workspaceRoot: project.workspaceRoot,
-      available,
-      projectIcon: parseProjectIcon(project.projectIcon),
-      faviconPath: parseProjectFaviconPath(project.faviconPath),
-    };
-  }
-  async listProjects(target: T3EnvironmentTarget): Promise<readonly T3Project[]> {
-    return this.withProjectContract(target, async (client) => {
-      const projects: T3Project[] = [];
-      const ids = new Set<string>();
-      const add = (project: T3Project | null) => {
-        if (!project) return;
-        if (ids.has(project.projectId)) throw new Error("Project pages shifted; recheck.");
-        ids.add(project.projectId);
-        projects.push(project);
-      };
-      let cursor: number | undefined;
-      const seen = new Set<number>();
-      do {
-        const page = await this.projectPage(client, target.environmentId, cursor);
-        for (const raw of page.projects) add(await this.projectValue(target.endpoint, raw));
-        cursor = page.nextCursor ?? undefined;
-        if (cursor !== undefined && (seen.has(cursor) || seen.size >= 100))
-          throw new Error("Invalid project pagination");
-        if (cursor !== undefined) seen.add(cursor);
-      } while (cursor !== undefined);
-      return projects;
-    });
-  }
-  private async projectPage(
-    client: Client,
-    environmentId: string,
-    cursor: number | undefined,
-  ): Promise<{ projects: unknown[]; nextCursor: number | null }> {
-    const body = (await this.projectCall(client, "t3_project_list", {
-      environmentId,
-      limit: 100,
-      ...(cursor === undefined ? {} : { cursor }),
-    })) as { projects?: unknown; nextCursor?: unknown };
-    if (
-      !body ||
-      !Array.isArray(body.projects) ||
-      !(
-        body.nextCursor === null ||
-        (Number.isInteger(body.nextCursor) && (body.nextCursor as number) >= 0)
-      )
-    )
-      throw new Error("Invalid project page");
-    return { projects: body.projects, nextCursor: body.nextCursor as number | null };
-  }
-  async createProject(target: T3ProjectTarget): Promise<T3Project> {
-    return this.withProjectContract(target, async (client) => {
-      const value = await this.projectCall(client, "t3_project_create", {
-        environmentId: target.environmentId,
-        title: basename(target.workspaceRoot),
-        workspaceRoot: target.workspaceRoot,
-        createWorkspaceRootIfMissing: false,
-      });
-      const project = await this.projectValue(target.endpoint, value);
-      if (!project) throw new Error("Project unavailable");
-      return project;
-    });
-  }
-  readDelegatedSettlement(target: T3Endpoint, threadId: string, runId: string) {
-    return readDelegatedSettlement(
-      (args) =>
-        this.withAuthorizedClient(target, async (client) =>
-          this.structuredToolResult(
-            await client.callTool({ name: "t3_thread_wait", arguments: args }, { timeout: 10_000 }),
-          ),
-        ),
-      threadId,
-      runId,
-    );
   }
   async close() {
     await this.completion;

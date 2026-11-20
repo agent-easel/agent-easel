@@ -171,9 +171,9 @@ export default defineConfig({
               patterns: [
                 ...backendImportRestrictions,
                 {
-                  regex: "(^|/)adapters/",
+                  regex: "(^|/)(adapters|t3)/",
                   message:
-                    "The Run store never reaches T3: its transactions cannot span a T3 call. Orchestration calls the T3 adapter.",
+                    "The Run store never reaches T3: its transactions cannot span a T3 call. Orchestration calls T3.",
                 },
               ],
             },

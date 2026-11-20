@@ -1,4 +1,4 @@
-import type { ExecutionObservation, LaunchCandidate, LaunchPayload } from "../adapters/t3.ts";
+import type { ExecutionObservation, LaunchCandidate, LaunchPayload } from "../t3/threads.ts";
 
 /**
  * The workspace a Run's workers share. A checkout Run works in its project root. A worktree Run's

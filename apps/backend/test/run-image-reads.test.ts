@@ -108,7 +108,7 @@ it("a checkout downstream worker launched without attachments reads an original 
   const reported = await resultReported(setup.world, atWork);
   await resultReleasedToSecondWorker(setup.world, reported);
   const f = { ...setup, ...reported };
-  const downstream = [...f.t3.launches.values()][1]!.payload;
+  const downstream = [...f.t3.threads.launches.values()][1]!.payload;
   expect(downstream.attachments).toBeUndefined();
   const client = await factoryMcpClient(c, f.f);
 
@@ -130,7 +130,7 @@ it("a worktree Block's worker launched at its first arrival after a Human step r
   const reported = await resultReported(setup.world, entry);
   const review = await resultReleasedToHumanReview(setup.world, reported);
   await resultReleasedToSecondWorker(setup.world, await reviewApproved(setup.world, review));
-  const parallel = [...setup.t3.launches.values()][1]!.payload;
+  const parallel = [...setup.t3.threads.launches.values()][1]!.payload;
   expect(parallel.attachments).toBeUndefined();
   const client = await factoryMcpClient(c, setup.f);
 
@@ -154,7 +154,7 @@ it("a revisited worker reads an original Run image during its queued later visit
   await laterResultReturning(ready.world, await reviewApproved(ready.world, review), entry);
   const setup = { ...ready, entryBlockId: entry.blockId };
   assert((await setup.f.reconcileRuns()).ok);
-  const [revisit] = [...setup.t3.sends.values()].map(({ payload }) => payload);
+  const [revisit] = [...setup.t3.threads.sends.values()].map(({ payload }) => payload);
   expect(revisit?.threadId).toBe("thread-1");
   const client = await factoryMcpClient(c, setup.f);
 
@@ -309,7 +309,11 @@ it("repeated, lost-response and failed image reads change neither the Run nor an
   const client = await factoryMcpClient(c, f.f);
   const lossy = await factoryMcpClient(c, f.f, { loseCallResponses: true });
   const before = await f.f.getRun(f.runId);
-  const calls = { launches: f.t3.launchCalls, uploads: f.t3.uploadCalls, sends: f.t3.sends.size };
+  const calls = {
+    launches: f.t3.threads.launchCalls,
+    uploads: f.t3.threads.uploadCalls,
+    sends: f.t3.threads.sends.size,
+  };
 
   // Act
   const results = await Promise.allSettled([
@@ -332,8 +336,8 @@ it("repeated, lost-response and failed image reads change neither the Run nor an
   ]);
   expect(await f.f.getRun(f.runId)).toStrictEqual(before);
   expect({
-    launches: f.t3.launchCalls,
-    uploads: f.t3.uploadCalls,
-    sends: f.t3.sends.size,
+    launches: f.t3.threads.launchCalls,
+    uploads: f.t3.threads.uploadCalls,
+    sends: f.t3.threads.sends.size,
   }).toStrictEqual(calls);
 });

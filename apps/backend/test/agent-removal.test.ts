@@ -167,7 +167,7 @@ it("an Agent of a Project that became unavailable can be removed", async (c) => 
   // Arrange
   const { factory, t3, first } = await discoveredClones(c);
   const agent = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -195,7 +195,7 @@ it("an Agent placed by a Flow of an unavailable Project is still refused as in u
       },
     }),
   );
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
 
   // Act

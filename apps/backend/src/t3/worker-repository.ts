@@ -1,5 +1,5 @@
 import type { RunPullRequest } from "@t3-factory/contracts";
-import type { ExecutionObservation } from "./t3.ts";
+import type { ExecutionObservation } from "./threads.ts";
 
 function pullRequest(value: unknown): RunPullRequest {
   if (!value || typeof value !== "object") throw Error("Invalid worker pull request.");

@@ -16,21 +16,21 @@ export function runImagesAndTitlesFixture(
   { factory, t3 }: Host,
   scenarios: Awaited<ReturnType<typeof scenariosFixture>>,
 ) {
-  const providers = [...t3.controlledProviders];
+  const providers = [...t3.projects.controlledProviders];
   return {
     actions: {
       attachments({ supported }: { supported: boolean }) {
-        t3.support.attachmentLimit = supported ? 8 : null;
+        t3.contract.support.attachmentLimit = supported ? 8 : null;
       },
       /** Each worker launch of Run `number` with its attachment names and uploaded digests. */
       launches: ({ number }: { number: number }) =>
-        [...t3.launches.values()]
+        [...t3.threads.launches.values()]
           .filter(({ payload }) => payload.title.startsWith(`Factory #${number} · `))
           .map(({ payload }) => ({
             title: payload.title,
             attachments: (payload.attachments ?? []).map((attachment) => ({
               name: attachment.name,
-              sha256: sha256Hex(t3.uploads.get(attachment.id)!.data),
+              sha256: sha256Hex(t3.threads.uploads.get(attachment.id)!.data),
             })),
           })),
       /**
@@ -49,12 +49,16 @@ export function runImagesAndTitlesFixture(
       },
     },
     async reset() {
-      t3.support.attachmentLimit = 8;
+      t3.contract.support.attachmentLimit = 8;
       if (
-        providers.length !== t3.controlledProviders.length ||
-        providers.some((provider, index) => provider !== t3.controlledProviders[index])
+        providers.length !== t3.projects.controlledProviders.length ||
+        providers.some((provider, index) => provider !== t3.projects.controlledProviders[index])
       )
-        t3.controlledProviders.splice(0, t3.controlledProviders.length, ...providers);
+        t3.projects.controlledProviders.splice(
+          0,
+          t3.projects.controlledProviders.length,
+          ...providers,
+        );
       const setting = requireSuccess(await factory.getRunTitleSetting());
       if (setting.enabled || !isDeepStrictEqual(setting.model, controlledTitleModel))
         requireSuccess(

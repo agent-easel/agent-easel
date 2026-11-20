@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as SqliteClient from "@effect/sql-sqlite-node/SqliteClient";
 import { LiveGitAdapter } from "./adapters/live-git.ts";
 import { LiveGitHubAdapter } from "./adapters/live-github.ts";
-import { LiveT3Adapter } from "./adapters/live-t3.ts";
+import { makeLiveT3 } from "./t3/live-modules.ts";
 import { migrate } from "./database.ts";
 import type { FactoryOptions } from "./factory-options.ts";
 import { FactoryService, makeFactoryService } from "./factory-service.ts";
@@ -30,9 +30,7 @@ export const factoryLayer = (options: FactoryOptions) =>
       yield* Effect.provide(migrate, sqlContext);
       const credentialsDirectory =
         options.credentialsDirectory ?? join(dirname(options.databasePath), "credentials");
-      const t3 = yield* Effect.sync(
-        () => options.t3 ?? new LiveT3Adapter({ credentialsDirectory }),
-      );
+      const t3 = yield* Effect.sync(() => options.t3 ?? makeLiveT3({ credentialsDirectory }));
       const github = options.github ?? new LiveGitHubAdapter();
       const git = options.git ?? new LiveGitAdapter();
       return yield* makeFactoryService(options, owner, t3, github, git, credentialsDirectory).pipe(

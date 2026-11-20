@@ -45,7 +45,7 @@ export async function wireWorker(c: TestContext, wait: (runId: string) => Record
   const threadId = "thread-1";
   const wire = await authorizedLiveOAuth(c, {
     runtimeActivity: () => {
-      const observation = f.t3.executionObservations.get(threadId)!;
+      const observation = f.t3.threads.executionObservations.get(threadId)!;
       return {
         ...workerActivity,
         thread: {
@@ -62,13 +62,13 @@ export async function wireWorker(c: TestContext, wait: (runId: string) => Record
     wait: (args) => wait(String(args.runId)),
   });
   const target = { endpoint: wire.endpoint };
-  const readExecution = f.t3.readExecution.bind(f.t3);
-  f.t3.readExecution = (t, id) =>
-    id === threadId ? wire.adapter.readExecution(target, id) : readExecution(t, id);
-  const readDelegatedSettlement = f.t3.readDelegatedSettlement.bind(f.t3);
-  f.t3.readDelegatedSettlement = (t, id, runId) =>
+  const readExecution = f.t3.threads.readExecution.bind(f.t3.threads);
+  f.t3.threads.readExecution = (t, id) =>
+    id === threadId ? wire.threads.readExecution(target, id) : readExecution(t, id);
+  const readDelegatedSettlement = f.t3.threads.readDelegatedSettlement.bind(f.t3.threads);
+  f.t3.threads.readDelegatedSettlement = (t, id, runId) =>
     id === threadId
-      ? wire.adapter.readDelegatedSettlement(target, id, runId)
+      ? wire.threads.readDelegatedSettlement(target, id, runId)
       : readDelegatedSettlement(t, id, runId);
   return f;
 }

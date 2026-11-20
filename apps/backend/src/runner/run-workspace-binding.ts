@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
 import type { RunStore } from "./run-store/run-store.ts";
 import { runTarget, type RunRow } from "./runner-types.ts";
 
@@ -10,7 +10,7 @@ import { runTarget, type RunRow } from "./runner-types.ts";
  * queues each launched worker's own setup behind its workspace preparation.
  * Returns whether this call bound the worktree.
  */
-export function bindRunWorkspace(store: RunStore, t3: T3Adapter, run: RunRow) {
+export function bindRunWorkspace(store: RunStore, t3: T3Threads, run: RunRow) {
   return Effect.gen(function* () {
     const { workspace } = run;
     if (workspace.mode !== "worktree" || workspace.state !== "preparing") return false;

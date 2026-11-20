@@ -155,7 +155,7 @@ host's `gh` ([Development scenarios](dev-scenarios.md#simulator-support-limits))
 
 ## UI journeys
 
-After `pnpm build`, `pnpm test:e2e` runs the controlled Chromium journeys against a foreground backend with a temporary home and a controlled T3 adapter (no OAuth or paid workload). First boot may need
+After `pnpm build`, `pnpm test:e2e` runs the controlled Chromium journeys against a foreground backend with a temporary home and controlled T3 modules (no OAuth or paid workload). First boot may need
 `pnpm exec e2e-web install chromium --with-deps` (for CI). Logs and traces go to the ignored `.e2e/` directory. These journeys are separate from `pnpm test` and do not establish live compatibility; see
 [UI verification](testing.md). The Run title journey submits the generated title for the controlled title thread through
 `factory_set_run_title`; it shows the Settings section, indicators, title line and details, not that a live model
@@ -273,7 +273,7 @@ Save each Agent's worker settings (environment, provider, model and every option
 | Restart and lost acknowledgement | Original keys, payloads and options stay immutable; positive evidence or independently verified replay continuity resolves identity, otherwise uncertainty stays without new work |
 | Later direct chat | A Settled Run stays Settled after chat without a report and returns to Active on an accepted report; an Archived Run stays archived; neither delivers old work or schedules assessment or repair |
 
-Qualify remote workers separately and only where the adapter exposes enough native identity and interrupt support.
+Qualify remote workers separately and only where T3 exposes enough native identity and interrupt support.
 
 ### Additional integration cases
 

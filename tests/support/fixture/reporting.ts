@@ -28,7 +28,7 @@ export function reportingFixture({ factory, t3, home }: Host) {
   return {
     actions: {
       incompleteRuntime() {
-        t3.runtimeContractComplete = false;
+        t3.contract.runtimeContractComplete = false;
       },
       async removeRegistration() {
         await rm(join(codex, "config.toml"));
@@ -55,7 +55,7 @@ export function reportingFixture({ factory, t3, home }: Host) {
       },
     },
     async reset() {
-      t3.runtimeContractComplete = true;
+      t3.contract.runtimeContractComplete = true;
       await rm(join(home, ".cursor", "mcp.json"), { force: true });
       const required = await lstat(requiredSkill).catch((cause: unknown) => {
         if ((cause as NodeJS.ErrnoException).code !== "ENOENT") throw cause;

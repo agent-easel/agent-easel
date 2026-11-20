@@ -3,12 +3,12 @@ import { settledWait, threadWire } from "./support/worker-thread-wire.ts";
 
 it("a settled delegated wait counts as finished when its result run names an earlier run", async (c) => {
   // Arrange
-  const { adapter, endpoint, calls } = await threadWire(c, {
+  const { threads, endpoint, calls } = await threadWire(c, {
     wait: { ...settledWait, resultRun: { runId: "earlier-run", status: "completed" } },
   });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence).toStrictEqual({
@@ -32,12 +32,12 @@ it("a settled delegated wait counts as finished when its result run names an ear
 
 it("a timed-out delegated wait leaves the worker thread unsettled", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await threadWire(c, {
+  const { threads, endpoint } = await threadWire(c, {
     wait: { ...settledWait, status: "running", timedOut: true },
   });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence.state).toBe("pending");
@@ -45,12 +45,12 @@ it("a timed-out delegated wait leaves the worker thread unsettled", async (c) =>
 
 it("a rolled-back delegated wait is terminal rather than unavailable completion evidence", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await threadWire(c, {
+  const { threads, endpoint } = await threadWire(c, {
     wait: { ...settledWait, status: "rolled_back" },
   });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence).toStrictEqual({
@@ -63,12 +63,12 @@ it("a rolled-back delegated wait is terminal rather than unavailable completion 
 
 it("a delegated wait answered for another run is not completion evidence", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await threadWire(c, {
+  const { threads, endpoint } = await threadWire(c, {
     wait: { ...settledWait, runId: "continuation" },
   });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence.state).toBe("unknown");
@@ -76,12 +76,12 @@ it("a delegated wait answered for another run is not completion evidence", async
 
 it("a delegated wait answered for another thread is not completion evidence", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await threadWire(c, {
+  const { threads, endpoint } = await threadWire(c, {
     wait: { ...settledWait, threadId: "subagent" },
   });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence.state).toBe("unknown");
@@ -90,10 +90,10 @@ it("a delegated wait answered for another thread is not completion evidence", as
 it("a delegated wait without timeout evidence is not completion evidence", async (c) => {
   // Arrange
   const { timedOut: _timedOut, ...withoutTimeout } = settledWait;
-  const { adapter, endpoint } = await threadWire(c, { wait: withoutTimeout });
+  const { threads, endpoint } = await threadWire(c, { wait: withoutTimeout });
 
   // Act
-  const evidence = await adapter.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
+  const evidence = await threads.readDelegatedSettlement({ endpoint }, "worker", "latest-run");
 
   // Assert
   expect(evidence.state).toBe("unknown");

@@ -31,7 +31,7 @@ export const sampleAgentInput = (name = "Coder", projectId: OwningProject = null
 
 export async function openFactoryWithApprovedT3(context: TestContext) {
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   const harness = await factoryHarness(context);
   const factory = await harness.open({ t3 });
   assert((await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" })).ok);
@@ -44,8 +44,8 @@ export async function savedAgentWhileCapabilitiesFail(context: TestContext) {
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   const saved = await factory.createAgent(sampleAgentInput());
   assert(saved.ok);
-  t3.capabilitiesAvailable = false;
-  return { factory, t3, agent: saved.value, capabilityReads: t3.capabilityReads };
+  t3.projects.capabilitiesAvailable = false;
+  return { factory, t3, agent: saved.value, capabilityReads: t3.projects.capabilityReads };
 }
 
 export async function readAgentAfterRestart(
@@ -160,8 +160,8 @@ export async function reviewedFlow(context: TestContext) {
 export async function projectsHarness(context: TestContext) {
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
-  t3.projects = [
+  t3.connection.authorized = true;
+  t3.projects.catalog = [
     { projectId: "one", title: "First clone", workspaceRoot: "/repos/one", available: true },
     {
       projectId: "clone",
@@ -235,9 +235,9 @@ export function ownerChangedInStorage(
 
 export async function uncertainProjectCreation(context: TestContext) {
   const p = await projectsHarness(context);
-  p.t3.projects = [];
-  const create = p.t3.createProject.bind(p.t3);
-  p.t3.createProject = async (...args) => {
+  p.t3.projects.catalog = [];
+  const create = p.t3.projects.createProject.bind(p.t3.projects);
+  p.t3.projects.createProject = async (...args) => {
     await create(...args);
     throw new Error("Lost response with private content");
   };

@@ -29,8 +29,7 @@ import {
 } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type { GitAdapter } from "../adapters/git.ts";
-import type { T3ContractSnapshot } from "../adapters/t3.ts";
-import { attachmentSupport } from "../adapters/t3-contract.ts";
+import { attachmentSupport, type T3ContractSnapshot } from "../t3/contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type {

@@ -73,21 +73,25 @@ export async function restoreCapturedAdapter(
   retired: ReadonlySet<string> = new Set(),
 ) {
   const t3 = new ControlledT3();
+  // Older captures record the controlled engine's fields as one flat object.
+  const parts = [t3, t3.connection, t3.contract, t3.threads, t3.projects];
   for (const [key, value] of Object.entries(observations)) {
     if (retired.has(key)) continue;
-    assert(Object.hasOwn(t3, key), `Unknown captured adapter field: ${key}`);
+    const part =
+      key === "projects" ? t3.projects : parts.find((candidate) => Object.hasOwn(candidate, key));
+    assert(part, `Unknown captured adapter field: ${key}`);
     const restored =
       value && typeof value === "object" && "map" in value && Array.isArray(value.map)
         ? new Map(value.map as [string, unknown][])
         : value && typeof value === "object" && "set" in value
           ? new Set(value.set as unknown[])
           : value;
-    Object.assign(t3, { [key]: restored });
+    Object.assign(part, { [key === "projects" ? "catalog" : key]: restored });
   }
   const state = join(processHome, "reporting-state");
   const home = join(processHome, "codex-home");
   await mkdir(state);
   await mkdir(home);
-  await writeReportingState(state, t3.environmentId, home);
+  await writeReportingState(state, t3.connection.environmentId, home);
   return t3;
 }

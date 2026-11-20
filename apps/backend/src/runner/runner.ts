@@ -8,7 +8,8 @@ import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
 import type { GitAdapter } from "../adapters/git.ts";
-import type { T3Adapter, T3ContractSnapshot } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
+import type { T3ContractSnapshot } from "../t3/contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { BlockRow, RunnerOptions, RunRow } from "./runner-types.ts";
@@ -33,7 +34,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   freshSnapshot: ContractSnapshots["fresh"],
   /** The Project catalog reconciled under the latest connection check, without checking again. */
   refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
-  t3: T3Adapter,
+  t3: T3Threads,
   git: GitAdapter,
   owner: { token: string },
   intervalMs: number,

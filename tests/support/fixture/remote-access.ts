@@ -129,8 +129,8 @@ export async function remoteAccessFixture(
   let authorizationOpenedAt = -Infinity;
   /** When the fixture relayed each access request, per target server. */
   const accessRequests = new Map<typeof current, number[]>();
-  const resumeAuthorization = t3.resumeAuthorization.bind(t3);
-  t3.resumeAuthorization = (target) => {
+  const resumeAuthorization = t3.connection.resumeAuthorization.bind(t3.connection);
+  t3.connection.resumeAuthorization = (target) => {
     authorizationOpenedAt = Date.now();
     return resumeAuthorization(target);
   };
@@ -187,28 +187,28 @@ export async function remoteAccessFixture(
       incompatible: () => retarget(newer),
       /** The owner saved a T3 endpoint on the host; T3 approval happens in the host's browser. */
       async t3Endpoint() {
-        t3.authorized = false;
+        t3.connection.authorized = false;
         await factory.configureConnection({ endpoint: "http://127.0.0.1:0/demo-only/mcp" });
       },
       /** T3 stops answering on the host; live connection status follows the recheck. */
       async t3Unavailable() {
-        t3.available = false;
+        t3.connection.available = false;
         requireSuccess(await factory.recheckConnection());
       },
       async t3Available() {
-        t3.available = true;
+        t3.connection.available = true;
         requireSuccess(await factory.recheckConnection());
       },
       t3Approve() {
-        t3.approve();
+        t3.connection.approve();
       },
       resetConnectionReads() {
         connectionReads = 0;
       },
       serverUpdateActions: () => serverUpdates.actions,
       t3Observations: () => ({
-        authorizationStarts: t3.authorizationStarts,
-        reopenedApprovals: t3.reopenedApprovals,
+        authorizationStarts: t3.connection.authorizationStarts,
+        reopenedApprovals: t3.connection.reopenedApprovals,
         connectionReads,
       }),
     },
@@ -218,8 +218,8 @@ export async function remoteAccessFixture(
       target = current;
       dropAccessRequest = false;
       connectionReads = 0;
-      t3.authorizationStarts = 0;
-      t3.reopenedApprovals = 0;
+      t3.connection.authorizationStarts = 0;
+      t3.connection.reopenedApprovals = 0;
       // The host ignores another open within its cooldown, so the next journey waits it out.
       await sleep(authorizationOpenedAt + authorizationOpenCooldownMs - Date.now());
       // A journey makes at most one access request, so each server keeps one free in its minute.
@@ -231,9 +231,9 @@ export async function remoteAccessFixture(
             recent[recent.length - accessRequestsPerMinute]! + minuteMs - Date.now() + 100,
           );
       }
-      if (!t3.available || !t3.authorized || t3.pendingApproval) {
-        t3.available = true;
-        t3.approve();
+      if (!t3.connection.available || !t3.connection.authorized || t3.connection.pendingApproval) {
+        t3.connection.available = true;
+        t3.connection.approve();
         requireSuccess(await factory.recheckConnection());
       }
     },
