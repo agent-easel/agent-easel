@@ -1,5 +1,5 @@
 import { runFactoryProcess } from "./support/factory-process.ts";
-import { assert, expect, it, type TestContext } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import { readdir, stat, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
