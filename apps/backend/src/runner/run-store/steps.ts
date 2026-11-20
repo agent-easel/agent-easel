@@ -15,6 +15,8 @@ export type TimelineEvent = { readonly runId: string; readonly observedAt: strin
   | { readonly kind: "run-settled"; readonly reason: SettlementReason }
   | { readonly kind: "run-activated"; readonly blockId: string; readonly reportId?: string }
   | { readonly kind: "run-archived" }
+  /** The Run accepted its one delivery into an ending; a Run has at most one. */
+  | { readonly kind: "ending-reached"; readonly endingId: string }
   /** The user confirmed manual settlement (attempt 1) or retried it. */
   | { readonly kind: "settlement-requested"; readonly attempt: number }
   | {
@@ -268,6 +270,13 @@ function stored(event: Exclude<TimelineEvent, WaitEvent>) {
     switch (event.kind) {
       case "started":
         return { blockId: null, executionId: null, sourceKey: "start", causeId: null };
+      case "ending-reached":
+        return {
+          blockId: null,
+          executionId: null,
+          sourceKey: "ending-reached",
+          causeId: event.endingId,
+        };
       case "execution-observed":
         return {
           blockId: event.blockId,

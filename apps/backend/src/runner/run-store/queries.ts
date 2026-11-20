@@ -12,9 +12,11 @@ import { recoveryRows } from "./recovery-read.ts";
 import { waitArrival, type WaitArrivalRow } from "./waits.ts";
 import { workerProvenance } from "./handoffs.ts";
 import { readConditionSummaries } from "./conditions.ts";
+import { readRunResult } from "./endings.ts";
 import {
   CONDITION_OTHERWISE_ID,
   CONDITION_TIMELINE_ARRIVALS,
+  FINISH_BLOCK_ID,
   type Result,
   type RunAttention,
   type RunDetail,
@@ -275,7 +277,7 @@ export function openRunQueries(database: RunnerDatabase) {
         if (!saved) return failure("not_found", "This Run does not exist.");
         const runRow: RunRow = { ...saved, definitions: yield* readRunDefinitions(sql, saved) };
         const blocks =
-          yield* sql<BlockRow>`SELECT * FROM run_blocks WHERE run_id=${id} ORDER BY rowid`;
+          yield* sql<BlockRow>`SELECT * FROM run_blocks WHERE run_id=${id} AND block_id!=${FINISH_BLOCK_ID} ORDER BY rowid`;
         const intents =
           yield* sql<IntentRow>`SELECT i.*,t.thread_id AS origin_thread_id FROM operation_intents i LEFT JOIN run_thread_bindings t ON t.id=i.binding_id WHERE i.run_id=${id} ORDER BY i.rowid`;
         // A Condition's selections grow with every arrival, so a Run read keeps only its latest
@@ -342,6 +344,7 @@ export function openRunQueries(database: RunnerDatabase) {
             startedAt: runRow.started_at,
             lifecycle,
             gateOpen: !!runRow.gate_open,
+            result: yield* readRunResult(sql, id),
             settlement: yield* readRunSettlement(sql, runRow),
             generation: runRow.generation,
             blocks: blocks.map((block) =>

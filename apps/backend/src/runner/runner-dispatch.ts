@@ -8,7 +8,7 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { recoverOperation } from "./runner-effects.ts";
 import { recoveryDispatchGeneration } from "./runner-recovery.ts";
-import type { FactoryOperations } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID, type FactoryOperations } from "@t3-factory/contracts";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import type { SendPayload, SendReference, T3Threads } from "../t3/threads.ts";
@@ -62,9 +62,12 @@ function storedTarget(
     return unverified("Stored operation target cannot be verified.");
   return verified(target);
 }
+/** A Handoff into an ending names the Finish block, which is not one of the graph's blocks. */
 const targetKind = (runRow: RunRow, handoff: Handoff) =>
-  runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
-/** Accepting a Handoff at a Condition sends nothing to T3 and commits atomically: a failed attempt,
+  handoff.block_id === FINISH_BLOCK_ID
+    ? "finish"
+    : runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
+/** Accepting a Handoff at a Condition or an ending sends nothing to T3 and commits atomically: a failed attempt,
  * such as unavailable storage, committed nothing, so the Handoff stays pending for the next pass.
  * It is never noted as uncertain T3 work. */
 const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>
@@ -85,8 +88,9 @@ export function openRunnerDispatch(
 ) {
   /** A released Handoff to an Agent becomes a worker launch or a revisit send, a Continuation
    * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, a Wait Handoff an
-   * arrival whose wake-up is scheduled, and a Condition Handoff a numbered, routed arrival. A held
-   * Handoff stays a Handoff; reservation asks again. */
+   * arrival whose wake-up is scheduled, a Condition Handoff a numbered, routed arrival, and the
+   * first Handoff into an ending the Run result. A held Handoff stays a Handoff; reservation asks
+   * again. */
   function prepareHandoff(
     runRow: RunRow,
     handoff: Handoff,
@@ -95,9 +99,11 @@ export function openRunnerDispatch(
       const release = yield* releaseAtPreparation(store, t3, runRow, handoff);
       if (release.state === "held") return;
       const current = release.run;
-      const kind = current.definitions.flow.graph.blocks.find(
-        (block) => block.id === handoff.block_id,
-      )?.kind;
+      const kind = targetKind(current, handoff);
+      if (kind === "finish") {
+        yield* store.reachEnding(current, handoff, arrivalGeneration(release));
+        return;
+      }
       if (kind === "continuation") return yield* prepareContinuationHandoff(current, handoff);
       if (kind === "human") {
         yield* store.handoffToHumanOccurrence(current, handoff, arrivalGeneration(release));
@@ -178,7 +184,8 @@ export function openRunnerDispatch(
           yield* observe(runRow, block, contextId);
         return;
       }
-      if (saved.kind === "handoff" && targetKind(runRow, saved) === "condition")
+      const target = saved.kind === "handoff" ? targetKind(runRow, saved) : undefined;
+      if (saved.kind === "handoff" && (target === "condition" || target === "finish"))
         return yield* retriedNextPass(prepareHandoff(runRow, saved));
       let intent: Handoff | Delivery = saved;
       return yield* recoverOperation(

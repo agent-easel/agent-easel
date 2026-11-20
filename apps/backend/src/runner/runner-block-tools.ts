@@ -243,6 +243,7 @@ function runView(detail: RunDetail): RuntimeReply {
     input: detail.input,
     state: detail.lifecycle,
     conditions: detail.conditions,
+    result: detail.result,
     blocks: detail.blocks.map((block) => ({
       blockId: block.blockId,
       name: block.name,

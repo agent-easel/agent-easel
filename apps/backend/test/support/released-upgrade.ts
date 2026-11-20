@@ -180,6 +180,8 @@ export function currentRun(
     gateOpen: lifecycle === "settled",
     // Upgrading starts no manual settlement: a released Settled Run keeps its open gate.
     settlement: null,
+    // Released Flows had no endings, so no released Run has a Run result.
+    result: null,
     definitions: capturedDefinitions(snapshot),
     currentFlowRevision,
     // Released Runs worked in the project checkout.

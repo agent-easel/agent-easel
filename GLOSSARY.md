@@ -137,7 +137,7 @@ An agent's explicit report of its block's state and, where applicable, a selecte
 The newest accepted `finished` report for one Block activation, sent from any turn of
 the Block's worker thread with its Block id. A later `finished` report for the same activation replaces it as a new
 version; earlier versions stay in the Run's history unchanged. Acceptance and the worker thread being finished are
-separate facts.
+separate facts. It is a Block's result, never the Run's outcome; see Run result.
 
 **Run coordinator**:
 Retired. Factory no longer saves a model selection for a primary Run conversation. A closed Run may still display one when it was stored before this contract.
@@ -270,6 +270,10 @@ _Avoid_: End block, Join block, terminal block
 One declared way a Flow can end, in the Finish block's ordered list: a stable id, a name, an optional description and an output setting (None, Optional or Required) with a description of the expected output. Wires from any exit or output, Condition Otherwise included, enter a specific ending by its id, so renaming keeps them; several wires may enter one ending. A blank, duplicate or unwired ending is a readiness gap. An ending is not a Block exit, and an unconnected exit is not an ending.
 _Avoid_: outcome, result type, terminal exit, End
 
+**Run result**:
+A Run's one accepted outcome: the first released delivery into an ending that the Run accepts. It records the ending with its captured name, the delivered text exactly (none for an ending whose output is None), whether a Required ending got blank text (Output missing), the source block and exit or output, the block that wrote the text (a Human step for its answer, also after forwarding), worker provenance, the delivery and the acceptance time. It is never changed by a later report and is kept through Archive. A Run with no endings, or one that ended without reaching one, has no Run result.
+_Avoid_: Final result (a Block activation's result), Run output, Finished
+
 **Authorization context**:
 A durable Factory reference binding accepted work to one T3 endpoint, OAuth grant
 lineage and environment. Reconnection and refresh preserve it; changed grants,
@@ -287,7 +291,7 @@ pending on that Block; acceptance alone does not start work. A held handoff is c
 replaced before release. Each recipient and repeated arrival proceeds independently, using the routing rules of the Run's captured Flow revision.
 
 **Handoff gate**:
-A Run's switch that permits releasing Handoffs, forwarding Wait arrivals and dispatching new work. It is open from Start; a confirmed manual settlement and Archive close it for good, and automatic settlement leaves it open so owed Handoffs are still delivered.
+A Run's switch that permits releasing Handoffs, forwarding Wait arrivals and dispatching new work. It is open from Start; a confirmed manual settlement, Archive and accepting the Run result close it for good, and automatic settlement leaves it open so owed Handoffs are still delivered.
 _Avoid_: Treating Settled as a closed gate.
 
 **Run generation**:

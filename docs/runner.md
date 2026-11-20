@@ -541,6 +541,31 @@ settlement and stays latched across restart. Only [manual settlement](#manual-se
 cancelling the waiting deliveries without numbering them; neither reports success nor changes the count. Flow edits affect
 only later Runs.
 
+### Reaching an ending
+
+A Handoff into an [ending](../GLOSSARY.md#ending) is created, held and released like any Handoff: a Final result's waits
+for its source worker thread to finish, and a Human answer's, Wait forwarding's, Condition selection's or pass-through's is
+released when created. Its recipient is the Finish block, which has no worker and is not a Block of the Run's reads; Run
+detail lists the delivery among its intents. Accepting a released one sends nothing to T3 and is one guarded transaction
+under the owner, open gate, live authorization context and, unless the release is durable, the release generation. It
+records the [Run result](../GLOSSARY.md#run-result), closes the handoff gate for good, cancels every other delivery into an
+ending that is still pending, appends one `ending-reached` event naming the ending, acknowledges the delivery and advances
+the generation. A replay of the accepted delivery answers its original acceptance. A failure before commit records
+nothing and the next dispatch pass retries, as for a Condition.
+
+The result keeps the ending's name from the Run's captured revision and the delivered text exactly. An ending whose output
+is None keeps no copy of the text, and the delivery's payload is cleared on acknowledgement. Blank text (by the report trim
+rule) at a Required ending is recorded with Output missing, without a Problem or attention. The writer of the text is found
+through Wait, Condition and pass-through forwarding, so a Human step's answer is attributed to that step; the result
+carries the delivery's [worker provenance](#worker-provenance).
+
+The closed gate is final for this Run: a racing delivery into any ending is cancelled with `cancelled-on-Finish` and never
+becomes a second result, and later reports, Human answers and Wait forwarding follow the closed-gate rules and record
+nothing. A confirmed manual settlement or Archive that closed the gate first leaves its pending deliveries into endings
+to be cancelled with the rest of its owed work, so no result is recorded. Accepting the result stops no other worker;
+Blocks already at work keep running. A Run whose branches end without reaching an ending settles automatically as before
+and keeps its open gate, so a later accepted report can still reach an ending.
+
 ## Run title generations
 
 A [Run title generation](runs.md#run-title-generation) runs beside its Run and is never Run work: it holds no gate,

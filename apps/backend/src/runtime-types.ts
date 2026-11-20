@@ -4,6 +4,7 @@ import type {
   ConditionSummary,
   FlowEnding,
   RunImageMimeType,
+  RunResult,
 } from "@t3-factory/contracts";
 
 type RuntimeImage = {
@@ -70,6 +71,8 @@ export type RuntimeReply = {
   }[];
   /** The Run's constant-size Condition summaries, not their histories. */
   readonly conditions?: readonly ConditionSummary[];
+  /** The Run result once the Run reached an ending, else null. */
+  readonly result?: RunResult | null;
   /** One Condition evidence page: its arrivals, window high-water and next cursor. */
   readonly arrivals?: readonly ConditionArrivalEvidence[];
   readonly highWater?: number;

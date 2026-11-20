@@ -461,8 +461,11 @@ export interface RunDetail extends RunSummary {
   readonly workspace: RunWorkspaceDetail;
   readonly activations: readonly RunActivation[];
   readonly threadBindings: readonly RunThreadBinding[];
-  /** Closed by Archive and by accepting a manual settlement. */
+  /** Closed by Archive, by accepting a manual settlement and by reaching an ending. */
   readonly gateOpen: boolean;
+  /** The Run's one accepted outcome once it reached an ending; null before then and for a Run
+   * that ended without reaching one. */
+  readonly result: RunResult | null;
   /** The confirmed manual settlement in progress; null once Settled, when Archived or never. */
   readonly settlement: RunSettlement | null;
   readonly generation: number;
@@ -714,6 +717,30 @@ export interface WorkerProvenance {
   readonly runId: string;
   readonly activationId: string;
   readonly threadId: string;
+}
+
+/**
+ * The delivery into an ending that the Run accepted first. It is recorded once, never changed by a
+ * later report and kept through Archive.
+ */
+export interface RunResult {
+  readonly endingId: string;
+  /** The ending's name in the Flow revision the Run captured. */
+  readonly endingName: string;
+  /** The delivered text exactly, including empty; null when the ending's output is None. */
+  readonly output: string | null;
+  /** A Required ending was reached with blank text. */
+  readonly outputMissing: boolean;
+  /** The block whose exit or output is wired into the ending. */
+  readonly sourceBlockId: string;
+  readonly exitId: string;
+  /** The block that wrote the text: a Human step for its answer, even after a Wait, Condition or
+   * Continuation forwarded it. */
+  readonly authorBlockId: string;
+  readonly origin: WorkerProvenance | null;
+  /** The accepted delivery's id, as listed in the Run's intents. */
+  readonly deliveryId: string;
+  readonly acceptedAt: string;
 }
 
 /**

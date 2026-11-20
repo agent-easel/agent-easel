@@ -419,7 +419,7 @@ The current protocol is **22**. A server accepts clients from protocol **22**, a
 client requires a protocol **22** server, so only protocol 22 peers interoperate.
 
 Protocol 22 adds the [Finish block](studio.md#finish-block) with its endings to Flows and captured
-Run definitions, and connections that enter an ending. Older clients can neither read nor save such
+Run definitions, connections that enter an ending and the Run's `result` in Run detail. Older clients can neither read nor save such
 a Flow, so the server refuses them at the handshake before product screens mount and they must
 update; their credentials and stored data are kept. A current client likewise refuses a protocol 21
 or older server, which rejects or lacks the Finish block, and shows the update gate naming the

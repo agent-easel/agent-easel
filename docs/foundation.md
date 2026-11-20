@@ -143,7 +143,8 @@ its outcome, deadline and deduplication identity stay. A Condition arrival follo
 for its number its text stays only in the incoming delivery, and its number, selection, provenance and deduplication identity
 stay. Other message payloads persist only while needed for pending Human context,
 uncertain delivery or recovery, then are cleared while keys, fingerprints and references
-remain. Initial input, including its images, and revision prompts are intentional exceptions;
+remain. Initial input, including its images, revision prompts and the [Run result](runner.md#reaching-an-ending), which
+keeps its text through Archive unless its ending's output is None, are intentional exceptions;
 staged images no Run references are deleted after 24 hours. The only other image removal is manual
 deletion from **Settings → Run images** of an image whose every Run is Settled or Archived. Factory
 rechecks that rule at deletion and removes only the bytes; manifest, staging row and history stay. A

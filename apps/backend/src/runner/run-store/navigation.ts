@@ -1,6 +1,7 @@
 import {
   attentionPresentation,
   awaitsReviewInT3,
+  FINISH_BLOCK_ID,
   type ArchivedRunMatch,
   type Result,
   type RunAttention,
@@ -67,7 +68,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             report_status: "working" | "finished" | null;
             engine_status: string | null;
             worker_finished: 0 | 1;
-          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status,worker_finished FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
+          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status,worker_finished FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) AND block_id!=${FINISH_BLOCK_ID} ORDER BY rowid`;
           const working = new Map(
             (yield* currentProgress(sql)).map((row) => [`${row.runId}/${row.blockId}`, row]),
           );

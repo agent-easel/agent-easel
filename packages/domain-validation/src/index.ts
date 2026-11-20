@@ -547,8 +547,7 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 
 /**
  * The distinct blocks a message leaving `sourceBlockId` by `exitId` is handed to, in wire order.
- * Wires into Finish endings hand nothing to a block; until reaching an ending is built they end
- * the branch like an unconnected exit.
+ * Wires into Finish endings hand nothing to a block; `handoffEndings` lists them.
  */
 export function handoffRecipients(
   connections: FlowGraphInput["connections"],
@@ -562,6 +561,26 @@ export function handoffRecipients(
         edge.exitId === exitId &&
         edge.targetBlockId !== FINISH_BLOCK_ID
           ? [edge.targetBlockId]
+          : [],
+      ),
+    ),
+  ];
+}
+
+/** The distinct endings a message leaving `sourceBlockId` by `exitId` enters, in wire order. */
+export function handoffEndings(
+  connections: FlowGraphInput["connections"],
+  sourceBlockId: string,
+  exitId: string,
+): string[] {
+  return [
+    ...new Set(
+      connections.flatMap((edge) =>
+        edge.sourceBlockId === sourceBlockId &&
+        edge.exitId === exitId &&
+        edge.targetBlockId === FINISH_BLOCK_ID &&
+        edge.targetEndingId
+          ? [edge.targetEndingId]
           : [],
       ),
     ),

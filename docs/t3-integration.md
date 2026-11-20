@@ -536,8 +536,10 @@ declaration is required, and Factory does not automatically fetch linked artifac
 format when the next step needs one; the reporting contract's message requirements still apply.
 
 `factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result, plus each
-Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history.
-It grants no routing authority.
+Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history,
+and `result`: the [Run result](runner.md#reaching-an-ending) once the Run reached an ending, else null. A result holds
+`endingId`, `endingName`, `output` (the delivered text, null for an ending whose output is None), `outputMissing`,
+`sourceBlockId`, `exitId`, `authorBlockId`, `origin`, `deliveryId` and `acceptedAt`. It grants no routing authority.
 
 `factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` reads one page of
 [Condition evidence](runs.md#conditions) for a Condition of the calling Block's Run: the same page, window, cursor and limits as
