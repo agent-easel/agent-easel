@@ -6,6 +6,7 @@ import type { Result, TriggerDefinition } from "../packages/contracts/src/index.
 import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
 import { refuseFlowCreate } from "./support/flows.ts";
 import { descriptionOf, whileTriggerChecksHeld } from "./support/studio.ts";
+import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -110,6 +111,26 @@ async function allowRuns(baseUrl: string | undefined, name: string, maxActiveRun
 
 test.beforeEach(async ({ browser }) => {
   await browser.setViewport(viewport);
+});
+
+// The desktop window keeps a 48 px title-bar strip for the native macOS traffic lights.
+test("in the desktop app Studio opens below the title bar that holds the native window controls", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+
+  // Act
+  await app.open("/studio/flows");
+
+  // Assert
+  await expect
+    .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
+    .toMatchObject({ x: 16, y: 48, width: 1408, height: 836 });
+  await shot(app, browser, "studio-desktop-below-title-bar");
 });
 
 test("Flows, Agents and Triggers share one header, toolbar and group heading", async ({

@@ -170,9 +170,11 @@
   width: 280px;
 }
 
-/* Clear the native window controls where the Studio header meets the title bar. */
-html[data-desktop="true"] [data-studio] > header {
-  padding-left: 80px;
+/* Studio opens below the title-bar strip, clear of the native window controls. */
+html[data-desktop="true"] [data-studio] {
+  top: 48px;
+  height: calc(100vh - 64px);
+  translate: -50% 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
