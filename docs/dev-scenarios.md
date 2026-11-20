@@ -45,6 +45,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - `wait-arrivals`: Demo · Waiting · Two reviews held for the morning sync
 - `condition-unvisited`: Demo · Condition · First review before the rounds gate
 - `condition-arrivals`: Demo · Condition · Second approval ended at the gate
+- `ending-reached`: Demo · Ended · Shipped while an alternative was stopped
 - `worktree`: Demo · Worktree · Search fix on its own branch
 - `working-report`: Demo · Monitoring · Agent is watching CI for the search fix
 - `continuation-sent`: Demo · Continuation · Spec prompt sent to the planning thread
@@ -64,6 +65,8 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - The `generated-title` Run turns **Generate Run titles** on only for its own Start, so the setting stays off for other
   seeded Runs and new demo Runs. Its title thread is simulated and the seed submits the generated title through
   `factory_set_run_title` itself; it proves no title model or live T3 launch.
+- The `ending-reached` Run starts two workers in a Flow whose Finish block has the endings Shipped and Dropped. The first worker's result enters Shipped, so the Run records its result, stops the second worker
+  (a stopped Block) and settles with reason `finish`. The simulator interrupts the Stop at once; it proves no real T3 Stop or worker settlement.
 - No seeded Run shows a Condition integrity Problem. Only missing or inconsistent stored Condition state records one, and public operations cannot produce that state.
 - A worktree Run reports a fixture path: the simulator resolves **Default branch** to `origin/main` and creates no Git worktree, so real worktree creation needs live qualification.
 - A repository registered through the project API gets no explicit icon; supplied emoji and repository images are covered by controlled fixtures, not the seed. The composer does not add repositories.
