@@ -38,18 +38,31 @@ test("Start names every blocked Agent including later branches and succeeds afte
   await expect(screen.getByLabel("Initial prompt", { exact: false })).toHaveText(
     "UI whole Flow readiness",
   );
+
+  // Act — repair Agent reporting and retry the same draft.
   await screen.getByRole("link", "Open Settings → Agent reporting", { exact: true }).first().tap();
   await repairCodexReporting(screen);
   await expect(screen.getByRole("link", "Settings, Connected", { exact: true })).toBeVisible();
   await app.screenshot("whole-flow-configuration-repaired");
   await screen.getByRole("button", "Start", { exact: true }).tap();
+
+  // Assert — the repaired Run starts and its worker can report a result.
   await expect(
     screen.getByRole("heading", "UI whole Flow readiness", { exact: true }),
   ).toBeVisible();
   const created = await findRun(app.baseUrl, "UI whole Flow readiness");
   await expect
-    .poll(async () => (await readHistoryRun(app.baseUrl, created.id)).activations.length)
-    .toBe(1);
+    .poll(
+      async () => {
+        const run = await readHistoryRun(app.baseUrl, created.id);
+        return run.blocks.some(
+          (block) =>
+            block.blockId === "worker" && block.threadId !== null && block.executionId !== null,
+        );
+      },
+      { message: "The Implement change worker has launched" },
+    )
+    .toBe(true);
   await app.screenshot("whole-flow-start-accepted");
   await applyRunState(app, created.id, "result reported", "Ready for parallel review.");
   await applyRunState(app, created.id, "result released to two workers");
