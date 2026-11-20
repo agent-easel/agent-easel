@@ -29,9 +29,9 @@ and restricted OAuth credentials live outside project repositories.
   execution, recovery and Run history read these revisions, so later edits and removals
   cannot rewrite history.
   External skill files are not frozen. Agent revisions hold the Agent's exits and Flow revisions
-  hold each Agent block's hidden and Flow-local exits and its Revisit instruction and each
-  Condition's ordered rules, so a Run's block exits, Revisit instructions and Condition rules come
-  from the same frozen revisions. Migration `072` converted
+  hold each Agent block's hidden and Flow-local exits and its Revisit instruction, each
+  Condition's ordered rules and the Finish block with its ordered endings, so a Run's block exits,
+  Revisit instructions, Condition rules and endings come from the same frozen revisions. Migration `072` converted
   every stored Flow revision, including those Runs captured: Agents started with no exits, Agent
   block exits became Flow-local with the same IDs, and Human exits became Approve or Request
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
@@ -47,7 +47,11 @@ and restricted OAuth credentials live outside project repositories.
   per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
   rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
   starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
-  recipient deliveries and changes no row.
+  recipient deliveries and changes no row. Migration `113` gave every stored Flow revision,
+  including those Runs captured, an immutable empty Finish block 80 px right of its rightmost Flow
+  input or block and level with the Flow input (within the canvas limit), added immutable ending
+  rows, and rebuilt the connection table under its restored immutability guards so a connection
+  enters exactly one block or one ending of its revision, with every stored wire unchanged.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the

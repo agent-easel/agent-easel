@@ -58,7 +58,7 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
@@ -261,6 +261,14 @@ _Avoid_: Initial input, initial prompt as a separate concept
 **Flow input block**:
 The single, always-present Flow block representing the Flow input. It has one unnamed output and no input; the Agent blocks it connects to are the ones that start a Run, independently and in parallel.
 _Avoid_: Start block, entry, entry Agent
+
+**Finish block**:
+The single, always-present Flow block on which the author declares the Flow's endings, placed right of the other blocks by default. It cannot be removed, has the fixed label Finish, has no worker and no exits, and the Flow input never connects to it. A Flow with no endings keeps its unconnected exits as its only branch ends.
+_Avoid_: End block, Join block, terminal block
+
+**Ending**:
+One declared way a Flow can end, in the Finish block's ordered list: a stable id, a name, an optional description and an output setting (None, Optional or Required) with a description of the expected output. Wires from any exit or output, Condition Otherwise included, enter a specific ending by its id, so renaming keeps them; several wires may enter one ending. A blank, duplicate or unwired ending is a readiness gap. An ending is not a Block exit, and an unconnected exit is not an ending.
+_Avoid_: outcome, result type, terminal exit, End
 
 **Authorization context**:
 A durable Factory reference binding accepted work to one T3 endpoint, OAuth grant
