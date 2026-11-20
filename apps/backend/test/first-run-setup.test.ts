@@ -77,6 +77,8 @@ it.for([
   ["a non-loopback HTTP origin", runtimeFile({ origin: "http://192.168.1.20:3773" })],
   ["an origin with credentials", runtimeFile({ origin: "https://user:secret@t3.example" })],
   ["an origin with a query", runtimeFile({ origin: "https://t3.example?token=secret" })],
+  ["an origin with a path", runtimeFile({ origin: "http://127.0.0.1:3773/base" })],
+  ["origin text the URL parser would repair", runtimeFile({ origin: "http://127.0.0.1:37\n73" })],
 ])("%s means no running T3 was found", async ([_name, contents], c) => {
   // Arrange
   const { open } = await freshHome(c, contents);
@@ -101,13 +103,13 @@ it("a runtime file in the overridden T3 state directory is the one detection rea
     join(other, "server-runtime.json"),
     runtimeFile({ origin: "http://127.0.0.1:5000" }),
   );
-
-  // Act
   const factory = await harness.open({
     reportingStateDirectory: other,
     t3: new ControlledT3(),
     connectionRetryMs: 60_000,
   });
+
+  // Act
   const setup = await factory.getFirstRunSetup();
 
   // Assert
@@ -160,18 +162,42 @@ it("recorded completion persists across a backend restart", async (c) => {
   expect(harness.databasePath).toContain("factory.sqlite");
 });
 
-it("an approved client reads the setup status but cannot record completion", async (c) => {
+/** An approved client of a fresh host whose disposable T3 state directory holds a runtime file. */
+async function approvedClientOfFreshHost(context: TestContext) {
+  const { harness, state } = await freshHome(context, runtimeFile({}));
+  const server = await remoteServer(context, {
+    home: harness.processHome,
+    t3: new ControlledT3(),
+    git: new ControlledGit(),
+    reportingStateDirectory: state,
+  });
+  return { server, laptop: await server.approved("Laptop") };
+}
+
+it("an approved client reads the host's setup status", async (c) => {
   // Arrange
-  const server = await remoteServer(c, { t3: new ControlledT3(), git: new ControlledGit() });
-  const laptop = await server.approved("Laptop");
+  const { laptop } = await approvedClientOfFreshHost(c);
 
   // Act
   const read = await laptop.send("GET", "/api/setup");
-  const complete = await laptop.send("POST", "/api/setup/complete");
 
   // Assert
   assert(read.body.ok);
-  expect(read.body.value).toMatchObject({ completed: false });
+  expect(read.body.value).toStrictEqual({
+    completed: false,
+    detectedT3: { endpoint: "http://127.0.0.1:3773/mcp", serverVersion: "0.1.11" },
+    harnessesOffInT3: [],
+  });
+});
+
+it("an approved client cannot record completion, and setup stays incomplete", async (c) => {
+  // Arrange
+  const { server, laptop } = await approvedClientOfFreshHost(c);
+
+  // Act
+  const complete = await laptop.send("POST", "/api/setup/complete");
+
+  // Assert
   expect(complete.status).toBe(403);
   assert(!complete.body.ok);
   expect(complete.body.error.code).toBe("host_only");

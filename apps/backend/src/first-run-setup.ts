@@ -17,8 +17,10 @@ async function detectT3(stateDirectory: string): Promise<DetectedT3 | null> {
       await readFile(join(stateDirectory, "server-runtime.json"), "utf8"),
     );
     if (typeof file !== "object" || file === null || !("origin" in file)) return null;
-    if (typeof file.origin !== "string") return null;
-    const endpoint = parseEndpoint({ endpoint: `${file.origin.replace(/\/+$/, "")}/mcp` });
+    // Only an exact origin is one: a path, credentials or text the URL parser would repair are not.
+    if (typeof file.origin !== "string" || !URL.canParse(file.origin)) return null;
+    if (new URL(file.origin).origin !== file.origin) return null;
+    const endpoint = parseEndpoint({ endpoint: `${file.origin}/mcp` });
     if (!endpoint.ok) return null;
     const serverVersion =
       "serverVersion" in file && typeof file.serverVersion === "string" && file.serverVersion
