@@ -40,7 +40,7 @@ export function agentReportingStatus(
     };
   const target =
     targets.find((target) => target.instances.includes(providerInstanceId)) ??
-    targets.find((target) => target.instances.length === 0 && target.status === "needs-attention");
+    targets.find((target) => target.kind !== "instance");
   if (!target)
     return {
       state: "attention",

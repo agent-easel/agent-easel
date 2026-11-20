@@ -321,7 +321,7 @@ const openReportingInstallation = Effect.fn(function* (
         ok: true,
         value: yield* Effect.forEach(
           (yield* targets()).map((target) =>
-            target.path || target.instances.length === 0 || isReportingDriver(target.provider)
+            target.path || target.kind !== "instance" || isReportingDriver(target.provider)
               ? target
               : { ...target, message: manual },
           ),

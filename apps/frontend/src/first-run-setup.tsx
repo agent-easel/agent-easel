@@ -9,13 +9,11 @@ import {
   Unplug,
   Workflow,
 } from "lucide-react";
-import {
-  REPORTING_DISCOVERY_REFUSED,
-  REPORTING_NONE_ENABLED,
-  type DetectedT3,
-  type FirstRunSetup,
-  type ReportingInstallation,
-  type T3Connection,
+import type {
+  DetectedT3,
+  FirstRunSetup,
+  ReportingInstallation,
+  T3Connection,
 } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -38,6 +36,10 @@ import { installable, providerName, targetStatus, useReportingState } from "./re
 
 /** How often a step without a detected T3 looks for one again. */
 const detectionRecheckMs = 2000;
+
+/** Where the documentation describes the reporting entries, for setting them up by hand. */
+const MANUAL_REPORTING_URL =
+  "https://github.com/alimek/t3-factory/blob/main/docs/t3-integration.md#reporting-installation";
 
 /**
  * The last full-window state before the application: until the host records First-run setup
@@ -83,7 +85,7 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
 
 /** The reporting targets step 2 installs into: a T3 provider with Factory reporting. */
 const listedTarget = (target: ReportingInstallation) =>
-  target.instances.length > 0 && target.status !== "unsupported";
+  target.kind === "instance" && target.status !== "unsupported";
 
 const installedEverywhere = (listed: readonly ReportingInstallation[] | null) =>
   !!listed?.length && listed.every((target) => target.status === "installed");
@@ -97,7 +99,7 @@ const nothingToInstall = (
   targets: readonly ReportingInstallation[],
   listed: readonly ReportingInstallation[],
 ) =>
-  targets.some((target) => target.id === REPORTING_DISCOVERY_REFUSED) ||
+  targets.some((target) => target.kind === "discovery-refused") ||
   (listed.length > 0 && !listed.some(installable));
 
 const names = (providers: readonly string[]) =>
@@ -332,7 +334,7 @@ function InstallStep({
   }, [refresh, offKey]);
   const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
   // Discovery could not read T3's harnesses: turning one on in T3 would not help.
-  const refusal = targets?.find((target) => target.id === REPORTING_DISCOVERY_REFUSED);
+  const refusal = targets?.find((target) => target.kind === "discovery-refused");
   const caption = !refusal && offInT3.length > 0 && (
     <p className="text-2xs font-medium text-subtle-foreground">
       {offInT3.length === 1
@@ -368,7 +370,9 @@ function InstallStep({
           title="Couldn’t check your harnesses"
           action={<TextLink onClick={checkAgain}>Check again</TextLink>}
         >
-          {refusal.message}
+          {refusal.message} Open Factory to continue without reporting. Once this is fixed, install
+          it from Settings → Agent reporting, or{" "}
+          <TextLink href={MANUAL_REPORTING_URL}>set it up by hand</TextLink>.
         </ProblemCard>
         <ReadyStep reminder={false} onCompleted={onCompleted} />
       </>
@@ -379,7 +383,7 @@ function InstallStep({
         tone="attention"
         density="compact"
         title="Turn on a harness in T3"
-        details={targets?.find((target) => target.id === REPORTING_NONE_ENABLED)?.message}
+        details={targets?.find((target) => target.kind === "none-enabled")?.message}
         action={<TextLink onClick={checkAgain}>Check again</TextLink>}
       >
         None of the harnesses Factory installs into is on in T3. Turn one on in T3’s settings, then

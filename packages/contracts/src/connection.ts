@@ -17,16 +17,15 @@ export interface ReportingInstallationActions {
   readonly repair: boolean;
   readonly reinstall: boolean;
 }
-/**
- * The id of the only target reporting discovery answers when it could not list T3's provider
- * instances; its message names the blocker and the recovery.
- */
-export const REPORTING_DISCOVERY_REFUSED = "unavailable";
-/** The id of the only target when discovery read T3's settings and found no instance on. */
-export const REPORTING_NONE_ENABLED = "none-enabled";
-
 export interface ReportingInstallation {
   readonly id: string;
+  /**
+   * `instance`: one harness home of the listed T3 provider instances. A discovery result is the
+   * only target in its list and stands for no instance: `discovery-refused` when discovery could
+   * not list T3's provider instances (its message names the blocker and the recovery), and
+   * `none-enabled` when it read T3's settings and found no instance on.
+   */
+  readonly kind: "instance" | "discovery-refused" | "none-enabled";
   readonly provider: string;
   readonly instances: readonly string[];
   readonly path: string | null;

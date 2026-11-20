@@ -18,9 +18,7 @@ export function reportingInstallationProblem(
 ): string | undefined {
   const target = targets.ok
     ? (targets.value.find((target) => target.instances.includes(providerInstanceId)) ??
-      targets.value.find(
-        (target) => target.instances.length === 0 && target.status === "needs-attention",
-      ))
+      targets.value.find((target) => target.kind !== "instance"))
     : undefined;
   if (target?.status === "installed") return undefined;
   return !targets.ok
