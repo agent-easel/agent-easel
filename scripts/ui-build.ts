@@ -46,16 +46,22 @@ export function uiBuildSignature(root: string): string {
   return hash.digest("hex");
 }
 
-export function requireCurrentUiBuild(root: string): void {
+function currentUiBuild(root: string): boolean {
   const builtUi = join(root, "apps/frontend/dist/index.html");
   const stamp = join(root, "apps/frontend/dist", uiBuildSignatureFile);
-  if (
-    !existsSync(builtUi) ||
-    !existsSync(stamp) ||
-    readFileSync(stamp, "utf8") !== uiBuildSignature(root)
-  ) {
+  return (
+    existsSync(builtUi) &&
+    existsSync(stamp) &&
+    readFileSync(stamp, "utf8") === uiBuildSignature(root)
+  );
+}
+
+export function requireCurrentUiBuild(root: string): void {
+  if (!currentUiBuild(root)) {
     throw new Error(
-      "apps/frontend/dist is missing or does not match the UI build inputs; run `pnpm build` before e2e.",
+      "apps/frontend/dist is missing or does not match the UI build inputs; run `pnpm e2e:prepare` before e2e.",
     );
   }
 }
+
+if (import.meta.main) process.exitCode = currentUiBuild(process.cwd()) ? 0 : 1;

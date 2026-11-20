@@ -73,7 +73,7 @@ await test("changed source content is rejected even when its timestamp matches t
 
   // Assert
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /run `pnpm build`/);
+  assert.match(result.stderr, /run `pnpm e2e:prepare`/);
 });
 
 await test("a build without its recorded input signature is rejected", (context) => {
@@ -86,7 +86,7 @@ await test("a build without its recorded input signature is rejected", (context)
 
   // Assert
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /run `pnpm build`/);
+  assert.match(result.stderr, /run `pnpm e2e:prepare`/);
 });
 
 await test("a signature without built UI cannot start journeys", (context) => {
@@ -99,7 +99,7 @@ await test("a signature without built UI cannot start journeys", (context) => {
 
   // Assert
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /run `pnpm build`/);
+  assert.match(result.stderr, /run `pnpm e2e:prepare`/);
 });
 
 await test("dependency changes invalidate the cached UI build", (context) => {
@@ -112,7 +112,7 @@ await test("dependency changes invalidate the cached UI build", (context) => {
 
   // Assert
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /run `pnpm build`/);
+  assert.match(result.stderr, /run `pnpm e2e:prepare`/);
 });
 
 await test("removing a shared source invalidates the cached UI build", (context) => {
@@ -125,7 +125,7 @@ await test("removing a shared source invalidates the cached UI build", (context)
 
   // Assert
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /run `pnpm build`/);
+  assert.match(result.stderr, /run `pnpm e2e:prepare`/);
 });
 
 await test("cached UI signatures remain valid in a different checkout with the same input contents", (context) => {
