@@ -98,9 +98,10 @@ it.for([
   [18, serverUpdate],
   [19, serverUpdate],
   [20, serverUpdate],
-  [21, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [21, serverUpdate],
+  [22, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which waits for the host's First-run setup, refuses a protocol %i server only when it predates 21",
+  "the current client, which reads and saves the Finish block, refuses a protocol %i server only when it predates 22",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
@@ -121,6 +122,22 @@ it("a protocol 20 client, which would skip the host's First-run setup, is told t
 
   // Act
   const reply = await old.send("GET", "/api/client-access");
+
+  // Assert
+  expect(reply.status).toBe(426);
+  assert(!reply.body.ok);
+  expect(reply.body.error.message).toMatch(/Update this client/);
+});
+
+it("a protocol 21 client, which can neither read nor save the Finish block, is told to update itself while the current client is served", async (c) => {
+  // Arrange
+  const server = await remoteServer(c);
+  const current = await server.approved("Laptop");
+  assert((await current.send("GET", "/api/flows")).body.ok);
+  const old = server.client("desktop", { protocol: 21, minimum: 21 });
+
+  // Act
+  const reply = await old.send("GET", "/api/flows");
 
   // Assert
   expect(reply.status).toBe(426);

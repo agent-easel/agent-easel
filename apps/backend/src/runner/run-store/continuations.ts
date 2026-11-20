@@ -1,4 +1,4 @@
-import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
+import { CONTINUATION_EXIT, handoffRecipients } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../../ids.ts";
@@ -172,16 +172,11 @@ export function openRunContinuations(database: RunnerDatabase) {
           id: string;
         }>`INSERT INTO continuation_visits(id,run_id,block_id,incoming_intent_id,kind,source_block_id,binding_id,state,arrived_at,forwarded_at) VALUES(${yield* newId},${current.id},${handoff.block_id},${handoff.id},'pass-through',${handoff.source_block_id},${handoff.binding_id},'forwarded',${time},${time}) ON CONFLICT(incoming_intent_id) DO UPDATE SET state='forwarded',forwarded_at=excluded.forwarded_at RETURNING id`;
         yield* sql`UPDATE operation_intents SET state='acknowledged',payload_json=NULL,problem=NULL,reconciled_at=${time} WHERE id=${handoff.id}`;
-        const recipients = [
-          ...new Set(
-            current.definitions.flow.graph.connections
-              .filter(
-                (edge) =>
-                  edge.sourceBlockId === handoff.block_id && edge.exitId === CONTINUATION_EXIT.id,
-              )
-              .map((edge) => edge.targetBlockId),
-          ),
-        ];
+        const recipients = handoffRecipients(
+          current.definitions.flow.graph.connections,
+          handoff.block_id,
+          CONTINUATION_EXIT.id,
+        );
         const target = JSON.parse(handoff.target_json) as StoredTarget;
         const payload = JSON.stringify({ message });
         for (const blockId of recipients) {

@@ -63,7 +63,9 @@ const done = (description: string): BlockExit => ({
 /**
  * The captured graph as the Agent-exit model reads it: Agent block exits become Flow-local with
  * the same IDs; Review's two exits without the feedback flag become Approve and the two with it
- * Request changes, and their wires merge into one fan-out without duplicates.
+ * Request changes, and their wires merge into one fan-out without duplicates. The Finish block
+ * migration adds an empty Finish block 80 px right of the rightmost 240 px block at x 800, level
+ * with the Flow input, and changes no wire.
  */
 export const upgradedGraph = (agentId: string, flowInput: FlowGraph["flowInput"]): FlowGraph => {
   const agentBlock = (id: string, name: string, x: number, localExits: BlockExit[]) => ({
@@ -98,5 +100,6 @@ export const upgradedGraph = (agentId: string, flowInput: FlowGraph["flowInput"]
       { sourceBlockId: "review", exitId: "approve", targetBlockId: "notify" },
       { sourceBlockId: "review", exitId: "request-changes", targetBlockId: "worker" },
     ],
+    finish: { position: { x: 1120, y: flowInput.position.y }, endings: [] },
   };
 };

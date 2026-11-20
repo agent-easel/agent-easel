@@ -1,4 +1,9 @@
-import type { AgentDefinition, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import {
+  FINISH_BLOCK_ID,
+  type AgentDefinition,
+  type FlowBlock,
+  type FlowGraph,
+} from "@t3-factory/contracts";
 import { effectiveExits, inheritedExits, type EffectiveExit } from "@t3-factory/domain-validation";
 
 /** Invalid saved wires keep their own display endpoint without offering a worker exit. */
@@ -70,9 +75,11 @@ export type WireSource =
   | { readonly kind: "flow-input" };
 
 /** The id of a wire's ELK edge, which is also the key the canvas looks its route up by. */
-export function wireRouteKey(source: WireSource, targetBlockId: string) {
+export function wireRouteKey(source: WireSource, targetBlockId: string, targetEndingId?: string) {
   if (source.kind === "flow-input") return `flow-input:${targetBlockId}`;
-  return `${source.sourceBlockId}:${source.exitId}:${targetBlockId}`;
+  const target =
+    targetEndingId === undefined ? targetBlockId : `${targetBlockId}:${targetEndingId}`;
+  return `${source.sourceBlockId}:${source.exitId}:${target}`;
 }
 
 /** A source's identity among one block's incoming wires; ids are free text, so the key is JSON. */
@@ -103,8 +110,10 @@ export function incomingIndex(graph: FlowGraph): IncomingIndex {
   };
   for (const targetBlockId of new Set(graph.flowInput.targetBlockIds))
     add(targetBlockId, { kind: "flow-input" });
+  // Wires into Finish attach to their ending's own port, never to a block input.
   for (const { sourceBlockId, exitId, targetBlockId } of graph.connections)
-    add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
+    if (targetBlockId !== FINISH_BLOCK_ID)
+      add(targetBlockId, { kind: "exit", sourceBlockId, exitId });
   return {
     wires: (targetBlockId) => incoming.get(targetBlockId)?.wires ?? [],
     portIndex: (targetBlockId, source) =>

@@ -11,7 +11,7 @@ import {
 import { runFactoryProcess } from "./factory-process.ts";
 import { assert, type TestContext } from "@effect/vitest";
 import { fileURLToPath } from "node:url";
-import type { AgentDefinition, FlowGraph } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowGraphInput } from "@t3-factory/contracts";
 import type { OwningProject } from "@t3-factory/domain-validation";
 import { DatabaseSync } from "node:sqlite";
 import { factoryHarness } from "./factory.ts";
@@ -291,7 +291,7 @@ export async function waitDraft(context: TestContext) {
 /** A saved Flow with an Agent and a Human step, whose graph a test replaces around a Condition. */
 export async function conditionDraft(context: TestContext) {
   const { harness, factory, created, agent } = await flowWithAgent(context);
-  const save = (graph: Omit<FlowGraph, "flowInput">, targets: readonly string[] = ["coder"]) =>
+  const save = (graph: Omit<FlowGraphInput, "flowInput">, targets: readonly string[] = ["coder"]) =>
     factory.updateFlow(created.value.id, {
       name: created.value.name,
       expectedRevision: created.value.revision,

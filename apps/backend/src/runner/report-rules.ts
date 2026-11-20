@@ -1,5 +1,5 @@
 import type { RunBlock, RunDefinitions } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import { effectiveExits, handoffRecipients } from "@t3-factory/domain-validation";
 import { fingerprint } from "../fingerprint.ts";
 import type { RuntimeReport } from "../runtime-types.ts";
 
@@ -31,9 +31,7 @@ export function reportRoute(definitions: RunDefinitions, blockId: string, report
     };
   if (exit?.messageRequired && !report.message?.trim()) return rejected("FEEDBACK_REQUIRED");
   const recipients = exit
-    ? definitions.flow.graph.connections
-        .filter((edge) => edge.sourceBlockId === block.id && edge.exitId === exit.id)
-        .map((edge) => edge.targetBlockId)
+    ? handoffRecipients(definitions.flow.graph.connections, block.id, exit.id)
     : [];
   if (recipients.some((id) => !definitions.flow.graph.blocks.some((block) => block.id === id)))
     return rejected("INVALID_RECIPIENT");

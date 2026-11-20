@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: settlement_reason
+-- Newest applied migration: finish_block
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -561,18 +561,39 @@ CREATE TABLE "flow_revision_connections" (
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
   source_block_id TEXT NOT NULL,
   exit_id TEXT NOT NULL,
-  target_block_id TEXT NOT NULL,
+  target_block_id TEXT,
+  target_ending_id TEXT,
+  CHECK ((target_block_id IS NULL) <> (target_ending_id IS NULL)),
   PRIMARY KEY (flow_revision_id, ordinal),
   UNIQUE (flow_revision_id, source_block_id, exit_id, target_block_id),
+  UNIQUE (flow_revision_id, source_block_id, exit_id, target_ending_id),
   FOREIGN KEY (flow_revision_id, source_block_id)
     REFERENCES flow_revision_blocks(flow_revision_id, block_id),
   FOREIGN KEY (flow_revision_id, target_block_id)
-    REFERENCES flow_revision_blocks(flow_revision_id, block_id)
+    REFERENCES flow_revision_blocks(flow_revision_id, block_id),
+  FOREIGN KEY (flow_revision_id, target_ending_id)
+    REFERENCES flow_revision_endings(flow_revision_id, ending_id)
 );
 
 CREATE TRIGGER immutable_flow_revision_connection_delete BEFORE DELETE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_connection_update BEFORE UPDATE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_endings (
+  flow_revision_id TEXT NOT NULL REFERENCES flow_revision_finish(flow_revision_id),
+  ending_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  output TEXT NOT NULL CHECK (output IN ('none', 'optional', 'required')),
+  output_description TEXT NOT NULL,
+  PRIMARY KEY (flow_revision_id, ending_id),
+  UNIQUE (flow_revision_id, ordinal)
+);
+
+CREATE TRIGGER immutable_flow_revision_ending_delete BEFORE DELETE ON flow_revision_endings BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_ending_update BEFORE UPDATE ON flow_revision_endings BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE flow_revision_exits (
   flow_revision_id TEXT NOT NULL,
@@ -590,6 +611,16 @@ CREATE TABLE flow_revision_exits (
 CREATE TRIGGER immutable_flow_revision_exit_delete BEFORE DELETE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_exit_update BEFORE UPDATE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_finish (
+  flow_revision_id TEXT PRIMARY KEY NOT NULL REFERENCES flow_revisions(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL
+);
+
+CREATE TRIGGER immutable_flow_revision_finish_delete BEFORE DELETE ON flow_revision_finish BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_finish_update BEFORE UPDATE ON flow_revision_finish BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE flow_revision_hidden_exits (
   flow_revision_id TEXT NOT NULL,

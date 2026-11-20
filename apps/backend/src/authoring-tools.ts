@@ -152,7 +152,7 @@ const flowFields = {
   graph: {
     type: "object",
     description:
-      'The whole Flow graph; a save replaces the saved one. Positions are optional: if any Block or Flow input position is omitted, the server auto-arranges the whole graph; fully positioned graphs are kept as given. Agent blocks {id, kind: agent, name, agentId, position, hiddenExitIds, localExits, revisitInstruction} (revisitInstruction is optional plain text up to 120,000 characters, stored trimmed and empty when omitted, that Factory sends on every visit to the block after the first; only Agent blocks have it), Human blocks {id, kind: human, name, position}, Wait blocks {id, kind: wait, name, position, duration: {amount: number, unit: minutes | hours | days} or null} (they hold each arrival for 1 minute to 7 days, judged after converting the unit, and leave by exitId "output"), Continuation blocks {id, kind: continuation, name, prompt, position} (they send their prompt once per Run into the worker thread of the message that reaches them; their single output has exitId "output"), Condition blocks {id, kind: condition, name, position, rules: [{id, name, fromArrival}], otherwise: {id: "otherwise"}} (they route each message that reaches them by its arrival number at the block within the Run, starting at 1: the first rule whose fromArrival the number reaches selects the output of that rule, which wires leave by its rule id, else the fixed last Otherwise output, exitId "otherwise"; fromArrival is a whole number of at least 1 or null in a draft; readiness requires distinct non-blank names, thresholds that strictly descend and are at least 2, and no loop through only Conditions and Continuations), connections {sourceBlockId, exitId, targetBlockId}, and flowInput {position, targetBlockIds} (Agent blocks only).',
+      'The whole Flow graph; a save replaces the saved one. Positions are optional: if any Block, Flow input or Finish position is omitted, the server auto-arranges the whole graph; fully positioned graphs are kept as given. Agent blocks {id, kind: agent, name, agentId, position, hiddenExitIds, localExits, revisitInstruction} (revisitInstruction is optional plain text up to 120,000 characters, stored trimmed and empty when omitted, that Factory sends on every visit to the block after the first; only Agent blocks have it), Human blocks {id, kind: human, name, position}, Wait blocks {id, kind: wait, name, position, duration: {amount: number, unit: minutes | hours | days} or null} (they hold each arrival for 1 minute to 7 days, judged after converting the unit, and leave by exitId "output"), Continuation blocks {id, kind: continuation, name, prompt, position} (they send their prompt once per Run into the worker thread of the message that reaches them; their single output has exitId "output"), Condition blocks {id, kind: condition, name, position, rules: [{id, name, fromArrival}], otherwise: {id: "otherwise"}} (they route each message that reaches them by its arrival number at the block within the Run, starting at 1: the first rule whose fromArrival the number reaches selects the output of that rule, which wires leave by its rule id, else the fixed last Otherwise output, exitId "otherwise"; fromArrival is a whole number of at least 1 or null in a draft; readiness requires distinct non-blank names, thresholds that strictly descend and are at least 2, and no loop through only Conditions and Continuations), connections {sourceBlockId, exitId, targetBlockId, targetEndingId?} (targetEndingId only for a wire into the Finish block, whose targetBlockId is "finish"), flowInput {position, targetBlockIds} (Agent blocks only; never "finish"), and finish {position, endings} (the one Finish block every Flow has; no Block may use the id "finish"). Omitting finish saves no endings and places the Finish block right of every block. Each ending {id, name, description, output: none | optional | required, outputDescription} is a way the Flow can end: any exit or output, Condition Otherwise included, may be wired into a specific ending by its id, several wires may enter one ending, and renaming an ending keeps its wires. Up to 100 endings; names up to 200 characters, stored trimmed; description and outputDescription up to 4,000 characters, empty when unset; outputDescription says what the output should contain when output is not none. An ending with a blank or duplicate name, or with no incoming wire, saves as a draft but is a readiness issue; zero endings is ready; unwired exits stay valid branch ends.',
     properties: {
       blocks: { type: "array", items: { type: "object" } },
       connections: { type: "array", items: { type: "object" } },
@@ -160,6 +160,28 @@ const flowFields = {
         type: "object",
         properties: { position, targetBlockIds: { type: "array", items: { type: "string" } } },
         required: ["targetBlockIds"],
+      },
+      finish: {
+        type: "object",
+        properties: {
+          position,
+          endings: {
+            type: "array",
+            maxItems: 100,
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                name: { type: "string", maxLength: 200 },
+                description: { type: "string", maxLength: 4000 },
+                output: { enum: ["none", "optional", "required"] },
+                outputDescription: { type: "string", maxLength: 4000 },
+              },
+              required: ["id", "name", "description", "output", "outputDescription"],
+            },
+          },
+        },
+        required: ["endings"],
       },
     },
     required: ["blocks", "connections", "flowInput"],

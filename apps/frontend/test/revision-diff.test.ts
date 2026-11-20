@@ -44,6 +44,7 @@ it("a new Flow revision exposes Wait, Continuation and Condition edits in the co
     workspace: { mode: "checkout" },
     graph: {
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+      finish: { position: { x: 800, y: 0 }, endings: [] },
       connections: [],
       blocks: [
         { ...blocks[0], kind: "wait", duration: { amount, unit: "minutes" } },

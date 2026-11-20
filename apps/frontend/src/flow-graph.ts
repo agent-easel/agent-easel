@@ -1,6 +1,7 @@
 import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
 import {
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type AgentDefinition,
   type FlowBlock,
   type FlowConnection,
@@ -227,13 +228,15 @@ export function continuedThread(graph: FlowGraph, blockId: string): string | nul
 
 /**
  * The names of the blocks each exit's connections reach, in graph order, indexed once per graph
- * since a canvas asks for every exit row; undefined for a target the graph lacks.
+ * since a canvas asks for every exit row; undefined for a target the graph lacks. Wires into
+ * Finish endings reach no block and are not listed until Studio shows endings.
  */
 export function exitRecipients(graph: FlowGraph) {
   const names = new Map<string, string>();
   for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
   const recipients = new Map<string, (string | undefined)[]>();
   for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
+    if (targetBlockId === FINISH_BLOCK_ID) continue;
     const key = JSON.stringify([sourceBlockId, exitId]);
     const list = recipients.get(key) ?? [];
     list.push(names.get(targetBlockId));
@@ -246,11 +249,12 @@ export function exitRecipients(graph: FlowGraph) {
 /**
  * The names of the blocks each of one block's exits reaches, in graph order: a single pass that
  * keeps only that block's connections, for views that show one block rather than the whole canvas.
+ * Wires into Finish endings are left out, as in `exitRecipients`.
  */
 export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   const recipients = new Map<string, (string | undefined)[]>();
   for (const { sourceBlockId, exitId, targetBlockId } of graph.connections) {
-    if (sourceBlockId !== blockId) continue;
+    if (sourceBlockId !== blockId || targetBlockId === FINISH_BLOCK_ID) continue;
     const list = recipients.get(exitId) ?? [];
     list.push(graph.blocks.find((block) => block.id === targetBlockId)?.name);
     recipients.set(exitId, list);
@@ -261,7 +265,7 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
 /**
  * Undoes a removal that turned `before` into `after` on the current graph: blocks and wires the
  * removal took come back, edits made since are kept, and a wire returns only while both its ends
- * exist.
+ * exist; a wire into Finish needs its ending.
  */
 export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
   const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
@@ -270,8 +274,12 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
     ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
   ];
   const exists = (id: string) => blocks.some((b) => b.id === id);
+  const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
+    targetBlockId === FINISH_BLOCK_ID
+      ? current.finish.endings.some((ending) => ending.id === targetEndingId)
+      : exists(targetBlockId);
   const restored = (graph: FlowGraph, wire: FlowWire) =>
-    !hasWire(after, wire) && !hasWire(graph, wire) && exists(wire.targetBlockId);
+    !hasWire(after, wire) && !hasWire(graph, wire) && targetExists(wire);
   let next: FlowGraph = { ...current, blocks };
   for (const targetBlockId of before.flowInput.targetBlockIds) {
     const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };

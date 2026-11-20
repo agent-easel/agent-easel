@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import {
   arrangeFlow,
+  defaultFinishPosition,
   AUTHORING_DIMENSIONS,
   canvasGraph,
   createFlowLayoutDimensions,
@@ -84,6 +85,12 @@ import {
 import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
+/** Where an unplaced Finish block goes in a positioned graph: right of every block. */
+const unplacedFinishPosition = (graph: Pick<FlowGraph, "blocks" | "flowInput">) =>
+  defaultFinishPosition(graph, {
+    flowInputWidth: AUTHORING_DIMENSIONS.flowInput.width,
+    blockWidth: AUTHORING_DIMENSIONS.block.width,
+  });
 
 const toDraft = (flow: CurrentFlow, agents: readonly ReadinessAgent[]): FlowDraft => ({
   ...flow,
@@ -284,8 +291,7 @@ export const makeDefinitions = (
     });
     const positionGraph = (input: FlowGraphInput) =>
       Effect.gen(function* () {
-        const graph: FlowGraph = {
-          ...input,
+        const placed = {
           flowInput: { ...input.flowInput, position: input.flowInput.position ?? { x: 0, y: 0 } },
           blocks: input.blocks.map((block): FlowBlock => {
             const position = block.position ?? { x: 0, y: 0 };
@@ -294,9 +300,19 @@ export const makeDefinitions = (
               : { ...block, position };
           }),
         };
+        const graph: FlowGraph = {
+          ...input,
+          ...placed,
+          // An omitted Finish block has no endings and needs no arrangement of its own.
+          finish: {
+            endings: input.finish?.endings ?? [],
+            position: input.finish?.position ?? unplacedFinishPosition(placed),
+          },
+        };
         if (
           input.flowInput.position !== undefined &&
-          input.blocks.every((block) => block.position !== undefined)
+          input.blocks.every((block) => block.position !== undefined) &&
+          (input.finish === undefined || input.finish.position !== undefined)
         )
           return { ok: true as const, value: graph };
         const resolved = canvasGraph(graph, yield* readinessAgents);
@@ -316,6 +332,7 @@ export const makeDefinitions = (
               value: {
                 ...graph,
                 flowInput: { ...graph.flowInput, position: positions.flowInput },
+                finish: { ...graph.finish, position: positions.finish },
                 blocks,
               },
             };
@@ -522,7 +539,11 @@ export const makeDefinitions = (
         id,
         revision: 1,
         name: flow.name,
-        graph: { ...flow.graph, blocks },
+        graph: {
+          ...flow.graph,
+          blocks,
+          finish: { endings: [], position: unplacedFinishPosition({ ...flow.graph, blocks }) },
+        },
         workspace: flow.workspace,
         savedAt: now,
       });

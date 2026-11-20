@@ -74,9 +74,11 @@ export function portableFlow(
     }
     return { ...rest, agentKey: agent ? keys.get(agent.id)! : null };
   });
+  // Format 2 has no Finish block; format 3 adds it (#626).
+  const { finish: _finish, ...graph } = flow.graph;
   const portable: PortableFlow = {
     name: flow.name,
-    graph: { ...flow.graph, blocks },
+    graph: { ...graph, blocks },
     workspace: flow.workspace,
   };
   const agents = revisions.map((agent) => portableAgent(agent, keys.get(agent.id)!, capabilities));

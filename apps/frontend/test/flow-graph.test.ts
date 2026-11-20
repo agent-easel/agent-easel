@@ -34,6 +34,7 @@ function conditionFlow(rules: readonly ConditionRule[], wired: readonly string[]
     blocks: [condition(rules), { id: "next", name: "Next", position, kind: "human" }],
     connections: wired.map((exitId) => ({ sourceBlockId: "gate", exitId, targetBlockId: "next" })),
     flowInput: { position, targetBlockIds: [] },
+    finish: { position: { x: 800, y: 0 }, endings: [] },
   };
 }
 
@@ -90,6 +91,37 @@ it("undoing a Block removal brings back its wires and keeps an edit made since",
   expect(undone.blocks.map((block) => block.id)).toStrictEqual(["gate", "next"]);
   expect(undone.connections).toStrictEqual(before.connections);
   expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
+});
+
+it("undoing a Block removal brings back its wires into Finish endings unchanged", () => {
+  // Arrange
+  const wired = conditionFlow([rule("first", 2)], ["first"]);
+  const before: FlowGraph = {
+    ...wired,
+    connections: [
+      ...wired.connections,
+      {
+        sourceBlockId: "gate",
+        exitId: "otherwise",
+        targetBlockId: "finish",
+        targetEndingId: "done",
+      },
+    ],
+    finish: {
+      ...wired.finish,
+      endings: [
+        { id: "done", name: "Done", description: "", output: "none", outputDescription: "" },
+      ],
+    },
+  };
+  const after = removeBlock(before, "gate");
+
+  // Act
+  const undone = undoRemoval(after, before, after);
+
+  // Assert
+  expect(undone.connections).toStrictEqual(before.connections);
+  expect(undone.finish).toStrictEqual(before.finish);
 });
 
 it("each exit's recipients follow connection order, and a missing target has no name", () => {

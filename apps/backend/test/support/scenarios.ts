@@ -9,6 +9,7 @@ import type {
   FactoryOperations,
   FlowBlock,
   FlowGraph,
+  FlowGraphInput,
   FlowWorkspace,
   Result,
   RunDetail,
@@ -619,7 +620,7 @@ async function workerAgent(
 async function saveFlow(
   world: ScenarioWorld,
   name: string,
-  graph: FlowGraph,
+  graph: FlowGraphInput,
   workspace: FlowWorkspace = { mode: "checkout" },
   projectId: OwningProject = null,
 ) {
@@ -689,7 +690,7 @@ const WORKTREE: FlowWorkspace = { mode: "worktree", base: { kind: "default" } };
 async function workerShape(
   world: ScenarioWorld,
   name: string,
-  graph: (agentId: string) => FlowGraph,
+  graph: (agentId: string) => FlowGraphInput,
   workspace?: FlowWorkspace,
 ): Promise<ReadyFlow> {
   const agent = await workerAgent(world, `create the ${name} Agent`);

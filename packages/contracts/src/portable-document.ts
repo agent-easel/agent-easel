@@ -60,10 +60,13 @@ export type PortableFlowBlock =
   | (Omit<Extract<FlowBlock, { kind: "agent" }>, "agentId"> & { readonly agentKey: string | null })
   | Exclude<FlowBlock, { kind: "agent" }>;
 
-/** The Flow of a Flow document: its name, positioned graph and workspace setting. */
+/** The Flow of a Flow document: its name, positioned graph and workspace setting. Formats 1 and 2
+ * carry no Finish block; their Flows import with an empty one. */
 export interface PortableFlow {
   readonly name: string;
-  readonly graph: Omit<FlowGraph, "blocks"> & { readonly blocks: readonly PortableFlowBlock[] };
+  readonly graph: Omit<FlowGraph, "blocks" | "finish"> & {
+    readonly blocks: readonly PortableFlowBlock[];
+  };
   readonly workspace: FlowWorkspace;
 }
 

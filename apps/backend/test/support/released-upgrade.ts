@@ -104,11 +104,22 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
         revisitInstruction: "",
       };
 
-/** A released Flow as current Factory reads it: the same revision in the project checkout, its
- * block exits Flow-local. */
+/** Migration 114 places a released Flow's empty Finish block 80 px right of its rightmost node
+ * (the Flow input is 200 px wide, a block 240 px), level with the Flow input. */
+const upgradedFinishPosition = ({ flowInput, blocks }: ReleasedFlow["graph"]) => ({
+  x: Math.max(flowInput.position.x + 200, ...blocks.map((block) => block.position.x + 240)) + 80,
+  y: flowInput.position.y,
+});
+
+/** A released Flow as current Factory reads it: the same revision and wires in the project
+ * checkout, its block exits Flow-local and an empty Finish block right of every block. */
 export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) => ({
   ...flow,
-  graph: { ...flow.graph, blocks: flow.graph.blocks.map(currentBlock) },
+  graph: {
+    ...flow.graph,
+    blocks: flow.graph.blocks.map(currentBlock),
+    finish: { position: upgradedFinishPosition(flow.graph), endings: [] },
+  },
   workspace: { mode: "checkout" as const },
 });
 

@@ -12,7 +12,7 @@ import {
   OTHERWISE,
 } from "../../apps/backend/test/support/scenarios.ts";
 import type { Factory } from "../../apps/backend/src/index.ts";
-import type { FlowGraph, FlowWorkspace } from "../../packages/contracts/src/index.ts";
+import type { FlowGraphInput, FlowWorkspace } from "../../packages/contracts/src/index.ts";
 import { requireSuccess } from "./seed-support.ts";
 import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 
@@ -20,7 +20,7 @@ import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 export async function saveFlow(
   factory: Factory,
   name: string,
-  graph: FlowGraph,
+  graph: FlowGraphInput,
   workspace: FlowWorkspace = { mode: "checkout" },
 ) {
   const flow = requireSuccess(await factory.createFlow({ name }));

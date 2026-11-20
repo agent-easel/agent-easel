@@ -1,17 +1,18 @@
-import type {
-  AgentCapabilities,
-  AgentDefinition,
-  AgentExecutionSettings,
-  FlowAgentRevisions,
-  FlowBlockInput,
-  FlowGraphInput,
-  FlowReadiness,
-  ProjectIcon,
-  ProjectIconColor,
-  StartTitleProvenance,
-  ValidationIssue,
-  WaitDuration,
-  WaitUnit,
+import {
+  FINISH_BLOCK_ID,
+  type AgentCapabilities,
+  type AgentDefinition,
+  type AgentExecutionSettings,
+  type FlowAgentRevisions,
+  type FlowBlockInput,
+  type FlowGraphInput,
+  type FlowReadiness,
+  type ProjectIcon,
+  type ProjectIconColor,
+  type StartTitleProvenance,
+  type ValidationIssue,
+  type WaitDuration,
+  type WaitUnit,
 } from "@t3-factory/contracts";
 import {
   CONDITION_OTHERWISE,
@@ -346,6 +347,20 @@ function blockReadiness(
   });
 }
 
+/** A wire's target as readiness names it: a block, or "Finish · <ending>". */
+function targetLabel(
+  graph: FlowGraphInput,
+  blocks: ReadonlyMap<string, FlowBlockInput>,
+  edge: FlowGraphInput["connections"][number],
+) {
+  if (edge.targetBlockId !== FINISH_BLOCK_ID) {
+    const target = blocks.get(edge.targetBlockId);
+    return target ? blockLabel(target) : edge.targetBlockId;
+  }
+  const ending = graph.finish?.endings.find((candidate) => candidate.id === edge.targetEndingId);
+  return `Finish · ${ending?.name.trim() || edge.targetEndingId}`;
+}
+
 /** Wires from an Agent block must leave one of its effective exits. */
 function connectionReadiness(
   graph: FlowGraphInput,
@@ -358,8 +373,7 @@ function connectionReadiness(
     if (source?.kind !== "agent") return;
     const agent = agents.find((candidate) => candidate.id === source.agentId);
     if (!agent || effectiveExits(source, agents).some((exit) => exit.id === edge.exitId)) return;
-    const target = blocks.get(edge.targetBlockId);
-    const toTarget = `its connection to ${target ? blockLabel(target) : edge.targetBlockId}`;
+    const toTarget = `its connection to ${targetLabel(graph, blocks, edge)}`;
     const inherited = agent.exits.find((exit) => exit.id === edge.exitId);
     if (inherited)
       add(
@@ -402,6 +416,34 @@ function conditionOutputReadiness(graph: FlowGraphInput, add: IssueReporter) {
         `graph.blocks.${i}`,
         `${label}: connect output "${CONDITION_OTHERWISE.name}". A Condition output cannot end a branch.`,
       );
+  });
+}
+
+/**
+ * Each ending needs a distinct, non-blank name and at least one incoming wire. A Flow with no
+ * endings is ready: its branches end on unconnected exits, as every Flow's did before Finish.
+ */
+function finishReadiness(graph: FlowGraphInput, add: IssueReporter) {
+  const wired = new Set(
+    graph.connections.flatMap((edge) =>
+      edge.targetBlockId === FINISH_BLOCK_ID && edge.targetEndingId ? [edge.targetEndingId] : [],
+    ),
+  );
+  const names = new Set<string>();
+  graph.finish?.endings.forEach((ending, i) => {
+    const path = `graph.finish.endings.${i}`;
+    const name = ending.name.trim();
+    const row = `Finish: ending ${i + 1}${name ? ` "${name}"` : ""}`;
+    if (!name) add("ending_name_required", `${path}.name`, `${row} needs a name.`);
+    else if (names.has(name))
+      add(
+        "ending_name_duplicate",
+        `${path}.name`,
+        `${row} has the same name as another ending. Rename it.`,
+      );
+    names.add(name);
+    if (!wired.has(ending.id))
+      add("ending_unconnected", path, `${row}: connect an exit or output to this ending.`);
   });
 }
 
@@ -504,6 +546,29 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
 }
 
 /**
+ * The distinct blocks a message leaving `sourceBlockId` by `exitId` is handed to, in wire order.
+ * Wires into Finish endings hand nothing to a block; until reaching an ending is built they end
+ * the branch like an unconnected exit.
+ */
+export function handoffRecipients(
+  connections: FlowGraphInput["connections"],
+  sourceBlockId: string,
+  exitId: string,
+): string[] {
+  return [
+    ...new Set(
+      connections.flatMap((edge) =>
+        edge.sourceBlockId === sourceBlockId &&
+        edge.exitId === exitId &&
+        edge.targetBlockId !== FINISH_BLOCK_ID
+          ? [edge.targetBlockId]
+          : [],
+      ),
+    ),
+  ];
+}
+
+/**
  * Graph and saved-Agent readiness against the given saved Agents, placed by a Flow owned by
  * `flowProject`; live T3 settings availability, project and provisioning gates remain separate.
  * Issues block Start, never a save.
@@ -536,6 +601,7 @@ export function flowReadiness(
   connectionReadiness(graph, agents, add);
   conditionOutputReadiness(graph, add);
   conditionCycleReadiness(graph, add);
+  finishReadiness(graph, add);
   if (graph.flowInput.targetBlockIds.length) reachabilityReadiness(graph, add);
   return { ready: issues.length === 0, issues };
 }
