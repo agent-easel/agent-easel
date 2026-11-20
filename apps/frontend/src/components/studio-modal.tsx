@@ -189,6 +189,14 @@ function studioReturn(selection: StudioSelection) {
   return { closeLabel: "Back to Runs", returnTo: undefined };
 }
 
+/** Esc from an open Flow, Agent or Trigger with no other return goes back to its list. */
+function studioList(selection: StudioSelection): StudioSelection | undefined {
+  if (selection.tab === "flows" && selection.flowId) return { tab: "flows" };
+  if (selection.tab === "agents" && selection.agentId) return { tab: "agents" };
+  if (selection.tab === "triggers" && selection.triggerId) return { tab: "triggers" };
+  return undefined;
+}
+
 /** The saved names the leave dialog quotes. */
 const leaveDialogNames = (
   flows: readonly FlowDraft[] | null,
@@ -246,6 +254,7 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
   const { escapeHandler, escapeTaken, registerEscape } = useEscapeHandler();
   const header = useStudioHeader(selection, definitions);
   const close = () => void navigate(header.returnTo);
+  const escapeTo = header.returnTo ?? studioList(selection);
   return (
     <Dialog
       open
@@ -270,16 +279,16 @@ export function StudioModal({ selection }: { selection: StudioSelection }) {
           if (escapeHandler.current) {
             event.preventDefault();
             escapeHandler.current();
-          } else if (header.returnTo) {
+          } else if (escapeTo) {
             event.preventDefault();
-            close();
+            void navigate(escapeTo);
           }
         }}
       >
         <WorkspaceDialogHeader
           title={header.title}
           {...header.section}
-          escChip={!escapeTaken}
+          escChip={!escapeTaken && escapeTo === header.returnTo}
           description="Author Flows and reusable Agent definitions, global or owned by one Project, and automate when Runs start."
           onClose={close}
           closeLabel={header.closeLabel}

@@ -22,7 +22,7 @@ export function WorkspaceDialogHeader({
   /** Links to the pages above `section`, outermost first. */
   parents?: readonly { label: string; link: ReactNode }[];
   section: string;
-  /** False while a panel inside the page shows its own Esc chip. */
+  /** False while Esc does something other than the close button, such as closing a panel. */
   escChip?: boolean;
   description: string;
   onClose: () => void;
@@ -61,7 +61,7 @@ export function WorkspaceDialogHeader({
             <X aria-hidden className="size-4" strokeWidth={1.5} />
           </Button>
         </TooltipTrigger>
-        <TooltipContent shortcut="Esc">{closeLabel}</TooltipContent>
+        <TooltipContent shortcut={escChip ? "Esc" : undefined}>{closeLabel}</TooltipContent>
       </Tooltip>
     </header>
   );

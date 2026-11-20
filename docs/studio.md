@@ -5,7 +5,7 @@ there with its draft intact. Settings holds connection, Agent reporting and keyb
 
 ## Shell
 
-Studio is a [full-window inset dialog](design-system.md#components-and-interaction) with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo.
+Studio is a [full-window inset dialog](design-system.md#components-and-interaction) with a Settings-style header (**Studio / Flows**, **Studio / Agents** or **Studio / Triggers**, an Escape hint and **Back to Runs**) and no logo. On a list, Esc closes Studio; on an open Flow, Agent or Trigger, Esc returns to its list (through the leave dialog when it has unsaved changes) and the header hides the Escape hint, while **Back to Runs** still closes Studio.
 The 192 px sidebar (144 px narrow) has an **Author** group with **Flows** and **Agents**, each with its
 definition count, and an **Automate** group with **Triggers**. Its count is the number of Triggers, or, in red, the number
 in Error while any Trigger is ([Trigger attention](#trigger-attention)). The Studio header breadcrumb carries the full path to the open item. Select a parent segment to go back. Pages use that breadcrumb for back navigation. Studio and Settings share a short opacity-only transition that reduced motion disables; the underlying sidebar title area stays mounted.
