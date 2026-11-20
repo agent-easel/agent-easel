@@ -65,10 +65,7 @@ export function OwnerGroupHeader({
     <Tooltip>
       <TooltipTrigger asChild>
         {/* Focusable so a keyboard reaches the placement rule. */}
-        <span
-          tabIndex={0}
-          className="shrink-0 rounded-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-        >
+        <span tabIndex={0} className="shrink-0 rounded-xs outline-none focus-ring">
           {owner.title}
         </span>
       </TooltipTrigger>
@@ -207,7 +204,7 @@ function OwnerOptionText({ owner, reason }: { owner: StudioOwner; reason?: strin
 }
 
 const ownerKindClass =
-  "group flex w-full items-center gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
+  "group flex w-full items-center gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-ring disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
 
 /** What a caller may pass as `kind`, for the owning-Project menu's wording. */
 const ownerKindText = {

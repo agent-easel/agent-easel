@@ -1,5 +1,6 @@
 import { assert } from "@effect/vitest";
 import { DatabaseSync } from "node:sqlite";
+import { T3Failure } from "../../src/t3/connection.ts";
 import type { ControlledT3 } from "./controlled-t3.ts";
 import {
   launchBlockId,
@@ -107,6 +108,15 @@ export function settleDuringNextLaunch({ factory, t3 }: ScenarioWorld, runId: st
   t3.threads.beforeLaunch = async () => {
     delete t3.threads.beforeLaunch;
     assert((await factory.settleRun(runId, { stopWorkers: true })).ok);
+  };
+}
+
+/** T3 cannot answer the next worker thread read, such as the observation a report triggers. */
+export function failNextThreadRead(t3: ControlledT3) {
+  const read = t3.threads.readExecution.bind(t3.threads);
+  t3.threads.readExecution = async () => {
+    t3.threads.readExecution = read;
+    throw new T3Failure("unavailable", "T3 is unreachable.");
   };
 }
 

@@ -83,7 +83,8 @@ function executionObservation(threadId: string, body: ThreadExecutionRead): Exec
         runId: recentRun.runId,
         status: recentRun.status,
         ...(recentRun.ordinal !== undefined ? { ordinal: recentRun.ordinal } : {}),
-        startedAt: recentRun.startedAt ?? null,
+        // T3 advertises a nullable start: null is a run that never started, absence is no evidence.
+        ...(recentRun.startedAt !== undefined ? { startedAt: recentRun.startedAt } : {}),
         completedAt: recentRun.completedAt ?? null,
         sourceAt: typeof source === "string" && Number.isFinite(Date.parse(source)) ? source : null,
       };

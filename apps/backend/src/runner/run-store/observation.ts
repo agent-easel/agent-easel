@@ -2,7 +2,13 @@ import type { RunAttention, RunPullRequest } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import type * as SqlClient from "effect/sql/SqlClient";
-import { blockState, failedRun, missingReport } from "../observation-rules.ts";
+import {
+  blockState,
+  cancelledBeforeStart,
+  decidingRun,
+  failedRun,
+  missingReport,
+} from "../observation-rules.ts";
 import type { BlockRow, RunRow } from "../runner-types.ts";
 import { now } from "../../time.ts";
 import type { WorkerThread } from "../worker-thread.ts";
@@ -92,12 +98,46 @@ export function recordExecution(
   });
 }
 
+/** The Problem recorded on `execution`: a failed run is an execution failure, unless it did no work
+ * after the Block's finished report (`noWork`). A run cancelled before it started keeps the
+ * classification recorded when it was first seen cancelled once it no longer decides. */
+function executionProblem(
+  execution: ExecutionRead,
+  deciding: ExecutionRead | null,
+  noWork: boolean,
+  recordedCancelled: boolean,
+): "execution-failed" | null | "keep" {
+  if (!failedRun(execution.status)) return null;
+  if (execution.runId === deciding?.runId) return "execution-failed";
+  if (cancelledBeforeStart(execution) && recordedCancelled) return "keep";
+  return noWork ? null : "execution-failed";
+}
+
+/** The Block's current finished report: when it was accepted and the turn it came from, when
+ * Factory observed that turn at acceptance. Null while the current report is not finished. */
+function currentFinishedReport(sql: SqlClient.SqlClient, runId: string, blockId: string) {
+  return Effect.gen(function* () {
+    const activation = (yield* currentReports(sql, runId)).find(
+      (entry) => entry.blockId === blockId,
+    );
+    if (activation?.report?.status !== "finished") return null;
+    const [report] = yield* sql<{
+      reporting_execution_id: string | null;
+      accepted_at: string;
+    }>`SELECT reporting_execution_id,accepted_at FROM runtime_reports WHERE activation_id=${activation.activationId} AND status='finished' ORDER BY rowid DESC LIMIT 1`;
+    return report ?? null;
+  });
+}
+
 function recordExecutions(
   sql: SqlClient.SqlClient,
   run: RunRow,
   block: BlockRow,
   bindingId: string,
   { thread }: WorkerThread,
+  deciding: ExecutionRead | null,
+  noWork: (execution: ExecutionRead) => boolean,
+  recordedCancelled: (runId: string) => boolean,
   time: string,
 ) {
   return Effect.gen(function* () {
@@ -113,7 +153,12 @@ function recordExecutions(
         scope,
         execution,
         thread.pendingRequestCount,
-        failedRun(execution.status) ? "execution-failed" : null,
+        executionProblem(
+          execution,
+          deciding,
+          noWork(execution),
+          recordedCancelled(execution.runId),
+        ),
         time,
       );
   });
@@ -251,27 +296,75 @@ function recordWorkerThread(
       thread.pendingRequestCount > 0,
       time,
     );
-    yield* recordExecutions(sql, run, block, binding.id, worker, time);
     // A run queued for a Continuation's prompt belongs to that Continuation, not to the worker's
-    // Block: its failure is the Continuation's.
-    const [owner] = latest
-      ? yield* sql<{
-          block_id: string;
-        }>`SELECT block_id FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId} AND execution_id=${latest.runId}`
-      : [];
-    const ownerScope = { block_id: owner?.block_id ?? block.block_id };
-    if (latest && failedRun(latest.status))
+    // Block: its failure is the Continuation's. A run not recorded yet is recorded as the Block's.
+    const recorded = yield* sql<{
+      execution_id: string;
+      block_id: string;
+      engine_status: string;
+      ordinal: number | null;
+      observed_at: string;
+      problem: string | null;
+    }>`SELECT execution_id,block_id,engine_status,ordinal,observed_at,problem FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
+    const recordOf = (runId: string) => recorded.find((entry) => entry.execution_id === runId);
+    const ownerOf = (runId: string) => recordOf(runId)?.block_id ?? block.block_id;
+    const report = yield* currentFinishedReport(sql, run.id, block.block_id);
+    const reportingOrdinal = report?.reporting_execution_id
+      ? (recordOf(report.reporting_execution_id)?.ordinal ?? null)
+      : null;
+    // The newest run an observation after the report's acceptance showed: T3 shows the run with
+    // the highest ordinal as the latest, so a newer run did not exist yet.
+    const seenAfterReport = report
+      ? Math.max(
+          -1,
+          ...recorded
+            .filter((entry) => entry.observed_at >= report.accepted_at)
+            .map((entry) => entry.ordinal ?? -1),
+        )
+      : -1;
+    // After the Block's finished report, a run of its own that T3 cancelled before it started did
+    // no work when the evidence shows it was cancelled after the report: it is newer than the
+    // reporting turn or than every run an observation after acceptance showed, or that
+    // observation showed it not yet cancelled. Once recorded cancelled, its recorded Problem keeps
+    // that judgement. Otherwise it is an execution failure as before.
+    const noWork = (execution: ExecutionRead) => {
+      if (!report || !cancelledBeforeStart(execution)) return false;
+      if (ownerOf(execution.runId) !== block.block_id) return false;
+      const prior = recordOf(execution.runId);
+      if (prior?.engine_status === "cancelled") return prior.problem === null;
+      if (prior && prior.observed_at >= report.accepted_at) return true;
+      const ordinal = execution.ordinal;
+      if (ordinal === undefined) return false;
+      return (
+        (reportingOrdinal !== null && ordinal > reportingOrdinal) ||
+        (seenAfterReport >= 0 && ordinal > seenAfterReport)
+      );
+    };
+    const deciding = decidingRun(worker, noWork);
+    yield* recordExecutions(
+      sql,
+      run,
+      block,
+      binding.id,
+      worker,
+      deciding,
+      noWork,
+      (runId) => recordOf(runId)?.engine_status === "cancelled",
+      time,
+    );
+    const ownerScope = { block_id: deciding ? ownerOf(deciding.runId) : block.block_id };
+    if (deciding && failedRun(deciding.status))
       yield* observeAttention(
         sql,
         run.id,
         ownerScope,
-        latest.runId,
+        deciding.runId,
         "execution-failed",
         true,
         time,
       );
     // A later run of the thread that completes recovers earlier execution failures.
-    if (latest?.status === "completed")
+    if (deciding?.status === "completed")
       yield* settlePendingAttention(
         sql,
         run.id,
@@ -281,7 +374,8 @@ function recordWorkerThread(
         time,
       );
     yield* recordActivation(sql, run, block, worker, time);
-    yield* recordContinuations(sql, run, binding.id, worker, ownerScope.block_id, time);
+    const latestOwner = latest ? ownerOf(latest.runId) : block.block_id;
+    yield* recordContinuations(sql, run, binding.id, worker, latestOwner, time);
     yield* advanceGeneration(sql, run.id);
   });
 }

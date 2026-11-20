@@ -87,6 +87,7 @@ export async function launchFixture(c: TestContext) {
               ordinal: 2,
               startedAt: "2026-11-01T08:02:00.000Z",
             },
+            { runId: "cancelled-before-start", status: "cancelled", ordinal: 3, startedAt: null },
           ],
         };
       },
