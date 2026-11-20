@@ -336,7 +336,7 @@ function OwningProjectMenu({
         choices={projectChoices(targets, ` — can’t own new ${plural}`)}
         disabled={disabled}
         placeholder="Choose a Project"
-        trigger={{ icon: true, detail: chosen.detail ?? "" }}
+        trigger={{ icon: true, detail: chosen.detail ?? "", describesValue: true }}
         describedBy={describedBy}
         problemTone="error"
         onChange={onChange}
@@ -408,7 +408,7 @@ export function OwnerTargetMenu({
         choices={ownerChoices(picker.targets, unavailableReason)}
         disabled={disabled}
         placeholder="Choose an owner"
-        trigger={{ icon: true, detail: context }}
+        trigger={{ icon: true, detail: context, describesValue: true }}
         describedBy={picker.blocked ? `${id}-status` : undefined}
         problemTone="error"
         onChange={(value) => onChange(value === "global" ? null : value)}

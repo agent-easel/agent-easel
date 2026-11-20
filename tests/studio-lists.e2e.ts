@@ -5,7 +5,7 @@ import { expect, type App, type Screen } from "e2e";
 import type { Result, TriggerDefinition } from "../packages/contracts/src/index.ts";
 import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
 import { refuseFlowCreate } from "./support/flows.ts";
-import { whileTriggerChecksHeld } from "./support/studio.ts";
+import { descriptionOf, whileTriggerChecksHeld } from "./support/studio.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -251,6 +251,24 @@ test("a Project-owned New Flow lists the Projects that can own it", async ({
   // Assert
   await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
   await shot(app, browser, "new-flow-owner");
+});
+
+test("a chosen Owning Project describes its field with the Project's title and path", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const dialog = await openNewFlow(app, screen);
+  await dialog.getByRole("radio", "Project", { exact: true }).tap();
+  const owner = dialog.getByRole("combobox", "Owning Project", { exact: true });
+  await owner.tap();
+
+  // Act
+  await screen.getByRole("option", /^Northwind/).tap();
+
+  // Assert
+  expect(await descriptionOf(browser, owner)).toMatch(/^Northwind \S*\/northwind$/);
 });
 
 test("a failed New Flow create reports one card and keeps the entered name", async ({

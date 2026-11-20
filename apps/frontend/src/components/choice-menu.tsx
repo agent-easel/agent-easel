@@ -53,6 +53,11 @@ interface TriggerExtras {
   readonly icon?: boolean;
   /** A quiet line after the label, such as where the choice lives. */
   readonly detail?: string;
+  /**
+   * The shown label and detail describe the trigger, for a field named by a visible label, whose
+   * name leaves out the value.
+   */
+  readonly describesValue?: boolean;
 }
 
 /** The field's name: a label the trigger prefixes to its value, or the id of a visible label. */
@@ -132,6 +137,10 @@ export function ChoiceMenu({
     `${shown ?? placeholder}${badgeSuffix(selected)}`,
   );
   const { listSearch, ...root } = useChoiceList({ choices, onChange, composer });
+  const valueId = useId();
+  const valueIds = trigger.describesValue
+    ? [`${valueId}-label`, ...(trigger.detail ? [`${valueId}-detail`] : [])]
+    : [];
   return (
     <Select.Root {...root} value={listValue} disabled={disabled}>
       <ChoiceTrigger
@@ -141,10 +150,17 @@ export function ChoiceMenu({
         busy={composer?.busy}
         dialog={!!listSearch || !choices.length}
         describedBy={describedBy}
+        valueIds={valueIds}
         problemTone={problemTone}
         className={className}
       >
-        <ChoiceValue shown={shown} placeholder={placeholder} selected={selected} extras={trigger} />
+        <ChoiceValue
+          id={trigger.describesValue ? valueId : undefined}
+          shown={shown}
+          placeholder={placeholder}
+          selected={selected}
+          extras={trigger}
+        />
       </ChoiceTrigger>
       <ChoiceList
         name={names.list}
@@ -166,6 +182,7 @@ function ChoiceTrigger({
   busy,
   dialog,
   describedBy,
+  valueIds,
   problemTone,
   className,
   children,
@@ -176,6 +193,8 @@ function ChoiceTrigger({
   busy: boolean | undefined;
   dialog: boolean;
   describedBy: string | undefined;
+  /** The shown value's elements, which describe the trigger before its problem. */
+  valueIds: readonly string[];
   problemTone: FieldState["tone"];
   className: string | undefined;
   children: ReactNode;
@@ -192,6 +211,7 @@ function ChoiceTrigger({
         aria-required={required}
         {...triggerState(busy, dialog)}
         {...fieldAria(describedBy)}
+        aria-describedby={[...valueIds, describedBy].filter(Boolean).join(" ") || undefined}
         className={cn(
           selectFieldClass,
           "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-2 data-[state=open]:ring-ring/30",
@@ -251,13 +271,18 @@ const triggerState = (busy: boolean | undefined, dialog: boolean) => ({
   ...(dialog && { "aria-haspopup": "dialog" as const }),
 });
 
-/** The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder. */
+/**
+ * The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder.
+ * With an `id`, the label and detail carry ids derived from it.
+ */
 function ChoiceValue({
+  id,
   shown,
   placeholder,
   selected,
   extras: { glyph, prefix, icon, detail },
 }: {
+  id: string | undefined;
   shown: string | undefined;
   placeholder: string;
   selected: MenuChoice | undefined;
@@ -269,6 +294,7 @@ function ChoiceValue({
       {prefix && <span className="shrink-0 text-subtle-foreground">{prefix}</span>}
       {icon && selected?.icon && <span className="flex shrink-0">{selected.icon}</span>}
       <span
+        id={id && `${id}-label`}
         data-slot="choice-value"
         className={cn("min-w-0 truncate", !shown && "text-muted-foreground")}
       >
@@ -277,16 +303,17 @@ function ChoiceValue({
       {selected?.badge && (
         <StatusBadge kind={selected.badgeKind ?? "attention"}>{selected.badge}</StatusBadge>
       )}
-      <TriggerDetail detail={detail} />
+      <TriggerDetail id={id && `${id}-detail`} detail={detail} />
     </>
   );
 }
 
 /** The detail fills the trigger's free width, truncated from its start so a path keeps its end. */
-function TriggerDetail({ detail }: { detail: string | undefined }) {
+function TriggerDetail({ id, detail }: { id: string | undefined; detail: string | undefined }) {
   if (!detail) return <span className="flex-1" />;
   return (
     <span
+      id={id}
       title={detail}
       dir="rtl"
       className="w-0 flex-1 truncate text-left text-2xs tracking-label text-subtle-foreground"

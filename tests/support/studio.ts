@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
-import { expect, type App, type Screen } from "e2e";
+import { expect, type App, type Locator, type Screen } from "e2e";
 import { copyAgentDefinition } from "./agents.ts";
 import { saveFlowCopy } from "./flows.ts";
 
 export type StudioFixtures = { app: App; screen: Screen; browser: Browser };
+
+/** What `field`'s description reads: the text of each element its `aria-describedby` names. */
+export async function descriptionOf(browser: Browser, field: Locator) {
+  const ids = (await field.getAttribute("aria-describedby")) ?? "";
+  return String(
+    await browser.evaluate(
+      `${JSON.stringify(ids)}.split(" ").filter(Boolean).map((id) => document.getElementById(id)?.textContent ?? "").join(" ")`,
+    ),
+  );
+}
 
 /**
  * Runs `observe` while every Trigger check the page sends is held, so a journey can watch a check

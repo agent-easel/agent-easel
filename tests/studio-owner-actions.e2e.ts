@@ -7,7 +7,12 @@ import {
   readAgentDefinition,
 } from "./support/agents.ts";
 import { readFlow, saveSingleAgentFlow } from "./support/flows.ts";
-import { chooseAgentAction, chooseFlowAction, expectSavedAgentRevision } from "./support/studio.ts";
+import {
+  chooseAgentAction,
+  chooseFlowAction,
+  descriptionOf,
+  expectSavedAgentRevision,
+} from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
 import {
   changeAgentOwnerElsewhere,
@@ -292,6 +297,28 @@ test("Import on the Agents list creates the file's Agent and opens it", async ({
   );
   assert.equal(imported.length, 1);
   assert.equal(imported[0]!.name, source.name);
+});
+
+test("an unavailable owner of a Duplicate is described by its title and then its problem", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  const source = await ownedFlow(app.baseUrl, "Docs refresh");
+  await app.open(`/studio/flows/${source.id}`);
+
+  // Act
+  await chooseFlowAction(screen, "Duplicate…");
+
+  // Assert
+  const dialog = screen.getByRole("dialog", "Duplicate “Docs refresh”");
+  const owner = dialog.getByRole("combobox", "Owning Project", { exact: true });
+  await expect(owner).toHaveAttribute("aria-invalid", "true");
+  expect(await descriptionOf(browser, owner)).toMatch(
+    /^Docs site .*Docs site: Project unavailable\. Choose Global or an available Project\.$/,
+  );
 });
 
 test("a Flow of an unavailable Project is rescued by duplicating it and its Agent into another Project", async ({
