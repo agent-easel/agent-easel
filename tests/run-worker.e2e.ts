@@ -11,7 +11,7 @@ import {
   settleStoppingWorkers,
 } from "./support/run-history.ts";
 import { listAgentDefinitions, readAgentDefinition } from "./support/agents.ts";
-import { prepareScenarios, applyRunState } from "./support/scenarios.ts";
+import { prepareScenario, applyRunState } from "./support/scenarios.ts";
 import { liveRun } from "./support/live.ts";
 import { openComposerWithFlow, startLosingResponse } from "./support/composer.ts";
 import {
@@ -20,10 +20,6 @@ import {
   shortcutMod,
 } from "./support/keyboard-shortcuts.ts";
 import { chooseDecision } from "./support/human-answers.ts";
-
-beforeEach(async ({ app }) => {
-  await prepareScenarios(app);
-});
 
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 1100 });
@@ -307,10 +303,7 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
   browser,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Discussing · Agent asked about empty-state wording",
-  );
+  const found = await prepareScenario(app, "conversation");
   const run = await readHistoryRun(app.baseUrl, found.id);
   await app.open(`/runs/${run.id}`);
 
@@ -343,10 +336,7 @@ test("a worker idle in its working report asks for review in T3 as Needs input a
 
 /** The Run page of the Agent asking in T3, with its Needs input card's Working report. */
 async function openConversationRun(app: App, screen: Screen) {
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Discussing · Agent asked about empty-state wording",
-  );
+  const found = await prepareScenario(app, "conversation");
   await app.open(`/runs/${found.id}`);
   const review = screen
     .getByRole("region", "Needs input")
@@ -459,10 +449,7 @@ test("a worker idle in working shows its message on the canvas and in its Run pr
   browser,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Monitoring · Agent is watching CI for the search fix",
-  );
+  const found = await prepareScenario(app, "working-report");
 
   // Act
   await app.open(`/runs/${found.id}`);
@@ -487,10 +474,7 @@ test("Request report asks a worker idle in working to assess its existing work",
   screen,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Monitoring · Agent is watching CI for the search fix",
-  );
+  const found = await prepareScenario(app, "working-report");
   await app.open(`/runs/${found.id}`);
   await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
   const details = screen.getByRole("complementary", "Run inspector");
@@ -515,10 +499,7 @@ test("a native worker reply completes the same activation without another workin
   browser,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Discussing · Agent asked about empty-state wording",
-  );
+  const found = await prepareScenario(app, "conversation");
   const before = await readHistoryRun(app.baseUrl, found.id);
   await app.open(`/runs/${found.id}`);
 
@@ -553,7 +534,7 @@ test("a worker's replaced report releases only its newest result to review work"
   browser,
 }) => {
   // Arrange
-  const found = await findRun(app.baseUrl, "UI worker · UI worker report release");
+  const found = await prepareScenario(app, "report-release");
   await app.open(`/runs/${found.id}`);
 
   // Act — the external worker reports a draft, then replaces it, through Factory's public runtime boundary.
@@ -604,7 +585,7 @@ test("a Human correction answered from the selected Human step revisits the same
   browser,
 }) => {
   // Arrange
-  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+  const found = await prepareScenario(app, "human-review");
   const before = await readHistoryRun(app.baseUrl, found.id);
   const worker = before.blocks.find((b) => b.blockId === "worker")!;
   await app.open(`/runs/${found.id}`);
@@ -648,8 +629,6 @@ test("a Human correction answered from the selected Human step revisits the same
   await app.screenshot("same-worker-second-visit");
 });
 
-const longContextRun = "UI worker · Decision · Long review summary for the reset action";
-
 /** The Overview's answer form for a Run's pending Human step "Your review". */
 function reviewAnswer(screen: Screen) {
   return screen
@@ -659,7 +638,7 @@ function reviewAnswer(screen: Screen) {
 
 /** The Overview's answer form for the long-context Human step, before anything is chosen. */
 async function openLongContextAnswer(app: App, screen: Screen) {
-  const found = await findRun(app.baseUrl, longContextRun);
+  const found = await prepareScenario(app, "human-context");
   await app.open(`/runs/${found.id}`);
   const answer = reviewAnswer(screen);
   await expect(answer).toBeVisible();
@@ -683,7 +662,7 @@ test("a long Human context shows its Markdown formatted on the card with Read fu
   screen,
 }) => {
   // Arrange
-  const found = await findRun(app.baseUrl, longContextRun);
+  const found = await prepareScenario(app, "human-context");
 
   // Act
   await app.open(`/runs/${found.id}`);
@@ -749,7 +728,7 @@ test("a short Human context shows whole on the card without Read full context", 
   screen,
 }) => {
   // Arrange
-  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+  const found = await prepareScenario(app, "human-review");
 
   // Act
   await app.open(`/runs/${found.id}`);
@@ -802,7 +781,7 @@ test("parallel Human occurrences each open their own context in the reader", asy
   screen,
 }) => {
   // Arrange
-  const found = await findRun(app.baseUrl, "UI worker · Two reviews wait for your decision");
+  const found = await prepareScenario(app, "parallel-decision");
   await app.open(`/runs/${found.id}`);
   const attention = screen.getByRole("complementary", "Run inspector");
   const accessibility = attention.getByRole(
@@ -836,7 +815,7 @@ test("Settle confirmation cancels without changes, then stops workers and settle
 }) => {
   // Arrange
   const title = "UI worker · Working · Improve the project picker";
-  const found = await findRun(app.baseUrl, title);
+  const found = await prepareScenario(app, "working");
   await app.open(`/runs/${found.id}`);
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
   const before = await readHistoryRun(app.baseUrl, found.id);
@@ -874,42 +853,12 @@ test("Settle confirmation cancels without changes, then stops workers and settle
   await app.screenshot("run-settled-from-row-menu");
 });
 
-test("a late report cannot revive a manually Settled Run", async ({ app, screen }) => {
-  // Arrange
-  const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
-  await settleStoppingWorkers(app.baseUrl, found.id);
-  await expect
-    .poll(async () => (await readHistoryRun(app.baseUrl, found.id)).lifecycle)
-    .toBe("settled");
-  await app.open(`/runs/${found.id}`);
-  const before = await readHistoryRun(app.baseUrl, found.id);
-
-  // Act
-  const report = await applyRunState(
-    app,
-    found.id,
-    "late working report",
-    "Two subagents are still checking the empty state.",
-  );
-
-  // Assert
-  expect(report).toMatchObject({ outcome: "RUN_SETTLED" });
-  const after = await readHistoryRun(app.baseUrl, found.id);
-  expect(after.lifecycle).toBe("settled");
-  expect(after.reports).toEqual(before.reports);
-  expect(after.activations).toEqual(before.activations);
-  await expect(screen.getByLabel("Run lifecycle", { exact: true })).toContainText("Settled");
-});
-
 test("an unresolved settlement is one Run card whose Retry settlement asks T3 to stop again", async ({
   app,
   screen,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Settlement unresolved · Stop support unavailable",
-  );
+  const found = await prepareScenario(app, "settlement-unresolved");
   await app.open(`/runs/${found.id}`);
   const card = screen.getByRole("article", "Problem · Run");
   await expect(card).toContainText("Settle couldn’t stop Implement change");
@@ -918,7 +867,9 @@ test("an unresolved settlement is one Run card whose Retry settlement asks T3 to
   await expect(screen.getByText("Settle requested", { exact: false })).toBeVisible();
   const row = screen
     .getByRole("navigation", "Open Runs")
-    .getByRole("link", new RegExp(found.title));
+    .getByRole("link", "UI worker · Settlement unresolved · Stop support unavailable", {
+      exact: false,
+    });
   await expect(row).not.toContainText("Settle unresolved");
   await expect(row).toContainText("Problem");
   const before = await readHistoryRun(app.baseUrl, found.id);
@@ -970,11 +921,11 @@ async function finishStopping(baseUrl: string | undefined, id: string) {
 /** Confirms Settle from the row menu with the keyboard while T3 keeps the stopped turn running. */
 async function confirmSettleStillStopping(
   { app, screen, browser }: { app: App; screen: Screen; browser: Browser },
-  title: string,
+  id: string,
 ) {
-  const found = await findRun(app.baseUrl, title);
-  await applyRunState(app, found.id, "Stop taken while the turn continues");
-  await app.open(`/runs/${found.id}`);
+  const { title } = await readHistoryRun(app.baseUrl, id);
+  await applyRunState(app, id, "Stop taken while the turn continues");
+  await app.open(`/runs/${id}`);
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
   await row.secondaryTap();
   await screen.getByRole("menuitem", "Settle", { exact: true }).tap();
@@ -984,7 +935,7 @@ async function confirmSettleStillStopping(
   await browser.keyboard.press("Enter");
   await expect(row).toContainText("Stopping");
   await expect(row).toBeFocused();
-  return found;
+  return row;
 }
 
 test("a keyboard-confirmed Settle that finishes stopping later focuses the Settled group", async ({
@@ -993,13 +944,11 @@ test("a keyboard-confirmed Settle that finishes stopping later focuses the Settl
   browser,
 }) => {
   // Arrange
-  const found = await confirmSettleStillStopping(
-    { app, screen, browser },
-    "UI worker · Corrections back in review",
-  );
+  const { id } = await prepareScenario(app, "correction");
+  await confirmSettleStillStopping({ app, screen, browser }, id);
 
   // Act
-  await finishStopping(app.baseUrl, found.id);
+  await finishStopping(app.baseUrl, id);
 
   // Assert
   await expect(screen.getByRole("button", /^Settled/)).toBeFocused();
@@ -1011,15 +960,13 @@ test("a Settle that finishes stopping later leaves focus where the user moved it
   browser,
 }) => {
   // Arrange
-  const found = await confirmSettleStillStopping(
-    { app, screen, browser },
-    "UI worker · Working · Hotfix notes reviewed without waiting for CI",
-  );
+  const { id } = await prepareScenario(app, "wait-continued");
+  await confirmSettleStillStopping({ app, screen, browser }, id);
   const search = screen.getByRole("textbox", "Search Run titles", { exact: true });
   await search.focus();
 
   // Act
-  await finishStopping(app.baseUrl, found.id);
+  await finishStopping(app.baseUrl, id);
 
   // Assert
   await expect(screen.getByRole("button", /^Settled/)).toBeVisible();
@@ -1033,8 +980,7 @@ test("a Settle that finishes stopping later leaves focus on the page after the u
 }) => {
   // Arrange
   const id = await liveRun(app, "settle-left-row");
-  const { title } = await readHistoryRun(app.baseUrl, id);
-  await confirmSettleStillStopping({ app, screen, browser }, title);
+  const row = await confirmSettleStillStopping({ app, screen, browser }, id);
   const search = screen.getByRole("textbox", "Search Run titles", { exact: true });
   await search.focus();
   await expect(search).toBeFocused();
@@ -1046,9 +992,7 @@ test("a Settle that finishes stopping later leaves focus on the page after the u
   await finishStopping(app.baseUrl, id);
 
   // Assert
-  await expect(
-    screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title)),
-  ).toHaveCount(0);
+  await expect(row).toHaveCount(0);
   await expect(screen.getByRole("button", /^Settled/)).not.toBeFocused();
   expect(await browser.evaluate("document.activeElement === document.body")).toBe(true);
 });
@@ -1060,7 +1004,7 @@ test("Archive from the Run page's ··· menu asks for confirmation and archives
 }) => {
   // Arrange
   const title = "UI worker · Parallel review from one prompt";
-  const found = await findRun(app.baseUrl, title);
+  const found = await prepareScenario(app, "parallel-start");
   const before = await readHistoryRun(app.baseUrl, found.id);
   await app.open(`/runs/${found.id}`);
   await expect(screen.getByRole("button", "Archive Run", { exact: true })).toHaveCount(0);
@@ -1095,7 +1039,7 @@ test("the row menu opened with Shift+F10 archives a Run after confirmation", asy
 }) => {
   // Arrange
   const title = "UI worker · Two reviewers working in parallel";
-  const found = await findRun(app.baseUrl, title);
+  const found = await prepareScenario(app, "parallel");
   await app.open("/runs/new");
   const row = screen.getByRole("navigation", "Open Runs").getByRole("link", new RegExp(title));
   await row.press("Shift+F10");

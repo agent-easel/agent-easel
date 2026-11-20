@@ -544,7 +544,7 @@ Turning a switch on opens the [review](#reviewing-what-starts); turning it off s
 `/studio/triggers/new/github-issues`. The form has:
 
 - **Name**, unique among current Triggers regardless of case. Studio checks the name as you type. A removed Trigger's name can be reused.
-- **Project**, chosen from the Projects available in T3. The Project must be local to the Factory host. Factory detects the Project's GitHub repository through `gh`
+- **Project**, chosen from the Projects available in T3. The Project must be local to the Factory host. Save refuses a Project that has left T3 or belongs to a different T3 environment. Factory detects the Project's GitHub repository through `gh`
   and shows it as **Detected**; saving confirms it. A Trigger never reads another repository. When an opened
   Trigger's Project folder later names a different repository, its checks stop with a repository mismatch and the
   form shows that repository as **Detected now** with **Confirm**. Confirming changes the draft's

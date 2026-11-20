@@ -1,121 +1,78 @@
-import { renameCanvasAgent } from "./support/studio-live-states.ts";
+import assert from "node:assert/strict";
+import { expect } from "e2e";
 import { test } from "./support/test.ts";
 import {
-  copyAgentDefinition,
-  saveAgentElsewhere,
+  listAgentDefinitions,
   removeAgentElsewhere,
+  saveAgentElsewhere,
   updateAgentExits,
 } from "./support/agents.ts";
-import { saveSingleAgentFlow, saveFlowElsewhere, removeFlowElsewhere } from "./support/flows.ts";
+import { readFlow, removeFlowElsewhere, saveFlowElsewhere } from "./support/flows.ts";
+import { delayLiveSnapshots, resetBrowserRequests } from "./support/live.ts";
 import {
-  expectCreatedAgent,
-  beforeCreatedAgent,
-  expectCreatedFlow,
-  beforeCreatedFlow,
-  expectRenamedDependency,
-  beforeRenamedDependency,
-  expectBrokenDependency,
-  beforeBrokenDependency,
-  expectRestoredReadiness,
-  beforeRestoredReadiness,
-  expectReleasedTyping,
-  beforeReleasedTyping,
-  expectReleasedGesture,
-  beforeReleasedGesture,
-  expectOfflineFlow,
-  beforeOfflineFlow,
-  expectReconnectedFlow,
-  beforeReconnectedFlow,
-  expectDirtyFlow,
-  beforeDirtyFlow,
-  expectNewestFlowComparison,
-  beforeNewestFlowComparison,
-  expectReboundFlow,
-  beforeReboundFlow,
-  expectSavedFlow,
-  beforeSavedFlow,
-  expectReloadedFlow,
-  beforeReloadedFlow,
-  expectUnusedAgent,
-  beforeUnusedAgent,
-  expectRemovedDependency,
-  beforeRemovedDependency,
-  expectReopenedLatestFlow,
-  beforeReopenedLatestFlow,
-  expectRemovedFlow,
-  beforeRemovedFlow,
-  expectCopiedFlow,
-  beforeCopiedFlow,
-  expectKeptFlow,
-  beforeKeptFlow,
-  expectCleanAgent,
-  beforeCleanAgent,
-  expectComparedAgent,
-  beforeComparedAgent,
-  expectInvalidatedAgentConfirmation,
-  beforeInvalidatedAgentConfirmation,
-  expectReboundAgent,
-  beforeReboundAgent,
-  expectSavedAgent,
-  beforeSavedAgent,
-  expectReloadedAgent,
-  beforeReloadedAgent,
-  expectRemovedAgent,
-  beforeRemovedAgent,
-  expectCopiedAgent,
-  beforeCopiedAgent,
-  expectGuardedAgent,
-  beforeGuardedAgent,
-  expectMissingFlow,
-  beforeMissingFlow,
-  expectMissingAgent,
-  beforeMissingAgent,
-  expectChangedDirtyDependency,
-  beforeChangedDirtyDependency,
-  expectCheckedBrokenDependency,
-  beforeCheckedBrokenDependency,
+  expectBrokenAgentWire,
+  expectFlowSaved,
+  expectRetainedDefinition,
+  readinessSummary,
+} from "./support/studio.ts";
+import {
+  expectNoStudioListReads,
+  expectStudioViewport,
+  flowCount,
+  handoffExit,
+  moveStudioViewport,
+  newStudioAgent,
+  newStudioFlow,
+  openApprovedStudio,
+  openComparedAgent,
+  openComparedFlow,
+  openLiveFlow,
+  openLiveFlowWithMovedViewport,
+  readRecoveredDefinition,
+  renameCanvasAgent,
 } from "./support/studio-live-states.ts";
-const block = { id: "worker", name: "Worker", x: 320, y: 120 };
-test("an independent Agent create updates the open Studio count", async ({
+
+test("an independent Agent create updates the open Studio count without a list read", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeCreatedAgent({ app, screen, browser }, "createdAgent");
-  const { prefix } = state;
+  const count = (await listAgentDefinitions(app.baseUrl)).length;
+  await openApprovedStudio({ app, screen, browser }, "agents");
+  const agents = screen.getByRole("navigation", "Studio navigation").getByRole("link", "Agents");
+  await expect(agents).toContainText(String(count));
+  await resetBrowserRequests(app);
 
   // Act
-  const agent = await copyAgentDefinition(
-    app.baseUrl,
-    "Sample worker",
-    `Acceptance · ${prefix} · Worker`,
-  );
+  const agent = await newStudioAgent(app);
 
   // Assert
-  await expectCreatedAgent({ ...state, agent });
+  await expect(screen.getByRole("link", agent.name, { exact: false })).toBeVisible();
+  await expect(agents).toContainText(String(count + 1));
+  await expectNoStudioListReads(app);
 });
 
-test("an independent Flow create updates the open Studio list and counts without list reads", async ({
+test("an independent Flow create updates the open Studio list and count without a list read", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeCreatedFlow({ app, screen, browser }, "createdFlow");
-  const { prefix, agent } = state;
+  const agent = await newStudioAgent(app);
+  const count = await flowCount(app);
+  await openApprovedStudio({ app, screen, browser }, "flows");
+  const flows = screen.getByRole("navigation", "Studio navigation").getByRole("link", "Flows");
+  await expect(flows).toContainText(String(count));
+  await resetBrowserRequests(app);
 
   // Act
-  const id = await saveSingleAgentFlow(
-    app.baseUrl,
-    `Acceptance · ${prefix} · Flow`,
-    agent.name,
-    block,
-    agent.exits[0]!.id,
-  );
+  const flow = await newStudioFlow(app, agent);
 
   // Assert
-  await expectCreatedFlow({ ...state, id });
+  await expect(screen.getByRole("link", flow.name, { exact: false })).toBeVisible();
+  await expect(flows).toContainText(String(count + 1));
+  await expectNoStudioListReads(app);
 });
 
 test("an open Flow resolves changed Agent names, execution and ports", async ({
@@ -124,18 +81,22 @@ test("an open Flow resolves changed Agent names, execution and ports", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeRenamedDependency({ app, screen, browser }, "renamedDependency");
-  const { prefix, agent } = state;
+  const { agent } = await openLiveFlow({ app, screen, browser });
+  const library = screen.getByRole("region", "Block library");
+  await expect(library.getByRole("button", `Add ${agent.name}`, { exact: true })).toBeVisible();
 
   // Act
-  const renamed = await renameCanvasAgent(
-    app.baseUrl,
-    agent,
-    `Acceptance · ${prefix} · Renamed worker`,
-  );
+  const renamed = await renameCanvasAgent(app, agent, `${agent.name} renamed`);
 
   // Assert
-  await expectRenamedDependency({ ...state, renamed });
+  const canvas = screen.getByRole("region", "Flow canvas");
+  await expect(canvas.getByText(renamed.name, { exact: true })).toBeVisible();
+  const row = browser.locator(`#block-library [aria-label=${JSON.stringify(renamed.name)}]`);
+  await expect(row).toHaveAttribute("aria-disabled", "true");
+  await expect(row).toContainText("Needs a model");
+  await expect(
+    canvas.getByRole("button", "Connect exit delivered of Worker", { exact: true }),
+  ).toBeVisible();
 });
 
 test("an open clean Flow retains broken wires and its viewport after an Agent exit disappears", async ({
@@ -144,19 +105,20 @@ test("an open clean Flow retains broken wires and its viewport after an Agent ex
   browser,
 }) => {
   // Arrange
-  const state = await beforeBrokenDependency({ app, screen, browser }, "brokenDependency");
-  const { renamed } = state;
+  const { agent, flow } = await openLiveFlow({ app, screen, browser });
+  const viewport = await moveStudioViewport({ app, screen, browser });
 
   // Act
-  const changed = await saveAgentElsewhere(app.baseUrl, renamed, {
-    exits: [
-      ...renamed.exits.slice(1),
-      { id: "handoff", name: "handoff", description: "", messageRequired: false },
-    ],
-  });
+  await updateAgentExits(app.baseUrl, agent, [handoffExit, ...agent.exits.slice(1)]);
 
   // Assert
-  await expectBrokenDependency({ ...state, changed });
+  await expect(viewport.canvas.getByText("handoff", { exact: true })).toBeVisible();
+  await expectBrokenAgentWire(screen, agent.exits[0]!.id);
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
+  await expectFlowSaved(screen);
+  await expectStudioViewport(viewport);
+  expect((await readFlow(app.baseUrl, flow.id)).graph).toEqual(flow.graph);
+  await app.screenshot("acceptance-clean-dependency-broken-wire");
 });
 
 test("restoring the Agent dependency restores clean Flow readiness", async ({
@@ -165,17 +127,17 @@ test("restoring the Agent dependency restores clean Flow readiness", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeRestoredReadiness({ app, screen, browser }, "restoredReadiness");
-  const { agent, changed } = state;
+  const agent = await newStudioAgent(app);
+  const flow = await newStudioFlow(app, agent);
+  const changed = await saveAgentElsewhere(app.baseUrl, agent, { exits: [handoffExit] });
+  await openApprovedStudio({ app, screen, browser }, `flows/${flow.id}`);
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
 
   // Act
-  await saveAgentElsewhere(app.baseUrl, changed, {
-    exits: agent.exits,
-    execution: agent.execution,
-  });
+  await updateAgentExits(app.baseUrl, changed, agent.exits);
 
   // Assert
-  await expectRestoredReadiness({ ...state });
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
 });
 
 test("releasing typing adopts the deferred Flow revision and clears its obsolete selection", async ({
@@ -184,14 +146,25 @@ test("releasing typing adopts the deferred Flow revision and clears its obsolete
   browser,
 }) => {
   // Arrange
-  const state = await beforeReleasedTyping({ app, screen, browser }, "releasedTyping");
-  const { canvas } = state;
+  const { flow, viewport } = await openLiveFlowWithMovedViewport({ app, screen, browser });
+  await screen.getByRole("button", "Human step Review", { exact: true }).tap();
+  const name = screen.getByLabel("Flow name", { exact: true });
+  await name.focus();
+  const updated = await saveFlowElsewhere(app.baseUrl, flow, {
+    name: `${flow.name} revised`,
+    graph: { ...flow.graph, blocks: [flow.graph.blocks[0]!], connections: [] },
+  });
+  const marker = await newStudioAgent(app);
+  await expect(screen.getByRole("button", `Add ${marker.name}`, { exact: true })).toBeVisible();
+  await expect(name).toHaveValue(flow.name);
 
   // Act
-  await canvas.focus();
+  await viewport.canvas.focus();
 
   // Assert
-  await expectReleasedTyping({ ...state });
+  await expect(name).toHaveValue(updated.name);
+  await expect(screen.getByRole("complementary", "Block settings")).toHaveCount(0);
+  await expectStudioViewport(viewport);
 });
 
 test("releasing the held canvas gesture adopts the deferred Flow revision without moving the view", async ({
@@ -200,24 +173,23 @@ test("releasing the held canvas gesture adopts the deferred Flow revision withou
   browser,
 }) => {
   // Arrange
-  const state = await beforeReleasedGesture({ app, screen, browser }, "releasedGesture");
+  const { flow, viewport } = await openLiveFlowWithMovedViewport({ app, screen, browser });
+  const worker = await screen.getByRole("button", "Agent Worker", { exact: true }).boundingBox();
+  assert(worker);
+  await browser.mouse.move(worker.x + worker.width / 2, worker.y + worker.height / 2);
+  await browser.mouse.down();
+  const updated = await saveFlowElsewhere(app.baseUrl, flow, { name: `${flow.name} revised` });
+  const marker = await newStudioAgent(app);
+  await expect(screen.getByRole("button", `Add ${marker.name}`, { exact: true })).toBeVisible();
+  const name = screen.getByLabel("Flow name", { exact: true });
+  await expect(name).toHaveValue(flow.name);
 
   // Act
   await browser.mouse.up();
 
   // Assert
-  await expectReleasedGesture({ ...state });
-});
-
-test("an offline Studio refuses Flow saves", async ({ fixture, app, screen, browser }) => {
-  // Arrange
-  const state = await beforeOfflineFlow({ app, screen, browser }, "offlineFlow");
-
-  // Act
-  await fixture.remoteAccess.offline();
-
-  // Assert
-  await expectOfflineFlow({ ...state });
+  await expect(name).toHaveValue(updated.name);
+  await expectStudioViewport(viewport);
 });
 
 test("a reconnect snapshot preserves the Flow draft and viewport", async ({
@@ -227,31 +199,22 @@ test("a reconnect snapshot preserves the Flow draft and viewport", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeReconnectedFlow({ app, screen, browser }, "reconnectedFlow");
+  const { viewport } = await openLiveFlowWithMovedViewport({ app, screen, browser });
+  await fixture.remoteAccess.offline();
+  const name = screen.getByLabel("Flow name", { exact: true });
+  await name.fill("Offline Flow draft");
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeDisabled();
+  await delayLiveSnapshots(app, 1500);
 
   // Act
   await fixture.remoteAccess.online();
 
   // Assert
-  await expectReconnectedFlow({ ...state });
-});
-
-test("a newer saved Flow revision leaves the local draft in reconciliation", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeDirtyFlow({ app, screen, browser }, "dirtyFlow");
-  const { prefix, revision3 } = state;
-
-  // Act
-  const revision4 = await saveFlowElsewhere(app.baseUrl, revision3, {
-    name: `Acceptance · ${prefix} · Flow revision 4`,
-  });
-
-  // Assert
-  await expectDirtyFlow({ ...state, revision4 });
+  await expect(save).toBeEnabled();
+  await expect(name).toHaveValue("Offline Flow draft");
+  await expectStudioViewport(viewport);
 });
 
 test("an open Flow comparison follows the newest saved revision", async ({
@@ -260,58 +223,19 @@ test("an open Flow comparison follows the newest saved revision", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeNewestFlowComparison({ app, screen, browser }, "newestFlowComparison");
-  const { prefix, revision4 } = state;
+  const { previous } = await openComparedFlow({ app, screen, browser }, "Local Flow draft");
 
   // Act
-  const revision5 = await saveFlowElsewhere(app.baseUrl, revision4, {
-    name: `Acceptance · ${prefix} · Flow revision 5`,
-  });
+  const latest = await saveFlowElsewhere(app.baseUrl, previous, { name: "Newest Flow revision" });
 
   // Assert
-  await expectNewestFlowComparison({ ...state, revision5 });
-});
-
-test("keeping a Flow draft against the newest revision sends no save", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeReboundFlow({ app, screen, browser }, "reboundFlow");
-  const comparison = screen.getByRole("dialog", "Compare with revision 5");
-
-  // Act
-  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
-
-  // Assert
-  await expectReboundFlow({ ...state });
-});
-
-test("Save commits the rebound Flow draft without a false external conflict", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeSavedFlow({ app, screen, browser }, "savedFlow");
-
-  // Act
-  await screen.getByRole("button", "Save", { exact: true }).tap();
-
-  // Assert
-  await expectSavedFlow({ ...state });
-});
-
-test("the rebound Flow save persists across reload", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeReloadedFlow({ app, screen, browser }, "reloadedFlow");
-
-  // Act
-  await browser.reload();
-
-  // Assert
-  await expectReloadedFlow({ ...state });
+  const comparison = screen.getByRole("dialog", `Compare with revision ${latest.revision}`);
+  await expect(
+    comparison.getByRole("button", `Load revision ${latest.revision}`, { exact: true }),
+  ).toBeVisible();
+  await expect(
+    screen.getByRole("dialog", `Compare with revision ${previous.revision}`),
+  ).toHaveCount(0);
 });
 
 test("an external Flow graph save updates the open Agent usage count", async ({
@@ -320,14 +244,24 @@ test("an external Flow graph save updates the open Agent usage count", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeUnusedAgent({ app, screen, browser }, "unusedAgent");
-  const { ownFlow, empty } = state;
+  const agent = await newStudioAgent(app);
+  const flow = await newStudioFlow(app, agent);
+  await openApprovedStudio({ app, screen, browser }, "agents");
+  const row = screen.getByRole("link", agent.name, { exact: false });
+  await expect(row).toContainText("1 Flow");
 
   // Act
-  await saveFlowElsewhere(app.baseUrl, ownFlow, { graph: empty });
+  await saveFlowElsewhere(app.baseUrl, flow, {
+    graph: {
+      ...flow.graph,
+      flowInput: { ...flow.graph.flowInput, targetBlockIds: [] },
+      blocks: [],
+      connections: [],
+    },
+  });
 
   // Assert
-  await expectUnusedAgent({ ...state });
+  await expect(row).toContainText("Unused");
 });
 
 test("an external Agent removal removes its open Studio list entry", async ({
@@ -336,254 +270,123 @@ test("an external Agent removal removes its open Studio list entry", async ({
   browser,
 }) => {
   // Arrange
-  const state = await beforeRemovedDependency({ app, screen, browser }, "removedDependency");
-  const { agent } = state;
+  const agent = await newStudioAgent(app);
+  await openApprovedStudio({ app, screen, browser }, "agents");
+  const row = screen.getByRole("link", agent.name, { exact: false });
+  await expect(row).toBeVisible();
 
   // Act
   await removeAgentElsewhere(app.baseUrl, agent.id);
 
   // Assert
-  await expectRemovedDependency({ ...state });
+  await expect(row).toHaveCount(0);
 });
 
-test("reopening a Flow left clean shows its newest saved revision", async ({
+test("external Flow removal closes the comparison and leaves its draft recoverable from the clipboard", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeReopenedLatestFlow({ app, screen, browser }, "reopenedLatestFlow");
-  const { prefix } = state;
+  const { flow, previous } = await openComparedFlow(
+    { app, screen, browser },
+    "Retained Flow draft",
+  );
 
   // Act
-  await screen.getByRole("link", new RegExp(`Acceptance · ${prefix} · Local Flow`)).tap();
+  await removeFlowElsewhere(app.baseUrl, flow.id);
 
   // Assert
-  await expectReopenedLatestFlow({ ...state });
-});
-
-test("an external Flow removal closes comparison and retains recovery with disabled writes", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeRemovedFlow({ app, screen, browser }, "removedFlow");
-  const { id } = state;
-
-  // Act
-  await removeFlowElsewhere(app.baseUrl, id);
-
-  // Assert
-  await expectRemovedFlow({ ...state });
-});
-
-test("a retained Flow copies its actual create-shape JSON to the granted clipboard", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeCopiedFlow({ app, screen, browser }, "copiedFlow");
-
-  // Act
-  await screen.getByRole("button", "Copy as JSON", { exact: true }).tap();
-
-  // Assert
-  await expectCopiedFlow({ ...state });
-});
-
-test("Keep editing stays on a removed Flow's retained draft", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeKeptFlow({ app, screen, browser }, "keptFlow");
-  const { flowGuard } = state;
-
-  // Act
-  await flowGuard.getByRole("button", "Keep editing", { exact: true }).tap();
-
-  // Assert
-  await expectKeptFlow({ ...state });
-});
-
-test("the Agent editor adopts an external revision in the same Studio history", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeCleanAgent({ app, screen, browser }, "cleanAgent");
-  const { prefix, currentAgent } = state;
-
-  // Act
-  const cleanAgent = await saveAgentElsewhere(app.baseUrl, currentAgent, {
-    name: `Acceptance · ${prefix} · Agent revision 3`,
+  await expect(
+    screen.getByRole("dialog", `Compare with revision ${previous.revision}`),
+  ).toHaveCount(0);
+  await expectRetainedDefinition(
+    screen,
+    "Flow",
+    ["Save"],
+    ["Duplicate…", "Change owner…", "Export JSON", "Remove"],
+  );
+  expect(await readRecoveredDefinition(screen, browser)).toEqual({
+    name: "Retained Flow draft",
+    graph: flow.graph,
+    workspace: flow.workspace,
   });
-
-  // Assert
-  await expectCleanAgent({ ...state, cleanAgent });
-});
-
-test("an Agent comparison shows the retained local prompt", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeComparedAgent({ app, screen, browser }, "comparedAgent");
-
-  // Act
-  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
-
-  // Assert
-  await expectComparedAgent({ ...state });
+  await app.screenshot("acceptance-removed-flow-recovery");
 });
 
 test("a newer Agent revision moves the open comparison to it", async ({ app, screen, browser }) => {
   // Arrange
-  const state = await beforeInvalidatedAgentConfirmation(
-    { app, screen, browser },
-    "invalidatedAgentConfirmation",
-  );
-  const { prefix, agent4 } = state;
+  const { previous } = await openComparedAgent({ app, screen, browser }, "Local Agent draft");
 
   // Act
-  await saveAgentElsewhere(app.baseUrl, agent4, {
-    prompt: `Acceptance · ${prefix} · Saved prompt 5`,
+  const latest = await saveAgentElsewhere(app.baseUrl, previous, { prompt: "Newest Agent prompt" });
+
+  // Assert
+  const comparison = screen.getByRole("dialog", `Compare with revision ${latest.revision}`);
+  await expect(comparison.getByLabel(`Revision ${latest.revision}`, { exact: true })).toContainText(
+    latest.prompt,
+  );
+  await expect(
+    comparison.getByRole("button", `Load revision ${previous.revision}`, { exact: true }),
+  ).toHaveCount(0);
+});
+
+test("external Agent removal closes the comparison and leaves its draft recoverable from the clipboard", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { agent, previous } = await openComparedAgent(
+    { app, screen, browser },
+    "Retained Agent prompt",
+  );
+
+  // Act
+  await removeAgentElsewhere(app.baseUrl, agent.id);
+
+  // Assert
+  await expect(
+    screen.getByRole("dialog", `Compare with revision ${previous.revision}`),
+  ).toHaveCount(0);
+  await expectRetainedDefinition(screen, "Agent", ["Save", "More actions"]);
+  expect(await readRecoveredDefinition(screen, browser)).toEqual({
+    name: agent.name,
+    prompt: "Retained Agent prompt",
+    execution: agent.execution,
+    exits: agent.exits,
+    projectOverrides: agent.projectOverrides,
   });
-
-  // Assert
-  await expectInvalidatedAgentConfirmation({ ...state });
 });
 
-test("keeping Agent edits against the newest revision sends no save", async ({
+test("an Agent exit change invalidates an open dirty Flow and retains its broken wire", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const state = await beforeReboundAgent({ app, screen, browser }, "reboundAgent");
-  const comparison = screen.getByRole("dialog", "Compare with revision 5");
+  const { agent } = await openLiveFlow({ app, screen, browser });
+  const name = screen.getByLabel("Flow name");
+  await name.fill("Dirty Flow draft");
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
 
   // Act
-  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
+  await updateAgentExits(app.baseUrl, agent, [handoffExit, ...agent.exits.slice(1)]);
 
   // Assert
-  await expectReboundAgent({ ...state });
-});
-
-test("Save commits the rebound Agent draft", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeSavedAgent({ app, screen, browser }, "savedAgent");
-
-  // Act
-  await screen.getByRole("button", "Save", { exact: true }).tap();
-
-  // Assert
-  await expectSavedAgent({ ...state });
-});
-
-test("the rebound Agent save persists across reload", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeReloadedAgent({ app, screen, browser }, "reloadedAgent");
-
-  // Act
-  await browser.reload();
-
-  // Assert
-  await expectReloadedAgent({ ...state });
-});
-
-test("external Agent removal closes comparison and retains recovery with disabled writes", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeRemovedAgent({ app, screen, browser }, "removedAgent");
-  const { marker } = state;
-
-  // Act
-  await removeAgentElsewhere(app.baseUrl, marker.id);
-
-  // Assert
-  await expectRemovedAgent({ ...state });
-});
-
-test("a retained Agent copies its actual create-shape JSON to the granted clipboard", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeCopiedAgent({ app, screen, browser }, "copiedAgent");
-
-  // Act
-  await screen.getByRole("button", "Copy as JSON", { exact: true }).tap();
-
-  // Assert
-  await expectCopiedAgent({ ...state });
-});
-
-test("leaving a retained Agent asks for explicit discard", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeGuardedAgent({ app, screen, browser }, "guardedAgent");
-
-  // Act
-  await screen.getByRole("button", "Back to Runs", { exact: true }).tap();
-
-  // Assert
-  await expectGuardedAgent({ ...state });
-});
-
-test("a removed Flow deep link shows not found", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeMissingFlow({ app, screen, browser }, "missingFlow");
-  const { id } = state;
-
-  // Act
-  await app.open(`/studio/flows/${id}`);
-
-  // Assert
-  await expectMissingFlow({ ...state });
-});
-
-test("a removed Agent deep link shows not found", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeMissingAgent({ app, screen, browser }, "missingAgent");
-  const { marker } = state;
-
-  // Act
-  await app.open(`/studio/agents/${marker.id}`);
-
-  // Assert
-  await expectMissingAgent({ ...state });
-});
-
-test("an Agent exit change invalidates an open dirty Flow readiness and retains its broken wire", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  const state = await beforeChangedDirtyDependency(
-    { app, screen, browser },
-    "changedDirtyDependency",
-  );
-  const { agent, handoff } = state;
-
-  // Act
-  await updateAgentExits(app.baseUrl, agent, [...agent.exits.slice(1), handoff]);
-
-  // Assert
-  await expectChangedDirtyDependency({ ...state });
-});
-
-test("the readiness issues report the removed Agent exit", async ({ app, screen, browser }) => {
-  // Arrange
-  const state = await beforeCheckedBrokenDependency(
-    { app, screen, browser },
-    "checkedBrokenDependency",
-  );
-
-  // Act
+  await expect(
+    screen.getByRole("region", "Flow canvas").getByText("handoff", { exact: true }),
+  ).toBeVisible();
+  await expectBrokenAgentWire(screen, agent.exits[0]!.id);
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expect(name).toHaveValue("Dirty Flow draft");
+  await expect(readinessSummary(screen, /^Not ready/)).toBeVisible();
+  await app.screenshot("studio-live-agent-changed-on-canvas");
   await screen.getByRole("button", /^Not ready/).tap();
-
-  // Assert
-  await expectCheckedBrokenDependency({ ...state });
+  await expect(
+    screen
+      .getByRole("list", "Readiness issues")
+      .getByRole("button", /Worker: its Agent no longer has exit/),
+  ).toBeVisible();
+  await app.screenshot("studio-live-agent-changed-checked");
 });

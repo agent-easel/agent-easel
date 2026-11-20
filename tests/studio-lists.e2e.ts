@@ -717,38 +717,6 @@ test("a Trigger that cannot check shows Problem on the row and Error in the side
   await shot(app, browser, "triggers-problem");
 });
 
-test("a Trigger cannot be saved on a Project that has already left T3", async ({
-  app,
-  screen,
-  browser,
-  fixture,
-}) => {
-  const docs = await ownedFlow(app.baseUrl, "Docs refresh");
-  const repository = (await fixture.github.state()).repository;
-  const result = (await (
-    await fetch(new URL("/api/triggers", app.baseUrl), {
-      method: "POST",
-      headers: mutation,
-      body: JSON.stringify({
-        kind: "github_issues",
-        name: "Journey · Gone project",
-        projectId: docs.projectId,
-        flowId: docs.id,
-        github: { repositoryNodeId: repository.nodeId, query: "label:factory:ready" },
-      }),
-    })
-  ).json()) as Result<unknown>;
-  // The fixture drops Docs site before any journey, so this frame has no seeded Trigger to open.
-  test.skip(
-    !result.ok,
-    "Creating a Trigger on a Project already gone from T3 is refused, so the gone-Trigger row is not reachable.",
-  );
-  await app.open("/studio/triggers");
-  await revealGroup(browser, "Docs site");
-  await screen.getByRole("button", "Journey · Gone project actions", { exact: true }).tap();
-  await shot(app, browser, "triggers-not-in-t3-menu");
-});
-
 test("empty Flows and Agents, and the composer’s Go to links return with the draft kept", async ({
   app,
   screen,
