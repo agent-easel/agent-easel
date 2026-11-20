@@ -244,6 +244,7 @@ export function BlockExitConfiguration({
           <LocalExitCard
             key={exit.id}
             exit={exit}
+            messageRequired={exits.get(exit.id)?.messageRequired ?? exit.messageRequired}
             target={target(exit.id, `local exit ${exit.name || "unnamed"}`)}
             onEdit={(next) =>
               onEdit({
@@ -325,11 +326,14 @@ function InheritedExit({
 
 function LocalExitCard({
   exit,
+  messageRequired,
   target,
   onEdit,
   onRemove,
 }: {
   exit: BlockExit;
+  /** Whether this Flow requires a message, such as when the exit leads to a Required ending. */
+  messageRequired: boolean;
   target: ReactNode;
   onEdit: (exit: BlockExit) => void;
   onRemove: () => void;
@@ -375,14 +379,20 @@ function LocalExitCard({
         maxLength={4000}
         onChange={(event) => onEdit({ ...exit, description: event.target.value })}
       />
-      <Label htmlFor={`${id}-message`} className="text-xs font-normal">
-        <Checkbox
-          id={`${id}-message`}
-          checked={exit.messageRequired}
-          onCheckedChange={(checked) => onEdit({ ...exit, messageRequired: checked === true })}
-        />
-        Message required
-      </Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Label htmlFor={`${id}-message`} className="text-xs font-normal">
+          <Checkbox
+            id={`${id}-message`}
+            checked={exit.messageRequired}
+            onCheckedChange={(checked) => onEdit({ ...exit, messageRequired: checked === true })}
+          />
+          Message required
+        </Label>
+        {/* The checkbox shows the exit's own setting; the tag, a requirement its ending adds. */}
+        {messageRequired && !exit.messageRequired && (
+          <StatusBadge kind="neutral">Message required</StatusBadge>
+        )}
+      </div>
       {target}
     </section>
   );

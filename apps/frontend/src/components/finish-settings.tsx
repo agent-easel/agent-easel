@@ -17,6 +17,7 @@ import { fieldAria } from "./field-state.ts";
 import { exitDisplayName } from "./flow-block.tsx";
 import { fieldProblem, type BlockIssue } from "./flow-readiness.tsx";
 import { ProblemCard } from "./problem-card.tsx";
+import { ScrollPane } from "./screen-layout.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
@@ -121,61 +122,63 @@ export function FinishSettings({
   const incoming = incomingWires(graph, agents);
   const full = endings.length >= ENDING_LIMIT;
   return (
-    <div ref={setList} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-4">
-      <section aria-labelledby={headingId} className="grid gap-1.5">
-        <h3 id={headingId} className="text-xs font-medium text-muted-foreground">
-          Endings
-        </h3>
-        <p className="text-label text-muted-foreground">
-          Every Flow has one Finish block. Each ending is an input on its left edge: wire the exits
-          that mean this ending into it.
-        </p>
-      </section>
-      {endings.length === 0 && (
-        <EmptyState
-          size="compact"
-          title="No endings yet"
-          body="Without endings, the Run ends as it does today, when its branches stop. Add an ending to give the Run a result."
-        />
-      )}
-      {endings.map((ending, index) => (
-        <EndingCard
-          key={ending.id}
-          ending={ending}
-          incoming={incoming(ending.id)}
-          issues={issues}
-          index={index}
-          onEdit={onEdit}
-          onRemove={() => onRemove(ending.id)}
-        />
-      ))}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          disabled={full}
-          aria-describedby={full ? `${headingId}-full` : undefined}
-          onClick={() => focusEnding(onAdd())}
-        >
-          <Plus aria-hidden /> Add ending
-        </Button>
-        {full && (
-          <span id={`${headingId}-full`} className="text-xs text-muted-foreground">
-            Up to {ENDING_LIMIT} endings
-          </span>
+    <ScrollPane className="p-4" fade="from-card">
+      <div ref={setList} className="flex flex-col gap-3.5">
+        <section aria-labelledby={headingId} className="grid gap-1.5">
+          <h3 id={headingId} className="text-xs font-medium text-muted-foreground">
+            Endings
+          </h3>
+          <p className="text-label text-muted-foreground">
+            Every Flow has one Finish block. Each ending is an input on its left edge: wire the
+            exits that mean this ending into it.
+          </p>
+        </section>
+        {endings.length === 0 && (
+          <EmptyState
+            size="compact"
+            title="No endings yet"
+            body="Without endings, the Run ends as it does today, when its branches stop. Add an ending to give the Run a result."
+          />
         )}
+        {endings.map((ending, index) => (
+          <EndingCard
+            key={ending.id}
+            ending={ending}
+            incoming={incoming(ending.id)}
+            issues={issues}
+            index={index}
+            onEdit={onEdit}
+            onRemove={() => onRemove(ending.id)}
+          />
+        ))}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            disabled={full}
+            aria-describedby={full ? `${headingId}-full` : undefined}
+            onClick={() => focusEnding(onAdd())}
+          >
+            <Plus aria-hidden /> Add ending
+          </Button>
+          {full && (
+            <span id={`${headingId}-full`} className="text-xs text-muted-foreground">
+              Up to {ENDING_LIMIT} endings
+            </span>
+          )}
+        </div>
+        <ProblemCard
+          tone="info"
+          density="compact"
+          className="shrink-0"
+          title="Reaching an ending ends the Run"
+        >
+          The first ending reached sets the Run’s Result. Other running branches stop at once,
+          without asking; their edits in the workspace stay.
+        </ProblemCard>
       </div>
-      <ProblemCard
-        tone="info"
-        density="compact"
-        className="shrink-0"
-        title="Reaching an ending ends the Run"
-      >
-        The first ending reached sets the Run’s Result. Other running branches stop at once, without
-        asking; their edits in the workspace stay.
-      </ProblemCard>
-    </div>
+    </ScrollPane>
   );
 }
 
