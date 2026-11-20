@@ -155,7 +155,7 @@ host's `gh` ([Development scenarios](dev-scenarios.md#simulator-support-limits))
 
 ## UI journeys
 
-After `pnpm build`, `pnpm test:e2e` runs the controlled Chromium journeys against a foreground backend with a temporary home and controlled T3 modules (no OAuth or paid workload). First boot may need
+`pnpm test:e2e` prepares the frontend and runs the controlled Chromium journeys against a foreground backend with a temporary home and controlled T3 modules (no OAuth or paid workload). First boot may need
 `pnpm exec e2e-web install chromium --with-deps` (for CI). Logs and traces go to the ignored `.e2e/` directory. These journeys are separate from `pnpm test` and do not establish live compatibility; see
 [UI verification](testing.md). The Run title journey submits the generated title for the controlled title thread through
 `factory_set_run_title`; it shows the Settings section, indicators, title line and details, not that a live model

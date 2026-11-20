@@ -263,17 +263,17 @@ The fixture requires a built UI with a recorded content signature matching the
 current frontend, shared sources and build/dependency configuration. Identical
 inputs remain valid after timestamp changes or cache restoration in another
 worktree. A missing UI entry point, missing signature or changed input contents
-refuses startup; run `pnpm build` to produce a current build, including when upgrading
+refuses startup; run `pnpm e2e:prepare` to build the frontend and its dependencies, including when upgrading
 from output that predates the signature.
 
 The pinned [e2e](https://e2e.tester.army/) runner drives the built web UI against a real temporary SQLite backend and `ControlledT3`, validating Factory behavior without live OAuth or paid T3 workloads. The
 [verification skill](../.agents/skills/verify-t3-factory/SKILL.md) and its [feature map](../.agents/skills/verify-t3-factory/features/README.md) define paths, charters and evidence standards.
 Live integration is covered by [live verification](installation.md).
 
-From the root, after `pnpm install --frozen-lockfile` (build again after changing app code before a direct `e2e` run; the fixture refuses a missing or stale frontend build):
+From the root, after `pnpm install --frozen-lockfile`:
 
 ```sh
-pnpm build
+pnpm e2e:prepare       # reuse the UI when its content signature matches
 pnpm exec e2e run tests/smoke.e2e.ts --trace on --output .e2e/doctor
 pnpm test:e2e          # build, then all controlled UI regression journeys
 pnpm e2e:screenshots   # build and capture named PNGs
@@ -298,5 +298,5 @@ Use charters from the feature map. Findings are hypotheses with screenshots; con
 
 ### Live agent control
 
-The project's MCP registration starts the pinned `pnpm exec e2e mcp` server (build first and reload the client after registering). Open a `web` session, observe, locate controls, act and capture screenshots or
+The project's MCP registration starts the pinned `pnpm exec e2e mcp` server (run `pnpm e2e:prepare` first and reload the client after registering). Open a `web` session, observe, locate controls, act and capture screenshots or
 video, then close it. There is no application sign-in or project-specific tool catalog, and sessions share fixture data, so use one writer at a time. For the runner's own reference, run `pnpm exec e2e guide mcp`.

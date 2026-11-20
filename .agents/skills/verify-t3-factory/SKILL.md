@@ -15,9 +15,8 @@ Run from the repository root. `e2e.config.ts` drives `tests/*.e2e.ts`;
 ## Launch
 
 Run `pnpm install --frozen-lockfile`, then build and run the smoke check below.
-The runner starts an isolated fixture on an allocated loopback port, waits for HTTP readiness and stops it afterward. Run `pnpm build`
-after application edits before a direct `pnpm exec e2e` run or MCP session; `pnpm test:e2e` and `pnpm e2e:screenshots` build first.
-The fixture refuses to start (`APP_UNREACHABLE`, its log names the cause) when `apps/frontend/dist` is missing or older than the UI sources.
+The runner starts an isolated fixture on an allocated loopback port, waits for HTTP readiness and stops it afterward. Run `pnpm e2e:prepare` before a direct journey or MCP session. It reuses a matching UI build and builds the frontend and its dependencies when the signature is stale or missing. `pnpm test:e2e` and `pnpm e2e:screenshots` prepare automatically.
+The fixture refuses to start (`APP_UNREACHABLE`, its log names the cause) when `apps/frontend/dist` is missing or its signature differs from the current inputs.
 The fixture serves the production frontend and real SQLite backend in a fresh
 OS temporary directory. It seeds development Runs plus authoring Agents and Flows against a controlled T3
 simulator. Host and remote browser journeys share this Factory; the remote helper
@@ -31,7 +30,7 @@ keep `workers: 1` and use unique names for new records.
 Build and run the model-free smoke:
 
 ```sh
-pnpm build
+pnpm e2e:prepare
 pnpm exec e2e run tests/smoke.e2e.ts --trace on --output .e2e/doctor
 ```
 
@@ -42,7 +41,7 @@ Exit 0 means the built app, browser engine and fixture work. On failure read
 
 ## Drive
 
-For a live session, build first, then use the registered e2e MCP server:
+For a live session, run `pnpm e2e:prepare` first, then use the registered e2e MCP server:
 `open_session {target: "web"}`, `call {tool: "observe"}`, and
 `call {tool: "locate", args: {role: "button", name: "New Flow", exact: true}}`.
 Use the returned catalog for navigation/actions; locate each new locator before
