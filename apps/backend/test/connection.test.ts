@@ -1,9 +1,9 @@
-import { assert, expect, it, type TestContext } from "@effect/vitest";
+import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import { factoryHarness } from "./support/factory.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
-import { readConnection, recheckConnection } from "./support/boundaries-setup.ts";
+import { readConnection, readyConnection, recheckConnection } from "./support/boundaries-setup.ts";
 
 it("configureConnection rejects endpoint URLs that embed credentials", async (context) => {
   // Arrange
@@ -162,19 +162,6 @@ it("a failed reopen of the approval page stays reported on later checks while ap
   expect(connection.authorizationOpenFailed).toBe(true);
   expect(connection.explanation).toMatch(/could not open the backend-host browser/);
 });
-
-/** A host whose saved T3 endpoint is ready, with its first ready generation. */
-async function readyConnection(context: TestContext) {
-  const harness = await factoryHarness(context);
-  const t3 = new ControlledT3();
-  t3.connection.authorized = true;
-  const factory = await harness.open({ t3, connectionRetryMs: 60_000 });
-  await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
-  const ready = await readConnection(factory);
-  expect(ready.state).toBe("ready");
-  expect(ready.readyGeneration).toEqual(expect.any(String));
-  return { t3, factory, ready };
-}
 
 it("later checks of the same ready connection keep its ready generation", async (context) => {
   // Arrange
