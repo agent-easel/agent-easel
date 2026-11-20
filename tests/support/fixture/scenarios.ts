@@ -726,6 +726,37 @@ export async function scenariosFixture(host: Host) {
       },
     ],
     [
+      // Ship the fix reached Shipped while T3 holds the Stop of Explore an alternative, so the
+      // Run shows its result while Stopping until the journey ends the held turn.
+      "ending-stopping",
+      async (keyNamespace) => {
+        const [first, second] = await twoWorkersStarted(
+          context,
+          await demoStart(
+            context,
+            flows.endings,
+            "ending-stopping",
+            "UI worker · Shipped while the alternative stops",
+            "Ship the Atlas search ranking fix while another worker explores an alternative.",
+            undefined,
+            { titlePrefix: "", keyNamespace },
+          ),
+        );
+        host.t3.threads.holdStops([second.threadId]);
+        await resultReported(context, first, {
+          exit: "Done",
+          message: "https://github.com/example/atlas/pull/45",
+        });
+        await observeFor(
+          "observe the Run stopping after its result",
+          context,
+          first.runId,
+          (run) => run.result !== null && run.settlement !== null,
+        );
+        return first.runId;
+      },
+    ],
+    [
       "continuation-relay",
       async (keyNamespace) => {
         const worker = await startWorker(

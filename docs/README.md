@@ -27,6 +27,6 @@ New here? Start with the [project overview and demo](../README.md),
 - [Quality gates](quality-gates.md)
 - [Release](release.md)
 - [Issue tracker](agents/issue-tracker.md), [triage labels](agents/triage-labels.md) and [domain documentation](agents/domain.md)
-- Architecture decision records: [Project ownership instead of per-project Flow overlays](adr/0001-project-ownership-instead-of-per-project-flow-overlays.md), [Project overrides of a global Agent's execution settings](adr/0002-project-overrides-of-global-agent-execution-settings.md)
+- Architecture decision records: [Project ownership instead of per-project Flow overlays](adr/0001-project-ownership-instead-of-per-project-flow-overlays.md), [Project overrides of a global Agent's execution settings](adr/0002-project-overrides-of-global-agent-execution-settings.md), [The first reached ending ends the Run; Subflow results are the invoked Flow's endings](adr/0003-first-reached-ending-ends-the-run.md)
 
 Read the relevant topic before changing behavior and update it in the same change. [AGENTS.md](../AGENTS.md) records documentation maintenance and contribution instructions.

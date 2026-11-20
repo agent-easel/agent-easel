@@ -771,7 +771,7 @@ Each delivery released to a Wait becomes its own arrival: Factory keeps its mess
 moment the incoming handoff was released, after the source worker's thread finished, not from the report. Parallel arrivals
 and repeated visits keep their own messages and deadlines and never join. At its deadline Factory forwards the arrival on its
 own, with no open window and no worker: every recipient of the Wait's output gets the unchanged message, and an unconnected
-output ends the branch. Timing is best effort; the [Runner](runner.md#wait-arrivals) defines how deadlines survive restart and
+output stops the branch. Timing is best effort; the [Runner](runner.md#wait-arrivals) defines how deadlines survive restart and
 downtime and how repeated deliveries and competing forwards resolve.
 
 **Continue now** forwards one selected pending arrival immediately, without confirmation, exactly as its deadline would, and

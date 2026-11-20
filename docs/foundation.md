@@ -122,11 +122,14 @@ and restricted OAuth credentials live outside project repositories.
   from other model-supplied references.
   Attention settlement and the Run's Settled and Archived states remain separate, with cancelled Human work never
   represented as an answer.
-- Every settlement records its reason: `automatic` or `manual` on the Run's `run-settled` timeline event, and
+- Every settlement records its reason: `automatic`, `manual` or `finish` on the Run's `run-settled` timeline event, and
   `manual` or `finish` on the confirmed stop-and-settle record that stops a Run's workers. The stop-and-settle
   takes its authorization (the user's confirmation, or the Flow) and its reason together, and a retry keeps the
   recorded reason. Migration `113` adds the reason to settlement records and backfills every existing one as
   `manual`, since only the user's confirmed Settle existed; no settlement history changes.
+- A Run has at most one [Run result](runner.md#reaching-an-ending), recorded once and never updated or deleted, and
+  each accepted delivery fixes at most one. Migration `115` adds that table and writes no row, so historical Runs have no
+  result.
 
 **Transactions and restart.** One backend owns a database. Start, reports, Human answers,
 delivery reservations, settling and Archive have atomic durable boundaries before their effects
