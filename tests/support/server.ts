@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
 import { appearanceFixture } from "./fixture/appearance.ts";
@@ -100,6 +100,13 @@ const proxy = createServer((incoming, outgoing) => {
       });
     return;
   }
+  const held = firstRunSetup.heldRead(incoming);
+  if (held) void held.then(() => route(incoming, outgoing, url));
+  else route(incoming, outgoing, url);
+});
+
+/** Relays a browser request to the server it reaches. */
+function route(incoming: IncomingMessage, outgoing: ServerResponse, url: URL) {
   live.record(incoming, url.pathname);
   if (remoteAccess.relay(incoming, outgoing)) return;
   if (isFixturePath(url.pathname)) {
@@ -108,7 +115,7 @@ const proxy = createServer((incoming, outgoing) => {
     return;
   }
   proxyFixture(incoming, outgoing, firstRunSetup.hostPort());
-});
+}
 proxy.on("upgrade", (incoming: IncomingMessage, socket: Duplex) => {
   if (!remoteAccess.relayUpgrade(incoming, socket)) live.relayHostUpgrade(incoming, socket);
 });

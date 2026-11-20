@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { unavailableGitHub } from "../../../apps/backend/src/adapters/github.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
@@ -22,6 +23,8 @@ export interface FreshOptions {
   sameT3?: boolean;
   /** `false` leaves Codex's home missing, so its row offers neither Install nor Repair. */
   codexHome?: boolean;
+  /** `false` leaves T3's settings file unreadable, so discovery refuses with its generic reason. */
+  t3Settings?: boolean;
 }
 
 /**
@@ -37,13 +40,15 @@ async function startFreshHost({
   t3Running = true,
   sameT3 = true,
   codexHome = true,
+  t3Settings = true,
 }: FreshOptions) {
   const home = await mkdtemp(join(tmpdir(), "factory-first-run-"));
   const state = join(home, "t3-state");
   const claude = join(home, "reporting-claude");
   const codex = join(home, "reporting-codex");
+  const grok = join(home, "reporting-grok");
   await Promise.all(
-    [state, claude, ...(codexHome ? [codex] : [])].map((directory) => mkdir(directory)),
+    [state, claude, grok, ...(codexHome ? [codex] : [])].map((directory) => mkdir(directory)),
   );
   const t3 = new ControlledT3();
   t3.contract.serverVersion = "0.1.11";
@@ -51,23 +56,26 @@ async function startFreshHost({
     join(state, "environment-id"),
     sameT3 ? t3.connection.environmentId : "another-environment",
   );
-  const writeSettings = (codexOn: boolean) =>
+  const on = { codex: harnessesOn, grok: false };
+  const writeSettings = () =>
     writeFile(
       join(state, "settings.json"),
-      JSON.stringify({
-        providerInstances: {
-          "setup-claude": {
-            driver: "claudeAgent",
-            enabled: harnessesOn,
-            config: { homePath: claude },
-          },
-          "codex-main": { driver: "codex", enabled: codexOn, config: { homePath: codex } },
-          "setup-cursor": { driver: "cursor" },
-          "setup-grok": { driver: "grok", enabled: false },
-        },
-      }),
+      t3Settings
+        ? JSON.stringify({
+            providerInstances: {
+              "setup-claude": {
+                driver: "claudeAgent",
+                enabled: harnessesOn,
+                config: { homePath: claude },
+              },
+              "codex-main": { driver: "codex", enabled: on.codex, config: { homePath: codex } },
+              "setup-cursor": { driver: "cursor" },
+              "setup-grok": { driver: "grok", enabled: on.grok, config: { homePath: grok } },
+            },
+          })
+        : "{ not json",
     );
-  await writeSettings(harnessesOn);
+  await writeSettings();
   const runtimeFile = join(state, "server-runtime.json");
   const t3Starts = () =>
     writeFile(
@@ -103,7 +111,15 @@ async function startFreshHost({
     t3,
     t3Starts,
     /** The owner turns Codex on in T3's settings. */
-    codexTurnedOn: () => writeSettings(true),
+    codexTurnedOn: () => {
+      on.codex = true;
+      return writeSettings();
+    },
+    /** The owner turns Grok on in T3's settings; its home exists with nothing installed. */
+    grokTurnedOn: () => {
+      on.grok = true;
+      return writeSettings();
+    },
     async close() {
       await server.close();
       await rm(home, { recursive: true, force: true });
@@ -118,11 +134,19 @@ export function firstRunSetupFixture(
   remoteAccess: Awaited<ReturnType<typeof remoteAccessFixture>>,
 ) {
   let fresh: FreshHost | null = null;
+  /** Releases the reporting reads held since `holdReportingReads`, or null while none is held. */
+  let releaseReads: (() => void) | null = null;
+  let readsReleased = Promise.resolve();
+  function releaseReportingReads() {
+    releaseReads?.();
+    releaseReads = null;
+  }
   const running = () => {
     if (!fresh) throw new Error("No fresh host: call firstRunSetup.fresh first.");
     return fresh;
   };
   async function stop() {
+    releaseReportingReads();
     remoteAccess.serve(null);
     await fresh?.close();
     fresh = null;
@@ -139,6 +163,15 @@ export function firstRunSetupFixture(
       /** T3 starts on this computer and writes its runtime file. */
       t3Starts: () => running().t3Starts(),
       codexTurnedOn: () => running().codexTurnedOn(),
+      grokTurnedOn: () => running().grokTurnedOn(),
+      /** Browsers' reporting list reads wait, unanswered, until `releaseReportingReads`. */
+      holdReportingReads() {
+        if (releaseReads) return;
+        readsReleased = new Promise((resolve) => {
+          releaseReads = resolve;
+        });
+      },
+      releaseReportingReads,
       /** The owner approves in T3; the host's next check, requested here, sees it. */
       async t3Approve() {
         running().t3.connection.approve();
@@ -169,6 +202,11 @@ export function firstRunSetupFixture(
       authorizationStarts: () => running().t3.connection.authorizationStarts,
     },
     reset: stop,
+    /** While reporting reads are held, when a browser's reporting read may go on; else null. */
+    heldRead: (incoming: IncomingMessage) =>
+      releaseReads && incoming.method === "GET" && incoming.url === "/api/reporting"
+        ? readsReleased
+        : null,
     /** The port host-surface browsers reach: the fresh host while one runs, else the shared host. */
     hostPort: () => (fresh ?? host).server.address.port,
     close: stop,

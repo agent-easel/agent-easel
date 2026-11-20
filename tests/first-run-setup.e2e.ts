@@ -6,15 +6,25 @@ import type { FirstRunSetup, Result, T3Connection } from "../packages/contracts/
 import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import type { Fixture } from "./support/fixture/handle.ts";
 
-/** A fresh host's setup screen, in the accepted Figma frames' 1440 × 900 dark appearance. */
-async function openFreshSetup(
-  { fixture, app, browser }: { fixture: Fixture; app: App; browser: Browser },
-  options?: Parameters<Fixture["firstRunSetup"]["fresh"]>[0],
+type FreshOptions = Parameters<Fixture["firstRunSetup"]["fresh"]>[0];
+
+/** A fresh host, seen in the accepted Figma frames' 1440 × 900 dark appearance. */
+async function freshHost(
+  { fixture, browser }: { fixture: Fixture; browser: Browser },
+  options?: FreshOptions,
 ) {
   await browser.setViewport({ width: 1440, height: 900 });
   await browser.emulateMedia({ colorScheme: "dark" });
   await fixture.firstRunSetup.fresh(options);
-  await app.open("/runs/new");
+}
+
+/** A fresh host's setup screen. */
+async function openFreshSetup(
+  context: { fixture: Fixture; app: App; browser: Browser },
+  options?: FreshOptions,
+) {
+  await freshHost(context, options);
+  await context.app.open("/runs/new");
 }
 
 /** Live delivery enables actions once current; a frame waits for the button's fade-in. */
@@ -51,7 +61,7 @@ async function expectInstallStepOpen(screen: Screen) {
 /** A fresh host connected to the detected T3, on its install step. */
 async function openInstallStep(
   context: { fixture: Fixture; app: App; browser: Browser; screen: Screen },
-  options: Parameters<Fixture["firstRunSetup"]["fresh"]>[0],
+  options: FreshOptions,
 ) {
   await openFreshSetup(context, options);
   await connectDetected(context.screen);
@@ -76,6 +86,69 @@ const savedEndpoint = async (baseUrl: string | undefined) =>
 /** A host action, as another host window or the host's own screen sends it. */
 const hostAction = <T>(baseUrl: string | undefined, path: string) =>
   hostCall<T>(baseUrl, path, { method: "POST", headers: { "X-Factory-Request": "1" } });
+
+const failedReopen = /Factory could not open the backend-host browser\. The pending approval/;
+const approvalPageOpen = /T3’s approval page is open in the browser on this computer/;
+const continueWithoutReporting =
+  /Open Factory to continue without reporting\. Once this is fixed, install it from Settings → Agent reporting, or set it up by hand\./;
+const cannotInstallHere =
+  "Factory can’t install here; waiting for the Factory host to open Factory";
+
+/** An approved remote browser on a fresh host that has not finished setup. */
+async function openApprovedClient(
+  context: { fixture: Fixture; app: App; browser: Browser },
+  options?: FreshOptions,
+) {
+  await freshHost(context, options);
+  await openRemoteBrowser(context.app);
+  await openApproved(context.app, "/runs/new");
+}
+
+/** Approval waits in the host's browser, which can no longer be opened again. */
+async function approvalPendingWithoutHostBrowser(context: {
+  fixture: Fixture;
+  app: App;
+  browser: Browser;
+  screen: Screen;
+}) {
+  await openFreshSetup(context);
+  await connectDetected(context.screen);
+  await expect(context.screen.getByText(approvalPageOpen)).toBeVisible();
+  await context.fixture.firstRunSetup.hostBrowserFails();
+}
+
+/** Reopen approval page, in this window, failed to open the host's browser. */
+async function failedReopenHere(context: {
+  fixture: Fixture;
+  app: App;
+  browser: Browser;
+  screen: Screen;
+}) {
+  await approvalPendingWithoutHostBrowser(context);
+  await context.screen.getByRole("button", "Reopen approval page").tap();
+  await expect(context.screen.getByText(failedReopen)).toBeVisible();
+}
+
+/** The pending approval explains the failed open instead of saying the page is open. */
+async function expectFailedReopenShown(screen: Screen) {
+  await expect(screen.getByText(failedReopen)).toBeVisible();
+  await expect(screen.getByText(approvalPageOpen)).toHaveCount(0);
+  await expect(screen.getByText("Waiting for approval", { exact: true })).toBeVisible();
+}
+
+/** Discovery's refusal with its explanation and how to continue without installing. */
+async function expectRefusalExplained(screen: Screen, explanation: RegExp) {
+  await expect(screen.getByText("Couldn’t check your harnesses")).toBeVisible();
+  await expect(screen.getByText(explanation)).toBeVisible();
+  await expect(screen.getByText(continueWithoutReporting)).toBeVisible();
+  await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
+}
+
+/** Neither an install nor Open Factory is offered on this screen. */
+async function expectNoInstallOrOpenFactory(screen: Screen) {
+  await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+}
 
 test("a fresh host connects to the detected T3, installs in its harnesses and opens Factory for good", async ({
   fixture,
@@ -198,21 +271,46 @@ test("a failed reopen of the approval page shows the host's explanation", async 
   browser,
 }) => {
   // Arrange
-  await openFreshSetup({ fixture, app, browser });
-  await connectDetected(screen);
-  await fixture.firstRunSetup.hostBrowserFails();
+  await approvalPendingWithoutHostBrowser({ fixture, app, browser, screen });
 
   // Act
   await screen.getByRole("button", "Reopen approval page").tap();
 
   // Assert
-  await expect(
-    screen.getByText(/Factory could not open the backend-host browser\. The pending approval/),
-  ).toBeVisible();
-  await expect(
-    screen.getByText(/T3’s approval page is open in the browser on this computer/),
-  ).toHaveCount(0);
-  await expect(screen.getByText("Waiting for approval", { exact: true })).toBeVisible();
+  await expectFailedReopenShown(screen);
+});
+
+test("after a failed reopen, a reload still shows the host's explanation", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await failedReopenHere({ fixture, app, browser, screen });
+
+  // Act
+  await browser.reload();
+
+  // Assert
+  await expectFailedReopenShown(screen);
+  await app.screenshot("first-run-setup-reopen-failed-reload");
+});
+
+test("a reopen that failed in another host window shows its explanation here", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await approvalPendingWithoutHostBrowser({ fixture, app, browser, screen });
+
+  // Act
+  await hostAction<T3Connection>(app.baseUrl, "/api/connection/authorization/open");
+
+  // Assert
+  await expectFailedReopenShown(screen);
 });
 
 test("an approval that ended without consent is explained after a reload", async ({
@@ -256,8 +354,7 @@ test("with no installable harness on in T3, the install step asks to turn one on
       "Claude, Codex, Cursor, and Grok are off in T3. Turn them on there to include them.",
     ),
   ).toBeVisible();
-  await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
-  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expectNoInstallOrOpenFactory(screen);
   await app.screenshot("first-run-setup-no-harness");
 });
 
@@ -293,13 +390,16 @@ test("when discovery cannot read the connected T3's harnesses, the install step 
 }) => {
   // Arrange
   await openInstallStep({ fixture, app, browser, screen }, { sameT3: false });
-  await expect(screen.getByText("Couldn’t check your harnesses")).toBeVisible();
-  await expect(
-    screen.getByText(/Connected T3 identity does not match local state\. Set FACTORY_T3_STATE/),
-  ).toBeVisible();
+  await expectRefusalExplained(
+    screen,
+    /Connected T3 identity does not match local state\. Set FACTORY_T3_STATE/,
+  );
+  await expect(screen.getByRole("link", "set it up by hand")).toHaveAttribute(
+    "href",
+    "https://github.com/alimek/t3-factory/blob/main/docs/t3-integration.md#reporting-installation",
+  );
   await expect(screen.getByText("Turn on a harness in T3")).toHaveCount(0);
   await expect(screen.getByText(/are off in T3/)).toHaveCount(0);
-  await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
   // Nothing was installed, so there is no new session to open.
   await expect(screen.getByText("Open a new agent session")).toHaveCount(0);
   await expectActionShown(browser, "Open Factory");
@@ -342,6 +442,60 @@ test("a listed harness Factory can neither install nor repair waits until the in
   await app.screenshot("first-run-setup-manual-harness");
 });
 
+test("when T3's settings file cannot be read, the install step says where Factory reads T3's state and how to continue", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openFreshSetup({ fixture, app, browser }, { t3Settings: false });
+  await connectDetected(screen);
+
+  // Act
+  await fixture.firstRunSetup.t3Approve();
+
+  // Assert
+  await expectInstallStepOpen(screen);
+  await expectRefusalExplained(
+    screen,
+    /Cannot discover local T3 configuration: .+\. Check that T3 has run on this computer as this user, or set FACTORY_T3_STATE_DIRECTORY to the owning local T3 state directory\./,
+  );
+  await expectActionShown(browser, "Open Factory");
+  await app.screenshot("first-run-setup-settings-unreadable");
+});
+
+test("a harness turned on in T3 beside one needing manual setup withholds Open Factory until the list read again offers its install", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: Claude installed and Codex needing manual setup, so Open Factory is offered.
+  await openInstallStep({ fixture, app, browser, screen }, { codexHome: false });
+  await screen.getByRole("button", "Install in 1 harness").tap();
+  await expectActionShown(browser, "Open Factory");
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.grokTurnedOn();
+
+  // Assert: once setup sees the change, the list is read again and Open Factory waits for it.
+  await expect(
+    screen.getByText("Cursor is off in T3. Turn it on there to include it."),
+  ).toBeVisible({ timeout: 8_000 });
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByText("Checking harnesses…")).toBeVisible();
+  await app.screenshot("first-run-setup-list-refreshing");
+  // The read answers: Grok is installable, so Install comes back and Open Factory stays away.
+  await fixture.firstRunSetup.releaseReportingReads();
+  await expect(screen.getByRole("group", "Grok", { exact: true }).getByRole("status")).toHaveText(
+    "Not installed",
+  );
+  await expect(screen.getByRole("button", "Install in 1 harness")).toBeVisible();
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+});
+
 test("an approved client waits read-only while the host sets up, then opens Factory by itself", async ({
   fixture,
   app,
@@ -349,11 +503,7 @@ test("an approved client waits read-only while the host sets up, then opens Fact
   browser,
 }) => {
   // Arrange: the host is in First-run setup; this browser is an approved remote device.
-  await browser.setViewport({ width: 1440, height: 900 });
-  await browser.emulateMedia({ colorScheme: "dark" });
-  await fixture.firstRunSetup.fresh();
-  await openRemoteBrowser(app);
-  await openApproved(app, "/runs/new");
+  await openApprovedClient({ fixture, app, browser });
 
   // Assert: the host's progress, read-only, with Check again as the only action.
   await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toBeVisible();
@@ -389,4 +539,45 @@ test("an approved client waits read-only while the host sets up, then opens Fact
   // Assert: the client leaves the setup screen without a reload.
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible({ timeout: 8_000 });
   await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toHaveCount(0);
+});
+
+test("an approved client is not told installation is impossible from a read made before the host connected", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: this client read the host's reporting list while T3 was not connected yet.
+  await openApprovedClient({ fixture, app, browser });
+  await expect(screen.getByText("Not connected yet")).toBeVisible();
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.hostConnects();
+
+  // Assert: until a list read since connecting answers, the client only waits for the install.
+  await expectInstallStepOpen(screen);
+  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible();
+  await expect(screen.getByText(cannotInstallHere)).toHaveCount(0);
+  await app.screenshot("first-run-setup-approved-client-list-pending");
+});
+
+test("an approved client on a host where installation is impossible waits for the host to open Factory", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: discovery refuses the host's T3, whose state belongs to another T3.
+  await openApprovedClient({ fixture, app, browser }, { sameT3: false });
+
+  // Act
+  await fixture.firstRunSetup.hostConnects();
+
+  // Assert: read-only, with no install and no Open Factory here.
+  await expectInstallStepOpen(screen);
+  await expect(screen.getByText(cannotInstallHere)).toBeVisible();
+  await expectNoInstallOrOpenFactory(screen);
+  await expect(screen.getByRole("button", "Check again")).toBeVisible();
+  await app.screenshot("first-run-setup-approved-client-blocked");
 });
