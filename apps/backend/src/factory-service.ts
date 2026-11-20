@@ -108,10 +108,10 @@ export const makeFactoryService = (
       intervalMs,
       changes,
     );
-    const projects = yield* makeProjects(t3.adapter, git, connection, intervalMs, changes);
+    const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
     const definitions = yield* makeDefinitions(
-      t3.adapter,
+      t3.projects,
       connection,
       projects,
       changes,

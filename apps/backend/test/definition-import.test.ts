@@ -239,8 +239,8 @@ it("reviewing a file shows its instruction inventory and proposes the single cat
 it("the provider instance named in the hint wins over another instance offering the model", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "codex-elsewhere",
   });
 
@@ -258,7 +258,10 @@ it("the provider instance named in the hint wins over another instance offering 
 it("several matching instances without the hint's name leave the Agent ambiguous, naming them", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
-  t3.controlledProviders.push({ ...t3.controlledProviders[0]!, providerInstanceId: "codex-work" });
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
+    providerInstanceId: "codex-work",
+  });
 
   // Act
   const review = await factory.reviewImport(fileBody(agentFile()));
@@ -387,7 +390,9 @@ it("a Flow file committed into a Project creates the Flow and a new Agent owned 
 it("a commit into an unavailable Project is refused and creates nothing", async (context) => {
   // Arrange
   const { factory, t3, second } = await discoveredClones(context);
-  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== second.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -418,8 +423,8 @@ it("with T3 disconnected a commit still saves the reviewed selection", async (co
 it("a selection whose provider has no Factory reporting rejects the whole commit and names the Agent", async (context) => {
   // Arrange
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "future-main",
     driverKind: "future",
   });
@@ -624,7 +629,7 @@ it("retrying an import into a Project that became unavailable replays the origin
   const { factory, t3, first } = await discoveredClones(context);
   const commit = { ...reviewedCommit(), projectId: first.id };
   const accepted = assertOk(await factory.commitImport(commit));
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
 
   // Act

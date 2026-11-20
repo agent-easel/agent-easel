@@ -784,7 +784,7 @@ uniqueness window pass. Factory does not search for copies an unknown create may
 
 One live qualification ran these pins against the real Discord Gateway and REST API with one
 application, one server, one allowlisted channel and one human participant, and against an
-OpenAI-compatible local model gateway, with a disposable Factory home whose T3 adapter was simulated
+OpenAI-compatible local model gateway, with a disposable Factory home and a simulated T3 engine
 (no real workers). It confirmed: the synthetic model Test; the Off connection-only check (real
 readiness and authenticated application, disconnect, no handlers or command registration); adoption of
 the authenticated application, `/factory reset` registration and reconnect after backend restarts;

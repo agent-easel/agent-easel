@@ -71,7 +71,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
       "The development simulator does not call an external model or modify your real repositories.\n",
   );
   const project = requireSuccess(await factory.addRepository({ path: root }));
-  t3.projects = t3.projects.map((item) =>
+  t3.projects.catalog = t3.projects.catalog.map((item) =>
     item.projectId === project.projectId
       ? {
           ...item,

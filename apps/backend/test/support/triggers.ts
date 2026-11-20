@@ -182,7 +182,7 @@ export async function reopenedAfterCrashedCheck(
   await writeFile(
     fixturePath,
     JSON.stringify({
-      projects: world.t3.projects,
+      projects: world.t3.projects.catalog,
       repositories: [...world.github.repositories],
       issues: world.github.issues,
     }),

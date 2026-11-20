@@ -17,7 +17,7 @@ t3.threads.launchThread = async (target, payload) => {
   return reference;
 };
 t3.connection.approve();
-t3.projects = fixture.projects;
+t3.projects.catalog = fixture.projects;
 for (const [key, value] of fixture.launches ?? []) t3.threads.launches.set(key, value);
 try {
   const f = await openFactory({

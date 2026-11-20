@@ -105,14 +105,14 @@ export async function enableRunTitlesWithCheapModel(
   factory: Pick<FactoryOperations, "updateRunTitleSetting">,
   t3: ControlledT3,
 ) {
-  const [provider] = t3.controlledProviders;
-  t3.controlledProviders[0] = {
+  const [provider] = t3.projects.controlledProviders;
+  t3.projects.controlledProviders[0] = {
     ...provider!,
     models: [...provider!.models, { id: cheapTitleModel.modelId, label: "GPT 6.1 Luna" }],
   };
   await enableRunTitles(factory, cheapTitleModel);
   return () => {
-    t3.controlledProviders[0] = provider!;
+    t3.projects.controlledProviders[0] = provider!;
   };
 }
 /**
@@ -161,9 +161,9 @@ export function reauthorizeDuringTitleEligibility(
 ) {
   return new Promise<void>((resolve) =>
     afterStartPreflight(t3, () => {
-      const read = t3.orchestratorCapabilities.bind(t3);
-      t3.orchestratorCapabilities = async (target) => {
-        t3.orchestratorCapabilities = read;
+      const read = t3.projects.orchestratorCapabilities.bind(t3.projects);
+      t3.projects.orchestratorCapabilities = async (target) => {
+        t3.projects.orchestratorCapabilities = read;
         t3.connection.approve("controlled-grant-3");
         await factory.recheckConnection();
         resolve();
@@ -1204,8 +1204,8 @@ export const worktreeReviewFlow: ReadyFlowShape = (world) =>
 export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow> {
   const agent = await workerAgent(world, "create the entry Agent");
   const { t3 } = world;
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "later-provider",
   });
   const later = [];
@@ -1231,7 +1231,7 @@ export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow>
     ],
     connections: later.map((_, index) => connection("worker", "done", `later-${index}`)),
   });
-  t3.controlledProviders.pop();
+  t3.projects.controlledProviders.pop();
   return { agent, flow };
 }
 

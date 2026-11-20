@@ -74,10 +74,11 @@ export async function restoreCapturedAdapter(
 ) {
   const t3 = new ControlledT3();
   // Older captures record the controlled engine's fields as one flat object.
-  const parts = [t3, t3.connection, t3.contract, t3.threads];
+  const parts = [t3, t3.connection, t3.contract, t3.threads, t3.projects];
   for (const [key, value] of Object.entries(observations)) {
     if (retired.has(key)) continue;
-    const part = parts.find((candidate) => Object.hasOwn(candidate, key));
+    const part =
+      key === "projects" ? t3.projects : parts.find((candidate) => Object.hasOwn(candidate, key));
     assert(part, `Unknown captured adapter field: ${key}`);
     const restored =
       value && typeof value === "object" && "map" in value && Array.isArray(value.map)
@@ -85,7 +86,7 @@ export async function restoreCapturedAdapter(
         : value && typeof value === "object" && "set" in value
           ? new Set(value.set as unknown[])
           : value;
-    Object.assign(part, { [key]: restored });
+    Object.assign(part, { [key === "projects" ? "catalog" : key]: restored });
   }
   const state = join(processHome, "reporting-state");
   const home = join(processHome, "codex-home");

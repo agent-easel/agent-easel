@@ -15,7 +15,7 @@ import type {
 } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import type { GitAdapter } from "./adapters/git.ts";
-import type { T3Adapter, T3Project } from "./adapters/t3.ts";
+import type { T3Projects, T3Project } from "./t3/projects.ts";
 import { loadProjectFavicon, projectFaviconUrl } from "./project-favicon.ts";
 import { failure as operationFailure } from "./result.ts";
 import type { LiveChanges } from "./live-changes.ts";
@@ -69,7 +69,7 @@ const failure = (message: string): Result<never> =>
   ]);
 
 export const makeProjects = (
-  t3: T3Adapter,
+  t3: T3Projects,
   git: GitAdapter,
   connection: {
     getConnection(): Effect.Effect<Result<T3Connection>, unknown>;

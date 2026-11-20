@@ -19,7 +19,7 @@ export class ControlledT3Contract implements T3ContractReader {
   runtimeContractComplete = true;
   /** The support answers each inspection reports while T3 is ready. A worktree launch also needs
    * `launch`; a null `attachmentLimit` advertises no uploaded attachments. A failing proof leaves
-   * its supported answer unchecked, as the live adapter does when a replay proof cannot be
+   * its supported answer unchecked, as live contract inspection does when a replay proof cannot be
    * established. */
   support = {
     launch: true,

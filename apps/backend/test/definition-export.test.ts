@@ -73,7 +73,7 @@ it("an export without T3 capabilities keeps the model hint, omits only its drive
   const { factory, t3 } = await openFactoryWithApprovedT3(context);
   const created = await factory.createAgent(sampleAgentInput("Coder"));
   assert(created.ok);
-  t3.capabilitiesAvailable = false;
+  t3.projects.capabilitiesAvailable = false;
 
   // Act
   const exported = await factory.exportAgent(created.value.id);
@@ -175,7 +175,7 @@ it("a Flow of an unavailable Project exports with its Agent and no Project", asy
       },
     }),
   );
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
 
   // Act

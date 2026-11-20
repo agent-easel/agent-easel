@@ -70,7 +70,7 @@ export async function authorizedLiveOAuth(
     harness,
     factory,
     live,
-    adapter: live.adapter,
+    projects: live.projects,
     threads: live.threads,
     external,
     endpoint: external.endpoint,
@@ -100,7 +100,7 @@ export const sendReference = {
   delivery: "queued",
 };
 
-/** An authorized live adapter whose T3 answers thread reads, sends and Project lists. */
+/** An authorized live T3 whose server answers thread reads, sends and Project lists. */
 export function connectedLiveT3(
   context: TestContext,
   handlers: { readonly send?: (args: Record<string, unknown>) => unknown } = {},
@@ -206,8 +206,8 @@ async function legacyRuntimeRepository(c: TestContext, directoryName: string, cl
   const t3 = new ControlledT3();
   t3.connection.approve();
   if (claude)
-    t3.controlledProviders.push({
-      ...t3.controlledProviders[0]!,
+    t3.projects.controlledProviders.push({
+      ...t3.projects.controlledProviders[0]!,
       providerInstanceId: "claude-local",
       driverKind: "claudeAgent",
     });

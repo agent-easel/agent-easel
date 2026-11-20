@@ -31,7 +31,7 @@ export async function faviconProject(
   }
   const t3 = new ControlledT3();
   t3.connection.authorized = true;
-  t3.projects = [
+  t3.projects.catalog = [
     {
       projectId: "favicon-project",
       title: "Favicon project",

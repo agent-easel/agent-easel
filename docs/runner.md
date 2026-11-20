@@ -203,7 +203,7 @@ Model options must be readable; otherwise live recovery can remain pending. A ma
 version or OAuth grant is not ownership. A definitive T3 rejection is an error and is
 not searched back into service. A thread T3 created before that rejection is an accepted
 limit. Uncertain queue sends still need the identical saved body, key, target and
-authorization context plus independent retention proof. The live adapter supplies no such
+authorization context plus independent retention proof. Live T3 contract inspection supplies no such
 proof by default. Acknowledged threads are observed, never relaunched. There is no Resume
 or fresh-attempt escape hatch.
 

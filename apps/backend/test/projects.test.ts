@@ -15,7 +15,7 @@ it("addRepository creates a new T3 project when the path was not discovered", as
 
   // Assert
   expect(second.id).not.toBe(first.id);
-  expect(t3.projectCreates).toBe(1);
+  expect(t3.projects.projectCreates).toBe(1);
 });
 
 it("project selection and catalog survive restart while connection is unavailable", async (context) => {
@@ -45,7 +45,7 @@ it("recheckProjects marks a project unavailable when T3 drops it from discovery"
   // Arrange
   const { factory, t3 } = await projectsHarness(context);
   assertOk(await factory.recheckProjects());
-  t3.projects = [];
+  t3.projects.catalog = [];
 
   // Act
   const missing = assertOk(await factory.recheckProjects()).projects[0];
@@ -59,13 +59,15 @@ it("recheckProjects records different-environment when the grant environment cha
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
   t3.connection.authorized = true;
-  t3.projects = [{ projectId: "same-id", title: "Old", workspaceRoot: "/old", available: true }];
+  t3.projects.catalog = [
+    { projectId: "same-id", title: "Old", workspaceRoot: "/old", available: true },
+  ];
   const factory = await harness.open({ t3 });
   assertOk(await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" }));
   const original = assertOk(await factory.recheckProjects()).projects[0]!;
   t3.connection.available = true;
   t3.connection.environmentId = "other-environment";
-  t3.projects = [
+  t3.projects.catalog = [
     { projectId: "same-id", title: "Other", workspaceRoot: "/moved", available: true },
   ];
 
@@ -87,8 +89,8 @@ it("uncertain T3 project creation does not leak private errors or retry automati
   t3.connection.authorized = true;
   const factory = await harness.open({ t3 });
   assertOk(await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" }));
-  const create = t3.createProject.bind(t3);
-  t3.createProject = async (...args) => {
+  const create = t3.projects.createProject.bind(t3.projects);
+  t3.projects.createProject = async (...args) => {
     await create(...args);
     throw new Error("Lost response with private content");
   };
@@ -99,21 +101,21 @@ it("uncertain T3 project creation does not leak private errors or retry automati
   // Assert
   expect(outcome.ok).toBe(false);
   expect(JSON.stringify(outcome).includes("private content")).toBe(false);
-  expect(t3.projectCreates).toBe(1);
+  expect(t3.projects.projectCreates).toBe(1);
 });
 
 it("incomplete T3 discovery retains history and blocks new mutations until recovery", async (context) => {
   // Arrange
   const { factory, t3 } = await projectsHarness(context);
   assertOk(await factory.recheckProjects());
-  const create = t3.createProject.bind(t3);
-  t3.createProject = async (...args) => {
+  const create = t3.projects.createProject.bind(t3.projects);
+  t3.projects.createProject = async (...args) => {
     await create(...args);
     throw new Error("Lost response with private content");
   };
   expect((await factory.addRepository({ path: "/repos/uncertain" })).ok).toBe(false);
   const id = assertOk(await factory.recheckProjects()).projects[0]!.id;
-  t3.listProjects = async () => {
+  t3.projects.listProjects = async () => {
     throw new Error("Incomplete page");
   };
 
@@ -126,7 +128,7 @@ it("incomplete T3 discovery retains history and blocks new mutations until recov
   expect(partial).toBe(id);
   expect(assertOk(await factory.getProjectReadiness(id)).ready).toBe(false);
   expect(blocked.ok).toBe(false);
-  expect(t3.projectCreates).toBe(1);
+  expect(t3.projects.projectCreates).toBe(1);
 });
 
 it("rediscovery lets an uncertain project creation reuse its remote project", async (context) => {
@@ -141,5 +143,5 @@ it("rediscovery lets an uncertain project creation reuse its remote project", as
   // Assert
   assert(recovered.ok);
   expect(recovered.value.id).toBe(id);
-  expect(t3.projectCreates).toBe(1);
+  expect(t3.projects.projectCreates).toBe(1);
 });

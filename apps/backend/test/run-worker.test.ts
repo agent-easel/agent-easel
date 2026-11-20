@@ -1,4 +1,5 @@
 import { assert, expect, it } from "@effect/vitest";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-projects.ts";
 import {
   blockLaunch,
   clearStoredExecution,
@@ -32,7 +33,6 @@ import {
   workerWorking,
   workingReportedIdle,
 } from "./support/scenarios.ts";
-import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 
 it("a Flow with two entry Agents launches an independent top-level worker for each", async (c) => {

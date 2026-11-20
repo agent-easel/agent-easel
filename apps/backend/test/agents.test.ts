@@ -224,7 +224,7 @@ it("duplicating an Agent of an unavailable Project into its default target is re
   // Arrange
   const { factory, t3, first } = await discoveredClones(context);
   const source = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -321,7 +321,7 @@ it("listing Agents answers from saved definitions without calling T3", async (co
 
   // Assert
   expect(listed).toStrictEqual({ ok: true, value: [agent] });
-  expect(t3.capabilityReads).toBe(capabilityReads);
+  expect(t3.projects.capabilityReads).toBe(capabilityReads);
 });
 
 it("reading an Agent answers from its saved definition without calling T3", async (context) => {
@@ -333,7 +333,7 @@ it("reading an Agent answers from its saved definition without calling T3", asyn
 
   // Assert
   expect(read).toStrictEqual({ ok: true, value: agent });
-  expect(t3.capabilityReads).toBe(capabilityReads);
+  expect(t3.projects.capabilityReads).toBe(capabilityReads);
 });
 
 it("the Studio snapshot answers from saved definitions without calling T3", async (context) => {
@@ -350,7 +350,7 @@ it("the Studio snapshot answers from saved definitions without calling T3", asyn
     _tag: "snapshot",
     studio: { agents: [agent], flows: [], triggers: [] },
   });
-  expect(t3.capabilityReads).toBe(capabilityReads);
+  expect(t3.projects.capabilityReads).toBe(capabilityReads);
 });
 
 it("Agent input missing required fields is rejected without creating a definition", async (context) => {
@@ -496,7 +496,9 @@ it("a Project Agent of an unavailable Project moves to global without a revision
   const { factory, t3, first } = await discoveredClones(context);
   const own = assertOk(await factory.createAgent(sampleAgentInput("Releaser", first.id)));
   const flow = await flowPlacing(factory, "Release", own.id, first.id);
-  t3.projects = t3.projects.filter((project) => project.projectId !== first.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== first.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act

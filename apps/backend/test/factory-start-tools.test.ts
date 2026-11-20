@@ -148,7 +148,7 @@ it("an unregistered repository root is explained without selecting or registerin
 it("an unavailable Project for the conversation's root is explained instead of matched", async (c) => {
   // Arrange
   const fixture = await prepared(c);
-  fixture.t3.projects = [];
+  fixture.t3.projects.catalog = [];
   const client = await factoryMcpClient(c, fixture.f);
 
   // Act

@@ -11,7 +11,7 @@ export async function iconProject(context: TestContext, projectIcon: ProjectIcon
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
   t3.connection.authorized = true;
-  t3.projects = [
+  t3.projects.catalog = [
     {
       projectId: "icon-project",
       title: "Icon project",

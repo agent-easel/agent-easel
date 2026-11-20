@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { isAbsolute, basename } from "node:path";
-import type { T3Adapter, T3Project, T3ProviderCapability } from "./t3.ts";
+import type { T3Projects, T3Project, T3ProviderCapability } from "./projects.ts";
 import {
   T3Failure,
   structured,
@@ -10,12 +10,12 @@ import {
   type T3ListedTool,
   type T3ProjectTarget,
   type T3Session,
-} from "../t3/connection.ts";
-import { hasEnvironmentIdentity } from "../t3/environment-identity.ts";
+} from "./connection.ts";
+import { hasEnvironmentIdentity } from "./environment-identity.ts";
 import type { AgentEnvironment } from "@t3-factory/contracts";
 import { parseProjectFaviconPath, parseProjectIcon } from "@t3-factory/domain-validation";
 import { isLocalEndpoint } from "../endpoint-local.ts";
-import { parseProviderCapabilities } from "./t3-capabilities.ts";
+import { parseProviderCapabilities } from "./project-capabilities.ts";
 
 const PROJECT_TOOL_FIELDS = [
   ["t3_project_list", ["environmentId", "cursor", "limit"]],
@@ -46,8 +46,7 @@ function supportsProjectTool(
   );
 }
 
-/** Every T3 call over one live connection, which owns authorization and classifies failures. */
-export class LiveT3Adapter implements T3Adapter {
+export class LiveT3Projects implements T3Projects {
   private readonly connection: T3Calls;
 
   constructor(connection: T3Calls) {

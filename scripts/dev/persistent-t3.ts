@@ -4,6 +4,8 @@ import { writeState } from "./write-state.ts";
 import { join } from "node:path";
 import { ControlledT3 } from "../../apps/backend/test/support/controlled-t3.ts";
 import type { ControlledT3Connection } from "../../apps/backend/test/support/controlled-t3-connection.ts";
+import type { ControlledT3Contract } from "../../apps/backend/test/support/controlled-t3-contract.ts";
+import { ControlledT3Projects } from "../../apps/backend/test/support/controlled-t3-projects.ts";
 import { ControlledT3Threads } from "../../apps/backend/test/support/controlled-t3-threads.ts";
 import type { LaunchPayload, SendPayload } from "../../apps/backend/src/t3/threads.ts";
 import {
@@ -23,6 +25,10 @@ export class PersistentT3 extends ControlledT3 {
   private readonly statePath: string;
   declare readonly threads: PersistentT3Threads;
 
+  protected override makeProjects() {
+    return new PersistentT3Projects(this.connection, this.contract, () => this.save());
+  }
+
   protected override makeThreads(projectWorkspace: (projectId: string) => string | null) {
     return new PersistentT3Threads(this.connection, projectWorkspace, () => this.save());
   }
@@ -37,7 +43,7 @@ export class PersistentT3 extends ControlledT3 {
     };
     this.contract.serverVersion = "local-development-simulator";
     // A provider T3 offers but Factory cannot correlate reports from yet.
-    this.controlledProviders.push({
+    this.projects.controlledProviders.push({
       providerInstanceId: "demo-cursor",
       displayName: "Cursor",
       driverKind: "cursor",
@@ -56,8 +62,8 @@ export class PersistentT3 extends ControlledT3 {
       for (const [key, value] of saved.delegatedSettlements)
         this.threads.delegatedSettlements.set(key, value);
 
-      this.projects = saved.projects;
-      this.projectCreates = saved.projectCreates;
+      this.projects.catalog = saved.projects;
+      this.projects.projectCreates = saved.projectCreates;
       for (const [key, value] of saved.launches) this.threads.launches.set(key, value);
       for (const [key, value] of saved.sends) this.threads.sends.set(key, value);
       for (const [key, value] of saved.executions)
@@ -79,8 +85,8 @@ export class PersistentT3 extends ControlledT3 {
       subagents: [...this.threads.subagents],
       delegatedSettlements: [...this.threads.delegatedSettlements],
 
-      projects: this.projects,
-      projectCreates: this.projectCreates,
+      projects: this.projects.catalog,
+      projectCreates: this.projects.projectCreates,
       launches: [...this.threads.launches],
       sends: [...this.threads.sends],
       executions: [...this.threads.executionObservations],
@@ -92,10 +98,23 @@ export class PersistentT3 extends ControlledT3 {
   save() {
     writeState(this.statePath, this.snapshot());
   }
+}
+
+class PersistentT3Projects extends ControlledT3Projects {
+  private readonly save: () => void;
+
+  constructor(
+    connection: ControlledT3Connection,
+    contract: ControlledT3Contract,
+    save: () => void,
+  ) {
+    super(connection, contract);
+    this.save = save;
+  }
 
   override async createProject(target: T3ProjectTarget) {
     const project = await super.createProject(target);
-    saveAccepted(() => this.save());
+    saveAccepted(this.save);
     return project;
   }
 }
@@ -236,7 +255,7 @@ class PersistentT3Threads extends ControlledT3Threads {
   }
 }
 
-/** Saves after T3 accepted an adapter call. A failed save leaves that call's outcome uncertain,
+/** Saves after the simulated T3 accepts a call. A failed save leaves that call's outcome uncertain,
  * which callers handle as an unavailable T3, never as a raw file error. */
 function saveAccepted(save: () => void) {
   try {

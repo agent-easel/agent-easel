@@ -24,7 +24,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
   // Arrange
   let readReached!: () => void;
   const readStarted = new Promise<void>((resolve) => (readReached = resolve));
-  const { live, adapter, threads, external, endpoint } = await authorizedLiveOAuth(context, {
+  const { live, projects, threads, external, endpoint } = await authorizedLiveOAuth(context, {
     projects: true,
     runtimeActivity: () => {
       readReached();
@@ -43,7 +43,7 @@ it("inspections and concurrent T3 calls on one endpoint share one MCP connection
     live.contract.inspect({ endpoint }),
     threads.sendMessage({ endpoint }, queuedSend),
     threads.readExecution({ endpoint }, "thread-1"),
-    adapter.listProjects({ endpoint, environmentId: "fixture-environment" }),
+    projects.listProjects({ endpoint, environmentId: "fixture-environment" }),
   ]);
 
   // Assert

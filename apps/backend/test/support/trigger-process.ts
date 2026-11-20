@@ -15,7 +15,7 @@ const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
 const crash = async () => process.exit(86);
 const t3 = new ControlledT3();
 t3.connection.approve();
-t3.projects = fixture.projects;
+t3.projects.catalog = fixture.projects;
 if (stage === "accepted") t3.threads.beforeLaunch = crash;
 const github = new ControlledGitHub();
 for (const [root, repository] of fixture.repositories) github.repositories.set(root, repository);

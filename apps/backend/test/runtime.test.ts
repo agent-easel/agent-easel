@@ -1,7 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-projects.ts";
 import { runtimeReadinessFixture } from "./support/boundaries-setup.ts";
 import { claudeRuntimeConfig } from "./support/boundaries-setup.ts";
-import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { readdir } from "node:fs/promises";
 
 it("missing user installation blocks readiness without launching setup work", async (c) => {
@@ -52,12 +52,12 @@ it("recheckRuntime reports reporting_unsupported from its own connection check, 
 it("recheckRuntime never answers a new authorization context with the report support its own check found for the previous one", async (c) => {
   // Arrange
   const { f, t3, selection } = await runtimeReadinessFixture(c);
-  const list = t3.listProjects.bind(t3);
+  const list = t3.projects.listProjects.bind(t3.projects);
   let releaseListing = () => {};
   const listingReleased = new Promise<void>((resolve) => (releaseListing = resolve));
   const listing = new Promise<void>((resolve) => {
-    t3.listProjects = async (target) => {
-      t3.listProjects = list;
+    t3.projects.listProjects = async (target) => {
+      t3.projects.listProjects = list;
       resolve();
       await listingReleased;
       return list(target);
@@ -123,8 +123,8 @@ it("recheckRuntime never reports reporting evidence read after the authorization
 it("a Cursor provider is not rejected as an unsupported harness", async (c) => {
   // Arrange
   const { t3, f, p, input } = await claudeRuntimeConfig(c);
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "cursor-local",
     driverKind: "cursor",
   });
@@ -152,8 +152,8 @@ it("a saved Agent's provider that T3 later offers as an unsupported harness stay
     execution: { ...input.execution, providerInstanceId: "future" },
   });
   assert(future.ok);
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "future",
     driverKind: "future",
   });

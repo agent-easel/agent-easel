@@ -810,7 +810,9 @@ it("creating a Flow for a Project Factory never discovered is refused and create
 it("creating a Flow for an unavailable Project is refused with its availability reason", async (context) => {
   // Arrange
   const { factory, t3, second } = await discoveredClones(context);
-  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== second.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -828,7 +830,7 @@ it("a Flow of a Project that became unavailable still saves its next revision", 
   // Arrange
   const { factory, t3, first } = await discoveredClones(context);
   const created = assertOk(await factory.createFlow({ name: "Release", projectId: first.id }));
-  t3.projects = t3.projects.map((project) => ({ ...project, available: false }));
+  t3.projects.catalog = t3.projects.catalog.map((project) => ({ ...project, available: false }));
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -875,7 +877,9 @@ it("a Flow of an unavailable Project moves to an available Project when it place
   const flow = assertOk(
     await factory.createFlow({ name: "Release", projectId: first.id, graph: placing(shared.id) }),
   );
-  t3.projects = t3.projects.filter((project) => project.projectId !== first.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== first.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -958,7 +962,9 @@ it("moving a Flow into an unavailable Project is refused with its availability r
   // Arrange
   const { factory, t3, second } = await discoveredClones(context);
   const flow = assertOk(await factory.createFlow({ name: "Release" }));
-  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== second.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act

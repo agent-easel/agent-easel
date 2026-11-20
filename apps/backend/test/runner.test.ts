@@ -1,4 +1,5 @@
 import { runFactoryProcess, spawnFactoryProcess } from "./support/factory-process.ts";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-projects.ts";
 import { assert, expect, it } from "@effect/vitest";
 import { once } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
@@ -6,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
-import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   blockedLaterFlow,
@@ -117,7 +117,10 @@ it("a fresh process cannot displace a live database owner", async (c) => {
   // Arrange
   const { h, t3, input } = await prepared(c);
   const fixturePath = join(dirname(h.databasePath), "external-engine.json");
-  await writeFile(fixturePath, JSON.stringify({ input, projects: t3.projects, launches: [] }));
+  await writeFile(
+    fixturePath,
+    JSON.stringify({ input, projects: t3.projects.catalog, launches: [] }),
+  );
   // Act
   const child = runFactoryProcess(
     [
@@ -140,7 +143,10 @@ it("SIGKILL of the live owner allows recovery of an uncertain Run conversation l
   // Arrange
   const { h, f, t3, input } = await prepared(c);
   const fixturePath = join(dirname(h.databasePath), "external-engine.json");
-  await writeFile(fixturePath, JSON.stringify({ input, projects: t3.projects, launches: [] }));
+  await writeFile(
+    fixturePath,
+    JSON.stringify({ input, projects: t3.projects.catalog, launches: [] }),
+  );
   function spawnChild(mode: string) {
     return spawnFactoryProcess(
       [
@@ -180,11 +186,11 @@ it("SIGKILL of the live owner allows recovery of an uncertain Run conversation l
 it("runtime readiness rejects a saved model option outside the permitted domain", async (c) => {
   // Arrange
   const { f, t3, project, agent } = await prepared(c);
-  t3.controlledProviders[0] = {
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders[0] = {
+    ...t3.projects.controlledProviders[0]!,
     models: [
       {
-        ...t3.controlledProviders[0]!.models[0]!,
+        ...t3.projects.controlledProviders[0]!.models[0]!,
         options: [
           {
             id: "reasoning",
@@ -390,7 +396,7 @@ it("Start refuses a Project Flow in another Project and creates no Run", async (
 it("Start refuses a Project Flow whose Project T3 no longer lists, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.projects = [];
+  t3.projects.catalog = [];
 
   // Act
   const result = await f.startRun(input);
@@ -406,7 +412,7 @@ it("Start refuses a Project Flow whose Project T3 no longer lists, with that rea
 it("Start refuses a Project Flow whose repository directory is missing, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.projects = t3.projects.map((entry) => ({ ...entry, available: false }));
+  t3.projects.catalog = t3.projects.catalog.map((entry) => ({ ...entry, available: false }));
 
   // Act
   const result = await f.startRun(input);
@@ -511,10 +517,10 @@ it("Start refuses a global Flow whose Agent became a Project Agent through readi
 it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
   // Arrange
   const { h, f, t3, input, agent, project } = await prepared(c);
-  const readCatalog = t3.orchestratorCapabilities.bind(t3);
-  t3.orchestratorCapabilities = async (target) => {
+  const readCatalog = t3.projects.orchestratorCapabilities.bind(t3.projects);
+  t3.projects.orchestratorCapabilities = async (target) => {
     // The Agent's readiness check reads the model catalog after Start read the Agent.
-    t3.orchestratorCapabilities = readCatalog;
+    t3.projects.orchestratorCapabilities = readCatalog;
     ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
     return readCatalog(target);
   };

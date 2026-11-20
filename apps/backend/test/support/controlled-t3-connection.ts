@@ -14,7 +14,7 @@ export class ControlledT3Connection implements T3Authorization {
   /** An authorization attempt waits for consent; reopening it keeps the same attempt. */
   pendingApproval = false;
   reopenedApprovals = 0;
-  /** Fails as the live adapter classifies an unreachable T3 or an unapproved grant. */
+  /** Uses the live connection's failure kinds for unreachable T3 and unapproved grants. */
   requireConnection(message = "Unavailable") {
     if (!this.available) throw new T3Failure("unavailable", message);
     if (!this.authorized) throw new T3Failure("authorization-required", message);

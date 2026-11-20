@@ -16,7 +16,7 @@ export function runImagesAndTitlesFixture(
   { factory, t3 }: Host,
   scenarios: Awaited<ReturnType<typeof scenariosFixture>>,
 ) {
-  const providers = [...t3.controlledProviders];
+  const providers = [...t3.projects.controlledProviders];
   return {
     actions: {
       attachments({ supported }: { supported: boolean }) {
@@ -51,10 +51,14 @@ export function runImagesAndTitlesFixture(
     async reset() {
       t3.contract.support.attachmentLimit = 8;
       if (
-        providers.length !== t3.controlledProviders.length ||
-        providers.some((provider, index) => provider !== t3.controlledProviders[index])
+        providers.length !== t3.projects.controlledProviders.length ||
+        providers.some((provider, index) => provider !== t3.projects.controlledProviders[index])
       )
-        t3.controlledProviders.splice(0, t3.controlledProviders.length, ...providers);
+        t3.projects.controlledProviders.splice(
+          0,
+          t3.projects.controlledProviders.length,
+          ...providers,
+        );
       const setting = requireSuccess(await factory.getRunTitleSetting());
       if (setting.enabled || !isDeepStrictEqual(setting.model, controlledTitleModel))
         requireSuccess(
