@@ -664,7 +664,9 @@ function useOpenedAgentDraft(
 
 /**
  * Tells Studio's guard about this editor's unsaved work: the draft's own changes and a new Agent's
- * picked owner, which lives only in this editor. Disposal clears only its own Studio guard.
+ * picked owner, which lives only in this editor. The pick counts only while the draft's own
+ * snapshot has no saved Agent, so a Create or Open Agent that adopts one clears the guard before
+ * its navigation. Disposal clears only its own Studio guard.
  */
 function useAgentDraftGuard(
   draft: AgentDraftModel,
@@ -676,8 +678,8 @@ function useAgentDraftGuard(
     () => ({
       subscribe: draft.subscribe,
       getSnapshot: () => {
-        const { dirty, removed } = draft.getSnapshot();
-        return { dirty: dirty || ownerPicked, removed };
+        const { dirty, removed, saved } = draft.getSnapshot();
+        return { dirty: dirty || (ownerPicked && saved === null), removed };
       },
     }),
     [draft, ownerPicked],
