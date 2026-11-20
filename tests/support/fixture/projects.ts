@@ -1,13 +1,15 @@
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import { requireSuccess } from "../../../scripts/dev/seed-support.ts";
 import type { Host } from "./host.ts";
 
 /**
- * Available T3 Projects a journey adds with a title of its choosing. Reset removes their Flows,
- * drops them from T3 and restores the Project selection they replaced.
+ * Available T3 Projects a journey adds with a title of its choosing, and can drop from Factory's
+ * catalog. Reset removes their Flows, drops them from T3 and restores the Project selection they
+ * replaced.
  */
 export function projectsFixture({ factory, t3, home }: Host) {
   const added: { id: string; projectId: string }[] = [];
@@ -31,6 +33,22 @@ export function projectsFixture({ factory, t3, home }: Host) {
         );
         requireSuccess(await factory.recheckProjects());
         return { id: project.id };
+      },
+      /**
+       * Drops the added Project `id`, which nothing owns, from T3 and from Factory's catalog, which
+       * Factory itself never does, so a journey can show a reference the catalog no longer holds.
+       */
+      async forget({ id }: { id: string }) {
+        const project = added.find((entry) => entry.id === id);
+        if (!project) throw new Error(`Project ${id} was not added by this journey.`);
+        t3.projects = t3.projects.filter((entry) => entry.projectId !== project.projectId);
+        {
+          using database = new DatabaseSync(join(home, "factory.sqlite"));
+          database.prepare("DELETE FROM projects WHERE id = ?").run(id);
+        }
+        // Selecting the current Project again publishes the catalog to live clients.
+        const { selectedProjectId } = requireSuccess(await factory.listProjects());
+        requireSuccess(await factory.selectProject({ id: selectedProjectId }));
       },
     },
     async reset() {

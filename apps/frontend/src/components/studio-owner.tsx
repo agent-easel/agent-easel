@@ -138,7 +138,8 @@ const ownerChoices = (targets: OwnerTargets, reason: string) => [
 
 /**
  * Figma Studio/OwnerFilter: All, Global or one available Project; Studio's lists share it. A chosen
- * Project that became unavailable stays listed with its reason.
+ * Project that became unavailable stays listed with its reason, and one the catalog no longer holds
+ * reads Unknown Project.
  */
 export function OwnerFilter({
   filter,
@@ -162,6 +163,9 @@ export function OwnerFilter({
       choices={[{ id: "all", label: "All" }, ...ownerChoices(targets, "")]}
       disabled={false}
       placeholder="All"
+      unlistedLabel={
+        filter.kind === "project" ? studioOwner(filter.projectId, projects).title : undefined
+      }
       className={cn("h-8 w-40 gap-1.5 bg-card pr-2 has-[>svg]:pr-2", className)}
       popupClassName="w-80"
       onChange={(value) =>

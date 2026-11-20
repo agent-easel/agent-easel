@@ -164,6 +164,32 @@ test("the Flows owner filter lists All, Global and each Project", async ({
   await shot(app, browser, "flows-owner-filter");
 });
 
+test("the Owner filter names a filtered Project that left the catalog Unknown Project", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const title = "Journey · Leaving Project";
+  const { id } = await fixture.projects.add({ title });
+  await app.open("/studio/flows");
+  await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
+  await screen.getByRole("option", title, { exact: true }).tap();
+  await expect(
+    screen.getByRole("combobox", `Owner filter: ${title}`, { exact: true }),
+  ).toBeVisible();
+
+  // Act
+  await fixture.projects.forget({ id });
+
+  // Assert
+  await expect(
+    screen.getByRole("combobox", "Owner filter: Unknown Project", { exact: true }),
+  ).toBeVisible();
+  await shot(app, browser, "owner-filter-unknown-project");
+});
+
 test("a Flows search with no match says so", async ({ app, screen, browser }) => {
   // Arrange
   await app.open("/studio/flows");
