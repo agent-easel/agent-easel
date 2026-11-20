@@ -22,6 +22,7 @@
     "desktop:package:beta": "pnpm build && pnpm --filter @t3-factory/desktop package --beta",
     "desktop:probe": "node apps/desktop/scripts/probe-package.mjs",
     "e2e:screenshots": "pnpm e2e:prepare && e2e run tests/screenshots.e2e.ts --trace on --output .e2e/screenshots",
+    "e2e:evidence": "node scripts/e2e-evidence.mjs",
     "e2e:evidence-diff": "node scripts/ui-evidence-diff.mjs",
     "e2e:explore": "e2e explore --config e2e.explore.config.ts",
     "format": "vp fmt",
