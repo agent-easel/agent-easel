@@ -7,6 +7,7 @@ import {
   allTurnsEnd,
   chainedContinuationFlow,
   connection,
+  continuationEndingFlow,
   continuationFlow,
   continuationLoopFlow,
   continuationStep,
@@ -417,6 +418,35 @@ it("factory_get_block describes a Continuation's task by its prompt, without exi
     reason: "continuation",
     prompt: "Write the spec from what we agreed.",
     exits: [],
+  });
+});
+
+it("factory_get_block shows the endings a Continuation's output is wired to", async (c) => {
+  // Arrange
+  const f = await prepared(c, continuationEndingFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker);
+  const prompt = await promptSent(f.world, worker);
+
+  // Act
+  const block = await f.f.runtime.block({ arguments: { blockId: prompt.blockId } });
+
+  // Assert
+  expect(block).toMatchObject({
+    reason: "continuation",
+    exits: [],
+    output: {
+      messageRequired: true,
+      endings: [
+        {
+          id: "shipped",
+          name: "Shipped",
+          description: "The work is merged.",
+          output: "required",
+          outputDescription: "The merge commit.",
+        },
+      ],
+    },
   });
 });
 

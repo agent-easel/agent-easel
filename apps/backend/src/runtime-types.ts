@@ -2,6 +2,7 @@ import type {
   BlockExit,
   ConditionArrivalEvidence,
   ConditionSummary,
+  FlowEnding,
   RunImageMimeType,
 } from "@t3-factory/contracts";
 
@@ -38,7 +39,13 @@ export type RuntimeReply = {
   readonly revisitInstruction?: string;
   /** How the Revisit instruction relates to the Agent's requirements; given with it. */
   readonly revisitRule?: string;
-  readonly exits?: readonly BlockExit[];
+  /** Each exit with the Finish endings it is wired straight to; `messageRequired` is this Flow's. */
+  readonly exits?: readonly (BlockExit & { readonly endings: readonly FlowEnding[] })[];
+  /** A prompted Continuation's single output, with the endings it is wired straight to. */
+  readonly output?: {
+    readonly messageRequired: boolean;
+    readonly endings: readonly FlowEnding[];
+  };
   readonly inputs?: {
     readonly input: string;
     readonly images: readonly RuntimeImage[];

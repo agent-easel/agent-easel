@@ -665,11 +665,13 @@ export {
   CONDITION_OTHERWISE,
   CONTINUATION_EXIT,
   effectiveExits,
+  exitsWithEndings,
   inheritedExits,
   HUMAN_EXITS,
   WAIT_OUTPUT,
   type EffectiveExit,
   type ExitSource,
+  type ExitWithEndings,
 } from "./block-exits.ts";
 export {
   CLIENT_LABEL_LIMIT,

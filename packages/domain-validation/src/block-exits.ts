@@ -1,8 +1,11 @@
 import {
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type AgentDefinition,
   type BlockExit,
   type FlowBlockInput,
+  type FlowEnding,
+  type FlowGraphInput,
   type Result,
   type ValidationIssue,
 } from "@t3-factory/contracts";
@@ -104,6 +107,43 @@ export function effectiveExits(
       .map((exit) => ({ ...exit, source: "agent" as const })),
     ...block.localExits.map((exit) => ({ ...exit, source: "local" as const })),
   ];
+}
+
+/** An exit as the worker reads it: the endings it is directly wired to, and `messageRequired` as
+ * this Flow makes it. */
+export interface ExitWithEndings extends EffectiveExit {
+  readonly endings: readonly FlowEnding[];
+}
+
+/**
+ * The exits `block` offers with the Finish endings each is wired straight to. An exit wired to a
+ * Required ending is message-required in this Flow only; the Agent's own exit is unchanged. Only
+ * direct wires count: an ending reached through another block does not.
+ */
+export function exitsWithEndings(
+  block: FlowBlockInput,
+  graph: Pick<FlowGraphInput, "connections" | "finish">,
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+): ExitWithEndings[] {
+  return effectiveExits(block, agents).map((exit) => {
+    const wired = new Set(
+      graph.connections.flatMap((edge) =>
+        edge.sourceBlockId === block.id &&
+        edge.exitId === exit.id &&
+        edge.targetBlockId === FINISH_BLOCK_ID &&
+        edge.targetEndingId !== undefined
+          ? [edge.targetEndingId]
+          : [],
+      ),
+    );
+    const endings = (graph.finish?.endings ?? []).filter((ending) => wired.has(ending.id));
+    return {
+      ...exit,
+      messageRequired:
+        exit.messageRequired || endings.some((ending) => ending.output === "required"),
+      endings,
+    };
+  });
 }
 
 const EXIT_FIELDS = ["id", "name", "description", "messageRequired"];

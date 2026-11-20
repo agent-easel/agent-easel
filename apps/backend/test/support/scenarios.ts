@@ -6,7 +6,9 @@ import type {
   BlockExit,
   CreateAgentInput,
   CreateTriggerInput,
+  EndingOutput,
   FactoryOperations,
+  FlowEnding,
   FlowBlock,
   FlowGraph,
   FlowGraphInput,
@@ -14,6 +16,7 @@ import type {
   Result,
   RunDetail,
 } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
 import type { ThreadFacts } from "./controlled-t3-threads.ts";
 import { START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 
@@ -798,6 +801,41 @@ export const handoffFlow: ReadyFlowShape = (world) =>
     flowInput: flowInput("worker"),
     blocks: [entryWorker(agentId), parallelWork(agentId)],
     connections: [connection("worker", "done", "parallel-block")],
+  }));
+
+/** The ending every ending Flow shape declares, entered by the wire from Entry worker's "Done". */
+export const SHIPPED_ENDING = (output: EndingOutput): FlowEnding => ({
+  id: "shipped",
+  name: "Shipped",
+  description: "The work is merged.",
+  output,
+  outputDescription: "The merge commit.",
+});
+const shippedWire = (sourceBlockId: string, exitId: string): FlowGraph["connections"][number] => ({
+  sourceBlockId,
+  exitId,
+  targetBlockId: FINISH_BLOCK_ID,
+  targetEndingId: "shipped",
+});
+
+/** Entry worker's "Done" is wired straight to the Finish ending Shipped, with `output`. */
+export const endingFlow =
+  (output: EndingOutput): ReadyFlowShape =>
+  (world) =>
+    workerShape(world, `Ending ${output}`, (agentId) => ({
+      flowInput: flowInput("worker"),
+      blocks: [entryWorker(agentId)],
+      connections: [shippedWire("worker", "done")],
+      finish: { endings: [SHIPPED_ENDING(output)] },
+    }));
+
+/** Entry worker's "Done" goes to the Continuation Spec, whose output is wired to a Required Shipped. */
+export const continuationEndingFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Continuation ending", (agentId) => ({
+    flowInput: flowInput("worker"),
+    blocks: [entryWorker(agentId), specStep],
+    connections: [connection("worker", "done", "spec"), shippedWire("spec", "output")],
+    finish: { endings: [SHIPPED_ENDING("required")] },
   }));
 
 /** Entry worker's "Done" goes to a Human Review whose Approve hands to Parallel work. */

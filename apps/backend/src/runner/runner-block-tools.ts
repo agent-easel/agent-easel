@@ -5,7 +5,11 @@ import type {
   RunDetail,
   RunImageMimeType,
 } from "@t3-factory/contracts";
-import { effectiveExits } from "@t3-factory/domain-validation";
+import {
+  effectiveExits,
+  exitsWithEndings,
+  type ExitWithEndings,
+} from "@t3-factory/domain-validation";
 import type { RunStore } from "./run-store/run-store.ts";
 import { OPEN_TRANSITIONS, type RuntimeReply } from "../runtime-types.ts";
 import { reportDiagnostic } from "../runtime-report-diagnostic.ts";
@@ -155,6 +159,11 @@ function blockView(
   // A later visit can re-read the Revisit instruction its message carried, e.g. after compaction.
   const revisitInstruction =
     graphBlock.kind === "agent" && visits.length > 1 ? graphBlock.revisitInstruction : "";
+  const exits = exitsWithEndings(
+    graphBlock,
+    detail.definitions.flow.graph,
+    detail.definitions.agents,
+  );
   return {
     code: "BLOCK",
     state: block.state,
@@ -162,14 +171,11 @@ function blockView(
     reason: continuation ? "continuation" : visitReason(cause),
     ...(continuation ? { prompt: graphBlock.prompt } : {}),
     ...(revisitInstruction ? { revisitInstruction, revisitRule: REVISIT_RULE } : {}),
-    exits: continuation
-      ? []
-      : effectiveExits(graphBlock, detail.definitions.agents).map((exit) => ({
-          id: exit.id,
-          name: exit.name,
-          description: exit.description,
-          messageRequired: exit.messageRequired,
-        })),
+    // A Continuation's single output is read as `output`; it has no exit to name.
+    exits: continuation ? [] : exits.map(workerExit),
+    ...(continuation
+      ? { output: { messageRequired: exits[0]!.messageRequired, endings: exits[0]!.endings } }
+      : {}),
     inputs: {
       input: detail.input,
       images,
@@ -177,6 +183,16 @@ function blockView(
       feedback: conditionArrivalId(cause) ? routed : visitFeedback(detail, cause),
     },
     allowedTransitions: current && detail.gateOpen ? OPEN_TRANSITIONS : [],
+  };
+}
+
+function workerExit(exit: ExitWithEndings) {
+  return {
+    id: exit.id,
+    name: exit.name,
+    description: exit.description,
+    messageRequired: exit.messageRequired,
+    endings: exit.endings,
   };
 }
 

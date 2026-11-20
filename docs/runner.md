@@ -258,7 +258,9 @@ worker reports.
 - Exits must match the ID or unambiguous exact name of one of the Block's exits in the Run's
   captured definitions (its captured Agent revision's exits minus those the Flow hid, plus its
   Flow-local exits), with a non-empty message when that exit requires one (`FEEDBACK_REQUIRED`
-  otherwise). Accepted results remain held until the
+  otherwise). An exit also requires a message when it is wired directly to a Finish ending whose
+  output is Required; that holds in this Flow only and leaves the shared Agent unchanged. Only
+  direct wires count: an ending reached through another Block does not. Accepted results remain held until the
   [handoff release](#routing-and-independent-queues) rule passes.
 - Workers report only `working` and `finished`. The worker reports `working` when it starts a
   visit's work and `finished` when the task is complete. Each activation needs its own report;

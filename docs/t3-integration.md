@@ -502,10 +502,14 @@ Factory-launched Block workers report for their Block from any turn of their thr
 
 `factory_get_block({ blockId })` returns the Block's current visit, reason, exits, inputs and allowed transitions, also while
 Factory is still confirming the worker's launch. `exits` lists the exits the worker may finish with, each
-`{ id, name, description, messageRequired }`: its captured Agent revision's exits not hidden in the Flow, then the Flow-local
-exits. For a
+`{ id, name, description, messageRequired, endings }`: its captured Agent revision's exits not hidden in the Flow, then the Flow-local
+exits. `endings` lists the Finish endings the exit is wired directly to, each
+`{ id, name, description, output, outputDescription }`; an exit wired to a Required ending reports
+`messageRequired: true` for this Flow, and a blank `finished` report on it is `FEEDBACK_REQUIRED`. Endings reached through
+another Block are not listed. For a
 Continuation the reason is `continuation`, `prompt` is its captured prompt and `exits` is empty: the worker finishes
-it without an exit, with its response as the message. On a visit after the first to an Agent block whose
+it without an exit, with its response as the message; `output: { messageRequired, endings }` carries the same ending
+information for its single output. On a visit after the first to an Agent block whose
 [Revisit instruction](runner.md#revisit-instructions) is set, `revisitInstruction` is the captured instruction and
 `revisitRule` the conflict rule its message states, worded in
 [Revisit instructions](runner.md#revisit-instructions). Both are omitted on a first visit or when the instruction is
