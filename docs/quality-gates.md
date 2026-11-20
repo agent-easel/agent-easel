@@ -42,7 +42,7 @@ tasks in the root `vite.config.ts` `run`):
 | 2 | `pnpm check:e2e-configs` | Any `e2e.*.config.ts` in the working tree other than `e2e.config.ts` and `e2e.explore.config.ts`, tracked or untracked, ignored output directories included (dependency directories excepted) |
 | 3 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
 | 4 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
-| 5 | `pnpm lint` | Vite+ lint rule violations (`vite.config.ts` `lint`, type-aware, warnings fail) |
+| 5 | `pnpm lint` | Vite+ lint rule violations and new JavaScript or TypeScript comments |
 | 6 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
 | 7 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
 | 8 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
@@ -258,6 +258,21 @@ render. There are no Hook-rule suppressions or compiler opt-outs.
 Import boundaries, unused suppression directives and warning failure remain
 enforced. Fallow owns unused code,
 dependencies, duplication and complexity checks. No findings baseline is allowed.
+
+### Comment ratchet
+
+The static gate rejects new comments in tracked or newly added JavaScript and TypeScript
+files. Write clear code and record durable decisions in the applicable ADR. Exact
+`// Arrange`, `// Act` and `// Assert` labels on their own lines in test files are allowed
+by the [testing policy](testing.md#arrangeactassert). Preserve existing notices and
+tool directives that carry legal or runtime meaning.
+
+Each file can retain the same comments that its comparison commit has, up to the same
+number of copies. Renamed files are checked as additions. Deletions need no baseline
+update. Locally the check uses the fork point with `origin/main`. The Quality gate
+compares a PR to its target commit and a push
+to the previous `main`, so merged deletions lower the allowance for later changes.
+Use [`/delete-comment`](../.agents/skills/delete-comment/SKILL.md) to continue the audit.
 
 ## Dependency rules
 

@@ -23,16 +23,11 @@ export type CanvasDimensions = {
     readonly outputY: number;
     readonly promptLine: number;
     readonly promptImages: number;
-    /** A read-only status row at the bottom of the Flow input; the execution canvas shows the Run
-     * title generation there. */
     readonly statusLine: number;
   };
   readonly port: {
-    /** The drawn circle. */
     readonly size: number;
-    /** The hit area of a port that starts a connection. */
     readonly handle: number;
-    /** The circle of the input a connection being drawn will use. */
     readonly highlight: number;
   };
 };
@@ -52,7 +47,6 @@ function dimensionPorts({ block }: CanvasDimensions): BlockPorts {
 
 export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly prompt?: "none" | "line" | "images";
-  /** The Flow input shows its status row. */
   readonly flowInputStatus?: boolean;
   readonly footerCount?: (block: B) => number;
   readonly reservedFooterCount?: number;
@@ -85,7 +79,6 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
   port: { size: 12, handle: 20, highlight: 16 },
 };
 
-/** Node sizes and anchors shared by the canvas and server-side authoring layout. */
 export function createNodeGeometry<B extends LayoutBlock>(
   graph: LayoutGraph<B>,
   dimensions: CanvasDimensions,
@@ -153,12 +146,10 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
     blockHeight: geometry.reservedHeight,
     ports: { ...geometry.ports, inputSpacing: INCOMING_PORT_SPACING },
     labels,
-    // Conservative width for the 10 px label, including padding and arrow gaps.
     labelSize: (text) => ({ width: text.length * 7 + 24, height: 22 }),
   };
 }
 
-/** Minimum vertical gap between incoming port anchors on the same block (world px). */
 const INCOMING_PORT_SPACING = 18;
 
 export function incomingPortY(index: number, ports: BlockPorts) {
@@ -166,6 +157,5 @@ export function incomingPortY(index: number, ports: BlockPorts) {
 }
 
 function blockHeightForIncomingFanIn(fanIn: number, ports: BlockPorts, baseHeight: number) {
-  // Leave room for the last input circle without moving the existing exit rows.
   return Math.max(baseHeight, incomingPortY(Math.max(0, fanIn - 1), ports) + 12);
 }

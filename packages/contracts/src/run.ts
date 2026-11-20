@@ -161,7 +161,6 @@ export interface TaskSummary {
   } | null;
   readonly runs: readonly TaskRunEntry[];
 }
-/** Factory can accept a Start. The server no longer publishes a coordinator contract. */
 export interface RunCreationPolicy {
   readonly ready: true;
 }
