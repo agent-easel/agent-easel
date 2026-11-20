@@ -5,12 +5,14 @@ import { FINISH_BLOCK_ID } from "@t3-factory/contracts";
 import { now } from "../../time.ts";
 import type { RunRow, StoredTarget } from "../runner-types.ts";
 import type { RunnerDatabase } from "./database.ts";
+import { cancelTitleGeneration } from "./title-generations.ts";
 import { arrivingHandoff, clearSpentArrivalMessages, workerProvenance } from "./handoffs.ts";
 import type { Handoff } from "./records.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
-/** Why a competing delivery into an ending never became a result. */
-const LOST_TO_ENDING = "cancelled-on-Finish";
+/** Why a competing delivery into an ending, or work the Run still owed when it settled after its
+ * ending, never ran. */
+export const CANCELLED_ON_FINISH = "cancelled-on-Finish";
 
 type RunResultRow = {
   run_id: string;
@@ -77,8 +79,9 @@ export function openRunEndings(database: RunnerDatabase) {
    * caller read the release at; `generation` is required unless the release is durable. Guards:
    * owner, open gate, live authorization context and the generation when given; the Handoff is
    * still pending. In one transaction it records the result, closes the gate for good, cancels
-   * every other delivery into an ending, appends "Reached ending", acknowledges the delivery and
-   * advances the generation. A replayed delivery answers its original acceptance; a delivery that
+   * every other delivery into an ending and a pending Run title generation, appends "Reached
+   * ending", acknowledges the delivery and advances the generation. Stopping and settling the Run
+   * follows from the recorded result (see `awaitingEndingSettlement`). A replayed delivery answers its original acceptance; a delivery that
    * finds the gate closed records nothing and answers undefined.
    */
   function reachEnding(current: RunRow, handoff: Handoff, generation: number | undefined) {
@@ -112,7 +115,7 @@ export function openRunEndings(database: RunnerDatabase) {
         });
         const losers = yield* sql<{
           id: string;
-        }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${LOST_TO_ENDING},reconciled_at=${time} WHERE run_id=${current.id} AND block_id=${FINISH_BLOCK_ID} AND state='pending' RETURNING id`;
+        }>`UPDATE operation_intents SET state='cancelled',payload_json=NULL,problem=${CANCELLED_ON_FINISH},reconciled_at=${time} WHERE run_id=${current.id} AND block_id=${FINISH_BLOCK_ID} AND state='pending' RETURNING id`;
         for (const loser of losers)
           yield* appendTimelineEvent(sql, {
             kind: "operation-cancelled",
@@ -121,6 +124,7 @@ export function openRunEndings(database: RunnerDatabase) {
             intentId: loser.id,
             observedAt: time,
           });
+        yield* cancelTitleGeneration(sql, current.id, time, "finish");
         yield* clearSpentArrivalMessages(sql, current.id);
         yield* advanceGeneration(sql, current.id);
         return (yield* readRunResult(sql, current.id)) ?? undefined;
@@ -128,5 +132,15 @@ export function openRunEndings(database: RunnerDatabase) {
     );
   }
 
-  return { reachEnding };
+  /** Whether the unarchived, unsettled Run has its result but no stop-and-settle recorded yet: the
+   * acceptance committed and the Runner, after it or after a restart, starts stopping the Run. */
+  const awaitingEndingSettlement = (runId: string) =>
+    database.transaction((sql) =>
+      Effect.map(
+        sql`SELECT 1 FROM runs r JOIN run_results x ON x.run_id=r.id WHERE r.id=${runId} AND r.archived_at IS NULL AND r.settled_at IS NULL AND NOT EXISTS(SELECT 1 FROM run_settlements s WHERE s.run_id=r.id)`,
+        (rows) => rows.length > 0,
+      ),
+    );
+
+  return { reachEnding, awaitingEndingSettlement };
 }

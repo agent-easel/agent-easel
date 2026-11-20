@@ -2,6 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   allTurnsEnd,
+  endingBesideReviewFlow,
   endingReached,
   finishedReport,
   optionalEndingFlow,
@@ -64,7 +65,7 @@ it("a report after the Run result is recorded changes nothing", async (c) => {
   const code = await report(f.world, later, finishedReport("A different outcome."));
 
   // Assert
-  expect(code).toBe("RUN_SETTLING");
+  expect(code).toBe("RUN_SETTLED");
   const run = await f.f.getRun(worker.runId);
   assert(run.ok);
   expect(run.value.result).toStrictEqual(reached.result);
@@ -164,4 +165,80 @@ it("factory_get_run returns the Run result", async (c) => {
 
   // Assert
   expect(read).toMatchObject({ code: "RUN", result: reached.result });
+});
+
+it("reaching an ending stops the other workers and settles the Run with finish only once fresh reads show them finished", async (c) => {
+  // Arrange
+  const f = await prepared(c, racingEndingsFlow);
+  const [first, second] = await twoWorkersStarted(f.world, f.input);
+  await resultReported(f.world, first, { message: "https://example.test/pull/42" });
+  const reached = await endingReached(f.world, first.runId);
+  assert((await f.f.reconcileRuns()).ok);
+  const stopping = await f.f.getRun(first.runId);
+  assert(stopping.ok);
+
+  // Act
+  allTurnsEnd(f.world, second, "interrupted");
+  assert((await f.f.reconcileRuns()).ok);
+
+  // Assert
+  expect(stopping.value).toMatchObject({
+    lifecycle: "active",
+    gateOpen: false,
+    result: reached.result,
+    settlement: {
+      state: "stopping",
+      workers: [
+        { blockId: "worker", state: "finished" },
+        { blockId: "second", state: "stopping", stopOutcome: "acknowledged" },
+      ],
+    },
+  });
+  expect(f.t3.threads.threadStops.map((stop) => stop.threadId)).toStrictEqual([second.threadId]);
+  const run = await f.f.getRun(first.runId);
+  assert(run.ok);
+  expect(run.value).toMatchObject({
+    lifecycle: "settled",
+    settlement: null,
+    result: reached.result,
+  });
+  expect(run.value.blocks.map((block) => [block.blockId, block.state])).toStrictEqual([
+    ["worker", "finished"],
+    ["second", "stopped"],
+  ]);
+  expect(
+    run.value.events
+      .filter((event) => event.kind.includes("settle") || event.kind.includes("stop"))
+      .map((event) => [event.kind, event.blockId]),
+  ).toStrictEqual([
+    ["settlement-requested", null],
+    ["worker-stop-requested", "second"],
+    ["worker-stopped", "second"],
+    ["run-settled", null],
+  ]);
+  expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
+});
+
+it("settling after an ending cancels the Run's pending Human occurrence with reason finish", async (c) => {
+  // Arrange
+  const f = await prepared(c, endingBesideReviewFlow);
+  const [first, second] = await twoWorkersStarted(f.world, f.input);
+  await resultReported(f.world, second, { message: "Please review." });
+  const review = await resultReleasedToHumanReview(f.world, second);
+  await resultReported(f.world, first, { message: "https://example.test/pull/42" });
+
+  // Act
+  await endingReached(f.world, first.runId);
+  assert((await f.f.reconcileRuns()).ok);
+
+  // Assert
+  const run = await f.f.getRun(first.runId);
+  assert(run.ok);
+  expect(run.value.lifecycle).toBe("settled");
+  expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("finish");
+  expect(run.value.humanOccurrences).toMatchObject([
+    { id: review.occurrence.id, state: "cancelled" },
+  ]);
+  expect(run.value.attention).toMatchObject([{ kind: "human", settlementReason: "finish" }]);
+  expect(f.t3.threads.threadStops).toStrictEqual([]);
 });

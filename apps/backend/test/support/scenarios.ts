@@ -804,7 +804,7 @@ export const handoffFlow: ReadyFlowShape = (world) =>
   }));
 
 /** The ending every ending Flow shape declares, entered by the wire from Entry worker's "Done". */
-const SHIPPED_ENDING =(output: EndingOutput): FlowEnding => ({
+const SHIPPED_ENDING = (output: EndingOutput): FlowEnding => ({
   id: "shipped",
   name: "Shipped",
   description: "The work is merged.",
@@ -1233,6 +1233,19 @@ export const racingEndingsFlow: ReadyFlowShape = (world) =>
       ending("delivered", "Delivered", "optional"),
       ending("gave-up", "Could not complete", "none"),
     ),
+  }));
+
+/** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" enters
+ * Delivered and Second entry's "Done" goes to a Human Review. */
+export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Ending beside review", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [entryWorker(agentId), agentBlock("second", "Second entry", agentId), reviewStep],
+    connections: [
+      endingConnection("worker", "done", "delivered"),
+      connection("second", "done", "review"),
+    ],
+    finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
 
 /** Entry worker's "Done" goes to a Human Review whose Approve reaches the Gate, whose Otherwise

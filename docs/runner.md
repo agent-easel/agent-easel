@@ -549,8 +549,8 @@ released when created. Its recipient is the Finish block, which has no worker an
 detail lists the delivery among its intents. Accepting a released one sends nothing to T3 and is one guarded transaction
 under the owner, open gate, live authorization context and, unless the release is durable, the release generation. It
 records the [Run result](../GLOSSARY.md#run-result), closes the handoff gate for good, cancels every other delivery into an
-ending that is still pending, appends one `ending-reached` event naming the ending, acknowledges the delivery and advances
-the generation. A replay of the accepted delivery answers its original acceptance. A failure before commit records
+ending that is still pending and a pending [Run title generation](#run-title-generations), appends one `ending-reached`
+event naming the ending, acknowledges the delivery and advances the generation. A replay of the accepted delivery answers its original acceptance. A failure before commit records
 nothing and the next dispatch pass retries, as for a Condition.
 
 The result keeps the ending's name from the Run's captured revision and the delivered text exactly. An ending whose output
@@ -562,9 +562,19 @@ carries the delivery's [worker provenance](#worker-provenance).
 The closed gate is final for this Run: a racing delivery into any ending is cancelled with `cancelled-on-Finish` and never
 becomes a second result, and later reports, Human answers and Wait forwarding follow the closed-gate rules and record
 nothing. A confirmed manual settlement or Archive that closed the gate first leaves its pending deliveries into endings
-to be cancelled with the rest of its owed work, so no result is recorded. Accepting the result stops no other worker;
-Blocks already at work keep running. A Run whose branches end without reaching an ending settles automatically as before
-and keeps its open gate, so a later accepted report can still reach an ending.
+to be cancelled with the rest of its owed work, so no result is recorded.
+
+After acceptance, the Runner stops and settles the Run through [manual settlement](#manual-settlement)'s confirmed path,
+authorized by the Flow, so no dialog is shown, and recorded with reason `finish`. It starts from the stored state, a result
+with no settlement yet, in the drive pass after acceptance and in every reconciliation, so a restart right after acceptance
+still starts it. Unfinished workers get one Stop each; the Run settles only once fresh reads confirm every bound worker
+finished, never on a Stop acknowledgement. Until then the Run is Active with its result visible and its settlement
+stopping, or unresolved with the existing Problem and retry; Archive stays available, and the Run never returns to Active.
+Settling cancels owed work as manual settlement does, with `cancelled-on-Finish` on pending deliveries and `finish` on
+pending attention, shows unfinished Blocks stopped and records `run-settled` (`finish`). A user's confirmed Settle on a Run
+that already has its result records `finish` too. Edits a stopped branch already made in the shared workspace stay. A Run
+whose branches end without reaching an ending settles automatically as before and keeps its open gate, so a later accepted
+report can still reach an ending.
 
 ## Run title generations
 
@@ -577,8 +587,8 @@ outcome stays final.
   Effect clock, as for [Wait arrivals](#wait-arrivals), when Start accepts the Run and at startup for every pending
   generation; the wake-up and every reconcile sweep time out a pending generation whose deadline has passed. A
   submission at or after the deadline is refused even before the timeout is recorded.
-- **Cancellation.** Archive and confirmed manual settlement cancel a pending generation in the transaction that closes
-  the handoff gate, whether its launch was sent or not; a dispatch that has not marked its launch sent then sends
+- **Cancellation.** Archive, confirmed manual settlement and [reaching an ending](#reaching-an-ending) cancel a pending
+  generation in the transaction that closes the handoff gate, whether its launch was sent or not; a dispatch that has not marked its launch sent then sends
   nothing. A generation whose deadline already passed records the timeout instead. Automatic settlement and turning the
   setting off cancel nothing.
 - **Restart.** Startup and each sweep reconcile every pending generation against its original deadline: an unsent

@@ -313,7 +313,8 @@ visited Block has its Final result with no later working report, every Human
 occurrence is answered, no Wait arrival is pending, nothing is owed or pending and every
 worker thread is finished; any accepted report from one of its Blocks then returns it to
 Active, while chat without a report does not. The user can also settle an Active or Snoozed
-Run by manual settlement, which ends its automatic work for good. Navigation groups Settled
+Run by manual settlement, which ends its automatic work for good. A Run that reaches an ending
+stops and settles the same way with reason `finish`, without a dialog, and never returns to Active. Navigation groups Settled
 Runs together. On a Run, settled attention matters no longer await attention and keep
 their appearance and settlement times and reasons; settling attention does not settle the Run.
 _Avoid_: Finished (the retired permanent outcome).
@@ -327,7 +328,8 @@ every worker finished. Until then the Run stays Active and its settlement is **s
 or **unresolved** with the affected workers and a retry. Settling cancels owed automatic
 work, pending Human occurrences and pending Wait arrivals without inventing answers,
 settles pending attention as `manual-settlement` and shows unfinished Blocks as stopped. Later reports change nothing and never return the
-Run to Active.
+Run to Active. Reaching an ending runs the same confirmed path, authorized by the Flow, and records
+`finish` instead of `manual`, also on pending attention.
 _Avoid_: Stop Run, Stopped, pause, Resume (none exist; an unresolved settlement is not a lifecycle state).
 
 **T3 thread settlement**:

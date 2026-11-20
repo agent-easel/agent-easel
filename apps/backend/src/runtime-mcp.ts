@@ -44,7 +44,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_block",
     description:
-      "Read your Block's current visit: state, why it was activated, its inputs, exits {id, name, description, messageRequired} and allowed reports. inputs.images is an ordered manifest {imageId, ordinal, name, mimeType, sizeBytes}; ordinal N matches [Image N: name] in the Run input. Fetch an image with factory_get_run_image; this read carries no image bytes. On a later visit of a Block with a Revisit instruction, revisitInstruction and revisitRule restate it.",
+      "Read your Block's current visit: state, why it was activated, its inputs, exits {id, name, description, messageRequired, endings} and allowed reports. An exit's endings [{id, name, description, output, outputDescription}] are the Run endings it enters; output none, optional or required says whether the message becomes the Run result, and messageRequired already includes a required ending. A prompted Continuation lists no exits; its output {messageRequired, endings} describes the same for its result. inputs.images is an ordered manifest {imageId, ordinal, name, mimeType, sizeBytes}; ordinal N matches [Image N: name] in the Run input. Fetch an image with factory_get_run_image; this read carries no image bytes. On a later visit of a Block with a Revisit instruction, revisitInstruction and revisitRule restate it.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },

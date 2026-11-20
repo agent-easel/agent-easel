@@ -321,7 +321,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
    * confirmation closes the handoff gate, cancelling a pending Run title generation, and starts attempt 1; a later one starts the next
    * attempt only while the current attempt has an unresolved worker or launch. Both record this
    * backend as the attempt's owner, the bound workers as stopping and "settlement requested", and advance the
-   * generation. The first confirmation records `reason`, which the settled Run keeps; a later one
+   * generation. The first confirmation records `reason`, or `finish` for a Run with a result, which the settled Run keeps; a later one
    * retries under the recorded reason. Answers whether an attempt started. */
   function acceptSettlement(
     id: string,
@@ -343,9 +343,13 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           if (settlement?.state !== "unresolved") return { ok: true as const, value: false };
           yield* sql`UPDATE run_settlements SET attempt=attempt+1,attempt_owner=${ownerToken},attempted_at=${time},stop_pass_at=NULL WHERE run_id=${id}`;
         } else {
+          // A Run that reached an ending settles because of it, even when the user's Settle
+          // records the attempt before the Runner does.
+          const [result] = yield* sql`SELECT 1 FROM run_results WHERE run_id=${id}`;
+          const recorded: StopSettlementReason = result ? "finish" : reason;
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
-          yield* cancelTitleGeneration(sql, id, time, "settle");
-          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${reason})`;
+          yield* cancelTitleGeneration(sql, id, time, recorded === "finish" ? "finish" : "settle");
+          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${recorded})`;
         }
         const attempt = (current?.attempt ?? 0) + 1;
         for (const worker of yield* boundWorkerRows(sql, id))
@@ -458,7 +462,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
   /** Settles `run` manually once the caller's fresh reads, made at `run`'s generation, confirmed
    * every bound worker finished. Guards: owner, not Archived, not Settled, the generation, no
    * launch whose outcome is unresolved and, when the Run has workers, its live authorization
-   * context. Closes the gate, cancels owed automatic work with the manual-settlement reason,
+   * context. Closes the gate, cancels owed automatic work with the recorded reason's cutoff,
    * leaves each reserved or uncertain send uncertain without its payload, records each worker's
    * runs as the reads showed them ended, without raising attention or replacing a recorded
    * Problem, records "worker stopped" for each worker whose Stop T3 acknowledged, settles the Run (clearing Snooze and
@@ -493,7 +497,8 @@ export function openRunManualSettlement(database: RunnerDatabase) {
               { runId: id, blockId: entry.blockId },
               { keep: NOT_WORKING, otherwise: "finished" },
             );
-        yield* cancelOwedWork(sql, id, time, "settle");
+        const reason = recorded?.reason ?? "manual";
+        yield* cancelOwedWork(sql, id, time, reason === "finish" ? "finish" : "settle");
         // T3 has no read for a send's outcome and only a same-key replay can resolve it, which
         // the closed gate forbids. The send stays uncertain, never cancelled, and its payload,
         // needed for nothing but that replay, is cleared.
@@ -523,7 +528,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
               engineStatus: worker.latest?.status ?? null,
               observedAt: time,
             });
-        yield* markSettled(sql, id, recorded?.reason ?? "manual", time);
+        yield* markSettled(sql, id, reason, time);
         yield* sql`UPDATE runtime_reports SET completion_eligible_at=COALESCE(completion_eligible_at,${time}) WHERE run_id=${id}`;
         yield* advanceGeneration(sql, id);
         return true;
