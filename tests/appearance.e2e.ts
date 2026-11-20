@@ -131,27 +131,68 @@ for (const { mode, opposite } of [
   });
 }
 
-test("System applies the current scheme, follows both live changes, and survives reload", async ({
+test("choosing System immediately applies the current device scheme", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
   await browser.emulateMedia({ colorScheme: "light" });
+  await browser.addInitScript(() => localStorage.setItem("factory.appearance", "dark"));
   await app.open(settingsPath);
-  await screen.getByRole("radio", "Dark").tap();
   await expectColors(browser, "dark");
 
   // Act
   await screen.getByRole("radio", "System").tap();
 
   // Assert
+  await expect(screen.getByRole("radio", "System")).toBeChecked();
   await expectColors(browser, "light");
-  await browser.emulateMedia({ colorScheme: "dark" });
-  await expectColors(browser, "dark");
+});
+
+for (const { from, to } of [
+  { from: "dark", to: "light" },
+  { from: "light", to: "dark" },
+] as const) {
+  test(`System follows a live device change from ${modes[from].label} to ${modes[to].label}`, async ({
+    app,
+    screen,
+    browser,
+  }) => {
+    // Arrange
+    await browser.emulateMedia({ colorScheme: from });
+    await app.open(settingsPath);
+    await expect(screen.getByRole("radio", "System")).toBeChecked();
+    await expectColors(browser, from);
+
+    // Act
+    await browser.emulateMedia({ colorScheme: to });
+
+    // Assert
+    await expectColors(browser, to);
+    await expect(screen.getByRole("radio", "System")).toBeChecked();
+  });
+}
+
+test("a browser profile's System choice survives reload after replacing an override", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
   await browser.emulateMedia({ colorScheme: "light" });
+  await recordFirstRender(browser);
+  await app.open(settingsPath);
+  await screen.getByRole("radio", "Dark").tap();
+  await expectColors(browser, "dark");
+  await screen.getByRole("radio", "System").tap();
   await expectColors(browser, "light");
+
+  // Act
   await browser.reload();
+
+  // Assert
+  await expectFirstRender(browser, "light");
   await expect(screen.getByRole("radio", "System")).toBeChecked();
   await expectColors(browser, "light");
 });
@@ -173,14 +214,9 @@ test("an unrecognized saved appearance follows the system scheme", async ({
   await expectColors(browser, "light");
 });
 
-test("another tab of the same profile follows changes to Light, Dark, and System", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  await browser.emulateMedia({ colorScheme: "light" });
-  await app.open(settingsPath);
+type AppearanceMirrorHost = Window & { __appearanceMirror?: Window };
+
+async function openAppearanceMirror(browser: Browser) {
   expect(
     await browser.evaluate((path) => {
       const tab = window.open(path, "appearance-mirror");
@@ -188,23 +224,84 @@ test("another tab of the same profile follows changes to Light, Dark, and System
       return tab !== null;
     }, settingsPath),
   ).toBe(true);
-  const mirroredChoice = () =>
-    browser.evaluate(() => {
-      const tab = (window as Window & { __appearanceMirror?: Window }).__appearanceMirror;
-      return [
-        tab?.document.querySelector('[role="radio"][aria-checked="true"]')?.textContent ?? null,
-        tab?.document.documentElement?.dataset.appearance ?? null,
-      ];
-    });
-  await expect.poll(mirroredChoice).toEqual(["System", "light"]);
+}
 
-  // Act and assert each preference change reaches the existing tab.
-  await screen.getByRole("radio", "Light").tap();
-  await expect.poll(mirroredChoice).toEqual(["Light", "light"]);
+const mirroredChoice = (browser: Browser) =>
+  browser.evaluate(() => {
+    const tab = (window as AppearanceMirrorHost).__appearanceMirror;
+    return [
+      tab?.document.querySelector('[role="radio"][aria-checked="true"]')?.textContent ?? null,
+      tab?.document.documentElement?.dataset.appearance ?? null,
+    ];
+  });
+
+for (const { choice, mode, initialChoice, initialMode } of [
+  { choice: "Light", mode: "light", initialChoice: "Dark", initialMode: "dark" },
+  { choice: "Dark", mode: "dark", initialChoice: "Light", initialMode: "light" },
+  { choice: "System", mode: "light", initialChoice: "Dark", initialMode: "dark" },
+] as const) {
+  test(`another tab of the same profile follows a change to ${choice}`, async ({
+    app,
+    screen,
+    browser,
+  }) => {
+    // Arrange
+    await browser.emulateMedia({ colorScheme: "light" });
+    await app.open(settingsPath);
+    await screen.getByRole("radio", initialChoice).tap();
+    await openAppearanceMirror(browser);
+    await expect.poll(() => mirroredChoice(browser)).toEqual([initialChoice, initialMode]);
+
+    // Act
+    await screen.getByRole("radio", choice).tap();
+
+    // Assert
+    await expect.poll(() => mirroredChoice(browser)).toEqual([choice, mode]);
+  });
+}
+
+test("a loading tab picks up System saved after first paint", async ({ app, screen, browser }) => {
+  // Arrange
+  await browser.emulateMedia({ colorScheme: "light" });
+  await app.open(settingsPath);
   await screen.getByRole("radio", "Dark").tap();
-  await expect.poll(mirroredChoice).toEqual(["Dark", "dark"]);
+  await expectColors(browser, "dark");
+  const moduleUrl = await browser.evaluate(
+    () => document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src,
+  );
+  let releaseModule!: () => void;
+  const moduleHeld = new Promise<void>((resolve) => {
+    releaseModule = resolve;
+  });
+  await browser.route(moduleUrl, async (route) => {
+    await moduleHeld;
+    await route.continue();
+  });
+  await openAppearanceMirror(browser);
+  await expect.poll(() => mirroredChoice(browser)).toEqual([null, "dark"]);
+  await browser.evaluate(() => {
+    const tab = (window as AppearanceMirrorHost).__appearanceMirror!;
+    tab.addEventListener("storage", (event) => {
+      if (event.key === "factory.appearance")
+        tab.document.documentElement.dataset.appearanceStorageEvent = event.newValue ?? "";
+    });
+    return null;
+  });
   await screen.getByRole("radio", "System").tap();
-  await expect.poll(mirroredChoice).toEqual(["System", "light"]);
+  await expect
+    .poll(() =>
+      browser.evaluate(() => {
+        const tab = (window as AppearanceMirrorHost).__appearanceMirror!;
+        return tab.document.documentElement.dataset.appearanceStorageEvent ?? null;
+      }),
+    )
+    .toBe("system");
+
+  // Act
+  releaseModule();
+
+  // Assert
+  await expect.poll(() => mirroredChoice(browser)).toEqual(["System", "light"]);
 });
 
 test("an offline client switches to System and follows the device without its server", async ({

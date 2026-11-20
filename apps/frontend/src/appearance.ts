@@ -98,6 +98,8 @@ export function startAppearance() {
       if (event.storageArea === storage && (event.key === storageKey || event.key === null))
         applyPreference(parsePreference(storage.getItem(storageKey)));
     });
+    // A tab may have saved a new choice since the blocking script read storage.
+    applyPreference(parsePreference(storage.getItem(storageKey)));
   } catch {
     // A profile that blocks storage has no persisted tab preferences to follow.
   }
