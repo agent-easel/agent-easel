@@ -190,6 +190,19 @@ export function firstRunSetupFixture(
         running().t3.connection.available = false;
         await recheck();
       },
+      async t3Available() {
+        running().t3.connection.available = true;
+        await recheck();
+      },
+      /**
+       * T3 at the same address answers with another grant while staying connected, so the host's
+       * next check, requested here, binds a new authorization context. T3's settings are unchanged.
+       */
+      async t3NewAuthorization() {
+        const { connection } = running().t3;
+        connection.approve(`${connection.identity}-renewed`);
+        await recheck();
+      },
       /** The owner connects the detected T3 on the host and approves it there. */
       async hostConnects() {
         const { factory } = running().server;

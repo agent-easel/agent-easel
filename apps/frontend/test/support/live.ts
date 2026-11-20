@@ -82,6 +82,7 @@ const connection = (state: T3Connection["state"]): T3Connection => ({
   authorizationContext: null,
   authorizationPending: false,
   authorizationOpenFailed: false,
+  readyGeneration: state === "ready" ? "ready-generation-1" : null,
   contract: null,
 });
 

@@ -103,16 +103,19 @@ const nothingToInstall = (
   (listed.length > 0 && !listed.some(installable));
 
 /**
- * The connection and reporting list both setup screens follow. The list is read again whenever T3
- * becomes Connected or the harnesses it keeps off change, and is `listed` once such a read has
- * applied; a later read for the same T3 and caption keeps it in view. It is `current` while no
- * newer read is outstanding as well: Open Factory and an approved client's status rest on that.
+ * The connection and reporting list both setup screens follow. The list is read again for every
+ * ready connection (each connect, reauthorization, reconnect or endpoint change is a new ready
+ * generation) and whenever the harnesses T3 keeps off change. It is `listed` only once a read
+ * requested for the current generation and caption has applied; a later read for the same request
+ * keeps it in view. It is `current` while no newer read is outstanding as well: Open Factory and
+ * an approved client's status rest on that.
  */
 function useSetupProgress(setup: FirstRunSetup) {
-  const { presentation } = useConnectionState();
+  const { connection, presentation } = useConnectionState();
   const { targets, refreshFor, answeredFor, refreshing } = useReportingState();
   const connected = presentation === "ready";
-  const key = connected ? setup.harnessesOffInT3.join(" ") : null;
+  const generation = connected ? connection?.readyGeneration : null;
+  const key = generation ? JSON.stringify([generation, setup.harnessesOffInT3]) : null;
   useEffect(() => {
     void refreshFor(key);
   }, [key, refreshFor]);
@@ -338,9 +341,9 @@ function InstallStep({
   onCheckAgain,
   onCompleted,
 }: {
-  /** Null until a reporting read requested for the connected T3 and its caption has applied. */
+  /** Null until a reporting read requested for the ready connection and its caption has applied. */
   listed: readonly ReportingInstallation[] | null;
-  /** The reporting list answers for the connected T3 and the current caption. */
+  /** `listed` answers the ready connection and caption, and no newer read is outstanding. */
   current: boolean;
   offInT3: readonly string[];
   onCheckAgain: () => Promise<void>;

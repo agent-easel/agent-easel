@@ -1,9 +1,9 @@
-import { assert, expect, it } from "@effect/vitest";
+import { assert, expect, it, type TestContext } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import { factoryHarness } from "./support/factory.ts";
 import { ControlledT3 } from "./support/controlled-t3.ts";
-import { readConnection } from "./support/boundaries-setup.ts";
+import { readConnection, recheckConnection } from "./support/boundaries-setup.ts";
 
 it("configureConnection rejects endpoint URLs that embed credentials", async (context) => {
   // Arrange
@@ -163,3 +163,61 @@ it("a failed reopen of the approval page stays reported on later checks while ap
   expect(connection.explanation).toMatch(/could not open the backend-host browser/);
 });
 
+/** A host whose saved T3 endpoint is ready, with its first ready generation. */
+async function readyConnection(context: TestContext) {
+  const harness = await factoryHarness(context);
+  const t3 = new ControlledT3();
+  t3.connection.authorized = true;
+  const factory = await harness.open({ t3, connectionRetryMs: 60_000 });
+  await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
+  const ready = await readConnection(factory);
+  expect(ready.state).toBe("ready");
+  expect(ready.readyGeneration).toEqual(expect.any(String));
+  return { t3, factory, ready };
+}
+
+it("later checks of the same ready connection keep its ready generation", async (context) => {
+  // Arrange
+  const { factory, ready } = await readyConnection(context);
+
+  // Act
+  const rechecked = await factory.recheckConnection();
+
+  // Assert
+  assert(rechecked.ok);
+  expect(rechecked.value.readyGeneration).toBe(ready.readyGeneration);
+});
+
+it("a reconnect after T3 was unavailable is a new ready generation for the same authorization context", async (context) => {
+  // Arrange
+  const { t3, factory, ready } = await readyConnection(context);
+  t3.connection.available = false;
+  expect((await recheckConnection(factory)).readyGeneration).toBeNull();
+  t3.connection.available = true;
+
+  // Act
+  const reconnected = await factory.recheckConnection();
+
+  // Assert
+  assert(reconnected.ok);
+  expect(reconnected.value.state).toBe("ready");
+  expect(reconnected.value.authorizationContext?.id).toBe(ready.authorizationContext?.id);
+  expect(reconnected.value.readyGeneration).toEqual(expect.any(String));
+  expect(reconnected.value.readyGeneration).not.toBe(ready.readyGeneration);
+});
+
+it("a new authorization context while T3 stays ready is a new ready generation", async (context) => {
+  // Arrange
+  const { t3, factory, ready } = await readyConnection(context);
+  t3.connection.identity = "controlled-grant-another";
+
+  // Act
+  const replaced = await factory.recheckConnection();
+
+  // Assert
+  assert(replaced.ok);
+  expect(replaced.value.state).toBe("ready");
+  expect(replaced.value.authorizationContext?.id).not.toBe(ready.authorizationContext?.id);
+  expect(replaced.value.readyGeneration).toEqual(expect.any(String));
+  expect(replaced.value.readyGeneration).not.toBe(ready.readyGeneration);
+});

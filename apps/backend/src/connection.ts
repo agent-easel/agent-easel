@@ -103,6 +103,7 @@ export const makeConnection = (
       authorizationContext: current ? contextValue(current) : null,
       authorizationPending: false,
       authorizationOpenFailed: false,
+      readyGeneration: null,
       contract: null,
     };
     /** The support answers of the check that set `status`. */
@@ -165,6 +166,12 @@ export const makeConnection = (
           }
         }
         support = observation.support;
+        // Kept while the connection stays ready for the same authorization context.
+        const sameReady =
+          before.readyGeneration !== null && before.authorizationContext?.id === current?.id;
+        let readyGeneration: string | null = null;
+        if (observation.state === "ready")
+          readyGeneration = sameReady ? before.readyGeneration : yield* newId;
         status = {
           endpoint,
           state: observation.state,
@@ -174,6 +181,7 @@ export const makeConnection = (
           // The pending attempt owns both, so a resumed attempt reports them as before.
           authorizationPending: isApprovalPending(observation.reason),
           authorizationOpenFailed: observation.reason === "approval-reopen-failed",
+          readyGeneration,
           contract: observation.contract ?? null,
         };
         publishCheck(before);
@@ -181,6 +189,7 @@ export const makeConnection = (
           status = {
             ...status,
             state: "incompatible",
+            readyGeneration: null,
             explanation:
               "T3 did not provide a verifiable authorization context and environment. Reauthorize and recheck.",
           };
@@ -197,6 +206,7 @@ export const makeConnection = (
               checkedAt: yield* now,
               authorizationPending: false,
               authorizationOpenFailed: false,
+              readyGeneration: null,
               contract: null,
               explanation:
                 "T3 is unavailable. Start T3 or check the endpoint and network. Factory will reconnect automatically.",
@@ -220,6 +230,7 @@ export const makeConnection = (
         authorizationContext: null,
         authorizationPending: false,
         authorizationOpenFailed: false,
+        readyGeneration: null,
         contract: null,
         state: "authorization-required",
       };
@@ -274,6 +285,7 @@ export const makeConnection = (
                 endpoint,
                 authorizationContext: null,
                 authorizationOpenFailed: false,
+                readyGeneration: null,
                 contract: null,
               };
               changes.connectionChanged();

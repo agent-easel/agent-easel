@@ -72,6 +72,14 @@ export interface T3Connection {
    * itself, so a backend restart that resumes the approval reports it too.
    */
   readonly authorizationOpenFailed: boolean;
+  /**
+   * Which ready connection this is: a new opaque value each time the connection becomes ready, or
+   * becomes ready for another authorization context, and null while it is not ready. Every
+   * connect, reauthorization, reconnect after an outage, endpoint change and backend restart
+   * therefore yields a new value; later checks of the same ready connection keep it. Anything
+   * read for an earlier value was read for another connection.
+   */
+  readonly readyGeneration: string | null;
   readonly contract: T3Contract | null;
 }
 

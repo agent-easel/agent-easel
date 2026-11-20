@@ -65,6 +65,9 @@ export function agentReportingStatus(
   };
 }
 
+/** One request for the list to answer for `key`; every request is its own read generation. */
+type ScopeRequest = { readonly key: string };
+
 type ReportingInstallState = {
   running: string | null;
   failures: Readonly<Record<string, string>>;
@@ -76,11 +79,12 @@ const ReportingStateContext = createContext<
       ReportingInstallState & {
         refresh: () => Promise<void>;
         /**
-         * Reads the list again for `scope`, such as the connected T3 and the harnesses it keeps
-         * off; null means no scope the list can answer for yet.
+         * Reads the list again for `key`, such as the ready T3 connection and the harnesses it
+         * keeps off; null means nothing the list can answer for yet. Each call is a new request,
+         * so an answer read for an earlier call never counts for a later one, even with the same key.
          */
-        refreshFor: (scope: string | null) => Promise<void>;
-        /** The scope the applied list answers for: current when its read started, and still. */
+        refreshFor: (key: string | null) => Promise<void>;
+        /** The key of the latest request, once a read started under that request has applied. */
         answeredFor: string | null;
         /** A read requested since `targets` applied is outstanding, so they may be out of date. */
         refreshing: boolean;
@@ -94,9 +98,10 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
-  const [answeredFor, setAnsweredFor] = useState<string | null>(null);
+  const [requested, setRequested] = useState<ScopeRequest | null>(null);
+  const [answered, setAnswered] = useState<ScopeRequest | null>(null);
   const installing = useRef(false);
-  const scope = useRef<string | null>(null);
+  const latestRequest = useRef<ScopeRequest | null>(null);
   const agents = useLiveStudio().value?.agents ?? null;
   const {
     failure,
@@ -105,22 +110,25 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
     supersede,
   } = useRefreshSchedule({
     read: async () => {
-      const readFor = scope.current;
+      const readFor = latestRequest.current;
       return { readFor, targets: await api.getReportingInstallations() };
     },
     apply: ({ readFor, targets }) => {
       setTargets(targets);
-      setAnsweredFor(readFor === scope.current ? readFor : null);
+      setAnswered(readFor === latestRequest.current ? readFor : null);
     },
     intervalMs: 30_000,
   });
   const refreshFor = useCallback(
-    async (next: string | null) => {
-      scope.current = next;
-      if (next !== null) await refresh();
+    async (key: string | null) => {
+      const request = key === null ? null : { key };
+      latestRequest.current = request;
+      setRequested(request);
+      if (request) await refresh();
     },
     [refresh],
   );
+  const answeredFor = answered !== null && answered === requested ? answered.key : null;
   const reads: ReportingReads = failure
     ? {
         targets: null,

@@ -69,6 +69,28 @@ async function openInstallStep(
   await expectInstallStepOpen(context.screen);
 }
 
+/** A fresh host installed in both harnesses T3 has on: Ready offers Open Factory. */
+async function readyHost(context: {
+  fixture: Fixture;
+  app: App;
+  browser: Browser;
+  screen: Screen;
+}) {
+  await openInstallStep(context, {});
+  await context.screen.getByRole("button", "Install in 2 harnesses").tap();
+  await expect(context.screen.getByRole("heading", "Factory is ready")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expectActionShown(context.browser, "Open Factory");
+}
+
+/** The harness list is being read again, and nothing rests on the earlier one meanwhile. */
+async function expectListBeingRead(screen: Screen) {
+  await expect(screen.getByText("Checking harnesses…")).toBeVisible({ timeout: 8_000 });
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
+}
+
 /** A host API call that must succeed: a refused or failed call fails the journey here. */
 async function hostCall<T>(baseUrl: string | undefined, path: string, init?: RequestInit) {
   const response = await fetch(new URL(path, baseUrl), init);
@@ -102,6 +124,18 @@ async function openApprovedClient(
   await freshHost(context, options);
   await openRemoteBrowser(context.app);
   await openApproved(context.app, "/runs/new");
+}
+
+/** Discovery refuses the host's connected T3, and this approved client has read that refusal. */
+async function clientReadRefusal(context: {
+  fixture: Fixture;
+  app: App;
+  browser: Browser;
+  screen: Screen;
+}) {
+  await openApprovedClient(context, { sameT3: false });
+  await context.fixture.firstRunSetup.hostConnects();
+  await expect(context.screen.getByText(cannotInstallHere)).toBeVisible({ timeout: 8_000 });
 }
 
 /** Approval waits in the host's browser, which can no longer be opened again. */
@@ -496,6 +530,48 @@ test("a harness turned on in T3 beside one needing manual setup withholds Open F
   await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
 });
 
+test("after T3 grants a new authorization with the same harnesses off, Open Factory waits for a list read for it", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await readyHost({ fixture, app, browser, screen });
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.t3NewAuthorization();
+
+  // Assert: the caption is unchanged, yet the list read for the earlier authorization no longer counts.
+  await expectListBeingRead(screen);
+  await expect(
+    screen.getByText("Cursor and Grok are off in T3. Turn them on there to include them."),
+  ).toBeVisible();
+});
+
+test("after T3 disconnects and reconnects, Open Factory waits for a list read since reconnecting", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await readyHost({ fixture, app, browser, screen });
+  await fixture.firstRunSetup.t3Unavailable();
+  await expect(screen.getByRole("heading", "Connect to T3, current step")).toBeVisible({
+    timeout: 8_000,
+  });
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.t3Available();
+
+  // Assert
+  await expectInstallStepOpen(screen);
+  await expectListBeingRead(screen);
+});
+
 test("an approved client waits read-only while the host sets up, then opens Factory by itself", async ({
   fixture,
   app,
@@ -580,4 +656,49 @@ test("an approved client on a host where installation is impossible waits for th
   await expectNoInstallOrOpenFactory(screen);
   await expect(screen.getByRole("button", "Check again")).toBeVisible();
   await app.screenshot("first-run-setup-approved-client-blocked");
+});
+
+test("an approved client is not told installation is impossible from a list read for an earlier T3 authorization", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await clientReadRefusal({ fixture, app, browser, screen });
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.t3NewAuthorization();
+
+  // Assert
+  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expect(screen.getByText(cannotInstallHere)).toHaveCount(0);
+});
+
+test("an approved client shows no harnesses read before T3 disconnected until a list read since reconnecting answers", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: this client listed the host's harnesses, then T3 went away.
+  await openApprovedClient({ fixture, app, browser });
+  await fixture.firstRunSetup.hostConnects();
+  await expect(screen.getByRole("group", "Claude", { exact: true })).toBeVisible({
+    timeout: 8_000,
+  });
+  await fixture.firstRunSetup.t3Unavailable();
+  await expect(screen.getByText("Not connected yet")).toBeVisible({ timeout: 8_000 });
+  await fixture.firstRunSetup.holdReportingReads();
+
+  // Act
+  await fixture.firstRunSetup.t3Available();
+
+  // Assert
+  await expectInstallStepOpen(screen);
+  await expect(screen.getByText("Waiting for the install on the Factory host")).toBeVisible();
+  await expect(screen.getByRole("group", "Claude", { exact: true })).toHaveCount(0);
 });
