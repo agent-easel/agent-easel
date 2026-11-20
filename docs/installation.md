@@ -48,6 +48,8 @@ Every request, including UI assets, must use the bound port and an allowed Host:
 Host; failures return HTTP 403 before any operation. Factory sends no CORS headers. The UI and shipped fixtures send the header; custom API clients must too. This blocks cross-site
 mutation and DNS rebinding. Factory MCP (`/mcp`) is the one exception: harnesses send no custom header, so it refuses any present `Origin` other than its own instead.
 
+A fresh data home opens on the [First-run setup](t3-integration.md#first-run-setup) screen until the host completes it; it proposes the T3 running on the same computer as the same user, found through the T3 state directory above, and otherwise asks for the address. An upgraded installation that already has a saved T3 endpoint skips it.
+
 This listener is the **host-local** surface: it answers only requests whose socket peer is loopback (others get 403 `host_only`), even when bound to `0.0.0.0`. Other devices use secure remote access
 (approved, revocable clients over TLS on a separate listener) enabled in **Settings → Devices & access** or `"remoteAccess": { "enabled": true }`; see [desktop and approved clients](desktop-and-clients.md) and [Release](release.md).
 

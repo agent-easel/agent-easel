@@ -118,15 +118,7 @@ export function ClientGate({ children }: { children: ReactNode }) {
     if (unapproved) forgetColors(profileStorage());
   }, [unapproved]);
 
-  if (gate.kind === "checking")
-    return (
-      <GateScreen
-        label="Connecting"
-        icon={Hourglass}
-        title="Connecting to Factory…"
-        description="Checking the server's protocol and this device's access."
-      />
-    );
+  if (gate.kind === "checking") return <ConnectingScreen />;
   if (gate.kind === "unreachable") return <UnreachableScreen />;
   if (gate.kind === "incompatible") return <IncompatibleScreen message={gate.message} />;
   if (gate.kind === "pending") return <PendingScreen client={gate.client} />;
@@ -140,6 +132,18 @@ export function ClientGate({ children }: { children: ReactNode }) {
         </AppearanceSourceContext.Provider>
       </ServerIdContext.Provider>
     </ScopeContext.Provider>
+  );
+}
+
+/** Shown while Factory checks whether this window may open the application. */
+export function ConnectingScreen() {
+  return (
+    <GateScreen
+      label="Connecting"
+      icon={Hourglass}
+      title="Connecting to Factory…"
+      description="Checking the server's protocol and this device's access."
+    />
   );
 }
 

@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { proxyFixture } from "./proxy.ts";
 import { appearanceFixture } from "./fixture/appearance.ts";
 import { definitionsFixture } from "./fixture/definitions.ts";
+import { firstRunSetupFixture } from "./fixture/first-run-setup.ts";
 import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
 import { githubFixture, startJourneyGitHub } from "./fixture/github.ts";
 import { startHost } from "./fixture/host.ts";
@@ -27,10 +28,11 @@ const live = liveFixture(host.server.address.port, remoteAccess.liveSocketCount)
 const scenarios = await scenariosFixture(host);
 
 /**
- * Every fixture module, in shared reset order: the host's T3 connection comes back first, since
- * the other modules' resets need it available and authorized.
+ * Every fixture module, in shared reset order: the host's T3 connection and completed setup come
+ * back first, since the other modules' resets need it available and authorized.
  */
 const modules = {
+  firstRunSetup: firstRunSetupFixture(host),
   remoteAccess,
   live,
   discord: discordFixture(discord, host),

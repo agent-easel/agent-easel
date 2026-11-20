@@ -4,7 +4,6 @@ import type { T3Connection } from "@t3-factory/contracts";
 import { KeyRound, LoaderCircle, Unplug } from "lucide-react";
 import { useClientScope } from "../client-scope.ts";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ProblemCard } from "@/components/problem-card";
 import { TechnicalDetails } from "@/components/technical-details";
 import { SettingsDetailRow, SettingsGroup, SettingsPage } from "@/components/settings-page";
@@ -17,7 +16,7 @@ import {
   settingsConnectionPresentation,
   type SettingsConnectionPresentation,
 } from "../connection-state.tsx";
-import { fieldAria } from "../components/field-state.ts";
+import { allowedAddress, T3AddressForm, T3AddressHelp } from "../components/t3-address.tsx";
 
 export function ConnectionSettingsPanel() {
   const { connection, loadError, presentation: status, setConnection } = useConnectionState();
@@ -140,8 +139,9 @@ function ConnectionRows({
           mono={!editing}
           value={
             editing ? (
-              <AddressForm
+              <T3AddressForm
                 value={endpoint}
+                submitLabel="Save"
                 invalid={invalid}
                 disabled={disabled}
                 onChange={setDraft}
@@ -199,17 +199,10 @@ function ConnectionRows({
           value={connection?.checkedAt ? dayAndTime(connection.checkedAt) : "—"}
         />
       </SettingsGroup>
-      {invalid && (
-        <ProblemCard id={addressProblemId} tone="error" title="Use HTTPS, or HTTP on this computer">
-          Leave credentials, queries and fragments out of the address.
-        </ProblemCard>
-      )}
+      {editing && <T3AddressHelp invalid={invalid} />}
     </>
   );
 }
-
-/** The address field names the card that explains why its value is not allowed. */
-const addressProblemId = "connection-address-problem";
 
 function AuthorizationAction({
   connection,
@@ -233,61 +226,6 @@ function AuthorizationAction({
         {pending ? "Start over" : "Reauthorize"}
       </Button>
     </MutationGate>
-  );
-}
-
-function AddressForm({
-  value,
-  invalid,
-  disabled,
-  onChange,
-  onSave,
-}: {
-  value: string;
-  invalid: boolean;
-  disabled: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-}) {
-  const blocked = disabled || invalid || !value.trim();
-  return (
-    <form
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!blocked) onSave();
-      }}
-    >
-      <Input
-        type="url"
-        aria-label="Address"
-        {...fieldAria(invalid && addressProblemId)}
-        disabled={disabled}
-        value={value}
-        placeholder="http://127.0.0.1:3773/mcp"
-        className="min-w-28 flex-1 bg-muted font-mono text-label"
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {invalid && <StatusBadge kind="error">Not allowed</StatusBadge>}
-      <MutationGate>
-        <Button type="submit" disabled={blocked}>
-          Save
-        </Button>
-      </MutationGate>
-    </form>
-  );
-}
-
-function allowedAddress(value: string) {
-  const url = URL.parse(value.trim());
-  return (
-    !!url &&
-    !url.username &&
-    !url.password &&
-    !url.search &&
-    !url.hash &&
-    (url.protocol === "https:" ||
-      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)))
   );
 }
 
