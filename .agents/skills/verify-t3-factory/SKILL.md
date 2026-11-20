@@ -7,10 +7,30 @@ description: Validate T3 Factory web UI changes, explore features for bugs, and 
 
 ## Read first
 
-Read [the feature map](features/README.md). Use `pnpm exec e2e guide [topic]` for the installed runner's reference (`writing-tests`, `mcp`, `explore` or `bug-bash`).
+Read [the feature map](features/README.md). The cheat-sheet below covers the
+commands you need; do not run `e2e --help` or `e2e guide` to rediscover them
+(`pnpm exec e2e guide writing-tests|mcp|explore|bug-bash` only for a topic it
+does not cover).
 Run from the repository root. `e2e.config.ts` drives `tests/*.e2e.ts`;
 `e2e.explore.config.ts` adds the exploration model. Use pinned Node/pnpm from
 [installation](../../../docs/installation.md).
+
+## CLI cheat-sheet
+
+Run from the repository root; `pnpm e2e:prepare` first after application edits.
+
+| Need | Command |
+| --- | --- |
+| Check discovery | `pnpm exec e2e list` |
+| Run a spec | `pnpm exec e2e run tests/<name>.e2e.ts [--grep <title>] [--trace on] [--video on] --output .e2e/proof/<change>` |
+| Before/after proof | `pnpm e2e:evidence --base <ref> <spec> --output .e2e/proof/<change>` |
+| Diff two PNG sets | `pnpm e2e:evidence-diff <before-dir> <after-dir> [out-dir]` |
+| Screenshots | `pnpm e2e:screenshots` |
+| Explore (model) | `pnpm e2e:explore '<charter>' --max-steps 3 --output .e2e/bugbash/<slug>` |
+
+Results land in `<output>/report.json` and `<output>/results/<test>/attempt-N/`
+(`screenshots/`, `trace.md`, video). A spec may live anywhere under the repository,
+including ignored `.e2e/`; it needs no config of its own.
 
 ## Launch
 
@@ -66,10 +86,14 @@ persisted simulator/scenario data for long identities and multiple workers;
 read the public API to confirm those values and links. Capture the rendered app
 without replacing DOM text, API responses or CSS for evidence.
 Capture the baseline from the PR base revision and the verified result in the same
-viewport; use comparable states and explain differences in the PR. Capture Before
-and After each in its own CLI run (fresh fixture) from a known seeded scenario,
-with distinct `--output .e2e/proof/<change>/before` and
-`--output .e2e/proof/<change>/after`, so an earlier journey cannot contaminate evidence.
+viewport; use comparable states and explain differences in the PR.
+One command does both: `pnpm e2e:evidence --base <ref> <spec> --output .e2e/proof/<change>`
+(`<ref>` is the PR base, such as `origin/main`; `<spec>` is a `tests/*.e2e.ts` file or
+a throwaway spec under `.e2e/`). It builds the base commit once in a cached worktree
+under `.e2e/evidence-base/<sha>/` (reused while the base SHA is unchanged), builds the
+current tree, runs the spec in each with the project config (fresh fixture per run) into
+`<output>/before` and `<output>/after`, then runs the diff below. Do not write
+per-change configs or hand-build base worktrees.
 Embed both sets in the PR body's **UI screenshots** section as a `| Before | After |`
 table with one row per view, Before on the left and After on the right, so each pair
 compares side by side; GitHub scales each image to its column and opens it full size
@@ -88,8 +112,19 @@ Then run `pnpm check:ui-evidence --pr <PR>`, the same validator as CI;
 that already holds HTTPS image URLs.
 Record the base/head commit, viewport, scenario and command alongside the images.
 Capture After only after the last application edit; rebuild and repeat the affected
-journey if the UI changes afterward. Inspect both image sets yourself, including
-long text and each worker link. The **UI evidence attachments** CI check only
+journey if the UI changes afterward. Inspect the evidence yourself, including
+long text and each worker link, without reading raw PNGs one by one (each Read
+costs context; one session read 44 images repeatedly). `pnpm e2e:evidence` already ran
+`pnpm e2e:evidence-diff <output>/before <output>/after` (run it alone for sets captured
+another way). Both runs fast-forward CSS transitions to their end state, and a pixel
+counts as changed only above a small colour distance, so builds with no UI difference
+diff as unchanged; a fixture-order change in a base older than the stable Flow order can
+still show as changed. It pairs views by name, writes one `before | after | diff` contact sheet per
+changed view to `.e2e/proof/<change>/contact-sheets/` and prints each view as
+changed (with diff %), unchanged or unpaired. Read the summary, then each changed
+sheet once; unchanged views need no image, and an unpaired view is the only case
+for reading a raw PNG. Do not re-read after intermediate fixes; rebuild, recapture
+and diff once. The **UI evidence attachments** CI check only
 checks that one row of the two-column Before | After table holds an embedded HTTPS
 image in both cells, outside HTML comments and code, accepting alt text with nested or escaped brackets;
 it does not check their content, provenance or comparability. A non-empty reason under `### No UI evidence`
@@ -111,12 +146,6 @@ keeps passing traces too, and `--video on` keeps the action sequence.
 In a test `await app.screenshot("name")` captures a named frame.
 A new run clears that output root's `results/`; choose a distinct
 `--output .e2e/proof/<change>` when evidence must survive later runs.
-
-The installed e2e CLI resolves `--config` relative to the working directory, then
-uses that config file's directory as the project root for test file arguments,
-`tests` globs, relative `--output`/config `output` and app-command `cwd` paths.
-Keep ad hoc configs at the repository root; output must remain inside that project
-root, even when given as an absolute path.
 
 Prove the real user action and resulting state. Check durable writes via reload
 and public API reads (Flow graph/revision, Runs and Human settlement), as existing
