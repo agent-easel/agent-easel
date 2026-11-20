@@ -185,6 +185,28 @@ export async function reportAdapter(
   return { t3, endpoint };
 }
 
+/** An authorized live T3 whose otherwise compatible send schema advertises a numeric `mode.enum`,
+ * which support evaluation cannot read. */
+export function malformedSendLiveT3(
+  c: TestContext,
+  options: { readonly resourceMetadataUnavailable?: boolean } = {},
+) {
+  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
+  const sendSchema = {
+    type: "object",
+    properties: {
+      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
+      mode: { type: "string", enum: 42 },
+    },
+  };
+  return authorizedLiveOAuth(c, {
+    sendSchema,
+    send: () => ({}),
+    readSchema: reportReadSchema,
+    ...options,
+  });
+}
+
 export async function claudeRuntimeConfig(c: TestContext) {
   const state = await legacyRuntimeRepository(c, "neutral-json", true);
   const original = {

@@ -5,6 +5,7 @@ import { T3Failure } from "../src/t3/connection.ts";
 import { attachmentSupport, reportSupport } from "../src/t3/contract.ts";
 import {
   authorizedLiveOAuth,
+  malformedSendLiveT3,
   reportAdapter as adapter,
   reportPage as page,
   reportReadSchema,
@@ -208,19 +209,7 @@ it("report support rejects a public schema whose read bounds cannot cover the re
 
 it("a ready T3 advertising a malformed send schema is an invalid answer, not an unclassified error", async (c) => {
   // Arrange
-  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
-  const sendSchema = {
-    type: "object",
-    properties: {
-      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
-      mode: { type: "string", enum: 42 },
-    },
-  };
-  const { live, endpoint } = await authorizedLiveOAuth(c, {
-    sendSchema,
-    send: () => ({}),
-    readSchema: reportReadSchema,
-  });
+  const { live, endpoint } = await malformedSendLiveT3(c);
 
   // Act
   const inspection = live.contract.inspect({ endpoint });
@@ -232,18 +221,7 @@ it("a ready T3 advertising a malformed send schema is an invalid answer, not an 
 
 it("a malformed send schema read after a recovered T3 server error is classified as unavailable", async (c) => {
   // Arrange
-  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
-  const sendSchema = {
-    type: "object",
-    properties: {
-      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
-      mode: { type: "string", enum: 42 },
-    },
-  };
-  const { live, external, endpoint } = await authorizedLiveOAuth(c, {
-    sendSchema,
-    send: () => ({}),
-    readSchema: reportReadSchema,
+  const { live, external, endpoint } = await malformedSendLiveT3(c, {
     resourceMetadataUnavailable: true,
   });
   external.expireAccess();
