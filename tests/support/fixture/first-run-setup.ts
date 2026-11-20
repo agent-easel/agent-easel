@@ -20,6 +20,8 @@ export interface FreshOptions {
   t3Running?: boolean;
   /** `false` gives the T3 state directory another T3's identity, so discovery refuses it. */
   sameT3?: boolean;
+  /** `false` leaves Codex's home missing, so its row offers neither Install nor Repair. */
+  codexHome?: boolean;
 }
 
 /**
@@ -34,12 +36,15 @@ async function startFreshHost({
   harnessesOn = true,
   t3Running = true,
   sameT3 = true,
+  codexHome = true,
 }: FreshOptions) {
   const home = await mkdtemp(join(tmpdir(), "factory-first-run-"));
   const state = join(home, "t3-state");
   const claude = join(home, "reporting-claude");
   const codex = join(home, "reporting-codex");
-  await Promise.all([state, claude, codex].map((directory) => mkdir(directory)));
+  await Promise.all(
+    [state, claude, ...(codexHome ? [codex] : [])].map((directory) => mkdir(directory)),
+  );
   const t3 = new ControlledT3();
   t3.contract.serverVersion = "0.1.11";
   await writeFile(

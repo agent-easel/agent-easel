@@ -278,21 +278,14 @@ test("a harness turned on in T3 during the install step joins the list and leave
   await expect(screen.getByText("Turn on a harness in T3")).toHaveCount(0);
 });
 
-test("when discovery cannot read the connected T3's harnesses, the install step names the blocker instead", async ({
+test("when discovery cannot read the connected T3's harnesses, the install step names the blocker and the host can still open Factory", async ({
   fixture,
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  await openFreshSetup({ fixture, app, browser }, { sameT3: false });
-  await connectDetected(screen);
-
-  // Act
-  await fixture.firstRunSetup.t3Approve();
-
-  // Assert
-  await expectInstallStepOpen(screen);
+  await openInstallStep({ fixture, app, browser, screen }, { sameT3: false });
   await expect(screen.getByText("Couldn’t check your harnesses")).toBeVisible();
   await expect(
     screen.getByText(/Connected T3 identity does not match local state\. Set FACTORY_T3_STATE/),
@@ -300,7 +293,46 @@ test("when discovery cannot read the connected T3's harnesses, the install step 
   await expect(screen.getByText("Turn on a harness in T3")).toHaveCount(0);
   await expect(screen.getByText(/are off in T3/)).toHaveCount(0);
   await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
+  // Nothing was installed, so there is no new session to open.
+  await expect(screen.getByText("Open a new agent session")).toHaveCount(0);
+  await expectActionShown(browser, "Open Factory");
   await app.screenshot("first-run-setup-discovery-refused");
+
+  // Act
+  await screen.getByRole("button", "Open Factory").tap();
+
+  // Assert
+  await expect(screen.getByRole("link", /^Settings/)).toBeVisible();
+  expect(await setupCompleted(app.baseUrl)).toBe(true);
+});
+
+test("a listed harness Factory can neither install nor repair waits until the installable ones are installed, then the host may open Factory", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openInstallStep({ fixture, app, browser, screen }, { codexHome: false });
+  await expect(screen.getByText("Codex’s configuration folder is missing")).toBeVisible();
+  await expect(screen.getByRole("group", "Codex", { exact: true }).getByRole("status")).toHaveText(
+    "Needs attention",
+  );
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+
+  // Act
+  await screen.getByRole("button", "Install in 1 harness").tap();
+
+  // Assert
+  await expect(screen.getByRole("group", "Claude", { exact: true }).getByRole("status")).toHaveText(
+    "Installed",
+    { timeout: 8_000 },
+  );
+  await expect(screen.getByText("Codex’s configuration folder is missing")).toBeVisible();
+  await expect(screen.getByRole("heading", "Install in your agents, current step")).toBeVisible();
+  await expect(screen.getByText("Open a new agent session")).toBeVisible();
+  await expectActionShown(browser, "Open Factory");
+  await app.screenshot("first-run-setup-manual-harness");
 });
 
 test("an approved client waits read-only while the host sets up, then opens Factory by itself", async ({

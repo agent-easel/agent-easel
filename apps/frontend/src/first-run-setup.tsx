@@ -88,6 +88,18 @@ const listedTarget = (target: ReportingInstallation) =>
 const installedEverywhere = (listed: readonly ReportingInstallation[] | null) =>
   !!listed?.length && listed.every((target) => target.status === "installed");
 
+/**
+ * Installation is impossible, so the host may open Factory without it: discovery refused, or the
+ * list is not empty and nothing in it still offers Install or Repair. Installable harnesses are
+ * installed first. An empty list keeps the step, since turning a harness on in T3 fixes it.
+ */
+const nothingToInstall = (
+  targets: readonly ReportingInstallation[],
+  listed: readonly ReportingInstallation[],
+) =>
+  targets.some((target) => target.id === REPORTING_DISCOVERY_REFUSED) ||
+  (listed.length > 0 && !listed.some(installable));
+
 const names = (providers: readonly string[]) =>
   new Intl.ListFormat("en", { type: "conjunction" }).format(providers.map(providerName));
 
@@ -133,11 +145,12 @@ function FirstRunSetupScreen({
               listed={listed}
               offInT3={setup.harnessesOffInT3}
               onCheckAgain={onCheckAgain}
+              onCompleted={onCompleted}
             />
           )}
         </li>
       </ol>
-      {ready && <ReadyStep onCompleted={onCompleted} />}
+      {ready && <ReadyStep reminder onCompleted={onCompleted} />}
     </GateScreen>
   );
 }
@@ -238,6 +251,7 @@ function HostSetupProgressScreen({ onCheckAgain }: { onCheckAgain: () => Promise
   const connected = presentation === "ready";
   const listed = connected && targets ? targets.filter(listedTarget) : null;
   const installed = installedEverywhere(listed);
+  const manual = !!targets && !!listed && nothingToInstall(targets, listed);
   // The shared reporting read may still hold the answer from before the host Connected.
   useEffect(() => {
     if (connected) void refresh();
@@ -271,7 +285,9 @@ function HostSetupProgressScreen({ onCheckAgain }: { onCheckAgain: () => Promise
             ready={installed}
             waiting={{
               upcoming: "Waiting for step 1",
-              current: "Waiting for the install on the Factory host",
+              current: manual
+                ? "Factory can’t install here; waiting for the Factory host to open Factory"
+                : "Waiting for the install on the Factory host",
             }}
           />
           {connected && !installed && !!listed?.length && (
@@ -299,12 +315,14 @@ function InstallStep({
   listed,
   offInT3,
   onCheckAgain,
+  onCompleted,
 }: {
   listed: readonly ReportingInstallation[] | null;
   offInT3: readonly string[];
   onCheckAgain: () => Promise<void>;
+  onCompleted: (setup: FirstRunSetup) => void;
 }) {
-  const { targets, error, readDetails, refresh, running, failures, install } = useReportingState();
+  const { targets, error, readDetails, refresh } = useReportingState();
   // The shared read may still hold the answer from before T3 was Connected, and a harness turned
   // on or off in T3 changes the caption: the list is read again with it.
   const [checked, setChecked] = useState(false);
@@ -343,14 +361,17 @@ function InstallStep({
     );
   else if (refusal)
     content = (
-      <ProblemCard
-        tone="attention"
-        density="compact"
-        title="Couldn’t check your harnesses"
-        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
-      >
-        {refusal.message}
-      </ProblemCard>
+      <>
+        <ProblemCard
+          tone="attention"
+          density="compact"
+          title="Couldn’t check your harnesses"
+          action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+        >
+          {refusal.message}
+        </ProblemCard>
+        <ReadyStep reminder={false} onCompleted={onCompleted} />
+      </>
     );
   else if (!listed.length)
     content = (
@@ -365,60 +386,79 @@ function InstallStep({
         check again.
       </ProblemCard>
     );
-  else {
-    const pending = listed.filter(installable);
-    content = (
-      <>
-        <HarnessList listed={listed} />
-        {listed.map((target) => (
-          <ReportingTargetProblem
-            key={target.id}
-            target={target}
-            failure={failures[target.id]}
-            density="compact"
-          />
-        ))}
-        <div className="flex items-start gap-3">
-          {pending.length > 0 && (
-            <MutationGate>
-              <Button disabled={running !== null} onClick={() => void install(pending)}>
-                {pending.length === 1
-                  ? "Install in 1 harness"
-                  : `Install in ${pending.length} harnesses`}
-              </Button>
-            </MutationGate>
-          )}
-          <div className="min-w-0 flex-1">
-            <Disclosure label="What gets installed">
-              <ul className="grid gap-1 pl-4.5 text-sm text-muted-foreground">
-                <li>
-                  Factory MCP (<code className="font-mono text-label">factory-runtime</code>) ·
-                  required: workers report Block results through it.
-                </li>
-                <li>
-                  <code className="font-mono text-label">$factory-block</code> skill · required: how
-                  a worker does and reports one Block.
-                </li>
-                <li>
-                  <code className="font-mono text-label">factory-start-run</code> skill · optional:
-                  start a Run from an agent conversation.
-                </li>
-                <li>
-                  <code className="font-mono text-label">setup-factory</code> skill · optional: set
-                  up a repository’s tracker labels for Factory.
-                </li>
-              </ul>
-            </Disclosure>
-          </div>
-        </div>
-      </>
-    );
-  }
+  else content = <HarnessInstall listed={listed} onCompleted={onCompleted} />;
   return (
     <div className="grid gap-3 pl-8.5">
       {content}
       {caption}
     </div>
+  );
+}
+
+/**
+ * The listed harnesses and the install for those that offer Install or Repair. Once none does,
+ * the rest need manual setup and the host may open Factory.
+ */
+function HarnessInstall({
+  listed,
+  onCompleted,
+}: {
+  listed: readonly ReportingInstallation[];
+  onCompleted: (setup: FirstRunSetup) => void;
+}) {
+  const { running, failures, install } = useReportingState();
+  const pending = listed.filter(installable);
+  return (
+    <>
+      <HarnessList listed={listed} />
+      {listed.map((target) => (
+        <ReportingTargetProblem
+          key={target.id}
+          target={target}
+          failure={failures[target.id]}
+          density="compact"
+        />
+      ))}
+      <div className="flex items-start gap-3">
+        {pending.length > 0 && (
+          <MutationGate>
+            <Button disabled={running !== null} onClick={() => void install(pending)}>
+              {pending.length === 1
+                ? "Install in 1 harness"
+                : `Install in ${pending.length} harnesses`}
+            </Button>
+          </MutationGate>
+        )}
+        <div className="min-w-0 flex-1">
+          <Disclosure label="What gets installed">
+            <ul className="grid gap-1 pl-4.5 text-sm text-muted-foreground">
+              <li>
+                Factory MCP (<code className="font-mono text-label">factory-runtime</code>) ·
+                required: workers report Block results through it.
+              </li>
+              <li>
+                <code className="font-mono text-label">$factory-block</code> skill · required: how a
+                worker does and reports one Block.
+              </li>
+              <li>
+                <code className="font-mono text-label">factory-start-run</code> skill · optional:
+                start a Run from an agent conversation.
+              </li>
+              <li>
+                <code className="font-mono text-label">setup-factory</code> skill · optional: set up
+                a repository’s tracker labels for Factory.
+              </li>
+            </ul>
+          </Disclosure>
+        </div>
+      </div>
+      {pending.length === 0 && (
+        <ReadyStep
+          reminder={listed.some((target) => target.status === "installed")}
+          onCompleted={onCompleted}
+        />
+      )}
+    </>
   );
 }
 
@@ -452,7 +492,14 @@ function HarnessList({
 }
 
 /** Open Factory records completion on the host before the application opens. */
-function ReadyStep({ onCompleted }: { onCompleted: (setup: FirstRunSetup) => void }) {
+function ReadyStep({
+  reminder,
+  onCompleted,
+}: {
+  /** Something was installed, so new agent sessions are needed to load it. */
+  reminder: boolean;
+  onCompleted: (setup: FirstRunSetup) => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
   const complete = async () => {
@@ -465,10 +512,12 @@ function ReadyStep({ onCompleted }: { onCompleted: (setup: FirstRunSetup) => voi
   };
   return (
     <>
-      <ProblemCard tone="info" density="compact" title="Open a new agent session">
-        Sessions that are already open keep the tools they loaded at start. New sessions see
-        Factory.
-      </ProblemCard>
+      {reminder && (
+        <ProblemCard tone="info" density="compact" title="Open a new agent session">
+          Sessions that are already open keep the tools they loaded at start. New sessions see
+          Factory.
+        </ProblemCard>
+      )}
       {failure && (
         <ProblemCard tone="error" density="compact" title="Couldn’t finish setup" details={failure}>
           Factory could not record that setup is complete. Try again.
