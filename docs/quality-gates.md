@@ -101,7 +101,8 @@ validation for pushes to `main` runs inside the Quality workflow.
 **Controlled UI journeys** is a separate PR check that runs the complete
 controlled Chromium suite, or reports an explicit not-applicable success for
 documentation/review-only changes; see [PR journey check](testing.md#pr-journey-check).
-Release/beta journeys and the local pre-push gate are unchanged.
+[Beta builds](release.md#beta-builds) reuse a passing full suite for the same
+tree or run the same three shards before packaging.
 
 For frontend changes, **UI evidence attachments** runs
 `scripts/check-ui-evidence.mjs --pr <number>` to check that a row of the PR body's

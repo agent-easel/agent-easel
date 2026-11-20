@@ -20,11 +20,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
+      pull-requests: read
     outputs:
       build: ${{ steps.source.outputs.build }}
       sha: ${{ steps.source.outputs.sha }}
       previous: ${{ steps.source.outputs.previous }}
+      quality-passed: ${{ steps.validation.outputs.quality }}
+      journeys-passed: ${{ steps.validation.outputs.journeys }}
     steps:
       - id: source
         env:
@@ -47,11 +51,63 @@ jobs:
             echo "sha=$GITHUB_SHA"
             echo "previous=$previous"
           } >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.source.outputs.build == 'true'
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.source.outputs.build == 'true'
+        with:
+          node-version-file: .node-version
+      - name: Find passing validation for this source
+        id: validation
+        if: steps.source.outputs.build == 'true'
+        # Missing or unreadable evidence sends Beta through the full checks.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/find-beta-validation.mjs
+
+  quality:
+    name: Validate beta code
+    needs: source
+    if: needs.source.outputs.build == 'true' && needs.source.outputs.quality-passed != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+
+  journeys:
+    needs: source
+    if: needs.source.outputs.build == 'true' && needs.source.outputs.journeys-passed != 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/run-ui-journeys.yml
+    with:
+      sha: ${{ needs.source.outputs.sha }}
 
   build-macos:
     name: Build
-    needs: source
-    if: needs.source.outputs.build == 'true'
+    needs: [source, quality, journeys]
+    if: >-
+      !cancelled() && needs.source.result == 'success' && needs.source.outputs.build == 'true' &&
+      (needs.quality.result == 'success' ||
+        (needs.quality.result == 'skipped' && needs.source.outputs.quality-passed == 'true')) &&
+      (needs.journeys.result == 'success' ||
+        (needs.journeys.result == 'skipped' && needs.source.outputs.journeys-passed == 'true'))
     permissions:
       contents: read
     uses: ./.github/workflows/desktop-build.yml
@@ -59,7 +115,7 @@ jobs:
       sha: ${{ needs.source.outputs.sha }}
       channel: beta
       beta-number: ${{ github.run_number }}
-      run-checks: true
+      run-checks: false
     secrets:
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}

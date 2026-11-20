@@ -1,0 +1,98 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { findBetaValidation } from "./find-beta-validation.mjs";
+
+const repository = "owner/factory";
+const sha = "a".repeat(40);
+const head = "b".repeat(40);
+const tested = "c".repeat(40);
+const actions = `repos/${repository}/actions`;
+const qualityUrl = "https://github.com/owner/factory/actions/runs/1";
+const journeysUrl = "https://github.com/owner/factory/actions/runs/2";
+
+function validationInput({
+  testedTree = "same-tree",
+  markerConclusion = "success",
+  qualityConclusion = "success",
+} = {}) {
+  const commits = `repos/${repository}/commits`;
+  const responses = {
+    [`${commits}/${sha}`]: { commit: { tree: { sha: "same-tree" } } },
+    [`${commits}/${tested}`]: { commit: { tree: { sha: testedTree } } },
+    [`${commits}/${sha}/pulls`]: [
+      {
+        merged_at: "2026-11-20",
+        base: { ref: "main" },
+        merge_commit_sha: sha,
+        head: { sha: head },
+      },
+    ],
+    [`${actions}/workflows/quality.yml/runs?event=push&branch=main&head_sha=${sha}&per_page=1`]: {
+      workflow_runs: [{ conclusion: qualityConclusion, html_url: qualityUrl }],
+    },
+    [`${actions}/workflows/ui-journeys.yml/runs?event=pull_request&head_sha=${head}&per_page=1`]: {
+      workflow_runs: [{ id: 2, conclusion: "success", html_url: journeysUrl }],
+    },
+    [`${actions}/runs/2/jobs?filter=latest`]: {
+      jobs: [
+        {
+          name: "Controlled UI journeys",
+          conclusion: "success",
+          steps: [{ name: `Full UI suite passed on ${tested}`, conclusion: markerConclusion }],
+        },
+      ],
+    },
+  };
+  return {
+    repository,
+    sha,
+    async read(path) {
+      assert.ok(Object.hasOwn(responses, path), `Unexpected GitHub API path ${path}`);
+      return responses[path];
+    },
+  };
+}
+
+await test("Beta reuses a full suite run on the same tree under a different commit", async () => {
+  // Arrange
+  const input = validationInput();
+
+  // Act
+  const validation = await findBetaValidation(input);
+
+  // Assert
+  assert.deepEqual(validation, { quality: qualityUrl, journeys: journeysUrl });
+});
+
+await test("Beta requires fresh journeys when the passed PR suite tested a different tree", async () => {
+  // Arrange
+  const input = validationInput({ testedTree: "old-tree" });
+
+  // Act
+  const validation = await findBetaValidation(input);
+
+  // Assert
+  assert.deepEqual(validation, { quality: qualityUrl, journeys: undefined });
+});
+
+await test("Beta requires fresh journeys when a successful PR check skipped the suite", async () => {
+  // Arrange
+  const input = validationInput({ markerConclusion: "skipped" });
+
+  // Act
+  const validation = await findBetaValidation(input);
+
+  // Assert
+  assert.deepEqual(validation, { quality: qualityUrl, journeys: undefined });
+});
+
+await test("Beta requires a fresh quality gate while the main push gate is pending", async () => {
+  // Arrange
+  const input = validationInput({ qualityConclusion: null });
+
+  // Act
+  const validation = await findBetaValidation(input);
+
+  // Assert
+  assert.deepEqual(validation, { quality: undefined, journeys: journeysUrl });
+});
