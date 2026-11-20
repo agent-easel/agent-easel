@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
@@ -58,17 +59,23 @@ async function openInstallStep(
   await expectInstallStepOpen(context.screen);
 }
 
-async function setupCompleted(baseUrl: string | undefined) {
-  const response = await fetch(new URL("/api/setup", baseUrl));
-  const setup = (await response.json()) as Result<FirstRunSetup>;
-  return setup.ok && setup.value.completed;
+/** A host API call that must succeed: a refused or failed call fails the journey here. */
+async function hostCall<T>(baseUrl: string | undefined, path: string, init?: RequestInit) {
+  const response = await fetch(new URL(path, baseUrl), init);
+  const result = (await response.json()) as Result<T>;
+  assert(result.ok, `${init?.method ?? "GET"} ${path} failed: ${JSON.stringify(result)}`);
+  return result.value;
 }
 
-async function savedEndpoint(baseUrl: string | undefined) {
-  const response = await fetch(new URL("/api/connection", baseUrl));
-  const connection = (await response.json()) as Result<T3Connection>;
-  return connection.ok ? connection.value.endpoint : null;
-}
+const setupCompleted = async (baseUrl: string | undefined) =>
+  (await hostCall<FirstRunSetup>(baseUrl, "/api/setup")).completed;
+
+const savedEndpoint = async (baseUrl: string | undefined) =>
+  (await hostCall<T3Connection>(baseUrl, "/api/connection")).endpoint;
+
+/** A host action, as another host window or the host's own screen sends it. */
+const hostAction = <T>(baseUrl: string | undefined, path: string) =>
+  hostCall<T>(baseUrl, path, { method: "POST", headers: { "X-Factory-Request": "1" } });
 
 test("a fresh host connects to the detected T3, installs in its harnesses and opens Factory for good", async ({
   fixture,
@@ -377,11 +384,7 @@ test("an approved client waits read-only while the host sets up, then opens Fact
   await app.screenshot("first-run-setup-approved-client-connected");
 
   // Act: the owner finishes setup on the host.
-  const completed = await fetch(new URL("/api/setup/complete", app.baseUrl), {
-    method: "POST",
-    headers: { "X-Factory-Request": "1" },
-  });
-  expect(completed.ok).toBe(true);
+  await hostAction<FirstRunSetup>(app.baseUrl, "/api/setup/complete");
 
   // Assert: the client leaves the setup screen without a reload.
   await expect(screen.getByRole("link", /^Settings/)).toBeVisible({ timeout: 8_000 });
