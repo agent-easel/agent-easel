@@ -11,7 +11,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--base") args.base = argv[++i];
     else if (argv[i] === "--output") args.output = argv[++i];
-    else if (args.spec === undefined) args.spec = argv[i];
+    else if (args.spec === undefined && !argv[i].startsWith("--")) args.spec = argv[i];
     else fail(`Unexpected argument: ${argv[i]}\n${USAGE}`);
   }
   if (!args.base || !args.spec || !args.output) fail(USAGE);
