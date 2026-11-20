@@ -7,15 +7,17 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export function Disclosure({
   label,
   hint,
+  defaultOpen,
   children,
 }: {
   label: string;
   /** One live value after the label, never fixed text. */
   hint?: string;
+  defaultOpen?: boolean | undefined;
   children: ReactNode;
 }) {
   return (
-    <Collapsible className="flex min-w-0 flex-col gap-3">
+    <Collapsible defaultOpen={defaultOpen} className="flex min-w-0 flex-col gap-3">
       <CollapsibleTrigger asChild>
         <Button
           type="button"

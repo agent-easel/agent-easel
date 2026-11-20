@@ -88,7 +88,7 @@ export function ProjectOverridesSection({
                 disabled={disabled}
                 // The label replaces the row's text, so it names the override's Worker too.
                 aria-label={`Edit override for ${owner.title}: ${worker}`}
-                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-ring disabled:opacity-50"
                 onClick={() => onEdit({ projectId: override.projectId, isNew: false })}
               >
                 <FolderGit2
@@ -128,7 +128,7 @@ export function ProjectOverridesSection({
             data-add
             type="button"
             disabled={disabled || needsModel || addable.length === 0}
-            className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+            className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm outline-none hover:bg-accent focus-ring disabled:pointer-events-none disabled:opacity-50"
             onClick={() => onEdit({ projectId: null, isNew: true })}
           >
             <Plus aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-muted-foreground" />

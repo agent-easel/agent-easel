@@ -10,7 +10,7 @@ import { MutationGate } from "@/client-gate";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import { Surface } from "@/components/ui/surface";
 import { StatusBadge } from "./status-badge.tsx";
 import type { OwnerMove } from "../revisioned-draft.ts";
 import { useStudioNavigation } from "../settings-navigation.ts";
@@ -226,19 +226,18 @@ function ChangeOwnerRefusal({
           ? `A Project Agent can only be placed by Flows of its owning Project. Remove it from these Flows first, or duplicate it into ${title} instead.`
           : `Remove these Agents from the Flow first, or duplicate it into ${title} instead; Duplicate copies the Agents the target can’t place.`}
       </ProblemCard>
-      <ul
-        aria-label={kind === "Agent" ? "Blocking Flows" : "Blocking Agents"}
-        className="grid gap-0.5 rounded-lg border bg-muted px-2 py-1.5"
-      >
-        {blockers.map((blocker) => (
-          <BlockerRow
-            key={blocker.message}
-            blocker={blocker}
-            subjectId={subject.id}
-            projects={projects}
-          />
-        ))}
-      </ul>
+      <Surface tone="inset" asChild className="grid gap-0.5 px-2 py-1.5">
+        <ul aria-label={kind === "Agent" ? "Blocking Flows" : "Blocking Agents"}>
+          {blockers.map((blocker) => (
+            <BlockerRow
+              key={blocker.message}
+              blocker={blocker}
+              subjectId={subject.id}
+              projects={projects}
+            />
+          ))}
+        </ul>
+      </Surface>
     </OwnerDialog>
   );
 }
@@ -294,7 +293,7 @@ function BlockerRow({
     <li>
       <button
         type="button"
-        className="flex w-full items-center gap-2 rounded-sm py-1.5 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="flex w-full items-center gap-2 rounded-sm py-1.5 outline-none hover:bg-accent focus-ring"
         onClick={() =>
           void openStudio(
             "graph" in definition
@@ -482,31 +481,33 @@ function DuplicatePlan({
   disabled: boolean;
   onChoose: (agentId: string, choice: FlowDuplicatePlanAgent["choice"]) => void;
 }) {
-  const box = "rounded-md border bg-background p-1";
+  const note = "px-2.5 py-3 text-sm text-muted-foreground";
   if (!state.plan)
     return (
-      <p role="status" className={cn(box, "px-2.5 py-3 text-sm text-muted-foreground")}>
-        {state.previewing ? "Preparing the plan…" : "No plan yet."}
-      </p>
+      <Surface tone="inset" asChild className={note}>
+        <p role="status">{state.previewing ? "Preparing the plan…" : "No plan yet."}</p>
+      </Surface>
     );
   if (state.plan.agents.length === 0)
     return (
-      <p className={cn(box, "px-2.5 py-3 text-sm text-muted-foreground")}>
-        This Flow places no Agents.
-      </p>
+      <Surface tone="inset" asChild className={note}>
+        <p>This Flow places no Agents.</p>
+      </Surface>
     );
   return (
-    <ul aria-labelledby="duplicate-flow-agents" className={cn(box, "grid gap-0.5")}>
-      {state.plan.agents.map((agent) => (
-        <DuplicateAgentRow
-          key={agent.agentId}
-          agent={agent}
-          projects={projects}
-          disabled={disabled}
-          onChoose={(choice) => onChoose(agent.agentId, choice)}
-        />
-      ))}
-    </ul>
+    <Surface tone="inset" asChild className="grid gap-0.5 p-1">
+      <ul aria-labelledby="duplicate-flow-agents">
+        {state.plan.agents.map((agent) => (
+          <DuplicateAgentRow
+            key={agent.agentId}
+            agent={agent}
+            projects={projects}
+            disabled={disabled}
+            onChoose={(choice) => onChoose(agent.agentId, choice)}
+          />
+        ))}
+      </ul>
+    </Surface>
   );
 }
 

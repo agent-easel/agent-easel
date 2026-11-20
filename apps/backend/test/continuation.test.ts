@@ -20,10 +20,11 @@ import {
   revisitBesideContinuationFlow,
   resultReported,
   sentTurnBegins,
+  turnBegins,
   workerAtWork,
   workerHandle,
 } from "./support/scenarios.ts";
-import { recordLaunchedThread } from "./support/controlled-thread.ts";
+import { queuedRunCancelled, recordLaunchedThread } from "./support/controlled-thread.ts";
 
 const blockState = (run: { blocks: readonly { blockId: string; state: string }[] }, id: string) =>
   run.blocks.find((block) => block.blockId === id)?.state;
@@ -442,4 +443,27 @@ it("Request report on a Continuation asks the worker's thread once, under the Co
   expect(sends).toHaveLength(2);
   expect(promptOn(f.world, worker).blockId).toBe(prompt.blockId);
   expect(sends[1]!.payload.message).toContain("Factory Request report");
+});
+
+it("a Continuation prompt T3 cancels before it starts, first seen beside a running later turn, shows a Problem in work history", async (c) => {
+  // Arrange
+  const f = await prepared(c, continuationFlow);
+  const worker = await workerAtWork(f.world, f.input);
+  await resultReported(f.world, worker);
+  await promptSent(f.world, worker);
+  const prompt = [...f.t3.sends.values()].at(-1)!.reference.runId;
+  queuedRunCancelled(f.t3, worker.threadId, prompt, { startedAt: null });
+  turnBegins(f.world, worker, "execution-next");
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(worker.runId);
+  assert(run.ok);
+  expect(run.value.executions.find((e) => e.executionId === prompt)).toMatchObject({
+    blockId: "spec",
+    engineStatus: "cancelled",
+    problem: "execution-failed",
+  });
 });

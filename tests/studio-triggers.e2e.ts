@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
+import type { Fixture } from "./support/fixture/handle.ts";
 import type {
   Result,
   RunNavigationEntry,
@@ -8,6 +9,7 @@ import type {
 } from "../packages/contracts/src/index.ts";
 import { archiveJourneyRun } from "./support/run-history.ts";
 import { saveFlowCopy, readFlow, saveFlowElsewhere } from "./support/flows.ts";
+import { expectSaveFilled, expectSaveNeutral, startHeldSave } from "./support/studio.ts";
 import { afterEach, beforeEach, test } from "./support/test.ts";
 
 /** Runs a journey's Trigger started, archived afterwards so later journeys do not list them. */
@@ -48,6 +50,26 @@ async function expectEditorOff(screen: Screen, name: string) {
   await expect(
     screen.getByRole("switch", "Trigger enabled", { exact: true, checked: false }),
   ).toBeVisible();
+}
+
+/** Opens a saved, enabled Trigger named `name` from the Trigger list. */
+async function openSavedTrigger(
+  { app, screen, fixture }: { app: App; screen: Screen; fixture: Fixture },
+  name: string,
+) {
+  await fixture.github.trigger({ name });
+  await app.open("/studio/triggers");
+  await screen.getByRole("link", name, { exact: false }).tap();
+  await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
+}
+
+/** Opens a saved, enabled Trigger named `name` and edits its name, leaving the edit unsaved. */
+async function openEditedTrigger(
+  fixtures: { app: App; screen: Screen; fixture: Fixture },
+  name: string,
+) {
+  await openSavedTrigger(fixtures, name);
+  await fixtures.screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
 }
 
 /** Opens the named Trigger from the list; answers its status strip once it shows Problem. */
@@ -125,10 +147,7 @@ test("an opened Trigger returns to the Trigger list from its breadcrumb", async 
 }) => {
   // Arrange
   const name = "Journey · Back to the list";
-  await fixture.github.trigger({ name });
-  await app.open("/studio/triggers");
-  await screen.getByRole("link", name, { exact: false }).tap();
-  await expect(screen.getByRole("heading", name, { exact: true })).toBeVisible();
+  await openSavedTrigger({ app, screen, fixture }, name);
 
   // Act
   await browser
@@ -232,6 +251,94 @@ test("Save creates a Trigger off and lands in its editor", async ({
   assert(saved.ok);
   assert.equal(saved.value.find((trigger) => trigger.name === name)?.enabled, false);
   await app.screenshot("edit-trigger-off");
+});
+
+test("a complete new Trigger has Save as its only filled action", async ({ app, screen }) => {
+  // Arrange
+  const name = "Journey · New Trigger Save";
+  await app.open("/studio/triggers/new/github-issues");
+  await expect(
+    screen.getByRole("heading", "New GitHub Issues Trigger", { exact: true }),
+  ).toBeVisible();
+
+  // Act
+  await fillTrigger(screen, name);
+
+  // Assert
+  await expect(screen.getByRole("button", "Save", { exact: true })).toHaveAttribute(
+    "data-variant",
+    "default",
+  );
+  const review = screen.getByRole("button", "Review and enable", { exact: true });
+  await expect(review).toBeEnabled();
+  await expect(review).not.toHaveAttribute("data-variant", "default");
+  await expect(screen.getByRole("switch", "Trigger enabled", { exact: true })).toHaveCount(0);
+});
+
+test("a saved Trigger's footer Save is filled once the Trigger has unsaved edits", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Footer Save unsaved";
+  await openSavedTrigger({ app, screen, fixture }, name);
+
+  // Act
+  await screen.getByRole("textbox", "Name", { exact: true }).fill(`${name} edited`);
+
+  // Assert
+  await expectSaveFilled(screen);
+});
+
+test("a saved Trigger's footer Save turns neutral and disabled once saved", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Footer Save saved";
+  await openEditedTrigger({ app, screen, fixture }, name);
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expect(screen.getByRole("heading", `${name} edited`, { exact: true })).toBeVisible();
+  await expectSaveNeutral(screen);
+});
+
+test("a saved Trigger's footer Save turns neutral when the Trigger is removed elsewhere during its save", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Removed while saving";
+  await openEditedTrigger({ app, screen, fixture }, name);
+  const listed = (await (await fetch(new URL("/api/triggers", app.baseUrl))).json()) as Result<
+    readonly TriggerDefinition[]
+  >;
+  assert(listed.ok);
+  const trigger = listed.value.find((entry) => entry.name === name);
+  assert(trigger);
+  const releaseSave = await startHeldSave(browser, screen, `/api/triggers/${trigger.id}`);
+
+  // Act
+  const removal = await fetch(new URL(`/api/triggers/${trigger.id}`, app.baseUrl), {
+    method: "DELETE",
+    headers: { "X-Factory-Request": "1" },
+  });
+
+  // Assert
+  assert.equal(removal.ok, true);
+  await expect(
+    screen.getByText("This Trigger was removed elsewhere", { exact: true }),
+  ).toBeVisible();
+  await expectSaveNeutral(screen);
+  await app.screenshot("trigger-footer-removed-while-saving");
+  releaseSave();
 });
 
 const retainedTrigger = "Journey · Retain Trigger draft";

@@ -59,7 +59,7 @@ function PaletteRow({
       aria-disabled={item.disabled}
       disabled={item.disabled}
       className={cn(
-        "relative flex min-h-8 w-full items-center gap-2 rounded-sm px-3 py-1 text-left text-[13px] leading-4 outline-none",
+        "relative flex min-h-8 w-full items-center gap-2 rounded-sm px-3 py-1 text-left text-sm leading-4 outline-none",
         active &&
           "bg-accent before:absolute before:inset-y-2 before:left-1 before:w-0.5 before:rounded-full before:bg-muted-foreground",
         item.disabled && "text-muted-foreground",
@@ -100,17 +100,17 @@ function CatalogStatus({
   return (
     <>
       {loading.length > 0 && (
-        <p role="status" className="px-3 py-5 text-center text-[13px] text-muted-foreground">
+        <p role="status" className="px-3 py-5 text-center text-sm text-muted-foreground">
           Loading {scopeNames(loading)}…
         </p>
       )}
       {refused.length > 0 && (
-        <p role="alert" className="px-3 py-6 text-center text-[13px] text-destructive">
+        <p role="alert" className="px-3 py-6 text-center text-sm text-destructive">
           Couldn't load {scopeNames(refused)}.
         </p>
       )}
       {empty && loading.length === 0 && refused.length === 0 && (
-        <p role="status" className="px-3 py-5 text-center text-[13px] text-muted-foreground">
+        <p role="status" className="px-3 py-5 text-center text-sm text-muted-foreground">
           No matches
         </p>
       )}

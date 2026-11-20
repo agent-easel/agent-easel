@@ -270,6 +270,9 @@ export type StudioOwnerFilter =
   | { readonly kind: "global" }
   | { readonly kind: "project"; readonly projectId: string };
 
+/** The Owner filter's All owners choice. */
+export const allOwners: StudioOwnerFilter = { kind: "all" };
+
 /** A definition's owner as Studio labels it. */
 export interface StudioOwner {
   /** The owning Project's Factory id, or null for a global definition. */
@@ -299,7 +302,8 @@ export interface OwnerGroup<D> {
 }
 
 /** Whether a definition owned by `projectId` passes the owner filter. */
-function shownByFilter(projectId: string | null, filter: StudioOwnerFilter) {
+/** Whether the Owner filter shows a definition owned by `projectId`. */
+export function shownByFilter(projectId: string | null, filter: StudioOwnerFilter) {
   if (filter.kind === "all") return true;
   if (filter.kind === "global") return projectId === null;
   return projectId === null || projectId === filter.projectId;

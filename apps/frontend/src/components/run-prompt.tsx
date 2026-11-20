@@ -4,6 +4,7 @@ import type { RunDetail, RunImage } from "@t3-factory/contracts";
 import { useRunImageSource } from "../run-images.ts";
 import { ImagePreviewDialog, previewImageClass } from "./prompt-images.tsx";
 import { Button } from "./ui/button.tsx";
+import { EmptyState } from "./ui/empty-state.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip.tsx";
 import { cn } from "../lib/utils.ts";
 
@@ -186,11 +187,7 @@ function RunImageGallery({
       onKeyDown={onKeyDown}
     >
       {unavailable.has(image.sha256) ? (
-        <div className="flex min-h-64 flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-muted px-4 text-center">
-          <ImageOff aria-hidden className="size-6 text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">Image unavailable</p>
-          <p className="max-w-full truncate text-xs text-muted-foreground">{label}</p>
-        </div>
+        <EmptyState size="large" icon={ImageOff} title="Image unavailable" body={label} />
       ) : (
         <img
           key={image.sha256}

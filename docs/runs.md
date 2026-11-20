@@ -431,7 +431,14 @@ fixed Human exits their old exits were mapped to.
   [Continuation](#continuations) shows Working while its prompt is worked on and Finished once it passed the response on. A
   finished block reads its taken exit as an outcome, **→ *exit* · time**. Several blocks can be active at once; the canvas
   marks no "current step", percentage or taken path. Repeated visits update the same block; the timeline and executions keep
-  the sequence. Connections use one neutral style, including never-run branches.
+  the sequence. At rest, connections use one neutral style, including never-run branches.
+- Hovering a block or Flow input with a mouse or trackpad, or giving one of its controls keyboard focus, temporarily draws
+  that source's direct outgoing connections, including fan-out, unvisited branches and return connections, heavier and in
+  higher contrast above the other connections. One source previews at a time: the most recent pointer or keyboard
+  interaction chooses it, and it clears when the source loses hover or focus, when panning, zooming or Follow active moves
+  it out from under the pointer, and when Studio or Settings covers the canvas or another Run opens. The preview shows
+  configured connections, not traversal: incoming connections and later hops keep the resting style. It works on ended
+  Runs from the captured revision, leaves selection and Follow active unchanged, and a touch tap shows none.
 - Exit rows name each exit in muted text until a report, an answer, a Condition selection or a forward has chosen it; a
   chosen exit reads in primary text. Condition outputs keep their rule (**from arrival *N* onward**, **when no rule
   matches**); other exits carry no source label.
@@ -491,14 +498,41 @@ fixed Human exits their old exits were mapped to.
 - The inspector toggle in the top bar (default **Mod+.**, see [Keyboard shortcuts](keyboard-shortcuts.md)) shows or hides the
   panel. The choice is kept per browser profile on this device across what is inspected, Runs and reload; until chosen, the
   inspector opens from 1280 px wide. While it is hidden, pending attention shows below the canvas.
-- The Overview of a Settled Run shows each activation's result title and **Read result**. Other result cards in the
-  inspector and timeline preview the result with its exit, deliveries and acceptance time. **Read result** opens the
-  full Markdown result (CommonMark with GitHub tables and task lists). The reader header shows the Block, visit, exit
-  and time, with **Copy Markdown**, **Open in T3 ↗**, **Esc** and close. Execution, completion, version and delivery
-  facts live under **Technical details**. The Working report and Human context readers share the header pattern.
-  **Esc** returns focus to the opener. Raw HTML in a result is shown as text and never runs, links open
-  outside Factory and images appear as links, so a result never loads remote content. Copying needs a secure context
-  (Factory's own window, loopback or HTTPS); over a plain-HTTP remote address the reader says copying is unavailable.
+- **Agent-written text** is shown as Markdown wherever it appears: block results, the context a Human step received (on
+  its decision card in the Overview and the Block view), the Working report of a working Agent or a sent Continuation in
+  the Block view (with **Read full report**), the Working report on an Agent's Needs input card, each Wait arrival's
+  message, and an Agent's question recorded in **Resolved attention**. One renderer applies CommonMark with GitHub tables and task lists and keeps single line
+  breaks, so short lines an Agent wrote stay on separate lines. Raw HTML is shown as text and never runs, links open
+  outside Factory and images appear as links, so Agent text never loads remote content. Long words, URLs and code wrap
+  or scroll inside their own block. Text a person or Factory wrote stays plain text exactly as entered: the initial
+  prompt, the Revisit instruction, a recorded Human answer and Factory messages such as report problems, Condition
+  integrity and errors.
+- A card that previews Agent-written text clamps it to its rendered beginning and fades it out when it continues. The
+  link under the preview opens the full text in the **reader**, and appears only when the text is longer than the
+  preview. While the preview is clamped, links and scrolling code or
+  tables that reach into its fade or below it are inert and left out of the tab order; the reader shows them all. The reader states where the text
+  came from and has **Copy Markdown**, which copies the unmodified text, **Esc** and close; **Esc** returns focus to
+  the link that opened it. Copying needs a secure context (Factory's own window, loopback or HTTPS); over a plain-HTTP
+  remote address the reader says copying is unavailable.
+  - **Results.** The Overview of a Settled Run shows each activation's result title and **Read result**. Other result
+    cards in the inspector and timeline preview the result with its exit, deliveries and acceptance time. The reader
+    header shows the Block, visit, exit and time, with **Open in T3 ↗**; execution, completion, version and delivery
+    facts live under **Technical details**. When the result fits its preview, the card offers **Technical details** in
+    place of **Read result**; it opens the reader with those facts expanded.
+  - **Human step context.** The decision card shows short context whole and previews long context with **Read full
+    context**. Its reader is titled ***Step* · context** with **From *Block* · Visit *N* · *time***, naming the Agent
+    visit that wrote the context also when a Wait, Condition or Continuation passing messages through forwarded it.
+    Context a person wrote as an earlier Human step's answer names that step without a visit, and a Continuation's own
+    response names the Continuation and its visit. Through a Condition or pass-through the line follows the deliveries
+    the relay received with the same message and worker provenance: when those came from different authors, or a
+    relayed delivery's record is gone, it names the relay that sent the context. The reader has no decision
+    controls: **Decision**, **Response** and **Submit answer** follow the preview directly, so the answer is always given
+    on the card. Parallel occurrences each have their own preview and reader.
+  - **Agent Needs input card.** The Agent's report appears under a **Working report** label, previewed with **Read full
+    report**, and **Open in T3 ↗** follows it directly. Its reader is titled ***Block* · Working report** with
+    **Visit *N* · waiting for your reply · since *time***, the time Factory saw the Agent's turn end, and adds **Open in
+    T3 ↗**. An empty Working report leaves the
+    label and text out.
 - Drag the inner edge of the shell sidebar (224–480 px) or of the inspector (280–640 px, at most half the area beside the
   sidebar) to resize it; with the edge focused, Left/Right step 16 px and Home/End jump to the bounds.
   Double-click restores the responsive default, which a saved width otherwise replaces. Widths are saved per browser profile
@@ -642,7 +676,8 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   worker thread without a report is a **missing-report Problem**, also after a notification or reply turn; a worker waiting on
   delegated or background work T3 has not settled stays working. A failed, cancelled or interrupted latest run is a Problem until
   a later run of that thread completes or the Block reports; it does not return for that run, and a later failed run is a new
-  Problem. Missing-report Problems persist across restart and renewed work;
+  Problem. A queued turn T3 cancels before it starts, after a finished report, is no Problem and does not hold the
+  result. Missing-report Problems persist across restart and renewed work;
   there is no automatic retry or dismiss-as-success.
 - **Working**: an Agent on its task reports `to: "working"` with a message when the visit's work starts. The block stays
   working and shows the message on the canvas, in its details and in the Run row; it selects no exit, releases nothing and is
@@ -652,9 +687,9 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   result, and the Run stays Active until a later report.
 - **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. While an
   Agent block's worker thread is idle and the visit's current report is still `working`, the block and the Run show **Needs
-  input**, and the overview has one card, **Review *Block* in T3**, with the working message and **Open in T3 ↗**. An Agent
-  that stopped without reporting leaves the same evidence, so the card never says the Agent waits for a reply; only an
-  explicit T3 request does. It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
+  input**, and the overview has one card, **Review *Block* in T3**, with its Working report and **Open in T3 ↗**. An Agent
+  that stopped without reporting leaves the same evidence, so the card's title never says the Agent waits for a reply; only
+  an explicit T3 request does. Opened in full, the Working report states the wait ([presentation](#execution-canvas)). It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
   cannot start on unanswered questions. Factory never parses chat; a model may still omit or misuse a report. Earlier Agent questions recorded before this contract stay in Settled
   attention with their text, and an upgrade turned questions still pending into the visit's working report without resuming the
   worker. See [report acceptance](runner.md#report-acceptance).
@@ -701,7 +736,8 @@ Pending** by choosing one of the fixed exits: **Approve** with optional text, or
 describing the changes. Submission settles only that
 occurrence and atomically saves all outgoing handoffs: double submission cannot send twice and a competing answer conflicts. Agent
 recipients get independent deliveries on the existing thread/queue rules; a Human recipient gets a new occurrence. The block stays
-waiting until its last occurrence is answered. Context and delivery text survive restart, are cleared after settlement and
+waiting until its last occurrence is answered. The context each occurrence received is Agent-written text, previewed on
+its card with **Read full context** ([presentation](#execution-canvas)). Context and delivery text survive restart, are cleared after settlement and
 acknowledgement, and Settled keeps only metadata. Human steps have no T3 thread; an answer carries on the originating
 worker of the message it answered. An authorized participant can also answer one occurrence through
 [Chat control](chat-control.md#human-answer-proposals) after a complete review and their own confirmation.

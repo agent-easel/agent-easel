@@ -66,10 +66,7 @@ function ShortcutSection({
       </h3>
       <dl>
         {commands.map((command) => (
-          <div
-            key={command.id}
-            className="flex min-h-7 items-center justify-between gap-3 text-[13px]"
-          >
+          <div key={command.id} className="flex min-h-7 items-center justify-between gap-3 text-sm">
             <dt>{command.label}</dt>
             <dd>
               <KeyChip>
@@ -101,7 +98,8 @@ export function ShortcutsCheatSheet({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogSurface
         presentation="workspace"
-        className="flex max-h-[85dvh] w-[calc(100%-2rem)] max-w-[720px] flex-col overflow-hidden"
+        size="wide"
+        className="flex flex-col overflow-hidden"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           titleRef.current?.focus();
@@ -111,7 +109,7 @@ export function ShortcutsCheatSheet({
           <DialogTitle ref={titleRef} tabIndex={-1} className="text-sm font-semibold outline-none">
             Keyboard shortcuts
           </DialogTitle>
-          <TextLink asChild className="ml-auto text-[13px]">
+          <TextLink asChild className="ml-auto text-sm">
             <AppLink
               to={pathname}
               search={{ settings: { tab: "keyboard" } }}

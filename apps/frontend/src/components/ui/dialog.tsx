@@ -15,11 +15,15 @@ const dialogOverlayClass =
   "fixed inset-0 z-50 bg-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
 const dialogSurfaceClass =
   "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-strong bg-card shadow-panel outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
-const centeredDialogClass =
-  "flex max-h-[85vh] w-[clamp(440px,33.333vw,560px)] flex-col gap-4 p-5 [@media(width<640px)]:w-[calc(100vw-32px)]";
+type DialogSize = "standard" | "wide";
+const dialogSizeLimitsClass = "max-h-[85vh] [@media(width<640px)]:w-[calc(100vw-32px)]";
+const dialogSizeClass = {
+  standard: `w-[clamp(440px,33.333vw,560px)] ${dialogSizeLimitsClass}`,
+  wide: `w-[clamp(560px,60vw,960px)] ${dialogSizeLimitsClass}`,
+} satisfies Record<DialogSize, string>;
+const centeredDialogClass = "flex flex-col gap-4 p-5";
 const dialogTitleClass = "pt-1 text-base leading-5 font-semibold wrap-anywhere";
 const dialogDescriptionClass = "text-sm text-muted-foreground";
-const wideDialogClass = "w-[clamp(560px,60vw,960px)]";
 
 /** The opener of a dialog that unmounted in the render now committing; see DialogSurface. */
 let replacedOpener: HTMLElement | null = null;
@@ -28,6 +32,7 @@ function DialogSurface({
   className,
   children,
   presentation = "dialog",
+  size,
   showCloseButton = false,
   onOpenAutoFocus,
   onCloseAutoFocus,
@@ -36,6 +41,8 @@ function DialogSurface({
   showCloseButton?: boolean;
   /** Large workspaces fade without scaling their canvas or blurring the live Run behind them. */
   presentation?: "dialog" | "workspace";
+  /** A shared dialog size; omit it when the surface sizes itself. */
+  size?: DialogSize;
 }) {
   // Controlled dialogs here have no DialogTrigger, so Radix would restore focus to nothing.
   // Return focus to whatever had it when the dialog opened instead; a dialog that stays mounted
@@ -63,6 +70,7 @@ function DialogSurface({
         data-presentation={presentation}
         className={cn(
           dialogSurfaceClass,
+          size && dialogSizeClass[size],
           presentation !== "workspace" &&
             "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
           className,
@@ -182,7 +190,6 @@ type CenteredDialogProps = Omit<
 > &
   Omit<DialogLayoutProps, "heading"> & {
     title: React.ReactNode;
-    size?: "standard" | "wide";
     onSubmit?: React.FormEventHandler<HTMLFormElement>;
   };
 
@@ -211,7 +218,8 @@ function DialogContent({
   return (
     <DialogSurface
       asChild={Boolean(onSubmit)}
-      className={cn(centeredDialogClass, size === "wide" && wideDialogClass)}
+      size={size}
+      className={centeredDialogClass}
       onOpenAutoFocus={(event) => {
         onOpenAutoFocus?.(event);
         if (event.defaultPrevented || !(event.target instanceof HTMLElement)) return;
@@ -263,6 +271,7 @@ export {
   DialogTitle,
   centeredDialogClass,
   dialogDescriptionClass,
+  dialogSizeClass,
   dialogTitleClass,
   dialogOverlayClass,
   dialogSurfaceClass,

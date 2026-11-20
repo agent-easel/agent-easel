@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Surface } from "@/components/ui/surface";
 import type { Appearance } from "@t3-factory/contracts/desktop-bridge";
 import { chooseAppearance, useAppearance } from "../appearance.ts";
 import { SegmentedChoice } from "./segmented-choice.tsx";
@@ -29,7 +30,7 @@ export function AppearanceChoice() {
   };
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-muted">
+      <Surface tone="group">
         <SettingsRow
           title="Mode"
           control={(text) => (
@@ -42,7 +43,7 @@ export function AppearanceChoice() {
             />
           )}
         />
-      </div>
+      </Surface>
       {failure && (
         <ProblemCard
           tone="error"

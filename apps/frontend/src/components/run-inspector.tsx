@@ -18,6 +18,7 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { conditionActivityText } from "../condition-arrivals.ts";
@@ -31,7 +32,7 @@ import {
 import { ExecutionStateBadge } from "./execution-state.tsx";
 import { clockTime, fullDateTime } from "../time-format.ts";
 import { RUN_STATE_LABELS, type RunStateKind } from "./status-badge.tsx";
-import { blockStateKind } from "../run-block-state.ts";
+import { blockStateKind, reviewInT3Since } from "../run-block-state.ts";
 import { PanelResizeHandle, type PanelBounds } from "./panel-resize.tsx";
 import { ResolvedAttention, RunAttentionDetails } from "./run-attention.tsx";
 import { RootWork } from "./run-coordination-controls.tsx";
@@ -119,7 +120,7 @@ function progressLine(run: RunDetail, block: FlowBlock, recorded: RunBlock, kind
   if (kind === "needs-input")
     return block.kind === "human"
       ? `Waiting for your decision${since(latest?.start)}`
-      : `Review in T3${since(recorded.observedAt)}`;
+      : `Review in T3${since(reviewInT3Since(run, recorded))}`;
   const continuation = continuationProgress(run, block, recorded);
   if (continuation) return continuation;
   if (activeStates.includes(recorded.state)) return currentVisitText(run, block, visits);
@@ -329,55 +330,60 @@ function WorkPeriods({ run }: { run: RunDetail }) {
         const block = run.blocks.find((item) => item.blockId === execution.blockId);
         const binding = run.threadBindings.find((item) => item.id === execution.bindingId);
         return (
-          <article
-            className="flex flex-col gap-1 rounded-md border bg-muted p-3 text-xs text-muted-foreground"
+          <Surface
             key={`${execution.bindingId}/${execution.executionId}`}
-            aria-label={`${binding ? bindingRole[binding.role] : "Agent"} · ${execution.executionId}`}
+            tone="inset"
+            asChild
+            className="flex flex-col gap-1 p-3 text-xs text-muted-foreground"
           >
-            <h4 className="text-sm font-medium break-all text-foreground">
-              {block?.name ?? execution.blockId} ·{" "}
-              {binding ? `${bindingRole[binding.role]} · ` : ""}
-              {execution.executionId}
-            </h4>
-            <p className="flex flex-wrap items-center gap-1">
-              T3 execution: <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> ·
-              Report:{" "}
-              {execution.reportStatus
-                ? `accepted ${execution.reportStatus}`
-                : binding?.role === "descendant"
-                  ? "the worker reports the result"
-                  : "not reported"}
-            </p>
-            {execution.problem && <p>Recorded Problem: {execution.problem}</p>}
-            {run.recoveries
-              .filter(
-                (r) => r.blockId === execution.blockId && r.executionId === execution.executionId,
-              )
-              .map((r) => (
-                <p key={r.attentionId}>
-                  Manual report recovery for {r.sourceExecutionId} ·{" "}
-                  {r.settledAt ? "reporting obligation settled" : "unresolved"}
-                </p>
-              ))}
-            <p>
-              Observed start: {observedTime(execution.observedStartedAt)} · Observed end:{" "}
-              {observedTime(execution.observedEndedAt)}
-            </p>
-            {execution.observedStartedAt && execution.observedEndedAt && (
-              <p>
-                Approximate elapsed:{" "}
-                {elapsedSeconds(execution.observedStartedAt, execution.observedEndedAt)} s
+            <article
+              aria-label={`${binding ? bindingRole[binding.role] : "Agent"} · ${execution.executionId}`}
+            >
+              <h4 className="text-sm font-medium break-all text-foreground">
+                {block?.name ?? execution.blockId} ·{" "}
+                {binding ? `${bindingRole[binding.role]} · ` : ""}
+                {execution.executionId}
+              </h4>
+              <p className="flex flex-wrap items-center gap-1">
+                T3 execution: <ExecutionStateBadge state={execution.engineStatus ?? "unknown"} /> ·
+                Report:{" "}
+                {execution.reportStatus
+                  ? `accepted ${execution.reportStatus}`
+                  : binding?.role === "descendant"
+                    ? "the worker reports the result"
+                    : "not reported"}
               </p>
-            )}
-            {binding ? (
-              <>
-                <p className="break-all">Thread: {binding.threadId}</p>
-                <BindingLink binding={binding} />
-              </>
-            ) : (
-              block?.link && <OpenInT3 href={block.link} className="text-xs" />
-            )}
-          </article>
+              {execution.problem && <p>Recorded Problem: {execution.problem}</p>}
+              {run.recoveries
+                .filter(
+                  (r) => r.blockId === execution.blockId && r.executionId === execution.executionId,
+                )
+                .map((r) => (
+                  <p key={r.attentionId}>
+                    Manual report recovery for {r.sourceExecutionId} ·{" "}
+                    {r.settledAt ? "reporting obligation settled" : "unresolved"}
+                  </p>
+                ))}
+              <p>
+                Observed start: {observedTime(execution.observedStartedAt)} · Observed end:{" "}
+                {observedTime(execution.observedEndedAt)}
+              </p>
+              {execution.observedStartedAt && execution.observedEndedAt && (
+                <p>
+                  Approximate elapsed:{" "}
+                  {elapsedSeconds(execution.observedStartedAt, execution.observedEndedAt)} s
+                </p>
+              )}
+              {binding ? (
+                <>
+                  <p className="break-all">Thread: {binding.threadId}</p>
+                  <BindingLink binding={binding} />
+                </>
+              ) : (
+                block?.link && <OpenInT3 href={block.link} className="text-xs" />
+              )}
+            </article>
+          </Surface>
         );
       })}
     </InspectorSection>

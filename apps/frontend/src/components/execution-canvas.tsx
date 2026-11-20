@@ -436,8 +436,7 @@ function executionFooters(
   return footers;
 }
 
-const pressClass =
-  "flex w-full flex-col rounded-lg text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+const pressClass = "flex w-full flex-col rounded-lg text-left outline-none focus-ring";
 
 /** Ports only mark where wires meet the block. */
 const port: CanvasPort = { className: "border-[1.5px] border-subtle-foreground bg-background" };

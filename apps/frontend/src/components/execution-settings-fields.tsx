@@ -7,6 +7,7 @@ import type {
   AgentModelOptionValue,
 } from "@t3-factory/contracts";
 import { Switch } from "@/components/ui/switch";
+import { Surface } from "@/components/ui/surface";
 import { ChoiceMenu, type MenuChoice } from "@/components/choice-menu";
 import { modelOptionChoices } from "@/lib/agent-display";
 
@@ -51,7 +52,7 @@ export function ExecutionSettingsFields({
       : { badge: "No Factory reporting", badgeKind: "neutral", disabled: true }),
   }));
   return (
-    <div className="divide-y overflow-hidden rounded-lg border bg-muted">
+    <Surface tone="group">
       {leading}
       <SelectRow
         id={`${idPrefix}-environment`}
@@ -91,7 +92,7 @@ export function ExecutionSettingsFields({
             saving={saving}
           />
         ))}
-    </div>
+    </Surface>
   );
 }
 

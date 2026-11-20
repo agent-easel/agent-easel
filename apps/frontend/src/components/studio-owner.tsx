@@ -4,6 +4,7 @@ import { FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChoiceMenu, type MenuChoice, type MenuGroup } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TextLink } from "@/components/ui/text-link";
@@ -40,10 +41,31 @@ export function OwnerBadge({ owner }: { owner: StudioOwner }) {
 
 /**
  * One owner's group: icon, name, repository path and count. A Project gone from T3 keeps its name
- * and a Not in T3 tag, and no path.
+ * and a Not in T3 tag, and no path. A `placement` rule is the name's tooltip.
  */
-export function OwnerGroupHeader({ owner, count }: { owner: StudioOwner; count: string }) {
+export function OwnerGroupHeader({
+  owner,
+  count,
+  placement,
+}: {
+  owner: StudioOwner;
+  count: string;
+  placement?: string | undefined;
+}) {
   const Icon = owner.projectId === null ? Workflow : FolderGit2;
+  const title = placement ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* Focusable so a keyboard reaches the placement rule. */}
+        <span tabIndex={0} className="shrink-0 rounded-xs outline-none focus-ring">
+          {owner.title}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{placement}</TooltipContent>
+    </Tooltip>
+  ) : (
+    <span className="shrink-0">{owner.title}</span>
+  );
   return (
     <h2 className="flex min-w-0 items-center gap-2 pt-2.5 pb-1.5 text-base leading-none font-semibold">
       <Icon
@@ -54,7 +76,7 @@ export function OwnerGroupHeader({ owner, count }: { owner: StudioOwner; count: 
         )}
         strokeWidth={1.5}
       />
-      <span className="shrink-0">{owner.title}</span>
+      {title}
       {owner.gone ? (
         <StatusBadge kind="neutral">Not in T3</StatusBadge>
       ) : (
@@ -154,7 +176,7 @@ export function OwnerFilter({
 }
 
 const ownerKindClass =
-  "group flex w-full items-center gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
+  "group flex w-full items-center gap-2.5 rounded-md border bg-background px-3 py-2.5 text-left outline-none hover:bg-accent focus-ring disabled:pointer-events-none disabled:opacity-50 data-[state=checked]:border-primary data-[state=checked]:bg-accent";
 
 /** What a caller may pass as `kind`, for the owning-Project menu's wording. */
 const ownerKindText = {

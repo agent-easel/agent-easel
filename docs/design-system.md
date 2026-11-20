@@ -63,6 +63,8 @@ first paint use the baseline until a client receives the presentation.
 - Keep the interface compact, with consistent field, button, panel and sidebar dimensions.
   Secondary/helper text must remain readable; faint uppercase section labels are not a
   substitute for readable helper text.
+- Feature components take font sizes only from the type-scale tokens in
+  `apps/frontend/src/styles.css`, never arbitrary sizes such as `text-[13px]`.
 - Focus must stay visible. Respect reduced motion: remove spatial transitions and keep
   modal changes short; programmatic canvas viewport moves jump instead of animating.
   Interactive controls must remain outside desktop drag regions.
@@ -124,20 +126,19 @@ button. Use at most one short introductory sentence in the body. Place any actio
 at the trailing edge, with Cancel or Keep editing before the primary or destructive
 action. Use 20 px of padding and a maximum height of 85vh. The body scrolls between
 the header and actions. The standard width is `clamp(440px, 33.333vw, 560px)`.
-Compare latest revision, Review and enable, and Import use the wide width
-`clamp(560px, 60vw, 960px)`. Below 640 px wide, both use the viewport width minus
-32 px.
+Compare latest revision, Review and enable, Import and the keyboard shortcuts
+sheet use the wide width `clamp(560px, 60vw, 960px)`. Below 640 px wide, both use
+the viewport width minus 32 px.
 
 A primary action with a blank required name stays neutral and disabled, with no reason and without
 marking the field invalid. Any other cause that keeps it from running shows that one reason beside
 the action. The control stays neutral while disabled and uses the filled primary only when it can
-run. **Create Flow**, **Import**, and Agent **Save** / **Create Agent** follow it. Flow editor
-**Save Flow** keeps the filled primary while disabled until that editor is revised; the same rule
-still describes when it may run.
+run. **Create Flow**, **Import** and the Studio editors' **Save** / **Create Agent** follow it.
 
-Save is the only filled primary action in Studio editors. The Trigger form's **Review and enable**
-is the exception. The Flow and Agent editors place Save in the header. The Trigger form keeps its
-actions in a pinned footer because its fields scroll.
+Save is the only filled primary action in Studio editors: filled only while there are unsaved
+changes it may send, neutral and disabled while saved or blocked, and **Saving…** while saving.
+In the Trigger form, **Review and enable** stays neutral beside Save. The Flow and Agent editors
+place Save in the header. The Trigger form keeps its actions in a pinned footer because its fields scroll.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
 is inert. Studio fills the window with a 16 px inset on every side at all viewport
@@ -168,12 +169,29 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   agree; an Error card is an `alert`, the others are `status`. Default density is the Settings
   and Studio card; compact is the composer, Run page and dialog card. The next step is one
   TextLink: an action, or a chevron link to Settings or Studio, or an external link to T3.
+- **Bordered container**: Surface, in one of four tones. Inset is content inside a panel or
+  card; Group holds grouped rows, as in Settings, divided by borders and clipped; Raised is a
+  card that stands on the page; Floating is a control or popup over the canvas, with the
+  floating shadow. Surface owns the border, background, radius and shadow only; padding, gap,
+  layout and content stay at the call site. A popover or other primitive that renders its own
+  element takes Surface's classes instead of nesting a Surface.
 - **Text link**: TextLink, for inline links and link-style actions. Its Link tone uses `--link`;
   Neutral keeps secondary text and turns primary on hover and focus. A trailing chevron moves
   forward in the app; the external ↗ leaves it or opens T3. It underlines on hover only, shows
   the `--ring` outline on keyboard focus, and a disabled action is at 50% opacity. In-app routes
   wrap AppLink, which stays the typed-route link; external links open in a new tab; actions are
   buttons.
+- **Navigation row**: NavRow, wrapping a typed AppLink with `asChild`. Compact rows are 32 px
+  tall, for Settings, and can carry a status or attention marker; Regular rows are 34 px tall,
+  for Studio, and can carry a trailing count. The selected row uses `bg-sidebar-accent`,
+  primary text and `aria-current="page"`; unselected rows use secondary text and a hover fill.
+  Both densities use the shared focus ring. The command palette, menus and library rows keep
+  their own components.
+- **Keyboard focus**: the shared focus ring, the `focus-ring` utility: 3 px of `--ring` at half
+  opacity on keyboard focus. A field or bordered control adds the `--ring` border beside it; a
+  surface or full-width row whose outer ring would be clipped adds the inset modifier. A
+  deliberate destructive or attention tone and an invalid field override it; TextLink replaces
+  it with its outline.
 - **Raw facts**: Technical details, closed by default with **Copy details**, as labelled rows
   or one raw error. Other closed secondary facts use the same disclosure.
 - **Field state**: the shared field-state helper sets `aria-invalid` and `aria-describedby` from
@@ -182,11 +200,29 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Dialog**: the shared dialog in its standard or wide size, with the shared header.
 - **Settings page**: the Settings page template of header, groups, rows and detail rows.
 - **Studio list**: the Studio list header (title, count, search, Import/New) and its rows.
+- **Studio editor header**: StudioEditorHeader in three layouts. Toolbar is the Flow editor's
+  52 px row above the canvas: owner, name, save status, controls, More actions, Save. Stacked is the
+  Agent editor's title row (name, controls, More actions, Save) over one status line, with no owner
+  because the list group beside it names the owner. Page is the Trigger editor's title with its
+  controls at the right over its check status, with Save in the pinned footer. StudioSaveButton
+  carries the Save rule wherever Save sits, including a pinned footer, and StudioSaveStatus shows
+  the saved check or the unsaved dot.
+- **Empty state**: EmptyState, always in a dashed frame. Large is for a whole list or preview
+  that is empty, such as an empty Studio list or an unavailable image: a centred icon tile, the
+  title, an optional body and an optional action; on a muted surface, such as Studio, the icon tile
+  takes the accent fill, which every palette keeps distinct from muted. Compact is for a panel list
+  that is empty for a reason worth explaining, such as a Run sidebar title search with no match: a
+  left-aligned title and a short body. A one-line hint without an explanation stays plain status
+  text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
+  list loading, no-match and error lines.
 - **Choice**: ChoiceMenu for every dropdown choice, a select-only combobox named by its field, with
   or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
   wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
   workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
   for a short exclusive choice that stays visible.
+- **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
+  the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
+  reader without a preview. Human-written text and Factory messages stay plain text.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.

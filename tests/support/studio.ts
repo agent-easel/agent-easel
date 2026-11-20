@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import { copyAgentDefinition } from "./agents.ts";
@@ -34,14 +35,79 @@ export async function openStudioAgent({ app, screen }: StudioFixtures, name: str
   return agent;
 }
 
-/** A saved copy of a seeded Flow is open in Studio with an unsaved rename. */
-export async function openEditedStudioFlow({ app, screen, browser }: StudioFixtures, name: string) {
+/** A saved copy of Sample worker is open in Studio with an unsaved Prompt edit. */
+export async function openEditedStudioAgent(fixtures: StudioFixtures, name: string) {
+  const agent = await openStudioAgent(fixtures, name);
+  await fixtures.screen.getByLabel("Prompt", { exact: true }).fill("Edited prompt");
+  return agent;
+}
+
+/**
+ * How long a held save waits at most. A journey that fails before its release cannot run cleanup
+ * first: the runner settles route handlers before `afterEach` within the default 30 s cleanup
+ * budget, so the hold ends on its own well inside that budget and past the journey's 5 s
+ * assertions after Save.
+ */
+const saveHoldMs = 20_000;
+
+/**
+ * Starts the open Studio editor's Save while its request to `path` is held, and returns the release.
+ * Something else, such as a removal elsewhere, can then reach the editor before the save replies.
+ * The release fails the journey when the hold already ended on its own: the save may then have
+ * replied before the journey's assertions, so they no longer prove the pending-save state.
+ */
+export async function startHeldSave(browser: Browser, screen: Screen, path: string) {
+  let expired = false;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      expired = true;
+      resolve();
+    }, saveHoldMs);
+    release = () => {
+      assert.equal(expired, false, `the held save ended on its own after ${saveHoldMs} ms`);
+      clearTimeout(timer);
+      resolve();
+    };
+  });
+  await browser.route(`**${path}`, async (route) => {
+    if (route.request.method === "PUT") await held;
+    return route.continue();
+  });
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(screen.getByRole("button", "Saving…", { exact: true })).toBeVisible();
+  return release;
+}
+
+/** The open Studio editor's Save has unsaved changes to send: enabled and filled. */
+export async function expectSaveFilled(screen: Screen) {
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeEnabled();
+  await expect(save).toHaveAttribute("data-variant", "default");
+}
+
+/** The open Studio editor's Save has nothing to send: disabled and neutral. */
+export async function expectSaveNeutral(screen: Screen) {
+  const save = screen.getByRole("button", "Save", { exact: true });
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-variant", "outline");
+}
+
+/** A saved copy of a seeded Flow is open in Studio with no unsaved changes. */
+export async function openStudioFlowCopy({ app, screen, browser }: StudioFixtures, name: string) {
   await browser.setViewport({ width: 1600, height: 1000 });
   const id = await saveFlowCopy(app.baseUrl, "Demo · Grill, spec and tickets", name, {
     mode: "checkout",
   });
   await app.open(`/studio/flows/${id}`);
-  await screen.getByLabel("Flow name").fill(`${name} edited`);
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+  return id;
+}
+
+/** A saved copy of a seeded Flow is open in Studio with an unsaved rename. */
+export async function openEditedStudioFlow(fixtures: StudioFixtures, name: string) {
+  const id = await openStudioFlowCopy(fixtures, name);
+  await fixtures.screen.getByLabel("Flow name").fill(`${name} edited`);
   return id;
 }
 
@@ -73,16 +139,16 @@ export const readinessSummary = (screen: Screen, readiness: "Ready" | RegExp) =>
     ? screen.getByText("Ready", { exact: true })
     : screen.getByRole("button", readiness);
 
-/** Saves the open Flow as revision 2 and expects its readiness summary, Ready or Not ready. */
-export async function saveFlowWithReadiness(
-  screen: Screen,
-  readiness: "Ready" | RegExp,
-  revision = 2,
-) {
+/** The open Flow has no unsaved changes: its save status reads Saved and Save is disabled. */
+export async function expectFlowSaved(screen: Screen) {
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Saved");
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+}
+
+/** Saves the open Flow and expects its readiness summary, Ready or Not ready. */
+export async function saveFlowWithReadiness(screen: Screen, readiness: "Ready" | RegExp) {
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText(
-    `Saved · Revision ${revision}`,
-  );
+  await expectFlowSaved(screen);
   await expect(readinessSummary(screen, readiness)).toBeVisible();
 }
 

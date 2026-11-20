@@ -11,6 +11,7 @@ import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
 import { ChevronLeft, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
+import { Surface } from "@/components/ui/surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { pendingRecovery } from "../attention-copy.ts";
 import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
@@ -31,7 +32,8 @@ import { OpenInT3 } from "./open-in-t3.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails } from "./technical-details.tsx";
 import { CoordinatorActivations } from "./run-coordination.tsx";
-import { ResultCard, RunTextReaderLink } from "./run-result.tsx";
+import { ResultCard } from "./run-result.tsx";
+import { WorkingReport } from "./agent-text.tsx";
 import { WaitArrivals } from "./wait-arrivals.tsx";
 import { ConditionArrivals } from "./condition-arrivals.tsx";
 
@@ -54,25 +56,21 @@ function visitSpan(visit: Visits[number]) {
 
 /** The current report of a working visit; a sent Continuation reports like an Agent. An Agent
  * idle with it can be asked to report. */
-function WorkingReport({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
+function WorkingReportSection({ run, recorded }: { run: RunDetail; recorded: RunBlock }) {
   if (recorded.state !== "working" && recorded.state !== "sent") return null;
   if (!recorded.workingMessage) return null;
   return (
-    <div className="flex flex-col gap-2.5">
-      <p className="text-sm break-words whitespace-pre-wrap text-foreground">
-        {recorded.workingMessage}
-      </p>
-      <RunTextReaderLink
-        label="Read working report"
-        title={`${recorded.name} · working report`}
-        metadata={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
-        text={recorded.workingMessage}
-        link={recorded.link}
-      />
+    <WorkingReport
+      text={recorded.workingMessage}
+      blockName={recorded.name}
+      provenance={recorded.observedAt ? clockTime(recorded.observedAt) : ""}
+      t3Link={recorded.link}
+      size="result"
+    >
       {(awaitsReviewInT3(recorded) || pendingRecovery(run, recorded)) && (
         <RequestReport run={run} block={recorded} />
       )}
-    </div>
+    </WorkingReport>
   );
 }
 
@@ -89,7 +87,7 @@ function BlockNow({
   const visits = blockVisits(run, block);
   return (
     <>
-      <WorkingReport run={run} recorded={recorded} />
+      <WorkingReportSection run={run} recorded={recorded} />
       {block.kind === "wait" && <WaitArrivals run={run} blockId={block.id} />}
       {block.kind === "condition" && (
         <ConditionArrivals key={`${run.id}:${block.id}`} run={run} blockId={block.id} />
@@ -101,22 +99,26 @@ function BlockNow({
               .map((visit, index) => ({ visit, number: index + 1 }))
               .reverse()
               .map(({ visit, number }) => (
-                <li
+                <Surface
                   key={visit.id}
-                  className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2"
+                  tone="inset"
+                  asChild
+                  className="flex items-center gap-2 px-3 py-2"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">Visit {number}</p>
-                    <p className="truncate text-xs text-subtle-foreground">{visitSpan(visit)}</p>
-                  </div>
-                  <ExecutionStateBadge
-                    state={
-                      block.kind === "agent" && number === visits.length
-                        ? recorded.state
-                        : visit.status
-                    }
-                  />
-                </li>
+                  <li>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">Visit {number}</p>
+                      <p className="truncate text-xs text-subtle-foreground">{visitSpan(visit)}</p>
+                    </div>
+                    <ExecutionStateBadge
+                      state={
+                        block.kind === "agent" && number === visits.length
+                          ? recorded.state
+                          : visit.status
+                      }
+                    />
+                  </li>
+                </Surface>
               ))}
           </ul>
         </InspectorSection>
@@ -206,14 +208,14 @@ function CapturedRevisitInstruction({ block }: { block: FlowBlock }) {
   if (block.kind !== "agent" || !block.revisitInstruction) return null;
   return (
     <InspectorSection title="Revisit instruction" label="Revisit instruction">
-      <div className="flex flex-col gap-1.5 rounded-md border bg-muted px-3 py-2">
+      <Surface tone="inset" className="flex flex-col gap-1.5 px-3 py-2">
         <p className="text-sm break-words whitespace-pre-wrap text-foreground">
           {block.revisitInstruction}
         </p>
         <p className="text-xs text-subtle-foreground">
           Captured at Start · sent on every visit after the first
         </p>
-      </div>
+      </Surface>
     </InspectorSection>
   );
 }
@@ -265,7 +267,7 @@ function ContinuationHistory({
             {queued ? `${queued} waiting behind the response` : "none"}
           </DetailRow>
         </dl>
-        <WorkingReport run={run} recorded={recorded} />
+        <WorkingReportSection run={run} recorded={recorded} />
       </InspectorSection>
       <ContinuationExchange run={run} block={block} prompt={prompt} />
       {ordered.length > 0 && (
@@ -281,7 +283,7 @@ function ContinuationHistory({
   );
 }
 
-const exchangeCardClass = "flex flex-col gap-0.5 rounded-md border bg-muted px-3 py-2";
+const exchangeCardClass = "flex flex-col gap-0.5 px-3 py-2";
 const exchangeTextClass = "line-clamp-3 text-xs break-words text-subtle-foreground";
 
 /** Input → prompt → response of the prompt visit; the prompt is the captured revision's. */
@@ -299,28 +301,28 @@ function ContinuationExchange({
   return (
     <InspectorSection title="Input → prompt → response">
       <div className="flex flex-col gap-1.5">
-        <div className={exchangeCardClass}>
+        <Surface tone="inset" className={exchangeCardClass}>
           <p className="text-sm font-medium">
             Input{prompt ? ` · from ${sourceName(run, prompt)}` : ""}
           </p>
           <p className={exchangeTextClass}>
             {prompt ? `arrived ${clockTime(prompt.arrivedAt)}` : "no message yet"}
           </p>
-        </div>
-        <div className={exchangeCardClass}>
+        </Surface>
+        <Surface tone="inset" className={exchangeCardClass}>
           <p className="text-sm font-medium">
             {prompt ? `Prompt sent${owner ? ` to ${owner}'s thread` : ""}` : "Prompt · not sent"}
           </p>
           <p className={exchangeTextClass} title={block.prompt}>
             {block.prompt || "No prompt in the captured revision"}
           </p>
-        </div>
-        <div className={exchangeCardClass}>
+        </Surface>
+        <Surface tone="inset" className={exchangeCardClass}>
           <p className="text-sm font-medium">Response</p>
           <p className={exchangeTextClass} title={response ?? undefined}>
             {response ?? "not yet"}
           </p>
-        </div>
+        </Surface>
       </div>
     </InspectorSection>
   );
@@ -354,16 +356,18 @@ function ContinuationVisitItem({
 }) {
   const link = run.threadBindings.find((binding) => binding.id === visit.bindingId)?.link;
   return (
-    <li className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <p className="text-sm font-medium">
-          Visit {number} · {visit.kind}
-        </p>
-        <p className="text-xs break-words text-subtle-foreground">{visitLine(run, visit)}</p>
-        {link && <OpenInT3 href={link} className="text-xs" />}
-      </div>
-      <ExecutionStateBadge state={visitPill(visit)} />
-    </li>
+    <Surface tone="inset" asChild className="flex items-center gap-2 px-3 py-2">
+      <li>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="text-sm font-medium">
+            Visit {number} · {visit.kind}
+          </p>
+          <p className="text-xs break-words text-subtle-foreground">{visitLine(run, visit)}</p>
+          {link && <OpenInT3 href={link} className="text-xs" />}
+        </div>
+        <ExecutionStateBadge state={visitPill(visit)} />
+      </li>
+    </Surface>
   );
 }
 

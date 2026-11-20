@@ -17,12 +17,18 @@ export const technicalDetailsText = (details: readonly TechnicalDetail[]) =>
  * Figma RD30: raw ids, reason codes, errors and paths, collapsed until the viewer opens them, with
  * Copy details for all of it. Labelled rows read as a list; a raw error reads as one block.
  */
-export function TechnicalDetails({ details }: { details: string | readonly TechnicalDetail[] }) {
+export function TechnicalDetails({
+  details,
+  defaultOpen,
+}: {
+  details: string | readonly TechnicalDetail[];
+  defaultOpen?: boolean | undefined;
+}) {
   const rows = typeof details === "string" ? null : present(details);
   const text = typeof details === "string" ? details : technicalDetailsText(details);
   if (!text) return null;
   return (
-    <Disclosure label="Technical details">
+    <Disclosure label="Technical details" defaultOpen={defaultOpen}>
       <div className="flex min-w-0 flex-col gap-2 text-2xs leading-4">
         {rows ? (
           <dl className="grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1.5">

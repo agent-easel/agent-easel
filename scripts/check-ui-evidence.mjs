@@ -68,11 +68,43 @@ function subsection(section, label) {
   );
 }
 
+function tableCells(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim());
+}
+
+const labels = ["Before", "After"];
+
+function isEvidenceTable(header, delimiter) {
+  const delimiterCells = tableCells(delimiter);
+  return (
+    header.length === 2 &&
+    header.every((cell, index) => cell === labels[index]) &&
+    delimiterCells.length === 2 &&
+    delimiterCells.every((cell) => /^:?-+:?$/.test(cell))
+  );
+}
+
+// Missing labels of the most complete row, so one row must pair a Before and an After image.
 export function checkUiEvidence(body) {
   const section =
     stripCode(body).match(/^## UI screenshots\s*\n([\s\S]*?)(?=^## |$(?![\s\S]))/m)?.[1] ?? "";
   if (subsection(section, "No UI evidence").trim()) return [];
-  return ["Before", "After"].filter((label) => !hasHttpsImage(subsection(section, label)));
+  const lines = section.split("\n");
+  let missing = labels;
+  for (let index = 0; index + 1 < lines.length; index++) {
+    if (!isEvidenceTable(tableCells(lines[index]), lines[index + 1])) continue;
+    for (let row = index + 2; row < lines.length && lines[row].includes("|"); row++) {
+      const cells = tableCells(lines[row]);
+      const rowMissing = labels.filter((_, column) => !hasHttpsImage(cells[column] ?? ""));
+      if (rowMissing.length < missing.length) missing = rowMissing;
+    }
+  }
+  return missing;
 }
 
 function readBody(args) {
@@ -94,7 +126,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     for (const label of checkUiEvidence(readBody(process.argv.slice(2)))) {
       console.error(
-        `::error::UI changes require an embedded HTTPS image under "### ${label}" in "## UI screenshots"; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
+        `::error::UI changes require a row of the "| Before | After |" table in "## UI screenshots" with an embedded HTTPS image in its ${label} column; a change without visible UI impact states why under "### No UI evidence" instead. See verify-t3-factory Evidence.`,
       );
       process.exitCode = 1;
     }

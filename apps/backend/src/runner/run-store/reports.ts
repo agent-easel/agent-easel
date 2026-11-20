@@ -81,8 +81,15 @@ function acceptFinal(
     exitId: string | null;
     recipients: readonly string[];
   },
+  observedSince: string,
 ) {
   const { runRow, block, activationId } = target;
+  // The reporting turn is known only from an observation of the worker thread made for this
+  // report; an older one may predate the turn.
+  const reporting =
+    block.freshness === "fresh" && block.observed_at !== null && block.observed_at >= observedSince
+      ? block.execution_id
+      : null;
   return Effect.gen(function* () {
     const id = yield* newId,
       time = yield* now;
@@ -100,7 +107,7 @@ function acceptFinal(
     const recipients = JSON.stringify(route.recipients);
     yield* settleForReport(sql, target, time, report.status);
     const handsOff = yield* replaceHeldResults(sql, runRow.id, activationId, route.exitId, time);
-    yield* sql`INSERT INTO runtime_reports(id,run_id,block_id,execution_id,fingerprint,status,exit_id,recipients_json,pending_message,acknowledgement_json,accepted_at,activation_id,result_message) VALUES(${id},${runRow.id},${block.block_id},${block.execution_id},${content},${report.status},${route.exitId},${recipients},${handsOff && route.recipients.length ? (report.message ?? "") : null},${JSON.stringify(reply)},${time},${activationId},${report.message ?? null})`;
+    yield* sql`INSERT INTO runtime_reports(id,run_id,block_id,execution_id,reporting_execution_id,fingerprint,status,exit_id,recipients_json,pending_message,acknowledgement_json,accepted_at,activation_id,result_message) VALUES(${id},${runRow.id},${block.block_id},${block.execution_id},${reporting},${content},${report.status},${route.exitId},${recipients},${handsOff && route.recipients.length ? (report.message ?? "") : null},${JSON.stringify(reply)},${time},${activationId},${report.message ?? null})`;
     yield* appendTimelineEvent(sql, {
       kind: "report-accepted",
       runId: runRow.id,
@@ -133,7 +140,12 @@ function acceptFinal(
  * manual settlement closed its gate (a report from stopped work never revives it), a protocol
  * violation, a repeat of the current report, then exit resolution and acceptance. The latest
  * report is the activation's current state, so a newer finished report replaces the result. */
-function decide(sql: SqlClient.SqlClient, target: ReportTarget, report: RuntimeReport) {
+function decide(
+  sql: SqlClient.SqlClient,
+  target: ReportTarget,
+  report: RuntimeReport,
+  observedSince: string,
+) {
   return Effect.gen(function* (): Effect.fn.Return<RuntimeReply, unknown> {
     const { runRow, block } = target;
     if (runRow.archived_at) return RUN_ARCHIVED;
@@ -146,7 +158,7 @@ function decide(sql: SqlClient.SqlClient, target: ReportTarget, report: RuntimeR
     const route = reportRoute(runRow.definitions, block.block_id, report);
     if (!route.ok) return route.reply;
     if (report.status === "working") return yield* acceptWorking(sql, target, report, content);
-    return yield* acceptFinal(sql, target, report, content, route);
+    return yield* acceptFinal(sql, target, report, content, route, observedSince);
   });
 }
 
@@ -161,12 +173,17 @@ export function openRunReports(database: RunnerDatabase) {
    * An accepted report advances the generation, and again when it returns a Settled Run to
    * Active; a newly raised rejection diagnostic advances it once. The verdict, whatever it is, is
    * published after the commit, because a rejection may record a diagnostic. */
-  function acceptReport(runId: string, publicId: string, report: RuntimeReport) {
+  function acceptReport(
+    runId: string,
+    publicId: string,
+    report: RuntimeReport,
+    observedSince: string,
+  ) {
     return database.mutate(runId, (sql) =>
       Effect.gen(function* () {
         const found = yield* reportTarget(sql, database.owner.token, publicId);
         if (!found.ok) return found.reply;
-        const reply = yield* decide(sql, found.target, report);
+        const reply = yield* decide(sql, found.target, report, observedSince);
         if (reply.code === "ACCEPTED")
           yield* returnToActive(
             sql,

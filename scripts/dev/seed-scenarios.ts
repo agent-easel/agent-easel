@@ -84,6 +84,37 @@ const reviewContent = {
   },
 };
 
+/** A review written as Markdown: long enough for the Human step to preview it with Read full context. */
+const longReviewContext = [
+  "## Review summary",
+  "",
+  "The search behavior looks good. Two wording choices need your decision before release.",
+  "The [empty-state notes](https://example.com/atlas/empty-state) list the options.",
+  "",
+  "### Empty state",
+  "",
+  '- Title: `No results for "{query}"`',
+  "- The query stays visible in the search field.",
+  "- The body suggests clearing filters instead of retrying the same search.",
+  "",
+  "### Reset action",
+  "",
+  "The button is labelled **Reset filters**. It clears `status`, `owner` and `tag` but keeps the query:",
+  "",
+  "```",
+  "GET /search?q=atlas&status=any&owner=me",
+  "→ GET /search?q=atlas",
+  "```",
+  "",
+  'The reviewed markup is <button class="reset">Reset filters</button>.',
+  "",
+  "### Decide",
+  "",
+  "Approve if the reset action is clear enough.",
+  "Request changes if it should also clear the query.",
+  "Compare it with the [reset filters layout](https://example.com/atlas/reset-filters).",
+].join("\n");
+
 const continuationContent = {
   prompt:
     "Plan saved searches for Atlas. Interview me about scope first, then write the spec and the tickets in the same conversation.",
@@ -123,6 +154,22 @@ const body = t("welcome.recentProjects");
 See the [Atlas copy guide](https://example.com/atlas/copy-guide) for tone.
 
 <b>Raw HTML stays text</b> <img src="missing.png" onerror="window.resultHtmlRan = true">`;
+
+/** A long Markdown Working report from an Agent that asks in T3 before it changes anything. */
+const emptyStateQuestion = `I drafted three options for the empty state and need your pick before changing anything.
+
+### Options
+
+1. **Neutral** — “No results. Try fewer filters.”
+2. **Helpful** — “No results for “atlas”. Clear filters to see 12 matches.”
+3. **Minimal** — the illustration and a \`Reset filters\` button only.
+
+### Open questions
+
+- Should the button say **Reset filters** or **Clear all**?
+- Keep the filter chips visible when nothing matches?
+
+Reply in T3 with the option number and any wording changes.`;
 
 /** Stable keys, titles and creation order are shared with journeys and the scenario catalog.
  * Reading this list needs no Factory; callers supply the saved Flow ids when instantiating it. */
@@ -190,7 +237,7 @@ export const seedScenarioList: readonly SeedScenario[] = [
     state: "working reported and idle",
     prompt:
       "Talk through the empty-state wording for Atlas search with me before changing anything.",
-    message: "Discussing the empty-state wording in T3: tone, filters and the button label.",
+    message: emptyStateQuestion,
     replies: 4,
   },
   {
@@ -210,6 +257,14 @@ export const seedScenarioList: readonly SeedScenario[] = [
     flow: "review",
     state: "result released to a Human review",
     ...reviewContent,
+  },
+  {
+    key: "human-context",
+    title: "Decision · Long review summary for the reset action",
+    flow: "review",
+    state: "result released to a Human review",
+    ...reviewContent,
+    review: { exit: "Ready for your decision", message: longReviewContext },
   },
   {
     key: "correction",

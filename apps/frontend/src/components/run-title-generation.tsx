@@ -74,7 +74,7 @@ export function FlowInputTitleLine({
       title={outcome ?? undefined}
       onClick={onInspect}
       className={cn(
-        "flex h-full min-w-0 items-center gap-1.5 rounded-b-lg px-3 text-left text-2xs tracking-label outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        "flex h-full min-w-0 items-center gap-1.5 rounded-b-lg px-3 text-left text-2xs tracking-label outline-none hover:bg-accent focus-ring",
         inspected ? "bg-accent" : "bg-muted",
       )}
     >

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import type { FlowDraft, PortableFlowDocument, Result } from "../packages/contracts/src/index.ts";
+import { openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import { test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
@@ -18,15 +19,21 @@ import {
 } from "./support/canvas.ts";
 import {
   chooseFlowAction,
+  expectFlowSaved,
+  expectSaveFilled,
+  expectSaveNeutral,
   expectSavedAgentRevision,
   flowsBreadcrumb,
   openEditedStudioFlow,
+  openStudioFlowCopy,
   readinessSummary,
   saveFlowWithReadiness,
+  startHeldSave,
 } from "./support/studio.ts";
 import {
   createStudioFlow,
   expectFlowBlocked,
+  removeFlowElsewhere,
   renameFlow,
   saveFlowCopy,
   saveSingleAgentFlow,
@@ -149,7 +156,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await expect(screen.getByRole("button", "Workspace: New worktree · develop")).toBeVisible();
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
 
   // Assert
   const path = new URL(await browser.url()).pathname;
@@ -176,7 +183,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await app.screenshot("after-flow-revision-comparison");
   await browser.setViewport({ width: 1920, height: 1000 });
   await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
-  await saveFlowWithReadiness(screen, "Ready", 5);
+  await saveFlowWithReadiness(screen, "Ready");
   await browser.reload();
   await expect(screen.getByLabel("Flow name")).toHaveValue("My preserved draft");
   await expect(screen.getByRole("button", "Workspace: New worktree · develop")).toBeVisible();
@@ -185,7 +192,7 @@ test("author a loop and fan-out by dragging exit ports, delete stray connections
   await renameFlow(app.baseUrl, saved.id, "Renamed elsewhere");
   await expect(screen.getByText("Updated to revision 6")).toBeVisible();
   await expect(screen.getByLabel("Flow name")).toHaveValue("Renamed elsewhere");
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 6");
+  await expectFlowSaved(screen);
 });
 
 test("Undo restores a wire disconnected from the Block target menu", async ({
@@ -259,7 +266,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     screen.getByRole("button", "Connection finish from Implement to Human step", { exact: true }),
   ).toBeVisible();
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await expectFlowBlocked(screen, /Implement: exit "finish" is hidden/);
   await app.screenshot("wired-inherited-exit-hidden");
   await browser.reload();
@@ -286,7 +293,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await app.screenshot("local-exit-name-conflict");
   await panel.getByLabel("Exit name", { exact: true }).fill("github-url");
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 5");
+  await expectFlowSaved(screen);
   await browser.reload();
   await screen.getByRole("button", "Agent Implement").tap();
   await expect(panel.getByLabel("Exit name", { exact: true })).toHaveValue("github-url");
@@ -347,7 +354,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
     "1",
   );
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 3");
+  await expectFlowSaved(screen);
   await browser.reload();
   await expect(screen.getByRole("group", "Directed connections")).toHaveAttribute(
     "data-connection-count",
@@ -379,7 +386,7 @@ test("a saved Agent block's Revisit instruction is shown again after reload and 
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
-  await expect(screen.getByRole("status", "Flow save status")).toContainText("Saved · Revision 2");
+  await expectFlowSaved(screen);
   await browser.reload();
   await expect(reviewer).toContainText("Revisit instruction");
   await expect(reviewer).not.toContainText(revisitInstruction);
@@ -594,6 +601,105 @@ test("Agent exit edits persist, renaming keeps Flow wires and removing a wired e
   assert(retained.ok);
   assert.deepEqual(retained.value.graph.connections, saved.value.graph.connections);
   await app.screenshot("agent-exit-removed-readiness");
+});
+
+test("the Flow header's Save is filled once the Flow has unsaved changes", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Header unsaved state ${crypto.randomUUID()}`;
+  await openStudioFlowCopy({ app, screen, browser }, name);
+
+  // Act
+  await screen.getByLabel("Flow name").fill(`${name} edited`);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveFilled(screen);
+  await app.screenshot("flow-header-unsaved");
+});
+
+test("the Flow header's Save turns neutral and disabled once the Flow is saved", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openEditedStudioFlow({ app, screen, browser }, `Header saved state ${crypto.randomUUID()}`);
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectFlowSaved(screen);
+  await expectSaveNeutral(screen);
+  await app.screenshot("flow-header-saved");
+});
+
+test("the Flow header's Save stays neutral and disabled while the Flow name is blank", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openStudioFlowCopy({ app, screen, browser }, `Header blank name ${crypto.randomUUID()}`);
+
+  // Act
+  await screen.getByLabel("Flow name").fill("");
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveNeutral(screen);
+});
+
+test("the Flow header's Save stays neutral and disabled while Studio is offline", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const name = `Header offline ${crypto.randomUUID()}`;
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const id = await saveFlowCopy(app.baseUrl, "Demo · Grill, spec and tickets", name, {
+    mode: "checkout",
+  });
+  await openRemoteBrowser(app);
+  await openApproved(app, `/studio/flows/${id}`);
+  await expect(screen.getByLabel("Flow name")).toHaveValue(name);
+  await fixture.remoteAccess.offline();
+
+  // Act
+  await screen.getByLabel("Flow name").fill(`${name} edited`);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText("Unsaved changes");
+  await expectSaveNeutral(screen);
+  await app.screenshot("flow-header-offline-unsaved");
+});
+
+test("the Flow header's Save turns neutral when the Flow is removed elsewhere during its save", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const name = `Header removed while saving ${crypto.randomUUID()}`;
+  const id = await openEditedStudioFlow({ app, screen, browser }, name);
+  const releaseSave = await startHeldSave(browser, screen, `/api/flows/${id}`);
+
+  // Act
+  await removeFlowElsewhere(app.baseUrl, id);
+
+  // Assert
+  await expect(screen.getByRole("status", "Flow save status")).toHaveText(
+    "Removed elsewhere · draft kept",
+  );
+  await expectSaveNeutral(screen);
+  await app.screenshot("flow-header-removed-while-saving");
+  releaseSave();
 });
 
 test("removing a Flow with unsaved changes returns to the Flow list without a discard dialog", async ({

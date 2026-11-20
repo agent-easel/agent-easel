@@ -368,22 +368,64 @@ test("an Agent whose Project left T3 can be removed only after the Flow that pla
   await shot(app, browser, "agents-remove-blocked");
 });
 
-test("Agents search with no match, and New Agent stays outline while the draft is open", async ({
+test("an Agents search with no match while the New Agent draft is open says No matching Agents", async ({
   app,
   screen,
   browser,
 }) => {
+  // Arrange
+  // A saved Agent stays listed while open, so the draft is open to leave nothing selected to keep.
   await app.open("/studio/agents");
-  await expect(screen.getByRole("region", "Agent editor")).toBeVisible();
+  await screen.getByRole("button", "New Agent", { exact: true }).tap();
+  const editor = screen.getByRole("region", "Agent editor");
+  await expect(editor.getByRole("button", "Create Agent", { exact: true })).toBeVisible();
+
+  // Act
   await screen.getByLabel("Search Agents", { exact: true }).fill("zzzz-no-such-agent");
+
+  // Assert
   await expect(screen.getByText("No matching Agents", { exact: true })).toBeVisible();
   await shot(app, browser, "agents-search-no-match");
-  await screen.getByLabel("Search Agents", { exact: true }).fill("");
-  await screen.getByRole("button", "New Agent", { exact: true }).tap();
-  await expect(screen.getByRole("button", "New Agent", { exact: true })).toBeVisible();
-  const editor = screen.getByRole("region", "Agent editor");
-  await expect(editor.getByRole("button", "Create Agent", { exact: true })).toBeDisabled();
+});
+
+test("New Agent turns outline while the New Agent draft is open", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await app.open("/studio/agents");
+  await expect(screen.getByRole("region", "Agent editor")).toBeVisible();
+  const newAgent = screen.getByRole("button", "New Agent", { exact: true });
+  await expect(newAgent).toHaveAttribute("data-variant", "default");
+
+  // Act
+  await newAgent.tap();
+
+  // Assert
+  await expect(newAgent).toHaveAttribute("data-variant", "outline");
   await shot(app, browser, "agents-new-draft");
+});
+
+test("a New Agent draft whose name is cleared keeps Create Agent neutral and disabled", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  await app.open("/studio/agents");
+  await screen.getByRole("button", "New Agent", { exact: true }).tap();
+  const editor = screen.getByRole("region", "Agent editor");
+  const name = editor.getByLabel("Name", { exact: true });
+  await name.fill("Draft name");
+  const create = editor.getByRole("button", "Create Agent", { exact: true });
+  await expect(create).toBeEnabled();
+
+  // Act
+  await name.fill("");
+
+  // Assert
+  await expect(create).toBeDisabled();
+  await expect(create).toHaveAttribute("data-variant", "outline");
 });
 
 test("Triggers with none yet shows its empty state without an owner filter", async ({
