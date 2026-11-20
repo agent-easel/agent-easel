@@ -1,3 +1,4 @@
+import { seedClock } from "../../apps/backend/test/support/seed-clock.ts";
 import { join } from "node:path";
 import { loadConfiguration } from "../../apps/backend/src/config.ts";
 import { openFactory } from "../../apps/backend/src/index.ts";
@@ -28,6 +29,7 @@ try {
       config.host === "0.0.0.0" ? "127.0.0.1" : config.host === "::" ? "::1" : config.host;
     const factory = await openFactory({
       runtimeBackendUrl: `http://${runtimeHost.includes(":") ? `[${runtimeHost}]` : runtimeHost}:${config.port}`,
+      clock: seedClock,
       databasePath: config.databasePath,
       t3,
       git,

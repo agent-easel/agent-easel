@@ -33,6 +33,7 @@ Skip a collection step only when the user already supplied an unambiguous value 
    - **Confirm**: an explicit yes to this review. Complete information in an earlier message is not confirmation.
 5. **Start.** Create one new random UUID as \`requestId\` for this confirmed review, for example with \`uuidgen\`. Call \`factory_start_run\` with \`requestId\`, \`projectId\`, \`flowId\` and \`input\` (the exact prompt), and keep those values frozen.
    - No reply, \`RUNTIME_UNAVAILABLE\` or \`internal\`: the outcome is unknown. Call again with the same \`requestId\` and identical arguments; Factory returns the already accepted Run instead of creating another.
+   - \`completed_issue\` in a validation reply: show the issue warnings and ask whether to start anyway. Only after explicit confirmation retry the same request with \`confirmCompletedIssues: true\`.
    - \`validation\`: Factory created nothing. Relay the issues and the recovery the user can take. Changing Agents, Flows, Projects, the T3 connection or reporting setup is the user's separate decision. When the user changes the Project, Flow or prompt, return to step 4; the next confirmed review gets a new \`requestId\`.
    - \`conflict\` with a \`start_key_conflict\` issue: this \`requestId\` was accepted with other content. Return to step 4.
    - Any other \`conflict\`, such as Factory shutting down or setup changing during the check: nothing new was accepted. Follow the reply's \`next\` and call again with the same \`requestId\` and identical arguments.

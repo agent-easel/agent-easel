@@ -74,6 +74,12 @@ export const gitHubRefusal = (failure: GitHubFailure): GitHubRead<never> => ({
 
 /** GitHub reads through the Factory host user's own `gh` login; Factory never writes to GitHub. */
 export interface GitHubAdapter {
+  /** Confirmed issue completion, or null while open without a merged closing PR. */
+  issueCompletion(
+    host: string,
+    repository: string,
+    number: number,
+  ): Promise<GitHubRead<string | null>>;
   /** `gh` is found and signed in to `host`; answers the login `@me` resolves to there. */
   readiness(host: string): Promise<GitHubRead<{ readonly login: string }>>;
   /** The repository a Project folder's remote names; answering proves the login can read it. */
@@ -131,6 +137,7 @@ const notAvailable = {
 
 /** Every read fails; for development and test hosts that must never run the host's `gh`. */
 export const unavailableGitHub: GitHubAdapter = {
+  issueCompletion: async () => notAvailable,
   readiness: async () => notAvailable,
   repository: async () => notAvailable,
   openIssues: async () => notAvailable,

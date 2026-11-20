@@ -224,6 +224,7 @@ function ReviewInT3({
 }) {
   const visit = run.activations.filter((activation) => activation.blockId === block.blockId).length;
   const waitingSince = reviewInT3Since(run, block);
+  const delayed = block.progressOverdue;
   const since = waitingSince ? ` · since ${clockTime(waitingSince)}` : "";
   return (
     <AttentionCard
@@ -234,11 +235,14 @@ function ReviewInT3({
       title={`Review ${block.name} in T3`}
       actions={block.link && <OpenInT3 href={block.link} variant="button" />}
     >
+      {delayed && <p>No progress report for at least three hours.</p>}
       {block.workingMessage && (
         <WorkingReport
           text={block.workingMessage}
           blockName={block.name}
-          provenance={`Visit ${visit} · waiting for your reply${since}`}
+          provenance={
+            delayed ? `Visit ${visit}` : `Visit ${visit} · waiting for your reply${since}`
+          }
           t3Link={block.link}
           size="needs-input"
         />

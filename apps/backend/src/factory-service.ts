@@ -363,6 +363,7 @@ export const makeFactoryService = (
       projects.refreshProjects,
       t3.threads,
       git,
+      github,
       owner,
       intervalMs,
       (projectId, agent, snapshot) => setup.recheckAgent(projectId, agent, snapshot),

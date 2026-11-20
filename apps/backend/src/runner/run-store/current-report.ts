@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import type { RuntimeReply } from "../../runtime-types.ts";
@@ -6,6 +7,7 @@ import type { ReportTarget } from "./records.ts";
 
 export type CurrentReport = {
   readonly status: "working" | "finished";
+  readonly acceptedAt: string;
   readonly fingerprint: string;
   readonly acknowledgement: RuntimeReply;
   readonly message: string | null;
@@ -23,30 +25,37 @@ export function currentReports(sql: SqlClient.SqlClient, runId: string | null) {
       run_id: string;
       block_id: string;
       activation_id: string;
+      created_at: string;
       report: string | null;
-    }>`SELECT a.run_id,a.block_id,a.id AS activation_id,COALESCE(
-      (SELECT json_object('status','working','fingerprint',fingerprint,'acknowledgement',json(acknowledgement_json),'message',message) FROM working_reports WHERE activation_id=a.id AND replaced_at IS NULL),
-      (SELECT json_object('status','finished','fingerprint',fingerprint,'acknowledgement',json(acknowledgement_json),'message',result_message) FROM runtime_reports WHERE activation_id=a.id AND status='finished' ORDER BY rowid DESC LIMIT 1)) AS report
+    }>`SELECT a.run_id,a.block_id,a.id AS activation_id,a.created_at,COALESCE(
+      (SELECT json_object('status','working','acceptedAt',accepted_at,'fingerprint',fingerprint,'acknowledgement',json(acknowledgement_json),'message',message) FROM working_reports WHERE activation_id=a.id AND replaced_at IS NULL),
+      (SELECT json_object('status','finished','acceptedAt',accepted_at,'fingerprint',fingerprint,'acknowledgement',json(acknowledgement_json),'message',result_message) FROM runtime_reports WHERE activation_id=a.id AND status='finished' ORDER BY rowid DESC LIMIT 1)) AS report
       FROM run_activations a WHERE (${runId} IS NULL OR a.run_id=${runId}) AND a.rowid=(SELECT MAX(l.rowid) FROM run_activations l WHERE l.run_id=a.run_id AND l.block_id=a.block_id)`,
     (rows) =>
       rows.map((row) => ({
         runId: row.run_id,
         blockId: row.block_id,
         activationId: row.activation_id,
+        createdAt: row.created_at,
         report: row.report === null ? null : (JSON.parse(row.report) as CurrentReport),
       })),
   );
 }
 
-/** Working messages that are the current report of each Block's latest activation. */
-export function currentWorkingMessages(sql: SqlClient.SqlClient, runId?: string) {
-  return Effect.map(currentReports(sql, runId ?? null), (reports) =>
-    reports.flatMap((entry) =>
-      entry.report?.status === "working"
-        ? [{ run_id: entry.runId, block_id: entry.blockId, message: entry.report.message }]
-        : [],
-    ),
-  );
+/** Progress starts with the current visit. Engine observations do not renew a worker report. */
+export function currentProgress(sql: SqlClient.SqlClient, runId?: string) {
+  return Effect.gen(function* () {
+    const time = yield* Clock.currentTimeMillis;
+    const reports = yield* currentReports(sql, runId ?? null);
+    return reports.map(({ runId, blockId, createdAt, report }) => ({
+      runId,
+      blockId,
+      message: report?.status === "working" ? report.message : null,
+      overdue:
+        report?.status !== "finished" &&
+        time - Date.parse(report?.acceptedAt ?? createdAt) >= 3 * 60 * 60 * 1000,
+    }));
+  });
 }
 
 /** An identical repeat of the Block's current report returns that report's stored acknowledgement,

@@ -1,3 +1,5 @@
+import * as Clock from "effect/Clock";
+import * as Layer from "effect/Layer";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import type { FactoryOperations, Result, RunDetail } from "@t3-factory/contracts";
@@ -43,7 +45,11 @@ function promiseOperations<T extends Record<keyof T, EffectOperation>, R>(
 
 /** Promise compatibility for Node callers; business logic executes in FactoryService. */
 export async function openFactory(options: FactoryOptions): Promise<Factory> {
-  const runtime = ManagedRuntime.make(factoryLayer(options));
+  const runtime = ManagedRuntime.make(
+    options.clock
+      ? Layer.provideMerge(factoryLayer(options), Layer.succeed(Clock.Clock)(options.clock))
+      : factoryLayer(options),
+  );
   let service: FactoryService["Service"];
   try {
     service = await runtime.runPromise(FactoryService);

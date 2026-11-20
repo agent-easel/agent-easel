@@ -305,3 +305,33 @@ it("changed content under an accepted request identity is refused as a conflict"
     issues: [{ code: "start_key_conflict" }],
   });
 });
+
+it("Start warns about a closed issue URL and a merged closing PR for a local issue before creating a Run", async (c) => {
+  // Arrange
+  const f = await prepared(c);
+  const repo = f.github.nameRepository(f.project.workspaceRoot, "example/project");
+  const closed = f.github.openIssue(repo, { number: 5, title: "Done" });
+  closed.open = false;
+  f.github.openIssue(repo, { number: 6, title: "Shipped" }).mergedClosingPr =
+    "https://github.com/example/project/pull/7";
+  const input = { ...startArguments(f), input: `Check ${closed.url} and #6.` };
+
+  // Act
+  const warning = await f.f.startTextRun(input);
+
+  // Assert
+  expect(warning).toMatchObject({
+    ok: false,
+    error: {
+      issues: [
+        { code: "completed_issue", message: "example/project#5 is already closed." },
+        {
+          code: "completed_issue",
+          message:
+            "example/project#6 has a merged closing pull request at https://github.com/example/project/pull/7.",
+        },
+      ],
+    },
+  });
+  expect(await f.f.listRunNavigation()).toEqual({ ok: true, value: [] });
+});

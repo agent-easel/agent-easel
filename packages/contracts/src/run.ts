@@ -123,6 +123,7 @@ export interface UpdateRunTitleSettingInput {
   readonly model: RunTitleModel | null;
 }
 export interface StartRunInput {
+  readonly confirmCompletedIssues?: boolean;
   /** Also the Run's navigation `creationKey`. */
   readonly requestId: string;
   readonly projectId: string;
@@ -225,6 +226,8 @@ export interface RunBlock {
   readonly reportStatus: "working" | "finished" | null;
   /** The Agent's message while `working` is the current report of the Block's current visit. */
   readonly workingMessage: string | null;
+  /** Three hours since the latest progress report or the start of an unreported visit. */
+  readonly progressOverdue: boolean;
   readonly problem: string | null;
   readonly pendingRequestCount: number | null;
   readonly observedAt: string | null;
@@ -630,15 +633,16 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
  * An Agent visit whose worker thread is idle while its current report is still `working`: the
  * Agent ended its turn, usually with a question in chat, or stopped without reporting. Both leave
  * the same evidence and Factory never parses chat, so the owner reviews the thread in T3. It is
- * Needs input on the Block and the Run without being an attention matter.
+ * Needs input on the Block and the Run without being an attention matter. A working Agent or
+ * sent Continuation also asks for review after three hours without progress.
  */
 export function awaitsReviewInT3(
-  block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus">,
+  block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus" | "progressOverdue">,
 ): boolean {
   return (
-    block.state === "working" &&
-    block.reportStatus === "working" &&
-    block.engineStatus === "completed"
+    (block.state === "working" || block.state === "sent") &&
+    (block.progressOverdue ||
+      (block.reportStatus === "working" && block.engineStatus === "completed"))
   );
 }
 

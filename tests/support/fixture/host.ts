@@ -1,3 +1,4 @@
+import { seedClock } from "../../../apps/backend/test/support/seed-clock.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,6 +44,7 @@ export async function startHost(
     {
       t3,
       git: new ControlledGit(),
+      clock: seedClock,
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       ...doubles,

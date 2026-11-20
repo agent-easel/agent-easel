@@ -107,6 +107,37 @@ export class LiveGitHubAdapter implements GitHubAdapter {
     return repositoryOf(parseJson(stdout));
   }
 
+  async issueCompletion(
+    host: string,
+    repository: string,
+    number: number,
+  ): Promise<GitHubRead<string | null>> {
+    const [owner, name] = repository.split("/") as [string, string];
+    const query = `query($owner:String!, $name:String!, $endCursor:String) {
+      repository(owner:$owner,name:$name){issue(number:${number}){
+        state closedByPullRequestsReferences(first:100,includeClosedPrs:true,after:$endCursor){
+          pageInfo{hasNextPage endCursor} nodes{merged url}
+        }
+      }}
+    }`;
+    let cursor: string | undefined;
+    do {
+      const read = await this.graphql(host, query, [
+        ["owner", owner],
+        ["name", name],
+        ...(cursor ? [["endCursor", cursor] as const] : []),
+      ]);
+      if (!read.ok) return read;
+      if (read.value.errors.length) return graphQLRefusal(read.value.errors[0]!);
+      const page = issueCompletionPage(read.value.data.repository);
+      if (!page.ok) return page;
+      if ("completion" in page.value) return gitHubAnswer(page.value.completion);
+      if (cursor === page.value.next) return unexpected();
+      cursor = page.value.next;
+    } while (cursor);
+    return unexpected();
+  }
+
   async openIssues(
     repository: GitHubRepositoryIdentity,
     query: string,
@@ -418,4 +449,24 @@ function labellingOf(event: Json) {
     typeof label.name === "string"
     ? { eventId: id, createdAt, label: label.name }
     : undefined;
+}
+
+function issueCompletionPage(
+  repository: unknown,
+): GitHubRead<{ completion: string | null } | { next: string }> {
+  const issue = isRecord(repository) && repository.issue;
+  if (!isRecord(issue)) return unexpected();
+  if (issue.state === "CLOSED") return gitHubAnswer({ completion: "is already closed" });
+  const links = issue.closedByPullRequestsReferences;
+  const prs = records(links);
+  if (issue.state !== "OPEN" || !isRecord(links) || !isRecord(links.pageInfo) || !prs)
+    return unexpected();
+  const merged = prs.find((pr) => pr.merged === true);
+  if (!prs.every((pr) => typeof pr.merged === "boolean" && typeof pr.url === "string"))
+    return unexpected();
+  if (merged && typeof merged.url === "string")
+    return gitHubAnswer({ completion: `has a merged closing pull request at ${merged.url}` });
+  if (links.pageInfo.hasNextPage === false) return gitHubAnswer({ completion: null });
+  if (typeof links.pageInfo.endCursor !== "string") return unexpected();
+  return gitHubAnswer({ next: links.pageInfo.endCursor });
 }
