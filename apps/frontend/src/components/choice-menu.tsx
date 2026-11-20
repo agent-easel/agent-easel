@@ -442,7 +442,7 @@ function listStatus(
   return choices.some(matches) ? undefined : noMatch;
 }
 
-/** With search it stays mounted while the popup is open, so a search that stops matching is announced. */
+/** Why the popup shows no choice; empty while it shows some, so a later reason is announced. */
 function ListStatus({ id, status }: { id: string; status: string | undefined }) {
   return (
     <p id={id} role="status" className={cn(status && "px-3 py-2 text-sm text-muted-foreground")}>
