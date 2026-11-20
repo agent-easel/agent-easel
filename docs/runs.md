@@ -434,6 +434,10 @@ fixed Human exits their old exits were mapped to.
   finished block reads its taken exit as an outcome, **→ *exit* · time**. Several blocks can be active at once; the canvas
   marks no "current step", percentage or taken path. Repeated visits update the same block; the timeline and executions keep
   the sequence. At rest, connections use one neutral style, including never-run branches.
+- The Finish block lists the captured endings, each with its incoming wires. They stay neutral while the Run can still
+  reach one; then the reached ending reads **Reached · *time*** in primary text and the others a muted **Not reached**,
+  and a Run that ended without one reads **No ending reached**. A captured Flow without endings, including every Run
+  started before endings existed, shows the Finish block's header only. Selecting it opens the Finish inspector below.
 - Hovering a block or Flow input with a mouse or trackpad, or giving one of its controls keyboard focus, temporarily draws
   that source's direct outgoing connections, including fan-out, unvisited branches and return connections, heavier and in
   higher contrast above the other connections. One source previews at a time: the most recent pointer or keyboard
