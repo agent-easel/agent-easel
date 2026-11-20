@@ -239,6 +239,10 @@ export async function remoteAccessFixture(
     },
     /** Live sockets currently relayed for remote browsers. */
     liveSocketCount: () => liveSockets.size,
+    /** Remote browsers reach `server` until `null` returns them to the host. */
+    serve(server: typeof current.server | null) {
+      retarget(server ? { server, anchor: server.remoteAccess.trustAnchor()! } : current);
+    },
     /**
      * Serves the remote browser navigations and relays a remote browser's request to the target
      * server. Returns false for host traffic.

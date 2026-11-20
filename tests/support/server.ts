@@ -24,15 +24,17 @@ const host = await startHost({
   applicationUpdates: serverUpdates.applicationUpdates,
 });
 const remoteAccess = await remoteAccessFixture(host, serverUpdates, () => live.snapshotDelayMs());
-const live = liveFixture(host.server.address.port, remoteAccess.liveSocketCount);
+const firstRunSetup = firstRunSetupFixture(host, remoteAccess);
+const live = liveFixture(firstRunSetup.hostPort, remoteAccess.liveSocketCount);
 const scenarios = await scenariosFixture(host);
 
 /**
- * Every fixture module, in shared reset order: the host's T3 connection and completed setup come
- * back first, since the other modules' resets need it available and authorized.
+ * Every fixture module, in shared reset order: browsers return from a fresh first-run host and
+ * the host's T3 connection comes back first, since the other modules' resets need it available
+ * and authorized.
  */
 const modules = {
-  firstRunSetup: firstRunSetupFixture(host),
+  firstRunSetup,
   remoteAccess,
   live,
   discord: discordFixture(discord, host),
@@ -105,7 +107,7 @@ const proxy = createServer((incoming, outgoing) => {
     outgoing.end(`Unknown fixture route ${url.pathname}`);
     return;
   }
-  proxyFixture(incoming, outgoing, host.server.address.port);
+  proxyFixture(incoming, outgoing, firstRunSetup.hostPort());
 });
 proxy.on("upgrade", (incoming: IncomingMessage, socket: Duplex) => {
   if (!remoteAccess.relayUpgrade(incoming, socket)) live.relayHostUpgrade(incoming, socket);
@@ -114,7 +116,7 @@ await new Promise<void>((resolve) => proxy.listen(host.port, "127.0.0.1", resolv
 
 async function shutdown() {
   proxy.close();
-  await Promise.all([host.close(), remoteAccess.close()]);
+  await Promise.all([host.close(), remoteAccess.close(), firstRunSetup.close()]);
   process.exit(0);
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const)
