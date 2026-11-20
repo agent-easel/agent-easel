@@ -1,4 +1,4 @@
-import { seedClock } from "../../../apps/backend/test/support/seed-clock.ts";
+import { advancingSeedClock } from "../../../apps/backend/test/support/seed-clock.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -39,12 +39,13 @@ export async function startHost(
   const t3 = new PersistentT3(home, false);
   // Use the real pending-approval simulation for remote connection journeys.
   t3.connection.authorize = ControlledT3Connection.prototype.authorize.bind(t3.connection);
+  const time = advancingSeedClock();
   const server = await startServer(
     { ...config, port: 0 },
     {
       t3,
       git: new ControlledGit(),
-      clock: seedClock,
+      clock: time.clock,
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       ...doubles,
@@ -82,6 +83,7 @@ export async function startHost(
     t3,
     server,
     factory,
+    time,
     /** The development seed's project, Agents and Flows, by key. */
     world,
     context: { factory, t3, projectId: world.project.id },

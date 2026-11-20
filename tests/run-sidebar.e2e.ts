@@ -5,7 +5,7 @@ import { expect, type App, type Screen } from "e2e";
 import { findArchivedRun, findRun, readHistoryRun } from "./support/run-history.ts";
 import { liveRun } from "./support/live.ts";
 import { shortcutMod } from "./support/keyboard-shortcuts.ts";
-import { prepareScenarios } from "./support/scenarios.ts";
+import { prepareScenario } from "./support/scenarios.ts";
 import {
   openSidebarAction,
   expectFlatSearch,
@@ -254,7 +254,7 @@ test("snooze during search keeps focus on the matching row", async ({ app, scree
 
 test("settle during search keeps focus on the matching row", async ({ app, screen, browser }) => {
   // Arrange
-  await prepareScenarios(app);
+  await prepareScenario(app, "snoozed");
   const { actions } = await openSidebarAction(
     { app, screen, browser },
     settleTitle,

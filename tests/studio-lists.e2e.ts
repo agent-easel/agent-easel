@@ -6,6 +6,7 @@ import type { Result, TriggerDefinition } from "../packages/contracts/src/index.
 import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
 import { refuseFlowCreate } from "./support/flows.ts";
 import { descriptionOf, whileTriggerChecksHeld } from "./support/studio.ts";
+import { desktopBridgeOptions, desktopBridgeScript } from "./support/desktop-bridge.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -110,6 +111,26 @@ async function allowRuns(baseUrl: string | undefined, name: string, maxActiveRun
 
 test.beforeEach(async ({ browser }) => {
   await browser.setViewport(viewport);
+});
+
+// The desktop window keeps a 48 px title-bar strip for the native macOS traffic lights.
+test("in the desktop app Studio opens below the title bar that holds the native window controls", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+
+  // Act
+  await app.open("/studio/flows");
+
+  // Assert
+  await expect
+    .poll(() => screen.getByRole("dialog", "Studio").boundingBox())
+    .toMatchObject({ x: 16, y: 48, width: 1408, height: 836 });
+  await shot(app, browser, "studio-desktop-below-title-bar");
 });
 
 test("Flows, Agents and Triggers share one header, toolbar and group heading", async ({
@@ -715,38 +736,6 @@ test("a Trigger that cannot check shows Problem on the row and Error in the side
     screen.getByRole("navigation", "Studio navigation").getByText("1 Trigger in Error"),
   ).toBeAttached();
   await shot(app, browser, "triggers-problem");
-});
-
-test("a Trigger cannot be saved on a Project that has already left T3", async ({
-  app,
-  screen,
-  browser,
-  fixture,
-}) => {
-  const docs = await ownedFlow(app.baseUrl, "Docs refresh");
-  const repository = (await fixture.github.state()).repository;
-  const result = (await (
-    await fetch(new URL("/api/triggers", app.baseUrl), {
-      method: "POST",
-      headers: mutation,
-      body: JSON.stringify({
-        kind: "github_issues",
-        name: "Journey · Gone project",
-        projectId: docs.projectId,
-        flowId: docs.id,
-        github: { repositoryNodeId: repository.nodeId, query: "label:factory:ready" },
-      }),
-    })
-  ).json()) as Result<unknown>;
-  // The fixture drops Docs site before any journey, so this frame has no seeded Trigger to open.
-  test.skip(
-    !result.ok,
-    "Creating a Trigger on a Project already gone from T3 is refused, so the gone-Trigger row is not reachable.",
-  );
-  await app.open("/studio/triggers");
-  await revealGroup(browser, "Docs site");
-  await screen.getByRole("button", "Journey · Gone project actions", { exact: true }).tap();
-  await shot(app, browser, "triggers-not-in-t3-menu");
 });
 
 test("empty Flows and Agents, and the composer’s Go to links return with the draft kept", async ({

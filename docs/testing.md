@@ -180,7 +180,9 @@ records.
 
 The development seed returns the Project, Agents, Flows and Runs it created, keyed
 by stable keys. The Run scenarios module takes Flows by those keys, never by
-display name. Definitions only journeys need are a named scenario set in that
+display name. Journeys that need a copy of a seeded Run request its key and use
+the returned ID. The original seed remains available for journeys that inspect
+the catalog. Definitions only journeys need are a named scenario set in that
 module, built with the seed's builders.
 
 ### PR journey check
