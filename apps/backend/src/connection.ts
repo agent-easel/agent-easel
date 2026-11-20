@@ -47,6 +47,9 @@ const explanations: Record<T3ConnectionReason, string> = {
     "T3 does not satisfy the connection contract. Inspect the reported problems, update T3 if needed, and recheck.",
 };
 
+const OPEN_FAILED_EXPLANATION =
+  "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.";
+
 /** Bounds how often anyone may open the host browser through `openConnectionAuthorization`. */
 const AUTHORIZATION_OPEN_COOLDOWN_MS = 5_000;
 
@@ -96,6 +99,7 @@ export const makeConnection = (
       checkedAt: null,
       authorizationContext: current ? contextValue(current) : null,
       authorizationPending: false,
+      authorizationOpenFailed: false,
       contract: null,
     };
     /** The support answers of the check that set `status`. */
@@ -158,13 +162,17 @@ export const makeConnection = (
           }
         }
         support = observation.support;
+        const pending = observation.reason === "approval-pending";
+        // A failed open stays reported while the same approval waits: no page opened for it.
+        const openFailed = pending && before.authorizationOpenFailed;
         status = {
           endpoint,
           state: observation.state,
-          explanation: explanations[observation.reason],
+          explanation: openFailed ? OPEN_FAILED_EXPLANATION : explanations[observation.reason],
           checkedAt: yield* now,
           authorizationContext: current ? contextValue(current) : null,
-          authorizationPending: observation.reason === "approval-pending",
+          authorizationPending: pending,
+          authorizationOpenFailed: openFailed,
           contract: observation.contract ?? null,
         };
         publishCheck(before);
@@ -187,6 +195,7 @@ export const makeConnection = (
               state: "unavailable",
               checkedAt: yield* now,
               authorizationPending: false,
+              authorizationOpenFailed: false,
               contract: null,
               explanation:
                 "T3 is unavailable. Start T3 or check the endpoint and network. Factory will reconnect automatically.",
@@ -209,6 +218,7 @@ export const makeConnection = (
         ...status,
         authorizationContext: null,
         authorizationPending: false,
+        authorizationOpenFailed: false,
         contract: null,
         state: "authorization-required",
       };
@@ -258,7 +268,13 @@ export const makeConnection = (
           ON CONFLICT(singleton) DO UPDATE SET endpoint = excluded.endpoint, context_id = NULL`;
               saved = { endpoint, context_id: null };
               current = undefined;
-              status = { ...status, endpoint, authorizationContext: null, contract: null };
+              status = {
+                ...status,
+                endpoint,
+                authorizationContext: null,
+                authorizationOpenFailed: false,
+                contract: null,
+              };
               changes.connectionChanged();
             }
             return yield* check();
@@ -292,12 +308,13 @@ export const makeConnection = (
             if (resumed._tag === "None") {
               status = {
                 ...status,
-                explanation:
-                  "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
+                explanation: OPEN_FAILED_EXPLANATION,
+                authorizationOpenFailed: true,
               };
               changes.connectionChanged();
               return value();
             }
+            status = { ...status, authorizationOpenFailed: false };
             if (resumed.value !== "none") return yield* check();
             return yield* startAuthorization(endpoint);
           }),

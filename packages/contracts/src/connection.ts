@@ -67,6 +67,11 @@ export interface T3Connection {
   readonly authorizationContext: AuthorizationContext | null;
   /** An approval started on the host is waiting for consent in the host's browser. */
   readonly authorizationPending: boolean;
+  /**
+   * The host's browser could not open the pending approval's page again; `explanation` says so
+   * until a later open succeeds or the approval ends.
+   */
+  readonly authorizationOpenFailed: boolean;
   readonly contract: T3Contract | null;
 }
 

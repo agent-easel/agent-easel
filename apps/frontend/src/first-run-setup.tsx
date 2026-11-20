@@ -644,19 +644,9 @@ function WaitingForApproval({
 }) {
   const { setConnection } = useConnectionState();
   const { busy, run, errorCard } = useStepOperation();
-  /** The explanation a Reopen answered, when it changed it: the host browser could not open. */
-  const [reopenProblem, setReopenProblem] = useState("");
-  const reopen = () =>
-    run(async () => {
-      const before = connection.explanation;
-      const reopened = await api.openConnectionAuthorization();
-      setConnection(reopened);
-      // An unchanged answer repeats the shown state; a changed one is a failure, or ends one.
-      if (reopened.explanation !== before)
-        setReopenProblem((shown) => (before === shown ? "" : reopened.explanation));
-    });
-  // The host rechecks within seconds and then no longer reports the failed open.
-  const reopenFailed = !!reopenProblem && connection.explanation === reopenProblem;
+  const reopen = () => run(async () => setConnection(await api.openConnectionAuthorization()));
+  // The host reports a failed open to every window until an open succeeds or approval ends.
+  const reopenFailed = connection.authorizationOpenFailed;
   const endpoint = connection.endpoint ?? "";
   return (
     <div className="grid gap-3 pl-8.5">
