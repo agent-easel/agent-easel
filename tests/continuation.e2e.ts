@@ -2,7 +2,7 @@ import { test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow } from "./support/flows.ts";
 import { findRun } from "./support/run-history.ts";
-import { prepareScenarios } from "./support/scenarios.ts";
+import { prepareScenario } from "./support/scenarios.ts";
 import { readerScreenshot } from "./support/human-answers.ts";
 
 test("a Continuation added after an Agent names the thread it continues and keeps its prompt after Save and reload", async ({
@@ -72,8 +72,7 @@ test("a later review a Continuation passes through to a Human step names the rev
 }) => {
   // Arrange
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app);
-  const run = await findRun(app.baseUrl, "UI worker · Code review passed through the spec");
+  const run = await prepareScenario(app, "continuation-relay");
   await app.open(`/runs/${run.id}`);
   const inspector = screen.getByRole("complementary", "Run inspector");
   await expect(

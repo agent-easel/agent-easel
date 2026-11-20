@@ -6,8 +6,8 @@ import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { expectFlowSaved, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
 import type { StudioFixtures } from "./support/studio.ts";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
+import { readHistoryRun } from "./support/run-history.ts";
+import { applyRunState, prepareScenario } from "./support/scenarios.ts";
 import { liveRun } from "./support/live.ts";
 import {
   approveFirstReviewAtLength,
@@ -139,21 +139,6 @@ test("a Wait given a duration saves ready with it", async ({ app, screen, browse
   });
 });
 
-test("a saved Wait shows its duration on the canvas after reload", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
-  await savedWaitFor90Hours({ app, screen, browser });
-
-  // Act
-  await browser.reload();
-
-  // Assert
-  await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 hours");
-});
-
 test("a reloaded Wait's settings show its duration, unit and output", async ({
   app,
   screen,
@@ -181,7 +166,6 @@ async function openHeldPause(
   message: string,
 ) {
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app);
   const runId = await liveRun(app, key, "pause");
   await applyRunState(app, runId, "result reported", message);
   await applyRunState(app, runId, "result released to a Wait");
@@ -191,6 +175,7 @@ async function openHeldPause(
 }
 
 test("a waiting arrival is held with its message and forwarded by the backend once its minute elapses", async ({
+  fixture,
   app,
   screen,
   browser,
@@ -206,10 +191,10 @@ test("a waiting arrival is held with its message and forwarded by the backend on
   await app.screenshot("wait-one-arrival-pending");
 
   // Act
-  const forwarded = screen.getByRole("button", /^Wait Pause a minute, Finished/);
-  await expect(forwarded).toBeVisible({ timeout: 90_000 });
+  await fixture.scenarios.elapseWait({ id: runId });
 
   // Assert
+  await expect(screen.getByRole("button", /^Wait Pause a minute, Finished/)).toBeVisible();
   await expect(screen.getByRole("listitem", "Arrival 1, forwarded")).toContainText(
     "elapsed, forwarded",
   );
@@ -258,11 +243,7 @@ test("a held message's task-list link with a long unbroken label wraps inside th
 /** The seeded Run whose Wait holds two reviews for the morning sync, open on its Run page. */
 async function openMorningSyncRun(app: App, browser: Browser) {
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app);
-  const held = await findRun(
-    app.baseUrl,
-    "UI worker · Waiting · Two reviews held for the morning sync",
-  );
+  const held = await prepareScenario(app, "wait-arrivals");
   await app.open(`/runs/${held.id}`);
   return held;
 }

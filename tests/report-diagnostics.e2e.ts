@@ -1,7 +1,7 @@
 import { test } from "./support/test.ts";
 import { expect } from "e2e";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { prepareScenarios } from "./support/scenarios.ts";
+import { readHistoryRun } from "./support/run-history.ts";
+import { prepareScenario } from "./support/scenarios.ts";
 
 test("a rejected report is one plain card whose reason stays in Technical details, and recovery assesses existing work", async ({
   app,
@@ -9,8 +9,7 @@ test("a rejected report is one plain card whose reason stays in Technical detail
   browser,
 }) => {
   // Arrange
-  await prepareScenarios(app);
-  const run = await findRun(app.baseUrl, "UI worker · Problem · Report exit needs correction");
+  const run = await prepareScenario(app, "rejected-report");
   await browser.setViewport({ width: 1440, height: 1100 });
   await app.open(`/runs/${run.id}`);
   const card = screen.getByRole("article", "Problem · Implement change");

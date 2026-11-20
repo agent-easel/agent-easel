@@ -1,8 +1,7 @@
 import { expect, type App, type Locator, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
 import { liveRun } from "./live.ts";
-import { findRun } from "./run-history.ts";
-import { applyRunState, prepareScenarios } from "./scenarios.ts";
+import { applyRunState, prepareScenario } from "./scenarios.ts";
 
 /** Chooses `decision` from the Decision menu of the Human answer form `answer`. */
 export async function chooseDecision(screen: Screen, answer: Locator, decision: string) {
@@ -92,11 +91,7 @@ export async function openIdenticalReviewsThroughCondition({
   browser: Browser;
 }) {
   await browser.setViewport({ width: 1600, height: 1000 });
-  await prepareScenarios(app);
-  const run = await findRun(
-    app.baseUrl,
-    "UI worker · Two identical reviews routed to your decision",
-  );
+  const run = await prepareScenario(app, "condition-identical-reviews");
   await app.open(`/runs/${run.id}`);
   const readContext = async (source: string) => {
     await screen

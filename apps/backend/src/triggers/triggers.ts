@@ -255,6 +255,16 @@ export const makeTriggers = (
           : undefined;
         if (!project)
           return refusal("validation", "trigger_project", "projectId", "Choose a saved Project.");
+        if (
+          project.availability === "project-unavailable" ||
+          project.availability === "different-environment"
+        )
+          return refusal(
+            "validation",
+            "trigger_project_unavailable",
+            "projectId",
+            `${project.title} is no longer in T3. Choose a Project that is still in T3.`,
+          );
         if (!isLocalEndpoint(project.endpoint))
           return refusal(
             "validation",

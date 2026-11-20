@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
 import type { Browser } from "@e2e-dev/web";
-import { beforeEach, test } from "./support/test.ts";
+import { test } from "./support/test.ts";
 import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
-import { findRun, readHistoryRun } from "./support/run-history.ts";
-import { prepareScenarios } from "./support/scenarios.ts";
-
-beforeEach(async ({ app }) => {
-  await prepareScenarios(app);
-});
+import { readHistoryRun } from "./support/run-history.ts";
+import { prepareScenario } from "./support/scenarios.ts";
 
 test("a selected Block's Needs input names the request plainly, and its long native identities stay readable in its Technical details after reload", async ({
   app,
@@ -17,10 +13,7 @@ test("a selected Block's Needs input names the request plainly, and its long nat
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Woke · A question about keyboard shortcuts",
-  );
+  const found = await prepareScenario(app, "woke");
   const run = await readHistoryRun(app.baseUrl, found.id);
   const worker = run.blocks.find((block) => block.blockId === "worker");
   assert(worker?.threadId && worker.executionId);
@@ -61,7 +54,7 @@ test("a worker whose own turn ended while its subagents still run stays working 
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
+  const found = await prepareScenario(app, "working");
   const run = await readHistoryRun(app.baseUrl, found.id);
   expect(run.blocks.find((block) => block.blockId === "worker")).toMatchObject({
     state: "working",
@@ -123,7 +116,7 @@ test("a selected Agent block shows its captured Revisit instruction read-only, a
 
 async function openWorkingRunInspector(app: App, screen: Screen, browser: Browser) {
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(app.baseUrl, "UI worker · Working · Improve the project picker");
+  const found = await prepareScenario(app, "working");
   await app.open(`/runs/${found.id}`);
   return screen.getByRole("complementary", "Run inspector");
 }
@@ -178,10 +171,7 @@ test("Key events collapses a discussing worker's repeated T3 status updates into
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Discussing · Agent asked about empty-state wording",
-  );
+  const found = await prepareScenario(app, "conversation");
   const run = await readHistoryRun(app.baseUrl, found.id);
   expect(run.events.map((event) => event.kind)).toEqual([
     "started",
@@ -222,10 +212,7 @@ test("All events shows every recorded entry and stays chosen after reload", asyn
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Discussing · Agent asked about empty-state wording",
-  );
+  const found = await prepareScenario(app, "conversation");
   await app.open(`/runs/${found.id}`);
   await browser.reload();
   await screen.getByRole("button", "Show timeline", { exact: true }).tap();
@@ -247,13 +234,12 @@ test("All events shows every recorded entry and stays chosen after reload", asyn
   await expect(timeline.getByRole("listitem")).toHaveCount(12);
 });
 
-const settledRun = "UI worker · Settled · Clearer onboarding copy";
 const settledResultCard = "Implement change · Visit 1 · result";
 
 /** The completed Run's Final result in the inspector overview; the viewport is short enough to scroll the reader. */
 async function openSettledResultCard(app: App, screen: Screen, browser: Browser) {
   await browser.setViewport({ width: 1440, height: 600 });
-  const found = await findRun(app.baseUrl, settledRun);
+  const found = await prepareScenario(app, "settled");
   await app.open(`/runs/${found.id}`);
   const card = screen
     .getByRole("complementary", "Run inspector")
@@ -278,7 +264,7 @@ test("a Settled Run’s activation shows the result title and the reader action"
 }) => {
   // Arrange
   await browser.setViewport({ width: 1440, height: 1100 });
-  const found = await findRun(app.baseUrl, settledRun);
+  const found = await prepareScenario(app, "settled");
   const run = await readHistoryRun(app.baseUrl, found.id);
   expect(run.lifecycle).toBe("settled");
   expect(run.reports.at(-1)?.resultMessage).toContain("<img");
@@ -367,7 +353,7 @@ test("a short result shows whole on its card, and its Technical details link ope
   screen,
 }) => {
   // Arrange: a Run waiting in its Human review, so it never settles into its title-only overview.
-  const found = await findRun(app.baseUrl, "UI worker · Waiting for your review");
+  const found = await prepareScenario(app, "human-review");
   await app.open(`/runs/${found.id}`);
   const card = screen
     .getByRole("complementary", "Run inspector")
@@ -395,10 +381,7 @@ test("a long result previews its beginning with Read result and no separate Tech
   screen,
 }) => {
   // Arrange
-  const found = await findRun(
-    app.baseUrl,
-    "UI worker · Decision · Long review summary for the reset action",
-  );
+  const found = await prepareScenario(app, "human-context");
 
   // Act
   await app.open(`/runs/${found.id}`);

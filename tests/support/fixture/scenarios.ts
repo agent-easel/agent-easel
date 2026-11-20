@@ -627,7 +627,11 @@ export async function scenariosFixture(host: Host) {
     seeded?: { context: string; runs: Map<string, ScenarioRun> },
   ) {
     let copy = seeded;
-    return async (runContext: string) => {
+    return async (runContext: string, requestedKey?: string) => {
+      if (requestedKey !== undefined && copy && copy.context !== runContext) {
+        for (const run of copy.runs.values()) await retire(run.id);
+        copy = undefined;
+      }
       const observe = await observeRuns();
       const earlier = copy?.context === runContext ? copy.runs : new Map<string, ScenarioRun>();
       const stale = async (key: string) => {
@@ -646,8 +650,11 @@ export async function scenariosFixture(host: Host) {
         ),
         ...extra.map(([key, start]) => [key, () => start(keyNamespace)] as const),
       ];
+      const selected =
+        requestedKey === undefined ? starts : starts.filter(([key]) => key === requestedKey);
+      assert(selected.length, `Unknown scenario ${requestedKey}`);
       const runs = new Map<string, string>();
-      for (const [key, start] of starts) {
+      for (const [key, start] of selected) {
         if (!(await stale(key))) continue;
         const replaced = copy?.runs.get(key);
         if (replaced) await retire(replaced.id);
@@ -763,18 +770,32 @@ export async function scenariosFixture(host: Host) {
         ).runId,
     ],
   ]);
-  let prepared:
-    | { attempt: number; context: string; runs: Promise<Map<string, ScenarioRun>> }
-    | undefined;
+  let preparedContext: string | undefined;
+  const prepared = new Map<string, string>();
+  let preparing = Promise.resolve();
 
   return {
     actions: {
-      /** This attempt's scenario Runs by scenario key, in the current authorization context. */
-      async prepare() {
-        const runContext = await currentContext();
-        if (prepared?.attempt !== attempt || prepared.context !== runContext)
-          prepared = { attempt, context: runContext, runs: refreshPrepared(runContext) };
-        return Object.fromEntries([...(await prepared.runs)].map(([key, run]) => [key, run.id]));
+      /** Prepares only the requested scenario in this attempt's authorization context. */
+      prepare({ key }: { key: string }) {
+        const result = preparing.then(async () => {
+          const runContext = await currentContext();
+          if (preparedContext !== runContext) {
+            prepared.clear();
+            preparedContext = runContext;
+          }
+          const existing = prepared.get(key);
+          if (existing) return { id: existing };
+          const runs = await refreshPrepared(runContext, key);
+          const id = runs.get(key)!.id;
+          prepared.set(key, id);
+          return { id };
+        });
+        preparing = result.then(
+          () => undefined,
+          () => undefined,
+        );
+        return result;
       },
       /** Starts `key` once per journey attempt, in `flow` and the current authorization context. */
       async ensure({ key, flow }: { key: string; flow: ScenarioFlow }) {
@@ -796,8 +817,16 @@ export async function scenariosFixture(host: Host) {
       async arriveAtCondition({ id, through }: { id: string; through: number }) {
         await conditionArrivalsThrough(context, id, through);
       },
+      async elapseWait({ id }: { id: string }) {
+        const run = requireSuccess(await factory.getRun(id));
+        const waiting = run.waitArrivals.filter((arrival) => arrival.state === "pending");
+        assert.equal(waiting.length, 1, "The journey Run must have one pending Wait arrival");
+        host.time.advanceTo(Date.parse(waiting[0]!.deadlineAt));
+      },
     },
     async reset() {
+      await preparing;
+      prepared.clear();
       attempt += 1;
       await refreshSeeded(await currentContext());
     },

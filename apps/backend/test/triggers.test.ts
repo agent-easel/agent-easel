@@ -184,6 +184,21 @@ it("a removed Trigger's name can be used again", async (c) => {
   expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [saved.value.trigger] });
 });
 
+it("a Trigger cannot be created for a Project that has left T3", async (c) => {
+  // Arrange
+  const { f, t3, triggerInput } = await triggerWorld(c);
+  t3.projects.catalog = [];
+  assert((await f.recheckProjects()).ok);
+
+  // Act
+  const saved = await f.createTrigger(triggerInput);
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error.issues[0]?.code).toBe("trigger_project_unavailable");
+  expect(await f.listTriggers()).toStrictEqual({ ok: true, value: [] });
+});
+
 it("a Project on a remote T3 environment is refused", async (c) => {
   // Arrange
   const { f, triggerInput } = await triggerWorld(c);
