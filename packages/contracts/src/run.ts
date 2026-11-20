@@ -223,6 +223,8 @@ export interface RunBlock {
   readonly executionId: string | null;
   readonly link: string | null;
   readonly engineStatus: string | null;
+  /** T3 confirmed completion of the worker thread, including delegated and background work. */
+  readonly workerFinished: boolean;
   readonly reportStatus: "working" | "finished" | null;
   /** The Agent's message while `working` is the current report of the Block's current visit. */
   readonly workingMessage: string | null;
@@ -637,12 +639,17 @@ export function attentionPresentation(kind: RunAttention["kind"]): RunAttentionP
  * sent Continuation also asks for review after three hours without progress.
  */
 export function awaitsReviewInT3(
-  block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus" | "progressOverdue">,
+  block: Pick<
+    RunBlock,
+    "state" | "reportStatus" | "engineStatus" | "workerFinished" | "progressOverdue"
+  >,
 ): boolean {
   return (
     (block.state === "working" &&
       (block.progressOverdue ||
-        (block.reportStatus === "working" && block.engineStatus === "completed"))) ||
+        (block.reportStatus === "working" &&
+          block.workerFinished &&
+          block.engineStatus === "completed"))) ||
     (block.state === "sent" && block.progressOverdue)
   );
 }

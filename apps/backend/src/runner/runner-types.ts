@@ -51,6 +51,7 @@ export type BlockRow = {
   execution_id: string | null;
   link: string | null;
   engine_status: string | null;
+  worker_finished: 0 | 1;
   report_status: RunBlock["reportStatus"];
   problem: string | null;
   pending_request_count: number | null;

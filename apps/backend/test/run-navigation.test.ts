@@ -4,11 +4,13 @@ import { assert, expect, it } from "@effect/vitest";
 import { prepared, preparedService } from "./support/prepared-runner.ts";
 import { unnumberedRun } from "./support/navigation.ts";
 import {
+  allTurnsEnd,
   observeFor,
   repositoryFactsObserved,
   twoRunsOfOneFlow,
   workerAtWork,
   workerLaunched,
+  workingReported,
   workingReportedIdle,
   worktreeFanOutFlow,
 } from "./support/scenarios.ts";
@@ -376,6 +378,25 @@ it("an Agent idle with a working report marks its Run Needs input in navigation 
     needsInput: true,
     problem: false,
     matters: [],
+  });
+});
+
+it("an Agent with a working report and pending delegated work does not ask for input", async (c) => {
+  // Arrange
+  const { f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  await workingReported(world, worker);
+  allTurnsEnd(world, worker);
+  t3.threads.answerDelegatedWait(worker.threadId, worker.executionId, "pending", "completed");
+  await f.reconcileRuns();
+
+  // Act
+  const navigation = await f.listRunNavigation();
+
+  // Assert
+  expect(navigation).toMatchObject({
+    ok: true,
+    value: [{ attention: { needsInput: false, problem: false, matters: [] } }],
   });
 });
 

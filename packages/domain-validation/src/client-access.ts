@@ -11,10 +11,11 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 20;
-/** Protocol 20 adds the First-run setup status and completion. A client opens the application only
+export const FACTORY_PROTOCOL = 21;
+/** Protocol 21 adds the First-run setup status and completion. A client opens the application only
  * once the host's setup is completed, which older clients do not check, so they must update.
- * Protocol 19 adds Agent Create reservations. Older clients still create without a reservation.
+ * Protocol 20 adds the worker thread's confirmed completion to Run detail. Older clients
+ * ignore that field. Protocol 19 adds Agent Create reservations; older clients create without one.
  * Protocol 18 adds the Trigger operations, Studio's Trigger list and the Run origin, which
  * protocol 17 clients ignore. Protocol 17 Flows and Agents have an owning Project and Flow
  * validation is per Flow, naming each placed Agent's revision and owner, which older clients can
@@ -22,9 +23,10 @@ export const FACTORY_PROTOCOL = 20;
  * rules and outputs. Protocol 15 adds attention fields and the Run-level `settlement-unresolved`
  * kind, whose Block id is null. Protocol 14 theme-color presentations and sources carry no
  * appearance grant. */
-export const FACTORY_MINIMUM_PEER_PROTOCOL = 20;
-/** The current UI reads the host's First-run setup status before it opens the application. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 20;
+export const FACTORY_MINIMUM_PEER_PROTOCOL = 21;
+/** The current UI reads the host's First-run setup status before it opens the application, and
+ * needs confirmed worker completion to offer Request report. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 21;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

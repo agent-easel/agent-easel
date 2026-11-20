@@ -36,6 +36,7 @@ export const block = (blockId: string): RunBlock => ({
   reportStatus: null,
   workingMessage: null,
   progressOverdue: false,
+  workerFinished: false,
   problem: null,
   pendingRequestCount: null,
   observedAt: null,

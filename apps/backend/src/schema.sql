@@ -801,7 +801,7 @@ CREATE TABLE run_blocks (
   report_status TEXT,
   pending_request_count INTEGER,
   observed_at TEXT,
-  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT,
+  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT, worker_finished INTEGER NOT NULL DEFAULT 0 CHECK (worker_finished IN (0,1)),
   PRIMARY KEY(run_id,block_id),
   UNIQUE(run_id,thread_id)
 );

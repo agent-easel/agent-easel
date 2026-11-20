@@ -311,10 +311,13 @@ can start a new run between Factory's read and its local decision.
 
 ## Observation and attention
 
-Engine status, report status, native requests and freshness are independent facts. Each
+Engine status, report status, native requests, worker completion and freshness are independent facts. Each
 observation reads the Block's worker thread and records its recent runs as work periods. An
 unavailable observation preserves prior facts, marks them stale and cannot release work or
-close the Run.
+close the Run. A completed work period can still belong to an unfinished worker thread.
+The Run uses the observed worker completion for idle **Needs input** and requires a fresh
+observation to enable **Request report**. Existing Runs acquire completion evidence as the Runner
+observes their workers.
 
 - **Missing report.** When the worker thread is finished, its latest run completed and the
   Block's current activation has no `finished` result or current `working` report, the Block shows a missing-report Problem for that run. The Problem persists through later

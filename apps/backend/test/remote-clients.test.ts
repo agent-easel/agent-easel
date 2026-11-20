@@ -95,12 +95,12 @@ const serverUpdate = {
 } as const;
 
 it.for([
-  [17, serverUpdate],
   [18, serverUpdate],
   [19, serverUpdate],
-  [20, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
+  [20, serverUpdate],
+  [21, { status: 200, body: { ok: true, value: { scope: "remote" } } }],
 ] as const)(
-  "the current client, which waits for the host's First-run setup, refuses a protocol %i server only when it predates 20",
+  "the current client, which waits for the host's First-run setup, refuses a protocol %i server only when it predates 21",
   async ([protocol, expected], c) => {
     // Arrange
     const server = await remoteServer(c, { protocol: { protocol, minimumPeerProtocol: 9 } });
@@ -114,10 +114,10 @@ it.for([
   },
 );
 
-it("a protocol 19 client, which would skip the host's First-run setup, is told to update itself", async (c) => {
+it("a protocol 20 client, which would skip the host's First-run setup, is told to update itself", async (c) => {
   // Arrange
   const server = await remoteServer(c);
-  const old = server.client("desktop", { protocol: 19, minimum: 19 });
+  const old = server.client("desktop", { protocol: 20, minimum: 20 });
 
   // Act
   const reply = await old.send("GET", "/api/client-access");

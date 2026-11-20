@@ -415,17 +415,22 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **20**. A server accepts clients from protocol **20**, and the current
-client requires a protocol **20** server, so only protocol 20 peers interoperate.
+The current protocol is **21**. A server accepts clients from protocol **21**, and the current
+client requires a protocol **21** server, so only protocol 21 peers interoperate.
 
-Protocol 20 adds the [First-run setup](t3-integration.md#first-run-setup) status read
+Protocol 21 adds the [First-run setup](t3-integration.md#first-run-setup) status read
 (`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the
 status before it opens the application and waits on the setup screen until the host completes it.
-A protocol 19 or older server lacks the read, so a current client shows the server update gate
-instead of waiting for a status that never comes. A protocol 19 or older client never reads the
+A protocol 20 or older server lacks the read, so a current client shows the server update gate
+instead of waiting for a status that never comes. A protocol 20 or older client never reads the
 status and would open the application while the host's setup is incomplete, so the server refuses
 it at the handshake and it shows the client update gate; its approved credentials and stored data
 are kept. This is an intentional transport break; it needs no stored-data migration of its own.
+
+Protocol 20 added the `workerFinished` field in Run detail. That field lets the client distinguish
+a completed turn from a finished worker thread when offering **Request report**. Protocol 20
+clients required a protocol 20 server for it; older clients ignored the field and the server still
+checked their requests before dispatch.
 
 Protocol 19 added [Agent Create reservations](studio.md#agent-definitions). Clients on protocols
 17 and 18 could still create Agents without a reservation, and a protocol 19 client showed the

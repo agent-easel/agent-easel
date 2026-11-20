@@ -61,8 +61,8 @@ export function reportRecoveryState(
  * worker with fresh evidence and no pending T3 request can assess its work. */
 export function requestReportBlocker(run: RunDetail, block: RunBlock | undefined) {
   if (!run.gateOpen || !block) return "unavailable" as const;
-  if (block.engineStatus !== "completed" || block.freshness !== "fresh") return "not-idle" as const;
-  if (block.pendingRequestCount !== 0) return "not-idle" as const;
+  if (!block.workerFinished || block.engineStatus !== "completed" || block.freshness !== "fresh")
+    return "not-idle" as const;
   return null;
 }
 

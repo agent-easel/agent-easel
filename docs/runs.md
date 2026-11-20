@@ -688,15 +688,17 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   replaces it. Reported after a result, when the Agent reopens the task, it shows the block working without withdrawing the
   result, and the Run stays Active until a later report.
 - **Overdue progress.** A working visit with three hours since its latest accepted progress report, or since activation if it has never reported, shows **Needs input** and **Review in T3**. This includes a sent Continuation. The threshold allows time for builds and external reviews. A new report updates the signal. The owner can open the worker thread while the Run continues normally.
-- **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. While an
-  Agent block's worker thread is idle and the visit's current report is still `working`, the block and the Run show **Needs
-  input**, and the overview has one card, **Review *Block* in T3**, with its Working report and **Open in T3 ↗**. An Agent
+- **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. Once T3
+  confirms that the worker thread and its delegated and background work have finished, a visit with a current `working` report
+  and a completed last turn shows **Needs input** on the Block and Run. The overview has one card, **Review *Block* in T3**,
+  with its Working report and **Open in T3 ↗**. An Agent
   that stopped without reporting leaves the same evidence, so the card's title never says the Agent waits for a reply; only
   an explicit T3 request does. Opened in full, the Working report states the wait ([presentation](#execution-canvas)). It is no attention matter: it neither notifies nor counts for the Dock badge, and the next block
   cannot start on unanswered questions. Factory never parses chat; a model may still omit or misuse a report. Earlier Agent questions recorded before this contract stay in Settled
   attention with their text, and an upgrade turned questions still pending into the visit's working report without resuming the
   worker. See [report acceptance](runner.md#report-acceptance).
-- **Request report** on a missing-report Problem, or in the details of a block idle in working, starts one extra turn on the
+- **Request report** on a missing-report Problem, or in the details of a block idle in working, becomes available once T3
+  confirms the thread has finished, including delegated and background work. The request starts one extra turn on the
   same thread asking the Agent to assess existing work and report. Eligibility is rechecked at acceptance (a newer run, an unfinished thread, changed authorization, accepted results
   and Archive make it stale); repeated clicks reuse the request. A successful linked recovery settles the original
   attention with a recovery reason and may let the Run settle; a failed one stays unresolved.
