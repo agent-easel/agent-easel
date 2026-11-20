@@ -65,6 +65,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
+          fetch-depth: 2
           persist-credentials: false
       - name: Check build source
         run: |
@@ -95,8 +96,10 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-        if: inputs.run-checks
+      - if: inputs.run-checks
+        env:
+          FACTORY_COMMENT_BASE: HEAD~1
+        run: pnpm check
       - name: Check controlled UI journeys
         if: inputs.run-checks
         run: |
