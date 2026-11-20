@@ -170,9 +170,20 @@
   width: 280px;
 }
 
-/* Clear the native window controls where the Studio header meets the title bar. */
-html[data-desktop="true"] [data-studio] > header {
-  padding-left: 80px;
+/* A window-filling workspace opens below the title-bar strip, clear of the native window
+   controls. Settings fills the window only below its 1024 × 720 px size threshold. */
+html[data-desktop="true"] [data-studio] {
+  top: 48px;
+  height: calc(100vh - 64px);
+  translate: -50% 0;
+}
+
+@media not ((min-width: 1024px) and (min-height: 720px)) {
+  html[data-desktop="true"] [data-settings] {
+    top: 48px;
+    height: calc(100vh - 64px);
+    translate: -50% 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

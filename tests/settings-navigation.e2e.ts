@@ -35,6 +35,25 @@ test("the desktop host lists every Settings section under Factory, Chat control,
   await app.screenshot("settings-navigation-desktop-host");
 });
 
+// Below 1024 × 720 Settings fills the window; the desktop keeps its 48 px title-bar strip clear.
+test("in a small desktop window Settings opens below the title bar that holds the native window controls", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1000, height: 700 });
+  await browser.addInitScript(desktopBridgeScript, desktopBridgeOptions("server"));
+
+  // Act
+  await app.open("/settings/connection");
+
+  // Assert
+  await expect
+    .poll(() => screen.getByRole("dialog", "Settings").boundingBox())
+    .toMatchObject({ x: 16, y: 48, width: 968, height: 636 });
+});
+
 test("a browser on the Factory host lists no Desktop app section", async ({ app, screen }) => {
   // Act
   await app.open("/settings/connection");

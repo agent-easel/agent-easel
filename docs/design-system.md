@@ -143,11 +143,14 @@ In the Trigger form, **Review and enable** stays neutral beside Save. The Flow a
 place Save in the header. The Trigger form keeps its actions in a pinned footer because its fields scroll.
 
 Studio and Settings stay centred over the mounted Run shell, whose hidden content
-is inert. Studio fills the window with a 16 px inset on every side at all viewport
+is inert. In a browser, Studio fills the window with a 16 px inset on every side at all viewport
 sizes (`100vw − 32px` by `100vh − 32px`).
 Settings uses `clamp(840px, 50vw, 1280px)` by
 `clamp(560px, 80vh, 960px)` at sizes of at least 1024 × 720 px. Below either
 Settings threshold, it fills the window with a 16 px inset on every side.
+In the desktop app, a window-filling Studio or Settings starts below the 48 px title-bar
+strip instead and keeps the 16 px inset at the sides and bottom; see
+[native window appearance](desktop-and-clients.md#native-window-appearance).
 Unsaved-change guards and keyboard behavior are specified in
 [Studio](studio.md) and [Keyboard shortcuts](keyboard-shortcuts.md).
 
