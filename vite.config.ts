@@ -42,11 +42,13 @@ export default defineConfig({
           "check:e2e-configs",
           "check:scenarios",
           "fallow",
-          "lint",
+          "lint:workspace",
           "typecheck",
         ],
         cache: false,
       },
+      "lint:workspace": { command: "vp lint", dependsOn: ["lint:comments"] },
+      "lint:comments": { command: "node scripts/check-comments.mjs", cache: false },
       // Tests and the build start only after the static checks pass: they would compete with
       // them for CPU, and a static failure makes their result moot.
       "gate:dynamic": { command: "true", dependsOn: ["test", "build"], cache: false },
