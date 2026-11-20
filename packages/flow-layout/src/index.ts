@@ -3,7 +3,6 @@ import type { FlowBlock, FlowGraph } from "@t3-factory/contracts";
 import { isCanvasPosition } from "@t3-factory/domain-validation";
 import { exitRows, incomingIndex, wireRouteKey, type IncomingIndex } from "./graph.ts";
 
-/** Exits must include unavailable wired endpoints, in the same order the canvas draws them. */
 export type LayoutBlock = FlowBlock & {
   readonly exits: readonly { readonly id: string; readonly name: string }[];
 };
@@ -19,11 +18,9 @@ function elkInputPortId(targetBlockId: string, index: number) {
   return `in:${targetBlockId}:${index}`;
 }
 
-// Block node ids are namespaced so no user-chosen Block id can collide with the Flow input node.
 const FLOW_INPUT_NODE_ID = "flow-input";
 const BLOCK_NODE_PREFIX = "block:";
 
-/** The canvas's block geometry as a layout reserves it; `labels` reserves room for exit labels. */
 export type FlowLayoutDimensions<B extends LayoutBlock = LayoutBlock> = {
   readonly flowInput: { readonly width: number; readonly height: number; readonly outputY: number };
   readonly blockWidth: number;
@@ -100,7 +97,6 @@ function blockPorts<B extends LayoutBlock>(
   ];
 }
 
-/** Reverse DFS finishing order keeps forward paths rightward and only cycle back edges leftward. */
 function orderedBlocks<B extends LayoutBlock>(graph: LayoutGraph<B>): B[] {
   const byId = new Map(graph.blocks.map((block) => [block.id, block]));
   const successors = new Map<string, string[]>();
@@ -175,10 +171,6 @@ function blockNode<B extends LayoutBlock>(
   return node;
 }
 
-/**
- * Each wire's label from its exit's and target's names, looked up once per graph. A
- * Continuation's single output is unnamed, so its wires carry no label to reserve room for.
- */
 function edgeLabeller<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayoutDimensions<B>) {
   const blocks = new Map<string, B>();
   for (const block of graph.blocks) if (!blocks.has(block.id)) blocks.set(block.id, block);
@@ -241,7 +233,6 @@ export function buildElkGraph<B extends LayoutBlock>(
   };
 }
 
-/** The arranged graph does not fit within the canvas coordinate limits. */
 export class FlowLayoutLimitError extends Error {
   constructor() {
     super("This Flow is too large to auto-arrange within the canvas limits.");
@@ -264,13 +255,10 @@ export function parseLayoutPositions(graph: FlowGraph, laidOut: ElkNode): FlowLa
   return { flowInput, blocks };
 }
 
-/** Compute positions without browser globals, workers or mutations of the supplied graph. */
 export async function arrangeFlow<B extends LayoutBlock>(
   graph: LayoutGraph<B>,
   dimensions: FlowLayoutDimensions<B>,
 ): Promise<FlowLayoutPositions> {
-  // The CommonJS module's default export is the constructor at runtime, but NodeNext (the
-  // package build) and Bundler (the frontend typecheck) type it differently.
   const { default: Elk } = (await import("elkjs/lib/elk.bundled.js")) as unknown as {
     readonly default: new () => ELK;
   };

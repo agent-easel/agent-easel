@@ -300,7 +300,27 @@ try {
     return { flows: flows.map((flow) => flow.name) };
   });
 
-  await stage("the window shows the bundled UI from the packaged backend", async () => {
+  await stage("the window shows First-run setup before completion", async () => {
+    const text = await until(() =>
+      pageText(9441).then((value) => (value?.includes("Set up Factory") ? value : undefined)),
+    );
+    return { excerpt: text.slice(0, 120) };
+  });
+
+  await stage("the window opens the bundled UI after First-run setup is recorded", async () => {
+    // Record completion in the disposable host without connecting it to T3.
+    const response = await api("/api/setup/complete", {
+      method: "POST",
+      headers: { "X-Factory-Request": "1" },
+    });
+    if (!response.ok)
+      throw new Error(`Recording First-run setup answered HTTP ${response.status}.`);
+    const setup = await response.json();
+    if (!setup.ok || setup.value.completed !== true)
+      throw new Error("First-run setup was not recorded as completed.");
+
+    const target = await page(9441);
+    await cdp(target.webSocketDebuggerUrl, "Page.reload");
     const text = await until(() =>
       pageText(9441).then((value) => (value?.includes("New Run") ? value : undefined)),
     );

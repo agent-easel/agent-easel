@@ -137,7 +137,8 @@ beta until a newer Release is published.
 ## Packaged verification and limits
 
 For a Release, `build-macos` runs the probe against the unpacked application it built and keeps the report in `release-evidence-<tag>`; it then checks that the application inside both the ZIP and the mounted DMG has an intact deep signature, a stapled ticket and the same code directory hash as the probed application, so the downloads ship the probed bundle. Locally, `pnpm desktop:probe /absolute/report.json` probes the package in `apps/desktop/release/mac-arm64/`, so run it right after packaging that checkout; it does not read a downloaded artifact. The probe uses disposable application data and a mock keychain and checks package startup, role selection, backend lifecycle and the
-Factory MCP endpoint; keep its report with the release artifacts. Controlled browser journeys cover approved-client transport and updater UI ([UI verification](testing.md)).
+Factory MCP endpoint. It checks that the packaged host shows First-run setup, records completion through the host API in the disposable data home, then reloads the window and checks that New Run opens.
+Keep its report with the release artifacts. Controlled browser journeys cover the setup interactions, approved-client transport and updater UI ([UI verification](testing.md)).
 
 Acceptance procedures use a disposable application copy, HOME, desktop profile and data home with a minimal PATH and a mock keychain unless real Keychain persistence is under test; never touch a production installation or
 its login items, and keep raw captures in ignored `.e2e/` with a summary in the PR.
