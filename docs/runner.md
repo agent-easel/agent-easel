@@ -359,7 +359,7 @@ answer directly authorizes its outgoing handoffs.
 A first visit launches that Block's own top-level worker. The message is `$factory-block`
 followed by the captured Agent prompt. A revisit queues a turn on the same worker after
 the previous activation's current result is released and, at send time, the worker thread is
-finished; it carries the incoming message, preceded by the Block's
+finished. Only the launch invokes the installed skill. The revisit carries the incoming message, preceded by the Block's
 [Revisit instruction](#revisit-instructions) when one is set, and never resends the Agent prompt. Two Blocks using the same
 Agent still have separate workers. Parallel arrivals never join or batch their feedback.
 Threads share the Run's workspace, the project-root checkout or the Run's worktree; Factory guarantees neither edit-conflict handling
@@ -412,7 +412,7 @@ composed only where such an arrival becomes a repeated activation of the Agent b
 Continuation prompts and [Request report](#manual-request-report) also use never adds it, so neither carries it, and a
 first visit is driven by the Agent prompt alone. When the instruction is set, the revisit message is:
 
-1. the usual `$factory-block` header and `Factory Block id` line;
+1. the `Factory Block id` line;
 2. a labelled Revisit instruction section: the label states that the instruction decides this visit's scope, that the
    Agent's role, criteria, exits and reporting rules still apply, that a narrower scope never permits skipping a
    required check or accepting a defect that has evidence, that a worker unable to reconcile the two says so in its

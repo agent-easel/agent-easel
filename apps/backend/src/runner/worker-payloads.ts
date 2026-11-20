@@ -1,9 +1,8 @@
-import type { BlockExit, RunDefinitions } from "@t3-factory/contracts";
+import type { RunDefinitions } from "@t3-factory/contracts";
 import { HUMAN_EXITS } from "@t3-factory/domain-validation";
 import type { LaunchPayload, SendPayload } from "../t3/threads.ts";
 import type { T3Target } from "../t3/connection.ts";
 import { attachmentName } from "../run-images.ts";
-import { conversationReportInstructions } from "./report-instructions.ts";
 
 /* Worker messages and launch payloads, pure so the Run store can persist them inside its
  * transactions and orchestration can verify them before a T3 call. */
@@ -93,7 +92,7 @@ export function workerRevisitPayload(
     threadId,
     mode: "queue",
     clientRequestId: key,
-    message: workerTurn(message, publicId),
+    message: `Factory Block id: ${publicId}.\n\n${message}`,
   };
 }
 
@@ -138,23 +137,4 @@ export function continuationPromptMessage(
       ? `\n\nReply from the Human step "${source.name}"${exit ? ` (${exit.name})` : ""}:\n${message.trim() || "(no message)"}`
       : "";
   return `${lead}\n\n${block.prompt}${reply}`;
-}
-
-/** Request report: a turn queued on a finished worker thread asking it to assess its existing work
- * and report. */
-export function requestReportPayload(
-  target: Pick<T3Target, "environmentId">,
-  threadId: string,
-  key: string,
-  exits: readonly BlockExit[],
-  publicId: string,
-): SendPayload {
-  return workerRevisitPayload(
-    target,
-    threadId,
-    key,
-    "Factory Request report: assess the existing work without repeating the task. If questions you asked the user are still unanswered, or CI, review, delegated or background work is still running, report working with what remains open instead of forcing completion; report finished only when the task, including its discussion, is actually complete.\n\n" +
-      conversationReportInstructions(exits),
-    publicId,
-  );
 }
