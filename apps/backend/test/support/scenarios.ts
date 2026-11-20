@@ -804,7 +804,7 @@ export const handoffFlow: ReadyFlowShape = (world) =>
   }));
 
 /** The ending every ending Flow shape declares, entered by the wire from Entry worker's "Done". */
-export const SHIPPED_ENDING = (output: EndingOutput): FlowEnding => ({
+const SHIPPED_ENDING =(output: EndingOutput): FlowEnding => ({
   id: "shipped",
   name: "Shipped",
   description: "The work is merged.",
