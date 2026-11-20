@@ -21,7 +21,7 @@ export function runImagesAndTitlesFixture(
     actions: {
       /** T3 offers no provider until the reset. */
       noProviders() {
-        t3.controlledProviders.splice(0, t3.controlledProviders.length);
+        t3.projects.controlledProviders.splice(0, t3.projects.controlledProviders.length);
       },
       attachments({ supported }: { supported: boolean }) {
         t3.contract.support.attachmentLimit = supported ? 8 : null;

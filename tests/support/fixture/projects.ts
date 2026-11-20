@@ -28,7 +28,7 @@ export function projectsFixture({ factory, t3, home }: Host) {
         });
         const project = requireSuccess(await factory.addRepository({ path: root }));
         added.push(project);
-        t3.projects = t3.projects.map((entry) =>
+        t3.projects.catalog = t3.projects.catalog.map((entry) =>
           entry.projectId === project.projectId ? { ...entry, title } : entry,
         );
         requireSuccess(await factory.recheckProjects());
@@ -41,7 +41,9 @@ export function projectsFixture({ factory, t3, home }: Host) {
       async forget({ id }: { id: string }) {
         const project = added.find((entry) => entry.id === id);
         if (!project) throw new Error(`Project ${id} was not added by this journey.`);
-        t3.projects = t3.projects.filter((entry) => entry.projectId !== project.projectId);
+        t3.projects.catalog = t3.projects.catalog.filter(
+          (entry) => entry.projectId !== project.projectId,
+        );
         {
           using database = new DatabaseSync(join(home, "factory.sqlite"));
           database.prepare("DELETE FROM projects WHERE id = ?").run(id);
@@ -58,7 +60,7 @@ export function projectsFixture({ factory, t3, home }: Host) {
         if (flow.projectId && ids.has(flow.projectId))
           requireSuccess(await factory.removeFlow(flow.id));
       const projectIds = new Set(added.map((project) => project.projectId));
-      t3.projects = t3.projects.filter((entry) => !projectIds.has(entry.projectId));
+      t3.projects.catalog = t3.projects.catalog.filter((entry) => !projectIds.has(entry.projectId));
       requireSuccess(await factory.recheckProjects());
       requireSuccess(await factory.selectProject({ id: selection }));
       added.length = 0;
