@@ -101,6 +101,12 @@ export interface T3Calls {
    * more; any other failure is reported, so an action T3 may have executed is never repeated. */
   authorized<A>(target: T3Endpoint, action: (session: T3Session) => Promise<A>): Promise<A>;
   /** Inspects the endpoint without requiring a grant: keeps a pending approval listening, revokes a
-   * rejected grant and reports a contract failure; an unreachable T3 rejects as `unavailable`. */
-  probe<A>(target: T3Endpoint, read: (session: T3Session) => Promise<A>): Promise<T3Probe<A>>;
+   * rejected grant and reports a contract failure; an unreachable T3 rejects as `unavailable`.
+   * `finish` derives the answer within the same call, so its failure is classified with what the
+   * probe's own requests met. */
+  probe<A, B>(
+    target: T3Endpoint,
+    read: (session: T3Session) => Promise<A>,
+    finish: (probe: T3Probe<A>) => Promise<B>,
+  ): Promise<B>;
 }

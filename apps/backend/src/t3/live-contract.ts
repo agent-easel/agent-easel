@@ -7,7 +7,6 @@ import {
   type T3Support,
 } from "./contract.ts";
 import { readEnvironmentIdentity } from "./environment-identity.ts";
-import { classifiedCall } from "./live-connection.ts";
 
 export interface LiveT3ContractOptions {
   /** Integration-only proof of server continuity and request-key retention. No proof = no replay.
@@ -87,11 +86,11 @@ export class LiveT3Contract implements T3ContractReader {
     this.options = options;
   }
 
-  /** Support is derived from T3's advertised schemas, so a schema Factory cannot evaluate is
-   * classified with the probe as T3's invalid answer. */
+  /** Support is derived from T3's advertised schemas within the probe's call, so a schema Factory
+   * cannot evaluate is classified with what that inspection's requests met. */
   inspect(target: T3Endpoint): Promise<T3Inspection> {
-    return classifiedCall(async () => {
-      const inspected = inspection(await this.calls.probe(target, readContract));
+    return this.calls.probe(target, readContract, async (probe) => {
+      const inspected = inspection(probe);
       return { ...inspected, support: await this.support(target.endpoint, inspected) };
     });
   }

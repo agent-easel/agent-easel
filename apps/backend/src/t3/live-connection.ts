@@ -173,7 +173,7 @@ function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
 }
 
 /** Runs one T3 call with its own record; it rejects only with that call's classified failure. */
-export async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Promise<A> {
+async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Promise<A> {
   const record: CallRecord = { unavailable: false };
   try {
     return await currentCall.run(record, () => work(record));
@@ -633,8 +633,14 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     }
     return "reopened";
   }
-  probe<A>(target: T3Endpoint, read: (session: T3Session) => Promise<A>): Promise<T3Probe<A>> {
-    return classifiedCall((record) => this.probeEndpoint(target.endpoint, read, record));
+  probe<A, B>(
+    target: T3Endpoint,
+    read: (session: T3Session) => Promise<A>,
+    finish: (probe: T3Probe<A>) => Promise<B>,
+  ): Promise<B> {
+    return classifiedCall(async (record) =>
+      finish(await this.probeEndpoint(target.endpoint, read, record)),
+    );
   }
   private async probeEndpoint<A>(
     endpoint: string,

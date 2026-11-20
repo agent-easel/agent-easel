@@ -229,3 +229,30 @@ it("a ready T3 advertising a malformed send schema is an invalid answer, not an 
   await expect(inspection).rejects.toBeInstanceOf(T3Failure);
   await expect(inspection).rejects.toMatchObject({ kind: "invalid-response" });
 });
+
+it("a malformed send schema read after a recovered T3 server error is classified as unavailable", async (c) => {
+  // Arrange
+  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
+  const sendSchema = {
+    type: "object",
+    properties: {
+      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
+      mode: { type: "string", enum: 42 },
+    },
+  };
+  const { live, external, endpoint } = await authorizedLiveOAuth(c, {
+    sendSchema,
+    send: () => ({}),
+    readSchema: reportReadSchema,
+    resourceMetadataUnavailable: true,
+  });
+  external.expireAccess();
+  const refreshes = external.refreshes;
+
+  // Act
+  const inspection = live.contract.inspect({ endpoint });
+
+  // Assert
+  await expect(inspection).rejects.toMatchObject({ name: "T3Failure", kind: "unavailable" });
+  expect(external.refreshes).toBe(refreshes + 1);
+});
