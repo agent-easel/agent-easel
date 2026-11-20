@@ -1,12 +1,13 @@
 import { stoppedVisitAt } from "../run-status.ts";
 import { useState } from "react";
 import { OpenInT3 } from "./open-in-t3.tsx";
-import type {
-  FactoryProject,
-  FlowBlock,
-  RunBlock,
-  RunDetail,
-  RunTitleGeneration,
+import {
+  FINISH_BLOCK_ID,
+  type FactoryProject,
+  type FlowBlock,
+  type RunBlock,
+  type RunDetail,
+  type RunTitleGeneration,
 } from "@t3-factory/contracts";
 import {
   CircleCheck,
@@ -44,6 +45,8 @@ import { InspectorSection } from "./inspector-section.tsx";
 import { activeStates, currentVisitText, RunBlockView } from "./run-block-view.tsx";
 import { RunTitleView } from "./run-title-view.tsx";
 import { RunOriginSection } from "./run-origin.tsx";
+import { RunFinishView } from "./run-finish-view.tsx";
+import { ResultSection } from "./run-result-section.tsx";
 
 /** Keeps the width users chose for the earlier Run side panels. */
 const inspectorBounds: PanelBounds = {
@@ -406,6 +409,7 @@ function RunOverview({
     <div className="flex min-h-0 flex-1 flex-col gap-5.5 overflow-auto px-4 pt-4 pb-3">
       <h2 className="text-base leading-4 font-semibold">Overview</h2>
       <RunAttentionDetails run={run} />
+      <ResultSection run={run} />
       <PendingIntents run={run} />
       <RunProgress run={run} waitingForWorkers={waitingForWorkers} />
       <RunBranch run={run} />
@@ -478,6 +482,8 @@ export function RunInspector({
       <PanelResizeHandle label="Resize Run inspector" side="left" bounds={inspectorBounds} />
       {titleGeneration ? (
         <RunTitleView generation={titleGeneration} onBack={() => onSelect(null)} />
+      ) : selected === FINISH_BLOCK_ID ? (
+        <RunFinishView run={run} onBack={() => onSelect(null)} />
       ) : block && recorded ? (
         <RunBlockView
           run={run}

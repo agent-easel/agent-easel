@@ -229,6 +229,10 @@ first, then use it; a one-off styled at the call site becomes the next consisten
 - **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
   the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
   reader without a preview. Human-written text and Factory messages stay plain text.
+- **Run result**: ResultSection (Figma Run/ResultSection), the Run overview's Result: the
+  reached ending's name with the flag icon, its output, Output missing tag or neither, its From,
+  Worker or By, and At facts, the Stopping tag while the Run stops its workers, and No result yet
+  or No result before a result. The Finish block's inspector shows the same output and facts.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.

@@ -479,7 +479,7 @@ fixed Human exits their old exits were mapped to.
   shortcuts with their current bindings and a link to the cheat sheet. The Flow editor keeps its labelled controls and
   keyboard hint.
 - One docked **inspector** beside the canvas shows the **Run overview** until a block is selected or the Run title is
-  inspected: **Attention** while something is pending, **Progress** with each started block and its status on a second line
+  inspected: **Attention** while something is pending, the Run's **Result** (below), **Progress** with each started block and its status on a second line
   that wraps (the counts sit beside the heading, as in **Progress  2 finished · 1 needs input**; a Problem row shows the error
   glyph and a plain line such as **Failed in T3 · 22:16**), a worktree Run's **Branch** (its branch name and **Own worktree
   from *base***, or **Preparing worktree** and **From *base*** until T3 reports it), worker branches (wrapping only at
@@ -495,6 +495,19 @@ fixed Human exits their old exits were mapped to.
   consequence (**ends branch** or **→ *Block***), and its T3 thread, execution, pending Problem reasons and observation under a
   closed **Technical details** section at the bottom. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.
+- The overview's **Result** section names the ending the Run reached with the flag icon, then its output (none for an
+  ending whose output is None), and **From** (the source block, its exit and visit), **Worker** with **Open in T3** for an
+  Agent's result or **By** for a Human step's answer, and **At**. A Required ending reached with blank text shows the
+  **Output missing** tag and which block sent no message. While the Run stops its other workers after the ending, the
+  section shows **Stopping** and the meta line **Reached *ending* *time* · Stopping**. Before a result it reads **No result
+  yet** while the Run can still reach an ending, and **No result** once it was settled or archived without one. A Run whose
+  captured Flow has no endings, including every Run started before endings existed, shows no Result section. The sidebar
+  Run row, the Run list and Chat control do not show the result. Selecting the Finish block shows **Finish** with
+  **Reached · *ending* · *time*** and the **Reached** tag, the result under **Result · ending *name***, which workers reaching
+  it stopped (**Ended the Run**), each captured ending with **Reached *time*** or **Not reached** (neutral before any
+  ending is reached) and its output, the incoming wires, and the Finish block id, Flow revision and delivery under
+  **Technical details**. The timeline shows the Run's **reached ending *name*** and a Settled Run's
+  **settled · reached ending *name***.
   **Esc** or the **Overview** breadcrumb returns from the block or the Run title to the overview. Selecting never answers
   or clears attention, and there is no editing here.
 - The inspector toggle in the top bar (default **Mod+.**, see [Keyboard shortcuts](keyboard-shortcuts.md)) shows or hides the

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Maximize2 } from "lucide-react";
 import { OpenInT3 } from "./open-in-t3.tsx";
-import type { RunDetail } from "@t3-factory/contracts";
+import { FINISH_BLOCK_ID, type RunDetail } from "@t3-factory/contracts";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { isSingleOutput } from "../block-kind.ts";
@@ -25,6 +25,7 @@ export function resultVersion(run: RunDetail, report: RunReport) {
 }
 
 function blockName(run: RunDetail, blockId: string) {
+  if (blockId === FINISH_BLOCK_ID) return "Finish";
   return run.blocks.find((b) => b.blockId === blockId)?.name ?? blockId;
 }
 

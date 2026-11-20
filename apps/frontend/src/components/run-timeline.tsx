@@ -3,6 +3,7 @@ import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
 import {
   CONDITION_TIMELINE_ARRIVALS,
+  FINISH_BLOCK_ID,
   type RunAttention,
   type RunDetail,
 } from "@t3-factory/contracts";
@@ -34,6 +35,7 @@ interface EventPhrase {
 
 function nameOf(run: RunDetail, blockId: string | null) {
   if (!blockId) return "Run";
+  if (blockId === FINISH_BLOCK_ID) return "Finish";
   return (
     run.blocks.find((block) => block.blockId === blockId)?.name ??
     run.definitions.flow.graph.blocks.find((block) => block.id === blockId)?.name ??
@@ -285,12 +287,18 @@ const phrases: Record<string, (run: RunDetail, event: RunEvent) => EventPhrase> 
   "settlement-requested": said("settlement requested · automatic work held"),
   "worker-stop-requested": said("worker Stop requested · awaiting completion confirmation"),
   "worker-stopped": said("worker stopped · completion confirmed"),
-  "run-settled": (_run, event) => ({
+  "ending-reached": (run) => ({
+    actorId: null,
+    text: `reached ending ${run.result?.endingName ?? "an ending"}`,
+  }),
+  "run-settled": (run, event) => ({
     actorId: null,
     text:
       event.causeId === "manual"
         ? "settled by you"
-        : "settled · every visited Block has its result and its worker thread is finished",
+        : event.causeId === "finish"
+          ? `settled · reached ending ${run.result?.endingName ?? "an ending"}`
+          : "settled · every visited Block has its result and its worker thread is finished",
   }),
   "run-activated": said("reported · the Run is Active again"),
   "run-archived": said("archived · Factory asked T3 to interrupt every worker thread"),
@@ -317,7 +325,8 @@ function ActorIcon({
 }) {
   if (title) return <TitleMark className="text-link" />;
   const kind = run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
-  const Icon = actorId ? BLOCK_KINDS[kind ?? "agent"].Icon : Flag;
+  // The Run and its Finish block share the Finish flag.
+  const Icon = actorId && actorId !== FINISH_BLOCK_ID ? BLOCK_KINDS[kind ?? "agent"].Icon : Flag;
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }
 

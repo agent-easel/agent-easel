@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   attentionPresentation,
   awaitsReviewInT3,
@@ -8,7 +8,7 @@ import {
   type RunDetail,
 } from "@t3-factory/contracts";
 import { CONTINUATION_EXIT } from "@t3-factory/domain-validation";
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft, X, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { KeyChip } from "@/components/ui/key-chip";
 import { Surface } from "@/components/ui/surface";
@@ -412,6 +412,61 @@ function BlockTechnicalDetails({
   );
 }
 
+/** Figma RD14: what the inspector shows instead of the overview, under **‹ Overview Esc**: its
+ * icon, name, a line about it, its state and Close. */
+export function InspectedHeader({
+  Icon,
+  title,
+  subtitle,
+  badge,
+  onBack,
+}: {
+  Icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  badge: ReactNode;
+  onBack: () => void;
+}) {
+  return (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        size="xs"
+        aria-label="Back to Run overview"
+        onClick={onBack}
+        className="-ml-1.5 w-fit text-label font-medium"
+      >
+        <ChevronLeft aria-hidden />
+        Overview
+        <KeyChip className="ml-1">Esc</KeyChip>
+      </Button>
+      <header className="flex min-w-0 items-center gap-2">
+        <Icon aria-hidden strokeWidth={1.5} className="size-4 shrink-0 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <h2 className="truncate text-base leading-4 font-semibold">{title}</h2>
+          <p className="truncate text-xs leading-3.5 text-subtle-foreground">{subtitle}</p>
+        </div>
+        {badge}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close block details"
+              onClick={onBack}
+            >
+              <X aria-hidden />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent shortcut="Esc">Close</TooltipContent>
+        </Tooltip>
+      </header>
+    </>
+  );
+}
+
 /** Figma RD14: the selected block in the docked inspector, attention first and raw ids last. */
 export function RunBlockView({
   run,
@@ -430,7 +485,6 @@ export function RunBlockView({
   useEffect(() => {
     content.current?.focus();
   }, [block.id]);
-  const KindIcon = BLOCK_KINDS[block.kind].Icon;
   const reference = blockReference(block, {
     graph: run.definitions.flow.graph,
     agents: run.definitions.agents,
@@ -449,44 +503,13 @@ export function RunBlockView({
         tabIndex={-1}
         className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-4 pt-3 pb-3 outline-none"
       >
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          aria-label="Back to Run overview"
-          onClick={onBack}
-          className="-ml-1.5 w-fit text-label font-medium"
-        >
-          <ChevronLeft aria-hidden />
-          Overview
-          <KeyChip className="ml-1">Esc</KeyChip>
-        </Button>
-        <header className="flex min-w-0 items-center gap-2">
-          <KindIcon
-            aria-hidden
-            strokeWidth={1.5}
-            className="size-4 shrink-0 text-muted-foreground"
-          />
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <h2 className="truncate text-base leading-4 font-semibold">{block.name}</h2>
-            <p className="truncate text-xs leading-3.5 text-subtle-foreground">{reference}</p>
-          </div>
-          <BlockStateBadge run={run} recorded={recorded} />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Close block details"
-                onClick={onBack}
-              >
-                <X aria-hidden />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent shortcut="Esc">Close</TooltipContent>
-          </Tooltip>
-        </header>
+        <InspectedHeader
+          Icon={BLOCK_KINDS[block.kind].Icon}
+          title={block.name}
+          subtitle={reference}
+          badge={<BlockStateBadge run={run} recorded={recorded} />}
+          onBack={onBack}
+        />
         <RunAttentionDetails run={run} blockId={block.id} />
         {block.kind === "continuation" ? (
           <ContinuationHistory run={run} block={block} recorded={recorded} />

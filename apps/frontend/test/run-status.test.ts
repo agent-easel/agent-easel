@@ -3,6 +3,7 @@ import {
   lifecycleAt,
   runActivity,
   runFreshness,
+  runResultState,
   waitsForWorkerConfirmation,
 } from "../src/run-status.ts";
 import { block, event, runDetail, runEntry } from "./support/run.ts";
@@ -101,4 +102,60 @@ it("a Settled Run with a stale block is not reported Not live", () => {
 
   // Assert
   expect(freshness).toStrictEqual({ live: true });
+});
+
+/** A Run whose captured Flow declares one ending. */
+function runWithEnding() {
+  const run = runDetail();
+  const graph = run.definitions.flow.graph;
+  const ending = {
+    id: "shipped",
+    name: "Shipped",
+    description: "",
+    output: "required" as const,
+    outputDescription: "URL of the PR",
+  };
+  return {
+    ...run,
+    definitions: {
+      ...run.definitions,
+      flow: {
+        ...run.definitions.flow,
+        graph: { ...graph, finish: { ...graph.finish, endings: [ending] } },
+      },
+    },
+  };
+}
+
+it("a Run whose captured Flow has no endings has no Result section", () => {
+  // Arrange
+  const run = { ...runDetail(), lifecycle: "settled" as const, gateOpen: false };
+
+  // Act
+  const state = runResultState(run);
+
+  // Assert
+  expect(state).toBe("none");
+});
+
+it("an open Run with endings and no result can still reach one", () => {
+  // Arrange
+  const run = runWithEnding();
+
+  // Act
+  const state = runResultState(run);
+
+  // Assert
+  expect(state).toBe("not-yet");
+});
+
+it("a Run whose gate closed without a result ended without one", () => {
+  // Arrange
+  const run = { ...runWithEnding(), gateOpen: false };
+
+  // Act
+  const state = runResultState(run);
+
+  // Assert
+  expect(state).toBe("not-reached");
 });
