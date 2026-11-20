@@ -41,6 +41,9 @@ interface SettingsWith<R extends string | null> extends Omit<
 /** Validated GitHub Issues settings: the confirmed repository and the derived query facts. */
 export type TriggerSettings = SettingsWith<string>;
 
+/** Settings to save over a saved Trigger; a null repository keeps the saved one. */
+export type TriggerUpdateSettings = SettingsWith<string | null>;
+
 /** Settings to preview; a null repository is the one the Project's folder names now. */
 export type TriggerPreviewSettings = SettingsWith<string | null>;
 
@@ -259,7 +262,8 @@ type RepositoryRule<R extends string | null> = (value: unknown) => Result<R>;
 const confirmedRepository: RepositoryRule<string> = (value) =>
   text(value, "github.repositoryNodeId", 256, "Confirm the Project's repository.");
 
-const previewedRepository: RepositoryRule<string | null> = (value) =>
+/** A repository that may be left out; one that is sent must be a node id, never null. */
+const optionalRepository: RepositoryRule<string | null> = (value) =>
   value === undefined ? { ok: true, value: null } : confirmedRepository(value);
 
 function parseGitHub<R extends string | null>(
@@ -361,15 +365,17 @@ function parseUpdate<R extends string | null>(
 /** A new Trigger; schedule, Max active Runs and query take their defaults when left out. */
 export const validateCreateTrigger = (input: unknown) => parseCreate(input, confirmedRepository);
 
-/** A complete replacement of a saved Trigger's settings, from the revision the edit started at. */
-export const validateUpdateTrigger = (input: unknown) => parseUpdate(input, confirmedRepository);
+/**
+ * A complete replacement of a saved Trigger's settings, from the revision the edit started at. The
+ * repository may be left out to keep the saved one.
+ */
+export const validateUpdateTrigger = (input: unknown) => parseUpdate(input, optionalRepository);
 
 /** A new Trigger to preview, as `validateCreateTrigger`; the repository may be left out. */
-export const validatePreviewNewTrigger = (input: unknown) =>
-  parseCreate(input, previewedRepository);
+export const validatePreviewNewTrigger = (input: unknown) => parseCreate(input, optionalRepository);
 
 /** A saved Trigger's settings to preview, as `validateUpdateTrigger`; the repository may be left out. */
-export const validatePreviewTrigger = (input: unknown) => parseUpdate(input, previewedRepository);
+export const validatePreviewTrigger = (input: unknown) => parseUpdate(input, optionalRepository);
 
 /**
  * A manual check: no input at all, or an object whose only, optional field is the revision it is

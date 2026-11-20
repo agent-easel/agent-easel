@@ -23,6 +23,7 @@ import {
   validateUpdateTrigger,
   type TriggerPreviewSettings,
   type TriggerSettings,
+  type TriggerUpdateSettings,
 } from "@t3-factory/domain-validation";
 import {
   gitHubRepairGuidance,
@@ -157,7 +158,7 @@ const previewsSaved = (
 
 /** The next saved state: new settings, with enablement and health kept. */
 function savedTrigger(
-  settings: TriggerSettings,
+  settings: TriggerUpdateSettings,
   repository: TriggerRepository,
   current: TriggerDefinition | undefined,
   id: string,
@@ -309,25 +310,32 @@ export const makeTriggers = (
       });
 
     /**
-     * Reads the Project's repository and checks the query against it when the Project, query or
-     * confirmed repository changes; other edits keep the repository the Trigger already reads
-     * without calling GitHub. A confirmed repository is accepted only while it is the one the
-     * Project's folder names now, which is how a Trigger is pointed at a Project's moved remote.
+     * Settles the repository a save stores. An edit that leaves the repository out keeps the saved
+     * one, and with the same Project and query it is stored without calling GitHub. Otherwise the
+     * Project's repository is read and the query checked against it: a named repository, even the
+     * saved one, or the kept one under a new Project or query, is accepted only while it is the one
+     * the Project's folder names now, which is how a Trigger is pointed at a moved remote.
      */
     const settleGitHub = (
-      settings: TriggerSettings,
+      settings: TriggerUpdateSettings,
       project: FactoryProject,
       saved: TriggerDefinition | undefined,
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<GitHubSettlement>, unknown> {
-        const confirmed = settings.github.repositoryNodeId;
-        const newRepository =
-          saved?.projectId !== settings.projectId || saved.github.repository.nodeId !== confirmed;
-        if (!newRepository && saved.github.query === settings.github.query)
+        const named = settings.github.repositoryNodeId;
+        if (
+          named === null &&
+          saved?.projectId === settings.projectId &&
+          saved.github.query === settings.github.query
+        )
           return {
             ok: true,
-            value: { repository: saved.github.repository, warnings: [], newRepository },
+            value: { repository: saved.github.repository, warnings: [], newRepository: false },
           };
+        // Validation leaves a repository out only on an edit, which has a saved Trigger.
+        const confirmed = named ?? saved?.github.repository.nodeId;
+        const newRepository =
+          saved?.projectId !== settings.projectId || saved.github.repository.nodeId !== confirmed;
         const repository = yield* Effect.promise(() => github.repository(project.workspaceRoot));
         if (!repository.ok) return gitHubRefusal(repository.failure);
         if (repository.value.nodeId !== confirmed)
@@ -353,7 +361,7 @@ export const makeTriggers = (
 
     /** Validates everything outside the store, then writes in one transaction against `id`'s revision. */
     const save = (
-      settings: TriggerSettings,
+      settings: TriggerUpdateSettings,
       target: { readonly id: string; readonly expectedRevision: number } | null,
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<TriggerSave>, unknown> {

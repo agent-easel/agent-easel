@@ -101,7 +101,15 @@ export interface CreateTriggerInput {
   readonly github: GitHubIssuesInput;
 }
 
-/** A complete replacement of the saved settings; the kind must stay the same. */
+/** GitHub settings whose repository may be left out; each operation says what that means. */
+type OptionalRepositoryInput = Omit<GitHubIssuesInput, "repositoryNodeId"> &
+  Partial<Pick<GitHubIssuesInput, "repositoryNodeId">>;
+
+/**
+ * A complete replacement of the saved settings; the kind must stay the same. Leaving out
+ * `github.repositoryNodeId` keeps the saved repository; naming one, even the saved one, is
+ * accepted only while the Project's folder names it now.
+ */
 export interface UpdateTriggerInput {
   readonly expectedRevision: number;
   readonly kind: TriggerKind;
@@ -110,22 +118,19 @@ export interface UpdateTriggerInput {
   readonly flowId: string;
   readonly schedule: TriggerSchedule;
   readonly maxActiveRuns: number;
-  readonly github: Required<GitHubIssuesInput>;
+  readonly github: Required<Omit<GitHubIssuesInput, "repositoryNodeId">> & OptionalRepositoryInput;
 }
-
-/** A preview's GitHub settings; without a repository it evaluates the one the Project's folder names now. */
-type PreviewGitHubInput = Omit<GitHubIssuesInput, "repositoryNodeId"> &
-  Partial<Pick<GitHubIssuesInput, "repositoryNodeId">>;
 
 /** The settings of a new Trigger to preview, as a create takes them; the repository may be left out. */
 export interface PreviewNewTriggerInput extends Omit<CreateTriggerInput, "github"> {
-  readonly github: PreviewGitHubInput;
+  readonly github: OptionalRepositoryInput;
 }
 
-/** A saved Trigger's settings to preview, as a save takes them; the repository may be left out. */
-export interface PreviewTriggerInput extends Omit<UpdateTriggerInput, "github"> {
-  readonly github: Required<Omit<GitHubIssuesInput, "repositoryNodeId">> & PreviewGitHubInput;
-}
+/**
+ * A saved Trigger's settings to preview, as a save takes them. Without a repository it evaluates
+ * the one the Project's folder names now, not the saved one.
+ */
+export type PreviewTriggerInput = UpdateTriggerInput;
 
 /** What a manual check may carry. */
 export interface RunTriggerInput {

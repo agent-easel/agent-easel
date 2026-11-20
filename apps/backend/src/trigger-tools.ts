@@ -5,6 +5,7 @@ import type {
   TriggerCheckReply,
   TriggerDefinition,
   TriggerPreview,
+  TriggerReadiness,
   TriggerRepository,
   TriggerRepositoryChoice,
 } from "@t3-factory/contracts";
@@ -342,23 +343,18 @@ function missingSetting(settings: Args): Result<never> | undefined {
   );
 }
 
-/** The GitHub repository the Project's folder names, through the shared readiness operation. */
-async function detectRepository(
+/**
+ * The shared readiness operation's answer for the GitHub repository the Project's folder names:
+ * the repository, or the problem that keeps it from being read.
+ */
+async function projectRepository(
   factory: TriggerToolOperations,
   projectId: unknown,
-): Promise<Result<TriggerRepositoryChoice>> {
+): Promise<Result<TriggerReadiness["repository"]>> {
   if (typeof projectId !== "string" || projectId === "")
     return invalid("invalid_id", "projectId", "Include projectId from factory_list_projects.");
   const readiness = await factory.getTriggerReadiness(projectId, "", "");
-  if (!readiness.ok) return readiness;
-  const { repository } = readiness.value;
-  return repository?.ready
-    ? { ok: true, value: repository.repository }
-    : invalid(
-        "trigger_repository",
-        "projectId",
-        repository?.problem ?? "Factory could not read the Project's GitHub repository.",
-      );
+  return readiness.ok ? { ok: true, value: readiness.value.repository } : readiness;
 }
 
 /** A saved Trigger's settings as the shared operations take them, repository included. */
@@ -380,8 +376,9 @@ const previewReply = (
 ) => withUntrustedTextNotice({ ...preview, repository: { saved, detected } });
 
 /**
- * A new draft is previewed without a repository, so the shared preview evaluates and names the one
- * the Project's folder names; Factory never takes one from the conversation.
+ * A new draft is previewed on the repository the readiness operation detects for the Project;
+ * Factory never takes one from the conversation. When readiness cannot name one, the shared
+ * preview evaluates the Project's folder itself and answers the problem that stops the check.
  */
 async function previewDraft(
   factory: TriggerToolOperations,
@@ -389,10 +386,15 @@ async function previewDraft(
 ): Promise<Result<unknown>> {
   const missing = missingSetting(settings);
   if (missing) return missing;
+  const detected = await projectRepository(factory, settings.projectId);
+  if (!detected.ok) return detected;
   const preview = await factory.previewNewTrigger({
     kind: "github_issues",
     ...settings,
-    github: { ...objectOf(settings.github), repositoryNodeId: undefined },
+    github: {
+      ...objectOf(settings.github),
+      repositoryNodeId: detected.value?.ready ? detected.value.repository.nodeId : undefined,
+    },
   });
   return preview.ok
     ? { ok: true, value: previewReply(preview.value, null, preview.value.repository) }
@@ -444,9 +446,15 @@ async function createDraft(
   const github = objectOf(settings.github);
   let { repositoryNodeId } = github;
   if (repositoryNodeId === undefined) {
-    const detected = await detectRepository(factory, settings.projectId);
+    const detected = await projectRepository(factory, settings.projectId);
     if (!detected.ok) return detected;
-    repositoryNodeId = detected.value.nodeId;
+    if (!detected.value?.ready)
+      return invalid(
+        "trigger_repository",
+        "projectId",
+        detected.value?.problem ?? "Factory could not read the Project's GitHub repository.",
+      );
+    repositoryNodeId = detected.value.repository.nodeId;
   }
   return factory.createTrigger({
     kind: "github_issues",
@@ -456,8 +464,8 @@ async function createDraft(
 }
 
 /**
- * Saves complete settings. The saved repository carries forward unless the conversation names the
- * reviewed one, which the shared save accepts only while the Project's folder still names it.
+ * Saves complete settings as the conversation sent them. Without github.repositoryNodeId the shared
+ * save keeps the saved repository; a named one it accepts only while the Project's folder names it.
  */
 async function saveSettings(
   factory: TriggerToolOperations,
@@ -466,15 +474,7 @@ async function saveSettings(
 ): Promise<Result<unknown>> {
   const saved = await factory.getTrigger(id);
   if (!saved.ok) return saved;
-  const github = objectOf(settings.github);
-  return factory.updateTrigger(id, {
-    kind: saved.value.kind,
-    ...settings,
-    github: {
-      ...github,
-      repositoryNodeId: github.repositoryNodeId ?? saved.value.github.repository.nodeId,
-    },
-  });
+  return factory.updateTrigger(id, { kind: saved.value.kind, ...settings });
 }
 
 const triggerCalls = (

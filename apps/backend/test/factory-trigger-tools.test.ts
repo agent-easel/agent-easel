@@ -232,6 +232,27 @@ it("a new-draft preview whose Project's remote cannot be read answers that probl
   });
 });
 
+it("a new-draft preview stopped by a launch blocker answers that problem and still names the detected repository", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  world.t3.contract.support.launch = false;
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_preview_trigger",
+    arguments: draftSettings(world),
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toMatchObject({
+    issues: [],
+    problem: { code: "start_blocked" },
+    repository: { saved: null, detected: { nodeId: "R_atlas" } },
+  });
+});
+
 it("an edit preview that detects the repository on a revision another save replaced is refused as stale while the remote cannot be read", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);
@@ -442,6 +463,29 @@ it("creating a Trigger with a node id the Project's remote no longer names is re
     code: "conflict",
     issues: [{ code: "trigger_repository_mismatch" }],
     next: expect.stringContaining("retarget"),
+  });
+  expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("creating a Trigger with a null repository node id is a validation refusal and saves nothing", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_trigger",
+    arguments: {
+      ...draftSettings(world),
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: null },
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ path: "github.repositoryNodeId" }],
   });
   expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
 });
@@ -909,6 +953,94 @@ it("a retarget to the reviewed repository is refused once the Project's remote n
   expect(saved.value).toMatchObject({
     revision: world.trigger.revision,
     github: { repository: { nodeId: "R_atlas" } },
+  });
+});
+
+it("saving with the saved repository's node id is refused once the Project's remote names another, and the Trigger stays unchanged", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      maxActiveRuns: 2,
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: "R_atlas" },
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "trigger_repository_mismatch" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
+});
+
+it("saving with a null repository node id is a validation refusal and the Trigger stays unchanged", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      maxActiveRuns: 2,
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: null },
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
+});
+
+it("saving with a repository node id that is not a string is a validation refusal and the Trigger stays unchanged", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      maxActiveRuns: 2,
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: 7 },
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
   });
 });
 

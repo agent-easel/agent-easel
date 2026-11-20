@@ -684,4 +684,5 @@ export {
   validateUpdateTrigger,
   type TriggerPreviewSettings,
   type TriggerSettings,
+  type TriggerUpdateSettings,
 } from "./trigger.ts";

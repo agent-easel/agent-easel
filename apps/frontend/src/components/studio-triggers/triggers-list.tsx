@@ -1,14 +1,19 @@
 import { StartedRuns } from "./started-runs.tsx";
 import { useRef, useState } from "react";
 import { ChevronRight, Pencil, RefreshCw, Trash2, Zap } from "lucide-react";
-import type { FactoryProject, TriggerDefinition, TriggerStartedRun } from "@t3-factory/contracts";
+import type {
+  FactoryProject,
+  TriggerCheckReply,
+  TriggerDefinition,
+  TriggerStartedRun,
+} from "@t3-factory/contracts";
 import { MutationGate, useMutationsAllowed } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
 import { DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "../status-badge.tsx";
 import { RemoveTriggerDialog } from "./remove-trigger-dialog.tsx";
-import type { RevisionRefusal, TriggerActions } from "./trigger-actions.ts";
+import type { CheckOutcome, RevisionRefusal, TriggerActions } from "./trigger-actions.ts";
 import { TriggerReviewDialog, type TriggerReview } from "./trigger-review-dialog.tsx";
 import { reviewSummary, scheduleText, triggerRoute, type TriggerNames } from "./trigger-text.ts";
 import { useStudioNavigation } from "../../settings-navigation.ts";
@@ -29,17 +34,28 @@ const refusalNotice = (revision: number, refused: RevisionRefusal) =>
     ? `Revision ${revision} was saved after your review, so nothing was enabled. Review these settings before enabling.`
     : `Revision ${revision} was saved after the revision you checked, so nothing was checked. Review these settings before checking.`;
 
-/** Turning a Trigger on first shows what its first check would start. */
-const enableReview = (
+/** How a review opens: first before enabling, or again after another saved revision refused a step. */
+export interface ReviewOptions {
+  /** The refused step, which confirming repeats on the revision the review shows. */
+  readonly refused?: RevisionRefusal;
+  /** Receives the reply once confirming checked the Trigger. */
+  readonly onChecked?: (reply: TriggerCheckReply) => void;
+}
+
+/**
+ * Turning a Trigger on first shows what its first check would start. After a refused check the
+ * review offers only that check: the Trigger is not enabled again.
+ */
+const triggerReview = (
   trigger: TriggerDefinition,
   names: TriggerNames,
   actions: TriggerActions,
   refused: RevisionRefusal | undefined,
 ): TriggerReview => ({
-  title: `Enable “${trigger.name}”?`,
+  title: refused === "check" ? `Check “${trigger.name}”?` : `Enable “${trigger.name}”?`,
   summary: reviewSummary(trigger, trigger.github.repository.nameWithOwner, names),
   repository: trigger.github.repository.nameWithOwner,
-  confirmLabel: "Enable and check",
+  confirmLabel: refused === "check" ? "Check now" : "Enable and check",
   load: () => actions.preview(trigger),
   ...(refused && { notice: refusalNotice(trigger.revision, refused) }),
 });
@@ -47,22 +63,32 @@ const enableReview = (
 /**
  * The review before enabling a saved Trigger; Enable and check confirms the revision it showed.
  * When another revision was saved after that, refusing the enable or the check, the review opens
- * again on the current settings with that notice.
+ * again on the current settings with that notice, and confirming repeats only the refused step.
  */
 export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
   const [reviewing, setReviewing] = useState<{
     readonly trigger: TriggerDefinition;
     readonly review: TriggerReview;
+    readonly options: ReviewOptions;
   } | null>(null);
-  const busy = reviewing !== null && actions.state.pending.get(reviewing.trigger.id) === "enable";
-  /** Opens the review of `trigger`; `refused` names the step another saved revision refused. */
-  const open = (trigger: TriggerDefinition, refused?: RevisionRefusal) =>
-    setReviewing({ trigger, review: enableReview(trigger, names, actions, refused) });
+  const busy = reviewing !== null && actions.state.pending.has(reviewing.trigger.id);
+  /** Opens the review of `trigger`, first or again after a refused step. */
+  const open = (trigger: TriggerDefinition, options: ReviewOptions = {}) =>
+    setReviewing({
+      trigger,
+      options,
+      review: triggerReview(trigger, names, actions, options.refused),
+    });
+  /** Closes the review, or opens it again on the revision that refused the step. */
+  const settle = (outcome: CheckOutcome | undefined, options: ReviewOptions) => {
+    if (outcome && "refused" in outcome)
+      return open(outcome.latest, { ...options, refused: outcome.refused });
+    if (outcome) options.onChecked?.(outcome.checked);
+    setReviewing(null);
+  };
   /** Enable and check `trigger` at the reviewed `revision`, or review it again if it changed. */
-  const enable = (trigger: TriggerDefinition, revision: number) =>
-    actions
-      .enableAndCheck(trigger, revision)
-      .then((changed) => (changed ? open(changed.latest, changed.refused) : setReviewing(null)));
+  const enable = (trigger: TriggerDefinition, revision: number, options: ReviewOptions = {}) =>
+    actions.enableAndCheck(trigger, revision).then((outcome) => settle(outcome, options));
   return {
     open,
     enable,
@@ -73,16 +99,22 @@ export function useEnableReview(names: TriggerNames, actions: TriggerActions) {
         onCancel={() => setReviewing(null)}
         onConfirm={(preview) => {
           if (!reviewing) return;
+          const { trigger, options } = reviewing;
+          const refused = options.refused ?? "enable";
           // A preview that did not show a saved revision cannot confirm one: review again.
-          if (preview.revision === null) return open(reviewing.trigger, "enable");
-          void enable(reviewing.trigger, preview.revision);
+          if (preview.revision === null) return open(trigger, { ...options, refused });
+          if (refused === "enable") return void enable(trigger, preview.revision, options);
+          void actions.run(trigger, preview.revision).then((outcome) => settle(outcome, options));
         }}
       />
     ),
   };
 }
 
-/** The Runs a Check now started in this visit. An empty list is “Nothing ready to start”. */
+/**
+ * The Runs the latest check from a row started in this visit: Check now, Enable and check, or a
+ * check confirmed after a refusal. An empty list is “Nothing ready to start”.
+ */
 type Started = ReadonlyMap<string, readonly TriggerStartedRun[]>;
 
 /** Figma T01/T02: Triggers grouped by Project, with Search and Check now on every row. */
@@ -97,8 +129,8 @@ export function TriggersList({
   names: TriggerNames;
   projects: readonly FactoryProject[];
   actions: TriggerActions;
-  /** Opens the review before enabling `trigger`, again with the step another revision refused. */
-  onEnable: (trigger: TriggerDefinition, refused?: RevisionRefusal) => void;
+  /** Opens the review before enabling `trigger`, or again for the step another revision refused. */
+  onEnable: (trigger: TriggerDefinition, options?: ReviewOptions) => void;
 }) {
   const openStudio = useStudioNavigation();
   const create = () => void openStudio({ tab: "triggers", triggerId: "new" });
@@ -113,10 +145,16 @@ export function TriggersList({
   const groups = matching ? ownerGroups(matching, projects, { kind: "all" }) : [];
   const loaded = items !== null;
   const noMatch = loaded && items.length > 0 && groups.length === 0;
+  // Every check started from a row, also one confirmed after a refusal, answers here.
+  const remember = (trigger: TriggerDefinition) => (reply: TriggerCheckReply) =>
+    rememberCheck(setStarted, trigger.id, reply);
   const checked = (trigger: TriggerDefinition) =>
-    void actions
-      .run(trigger, (latest) => onEnable(latest, "check"))
-      .then((reply) => rememberCheck(setStarted, trigger.id, reply));
+    void actions.run(trigger).then((outcome) => {
+      if (!outcome) return;
+      if ("refused" in outcome)
+        return onEnable(outcome.latest, { refused: outcome.refused, onChecked: remember(trigger) });
+      remember(trigger)(outcome.checked);
+    });
   return (
     <main className={studioListClass}>
       <StudioListHeader
@@ -160,7 +198,7 @@ export function TriggersList({
                   checking={pending.get(trigger.id) === "run"}
                   started={started.get(trigger.id)}
                   actions={actions}
-                  onEnable={() => onEnable(trigger)}
+                  onEnable={() => onEnable(trigger, { onChecked: remember(trigger) })}
                   onCheck={() => checked(trigger)}
                   onRemove={(opener) => {
                     menuButton.current = opener;
@@ -190,14 +228,8 @@ export function TriggersList({
 function rememberCheck(
   setStarted: (update: (current: Started) => Started) => void,
   triggerId: string,
-  reply:
-    | {
-        readonly error: TriggerDefinition["error"];
-        readonly startedRuns: readonly TriggerStartedRun[];
-      }
-    | undefined,
+  reply: TriggerCheckReply,
 ) {
-  if (!reply) return;
   setStarted((current) => {
     const next = new Map(current);
     if (reply.error) next.delete(triggerId);

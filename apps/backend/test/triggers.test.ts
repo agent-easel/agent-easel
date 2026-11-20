@@ -372,6 +372,73 @@ it("reconfirming a repository the Project does not name is refused and the saved
   expect(await f.getTrigger(trigger.id)).toStrictEqual({ ok: true, value: trigger });
 });
 
+it("an edit naming the saved repository is refused once the Project's remote names another, and the saved settings stay", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+
+  // Act
+  const saved = await world.f.updateTrigger(
+    world.trigger.id,
+    triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+  );
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "trigger_repository_mismatch", path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
+});
+
+it("an edit that leaves out the repository keeps the saved one without reading the Project's moved remote", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  world.github.calls.length = 0;
+
+  // Act
+  const saved = await world.f.updateTrigger(world.trigger.id, {
+    ...triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+    github: { query: world.trigger.github.query },
+  });
+
+  // Assert
+  assert(saved.ok);
+  expect(saved.value.trigger).toMatchObject({
+    maxActiveRuns: 2,
+    revision: world.trigger.revision + 1,
+    github: { repository: { nodeId: atlasRepository.nodeId } },
+  });
+  expect(world.github.calls).toStrictEqual([]);
+});
+
+it("an edit whose repository node id is null is refused and the saved settings stay", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+
+  // Act
+  const saved = await world.f.updateTrigger(world.trigger.id, {
+    ...triggerEdit(world.trigger, { maxActiveRuns: 2 }),
+    github: { repositoryNodeId: null, query: world.trigger.github.query },
+  });
+
+  // Assert
+  assert(!saved.ok);
+  expect(saved.error).toMatchObject({
+    code: "validation",
+    issues: [{ path: "github.repositoryNodeId" }],
+  });
+  expect(await world.f.getTrigger(world.trigger.id)).toStrictEqual({
+    ok: true,
+    value: world.trigger,
+  });
+});
+
 it("enabling with the revision a review showed is refused once a newer revision was saved, and the Trigger stays off", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);

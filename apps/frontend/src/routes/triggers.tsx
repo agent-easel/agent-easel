@@ -256,8 +256,10 @@ function useTriggerEditor({
   }
 
   async function check(target: TriggerDefinition) {
-    const result = await actions.run(target, () => draft.noteStaleRevision(target.revision));
-    if (result) setChecked(result);
+    const outcome = await actions.run(target);
+    if (!outcome) return;
+    if ("refused" in outcome) draft.noteStaleRevision(target.revision);
+    else setChecked(outcome.checked);
   }
 
   const saveOff = () => void finishSave(false);

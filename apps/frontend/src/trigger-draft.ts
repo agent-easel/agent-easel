@@ -125,11 +125,28 @@ export function matchingTriggerName(
 /** The settings a save would send, validated, or why they cannot be sent. */
 type TriggerProposal =
   | { readonly error: string }
-  | { readonly kind: "update"; readonly id: string; readonly input: UpdateTriggerInput }
+  | {
+      readonly kind: "update";
+      readonly id: string;
+      /** The edit as a review previews it, on the repository the form shows. */
+      readonly input: UpdateTriggerInput;
+      /** What the save sends. */
+      readonly body: UpdateTriggerInput;
+    }
   | { readonly kind: "create"; readonly input: CreateTriggerInput & TriggerReviewedFields };
 
 /** The fields a create sends in full, so a review can describe them. */
 type TriggerReviewedFields = Required<Pick<CreateTriggerInput, "schedule" | "maxActiveRuns">>;
+
+/**
+ * What a save of `input` over `trigger` sends: the saved repository is left out, so the save keeps
+ * it without reading GitHub even after the Project's remote moved, while a confirmed other one is
+ * named and checked against the Project's remote.
+ */
+function updateBody(trigger: TriggerDefinition, input: UpdateTriggerInput): UpdateTriggerInput {
+  const { repositoryNodeId, ...github } = input.github;
+  return repositoryNodeId === trigger.github.repository.nodeId ? { ...input, github } : input;
+}
 
 function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent): TriggerProposal {
   if (content.projectId && !content.repository)
@@ -139,7 +156,7 @@ function proposalOf(trigger: TriggerDefinition | null, content: TriggerContent):
     const input = { ...settings, expectedRevision: trigger.revision };
     const validation = validateUpdateTrigger(input);
     if (!validation.ok) return { error: validation.error.message };
-    return { kind: "update", id: trigger.id, input };
+    return { kind: "update", id: trigger.id, input, body: updateBody(trigger, input) };
   }
   const validation = validateCreateTrigger(settings);
   if (!validation.ok) return { error: validation.error.message };
@@ -157,7 +174,7 @@ function saveRequest(
   if (proposal.kind === "update")
     return {
       submitted: content,
-      send: () => source.updateTrigger(proposal.id, proposal.input).then((save) => save.trigger),
+      send: () => source.updateTrigger(proposal.id, proposal.body).then((save) => save.trigger),
       unknownMessage:
         "Save outcome unknown. Factory may have saved this Trigger; your edits are kept and nothing is retried.",
       fallback,
