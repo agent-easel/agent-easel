@@ -1,8 +1,8 @@
 import { test } from "./support/test.ts";
-import { expect, type App } from "e2e";
+import { expect, type App, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
 import type { FirstRunSetup, Result, T3Connection } from "../packages/contracts/src/index.ts";
-import { hostT3Observations } from "./support/remote-access.ts";
+import { hostT3Observations, openApproved, openRemoteBrowser } from "./support/remote-access.ts";
 import type { Fixture } from "./support/fixture/handle.ts";
 
 /** A fresh host's setup screen, in the accepted Figma frames' 1440 × 900 dark appearance. */
@@ -14,6 +14,14 @@ async function openFreshSetup(
   await browser.emulateMedia({ colorScheme: "dark" });
   await fixture.firstRunSetup.fresh(options);
   await app.open("/runs/new");
+}
+
+/** Step 1 turned done once T3 Connected, and step 2 is the current step. */
+async function expectInstallStepOpen(screen: Screen) {
+  await expect(screen.getByRole("heading", "Connected to T3 0.1.11, done")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expect(screen.getByRole("heading", "Install in your agents, current step")).toBeVisible();
 }
 
 async function setupCompleted(baseUrl: string | undefined) {
@@ -69,10 +77,7 @@ test("a fresh host connects to the detected T3, installs in its harnesses and op
 
   // The owner approves in T3; nobody touches this screen.
   await fixture.remoteAccess.t3Approve();
-  await expect(screen.getByRole("heading", "Connected to T3 0.1.11, done")).toBeVisible({
-    timeout: 8_000,
-  });
-  await expect(screen.getByRole("heading", "Install in your agents, current step")).toBeVisible();
+  await expectInstallStepOpen(screen);
   await expect(screen.getByText("Approve Factory in your browser")).toHaveCount(0);
 
   // Step 2 lists the installable harnesses T3 has on, and names the ones it keeps off.
@@ -144,4 +149,59 @@ test("with no installable harness on in T3, the install step asks to turn one on
   await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
   await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
   await app.screenshot("first-run-setup-no-harness");
+});
+
+test("an approved client waits read-only while the host sets up, then opens Factory by itself", async ({
+  fixture,
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: the host is in First-run setup; this browser is an approved remote device.
+  await browser.setViewport({ width: 1440, height: 900 });
+  await browser.emulateMedia({ colorScheme: "dark" });
+  await fixture.firstRunSetup.fresh();
+  await openRemoteBrowser(app);
+  await openApproved(app, "/runs/new");
+
+  // Assert: the host's progress, read-only, with Check again as the only action.
+  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toBeVisible();
+  await expect(
+    screen.getByText(/happen on the computer where Factory runs\. Open Factory there/),
+  ).toBeVisible();
+  await expect(screen.getByRole("heading", "Connect to T3, current step")).toBeVisible();
+  await expect(screen.getByText("Not connected yet")).toBeVisible();
+  await expect(screen.getByRole("heading", "Install in your agents, upcoming step")).toBeVisible();
+  await expect(screen.getByText("Waiting for step 1")).toBeVisible();
+  await expect(screen.getByRole("button", "Connect")).toHaveCount(0);
+  await expect(screen.getByRole("button", /another address/)).toHaveCount(0);
+  await expect(screen.getByRole("button", "Save and connect")).toHaveCount(0);
+  await expect(screen.getByRole("link", /^Settings/)).toHaveCount(0);
+  await screen.getByRole("button", "Check again").tap();
+  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toBeVisible();
+  await app.screenshot("first-run-setup-approved-client");
+
+  // Act: the owner connects T3 on the host.
+  await fixture.remoteAccess.t3Approve();
+  await fixture.remoteAccess.t3Available();
+
+  // Assert: step 1 is done and step 2 shows the host's harnesses, with nothing to install here.
+  await expectInstallStepOpen(screen);
+  await expect(screen.getByRole("group", "Claude", { exact: true }).getByRole("status")).toHaveText(
+    "Not installed",
+  );
+  await expect(screen.getByRole("button", /^Install in/)).toHaveCount(0);
+  await expect(screen.getByRole("button", "Open Factory")).toHaveCount(0);
+  await app.screenshot("first-run-setup-approved-client-connected");
+
+  // Act: the owner finishes setup on the host.
+  const completed = await fetch(new URL("/api/setup/complete", app.baseUrl), {
+    method: "POST",
+    headers: { "X-Factory-Request": "1" },
+  });
+  expect(completed.ok).toBe(true);
+
+  // Assert: the client leaves the setup screen without a reload.
+  await expect(screen.getByRole("link", /^Settings/)).toBeVisible({ timeout: 8_000 });
+  await expect(screen.getByRole("heading", "Finish setup on the Factory host")).toHaveCount(0);
 });

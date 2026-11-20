@@ -77,6 +77,8 @@ The second step, **Install in your agents**, opens once T3 is Connected. It list
 
 When both steps pass, **Factory is ready** shows both as done and reminds the user to open a new agent session, since an open session keeps the tools it loaded. **Open Factory** records completion through the host-only operation and then opens the application; if recording fails, the screen stays with the error. From then on the screen never returns, whatever later happens to the connection or reporting; Settings and the sidebar status report those problems, and Settings remains the place to repair them.
 
+An approved client that opens Factory while the host's setup is incomplete waits on the same card, read-only, titled **Finish setup on the Factory host**. It shows the host's progress through both steps from the same connection and reporting reads, including the listed harnesses and their status, and offers only **Check again**: no Connect, address entry, Install or Open Factory. The host-only rules are unchanged; only the host saves the endpoint, authorizes or records completion, which refuses approved clients with `host_only`. The client re-reads the setup status every few seconds while visible and on focus, and opens the application by itself, without a reload, once the host completes setup.
+
 ## Credentials and reauthorization
 
 OAuth registration, tokens, discovery, PKCE and pending callback state live in `credentials/t3-<endpoint SHA-256>.json`

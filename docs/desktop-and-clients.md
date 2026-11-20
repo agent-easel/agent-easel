@@ -81,7 +81,10 @@ to its local panel. The T3 endpoint and host reauthorization remain host-only: r
 clients see their status and the "Managed on the Factory host" chip.
 When T3 needs approval, a remote client can choose **Authorize** or
 **Open the page again** for the saved endpoint. Both open the host's browser.
-See [T3 connection](t3-integration.md#authorizing). Lifecycle and approvals are host-local
+See [T3 connection](t3-integration.md#authorizing). While the host's
+[First-run setup](t3-integration.md#first-run-setup) is incomplete, an approved client waits
+read-only on **Finish setup on the Factory host** and opens the application once the host
+completes it. Lifecycle and approvals are host-local
 only; an approved client may check, download and install the server's own update
 ([updates](#updates)).
 

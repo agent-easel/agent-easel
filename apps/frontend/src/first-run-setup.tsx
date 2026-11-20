@@ -3,6 +3,7 @@ import {
   CircleAlert,
   ExternalLink,
   LoaderCircle,
+  Lock,
   Plug,
   TriangleAlert,
   Unplug,
@@ -14,6 +15,7 @@ import type {
   ReportingInstallation,
   T3Connection,
 } from "@t3-factory/contracts";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
@@ -27,6 +29,7 @@ import { SetupStepHeader } from "@/components/setup-step-header";
 import { allowedAddress, T3AddressForm, T3AddressHelp } from "@/components/t3-address";
 import { ConnectingScreen, MutationGate } from "./client-gate.tsx";
 import { api } from "./api.ts";
+import { useClientScope } from "./client-scope.ts";
 import { useConnectionState, type ConnectionPresentation } from "./connection-state.tsx";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
 import { installable, providerName, targetStatus, useReportingState } from "./reporting-state.tsx";
@@ -37,20 +40,23 @@ const detectionRecheckMs = 2000;
 /**
  * The last full-window state before the application: until the host records First-run setup
  * as completed, no product route mounts. Completion is read only from the setup status, never
- * from the live connection, so a later T3 outage does not bring this screen back.
+ * from the live connection, so a later T3 outage does not bring this screen back. Approved
+ * clients keep re-reading it while visible, because only the host can complete setup.
  */
 export function FirstRunSetupGate({ children }: { children: ReactNode }) {
+  const remote = useClientScope() === "remote";
   const [setup, setSetup] = useState<FirstRunSetup | null>(null);
   const { failure, refresh } = useRefreshSchedule({
     read: api.getFirstRunSetup,
     apply: setSetup,
     intervalMs: detectionRecheckMs,
-    watching: setup !== null && !setup.completed && !setup.detectedT3,
+    watching: setup !== null && !setup.completed && (remote || !setup.detectedT3),
   });
   useEffect(() => {
     void refresh();
   }, [refresh]);
   if (setup?.completed) return children;
+  if (setup && remote) return <HostSetupProgressScreen onCheckAgain={refresh} />;
   if (setup)
     return <FirstRunSetupScreen setup={setup} onCheckAgain={refresh} onCompleted={setSetup} />;
   if (failure)
@@ -71,6 +77,9 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
 const listedTarget = (target: ReportingInstallation) =>
   target.instances.length > 0 && target.status !== "unsupported";
 
+const installedEverywhere = (listed: readonly ReportingInstallation[] | null) =>
+  !!listed?.length && listed.every((target) => target.status === "installed");
+
 const names = (providers: readonly string[]) =>
   new Intl.ListFormat("en", { type: "conjunction" }).format(providers.map(providerName));
 
@@ -87,7 +96,7 @@ function FirstRunSetupScreen({
   const { targets } = useReportingState();
   const connected = presentation === "ready";
   const listed = connected && targets ? targets.filter(listedTarget) : null;
-  const ready = !!listed?.length && listed.every((target) => target.status === "installed");
+  const ready = installedEverywhere(listed);
   return (
     <GateScreen
       size="wide"
@@ -125,7 +134,14 @@ function FirstRunSetupScreen({
   );
 }
 
-function ConnectStepHeader({ connected }: { connected: boolean }) {
+function ConnectStepHeader({
+  connected,
+  detail = "Factory uses T3 on this computer to list projects and start Runs.",
+}: {
+  connected: boolean;
+  /** The current step's sentence. */
+  detail?: string;
+}) {
   const { connection } = useConnectionState();
   const version = connection?.contract?.serverVersion;
   return connected ? (
@@ -136,12 +152,7 @@ function ConnectStepHeader({ connected }: { connected: boolean }) {
       detail={connection?.endpoint ?? ""}
     />
   ) : (
-    <SetupStepHeader
-      number={1}
-      state="current"
-      title="Connect to T3"
-      detail="Factory uses T3 on this computer to list projects and start Runs."
-    />
+    <SetupStepHeader number={1} state="current" title="Connect to T3" detail={detail} />
   );
 }
 
@@ -152,10 +163,13 @@ function InstallStepHeader({
   connected,
   listed,
   ready,
+  waiting,
 }: {
   connected: boolean;
   listed: readonly ReportingInstallation[] | null;
   ready: boolean;
+  /** An approved client's sentences: it waits for each step on the host. */
+  waiting?: { upcoming: string; current: string };
 }) {
   if (ready && listed)
     return (
@@ -172,7 +186,18 @@ function InstallStepHeader({
         number={2}
         state="upcoming"
         title="Install in your agents"
-        detail="Adds Factory’s MCP server and skills to your agent harnesses."
+        detail={
+          waiting?.upcoming ?? "Adds Factory’s MCP server and skills to your agent harnesses."
+        }
+      />
+    );
+  if (waiting)
+    return (
+      <SetupStepHeader
+        number={2}
+        state="current"
+        title="Install in your agents"
+        detail={waiting.current}
       />
     );
   return (
@@ -186,6 +211,70 @@ function InstallStepHeader({
           : installReason
       }
     />
+  );
+}
+
+/**
+ * Figma F06: an approved client sees the host's progress through both steps without any of the
+ * host's actions: only the host saves the endpoint, authorizes or completes setup, and
+ * installing belongs with it. Progress comes from the host screen's connection and reporting reads.
+ */
+function HostSetupProgressScreen({ onCheckAgain }: { onCheckAgain: () => Promise<void> }) {
+  const { connection, presentation } = useConnectionState();
+  const { targets, refresh } = useReportingState();
+  const connected = presentation === "ready";
+  const listed = connected && targets ? targets.filter(listedTarget) : null;
+  const installed = installedEverywhere(listed);
+  // The shared reporting read may still hold the answer from before the host Connected.
+  useEffect(() => {
+    if (connected) void refresh();
+  }, [connected, refresh]);
+  return (
+    <GateScreen
+      size="wide"
+      label="First-run setup"
+      icon={Lock}
+      title="Finish setup on the Factory host"
+      description="This device is approved, but connecting to T3 and installing in agents happen on the computer where Factory runs. Open Factory there; this screen updates by itself."
+    >
+      <ol aria-live="polite" className="grid gap-5">
+        <li aria-current={connected ? undefined : "step"} className="grid gap-3">
+          <ConnectStepHeader
+            connected={connected}
+            detail={
+              connection?.authorizationPending
+                ? "Waiting for approval on the Factory host"
+                : "Not connected yet"
+            }
+          />
+        </li>
+        <li
+          aria-current={connected && !installed ? "step" : undefined}
+          className="grid gap-3 border-t pt-5"
+        >
+          <InstallStepHeader
+            connected={connected}
+            listed={listed}
+            ready={installed}
+            waiting={{
+              upcoming: "Waiting for step 1",
+              current: "Waiting for the install on the Factory host",
+            }}
+          />
+          {connected && !installed && !!listed?.length && (
+            <HarnessList listed={listed} className="ml-8.5" />
+          )}
+        </li>
+      </ol>
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          onClick={() => void Promise.all([onCheckAgain(), connected && refresh()])}
+        >
+          Check again
+        </Button>
+      </div>
+    </GateScreen>
   );
 }
 
@@ -252,16 +341,7 @@ function InstallStep({
     const pending = listed.filter(installable);
     content = (
       <>
-        <Surface tone="group" className="rounded-md">
-          {listed.map((target) => (
-            <HarnessRow
-              key={target.id}
-              name={providerName(target.provider)}
-              paths={[target.path, target.skillsPath].filter((path) => path !== null)}
-              status={targetStatus(target, running === target.id, !!failures[target.id])}
-            />
-          ))}
-        </Surface>
+        <HarnessList listed={listed} />
         {listed.map((target) => (
           <ReportingTargetProblem
             key={target.id}
@@ -311,6 +391,29 @@ function InstallStep({
       {content}
       {caption}
     </div>
+  );
+}
+
+/** The listed harnesses with each one's paths and live install status. */
+function HarnessList({
+  listed,
+  className,
+}: {
+  listed: readonly ReportingInstallation[];
+  className?: string;
+}) {
+  const { running, failures } = useReportingState();
+  return (
+    <Surface tone="group" className={cn("rounded-md", className)}>
+      {listed.map((target) => (
+        <HarnessRow
+          key={target.id}
+          name={providerName(target.provider)}
+          paths={[target.path, target.skillsPath].filter((path) => path !== null)}
+          status={targetStatus(target, running === target.id, !!failures[target.id])}
+        />
+      ))}
+    </Surface>
   );
 }
 
