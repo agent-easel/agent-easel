@@ -16,6 +16,7 @@ import type {
 import {
   mayStartFlow,
   validateCreateTrigger,
+  validateRunTrigger,
   validateSetTriggerEnabled,
   validateUpdateTrigger,
   type TriggerSettings,
@@ -555,7 +556,12 @@ export const makeTriggers = (
           Effect.tap((result) => (result.ok ? schedule.follow(id, result.value) : Effect.void)),
         );
       },
-      runTrigger: (id) => published(check(id)),
+      runTrigger(id, input) {
+        const validated = validateRunTrigger(input);
+        return validated.ok
+          ? published(check(id, validated.value.expectedRevision))
+          : Effect.succeed(validated);
+      },
       previewNewTrigger(input) {
         const validated = validateCreateTrigger(input);
         return validated.ok ? preview(validated.value, null) : Effect.succeed(validated);

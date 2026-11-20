@@ -90,7 +90,7 @@ it.effect(
 
       // Act
       const [, manual] = yield* Effect.all(
-        [TestClock.adjust(INTERVAL), f.factory.runTrigger(f.trigger.id)],
+        [TestClock.adjust(INTERVAL), f.factory.runTrigger(f.trigger.id, {})],
         {
           concurrency: "unbounded",
         },
@@ -167,7 +167,7 @@ it("a Trigger with its schedule off checks when asked to Run", async (c) => {
   world.readyIssue(1, "On demand");
 
   // Act
-  const checked = await world.f.runTrigger(world.trigger.id);
+  const checked = await world.f.runTrigger(world.trigger.id, {});
 
   // Assert
   assert(checked.ok);

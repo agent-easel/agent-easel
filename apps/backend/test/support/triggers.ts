@@ -235,7 +235,7 @@ export async function startedIssues(f: Factory, projectId: string) {
  */
 export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
   const { inspecting, release } = world.t3.contract.holdInspection(START_INSPECTIONS);
-  const checked = world.f.runTrigger(world.trigger.id);
+  const checked = world.f.runTrigger(world.trigger.id, {});
   await inspecting;
   return { checked, release };
 }
@@ -251,7 +251,7 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
     entered();
     await held;
   };
-  const checked = world.f.runTrigger(world.trigger.id);
+  const checked = world.f.runTrigger(world.trigger.id, {});
   await reading;
   return { checked, release };
 }

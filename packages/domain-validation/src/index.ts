@@ -677,6 +677,7 @@ export {
   validateTriggerSchedule,
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
+  validateRunTrigger,
   validateSetTriggerEnabled,
   validateUpdateTrigger,
   type TriggerSettings,

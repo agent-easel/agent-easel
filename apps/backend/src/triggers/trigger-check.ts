@@ -511,13 +511,29 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       }),
     );
 
-  /** Checks an enabled Trigger once and records what the check did. */
-  const check = (triggerId: string) =>
+  /**
+   * Checks an enabled Trigger once and records what the check did. A manual check may name the
+   * revision it was asked to run; scheduled checks name none and run whatever is saved.
+   */
+  const check = (triggerId: string, expectedRevision?: number) =>
     lanes
       .serial(triggerId, () =>
         Effect.gen(function* (): Effect.fn.Return<Result<TriggerCheckReply>, unknown> {
           const trigger = yield* deps.readTrigger(triggerId);
           if (!trigger) return failure("not_found", "This Trigger does not exist.");
+          // Before any GitHub read, so a refused check starts nothing and changes nothing.
+          if (expectedRevision !== undefined && trigger.revision !== expectedRevision)
+            return failure(
+              "conflict",
+              `Revision ${trigger.revision} of this Trigger was saved after revision ${expectedRevision}, so nothing was checked. Review its current settings before checking.`,
+              [
+                {
+                  code: "stale_revision",
+                  path: "expectedRevision",
+                  message: `The Trigger is at revision ${trigger.revision}.`,
+                },
+              ],
+            );
           if (!trigger.enabled)
             return failure("conflict", "Enable this Trigger before running a check.", [
               {

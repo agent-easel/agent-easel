@@ -36,5 +36,5 @@ if (stage === "preflight") {
     if (++inspections === START_INSPECTIONS + 1) await crash();
   };
 }
-await f.runTrigger(triggerId!);
+await f.runTrigger(triggerId!, {});
 await f.reconcileRuns();

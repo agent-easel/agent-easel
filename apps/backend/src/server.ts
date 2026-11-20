@@ -460,7 +460,10 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
       handle: ({ parameters, input }) =>
         answer(() => factory.setTriggerEnabled(parameters.id, input)),
     },
-    runTrigger: { handle: ({ parameters }) => answer(() => factory.runTrigger(parameters.id)) },
+    runTrigger: {
+      body: standardBody,
+      handle: ({ parameters, input }) => answer(() => factory.runTrigger(parameters.id, input)),
+    },
     previewNewTrigger: {
       body: standardBody,
       handle: ({ input }) => answer(() => factory.previewNewTrigger(input)),

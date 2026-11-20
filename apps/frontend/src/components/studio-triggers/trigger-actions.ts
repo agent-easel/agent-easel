@@ -72,20 +72,28 @@ export function useTriggerActions(
      */
     enableAndCheck: (trigger: TriggerDefinition, reviewedRevision: number) =>
       perform(trigger, "enable", async (): Promise<TriggerDefinition | null> => {
+        let enabled: TriggerDefinition;
         try {
-          await definitions.setTriggerEnabled(trigger.id, { enabled: true, reviewedRevision });
+          enabled = await definitions.setTriggerEnabled(trigger.id, {
+            enabled: true,
+            reviewedRevision,
+          });
         } catch (cause) {
           if (!changedSinceReview(cause)) throw cause;
           return definitions.getTrigger(trigger.id);
         }
-        await definitions.runTrigger(trigger.id);
+        // Enabling advanced the revision; the check runs the one the enable returned.
+        await definitions.runTrigger(trigger.id, { expectedRevision: enabled.revision });
         return null;
       }),
     /** What a check of the saved Trigger would start now; it starts and changes nothing. */
     preview: (trigger: TriggerDefinition) =>
       definitions.previewTrigger(trigger.id, currentSettings(trigger)),
+    /** Checks the revision on screen; a refusal because another was saved shows as the failure. */
     run: (trigger: TriggerDefinition) =>
-      perform(trigger, "run", () => definitions.runTrigger(trigger.id)),
+      perform(trigger, "run", () =>
+        definitions.runTrigger(trigger.id, { expectedRevision: trigger.revision }),
+      ),
     remove: (trigger: TriggerDefinition) =>
       perform(trigger, "remove", () => definitions.removeTrigger(trigger.id).then(() => true)),
   };

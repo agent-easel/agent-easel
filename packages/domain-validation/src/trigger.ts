@@ -1,5 +1,6 @@
 import type {
   Result,
+  RunTriggerInput,
   SetTriggerEnabledInput,
   TriggerKind,
   TriggerSchedule,
@@ -335,6 +336,21 @@ export function validateUpdateTrigger(
   const settings = parseSettings(fields, false);
   if (!settings.ok) return settings;
   return { ok: true, value: { ...settings.value, expectedRevision: fields.expectedRevision } };
+}
+
+/** A manual check: the revision it is bound to is optional, and nothing else is accepted. */
+export function validateRunTrigger(input: unknown): Result<RunTriggerInput> {
+  const fields = record(input) ?? {};
+  const extra = unknownField(fields, ["expectedRevision"]);
+  if (extra) return extra;
+  if (fields.expectedRevision === undefined) return { ok: true, value: {} };
+  if (!isIntegerIn(fields.expectedRevision, 1, Number.MAX_SAFE_INTEGER))
+    return invalid(
+      "trigger_revision",
+      "expectedRevision",
+      "Name the saved revision to check, a positive whole number.",
+    );
+  return { ok: true, value: { expectedRevision: fields.expectedRevision } };
 }
 
 export function validateSetTriggerEnabled(input: unknown): Result<SetTriggerEnabledInput> {

@@ -479,6 +479,12 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
     "factory_list_triggers",
     "factory_get_trigger",
     "factory_preview_trigger",
+    "factory_create_trigger",
+    "factory_save_trigger",
+    "factory_enable_trigger",
+    "factory_disable_trigger",
+    "factory_run_trigger_check",
+    "factory_remove_trigger",
   ]);
   expect(listed.tools.map((tool) => tool.inputSchema.required)).toStrictEqual([
     ["blockId", "to"],
@@ -518,6 +524,21 @@ it("an installed Claude entry reaches the Factory tools on the listening backend
     undefined,
     ["triggerId"],
     undefined,
+    ["name", "projectId", "flowId", "schedule", "maxActiveRuns", "github"],
+    [
+      "triggerId",
+      "expectedRevision",
+      "name",
+      "projectId",
+      "flowId",
+      "schedule",
+      "maxActiveRuns",
+      "github",
+    ],
+    ["triggerId", "reviewedRevision"],
+    ["triggerId"],
+    ["triggerId", "expectedRevision"],
+    ["triggerId"],
   ]);
   expect(listed.tools[0]?.inputSchema.properties?.to).toMatchObject({
     enum: ["working", "finished"],

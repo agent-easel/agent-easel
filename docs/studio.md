@@ -581,8 +581,8 @@ The pinned footer has **Save** only. Saved-revision and removal notices appear a
 Triggers follow the [saved-revision rules](#following-saved-revisions) of the other editors: **Updated to revision
 N**, **Revision N was saved elsewhere** with **Compare latest revision**, **Load revision N** and **Keep my edits**, and
 **This Trigger was removed elsewhere** with the edits kept but no longer savable. Leaving a Trigger with unsaved changes
-asks to **Keep editing** or **Discard**, like an Agent. Enabling, disabling and checks do not change a Trigger's
-revision.
+asks to **Keep editing** or **Discard**, like an Agent. Each settings save and each off-to-on enable advances a
+Trigger's revision; disabling, enabling an already enabled Trigger and checks do not.
 
 ### Reviewing what starts
 
@@ -595,7 +595,9 @@ showed: the preview reports the saved revision it evaluated and enabling names t
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
 edit saves against the revision it started from, so a revision saved elsewhere meanwhile refuses it as a conflict.
 Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
-the same way and must be reviewed against the enabled Trigger. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
+the same way and must be reviewed against the enabled Trigger. **Check now**, **Enable and check** and **Apply and check** then run
+only the revision on screen: **Check now** sends the revision it shows, the other two the revision the enable or save returned. A check
+refused because another revision was saved meanwhile starts nothing and shows its refusal, which names that revision. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 
 An edit widens what can start when it changes the Project or repository, the query or the Flow, or raises **Max active
@@ -622,7 +624,7 @@ an issue that failed to start appears only in the status strip and leaves the Tr
 
 The Trigger screens use these routes, available to the host and every approved client with the protocol and mutation
 headers described in [Run HTTP API](runs.md#run-http-api). Bodies carry typed Trigger fields only; unknown fields are
-refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, read and preview Triggers.
+refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, read, preview, create, save, enable, disable, check and remove Triggers through the same operations.
 
 | HTTP | Purpose |
 | --- | --- |
@@ -632,7 +634,7 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 | `GET /api/triggers/:id` | Read one Trigger |
 | `PUT /api/triggers/:id` | Save settings against `expectedRevision` |
 | `PUT /api/triggers/:id/enabled` | Disable, or enable the `reviewedRevision` a preview showed |
-| `POST /api/triggers/:id/run` | Run one check now |
+| `POST /api/triggers/:id/run` | Run one check now. The JSON body may carry `expectedRevision`: a Trigger saved or enabled since is refused as a stale-revision conflict, starting nothing. `{}` checks whatever is saved |
 | `POST /api/triggers/preview` | Review what a new Trigger would start; starts and saves nothing |
 | `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |
 | `DELETE /api/triggers/:id` | Remove a Trigger |

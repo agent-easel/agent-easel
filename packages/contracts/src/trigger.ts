@@ -68,7 +68,10 @@ export interface TriggerDefinition {
   readonly schedule: TriggerSchedule;
   /** 1 to 10 Runs from this Trigger that are neither Settled nor Archived. */
   readonly maxActiveRuns: number;
-  /** Counts saved settings; enabling or disabling keeps it. */
+  /**
+   * Each settings save and each off-to-on enable advances it. Disabling, enabling an already
+   * enabled Trigger, and checks keep it.
+   */
   readonly revision: number;
   readonly nextCheckAt: string | null;
   readonly latestCheck: TriggerLatestCheck | null;
@@ -108,6 +111,12 @@ export interface UpdateTriggerInput {
   readonly schedule: TriggerSchedule;
   readonly maxActiveRuns: number;
   readonly github: Required<GitHubIssuesInput>;
+}
+
+/** What a manual check may carry. */
+export interface RunTriggerInput {
+  /** Checks only this revision: a Trigger saved or enabled since is refused and starts nothing. */
+  readonly expectedRevision?: number;
 }
 
 /**
@@ -224,11 +233,13 @@ export const triggerOperations = {
   /**
    * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
    * check's summary and the Runs it started. Every limit of a scheduled check applies. Those Runs
-   * are not stored on the Trigger.
+   * are not stored on the Trigger. The body may name the revision to check, which is refused as
+   * stale when another is saved; an empty object checks whatever is saved.
    */
-  runTrigger: operation<never, TriggerCheckReply>()({
+  runTrigger: operation<RunTriggerInput, TriggerCheckReply>()({
     method: "POST",
     path: "/api/triggers/:id/run",
+    body: "json",
   }),
   /** Previews the settings a new Trigger would be created with. */
   previewNewTrigger: operation<CreateTriggerInput, TriggerPreview>()({

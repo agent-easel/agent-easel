@@ -527,7 +527,10 @@ const ownedBy =
   };
 
 /** A removal reply names only the removed id; removing an absent or removed id succeeds too. */
-const removal = (key: "agentId" | "flowId", remove: (id: string) => Promise<Result<void>>) =>
+export const removal = (
+  key: "agentId" | "flowId" | "triggerId",
+  remove: (id: string) => Promise<Result<void>>,
+) =>
   withId(key, async (id) => {
     const removed = await remove(id);
     return removed.ok ? { ok: true, value: { [key]: id, removed: true } } : removed;
