@@ -139,7 +139,7 @@ export function ChoiceMenu({
         name={names.trigger}
         required={required}
         busy={composer?.busy}
-        searching={!!listSearch}
+        dialog={!!listSearch || !choices.length}
         describedBy={describedBy}
         problemTone={problemTone}
         className={className}
@@ -164,7 +164,7 @@ function ChoiceTrigger({
   name,
   required,
   busy,
-  searching,
+  dialog,
   describedBy,
   problemTone,
   className,
@@ -174,7 +174,7 @@ function ChoiceTrigger({
   name: ReturnType<typeof choiceNames>["trigger"];
   required: boolean | undefined;
   busy: boolean | undefined;
-  searching: boolean;
+  dialog: boolean;
   describedBy: string | undefined;
   problemTone: FieldState["tone"];
   className: string | undefined;
@@ -190,7 +190,7 @@ function ChoiceTrigger({
         // On the trigger only: Radix's own `required` would also make the hidden form select
         // block submission with the browser's message instead of the form's.
         aria-required={required}
-        {...triggerState(busy, searching)}
+        {...triggerState(busy, dialog)}
         {...fieldAria(describedBy)}
         className={cn(
           selectFieldClass,
@@ -242,10 +242,13 @@ function useChoiceList({
   return { open, onOpenChange, onValueChange, listSearch };
 }
 
-/** A busy trigger is disabled for assistive technology only; with search, the popup is a dialog. */
-const triggerState = (busy: boolean | undefined, searching: boolean) => ({
+/**
+ * A busy trigger is disabled for assistive technology only; with search or nothing to choose, the
+ * popup is a dialog.
+ */
+const triggerState = (busy: boolean | undefined, dialog: boolean) => ({
   ...(busy && { "aria-disabled": true, "aria-busy": true }),
-  ...(searching && { "aria-haspopup": "dialog" as const }),
+  ...(dialog && { "aria-haspopup": "dialog" as const }),
 });
 
 /** The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder. */
@@ -295,7 +298,10 @@ function TriggerDetail({ detail }: { detail: string | undefined }) {
 
 type ListName = ReturnType<typeof choiceNames>["list"];
 
-/** The popup listbox, named like its field; with search, a dialog holding the search and the list. */
+/**
+ * The popup listbox, named like its field; with search, a dialog holding the search and the list.
+ * While it shows no choice, the popup is a dialog that says why.
+ */
 function ChoiceList({
   name,
   choices,
@@ -323,7 +329,9 @@ function ChoiceList({
   const query = search?.query.trim().toLocaleLowerCase() ?? "";
   const matches = (choice: MenuChoice) => choice.label.toLocaleLowerCase().includes(query);
   const handlers = useSearchFocus(searchRef, listRef);
-  const parts = listParts(name, opensDown, !!search);
+  const status = listStatus(choices, matches, empty, search?.noMatch);
+  const statusId = useId();
+  const parts = listParts(name, opensDown, !!search, status ? statusId : undefined);
   return (
     <Select.Portal>
       <Select.Content
@@ -348,8 +356,10 @@ function ChoiceList({
         {/* Radix hides the list's scrollbar; a long list keeps it visible. */}
         <Select.Viewport ref={viewportRef} {...parts.list}>
           <ChoiceRows choices={choices} listValue={listValue} shows={matches} />
-          <ListStatus status={listStatus(choices, matches, empty, search?.noMatch)} />
         </Select.Viewport>
+        {/* Without search the popup is the listbox unless it is empty, which never changes
+            while it is open, so the status mounts only to say why. */}
+        {(search || status) && <ListStatus id={statusId} status={status} />}
         {opensDown && <ListFade viewport={viewport} watch={`${query}:${choices.length}`} />}
       </Select.Content>
     </Select.Portal>
@@ -364,9 +374,16 @@ const opensDownClass = "max-h-[calc(var(--radix-select-content-available-height)
 
 /**
  * The popup and its list. Without search the popup is the named listbox; with search it is a
- * named dialog holding the search and the listbox.
+ * named dialog holding the search and the listbox. While no choice shows, which `statusId` says,
+ * there is no listbox: a listbox must hold options, so the popup is a named dialog the status
+ * describes.
  */
-function listParts(name: ListName, opensDown: boolean, searching: boolean) {
+function listParts(
+  name: ListName,
+  opensDown: boolean,
+  searching: boolean,
+  statusId: string | undefined,
+) {
   const content = {
     ...name,
     align: opensDown ? ("start" as const) : ("end" as const),
@@ -377,11 +394,14 @@ function listParts(name: ListName, opensDown: boolean, searching: boolean) {
     "[scrollbar-width:thin]!",
     opensDown && "[scrollbar-color:var(--border-strong)_transparent]",
   );
-  if (!searching) return { content, list: { className: scrollbar } };
-  return {
-    content: { ...content, role: "dialog" },
-    list: { ...name, role: "listbox", className: cn(scrollbar, "p-1") },
-  };
+  const list = { className: cn(scrollbar, searching && "p-1") };
+  if (statusId)
+    return {
+      content: { ...content, role: "dialog", "aria-describedby": statusId },
+      list: { ...list, role: "presentation" },
+    };
+  if (!searching) return { content, list };
+  return { content: { ...content, role: "dialog" }, list: { ...list, ...name, role: "listbox" } };
 }
 
 /** Why the list shows no choice, if it shows none: nothing to choose, or nothing matches. */
@@ -395,10 +415,10 @@ function listStatus(
   return choices.some(matches) ? undefined : noMatch;
 }
 
-function ListStatus({ status }: { status: string | undefined }) {
-  if (!status) return null;
+/** With search it stays mounted while the popup is open, so a search that stops matching is announced. */
+function ListStatus({ id, status }: { id: string; status: string | undefined }) {
   return (
-    <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+    <p id={id} role="status" className={cn(status && "px-3 py-2 text-sm text-muted-foreground")}>
       {status}
     </p>
   );

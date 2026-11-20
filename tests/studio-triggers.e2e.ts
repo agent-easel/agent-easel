@@ -253,6 +253,25 @@ test("Save creates a Trigger off and lands in its editor", async ({
   await app.screenshot("edit-trigger-off");
 });
 
+test("a new Trigger's Flow list with no Flows says so in its named popup, with no empty listbox", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  await fixture.definitions.removeFlows();
+  await app.open("/studio/triggers/new/github-issues");
+
+  // Act
+  await screen.getByRole("combobox", "Flow", { exact: true }).tap();
+
+  // Assert
+  const popup = screen.getByRole("dialog", "Flow", { exact: true });
+  await expect(popup.getByRole("status")).toHaveText("No Flows available");
+  await expect(screen.getByRole("listbox", "Flow", { exact: true })).toHaveCount(0);
+  await app.screenshot("trigger-flow-list-empty");
+});
+
 test("a complete new Trigger has Save as its only filled action", async ({ app, screen }) => {
   // Arrange
   const name = "Journey · New Trigger Save";

@@ -336,7 +336,9 @@ test("a Flow search with no match says so", async ({ app, screen }) => {
   await screen.getByRole("searchbox", "Search Flows", { exact: true }).fill("zzzz-no-such-flow");
 
   // Assert
-  await expect(flowList(screen).getByText("No matching Flows", { exact: true })).toBeVisible();
+  const menu = screen.getByRole("dialog", "Flow", { exact: true });
+  await expect(menu.getByRole("status")).toHaveText("No matching Flows");
+  await expect(flowList(screen)).toHaveCount(0);
   await expect(screen.getByRole("option")).toHaveCount(0);
   await app.screenshot("after-flow-no-match");
 });

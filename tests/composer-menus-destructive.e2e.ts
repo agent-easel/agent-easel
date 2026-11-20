@@ -159,11 +159,12 @@ test("with no Flows the menu says No Flows yet and the card offers to create one
   await selectComposerProject(screen, "Northwind");
 
   // Act
-  await openFlowMenu(screen);
+  await screen.getByRole("combobox", /^Select Flow: /).tap();
 
   // Assert
-  await expect(flowList(screen).getByText("No Flows yet", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("option")).toHaveCount(0);
+  const menu = screen.getByRole("dialog", "Flow", { exact: true });
+  await expect(menu.getByRole("status")).toHaveText("No Flows yet");
+  await expect(flowList(screen)).toHaveCount(0);
   await expect(screen.getByText("Create your first Flow", { exact: true })).toBeVisible();
   await app.screenshot("after-flow-none");
 });
