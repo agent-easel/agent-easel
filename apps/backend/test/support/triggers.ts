@@ -318,6 +318,22 @@ export function remoteMovesAfterFirstRead(
   };
 }
 
+type BlockableWorld = Pick<Awaited<ReturnType<typeof triggerWorld>>, "f" | "flow" | "t3">;
+
+export async function flowMovedAway(world: BlockableWorld) {
+  const other = await world.f.addRepository({ path: "/repos/other" });
+  assert(other.ok);
+  const moved = await world.f.changeFlowOwner(world.flow.id, {
+    expectedProjectId: null,
+    projectId: other.value.id,
+  });
+  assert(moved.ok);
+}
+
+export function launchBlocked(world: BlockableWorld) {
+  world.t3.contract.support.launch = false;
+}
+
 /** Starts saving `edit` and holds it at GitHub's answer to its query, before anything is written. */
 export async function pendingTriggerUpdate(
   world: Awaited<ReturnType<typeof reviewingWorld>>,

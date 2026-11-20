@@ -515,7 +515,8 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
   /**
    * What a check of `subject` would start now and what would wait, without starting or writing,
    * and the repository the Project's folder names, also read when a problem stopped the plan
-   * before GitHub. A folder that no longer names the subject's repository is the problem even when
+   * before GitHub. A saved Trigger's preview answers the problem its check would hit first. A new
+   * draft's folder that no longer names the repository it was pinned to is the problem even when
    * another one stopped the plan first, so nothing previewed on one repository is offered for another.
    */
   const preview = (subject: AdmissionSubject) =>
@@ -529,7 +530,11 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           ).pipe(
             Effect.map((repository) => {
               const { nodeId } = subject.github.repository;
-              const moved = nodeId !== null && repository && repository.nodeId !== nodeId;
+              const moved =
+                subject.id === null &&
+                nodeId !== null &&
+                repository &&
+                repository.nodeId !== nodeId;
               return {
                 repository,
                 issues: [],

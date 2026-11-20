@@ -6,6 +6,8 @@ import {
   atlasRepository,
   checkingWorld,
   failingGitHubCall,
+  flowMovedAway,
+  launchBlocked,
   movedRepository,
   otherProjectWatcher,
   remoteMovesAfterFirstRead,
@@ -53,6 +55,26 @@ it("listing Triggers for a Project returns only that Project's Triggers with the
       latestCheck: null,
     },
   ]);
+});
+
+it("listing Triggers for an empty Project id is a validation refusal rather than an empty list", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  await triggerSaved(world.f, world.triggerInput);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_list_triggers",
+    arguments: { projectId: "" },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "invalid_id", path: "projectId" }],
+  });
 });
 
 it("a new-draft preview names the detected repository though no issue matches, as one JSON text item with the untrusted-text notice, and saves nothing", async (c) => {
@@ -304,6 +326,67 @@ it("a new-draft preview stopped by a launch blocker still answers a remote that 
     repository: { saved: null, detected: null },
   });
 });
+
+it.for([
+  ["a Flow", flowMovedAway, "trigger_flow"],
+  ["a launch", launchBlocked, "start_blocked"],
+] as const)(
+  "a saved-Trigger preview whose remote moved answers %s blocker first, as its check would",
+  async ([, block, code], c) => {
+    // Arrange
+    const world = await reviewingWorld(c);
+    await block(world);
+    world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+    const client = await factoryMcpClient(c, world.f);
+
+    // Act
+    const result = await client.callTool({
+      name: "factory_preview_trigger",
+      arguments: { triggerId: world.trigger.id, expectedRevision: world.trigger.revision },
+    });
+
+    // Assert
+    expect(result.isError).toBe(false);
+    expect(toolReply(result)).toMatchObject({
+      issues: [],
+      problem: { code },
+      repository: { saved: { nodeId: "R_atlas" }, detected: null },
+    });
+  },
+);
+
+it.for([
+  ["a Flow", flowMovedAway, "trigger_flow"],
+  ["a launch", launchBlocked, "start_blocked"],
+] as const)(
+  "an edit preview whose remote moved answers %s blocker first, as a check would",
+  async ([, block, code], c) => {
+    // Arrange
+    const world = await reviewingWorld(c);
+    await block(world);
+    world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+    const client = await factoryMcpClient(c, world.f);
+
+    // Act
+    const result = await client.callTool({
+      name: "factory_preview_trigger",
+      arguments: {
+        ...draftSettings(world),
+        name: "Renamed",
+        triggerId: world.trigger.id,
+        expectedRevision: world.trigger.revision,
+      },
+    });
+
+    // Assert
+    expect(result.isError).toBe(false);
+    expect(toolReply(result)).toMatchObject({
+      issues: [],
+      problem: { code },
+      repository: { saved: { nodeId: "R_atlas" }, detected: null },
+    });
+  },
+);
 
 it("an edit preview that detects the repository on a revision another save replaced is refused as stale while the remote cannot be read", async (c) => {
   // Arrange

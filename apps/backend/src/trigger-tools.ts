@@ -481,8 +481,12 @@ const triggerCalls = (
   factory: TriggerToolOperations,
 ): Record<string, (args: Args) => Promise<Result<unknown>>> => ({
   factory_list_triggers: async ({ projectId }) => {
-    if (projectId !== undefined && typeof projectId !== "string")
-      return invalid("invalid_id", "projectId", "Send a Project id.");
+    if (projectId !== undefined && (typeof projectId !== "string" || projectId === ""))
+      return invalid(
+        "invalid_id",
+        "projectId",
+        "Send a Project id from factory_list_projects, or omit projectId to list every Trigger.",
+      );
     const listed = await factory.listTriggers();
     if (!listed.ok) return listed;
     return {
