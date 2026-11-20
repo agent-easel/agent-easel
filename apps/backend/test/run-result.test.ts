@@ -1,5 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { prepared } from "./support/prepared-runner.ts";
+import { forgetSettlementAfterEnding } from "./support/run-worker.ts";
 import {
   allTurnsEnd,
   endingBesideReviewFlow,
@@ -241,4 +242,38 @@ it("settling after an ending cancels the Run's pending Human occurrence with rea
   ]);
   expect(run.value.attention).toMatchObject([{ kind: "human", settlementReason: "finish" }]);
   expect(f.t3.threads.threadStops).toStrictEqual([]);
+});
+
+it("a reached ending whose stop and settle starts after a restart under a replaced T3 authorization raises Settle could not stop workers", async (c) => {
+  // Arrange
+  const f = await prepared(c, racingEndingsFlow);
+  const [first, second] = await twoWorkersStarted(f.world, f.input);
+  await resultReported(f.world, first, { message: "https://example.test/pull/42" });
+  const reached = await endingReached(f.world, first.runId);
+  await f.f.close();
+  forgetSettlementAfterEnding(f.h.databasePath, first.runId);
+  f.t3.connection.approve("replacement-grant");
+  const stops = [...f.t3.threads.threadStops];
+
+  // Act
+  const reopened = await f.h.open({ t3: f.t3, connectionRetryMs: 60_000 });
+
+  // Assert
+  const run = await reopened.getRun(first.runId);
+  assert(run.ok);
+  expect(run.value).toMatchObject({
+    lifecycle: "active",
+    gateOpen: false,
+    result: reached.result,
+    settlement: {
+      state: "unresolved",
+      workers: expect.arrayContaining([
+        expect.objectContaining({ threadId: second.threadId, state: "unresolved" }),
+      ]),
+    },
+  });
+  expect(
+    run.value.attention.filter((matter) => matter.settledAt === null).map((m) => m.kind),
+  ).toStrictEqual(["settlement-unresolved"]);
+  expect(f.t3.threads.threadStops).toStrictEqual(stops);
 });

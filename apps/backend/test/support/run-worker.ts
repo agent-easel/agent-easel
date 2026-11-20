@@ -167,3 +167,18 @@ export function pauseWorkerReads(t3: ControlledT3, threadId: string) {
     t3.threads.readExecution = read;
   };
 }
+
+/**
+ * Removes from a closed backend's database what accepting the Run's stop-and-settle recorded,
+ * leaving its reached ending: the state a crash leaves between the ending's commit and the
+ * settlement's, which no public operation can stop between.
+ */
+export function forgetSettlementAfterEnding(databasePath: string, runId: string) {
+  const database = new DatabaseSync(databasePath);
+  database.prepare("DELETE FROM run_settlement_workers WHERE run_id = ?").run(runId);
+  database.prepare("DELETE FROM run_settlements WHERE run_id = ?").run(runId);
+  database
+    .prepare("DELETE FROM run_events WHERE run_id = ? AND kind = 'settlement-requested'")
+    .run(runId);
+  database.close();
+}

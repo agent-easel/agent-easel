@@ -844,7 +844,8 @@ once. Otherwise nothing changes until you confirm stopping every worker and endi
 confirmation changes nothing and sends no Stop. An ordinary Settle request never interrupts a worker: the server answers that
 confirmation is needed. A Run with workers, started under a T3 authorization Factory knows was since replaced, for example by
 reauthorizing or connecting another endpoint, cannot be settled: **Settle** is refused with or without confirmation, also while
-T3 is unavailable, and nothing changes; **Archive** remains available. A Settle confirmed while reauthorization is still
+T3 is unavailable, and nothing changes; **Archive** remains available. A Run that already reached an ending still starts
+stopping, and its workers end unresolved with **Settle could not stop workers**. A Settle confirmed while reauthorization is still
 pending is accepted, but if the new authorization is not the Run's, it ends unresolved and only **Archive** remains.
 
 Confirming holds the Run at once: nothing new is launched, sent, released or delivered, no Wait forwards (at its deadline or

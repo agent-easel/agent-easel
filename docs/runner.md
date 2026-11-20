@@ -570,6 +570,8 @@ with no settlement yet, in the drive pass after acceptance and in every reconcil
 still starts it. Unfinished workers get one Stop each; the Run settles only once fresh reads confirm every bound worker
 finished, never on a Stop acknowledgement. Until then the Run is Active with its result visible and its settlement
 stopping, or unresolved with the existing Problem and retry; Archive stays available, and the Run never returns to Active.
+Under an authorization Factory knows was replaced, the attempt is still recorded and ends unresolved with that Problem, so
+the Run is never left Active without one.
 Settling cancels owed work as manual settlement does, with `cancelled-on-Finish` on pending deliveries and `finish` on
 pending attention, shows unfinished Blocks stopped and records `run-settled` (`finish`). A user's confirmed Settle on a Run
 that already has its result records `finish` too. Edits a stopped branch already made in the shared workspace stay. A Run
@@ -648,7 +650,9 @@ uncertain launch as unresolved, without a thread. A Run with a bound worker or a
 launch, accepted under an authorization context that Factory knows was replaced, for example by
 reauthorizing or another endpoint, cannot be settled: Settle answers a conflict with or without
 `stopWorkers` and changes nothing, because that work could never be read, stopped or resolved
-under the Run's context; Archive stays available. A Run without such work settles as before. The
+under the Run's context; Archive stays available. A Run that reached an ending is the exception for
+its first confirmed attempt, which is accepted so its workers end unresolved with the Settle could not
+stop workers Problem; a retry answers the conflict. A Run without such work settles as before. The
 known context is the connection's recorded one, which Factory keeps while T3 is unavailable;
 the plain request checks it after its reads and the confirmed request in the transaction that
 accepts it. While no context is known, such as during reauthorization, a confirmed request is
