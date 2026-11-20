@@ -640,9 +640,10 @@ export function awaitsReviewInT3(
   block: Pick<RunBlock, "state" | "reportStatus" | "engineStatus" | "progressOverdue">,
 ): boolean {
   return (
-    (block.state === "working" || block.state === "sent") &&
-    (block.progressOverdue ||
-      (block.reportStatus === "working" && block.engineStatus === "completed"))
+    (block.state === "working" &&
+      (block.progressOverdue ||
+        (block.reportStatus === "working" && block.engineStatus === "completed"))) ||
+    (block.state === "sent" && block.progressOverdue)
   );
 }
 
