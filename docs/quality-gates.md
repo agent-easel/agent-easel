@@ -14,8 +14,8 @@ A red gate means the change is not ready; fix the cause, then push again.
 
 `.vite-hooks/pre-commit` runs `vp staged`, configured by `staged` in the root
 `vite.config.ts`. For each staged source, JSON, CSS, HTML or YAML file it runs
-`vp fmt` and then `vp lint --fix`, and stages the result. It fails only on lint
-errors that `--fix` cannot resolve; type errors, fallow findings and tests stay
+`vp fmt` and then `vp lint --fix`, and stages the result. It fails on a file
+that `vp fmt` cannot parse and on lint errors that `--fix` cannot resolve; type errors, fallow findings and tests stay
 with the pre-push gate. Markdown is not formatted, as in the gate.
 
 A partially staged file is handled by `vp staged` (the lint-staged approach):
