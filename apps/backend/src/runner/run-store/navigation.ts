@@ -66,7 +66,8 @@ export function openRunNavigation(database: RunnerDatabase) {
             freshness: RunNavigationEntry["blocks"][number]["freshness"];
             report_status: "working" | "finished" | null;
             engine_status: string | null;
-          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
+            worker_finished: 0 | 1;
+          }>`SELECT run_id,block_id,state,freshness,report_status,engine_status,worker_finished FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
           const working = new Map(
             (yield* currentProgress(sql)).map((row) => [`${row.runId}/${row.blockId}`, row]),
           );
@@ -78,6 +79,7 @@ export function openRunNavigation(database: RunnerDatabase) {
                   state: block.state,
                   reportStatus: block.report_status,
                   engineStatus: block.engine_status,
+                  workerFinished: block.worker_finished === 1,
                   progressOverdue:
                     working.get(`${block.run_id}/${block.block_id}`)?.overdue ?? false,
                 }),

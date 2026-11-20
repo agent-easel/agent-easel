@@ -177,6 +177,7 @@ export function openRunDeliveries(database: RunnerDatabase) {
           {
             execution_id: reference.runId,
             engine_status: reference.status,
+            worker_finished: 0,
             report_status: null,
             problem: prompt ? null : UNOBSERVED_WORKER_HOLD,
             freshness: "unknown",

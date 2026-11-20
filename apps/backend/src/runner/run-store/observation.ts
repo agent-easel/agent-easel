@@ -164,6 +164,15 @@ function recordExecutions(
   });
 }
 
+function workerObservation(worker: WorkerThread, time: string, ownsLatest: boolean) {
+  return {
+    worker_finished: ownsLatest && worker.finished ? 1 : 0,
+    freshness: "fresh",
+    observed_at: time,
+    pending_request_count: worker.thread.pendingRequestCount,
+  } as const;
+}
+
 function recordActivation(
   sql: SqlClient.SqlClient,
   run: RunRow,
@@ -197,9 +206,7 @@ function recordActivation(
       {
         execution_id: latest?.runId ?? block.execution_id,
         engine_status: latest?.status ?? null,
-        freshness: "fresh",
-        observed_at: time,
-        pending_request_count: worker.thread.pendingRequestCount,
+        ...workerObservation(worker, time, latest !== null),
         problem,
       },
     );
@@ -261,9 +268,7 @@ function recordContinuations(
         problem ? "error" : "sent",
         {
           ...(owned ? { execution_id: latest.runId, engine_status: latest.status } : {}),
-          freshness: "fresh",
-          observed_at: time,
-          pending_request_count: worker.thread.pendingRequestCount,
+          ...workerObservation(worker, time, Boolean(owned)),
           problem,
         },
       );

@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: report_reporting_execution
+-- Newest applied migration: block_worker_finished
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -796,7 +796,7 @@ CREATE TABLE run_blocks (
   report_status TEXT,
   pending_request_count INTEGER,
   observed_at TEXT,
-  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT,
+  freshness TEXT NOT NULL DEFAULT 'unknown', problem TEXT, public_id TEXT, worker_finished INTEGER NOT NULL DEFAULT 0 CHECK (worker_finished IN (0,1)),
   PRIMARY KEY(run_id,block_id),
   UNIQUE(run_id,thread_id)
 );

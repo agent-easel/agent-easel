@@ -1,6 +1,6 @@
 import { expect } from "e2e";
 import { test } from "./support/test.ts";
-import { openComposerWithFlow } from "./support/composer.ts";
+import { openComposerWithFlow, selectComposerProject } from "./support/composer.ts";
 import { archiveJourneyRun, findRun, readHistoryRun } from "./support/run-history.ts";
 
 test("a worker with three hours of silence shows Needs input on its Run", async ({
@@ -29,6 +29,7 @@ test("Start anyway accepts a Run only after the composer shows the closed issue"
   // Arrange
   await fixture.github.issue({ number: 41, title: "Index search results", open: false });
   await openComposerWithFlow(app, screen, "Demo · Focused change");
+  await selectComposerProject(screen, "Atlas demo");
   await screen.getByLabel("Initial prompt", { exact: false }).fill("Check issue #41");
 
   // Act

@@ -173,7 +173,12 @@ export function currentRun(
     currentFlowRevision,
     // Released Runs worked in the project checkout.
     workspace: { mode: "checkout" },
-    blocks: run.blocks.map((block) => ({ ...block, workingMessage: null, progressOverdue: false })),
+    blocks: run.blocks.map((block) => ({
+      ...block,
+      workerFinished: false,
+      workingMessage: null,
+      progressOverdue: false,
+    })),
     reports: run.reports.map(({ key: _key, ...report }) => report),
     activations: run.activations.map(({ coverage: _coverage, evidence: _evidence, ...a }) => a),
     // Released deliveries came from no Final result, so they carry no origin.
