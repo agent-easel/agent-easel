@@ -68,7 +68,8 @@ export interface T3Connection {
   readonly authorizationPending: boolean;
   /**
    * The host's browser could not open the pending approval's page again; `explanation` says so
-   * until a later open succeeds or the approval ends.
+   * until a later open succeeds or the approval ends. It is kept with the pending approval
+   * itself, so a backend restart that resumes the approval reports it too.
    */
   readonly authorizationOpenFailed: boolean;
   readonly contract: T3Contract | null;

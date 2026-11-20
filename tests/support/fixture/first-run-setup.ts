@@ -184,8 +184,7 @@ export function firstRunSetupFixture(
       },
       /** The host's browser can no longer be opened. */
       hostBrowserFails() {
-        running().t3.connection.resumeAuthorization = () =>
-          Promise.reject(new Error("No browser on the Factory host"));
+        running().t3.connection.hostBrowserOpens = false;
       },
       async t3Unavailable() {
         running().t3.connection.available = false;

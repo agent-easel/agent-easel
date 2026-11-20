@@ -148,7 +148,7 @@ it("a failed reopen of the approval page stays reported on later checks while ap
   const factory = await harness.open({ t3, connectionRetryMs: 60_000 });
   await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
   await factory.authorizeConnection();
-  t3.connection.resumeAuthorization = () => Promise.reject(new Error("No host browser"));
+  t3.connection.hostBrowserOpens = false;
   const reopened = await factory.openConnectionAuthorization();
   assert(reopened.ok);
   expect(reopened.value.authorizationOpenFailed).toBe(true);
@@ -163,21 +163,3 @@ it("a failed reopen of the approval page stays reported on later checks while ap
   expect(connection.explanation).toMatch(/could not open the backend-host browser/);
 });
 
-it("a new approval after a failed reopen starts with no failure reported", async (context) => {
-  // Arrange
-  const harness = await factoryHarness(context);
-  const t3 = new ControlledT3();
-  const factory = await harness.open({ t3, connectionRetryMs: 60_000 });
-  await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
-  await factory.authorizeConnection();
-  t3.connection.resumeAuthorization = () => Promise.reject(new Error("No host browser"));
-  assert((await factory.openConnectionAuthorization()).ok);
-
-  // Act
-  const started = await factory.authorizeConnection();
-
-  // Assert
-  assert(started.ok);
-  expect(started.value.authorizationPending).toBe(true);
-  expect(started.value.authorizationOpenFailed).toBe(false);
-});

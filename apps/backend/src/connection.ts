@@ -7,7 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as SqlClient from "effect/sql/SqlClient";
 import type { AuthorizationContext, Result, T3Connection } from "@t3-factory/contracts";
-import type { T3Authorization, T3ConnectionReason } from "./t3/connection.ts";
+import {
+  isApprovalPending,
+  type T3Authorization,
+  type T3ConnectionReason,
+} from "./t3/connection.ts";
 import {
   NO_T3_SUPPORT,
   type T3ContractReader,
@@ -37,6 +41,8 @@ const explanations: Record<T3ConnectionReason, string> = {
     "Approve access in T3 by opening authorization on the Factory host; consent happens in that computer's browser. No token copying is needed.",
   "approval-pending":
     "Approve access in the browser opened on the backend host. Factory will recheck automatically.",
+  "approval-reopen-failed":
+    "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.",
   "browser-unavailable":
     "Factory could not open the backend-host browser. Check its desktop/browser setup and choose Authorize again.",
   "callback-unavailable":
@@ -46,9 +52,6 @@ const explanations: Record<T3ConnectionReason, string> = {
   "contract-missing":
     "T3 does not satisfy the connection contract. Inspect the reported problems, update T3 if needed, and recheck.",
 };
-
-const OPEN_FAILED_EXPLANATION =
-  "Factory could not open the backend-host browser. The pending approval is unchanged; check the host's desktop/browser setup and try again.";
 
 /** Bounds how often anyone may open the host browser through `openConnectionAuthorization`. */
 const AUTHORIZATION_OPEN_COOLDOWN_MS = 5_000;
@@ -162,17 +165,15 @@ export const makeConnection = (
           }
         }
         support = observation.support;
-        const pending = observation.reason === "approval-pending";
-        // A failed open stays reported while the same approval waits: no page opened for it.
-        const openFailed = pending && before.authorizationOpenFailed;
         status = {
           endpoint,
           state: observation.state,
-          explanation: openFailed ? OPEN_FAILED_EXPLANATION : explanations[observation.reason],
+          explanation: explanations[observation.reason],
           checkedAt: yield* now,
           authorizationContext: current ? contextValue(current) : null,
-          authorizationPending: pending,
-          authorizationOpenFailed: openFailed,
+          // The pending attempt owns both, so a resumed attempt reports them as before.
+          authorizationPending: isApprovalPending(observation.reason),
+          authorizationOpenFailed: observation.reason === "approval-reopen-failed",
           contract: observation.contract ?? null,
         };
         publishCheck(before);
@@ -305,17 +306,8 @@ export const makeConnection = (
             const resumed = yield* Effect.tryPromise(() =>
               authorization.resumeAuthorization({ endpoint: endpoint.endpoint }),
             ).pipe(Effect.option);
-            if (resumed._tag === "None") {
-              status = {
-                ...status,
-                explanation: OPEN_FAILED_EXPLANATION,
-                authorizationOpenFailed: true,
-              };
-              changes.connectionChanged();
-              return value();
-            }
-            status = { ...status, authorizationOpenFailed: false };
-            if (resumed.value !== "none") return yield* check();
+            // A failed open is recorded on the pending attempt, which the check reports.
+            if (resumed._tag === "None" || resumed.value !== "none") return yield* check();
             return yield* startAuthorization(endpoint);
           }),
         ),

@@ -29,7 +29,9 @@ async function openOAuthFactory(context: TestContext) {
   const credentialsDirectory = join(dirname(harness.databasePath), "credentials");
   let authorizationUrl = "";
   const openedUrls: string[] = [];
+  let browserFails = false;
   const live = liveT3(credentialsDirectory, (url) => {
+    if (browserFails) throw new Error("No browser on the backend host");
     authorizationUrl = url;
     openedUrls.push(url);
   });
@@ -59,7 +61,31 @@ async function openOAuthFactory(context: TestContext) {
     getAuthorizationUrl: () => authorizationUrl,
     /** Every page the host browser was asked to open, in order. */
     openedUrls,
+    /** Whether the backend host's browser can be opened. */
+    hostBrowserOpens: (opens: boolean) => {
+      browserFails = !opens;
+    },
   };
+}
+
+/** The backend restarts on the same home and credentials; its host browser opens. */
+async function restartedOAuthFactory(
+  { harness, factory, credentialsDirectory }: Awaited<ReturnType<typeof openOAuthFactory>>,
+  onUrl: (url: string) => void = () => {},
+) {
+  await factory.close();
+  return harness.open({ t3: liveT3(credentialsDirectory, onUrl) });
+}
+
+/** Approval waits in the host's browser, and reopening its page failed to open that browser. */
+async function failedReopen(context: TestContext) {
+  const opened = await openOAuthFactory(context);
+  assert((await opened.factory.authorizeConnection()).ok);
+  opened.hostBrowserOpens(false);
+  const reopened = await opened.factory.openConnectionAuthorization();
+  assert(reopened.ok);
+  expect(reopened.value.authorizationOpenFailed).toBe(true);
+  return opened;
 }
 
 async function approvePendingOAuth(
@@ -103,6 +129,52 @@ it("OAuth approval completes after backend restart on the pending callback", asy
   // Assert
   expect(approval.status).toBe(200);
   expect((await recheckConnection(reopened)).state).toBe("ready");
+});
+
+it("a failed reopen of the pending approval is still reported after a backend restart", async (context) => {
+  // Arrange
+  const opened = await failedReopen(context);
+  await opened.factory.close();
+
+  // Act
+  const restarted = await opened.harness.open({
+    t3: liveT3(opened.credentialsDirectory, () => {}),
+  });
+
+  // Assert
+  const connection = await readConnection(restarted);
+  expect(connection.authorizationPending).toBe(true);
+  expect(connection.authorizationOpenFailed).toBe(true);
+  expect(connection.explanation).toMatch(/could not open the backend-host browser/);
+});
+
+it("a reopen that opens the approval page after a failed one no longer reports the failure", async (context) => {
+  // Arrange: a restart, so the reopen is not held back by the previous one's cooldown.
+  const opened = await failedReopen(context);
+  const restarted = await restartedOAuthFactory(opened);
+
+  // Act
+  const reopened = await restarted.openConnectionAuthorization();
+
+  // Assert
+  assert(reopened.ok);
+  expect(reopened.value.authorizationPending).toBe(true);
+  expect(reopened.value.authorizationOpenFailed).toBe(false);
+  expect(reopened.value.explanation).toMatch(/Approve access in the browser/);
+});
+
+it("a new approval after a failed reopen starts with no failure reported", async (context) => {
+  // Arrange
+  const opened = await failedReopen(context);
+  opened.hostBrowserOpens(true);
+
+  // Act
+  const started = await opened.factory.authorizeConnection();
+
+  // Assert
+  assert(started.ok);
+  expect(started.value.authorizationPending).toBe(true);
+  expect(started.value.authorizationOpenFailed).toBe(false);
 });
 
 it("OAuth credential files are stored with restrictive permissions and no pending verifier fields", async (context) => {
