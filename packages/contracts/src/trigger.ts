@@ -113,6 +113,20 @@ export interface UpdateTriggerInput {
   readonly github: Required<GitHubIssuesInput>;
 }
 
+/** A preview's GitHub settings; without a repository it evaluates the one the Project's folder names now. */
+type PreviewGitHubInput = Omit<GitHubIssuesInput, "repositoryNodeId"> &
+  Partial<Pick<GitHubIssuesInput, "repositoryNodeId">>;
+
+/** The settings of a new Trigger to preview, as a create takes them; the repository may be left out. */
+export interface PreviewNewTriggerInput extends Omit<CreateTriggerInput, "github"> {
+  readonly github: PreviewGitHubInput;
+}
+
+/** A saved Trigger's settings to preview, as a save takes them; the repository may be left out. */
+export interface PreviewTriggerInput extends Omit<UpdateTriggerInput, "github"> {
+  readonly github: Required<Omit<GitHubIssuesInput, "repositoryNodeId">> & PreviewGitHubInput;
+}
+
 /** What a manual check may carry. */
 export interface RunTriggerInput {
   /** Checks only this revision: a Trigger saved or enabled since is refused and starts nothing. */
@@ -148,17 +162,18 @@ export interface TriggerReadiness {
     | { readonly ready: true; readonly login: string }
     | { readonly ready: false; readonly problem: string };
   readonly repository:
-    | {
-        readonly ready: true;
-        readonly repository: TriggerRepositoryChoice;
-        /**
-         * What the editor should show before any preview: the same warning a preview carries
-         * when another saved Trigger watches this repository.
-         */
-        readonly warnings: readonly ValidationIssue[];
-      }
+    | { readonly ready: true; readonly repository: TriggerRepositoryChoice }
     | { readonly ready: false; readonly problem: string }
     | null;
+  /**
+   * What the editor shows before any preview for each repository it may save: the one the
+   * Project's folder names and the edited Trigger's confirmed one. Each carries the warning a
+   * preview carries when another saved Trigger watches that repository.
+   */
+  readonly repositoryWarnings: readonly {
+    readonly nodeId: string;
+    readonly warnings: readonly ValidationIssue[];
+  }[];
   /** The same readiness New Run shows for the Flow. */
   readonly flow: FlowReadiness | null;
 }
@@ -195,6 +210,11 @@ export interface TriggerPreview {
    * Trigger or an unsaved edit.
    */
   readonly revision: number | null;
+  /**
+   * The repository the Project's folder names now, as GitHub answered, which a preview without a
+   * repository evaluated; null when GitHub could not be read.
+   */
+  readonly repository: TriggerRepositoryChoice | null;
 }
 
 /** A Run this check started, so the list can open it without storing the check. */
@@ -205,7 +225,10 @@ export interface TriggerStartedRun {
   readonly title: string;
 }
 
-/** The Trigger after a check, plus the Runs that check started. */
+/**
+ * The Trigger revision a check ran, with the latest check and problem that check recorded and the
+ * Runs it started. A save or removal while the check ran does not change it.
+ */
 export interface TriggerCheckReply extends TriggerDefinition {
   readonly startedRuns: readonly TriggerStartedRun[];
 }
@@ -253,7 +276,7 @@ export const triggerOperations = {
     body: "json",
   }),
   /** Previews the settings a new Trigger would be created with. */
-  previewNewTrigger: operation<CreateTriggerInput, TriggerPreview>()({
+  previewNewTrigger: operation<PreviewNewTriggerInput, TriggerPreview>()({
     method: "POST",
     path: "/api/triggers/preview",
     body: "json",
@@ -262,7 +285,7 @@ export const triggerOperations = {
    * Previews a saved Trigger with the given settings, its current ones or an edit from its
    * current revision, counting its guards and active Runs.
    */
-  previewTrigger: operation<UpdateTriggerInput, TriggerPreview>()({
+  previewTrigger: operation<PreviewTriggerInput, TriggerPreview>()({
     method: "POST",
     path: "/api/triggers/:id/preview",
     body: "json",

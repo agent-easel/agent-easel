@@ -4,6 +4,8 @@ import type {
   Result,
   TriggerCheckReply,
   TriggerDefinition,
+  TriggerPreview,
+  TriggerRepository,
   TriggerRepositoryChoice,
 } from "@t3-factory/contracts";
 import {
@@ -103,6 +105,17 @@ const completeSettings = [
   "github",
 ] as const;
 
+/** The GitHub settings with the optional node id of a repository the user reviewed. */
+const repositoryGithub = (nodeIdDescription: string) => ({
+  ...settingsProperties.github,
+  description:
+    "The GitHub issue query, and optionally the node id of the repository a preview showed the user.",
+  properties: {
+    ...settingsProperties.github.properties,
+    repositoryNodeId: { type: "string", description: nodeIdDescription },
+  },
+});
+
 const changedRemote =
   "Changed remote: when the Project's remote no longer names the Trigger's repository, show the user both repositories and offer to restore the remote or retarget the Trigger; retargeting an enabled Trigger is a widening edit.";
 
@@ -160,19 +173,9 @@ export const triggerTools: Tool[] = [
       type: "object",
       properties: {
         ...settingsProperties,
-        github: {
-          ...settingsProperties.github,
-          description:
-            "The GitHub issue query, and optionally the repository node id the new-draft preview returned.",
-          properties: {
-            ...settingsProperties.github.properties,
-            repositoryNodeId: {
-              type: "string",
-              description:
-                "repository.detected.nodeId from the new-draft preview you showed the user. Omit it and Factory detects the Project's repository.",
-            },
-          },
-        },
+        github: repositoryGithub(
+          "repository.detected.nodeId from the new-draft preview you showed the user. Omit it and Factory detects the Project's repository.",
+        ),
       },
       required: [...completeSettings],
       additionalProperties: false,
@@ -180,18 +183,16 @@ export const triggerTools: Tool[] = [
   },
   {
     name: "factory_save_trigger",
-    description: `Save a Trigger's complete settings, replacing the saved ones, against expectedRevision: the revision of the last get or preview the user was shown, or of the last save or enable reply. A stale expectedRevision is a conflict: read the Trigger again, reconcile and review again. Starts no Runs now, but saving can arm the schedule: turning the schedule on, or changing the interval of an enabled Trigger, authorizes later automatic starts, and a clear user instruction is enough for that. A widening edit changes the Project or repository, the query or the Flow, or raises Max active Runs. To widen an enabled Trigger, call factory_preview_trigger with the exact edit (triggerId, expectedRevision and the same settings), show the user what it lists, get explicit confirmation naming the Trigger, then save against that base revision. Renames, schedule changes, a lower limit and any edit of a switched-off Trigger need no review. An ordinary save keeps the Trigger's saved repository. ${changedRemote} Send retargetRepository true only after the user confirmed the retarget: the Project's current repository then replaces the saved one. The reply is {trigger, warnings}; trigger.revision is the new revision.`,
+    description: `Save a Trigger's complete settings, replacing the saved ones, against expectedRevision: the revision of the last get or preview the user was shown, or of the last save or enable reply. A stale expectedRevision is a conflict: read the Trigger again, reconcile and review again. Starts no Runs now, but saving can arm the schedule: turning the schedule on, or changing the interval of an enabled Trigger, authorizes later automatic starts, and a clear user instruction is enough for that. A widening edit changes the Project or repository, the query or the Flow, or raises Max active Runs. To widen an enabled Trigger, call factory_preview_trigger with the exact edit (triggerId, expectedRevision and the same settings), show the user what it lists, get explicit confirmation naming the Trigger, then save against that base revision. Renames, schedule changes, a lower limit and any edit of a switched-off Trigger need no review. An ordinary save omits github.repositoryNodeId and keeps the Trigger's saved repository. ${changedRemote} To retarget, send github.repositoryNodeId only after the user confirmed the retarget: the repository.detected.nodeId of the detectRepository preview you showed them, never a guess. The save refuses with trigger_repository_mismatch if the Project's remote no longer names that repository. The reply is {trigger, warnings}; trigger.revision is the new revision.`,
     inputSchema: {
       type: "object",
       properties: {
         triggerId,
         expectedRevision,
         ...settingsProperties,
-        retargetRepository: {
-          type: "boolean",
-          description:
-            "true replaces the saved repository with the Project's current one, after the user confirmed the retarget.",
-        },
+        github: repositoryGithub(
+          "Omit it to keep the saved repository. To retarget after the user confirmed it: repository.detected.nodeId from the detectRepository preview you showed them.",
+        ),
       },
       required: ["triggerId", "expectedRevision", ...completeSettings],
       additionalProperties: false,
@@ -262,7 +263,7 @@ const nextSteps: Partial<Record<string, string>> = {
   trigger_disabled:
     "Nothing was checked: the Trigger is switched off. Enabling is a separate step after the user reviews it: preview, get confirmation, then factory_enable_trigger.",
   trigger_repository_mismatch:
-    "Nothing was saved: the Project's remote no longer names the confirmed repository. Show the user both repositories (factory_preview_trigger with detectRepository true for an existing Trigger, a new-draft preview for a new one) and offer to restore the remote or retarget. A retarget of an existing Trigger is saved with retargetRepository true on factory_save_trigger, and retargeting an enabled Trigger is a widening edit the user must confirm.",
+    "Nothing was saved: the Project's remote no longer names the confirmed repository. Show the user both repositories (factory_preview_trigger with detectRepository true for an existing Trigger, a new-draft preview for a new one) and offer to restore the remote or retarget. A retarget of an existing Trigger is saved on factory_save_trigger with github.repositoryNodeId set to the detected repository the user confirmed, and retargeting an enabled Trigger is a widening edit the user must confirm.",
   flow_project_mismatch:
     "Nothing was saved. A Flow of another Project cannot start here: choose a global Flow or one of the Project's own from factory_list_flows, then call again.",
   trigger_name_taken:
@@ -270,6 +271,16 @@ const nextSteps: Partial<Record<string, string>> = {
   not_found: "Find a current Trigger id with factory_list_triggers.",
   trigger_repository: ghRepairNext,
   trigger_github: ghRepairNext,
+};
+
+/**
+ * A check whose outcome Factory could not report may have started Runs, so it is never retried
+ * automatically.
+ */
+const checkSteps: Partial<Record<string, string>> = {
+  ...nextSteps,
+  internal:
+    "The check's outcome is unknown, and it may have started Runs. Do not call factory_run_trigger_check again on your own: read the latest check with factory_get_trigger, report it, and point the user to Started from in Factory to find the Runs it started. Treat any further check the user asks for as a new one.",
 };
 
 type Args = Record<string, unknown>;
@@ -313,6 +324,24 @@ const checkReply = (checked: TriggerCheckReply) =>
     error: checked.error,
   });
 
+/**
+ * Refuses settings a conversation left out. MCP takes complete settings only, while the shared
+ * create, which REST also serves, fills defaults for them.
+ */
+function missingSetting(settings: Args): Result<never> | undefined {
+  const missing = completeSettings.find((key) => settings[key] === undefined);
+  const path =
+    missing ?? (objectOf(settings.github).query === undefined ? "github.query" : undefined);
+  return (
+    path &&
+    invalid(
+      "missing_setting",
+      path,
+      `Include ${path}: send complete settings exactly as the user confirmed them.`,
+    )
+  );
+}
+
 /** The GitHub repository the Project's folder names, through the shared readiness operation. */
 async function detectRepository(
   factory: TriggerToolOperations,
@@ -343,28 +372,37 @@ const savedSettings = (trigger: TriggerDefinition) => ({
   github: { repositoryNodeId: trigger.github.repository.nodeId, query: trigger.github.query },
 });
 
+/** A preview reply: the shared preview, the saved and detected repository and the notice. */
+const previewReply = (
+  preview: TriggerPreview,
+  saved: TriggerRepository | null,
+  detected: TriggerRepositoryChoice | null,
+) => withUntrustedTextNotice({ ...preview, repository: { saved, detected } });
+
+/**
+ * A new draft is previewed without a repository, so the shared preview evaluates and names the one
+ * the Project's folder names; Factory never takes one from the conversation.
+ */
 async function previewDraft(
   factory: TriggerToolOperations,
   settings: Args,
 ): Promise<Result<unknown>> {
-  const detected = await detectRepository(factory, settings.projectId);
-  if (!detected.ok) return detected;
+  const missing = missingSetting(settings);
+  if (missing) return missing;
   const preview = await factory.previewNewTrigger({
     kind: "github_issues",
     ...settings,
-    github: { ...objectOf(settings.github), repositoryNodeId: detected.value.nodeId },
+    github: { ...objectOf(settings.github), repositoryNodeId: undefined },
   });
   return preview.ok
-    ? {
-        ok: true,
-        value: withUntrustedTextNotice({
-          ...preview.value,
-          repository: { saved: null, detected: detected.value },
-        }),
-      }
+    ? { ok: true, value: previewReply(preview.value, null, preview.value.repository) }
     : preview;
 }
 
+/**
+ * A saved Trigger's settings, or an edit of them, on its saved repository; `detectRepository`
+ * leaves the repository out so the shared preview evaluates the Project's current one.
+ */
 async function previewSaved(
   factory: TriggerToolOperations,
   id: string,
@@ -378,32 +416,22 @@ async function previewSaved(
     );
   const saved = await factory.getTrigger(id);
   if (!saved.ok) return saved;
-  const edited = Object.keys(settings).length > 0;
-  const detected =
-    detect === true
-      ? await detectRepository(factory, edited ? settings.projectId : saved.value.projectId)
-      : null;
-  if (detected && !detected.ok) return detected;
-  const base = edited
-    ? { kind: saved.value.kind, ...settings, github: objectOf(settings.github) }
-    : savedSettings(saved.value);
+  const savedRepository = saved.value.github.repository;
+  const base =
+    Object.keys(settings).length > 0
+      ? { kind: saved.value.kind, ...settings, github: objectOf(settings.github) }
+      : savedSettings(saved.value);
   const preview = await factory.previewTrigger(id, {
     ...base,
     github: {
       ...base.github,
-      repositoryNodeId: detected?.value.nodeId ?? saved.value.github.repository.nodeId,
+      repositoryNodeId: detect === true ? undefined : savedRepository.nodeId,
     },
     expectedRevision,
   });
-  return preview.ok
-    ? {
-        ok: true,
-        value: withUntrustedTextNotice({
-          ...preview.value,
-          repository: { saved: saved.value.github.repository, detected: detected?.value ?? null },
-        }),
-      }
-    : preview;
+  if (!preview.ok) return preview;
+  const detected = detect === true ? preview.value.repository : null;
+  return { ok: true, value: previewReply(preview.value, savedRepository, detected) };
 }
 
 /** Saves a new Trigger off; the node id the preview returned is rechecked, else detected. */
@@ -411,6 +439,8 @@ async function createDraft(
   factory: TriggerToolOperations,
   settings: Args,
 ): Promise<Result<unknown>> {
+  const missing = missingSetting(settings);
+  if (missing) return missing;
   const github = objectOf(settings.github);
   let { repositoryNodeId } = github;
   if (repositoryNodeId === undefined) {
@@ -425,24 +455,25 @@ async function createDraft(
   });
 }
 
-/** Saves complete settings; the saved repository carries forward unless the user confirmed a retarget. */
+/**
+ * Saves complete settings. The saved repository carries forward unless the conversation names the
+ * reviewed one, which the shared save accepts only while the Project's folder still names it.
+ */
 async function saveSettings(
   factory: TriggerToolOperations,
   id: string,
-  { retargetRepository, ...settings }: Args,
+  settings: Args,
 ): Promise<Result<unknown>> {
   const saved = await factory.getTrigger(id);
   if (!saved.ok) return saved;
-  let repositoryNodeId = saved.value.github.repository.nodeId;
-  if (retargetRepository === true) {
-    const detected = await detectRepository(factory, settings.projectId);
-    if (!detected.ok) return detected;
-    repositoryNodeId = detected.value.nodeId;
-  }
+  const github = objectOf(settings.github);
   return factory.updateTrigger(id, {
     kind: saved.value.kind,
     ...settings,
-    github: { ...objectOf(settings.github), repositoryNodeId },
+    github: {
+      ...github,
+      repositoryNodeId: github.repositoryNodeId ?? saved.value.github.repository.nodeId,
+    },
   });
 }
 
@@ -503,5 +534,7 @@ export async function callTriggerTool(
 ): Promise<CallToolResult | undefined> {
   const calls = triggerCalls(factory);
   if (!Object.hasOwn(calls, name)) return undefined;
-  return answerDefinitionCall(nextSteps, () => calls[name]!(toolArguments(args)));
+  return answerDefinitionCall(name === "factory_run_trigger_check" ? checkSteps : nextSteps, () =>
+    calls[name]!(toolArguments(args)),
+  );
 }

@@ -16,9 +16,12 @@ import type {
 import {
   mayStartFlow,
   validateCreateTrigger,
+  validatePreviewNewTrigger,
+  validatePreviewTrigger,
   validateRunTrigger,
   validateSetTriggerEnabled,
   validateUpdateTrigger,
+  type TriggerPreviewSettings,
   type TriggerSettings,
 } from "@t3-factory/domain-validation";
 import {
@@ -134,15 +137,22 @@ const enabledDeadline = (current: TriggerDefinition, enabled: boolean, time: str
     : deadlineAfter(time, current.schedule.intervalMinutes);
 };
 
-/** Whether `settings` are exactly `saved`'s, so a preview of them reviewed that revision. */
-const previewsSaved = (saved: TriggerDefinition, settings: TriggerSettings) =>
+/**
+ * Whether `settings`, evaluated on the repository `nodeId`, are exactly `saved`'s, so a preview of
+ * them reviewed that revision.
+ */
+const previewsSaved = (
+  saved: TriggerDefinition,
+  settings: TriggerPreviewSettings,
+  nodeId: string | null,
+) =>
   settings.name === saved.name &&
   settings.projectId === saved.projectId &&
   settings.flowId === saved.flowId &&
   settings.schedule.enabled === saved.schedule.enabled &&
   settings.schedule.intervalMinutes === saved.schedule.intervalMinutes &&
   settings.maxActiveRuns === saved.maxActiveRuns &&
-  settings.github.repositoryNodeId === saved.github.repository.nodeId &&
+  nodeId === saved.github.repository.nodeId &&
   settings.github.query === saved.github.query;
 
 /** The next saved state: new settings, with enablement and health kept. */
@@ -197,32 +207,33 @@ const sharedRepositoryWarning = (name: string, trigger: TriggerDefinition): Vali
   message: `Trigger ${name} already watches ${trigger.github.repository.nameWithOwner}. Each Trigger starts its own Runs for the issues it matches.`,
 });
 
-/** One warning naming every other saved Trigger on `repository`, or none when none watches it. */
-const sharedRepositoryPreviewWarnings = (
-  names: readonly string[],
-  repository: GitHubRepository,
-): ValidationIssue[] =>
-  names.length === 0
-    ? []
-    : [
-        {
-          code: "trigger_repository_shared",
-          path: "projectId",
-          message: `${names.length === 1 ? "Trigger" : "Triggers"} ${names.join(", ")} already ${names.length === 1 ? "watches" : "watch"} ${repository.nameWithOwner}. Each Trigger starts its own Runs for the issues it matches.`,
-        },
-      ];
+type Watcher = { readonly name: string; readonly nameWithOwner: string };
+
+/**
+ * One warning naming every other saved Trigger on a repository, or none when none watches it. The
+ * repository is named as GitHub answered, else as the first watcher saved it.
+ */
+function sharedRepositoryPreviewWarnings(
+  watching: readonly Watcher[],
+  nameWithOwner?: string,
+): ValidationIssue[] {
+  const [first] = watching;
+  if (!first) return [];
+  const names = watching.map((watcher) => watcher.name);
+  return [
+    {
+      code: "trigger_repository_shared",
+      path: "projectId",
+      message: `${names.length === 1 ? "Trigger" : "Triggers"} ${names.join(", ")} already ${names.length === 1 ? "watches" : "watch"} ${nameWithOwner ?? first.nameWithOwner}. Each Trigger starts its own Runs for the issues it matches.`,
+    },
+  ];
+}
 
 /** A Project refusal or GitHub's answer for the Project's folder. */
 function repositoryReadiness(
   repository: GitHubRead<GitHubRepository> | Result<never>,
-  watching: readonly string[],
 ): TriggerReadiness["repository"] {
-  if (repository.ok)
-    return {
-      ready: true,
-      repository: repository.value,
-      warnings: sharedRepositoryPreviewWarnings(watching, repository.value),
-    };
+  if (repository.ok) return { ready: true, repository: repository.value };
   return {
     ready: false,
     problem:
@@ -347,7 +358,10 @@ export const makeTriggers = (
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<TriggerSave>, unknown> {
         const saved = target ? yield* readTrigger(target.id) : undefined;
-        if (target && !saved) return notFound();
+        // A stale edit is refused before the Project, Flow or GitHub are read, so its reply asks
+        // for a reconcile rather than a repair that the newer revision may not need.
+        const stale = storeRefusal(target, saved, false);
+        if (stale) return stale;
         const project = yield* hostLocalProject(settings.projectId);
         if (!project.ok) return project;
         const flow = yield* deps.getFlow(settings.flowId);
@@ -383,11 +397,31 @@ export const makeTriggers = (
                 trigger,
                 warnings: [
                   ...settled.value.warnings,
-                  ...watching.map((name) => sharedRepositoryWarning(name, trigger)),
+                  ...watching.map(({ name }) => sharedRepositoryWarning(name, trigger)),
                 ],
               },
             };
           }),
+        );
+      });
+
+    /**
+     * The shared-repository warning for each repository an editor may save: the one the Project's
+     * folder names and the edited Trigger's confirmed one, named as GitHub or that Trigger has it.
+     */
+    const repositoryWarnings = (detected: GitHubRepository | null, triggerId: string) =>
+      Effect.gen(function* () {
+        const edited = triggerId ? yield* readTrigger(triggerId) : undefined;
+        const confirmed = edited?.github.repository;
+        const repositories: TriggerRepository[] = detected ? [detected] : [];
+        if (confirmed && confirmed.nodeId !== detected?.nodeId) repositories.push(confirmed);
+        return yield* Effect.forEach(repositories, (repository) =>
+          triggersWatching(sql, repository.nodeId, triggerId || null).pipe(
+            Effect.map((watching) => ({
+              nodeId: repository.nodeId,
+              warnings: sharedRepositoryPreviewWarnings(watching, repository.nameWithOwner),
+            })),
+          ),
         );
       });
 
@@ -399,12 +433,9 @@ export const makeTriggers = (
           (project.ok
             ? yield* Effect.promise(() => github.repository(project.value.workspaceRoot))
             : project);
-        const watching = repository?.ok
-          ? yield* triggersWatching(sql, repository.value.nodeId, triggerId || null)
-          : [];
-        const login = yield* Effect.promise(() =>
-          github.readiness(repository?.ok ? repository.value.host : "github.com"),
-        );
+        const detected = repository?.ok ? repository.value : null;
+        const warnings = yield* sql.withTransaction(repositoryWarnings(detected, triggerId));
+        const login = yield* Effect.promise(() => github.readiness(detected?.host ?? "github.com"));
         const flow = flowId ? yield* deps.getFlow(flowId) : null;
         return {
           ok: true,
@@ -412,7 +443,8 @@ export const makeTriggers = (
             gitHub: login.ok
               ? { ready: true, login: login.value.login }
               : { ready: false, problem: gitHubRepairGuidance(login.failure) },
-            repository: repository && repositoryReadiness(repository, watching),
+            repository: repository && repositoryReadiness(repository),
+            repositoryWarnings: warnings,
             flow: flow && flowReadiness(flow, projectId),
           },
         };
@@ -441,10 +473,11 @@ export const makeTriggers = (
 
     /**
      * A check's reads and admission rules for `settings`, on the saved Trigger `target` when given;
-     * nothing starts and nothing is written.
+     * nothing starts and nothing is written. Settings without a repository evaluate the one the
+     * Project's folder names. The repository's warnings hold even when a problem stops the check.
      */
     const preview = (
-      settings: TriggerSettings,
+      settings: TriggerPreviewSettings,
       target: { readonly id: string; readonly expectedRevision: number } | null,
     ) =>
       Effect.gen(function* (): Effect.fn.Return<Result<TriggerPreview>, unknown> {
@@ -459,26 +492,26 @@ export const makeTriggers = (
           maxActiveRuns: settings.maxActiveRuns,
           github: { repository: { nodeId: repositoryNodeId }, query, readyLabel },
         });
-        const repository = planned.repository;
-        const login = repository
-          ? yield* Effect.promise(() => github.readiness(repository.host))
+        const detected = planned.repository;
+        const nodeId = repositoryNodeId ?? detected?.nodeId ?? null;
+        // GitHub's answer for the repository the preview evaluated, when GitHub gave one.
+        const evaluated = detected?.nodeId === nodeId ? detected : null;
+        const login = detected
+          ? yield* Effect.promise(() => github.readiness(detected.host))
           : null;
-        const watching = repository
-          ? yield* triggersWatching(sql, repository.nodeId, target?.id ?? null)
-          : [];
+        const watching = nodeId ? yield* triggersWatching(sql, nodeId, target?.id ?? null) : [];
         return {
           ok: true,
           value: {
             issues: planned.issues,
             problem: planned.problem,
-            warnings: repository
-              ? [
-                  ...authorFilterWarnings(repository, authorFilter),
-                  ...sharedRepositoryPreviewWarnings(watching, repository),
-                ]
-              : [],
+            warnings: [
+              ...(evaluated ? authorFilterWarnings(evaluated, authorFilter) : []),
+              ...sharedRepositoryPreviewWarnings(watching, evaluated?.nameWithOwner),
+            ],
             login: login?.ok ? login.value.login : null,
-            revision: saved && previewsSaved(saved, settings) ? saved.revision : null,
+            revision: saved && previewsSaved(saved, settings, nodeId) ? saved.revision : null,
+            repository: detected,
           },
         };
       });
@@ -572,11 +605,11 @@ export const makeTriggers = (
           : Effect.succeed(validated);
       },
       previewNewTrigger(input) {
-        const validated = validateCreateTrigger(input);
+        const validated = validatePreviewNewTrigger(input);
         return validated.ok ? preview(validated.value, null) : Effect.succeed(validated);
       },
       previewTrigger(id, input) {
-        const validated = validateUpdateTrigger(input);
+        const validated = validatePreviewTrigger(input);
         if (!validated.ok) return Effect.succeed(validated);
         const { expectedRevision, ...settings } = validated.value;
         return preview(settings, { id, expectedRevision });

@@ -13,7 +13,6 @@ import type {
   TriggerDefinition,
   TriggerMissedIssue,
   TriggerPreviewIssue,
-  TriggerRepository,
   TriggerStartedRun,
 } from "@t3-factory/contracts";
 import {
@@ -33,12 +32,13 @@ import { now } from "../time.ts";
 import {
   activeTriggerRuns,
   admittedRun,
+  checkRecord,
   deleteAdmissions,
   deleteAttempt,
   deleteUnadmitted,
   readTriggerAdmissions,
   writeAdmissionAttempt,
-  writeCheckOutcome,
+  writeCheckRecord,
   type CheckOutcome,
 } from "./trigger-store.ts";
 
@@ -66,7 +66,8 @@ export interface TriggerCheckDeps {
 
 /**
  * What a check reads its settings from: a saved Trigger, or proposed settings to preview. Without
- * an id nothing is guarded yet and no Run counts against the limit.
+ * an id nothing is guarded yet and no Run counts against the limit. A preview without a repository
+ * node id evaluates whichever repository the Project's folder names.
  */
 export interface AdmissionSubject {
   readonly id: string | null;
@@ -74,11 +75,14 @@ export interface AdmissionSubject {
   readonly flowId: string;
   readonly maxActiveRuns: number;
   readonly github: Pick<GitHubIssuesSettings, "query" | "readyLabel"> & {
-    readonly repository: Pick<TriggerRepository, "nodeId">;
+    readonly repository: { readonly nodeId: string | null };
   };
 }
 
-/** A preview's issues, or the shared problem, and the repository GitHub answered with. */
+/**
+ * A preview's issues, or the shared problem, and the repository the Project's folder names, as
+ * GitHub answered; null when GitHub could not answer.
+ */
 interface TriggerPlanPreview {
   readonly repository: GitHubRepository | null;
   readonly issues: readonly TriggerPreviewIssue[];
@@ -93,6 +97,12 @@ interface Candidate {
   readonly labellingEventId: string | null;
 }
 
+/**
+ * What GitHub answered for the Project's folder before a problem stopped the check: its
+ * repository, null when that read failed, or undefined when the check stopped before reading it.
+ */
+type ReadRepository = GitHubRepository | null | undefined;
+
 /** Everything a check decides before it writes, or the shared problem that stops it. */
 type AdmissionPlan =
   | {
@@ -103,7 +113,7 @@ type AdmissionPlan =
       readonly released: readonly string[];
       readonly free: number;
     }
-  | { readonly ok: false; readonly problem: Problem };
+  | { readonly ok: false; readonly problem: Problem; readonly repository?: ReadRepository };
 
 /**
  * How one admission ended: `full` when no Run slot was free after all, `stopped` when the Trigger
@@ -380,24 +390,26 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           readonly matching: readonly GitHubIssue[];
           readonly states: ReadonlyMap<string, GitHubLabelState>;
         }
-      | { readonly ok: false; readonly problem: Problem },
+      | { readonly ok: false; readonly problem: Problem; readonly repository: ReadRepository },
       unknown
     > {
       const read = yield* Effect.promise(() => github.repository(project.workspaceRoot));
-      if (!read.ok) return { ok: false, problem: gitHubFailed(read.failure) };
-      if (read.value.nodeId !== subject.github.repository.nodeId)
+      if (!read.ok) return { ok: false, problem: gitHubFailed(read.failure), repository: null };
+      const repository = read.value;
+      const { nodeId } = subject.github.repository;
+      if (nodeId !== null && repository.nodeId !== nodeId)
         return {
           ok: false,
           problem: gitHubFailed({
             reason: "repository_mismatch",
-            nameWithOwner: read.value.nameWithOwner,
+            nameWithOwner: repository.nameWithOwner,
           }),
+          repository,
         };
-      const repository = read.value;
       const matching = yield* Effect.promise(() =>
         github.openIssues(repository, subject.github.query),
       );
-      if (!matching.ok) return { ok: false, problem: gitHubFailed(matching.failure) };
+      if (!matching.ok) return { ok: false, problem: gitHubFailed(matching.failure), repository };
       const ids = [
         ...new Set([
           ...matching.value.map((issue) => issue.nodeId),
@@ -410,7 +422,7 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
           : yield* Effect.promise(() =>
               github.labelStates(repository, ids, subject.github.readyLabel),
             );
-      if (!states.ok) return { ok: false, problem: gitHubFailed(states.failure) };
+      if (!states.ok) return { ok: false, problem: gitHubFailed(states.failure), repository };
       return { ok: true, repository, matching: matching.value, states: states.value };
     });
 
@@ -491,12 +503,30 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return yield* admitAll(trigger, plan.repository.nameWithOwner, plan.candidates, plan.free);
     });
 
-  /** What a check of `subject` would start now and what would wait, without starting or writing. */
+  /** The repository the Project's folder names, or null when it or GitHub cannot be read. */
+  const projectRepository = (projectId: string) =>
+    Effect.gen(function* () {
+      const project = yield* deps.hostLocalProject(projectId);
+      if (!project.ok) return null;
+      const read = yield* Effect.promise(() => github.repository(project.value.workspaceRoot));
+      return read.ok ? read.value : null;
+    });
+
+  /**
+   * What a check of `subject` would start now and what would wait, without starting or writing,
+   * and the repository the Project's folder names, also read when a problem stopped the plan
+   * before GitHub.
+   */
   const preview = (subject: AdmissionSubject) =>
     admissionPlan(subject).pipe(
-      Effect.map((plan): TriggerPlanPreview => {
-        if (!plan.ok) return { repository: null, issues: [], problem: plan.problem };
-        return {
+      Effect.flatMap((plan): Effect.Effect<TriggerPlanPreview, unknown> => {
+        if (!plan.ok)
+          return (
+            plan.repository === undefined
+              ? projectRepository(subject.projectId)
+              : Effect.succeed(plan.repository)
+          ).pipe(Effect.map((repository) => ({ repository, issues: [], problem: plan.problem })));
+        return Effect.succeed({
           repository: plan.repository,
           problem: null,
           issues: plan.candidates.map(({ issue }, index) => ({
@@ -507,13 +537,14 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             createdAt: issue.createdAt,
             admission: index < plan.free ? "starts_now" : "waits",
           })),
-        };
+        });
       }),
     );
 
   /**
    * Checks an enabled Trigger once and records what the check did. A manual check may name the
-   * revision it was asked to run; scheduled checks name none and run whatever is saved.
+   * revision it was asked to run; scheduled checks name none and run whatever is saved. The reply
+   * is the revision checked with the check's record and the Runs it started.
    */
   const check = (triggerId: string, expectedRevision?: number) =>
     lanes
@@ -543,11 +574,22 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
               },
             ]);
           const outcome = yield* inspect(trigger);
-          yield* sql.withTransaction(writeCheckOutcome(sql, triggerId, outcome, yield* now));
-          const checked = yield* deps.readTrigger(triggerId);
-          return checked
-            ? { ok: true as const, value: { ...checked, startedRuns: outcome.runs } }
-            : failure("not_found", "This Trigger was removed during the check.");
+          const time = yield* now;
+          // The reply describes the revision this check ran and keeps every Run it started, even
+          // when a save or removal landed meanwhile; the record is stored only while the Trigger is.
+          const current = yield* sql.withTransaction(
+            Effect.gen(function* () {
+              const stored = yield* deps.readTrigger(triggerId);
+              const recorded = checkRecord((stored ?? trigger).error, outcome, time);
+              if (stored) yield* writeCheckRecord(sql, triggerId, recorded);
+              return { stored, recorded };
+            }),
+          );
+          const checked = current.stored?.revision === trigger.revision ? current.stored : trigger;
+          return {
+            ok: true as const,
+            value: { ...checked, ...current.recorded, startedRuns: outcome.runs },
+          };
         }),
       )
       .pipe(Effect.uninterruptible);

@@ -202,3 +202,89 @@ it("a preview that cannot read GitHub reports the check's problem and leaves the
   assert(saved.ok);
   expect(saved.value.error).toBeNull();
 });
+
+it("previewing a new Trigger without a repository evaluates and names the one the Project's folder names", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+
+  // Act
+  const preview = await world.f.previewNewTrigger({
+    ...world.triggerInput,
+    github: { query: "label:factory:ready" },
+  });
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value).toMatchObject({
+    repository: atlasRepository,
+    issues: [],
+    problem: null,
+    login: "factory-maintainer",
+    revision: null,
+  });
+});
+
+it("previewing a new Trigger whose Project's remote cannot be read answers that problem with no repository", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  world.github.failures.set("repository", {
+    reason: "unreadable",
+    message: "Not Found (HTTP 404)",
+  });
+
+  // Act
+  const preview = await world.f.previewNewTrigger({
+    ...world.triggerInput,
+    github: { query: "label:factory:ready" },
+  });
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value).toMatchObject({
+    repository: null,
+    issues: [],
+    problem: { code: "github_unreadable", message: expect.stringContaining("cannot read") },
+  });
+});
+
+it("a preview stopped before GitHub is read still names the repository and carries its warnings", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c, { ...atlasRepository, visibility: "public" });
+  await otherProjectWatcher(world, "Docs issues");
+  world.t3.contract.support.launch = false;
+
+  // Act
+  const preview = await world.f.previewNewTrigger({
+    ...world.triggerInput,
+    name: "Bug issues",
+    github: { ...world.triggerInput.github, query: "label:factory:ready" },
+  });
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value).toMatchObject({
+    repository: { ...atlasRepository, visibility: "public" },
+    problem: { code: "start_blocked" },
+  });
+  expect(preview.value.warnings.map((warning) => warning.code)).toStrictEqual([
+    "trigger_author_filter_removed",
+    "trigger_repository_shared",
+  ]);
+});
+
+it("a preview whose repository GitHub cannot read still warns that another Trigger watches the confirmed one", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  await otherProjectWatcher(world, "Docs issues");
+  world.github.signedIn = false;
+
+  // Act
+  const preview = await world.f.previewTrigger(world.trigger.id, triggerEdit(world.trigger, {}));
+
+  // Assert
+  assert(preview.ok);
+  expect(preview.value).toMatchObject({ repository: null, problem: { code: "github_signed_out" } });
+  expect(preview.value.warnings.map((warning) => warning.message)).toStrictEqual([
+    "Trigger Docs issues already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+  ]);
+});

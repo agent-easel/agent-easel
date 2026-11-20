@@ -627,9 +627,56 @@ it("removing a Trigger while its Start is in preflight accepts no Run", async (c
   const checked = await pending.checked;
 
   // Assert
-  assert(!checked.ok);
-  expect(checked.error.code).toBe("not_found");
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({ startedRuns: [], latestCheck: { started: 0 } });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
+});
+
+it("removing a Trigger after its check started a Run still answers the Run that check started", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { maxActiveRuns: 2 });
+  world.readyIssue(1, "Started before the removal", "2026-11-10T09:00:00.000Z");
+  world.readyIssue(2, "Reached after the removal", "2026-11-10T10:00:00.000Z");
+  const pending = await pendingCheck(world, 1);
+  assert((await world.f.removeTrigger(world.trigger.id)).ok);
+
+  // Act
+  pending.release();
+  const checked = await pending.checked;
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({
+    revision: world.trigger.revision,
+    startedRuns: [{ title: expect.stringContaining("Started before the removal") }],
+    latestCheck: { started: 1, waiting: 0 },
+  });
+  expect(await startedIssues(world.f, world.project.id)).toStrictEqual([1]);
+});
+
+it("saving a Trigger after its check started a Run answers that Run under the revision the check ran", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c, { maxActiveRuns: 2 });
+  world.readyIssue(1, "Started before the save", "2026-11-10T09:00:00.000Z");
+  world.readyIssue(2, "Reached after the save", "2026-11-10T10:00:00.000Z");
+  const pending = await pendingCheck(world, 1);
+  assert(
+    (await world.f.updateTrigger(world.trigger.id, triggerEdit(world.trigger, { name: "Renamed" })))
+      .ok,
+  );
+
+  // Act
+  pending.release();
+  const checked = await pending.checked;
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value).toMatchObject({
+    name: world.trigger.name,
+    revision: world.trigger.revision,
+    startedRuns: [{ title: expect.stringContaining("Started before the save") }],
+    latestCheck: { started: 1, waiting: 0 },
+  });
 });
 
 it("saving a Trigger while its Start is in preflight accepts no Run under the older settings", async (c) => {

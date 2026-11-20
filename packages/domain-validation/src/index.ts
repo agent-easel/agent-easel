@@ -677,8 +677,11 @@ export {
   validateTriggerSchedule,
   TRIGGER_DEFAULTS,
   validateCreateTrigger,
+  validatePreviewNewTrigger,
+  validatePreviewTrigger,
   validateRunTrigger,
   validateSetTriggerEnabled,
   validateUpdateTrigger,
+  type TriggerPreviewSettings,
   type TriggerSettings,
 } from "./trigger.ts";

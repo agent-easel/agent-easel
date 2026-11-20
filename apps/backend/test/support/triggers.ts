@@ -8,16 +8,18 @@ import type {
   CreateTriggerInput,
   FactoryProject,
   TriggerDefinition,
+  TriggerSave,
   UpdateTriggerInput,
 } from "@t3-factory/contracts";
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
-import type { ControlledGitHub, ControlledIssue } from "./controlled-github.ts";
+import type { ControlledGitHub, ControlledIssue, GitHubCall } from "./controlled-github.ts";
 import { START_INSPECTIONS } from "./controlled-t3.ts";
 import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
 import { prepared, preparedService } from "./prepared-runner.ts";
+import { remotePrepared } from "./remote-clients.ts";
 import { triggerEnabled, triggerSaved } from "./scenarios.ts";
 
 /** The repository the prepared Project's folder names on GitHub. */
@@ -153,6 +155,40 @@ export async function reviewingWorld(c: TestContext, settings: TriggerSettings =
 }
 
 /**
+ * An enabled Trigger an approved client created and enabled over REST, with one ready issue:
+ * `send` is that client's request, `runPath` the Trigger's run route and `f` the host's Factory.
+ */
+export async function remoteCheckingWorld(c: TestContext): Promise<{
+  readonly f: Factory;
+  readonly project: FactoryProject;
+  readonly trigger: TriggerDefinition;
+  readonly runPath: string;
+  readonly send: (method: string, path: string, body?: unknown) => Promise<{ body: unknown }>;
+}> {
+  const world = await remotePrepared(c);
+  const created = await world.laptop.send<TriggerSave>(
+    "POST",
+    "/api/triggers",
+    watching(world, atlasRepository),
+  );
+  assert(created.body.ok);
+  const { id, revision } = created.body.value.trigger;
+  const enabled = await world.laptop.send<TriggerDefinition>("PUT", `/api/triggers/${id}/enabled`, {
+    enabled: true,
+    reviewedRevision: revision,
+  });
+  assert(enabled.body.ok);
+  readyIssues(world.github)(1, "Ready over REST");
+  return {
+    f: world.server.factory,
+    project: world.project,
+    trigger: enabled.body.value,
+    runPath: `/api/triggers/${id}/run`,
+    send: (method, path, body) => world.laptop.send(method, path, body),
+  };
+}
+
+/**
  * As `checkingWorld`, on backend services in the test's scope so TestClock drives the schedule.
  * The periodic reconcile is left off the clock; the default schedule checks every 5 minutes.
  * GitHub's call log starts after the save, so it holds only what checks read.
@@ -230,11 +266,17 @@ export async function startedIssues(f: Factory, projectId: string) {
 }
 
 /**
- * Holds a check's first Start at its T3 contract snapshot until the test releases it. The check's
- * own launch-blocker read inspects T3 as that Start does.
+ * Holds a check's Start at its T3 contract snapshot until the test releases it: the first one, or
+ * the one after `startedFirst` Starts went through. The check's own launch-blocker read inspects
+ * T3 as each Start does.
  */
-export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
-  const { inspecting, release } = world.t3.contract.holdInspection(START_INSPECTIONS);
+export async function pendingCheck(
+  world: Awaited<ReturnType<typeof checkingWorld>>,
+  startedFirst = 0,
+) {
+  const { inspecting, release } = world.t3.contract.holdInspection(
+    START_INSPECTIONS * (1 + startedFirst),
+  );
   const checked = world.f.runTrigger(world.trigger.id, {});
   await inspecting;
   return { checked, release };
@@ -254,6 +296,13 @@ export async function pendingGitHubCheck(world: Awaited<ReturnType<typeof checki
   const checked = world.f.runTrigger(world.trigger.id, {});
   await reading;
   return { checked, release };
+}
+
+/** From now on GitHub's `call` fails unexpectedly instead of answering, as a lost connection does. */
+export function failingGitHubCall(github: ControlledGitHub, failing: GitHubCall) {
+  github.beforeAnswer = async (call) => {
+    if (call === failing) throw new Error("The connection to GitHub was reset.");
+  };
 }
 
 /** Starts saving `edit` and holds it at GitHub's answer to its query, before anything is written. */

@@ -649,7 +649,8 @@ export const toolArguments = (args: unknown) =>
 /**
  * Answers one definition tool call in the authoring envelope: the success value as a single JSON
  * text item, or a failure with its outer code, issues, a next step from `steps` (an issue code
- * wins over the outer code) and never the call's arguments.
+ * wins over the outer code; `internal` also answers a call that threw) and never the call's
+ * arguments.
  */
 export async function answerDefinitionCall(
   steps: Partial<Record<string, string>>,
@@ -671,7 +672,7 @@ export async function answerDefinitionCall(
       code: "internal",
       message: "Factory could not complete this call.",
       issues: [],
-      next: unavailableNext,
+      next: steps.internal ?? unavailableNext,
     });
   }
 }

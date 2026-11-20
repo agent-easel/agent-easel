@@ -90,6 +90,62 @@ async function runStartedBy(baseUrl: string | undefined, trigger: string) {
   return run;
 }
 
+const mutation = { "content-type": "application/json", "X-Factory-Request": "1" };
+
+/** The saved Trigger named `name`, as Factory answers it now. */
+async function savedTrigger(baseUrl: string | undefined, name: string) {
+  const listed = (await (await fetch(new URL("/api/triggers", baseUrl))).json()) as Result<
+    readonly TriggerDefinition[]
+  >;
+  assert(listed.ok);
+  const trigger = listed.value.find((entry) => entry.name === name);
+  assert(trigger, `Expected a saved Trigger named ${name}`);
+  return trigger;
+}
+
+/** Another client switches the saved Trigger named `name` off. */
+async function disableElsewhere(baseUrl: string | undefined, name: string) {
+  const trigger = await savedTrigger(baseUrl, name);
+  const reply = await fetch(new URL(`/api/triggers/${trigger.id}/enabled`, baseUrl), {
+    method: "PUT",
+    headers: mutation,
+    body: JSON.stringify({ enabled: false }),
+  });
+  assert.equal(reply.ok, true);
+}
+
+/**
+ * Holds the page's next check of the Trigger named `name` until another client saved it as
+ * `renamed`, a newer revision, then sends that check.
+ */
+async function saveBeforeCheck(
+  browser: Browser,
+  baseUrl: string | undefined,
+  name: string,
+  renamed: string,
+) {
+  const trigger = await savedTrigger(baseUrl, name);
+  await browser.route(`**/api/triggers/${trigger.id}/run`, async (route) => {
+    const current = await savedTrigger(baseUrl, name);
+    const saved = await fetch(new URL(`/api/triggers/${trigger.id}`, baseUrl), {
+      method: "PUT",
+      headers: mutation,
+      body: JSON.stringify({
+        expectedRevision: current.revision,
+        kind: current.kind,
+        name: renamed,
+        projectId: current.projectId,
+        flowId: current.flowId,
+        schedule: current.schedule,
+        maxActiveRuns: current.maxActiveRuns,
+        github: { repositoryNodeId: current.github.repository.nodeId, query: current.github.query },
+      }),
+    });
+    assert.equal(saved.ok, true);
+    await route.continue();
+  });
+}
+
 test("a GitHub Issues Trigger made in Studio starts a Run for a ready issue, and removing it keeps where the Run started", async ({
   app,
   screen,
@@ -525,4 +581,64 @@ test("an unknown Create with a saved Trigger offers to open it without creating 
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
   await screen.getByRole("button", "Open Trigger", { exact: true }).tap();
   await expectEditorOff(screen, name);
+});
+
+test("Check now on a Trigger saved elsewhere meanwhile checks nothing and reviews the saved revision", async ({
+  app,
+  browser,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Checked while saved elsewhere";
+  const renamed = `${name} renamed`;
+  await fixture.github.trigger({ name });
+  await app.open("/studio/triggers");
+  await expect(screen.getByRole("switch", name, { exact: true, checked: true })).toBeVisible();
+  await saveBeforeCheck(browser, app.baseUrl, name, renamed);
+
+  // Act
+  await runFromMenu(screen, name);
+
+  // Assert
+  const review = screen.getByRole("dialog", `Enable “${renamed}”?`);
+  await expect(
+    review.getByText("so nothing was checked. Review these settings before checking.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await app.screenshot("trigger-check-now-saved-elsewhere");
+});
+
+test("Enable and check on a Trigger saved elsewhere after enabling leaves it on, checks nothing and reviews the saved revision", async ({
+  app,
+  browser,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Enabled while saved elsewhere";
+  const renamed = `${name} renamed`;
+  await fixture.github.trigger({ name });
+  await disableElsewhere(app.baseUrl, name);
+  await app.open("/studio/triggers");
+  await screen.getByRole("switch", name, { exact: true, checked: false }).tap();
+  const confirm = screen
+    .getByRole("dialog", `Enable “${name}”?`)
+    .getByRole("button", "Enable and check", { exact: true });
+  await expect(confirm).toBeEnabled();
+  await saveBeforeCheck(browser, app.baseUrl, name, renamed);
+
+  // Act
+  await confirm.tap();
+
+  // Assert
+  const review = screen.getByRole("dialog", `Enable “${renamed}”?`);
+  await expect(
+    review.getByText("so nothing was checked. Review these settings before checking.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  assert.equal((await savedTrigger(app.baseUrl, renamed)).enabled, true);
+  await app.screenshot("trigger-enable-and-check-saved-elsewhere");
 });

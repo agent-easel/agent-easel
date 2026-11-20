@@ -568,7 +568,7 @@ The repository and Flow fields show their own readiness. A problem with `gh` has
 **Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
 page, and **Review and enable**, which stays neutral; Save follows the
 [one Save rule](design-system.md#components-and-interaction). When another Trigger already watches the same repository, the
-form warns before saving, from the warning the backend's readiness answer carries for the Project's repository and the Trigger being edited; the review's warning comes from the backend preview, with the same wording. Saving is still available.
+form warns before saving, from the warning the backend's readiness answer carries for the repository the form shows: the Project's repository, or the edited Trigger's confirmed one while the Project's remote has moved and the Trigger is not retargeted; the edited Trigger is never named. The review's warning comes from the backend preview, with the same wording. Saving is still available.
 
 **Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
 check, its health, started Runs, issues waiting for a slot, and the next scheduled check, or the
@@ -589,7 +589,7 @@ Trigger's revision; disabling, enabling an already enabled Trigger and checks do
 Enabling a Trigger, and saving an edit that widens what an enabled Trigger can start, first opens a review: the matching
 issues a check would start now, oldest first, each marked **Starts now** or **Waits** for a slot, issues the Trigger
 already started left out, a warning when another Trigger watches the repository, and any problem
-a check would hit. The backend preview raises that warning for any Project, disabled Triggers included and the edited Trigger excluded, so Studio and [Factory MCP's preview](t3-integration.md#trigger-tools) warn identically. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
+a check would hit. The backend preview raises that warning for any Project, disabled Triggers included and the edited Trigger excluded, so Studio and [Factory MCP's preview](t3-integration.md#trigger-tools) warn identically. The warnings come from the previewed repository, so they also show when a problem stops the check before it reads issues. Nothing starts before confirming. **Enable and check** enables the Trigger and runs
 its first check at once; **Apply and check** saves the edit and checks. Each confirms exactly the settings the review
 showed: the preview reports the saved revision it evaluated and enabling names that revision, refused if another
 revision was saved meanwhile, in which case nothing is enabled and the review opens again on the current settings; an
@@ -597,7 +597,7 @@ edit saves against the revision it started from, so a revision saved elsewhere m
 Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
 the same way and must be reviewed against the enabled Trigger. **Check now**, **Enable and check** and **Apply and check** then run
 only the revision on screen: **Check now** sends the revision it shows, the other two the revision the enable or save returned. A check
-refused because another revision was saved meanwhile starts nothing. In the Trigger editor, **Check now** and **Apply and check** show it as the saved-elsewhere notice a stale save shows; a check started from the list, or from the enable review, shows its refusal, which names that revision. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
+refused because another revision was saved meanwhile starts nothing. In the Trigger editor, **Check now** and **Apply and check** show it as the saved-elsewhere notice a stale save shows, unless the editor already follows the newer revision. **Check now** in the list and **Enable and check** open the review again on the current settings, as a refused enable does, with **Revision N was saved after the revision you checked, so nothing was checked**; after **Enable and check** the Trigger stays on, and confirming that review checks the revision it shows. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 
 An edit widens what can start when it changes the Project or repository, the query or the Flow, or raises **Max active
@@ -628,15 +628,17 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 
 | HTTP | Purpose |
 | --- | --- |
-| `GET /api/triggers/readiness?projectId=&flowId=&triggerId=` | Check `gh`, the Project's repository (with the same-repository warning, leaving out `triggerId`) and the Flow |
+| `GET /api/triggers/readiness?projectId=&flowId=&triggerId=` | Check `gh`, the Project's repository and the Flow. `repositoryWarnings` carries the same-repository warning, leaving out `triggerId`, for the Project's repository and the confirmed repository of `triggerId` |
 | `GET /api/triggers` | List Triggers |
 | `POST /api/triggers` | Create a Trigger, saved disabled |
 | `GET /api/triggers/:id` | Read one Trigger |
 | `PUT /api/triggers/:id` | Save settings against `expectedRevision` |
 | `PUT /api/triggers/:id/enabled` | Disable, or enable the `reviewedRevision` a preview showed |
-| `POST /api/triggers/:id/run` | Run one check now. The JSON body may carry `expectedRevision`: a Trigger saved or enabled since is refused as a stale-revision conflict, starting nothing. A request without a body checks whatever is saved |
+| `POST /api/triggers/:id/run` | Run one check now. The JSON body may carry `expectedRevision`: a Trigger saved or enabled since is refused as a stale-revision conflict, starting nothing. A request without a body checks whatever is saved; a body that is not a JSON object is refused. The reply is the revision checked, with the check's record and started Runs, even when a save or removal landed meanwhile |
 | `POST /api/triggers/preview` | Review what a new Trigger would start; starts and saves nothing |
 | `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |
+
+A preview body may leave out `github.repositoryNodeId` to evaluate the repository the Project's folder names now. Every preview reply carries that repository as `repository`, or `null` when GitHub could not be read.
 | `DELETE /api/triggers/:id` | Remove a Trigger |
 
 ## Definition export

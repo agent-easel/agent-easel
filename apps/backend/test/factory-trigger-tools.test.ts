@@ -5,6 +5,7 @@ import { triggerChecked, triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,
   checkingWorld,
+  failingGitHubCall,
   movedRepository,
   otherProjectWatcher,
   reviewingWorld,
@@ -210,7 +211,7 @@ it("a preview of a saved Trigger without its expected revision is a validation r
   });
 });
 
-it("a new-draft preview while gh is signed out is refused with the repair guidance as its next step", async (c) => {
+it("a new-draft preview whose Project's remote cannot be read answers that problem with no detected repository", async (c) => {
   // Arrange
   const world = await triggerWorld(c);
   world.github.signedIn = false;
@@ -223,11 +224,56 @@ it("a new-draft preview while gh is signed out is refused with the repair guidan
   });
 
   // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toMatchObject({
+    issues: [],
+    problem: { code: "github_signed_out", message: expect.stringContaining("gh auth login") },
+    repository: { saved: null, detected: null },
+  });
+});
+
+it("an edit preview that detects the repository on a revision another save replaced is refused as stale while the remote cannot be read", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  assert(
+    (await world.f.updateTrigger(world.trigger.id, triggerEdit(world.trigger, { name: "Renamed" })))
+      .ok,
+  );
+  world.github.signedIn = false;
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_preview_trigger",
+    arguments: {
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+      detectRepository: true,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "stale_revision" }],
+  });
+});
+
+it("a new-draft preview without its schedule is a validation refusal naming it rather than a preview of a default", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  const { schedule: _left, ...incomplete } = draftSettings(world);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({ name: "factory_preview_trigger", arguments: incomplete });
+
+  // Assert
   expect(result.isError).toBe(true);
   expect(toolReply(result)).toMatchObject({
     code: "validation",
-    issues: [{ code: "trigger_repository", message: expect.stringContaining("gh auth login") }],
-    next: expect.stringContaining("gh"),
+    issues: [{ code: "missing_setting", path: "schedule" }],
   });
 });
 
@@ -354,34 +400,68 @@ it("creating a Trigger saves it disabled with the detected repository and starts
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([]);
 });
 
-it("creating a Trigger with the node id its preview returned saves it, and with a changed remote's refuses with the repository-mismatch issue", async (c) => {
+it("creating a Trigger with the node id its preview returned saves it with that repository", async (c) => {
   // Arrange
   const world = await triggerWorld(c);
   const client = await factoryMcpClient(c, world.f);
-  const create = (nodeId: string, name: string) =>
-    client.callTool({
-      name: "factory_create_trigger",
-      arguments: {
-        ...draftSettings(world),
-        name,
-        github: { query: "label:factory:ready", repositoryNodeId: nodeId },
-      },
-    });
 
   // Act
-  const confirmed = await create("R_atlas", "Confirmed");
-  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
-  const moved = await create("R_atlas", "After the remote moved");
+  const result = await client.callTool({
+    name: "factory_create_trigger",
+    arguments: {
+      ...draftSettings(world),
+      github: { query: "label:factory:ready", repositoryNodeId: "R_atlas" },
+    },
+  });
 
   // Assert
-  expect(confirmed.isError).toBe(false);
-  expect(moved.isError).toBe(true);
-  expect(toolReply(moved)).toMatchObject({
+  expect(result.isError).toBe(false);
+  expect(toolReply(result).trigger).toMatchObject({
+    github: { repository: { nodeId: "R_atlas" } },
+  });
+});
+
+it("creating a Trigger with a node id the Project's remote no longer names is refused with the repository-mismatch issue and saves nothing", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_trigger",
+    arguments: {
+      ...draftSettings(world),
+      github: { query: "label:factory:ready", repositoryNodeId: "R_atlas" },
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
     code: "conflict",
     issues: [{ code: "trigger_repository_mismatch" }],
     next: expect.stringContaining("retarget"),
   });
-  expect(await world.f.listTriggers()).toMatchObject({ value: [{ name: "Confirmed" }] });
+  expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
+});
+
+it("creating a Trigger without its schedule is a validation refusal naming it and saves nothing", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  const { schedule: _left, ...incomplete } = draftSettings(world);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({ name: "factory_create_trigger", arguments: incomplete });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "validation",
+    issues: [{ code: "missing_setting", path: "schedule" }],
+  });
+  expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
 });
 
 it("creating a Trigger while gh is signed out is refused with the repair guidance and saves nothing", async (c) => {
@@ -406,19 +486,11 @@ it("creating a Trigger while gh is signed out is refused with the repair guidanc
   expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
 });
 
-it("creating a Trigger with a Flow of another Project or a name another Trigger has is refused with a next step", async (c) => {
+it("creating a Trigger with a Flow of another Project is refused with a next step", async (c) => {
   // Arrange
   const world = await triggerWorld(c);
-  await triggerSaved(world.f, world.triggerInput);
-  const client = await factoryMcpClient(c, world.f);
   const other = await world.f.addRepository({ path: "/repos/other" });
   assert(other.ok);
-
-  // Act
-  const taken = await client.callTool({
-    name: "factory_create_trigger",
-    arguments: draftSettings(world),
-  });
   assert(
     (
       await world.f.changeFlowOwner(world.flow.id, {
@@ -427,18 +499,36 @@ it("creating a Trigger with a Flow of another Project or a name another Trigger 
       })
     ).ok,
   );
-  const foreignFlow = await client.callTool({
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
     name: "factory_create_trigger",
-    arguments: { ...draftSettings(world), name: "Another name" },
+    arguments: draftSettings(world),
   });
 
   // Assert
-  expect(toolReply(foreignFlow)).toMatchObject({
+  expect(toolReply(result)).toMatchObject({
     code: "validation",
     issues: [{ code: "flow_project_mismatch" }],
     next: expect.stringContaining("global Flow"),
   });
-  expect(toolReply(taken)).toMatchObject({
+});
+
+it("creating a Trigger with a name another Trigger has is refused with a next step", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  await triggerSaved(world.f, world.triggerInput);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_create_trigger",
+    arguments: draftSettings(world),
+  });
+
+  // Assert
+  expect(toolReply(result)).toMatchObject({
     code: "validation",
     issues: [{ code: "trigger_name_taken" }],
     next: expect.stringContaining("different name"),
@@ -569,6 +659,28 @@ it("a check that hits a problem returns its result with the problem instead of a
   });
 });
 
+it("a check whose result is unknown says not to retry and points to the latest check and Started from", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(1, "Outcome unknown");
+  failingGitHubCall(world.github, "labelStates");
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_run_trigger_check",
+    arguments: { triggerId: world.trigger.id, expectedRevision: world.trigger.revision },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  const reply = toolReply(result);
+  expect(reply).toMatchObject({ code: "internal" });
+  expect(reply.next).toMatch(/do not call factory_run_trigger_check again/i);
+  expect(reply.next).toMatch(/factory_get_trigger/);
+  expect(reply.next).toMatch(/Started from/);
+});
+
 it("a check without its expected revision is a validation refusal and starts nothing", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
@@ -636,60 +748,60 @@ it("checking a disabled Trigger is a refused call with a next step", async (c) =
   });
 });
 
-it("removing a Trigger replies with its id, also for an absent or already removed one, and keeps the Runs it started", async (c) => {
+it("removing a Trigger replies with its id and keeps the Runs it started", async (c) => {
   // Arrange
   const world = await checkingWorld(c);
   world.readyIssue(3, "Started before removal");
   await triggerChecked(world.f, world.trigger.id);
   const client = await factoryMcpClient(c, world.f);
-  const remove = (triggerId: string) =>
-    client.callTool({ name: "factory_remove_trigger", arguments: { triggerId } });
 
   // Act
-  const removed = await remove(world.trigger.id);
-  const again = await remove(world.trigger.id);
-  const absent = await remove("no-such-trigger");
+  const result = await client.callTool({
+    name: "factory_remove_trigger",
+    arguments: { triggerId: world.trigger.id },
+  });
 
   // Assert
-  expect(removed.isError).toBe(false);
-  expect(toolReply(removed)).toStrictEqual({ triggerId: world.trigger.id, removed: true });
-  expect(toolReply(again)).toStrictEqual({ triggerId: world.trigger.id, removed: true });
-  expect(toolReply(absent)).toStrictEqual({ triggerId: "no-such-trigger", removed: true });
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual({ triggerId: world.trigger.id, removed: true });
   expect(await world.f.listTriggers()).toStrictEqual({ ok: true, value: [] });
   expect(await startedIssues(world.f, world.project.id)).toStrictEqual([3]);
 });
 
-it("saving settings carries the saved repository forward, and a stale save is a conflict with a next step", async (c) => {
+it("removing an already removed Trigger replies that it is removed, so a retry is safe", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);
-  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  assert((await world.f.removeTrigger(world.trigger.id)).ok);
   const client = await factoryMcpClient(c, world.f);
-  const save = (expectedRevision: number, name: string) =>
-    client.callTool({
-      name: "factory_save_trigger",
-      arguments: { ...draftSettings(world), name, triggerId: world.trigger.id, expectedRevision },
-    });
 
   // Act
-  const renamed = await save(world.trigger.revision, "Renamed");
-  const stale = await save(world.trigger.revision, "Stale rename");
+  const result = await client.callTool({
+    name: "factory_remove_trigger",
+    arguments: { triggerId: world.trigger.id },
+  });
 
   // Assert
-  expect(renamed.isError).toBe(false);
-  expect(toolReply(renamed).trigger).toMatchObject({
-    name: "Renamed",
-    revision: world.trigger.revision + 1,
-    github: { repository: { nodeId: "R_atlas" } },
-  });
-  expect(stale.isError).toBe(true);
-  expect(toolReply(stale)).toMatchObject({
-    code: "conflict",
-    issues: [{ code: "stale_revision" }],
-    next: expect.stringContaining("factory_get_trigger"),
-  });
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual({ triggerId: world.trigger.id, removed: true });
 });
 
-it("saving with an explicit retarget replaces the saved repository with the detected one", async (c) => {
+it("removing a Trigger id that never existed replies that it is removed", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_remove_trigger",
+    arguments: { triggerId: "no-such-trigger" },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toStrictEqual({ triggerId: "no-such-trigger", removed: true });
+});
+
+it("saving settings carries the saved repository forward though the Project's remote moved", async (c) => {
   // Arrange
   const world = await reviewingWorld(c);
   world.github.repositories.set(world.project.workspaceRoot, movedRepository);
@@ -700,16 +812,103 @@ it("saving with an explicit retarget replaces the saved repository with the dete
     name: "factory_save_trigger",
     arguments: {
       ...draftSettings(world),
+      name: "Renamed",
       triggerId: world.trigger.id,
       expectedRevision: world.trigger.revision,
-      retargetRepository: true,
     },
   });
 
   // Assert
   expect(result.isError).toBe(false);
   expect(toolReply(result).trigger).toMatchObject({
+    name: "Renamed",
+    revision: world.trigger.revision + 1,
+    github: { repository: { nodeId: "R_atlas" } },
+  });
+});
+
+it("a save on a revision another save replaced is a conflict with a next step", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  assert(
+    (await world.f.updateTrigger(world.trigger.id, triggerEdit(world.trigger, { name: "Renamed" })))
+      .ok,
+  );
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      name: "Stale rename",
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "stale_revision" }],
+    next: expect.stringContaining("factory_get_trigger"),
+  });
+});
+
+it("saving with the node id of the repository the user reviewed retargets the Trigger to it", async (c) => {
+  // Arrange
+  const world = await reviewingWorld(c);
+  world.github.repositories.set(world.project.workspaceRoot, movedRepository);
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: "R_other" },
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result).trigger).toMatchObject({
+    revision: world.trigger.revision + 1,
     github: { repository: { nameWithOwner: movedRepository.nameWithOwner, nodeId: "R_other" } },
+  });
+});
+
+it("a retarget to the reviewed repository is refused once the Project's remote names another, and the saved repository stays", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.github.nameRepository(world.project.workspaceRoot, "third-owner/atlas");
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_save_trigger",
+    arguments: {
+      ...draftSettings(world),
+      github: { query: "label:factory:ready author:@me", repositoryNodeId: "R_other" },
+      triggerId: world.trigger.id,
+      expectedRevision: world.trigger.revision,
+    },
+  });
+
+  // Assert
+  expect(result.isError).toBe(true);
+  expect(toolReply(result)).toMatchObject({
+    code: "conflict",
+    issues: [{ code: "trigger_repository_mismatch" }],
+  });
+  const saved = await world.f.getTrigger(world.trigger.id);
+  assert(saved.ok);
+  expect(saved.value).toMatchObject({
+    revision: world.trigger.revision,
+    github: { repository: { nodeId: "R_atlas" } },
   });
 });
 

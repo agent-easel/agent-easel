@@ -237,8 +237,11 @@ function useTriggerEditor({
   const { canSave } = validation;
   const ghProblem = readinessNotice(validation.ghProblem, shown?.error?.code);
   const repositoryName = content.repository?.nameWithOwner ?? "";
-  const detected = host.readiness?.repository;
-  const warnings = detected?.ready ? detected.warnings : [];
+  // The warning for the repository the form shows, which differs from the one the Project's
+  // folder names once its remote moved and before a retarget.
+  const warnings =
+    host.readiness?.repositoryWarnings.find((entry) => entry.nodeId === content.repository?.nodeId)
+      ?.warnings ?? [];
 
   async function finishSave(enable: boolean) {
     const saved = await draft.save();
@@ -253,7 +256,7 @@ function useTriggerEditor({
   }
 
   async function check(target: TriggerDefinition) {
-    const result = await actions.run(target, draft.noteStaleRevision);
+    const result = await actions.run(target, () => draft.noteStaleRevision(target.revision));
     if (result) setChecked(result);
   }
 

@@ -9,6 +9,9 @@ type TriggerAction = "enable" | "disable" | "run" | "remove";
 /** The last action Factory refused, with its reason. */
 type TriggerFailure = { readonly name: string; readonly message: string } | null;
 
+/** Which step another saved revision refused: enabling the reviewed one, or checking it. */
+export type RevisionRefusal = "enable" | "check";
+
 /** Factory refused enabling because another revision was saved after the reviewed one. */
 const changedSinceReview = (cause: unknown) =>
   cause instanceof ApiError && cause.detail.issues[0]?.code === "trigger_changed";
@@ -71,39 +74,49 @@ export function useTriggerActions(
       ),
     /**
      * Enable and check: enabling starts the schedule an interval out, so the check runs now.
-     * Answers the Trigger as saved now when another revision was saved after `reviewedRevision`;
-     * nothing is enabled then and its author reviews the current settings instead.
+     * Answers the Trigger as saved now, with the refused step, when another revision was saved
+     * after `reviewedRevision` (nothing is enabled) or after the enable (it stays on, nothing is
+     * checked); its author then reviews the current settings instead.
      */
     enableAndCheck: (trigger: TriggerDefinition, reviewedRevision: number) =>
-      perform(trigger, "enable", async (): Promise<TriggerDefinition | null> => {
-        let enabled: TriggerDefinition;
-        try {
-          enabled = await definitions.setTriggerEnabled(trigger.id, {
-            enabled: true,
-            reviewedRevision,
-          });
-        } catch (cause) {
-          if (!changedSinceReview(cause)) throw cause;
-          return definitions.getTrigger(trigger.id);
-        }
-        // Enabling advanced the revision; the check runs the one the enable returned.
-        await definitions.runTrigger(trigger.id, { expectedRevision: enabled.revision });
-        return null;
-      }),
+      perform(
+        trigger,
+        "enable",
+        async (): Promise<{ latest: TriggerDefinition; refused: RevisionRefusal } | null> => {
+          let enabled: TriggerDefinition;
+          try {
+            enabled = await definitions.setTriggerEnabled(trigger.id, {
+              enabled: true,
+              reviewedRevision,
+            });
+          } catch (cause) {
+            if (!changedSinceReview(cause)) throw cause;
+            return { latest: await definitions.getTrigger(trigger.id), refused: "enable" };
+          }
+          try {
+            // Enabling advanced the revision; the check runs the one the enable returned.
+            await definitions.runTrigger(trigger.id, { expectedRevision: enabled.revision });
+          } catch (cause) {
+            if (!staleCheck(cause)) throw cause;
+            return { latest: await definitions.getTrigger(trigger.id), refused: "check" };
+          }
+          return null;
+        },
+      ),
     /** What a check of the saved Trigger would start now; it starts and changes nothing. */
     preview: (trigger: TriggerDefinition) =>
       definitions.previewTrigger(trigger.id, currentSettings(trigger)),
     /**
-     * Checks the revision on screen. A refusal because another was saved goes to `onStale`, the
-     * caller's saved-revision notice, when it has one; otherwise it shows as the failure.
+     * Checks the revision on screen. A refusal because another was saved starts nothing and goes
+     * to `onStale` with the Trigger as saved now, for the caller's saved-revision notice.
      */
-    run: (trigger: TriggerDefinition, onStale?: () => void) =>
+    run: (trigger: TriggerDefinition, onStale: (latest: TriggerDefinition) => void) =>
       perform(trigger, "run", () =>
         definitions
           .runTrigger(trigger.id, { expectedRevision: trigger.revision })
-          .catch((cause) => {
-            if (!onStale || !staleCheck(cause)) throw cause;
-            onStale();
+          .catch(async (cause: unknown) => {
+            if (!staleCheck(cause)) throw cause;
+            onStale(await definitions.getTrigger(trigger.id));
             return undefined;
           }),
       ),

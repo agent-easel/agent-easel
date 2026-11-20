@@ -30,10 +30,19 @@ interface TriggerQuery {
   readonly authorFilter: boolean;
 }
 
-/** Validated GitHub Issues settings: the confirmed repository and the derived query facts. */
-export interface TriggerSettings extends Omit<UpdateTriggerInput, "expectedRevision" | "github"> {
-  readonly github: TriggerQuery & { readonly repositoryNodeId: string };
+/** Validated settings whose repository is `R`: a confirmed node id, or null for a preview without one. */
+interface SettingsWith<R extends string | null> extends Omit<
+  UpdateTriggerInput,
+  "expectedRevision" | "github"
+> {
+  readonly github: TriggerQuery & { readonly repositoryNodeId: R };
 }
+
+/** Validated GitHub Issues settings: the confirmed repository and the derived query facts. */
+export type TriggerSettings = SettingsWith<string>;
+
+/** Settings to preview; a null repository is the one the Project's folder names now. */
+export type TriggerPreviewSettings = SettingsWith<string | null>;
 
 const QUERY_PATH = "github.query";
 
@@ -244,7 +253,20 @@ export function validateTriggerLimit(value: unknown): Result<number> {
       );
 }
 
-function parseGitHub(value: unknown, defaults: boolean): Result<TriggerSettings["github"]> {
+/** How settings name their repository: a node id the client confirmed, or that for a preview, none. */
+type RepositoryRule<R extends string | null> = (value: unknown) => Result<R>;
+
+const confirmedRepository: RepositoryRule<string> = (value) =>
+  text(value, "github.repositoryNodeId", 256, "Confirm the Project's repository.");
+
+const previewedRepository: RepositoryRule<string | null> = (value) =>
+  value === undefined ? { ok: true, value: null } : confirmedRepository(value);
+
+function parseGitHub<R extends string | null>(
+  value: unknown,
+  defaults: boolean,
+  repository: RepositoryRule<R>,
+): Result<SettingsWith<R>["github"]> {
   const fields = record(value);
   if (!fields)
     return invalid(
@@ -254,12 +276,7 @@ function parseGitHub(value: unknown, defaults: boolean): Result<TriggerSettings[
     );
   const extra = unknownField(fields, ["repositoryNodeId", "query"], "github.");
   if (extra) return extra;
-  const repositoryNodeId = text(
-    fields.repositoryNodeId,
-    "github.repositoryNodeId",
-    256,
-    "Confirm the Project's repository.",
-  );
+  const repositoryNodeId = repository(fields.repositoryNodeId);
   if (!repositoryNodeId.ok) return repositoryNodeId;
   const query = parseTriggerQuery(
     defaults && fields.query === undefined ? TRIGGER_DEFAULTS.query : fields.query,
@@ -271,10 +288,11 @@ function parseGitHub(value: unknown, defaults: boolean): Result<TriggerSettings[
 const SETTING_KEYS = ["kind", "name", "projectId", "flowId", "schedule", "maxActiveRuns", "github"];
 
 /** Shared by create and update; `defaults` fills the settings a create may leave out. */
-function parseSettings(
+function parseSettings<R extends string | null>(
   fields: Record<string, unknown>,
   defaults: boolean,
-): Result<TriggerSettings> {
+  repository: RepositoryRule<R>,
+): Result<SettingsWith<R>> {
   if (!TRIGGER_KINDS.includes(fields.kind as TriggerKind))
     return invalid("trigger_kind", "kind", "Choose a Trigger type: GitHub Issues (github_issues).");
   const name = text(
@@ -298,7 +316,7 @@ function parseSettings(
       : fields.maxActiveRuns,
   );
   if (!maxActiveRuns.ok) return maxActiveRuns;
-  const github = parseGitHub(fields.github, defaults);
+  const github = parseGitHub(fields.github, defaults, repository);
   if (!github.ok) return github;
   return {
     ok: true,
@@ -314,16 +332,18 @@ function parseSettings(
   };
 }
 
-/** A new Trigger; schedule, Max active Runs and query take their defaults when left out. */
-export function validateCreateTrigger(input: unknown): Result<TriggerSettings> {
+function parseCreate<R extends string | null>(
+  input: unknown,
+  repository: RepositoryRule<R>,
+): Result<SettingsWith<R>> {
   const fields = record(input) ?? {};
-  return unknownField(fields, SETTING_KEYS) ?? parseSettings(fields, true);
+  return unknownField(fields, SETTING_KEYS) ?? parseSettings(fields, true, repository);
 }
 
-/** A complete replacement of a saved Trigger's settings, from the revision the edit started at. */
-export function validateUpdateTrigger(
+function parseUpdate<R extends string | null>(
   input: unknown,
-): Result<TriggerSettings & Pick<UpdateTriggerInput, "expectedRevision">> {
+  repository: RepositoryRule<R>,
+): Result<SettingsWith<R> & Pick<UpdateTriggerInput, "expectedRevision">> {
   const fields = record(input) ?? {};
   const extra = unknownField(fields, [...SETTING_KEYS, "expectedRevision"]);
   if (extra) return extra;
@@ -333,14 +353,36 @@ export function validateUpdateTrigger(
       "expectedRevision",
       "Name the saved revision these edits start from.",
     );
-  const settings = parseSettings(fields, false);
+  const settings = parseSettings(fields, false, repository);
   if (!settings.ok) return settings;
   return { ok: true, value: { ...settings.value, expectedRevision: fields.expectedRevision } };
 }
 
-/** A manual check: the revision it is bound to is optional, and nothing else is accepted. */
+/** A new Trigger; schedule, Max active Runs and query take their defaults when left out. */
+export const validateCreateTrigger = (input: unknown) => parseCreate(input, confirmedRepository);
+
+/** A complete replacement of a saved Trigger's settings, from the revision the edit started at. */
+export const validateUpdateTrigger = (input: unknown) => parseUpdate(input, confirmedRepository);
+
+/** A new Trigger to preview, as `validateCreateTrigger`; the repository may be left out. */
+export const validatePreviewNewTrigger = (input: unknown) =>
+  parseCreate(input, previewedRepository);
+
+/** A saved Trigger's settings to preview, as `validateUpdateTrigger`; the repository may be left out. */
+export const validatePreviewTrigger = (input: unknown) => parseUpdate(input, previewedRepository);
+
+/**
+ * A manual check: no input at all, or an object whose only, optional field is the revision it is
+ * bound to. Any other JSON value is refused rather than read as a check of whatever is saved.
+ */
 export function validateRunTrigger(input: unknown): Result<RunTriggerInput> {
-  const fields = record(input) ?? {};
+  const fields = input === undefined ? {} : record(input);
+  if (!fields)
+    return invalid(
+      "trigger_run_input",
+      "input",
+      "Send no body, or a JSON object that may name expectedRevision.",
+    );
   const extra = unknownField(fields, ["expectedRevision"]);
   if (extra) return extra;
   if (fields.expectedRevision === undefined) return { ok: true, value: {} };
