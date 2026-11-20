@@ -1,5 +1,5 @@
 import { Button } from "../components/ui/button";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDraftGuard, type ReportDraft } from "../draft-guard.ts";
 import type {
   AgentCapabilities,
@@ -137,16 +137,20 @@ function useNewAgentOwner(
 }
 
 /**
- * With no Agent opened, the Agents page opens the first Agent in the visible list.
+ * Entering the Agents page with no Agent opened opens the first Agent in the visible list. Going
+ * back to the list from an opened Agent (Esc, the Agents crumb) leaves nothing opened.
  */
 function useAgentsNavigation(agentId: string | undefined, firstId: string | undefined) {
   const openStudio = useStudioNavigation();
   const openRef = useRef(openStudio);
+  const opened = useRef(agentId !== undefined);
   useEffect(() => {
     openRef.current = openStudio;
   }, [openStudio]);
   useEffect(() => {
-    if (agentId !== undefined || !firstId) return;
+    if (agentId !== undefined) opened.current = true;
+    if (opened.current || !firstId) return;
+    opened.current = true;
     void openRef.current({ tab: "agents", agentId: firstId });
   }, [agentId, firstId]);
   return openStudio;
@@ -646,19 +650,41 @@ function useAgentOwnership(
 
 /**
  * One loaded editor owns its draft, which follows Studio's saved Agents while mounted; disposal
- * detaches it and clears only its own Studio guard.
+ * detaches it.
  */
 function useOpenedAgentDraft(
   agent: AgentDefinition | null,
   capabilities: AgentCapabilities | null,
   source: AgentDraftSource,
-  id: string,
-  reportDraft: ReportDraft,
 ) {
   const [draft] = useState(() => createAgentDraft(agent, capabilities, source));
   useEffect(() => draft.connect(), [draft]);
-  useDraftGuard(draft, id, reportDraft);
   return { draft, state: useAgentDraftSnapshot(draft) };
+}
+
+/**
+ * Tells Studio's guard about this editor's unsaved work: the draft's own changes and a new Agent's
+ * picked owner, which lives only in this editor. The pick counts only while the draft's own
+ * snapshot has no saved Agent, so a Create or Open Agent that adopts one clears the guard before
+ * its navigation. Disposal clears only its own Studio guard.
+ */
+function useAgentDraftGuard(
+  draft: AgentDraftModel,
+  id: string,
+  reportDraft: ReportDraft,
+  ownerPicked: boolean,
+) {
+  const guarded = useMemo(
+    () => ({
+      subscribe: draft.subscribe,
+      getSnapshot: () => {
+        const { dirty, removed, saved } = draft.getSnapshot();
+        return { dirty: dirty || (ownerPicked && saved === null), removed };
+      },
+    }),
+    [draft, ownerPicked],
+  );
+  useDraftGuard(guarded, id, reportDraft);
 }
 
 type AgentOwnerDialog =
@@ -773,9 +799,15 @@ function OpenedAgentEditor({
   flows: readonly FlowDraft[];
   onDeleted: () => void;
 }) {
-  const { draft, state } = useOpenedAgentDraft(agent, capabilities, source, agentId, reportDraft);
+  const { draft, state } = useOpenedAgentDraft(agent, capabilities, source);
   const exporter = useDefinitionExport(() => api.exportAgent(agentId));
   const ownership = useAgentOwnership(state.saved, state.owner, projects, newOwner);
+  useAgentDraftGuard(
+    draft,
+    agentId,
+    reportDraft,
+    ownership.kind === "new" && ownership.chosen !== ownership.initial,
+  );
   const dialogs = useAgentOwnerDialogs(draft, onDuplicated);
   async function save() {
     if (ownership.kind === "new" && ownership.blocked) return;

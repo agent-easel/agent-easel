@@ -13,8 +13,10 @@ function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>)
 
 const dialogOverlayClass =
   "fixed inset-0 z-50 bg-overlay data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
+// A dialog can sit over the desktop title bar; Electron would turn the overlapped part of its
+// controls into window drag area.
 const dialogSurfaceClass =
-  "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-strong bg-card shadow-panel outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
+  "fixed [-webkit-app-region:no-drag] top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border-strong bg-card shadow-panel outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0";
 type DialogSize = "standard" | "wide";
 const dialogSizeLimitsClass = "max-h-[85vh] [@media(width<640px)]:w-[calc(100vw-32px)]";
 const dialogSizeClass = {

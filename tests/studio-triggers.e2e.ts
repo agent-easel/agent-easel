@@ -327,6 +327,28 @@ test("a saved Trigger's footer Save turns neutral and disabled once saved", asyn
   await expectSaveNeutral(screen);
 });
 
+test("Escape on an edited Trigger asks before discarding and returns to the Trigger list, not out of Studio", async ({
+  app,
+  browser,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  await openEditedTrigger({ app, screen, fixture }, "Journey · Escape to Triggers");
+
+  // Act
+  await browser.keyboard.press("Escape");
+  await screen
+    .getByRole("dialog", "Discard unsaved changes?")
+    .getByRole("button", "Discard changes", { exact: true })
+    .tap();
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Studio", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("heading", "Triggers", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("textbox", "Name", { exact: true })).toHaveCount(0);
+});
+
 test("a saved Trigger's footer Save turns neutral when the Trigger is removed elsewhere during its save", async ({
   app,
   screen,
