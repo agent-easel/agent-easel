@@ -123,3 +123,37 @@ test("a skewed browser clock does not prevent Create or recovery of its lost rep
   await open.tap();
   await expect(screen.getByLabel("Name", { exact: true })).toHaveValue(revised);
 });
+
+/** Factory creates the Agent, but its Create reply never reaches the browser. */
+async function loseAgentCreateReply(browser: Browser) {
+  await browser.route("**/api/agents", async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    await route.fetch();
+    await route.abort();
+  });
+}
+
+test("Open Agent after a lost Create reply opens a Project-owned Agent without asking to discard it", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1440, height: 900 });
+  await app.open("/studio/agents/new");
+  await screen.getByLabel("Name", { exact: true }).fill("Creation recovery · Project owner");
+  await screen.getByLabel("Prompt", { exact: true }).fill("Review the change.");
+  await screen.getByRole("radio", "Project", { exact: true }).tap();
+  await screen.getByRole("combobox", "Owning Project", { exact: true }).tap();
+  await screen.getByRole("option", "Atlas demo", { exact: true }).tap();
+  await loseAgentCreateReply(browser);
+  await screen.getByRole("button", "Create Agent", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", "Open Agent", { exact: true }).tap();
+
+  // Assert
+  await expect(browser).toHaveURL(/\/studio\/agents\/(?!new$)[^/]+$/);
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toHaveCount(0);
+});

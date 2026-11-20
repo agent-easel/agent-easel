@@ -112,8 +112,8 @@ export async function expectRemovedAgentBackList(
   state: Awaited<ReturnType<typeof beforeRemovedAgentBackList>>,
 ) {
   const { browser, screen } = state;
-  // An Agents URL with no id selects the first Agent, so the list never stays on /studio/agents.
-  await expect(browser).toHaveURL(/\/studio\/agents\/[^/]+$/);
+  // Back to list returns to the list itself; only entering Agents selects the first Agent.
+  await expect(browser).toHaveURL(/\/studio\/agents$/);
   await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
   await expect(screen.getByText("Agent not found", { exact: true })).toHaveCount(0);
   return { ...state };
