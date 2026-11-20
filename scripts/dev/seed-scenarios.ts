@@ -30,6 +30,7 @@ export type SeedScenario = {
   | { state: "settled"; repository: Repository; result: Report }
   | { state: "archived" | "execution failed" | "snoozed" | "woke" }
   | { state: "settlement unresolved" }
+  | { state: "progress overdue" }
   /** Generate Run titles was on for this Start only; the title thread's title was applied. */
   | { state: "generated title applied"; generatedTitle: string }
   | { state: "Run worktree bound" }
@@ -451,6 +452,13 @@ export const seedScenarioList: readonly SeedScenario[] = [
       pullRequests: [],
     },
     delegations: 2,
+  },
+  {
+    key: "overdue",
+    title: "Needs input · Search indexing has gone quiet",
+    flow: "simple",
+    state: "progress overdue",
+    prompt: "Check the search indexing job and report progress.",
   },
   {
     key: "generated-title",

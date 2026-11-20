@@ -1,5 +1,7 @@
+import * as Effect from "effect/Effect";
+import * as TestClock from "effect/testing/TestClock";
 import { assert, expect, it } from "@effect/vitest";
-import { prepared } from "./support/prepared-runner.ts";
+import { prepared, preparedService } from "./support/prepared-runner.ts";
 import { unnumberedRun } from "./support/navigation.ts";
 import {
   observeFor,
@@ -376,3 +378,22 @@ it("an Agent idle with a working report marks its Run Needs input in navigation 
     matters: [],
   });
 });
+
+it.effect("an unreported visit first needs review after three hours without progress", (c) =>
+  Effect.gen(function* () {
+    // Arrange
+    const f = yield* preparedService(c, {}, { connectionRetryMs: 24 * 60 * 60_000 });
+    yield* Effect.promise(() => workerAtWork(f.world, f.input));
+    yield* TestClock.adjust(179 * 60_000);
+    const before = yield* f.factory.listRunNavigation();
+
+    // Act
+    yield* TestClock.adjust(60_000);
+
+    // Assert
+    expect(before).toMatchObject({ value: [{ attention: { needsInput: false } }] });
+    expect(yield* f.factory.listRunNavigation()).toMatchObject({
+      value: [{ attention: { needsInput: true, matters: [] } }],
+    });
+  }),
+);

@@ -195,6 +195,7 @@ function readSubmission(value: unknown): StartRunInput | undefined {
     projectId,
     flowId,
     ...prompt,
+    ...(fields.confirmCompletedIssues === true && { confirmCompletedIssues: true }),
     title,
     titleProvenance,
     createdAt,
@@ -608,7 +609,7 @@ export function createRunDraft(
       error = missingImagesOutcome;
     else error = recoverable ? unknownOutcome : unsavedUnknownOutcome;
   }
-  async function start() {
+  async function start(confirmCompletedIssues = false) {
     const requestServer = server;
     const saved = find(currentId);
     if (requestServer === undefined || !saved || inFlight.has(saved.id)) return;
@@ -620,6 +621,7 @@ export function createRunDraft(
       Object.freeze({
         // Rejected requests are never recorded, so one key per draft can still be retried.
         requestId: id,
+        ...(confirmCompletedIssues && { confirmCompletedIssues: true }),
         projectId: saved.projectId,
         flowId: saved.flowId,
         segments: saved.segments,

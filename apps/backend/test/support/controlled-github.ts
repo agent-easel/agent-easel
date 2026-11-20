@@ -17,6 +17,7 @@ type GitHubCall = keyof GitHubAdapter;
 export interface ControlledIssue extends GitHubIssue {
   readonly repositoryNodeId: string;
   open: boolean;
+  mergedClosingPr?: string;
   /** False when the issue no longer meets the query's conditions other than its labels. */
   matchesQuery: boolean;
   labels: string[];
@@ -94,6 +95,20 @@ export class ControlledGitHub implements GitHubAdapter {
       return repository
         ? gitHubAnswer(repository)
         : gitHubRefusal({ reason: "no_repository", message: "No GitHub remote." });
+    });
+  }
+
+  async issueCompletion(host: string, repository: string, number: number) {
+    return this.answer("issueCompletion", () => {
+      const issue = this.issues.find(
+        (candidate) => candidate.url === `https://${host}/${repository}/issues/${number}`,
+      );
+      if (issue && !issue.open) return gitHubAnswer("is already closed");
+      return gitHubAnswer(
+        issue?.mergedClosingPr
+          ? `has a merged closing pull request at ${issue.mergedClosingPr}`
+          : null,
+      );
     });
   }
 

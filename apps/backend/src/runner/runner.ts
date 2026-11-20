@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Semaphore from "effect/Semaphore";
 import type { EffectOperations } from "../effect-operations.ts";
+import type { GitHubAdapter } from "../adapters/github.ts";
 import type { GitAdapter } from "../adapters/git.ts";
 import type { T3Threads } from "../t3/threads.ts";
 import type { T3ContractSnapshot } from "../t3/contract.ts";
@@ -36,6 +37,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
   refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   t3: T3Threads,
   git: GitAdapter,
+  github: GitHubAdapter,
   owner: { token: string },
   intervalMs: number,
   checkAgent: RunnerOptions["checkAgent"],
@@ -87,6 +89,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
     freshSnapshot,
     refreshProjects,
     git,
+    github,
     lifecycle,
     checkAgent,
     titles.planTitleGeneration,

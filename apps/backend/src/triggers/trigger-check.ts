@@ -208,6 +208,11 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
       return { ok: true as const, value: undefined };
     });
     return {
+      triggerIssue: {
+        host: trigger.github.repository.host,
+        repository: origin.repository,
+        number: origin.issueNumber,
+      },
       check: local,
       commit: (runId) =>
         Effect.gen(function* () {

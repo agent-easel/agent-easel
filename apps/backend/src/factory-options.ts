@@ -1,3 +1,4 @@
+import type * as Clock from "effect/Clock";
 import type { GitAdapter } from "./adapters/git.ts";
 import type { GitHubAdapter } from "./adapters/github.ts";
 import type { T3Modules } from "./t3/modules.ts";
@@ -9,6 +10,7 @@ export interface FactoryOptions {
   readonly databasePath: string;
   readonly credentialsDirectory?: string;
   readonly t3?: T3Modules;
+  readonly clock?: Clock.Clock;
   readonly github?: GitHubAdapter;
   readonly git?: GitAdapter;
   readonly connectionRetryMs?: number;

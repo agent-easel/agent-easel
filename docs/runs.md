@@ -25,6 +25,8 @@ levels of evidence. A configuration check alone proves neither execution nor rep
   while Start was validating refuses it with a conflict. No refusal creates a Task, Run or worker. Ownership adds no
   model or environment check; every other Start gate applies unchanged.
 
+Before creating a Run, Start checks the Trigger’s issue or explicit GitHub issue references in the prompt. An HTTPS github.com issue URL identifies its repository directly. A bare `#123` uses the host-local Project’s GitHub repository. A confirmed closed issue or merged closing pull request displays a warning. The composer offers **Start anyway** and the Start tool accepts confirmation after review. An unattended Trigger lists the issue as not started. An unavailable GitHub read leaves manual Start available.
+
 Worktree Runs require T3 to advertise the boolean `workspaceStrategy.startFromOrigin` option.
 Update T3 before using worktree Flows with this Factory version. If its launch schema lacks
 that option, Factory rejects Start with `launch_unsupported`. Project-checkout Flows do not require it.
@@ -685,6 +687,7 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   waits for CI or review, so a finished worker thread is not a missing-report Problem. A later working or finished report
   replaces it. Reported after a result, when the Agent reopens the task, it shows the block working without withdrawing the
   result, and the Run stays Active until a later report.
+- **Overdue progress.** A working visit with three hours since its latest accepted progress report, or since activation if it has never reported, shows **Needs input** and **Review in T3**. This includes a sent Continuation. The threshold allows time for builds and external reviews. A new report updates the signal. The owner can open the worker thread while the Run continues normally.
 - **Conversation**: an Agent that asks questions in chat ends its turn with them; reply in the worker's T3 thread. While an
   Agent block's worker thread is idle and the visit's current report is still `working`, the block and the Run show **Needs
   input**, and the overview has one card, **Review *Block* in T3**, with its Working report and **Open in T3 ↗**. An Agent

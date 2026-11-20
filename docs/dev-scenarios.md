@@ -50,6 +50,7 @@ of the [quality gate](quality-gates.md), rejects stale rows and missing or malfo
 - `continuation-sent`: Demo · Continuation · Spec prompt sent to the planning thread
 - `continuation-forwarded`: Demo · Continuation · Spec passed on to Tickets
 - `working`: Demo · Working · Improve the project picker
+- `overdue`: Demo · Needs input · Search indexing has gone quiet
 - `generated-title`: Demo · Generated title · Rank exact project-name matches above partial matches when someone searches Atlas
 
 <!-- scenario-catalog:end -->

@@ -728,6 +728,7 @@ function handleHttpRequestInner(
 export interface ServerOptions {
   readonly uiDirectory?: string | null;
   readonly t3?: FactoryOptions["t3"];
+  readonly clock?: FactoryOptions["clock"];
   readonly github?: FactoryOptions["github"];
   readonly git?: FactoryOptions["git"];
   readonly connectionRetryMs?: number;
@@ -752,6 +753,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),
     ...(options.t3 ? { t3: options.t3 } : {}),
+    ...(options.clock ? { clock: options.clock } : {}),
     ...(options.github ? { github: options.github } : {}),
     ...(options.git ? { git: options.git } : {}),
     ...(options.connectionRetryMs !== undefined
