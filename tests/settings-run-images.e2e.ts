@@ -37,9 +37,9 @@ async function projects(app: App) {
 }
 
 async function selectProject(screen: Screen, project: string) {
-  await screen.getByRole("button", /^Project: /).tap();
-  await screen.getByRole("menuitemradio", project, { exact: true }).tap();
-  await expect(screen.getByRole("menu")).toBeHidden();
+  await screen.getByRole("combobox", /^Project: /).tap();
+  await screen.getByRole("option", project, { exact: true }).tap();
+  await expect(screen.getByRole("listbox")).toBeHidden();
 }
 
 const cards = (screen: Screen) =>

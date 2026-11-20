@@ -1,23 +1,15 @@
 import { useId } from "react";
 import type { FactoryProject } from "@t3-factory/contracts";
-import { ChevronDown, ChevronsUpDown, FolderGit2, RefreshCw, Workflow } from "lucide-react";
+import { FolderGit2, RefreshCw, Workflow } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ChoiceMenu, type MenuChoice, type MenuGroup } from "./choice-menu.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { ProblemCard } from "./problem-card.tsx";
-import { fieldLabelClass, selectFieldClass } from "./page.tsx";
+import { fieldLabelClass } from "./page.tsx";
 import type { OwnerChange } from "../revisioned-draft.ts";
 import {
   ownerPicker,
@@ -105,16 +97,49 @@ export function OwnerGroupHeader({
 const filterValue = (filter: StudioOwnerFilter) =>
   filter.kind === "project" ? filter.projectId : filter.kind;
 
-/** The filter's short value on its trigger. */
-function filterLabel(filter: StudioOwnerFilter, projects: readonly FactoryProject[]) {
-  if (filter.kind === "all") return "All";
-  if (filter.kind === "global") return "Global";
-  return studioOwner(filter.projectId, projects).title;
+type OwnerTargets = ReturnType<typeof ownerPicker>["targets"];
+
+const globalChoice: MenuChoice = {
+  id: "global",
+  label: "Global",
+  description: "Usable in every project",
+  icon: <Workflow aria-hidden strokeWidth={1.5} className="size-4 text-muted-foreground" />,
+};
+
+/**
+ * Each Project owner as a choice with its repository path; one that became unavailable stays
+ * listed, disabled, with its reason and `reason` appended.
+ */
+function projectChoices(targets: OwnerTargets, reason: string, group?: MenuGroup): MenuChoice[] {
+  return targets.map(({ owner, disabled }) => {
+    const why = owner.unavailable && `${owner.unavailable}${reason}`;
+    return {
+      id: owner.projectId!,
+      label: owner.title,
+      description: [owner.detail, why].filter(Boolean).join(" · "),
+      icon: (
+        <FolderGit2
+          aria-hidden
+          strokeWidth={1.5}
+          className={cn("size-4", owner.unavailable ? "text-attention" : "text-muted-foreground")}
+        />
+      ),
+      disabled: disabled !== null,
+      ...(group && { group }),
+    };
+  });
 }
+
+/** Global, then the Project owners under their own heading. */
+const ownerChoices = (targets: OwnerTargets, reason: string) => [
+  globalChoice,
+  ...projectChoices(targets.slice(1), reason, { id: "projects", label: "Projects" }),
+];
 
 /**
  * Figma Studio/OwnerFilter: All, Global or one available Project; Studio's lists share it. A chosen
- * Project that became unavailable stays listed with its reason.
+ * Project that became unavailable stays listed with its reason, and one the catalog no longer holds
+ * reads Unknown Project.
  */
 export function OwnerFilter({
   filter,
@@ -127,79 +152,30 @@ export function OwnerFilter({
   onChange: (filter: StudioOwnerFilter) => void;
   className?: string;
 }) {
-  const label = filterLabel(filter, projects);
+  const id = useId();
   const { targets } = ownerPicker(filter.kind === "project" ? filter.projectId : null, projects);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={`Owner filter: ${label}`}
-          className={cn(
-            "h-8 w-40 justify-start gap-1.5 bg-card pr-2 pl-3 font-normal has-[>svg]:pr-2 has-[>svg]:pl-3",
-            className,
-          )}
-        >
-          <span className="text-subtle-foreground">Owner:</span>
-          <span className="min-w-0 truncate font-medium">{label}</span>
-          <ChevronDown aria-hidden className="ml-auto size-3 text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56 max-w-[calc(100vw-1rem)]">
-        <DropdownMenuRadioGroup
-          value={filterValue(filter)}
-          onValueChange={(value) =>
-            onChange(
-              value === "all" || value === "global"
-                ? { kind: value }
-                : { kind: "project", projectId: value },
-            )
-          }
-        >
-          <DropdownMenuRadioItem value="all" indicatorPosition="right" className="pl-2">
-            All owners
-          </DropdownMenuRadioItem>
-          <DropdownMenuRadioItem value="global" indicatorPosition="right" className="pl-2">
-            <Workflow aria-hidden strokeWidth={1.5} className="text-muted-foreground" />
-            Global
-          </DropdownMenuRadioItem>
-          {targets.length > 1 && <DropdownMenuSeparator />}
-          {targets.slice(1).map(({ owner, disabled }) => (
-            <DropdownMenuRadioItem
-              key={owner.projectId}
-              value={owner.projectId!}
-              disabled={disabled !== null}
-              indicatorPosition="right"
-              aria-label={`${owner.title} · ${owner.detail}${owner.unavailable ? ` · ${owner.unavailable}` : ""}`}
-              className="items-start pl-2"
-            >
-              <FolderGit2 aria-hidden strokeWidth={1.5} className="mt-0.5 text-muted-foreground" />
-              <OwnerOptionText owner={owner} />
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-/** A Project owner's title, repository path and, when unavailable, its reason. */
-function OwnerOptionText({ owner, reason }: { owner: StudioOwner; reason?: string }) {
-  return (
-    <span className="grid min-w-0 flex-1 gap-0.5">
-      <span className="truncate font-medium">{owner.title}</span>
-      <OwnerPath
-        path={owner.detail ?? ""}
-        className="text-2xs tracking-label text-subtle-foreground"
-      />
-      {owner.unavailable && (
-        <span className="truncate text-2xs tracking-label text-attention">
-          {owner.unavailable}
-          {reason ?? ""}
-        </span>
-      )}
-    </span>
+    <ChoiceMenu
+      id={id}
+      label="Owner filter"
+      trigger={{ prefix: "Owner:" }}
+      value={filterValue(filter)}
+      choices={[{ id: "all", label: "All" }, ...ownerChoices(targets, "")]}
+      disabled={false}
+      placeholder="All"
+      unlistedLabel={
+        filter.kind === "project" ? studioOwner(filter.projectId, projects).title : undefined
+      }
+      className={cn("h-8 w-40 gap-1.5 bg-card pr-2 has-[>svg]:pr-2", className)}
+      popupClassName="w-80"
+      onChange={(value) =>
+        onChange(
+          value === "all" || value === "global"
+            ? { kind: value }
+            : { kind: "project", projectId: value },
+        )
+      }
+    />
   );
 }
 
@@ -227,7 +203,7 @@ export function OwnerPicker({
   kind,
   initial,
   hint,
-  quietStatus,
+  quietStatus = false,
 }: {
   chosen: string | null;
   projects: readonly FactoryProject[];
@@ -246,6 +222,7 @@ export function OwnerPicker({
   const projectTargets = picker.targets.slice(1);
   const firstAvailable = projectTargets.find((target) => !target.disabled)?.owner.projectId;
   const text = ownerKindText[kind];
+  const blocked = picker.blocked && `${picker.chosen.title}: ${picker.blocked}`;
   return (
     <div className="grid gap-1.5">
       <span id={`${id}-owner`} className={fieldLabelClass}>
@@ -272,15 +249,16 @@ export function OwnerPicker({
           targets={projectTargets}
           plural={text.plural}
           disabled={disabled}
+          describedBy={blocked ? `${id}-status` : undefined}
           onChange={onChange}
         />
       )}
-      {!quietStatus && (
-        <OwnerPickerStatus
-          blocked={picker.blocked && `${picker.chosen.title}: ${picker.blocked}`}
-          note={chosen === initial ? hint : ""}
-        />
-      )}
+      <OwnerPickerStatus
+        id={`${id}-status`}
+        blocked={blocked}
+        note={chosen === initial ? hint : ""}
+        quiet={quietStatus}
+      />
     </div>
   );
 }
@@ -303,32 +281,51 @@ function OwnerKind({
   );
 }
 
-/** The chosen owner's problem, or where its default came from. An empty note says nothing. */
-function OwnerPickerStatus({ blocked, note }: { blocked: string | null; note: string }) {
+/**
+ * The chosen owner's problem, or where its default came from. An empty note says nothing. A quiet
+ * problem is shown beside the caller's action, so here it only describes the invalid field.
+ */
+function OwnerPickerStatus({
+  id,
+  blocked,
+  note,
+  quiet,
+}: {
+  id: string;
+  blocked: string | null;
+  note: string;
+  quiet: boolean;
+}) {
   if (blocked)
     return (
-      <p role="alert" className="text-2xs tracking-label text-attention">
+      <p
+        id={id}
+        role={quiet ? undefined : "alert"}
+        className={quiet ? "sr-only" : "text-2xs tracking-label text-attention"}
+      >
         {blocked}. Choose Global or an available Project.
       </p>
     );
-  if (!note) return null;
+  if (quiet || !note) return null;
   return <p className="text-2xs tracking-label text-subtle-foreground">{note}</p>;
 }
 
-/** Figma Run/SelectField for the owning Project, with each owner target as a menu choice. */
+/** Figma Run/SelectField for the owning Project, with each owner target as a choice. */
 function OwningProjectMenu({
   labelId,
   chosen,
   targets,
   plural,
   disabled,
+  describedBy,
   onChange,
 }: {
   labelId: string;
   chosen: StudioOwner;
-  targets: ReturnType<typeof ownerPicker>["targets"];
+  targets: OwnerTargets;
   plural: string;
   disabled: boolean;
+  describedBy: string | undefined;
   onChange: (owner: string) => void;
 }) {
   return (
@@ -336,80 +333,22 @@ function OwningProjectMenu({
       <span id={labelId} className={fieldLabelClass}>
         Owning Project
       </span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={disabled}>
-          <Button
-            type="button"
-            variant="outline"
-            aria-labelledby={labelId}
-            aria-describedby={`${labelId}-value`}
-            aria-invalid={chosen.unavailable ? true : undefined}
-            className={cn(
-              selectFieldClass,
-              "disabled:opacity-50 data-[state=open]:border-ring data-[state=open]:ring-[3px] data-[state=open]:ring-ring/50",
-            )}
-          >
-            <FolderGit2
-              aria-hidden
-              className={cn(
-                "size-4 shrink-0",
-                chosen.unavailable ? "text-attention" : "text-muted-foreground",
-              )}
-              strokeWidth={1.5}
-            />
-            <span id={`${labelId}-value`} className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 font-medium">{chosen.title}</span>
-              <OwnerPath
-                path={chosen.detail ?? ""}
-                className="flex-1 text-2xs tracking-label text-subtle-foreground"
-              />
-            </span>
-            <ChevronsUpDown
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.5}
-            />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)]"
-        >
-          <DropdownMenuRadioGroup value={chosen.projectId ?? ""} onValueChange={onChange}>
-            <ProjectTargetItems targets={targets} reason={` — can’t own new ${plural}`} />
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ChoiceMenu
+        id={`${labelId}-menu`}
+        labelledBy={labelId}
+        value={chosen.projectId ?? ""}
+        choices={projectChoices(targets, ` — can’t own new ${plural}`)}
+        disabled={disabled}
+        placeholder="Choose a Project"
+        // A chosen Project the catalog no longer holds keeps its resolved title.
+        unlistedLabel={chosen.title}
+        trigger={{ icon: true, detail: chosen.detail ?? "", describesValue: true }}
+        describedBy={describedBy}
+        problemTone="error"
+        onChange={onChange}
+      />
     </div>
   );
-}
-
-/** Each Project as an owner menu choice; an unavailable one is disabled with its reason. */
-function ProjectTargetItems({
-  targets,
-  reason,
-}: {
-  targets: ReturnType<typeof ownerPicker>["targets"];
-  /** Appended to an unavailable Project's reason. */
-  reason: string;
-}) {
-  return targets.map(({ owner, disabled }) => (
-    <DropdownMenuRadioItem
-      key={owner.projectId}
-      value={owner.projectId!}
-      disabled={disabled !== null}
-      indicatorPosition="right"
-      aria-label={[owner.title, owner.detail, disabled].filter(Boolean).join(" · ")}
-      className="items-start py-1.5"
-    >
-      <FolderGit2
-        aria-hidden
-        className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-        strokeWidth={1.5}
-      />
-      <OwnerOptionText owner={owner} reason={reason} />
-    </DropdownMenuRadioItem>
-  ));
 }
 
 /** The radio dot of an owner kind card; checked shows the primary ring and fill. */
@@ -459,7 +398,6 @@ export function OwnerTargetMenu({
 }) {
   const id = useId();
   const picker = ownerPicker(chosen, projects);
-  const Icon = chosen === null ? Workflow : FolderGit2;
   const changedFrom = chosen === from ? null : `changed from ${studioOwner(from, projects).title}`;
   const context = [picker.chosen.detail ?? "Usable in every project", changedFrom]
     .filter(Boolean)
@@ -469,71 +407,21 @@ export function OwnerTargetMenu({
       <span id={id} className={fieldLabelClass}>
         {label}
       </span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild disabled={disabled}>
-          <Button
-            type="button"
-            variant="outline"
-            aria-labelledby={id}
-            aria-describedby={`${id}-value`}
-            aria-invalid={picker.blocked ? true : undefined}
-            className={cn(selectFieldClass, "disabled:opacity-50")}
-          >
-            <Icon
-              aria-hidden
-              className={cn(
-                "size-4 shrink-0",
-                picker.blocked ? "text-attention" : "text-muted-foreground",
-              )}
-              strokeWidth={1.5}
-            />
-            <span id={`${id}-value`} className="flex min-w-0 flex-1 items-center gap-2">
-              <span className="shrink-0 font-medium">{picker.chosen.title}</span>
-              <OwnerPath
-                path={context}
-                className="flex-1 text-2xs tracking-label text-subtle-foreground"
-              />
-            </span>
-            <ChevronsUpDown
-              aria-hidden
-              className="size-4 shrink-0 text-muted-foreground"
-              strokeWidth={1.5}
-            />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          className="w-[var(--radix-dropdown-menu-trigger-width)] max-w-[calc(100vw-1rem)]"
-        >
-          <DropdownMenuRadioGroup
-            value={chosen ?? "global"}
-            onValueChange={(value) => onChange(value === "global" ? null : value)}
-          >
-            <DropdownMenuRadioItem
-              value="global"
-              indicatorPosition="right"
-              aria-label="Global · usable in every project"
-              className="items-start py-1.5"
-            >
-              <Workflow
-                aria-hidden
-                className="mt-0.5 size-4 shrink-0 text-muted-foreground"
-                strokeWidth={1.5}
-              />
-              <span className="grid min-w-0 flex-1 gap-0.5">
-                <span className="truncate font-medium">Global</span>
-                <span className="text-2xs tracking-label text-subtle-foreground">
-                  Usable in every project
-                </span>
-              </span>
-            </DropdownMenuRadioItem>
-            {picker.targets.length > 1 && <DropdownMenuSeparator />}
-            <ProjectTargetItems targets={picker.targets.slice(1)} reason={unavailableReason} />
-          </DropdownMenuRadioGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <ChoiceMenu
+        id={`${id}-menu`}
+        labelledBy={id}
+        value={chosen ?? "global"}
+        choices={ownerChoices(picker.targets, unavailableReason)}
+        disabled={disabled}
+        placeholder="Choose an owner"
+        unlistedLabel={picker.chosen.title}
+        trigger={{ icon: true, detail: context, describesValue: true }}
+        describedBy={picker.blocked ? `${id}-status` : undefined}
+        problemTone="error"
+        onChange={(value) => onChange(value === "global" ? null : value)}
+      />
       {picker.blocked && (
-        <p role="alert" className="text-2xs tracking-label text-attention">
+        <p id={`${id}-status`} role="alert" className="text-2xs tracking-label text-attention">
           {picker.chosen.title}: {picker.blocked}. Choose Global or an available Project.
         </p>
       )}

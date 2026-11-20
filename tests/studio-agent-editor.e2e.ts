@@ -170,8 +170,8 @@ test("a Worker change made in the model picker marks the draft dirty and Save st
   });
   await picker.tap();
   const settings = screen.getByRole("dialog", "Worker");
-  await settings.getByRole("button", "Reasoning effort: High", { exact: true }).tap();
-  await screen.getByRole("menuitemradio", "Low", { exact: true }).tap();
+  await settings.getByRole("combobox", "Reasoning effort: High", { exact: true }).tap();
+  await screen.getByRole("option", "Low", { exact: true }).tap();
   await expect(screen.getByText(/^Unsaved changes · Revision 1 · /)).toBeVisible();
   await settings.press("Escape");
 
@@ -203,7 +203,7 @@ test("Escape closes only the model picker and returns focus to it", async ({
   const picker = screen.getByRole("button", /^Worker: /);
   await picker.tap();
   const settings = screen.getByRole("dialog", "Worker");
-  await expect(settings.getByRole("button", /^Environment: /)).toBeFocused();
+  await expect(settings.getByRole("combobox", /^Environment: /)).toBeFocused();
 
   // Act
   await settings.press("Escape");

@@ -9,10 +9,10 @@ import {
   type RunBlock,
   type RunDetail,
 } from "@t3-factory/contracts";
+import { ChoiceMenu } from "./choice-menu.tsx";
 import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Surface } from "@/components/ui/surface";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
@@ -911,22 +911,17 @@ function DecisionSelect({
       <Label htmlFor={id} className={fieldLabelClass}>
         Decision
       </Label>
-      <NativeSelect
+      <ChoiceMenu
         id={id}
+        label="Decision"
         value={value}
+        choices={options}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
+        placeholder="Choose a decision"
+        className="h-8 border-input bg-background"
         required
-      >
-        <NativeSelectOption value="" disabled>
-          Choose a decision
-        </NativeSelectOption>
-        {options.map((option) => (
-          <NativeSelectOption key={option.id} value={option.id}>
-            {option.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+        onChange={onChange}
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import { saveSingleAgentFlow } from "./support/flows.ts";
 import { expectFlowSaved, readinessSummary, saveFlowWithReadiness } from "./support/studio.ts";
+import type { StudioFixtures } from "./support/studio.ts";
 import { findRun, readHistoryRun } from "./support/run-history.ts";
 import { applyRunState, prepareScenarios } from "./support/scenarios.ts";
 import { liveRun } from "./support/live.ts";
@@ -15,12 +16,8 @@ import {
   readerScreenshot,
 } from "./support/human-answers.ts";
 
-test("a Wait added from the library saves with a missing duration as a readiness gap, then reloads ready with its duration and output", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  // Arrange
+/** A saved Flow whose Coder hands over to a Wait named Cool down added from the library, unsaved. */
+async function unsavedWait({ app, screen, browser }: StudioFixtures) {
   await browser.setViewport({ width: 1920, height: 1000 });
   const flowId = await saveSingleAgentFlow(app.baseUrl, "Wait before review", "Sample worker", {
     id: "coder",
@@ -35,31 +32,102 @@ test("a Wait added from the library saves with a missing duration as a readiness
   await screen.getByRole("button", "Close block settings").tap();
   await screen.getByRole("button", "Fit Flow").tap();
   await screen.getByRole("button", "Connect exit finish of Coder").dragTo(wait);
-  await saveFlowWithReadiness(screen, /^Not ready\s*1 issue$/);
+  return { flowId, wait };
+}
+
+/** The Cool down Wait saved without a duration, its settings open. */
+async function waitSettingsWithoutDuration(fixtures: StudioFixtures) {
+  const saved = await unsavedWait(fixtures);
+  await saveFlowWithReadiness(fixtures.screen, /^Not ready\s*1 issue$/);
+  await fixtures.screen.getByRole("button", "Wait Cool down").tap();
+  return saved;
+}
+
+/** Cool down set to wait 90 hours in its settings, unsaved; hours chosen by pointer. */
+async function waitFor90Hours(fixtures: StudioFixtures) {
+  const { screen } = fixtures;
+  const saved = await waitSettingsWithoutDuration(fixtures);
+  await screen.getByLabel("Wait for").fill("90");
+  await screen.getByRole("combobox", "Unit: minutes", { exact: true }).tap();
+  await screen.getByRole("option", "hours", { exact: true }).tap();
+  await expect(screen.getByRole("combobox", "Unit: hours", { exact: true })).toBeVisible();
+  return saved;
+}
+
+/** That 90-hour Wait saved. */
+async function savedWaitFor90Hours(fixtures: StudioFixtures) {
+  await waitFor90Hours(fixtures);
+  await saveFlowWithReadiness(fixtures.screen, "Ready");
+}
+
+/** That saved Wait after a reload. */
+async function reloadedWait(fixtures: StudioFixtures) {
+  await savedWaitFor90Hours(fixtures);
+  await fixtures.browser.reload();
+  await expect(fixtures.screen.getByRole("article", "Block Cool down")).toContainText("90 hours");
+}
+
+test("a Wait added from the library and saved without a duration is a readiness gap", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const { wait } = await unsavedWait({ app, screen, browser });
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expectFlowSaved(screen);
+  await expect(readinessSummary(screen, /^Not ready\s*1 issue$/)).toBeVisible();
   await expect(wait).toContainText("No duration");
+});
+
+test("the readiness issues name a Wait's missing duration", async ({ app, screen, browser }) => {
+  // Arrange
+  await unsavedWait({ app, screen, browser });
+  await saveFlowWithReadiness(screen, /^Not ready\s*1 issue$/);
+
+  // Act
   await screen.getByRole("button", /^Not ready/).tap();
+
+  // Assert
   await expect(screen.getByRole("list", "Readiness issues")).toContainText(
     "Enter how long Cool down waits.",
   );
   await app.screenshot("wait-readiness-missing-duration");
+});
+
+test("a Wait's unit is chosen from the keyboard", async ({ app, screen, browser }) => {
+  // Arrange
+  await waitSettingsWithoutDuration({ app, screen, browser });
+  await screen.getByLabel("Wait for").fill("90");
+  await screen.getByRole("combobox", "Unit: minutes", { exact: true }).press("Enter");
+  const units = screen.getByRole("listbox", "Unit", { exact: true });
+  const minutes = units.getByRole("option", "minutes", { exact: true });
+  await expect(minutes).toBeFocused();
+  await minutes.press("ArrowDown");
+  const hours = units.getByRole("option", "hours", { exact: true });
+  await expect(hours).toBeFocused();
 
   // Act
-  await screen.getByRole("button", "Wait Cool down").tap();
-  await screen.getByLabel("Wait for").fill("90");
-  await screen.getByLabel("Unit").selectOption("minutes");
+  await hours.press("Enter");
+
+  // Assert
+  await expect(screen.getByRole("combobox", "Unit: hours", { exact: true })).toBeFocused();
+});
+
+test("a Wait given a duration saves ready with it", async ({ app, screen, browser }) => {
+  // Arrange
+  const { flowId } = await waitFor90Hours({ app, screen, browser });
+
+  // Act
   await screen.getByRole("button", "Save", { exact: true }).tap();
 
   // Assert
   await expectFlowSaved(screen);
   await expect(readinessSummary(screen, "Ready")).toBeVisible();
-  await browser.reload();
-  await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 minutes");
-  await screen.getByRole("button", "Wait Cool down").tap();
-  await expect(screen.getByLabel("Wait for")).toHaveValue("90");
-  await expect(
-    screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
-  ).toBeVisible();
-  await app.screenshot("wait-configured-after-reload");
   const saved = (await (
     await fetch(new URL(`/api/flows/${flowId}`, app.baseUrl))
   ).json()) as Result<FlowDraft>;
@@ -67,8 +135,43 @@ test("a Wait added from the library saves with a missing duration as a readiness
   expect(saved.value.graph.blocks[1]).toMatchObject({
     kind: "wait",
     name: "Cool down",
-    duration: { amount: 90, unit: "minutes" },
+    duration: { amount: 90, unit: "hours" },
   });
+});
+
+test("a saved Wait shows its duration on the canvas after reload", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await savedWaitFor90Hours({ app, screen, browser });
+
+  // Act
+  await browser.reload();
+
+  // Assert
+  await expect(screen.getByRole("article", "Block Cool down")).toContainText("90 hours");
+});
+
+test("a reloaded Wait's settings show its duration, unit and output", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await reloadedWait({ app, screen, browser });
+
+  // Act
+  await screen.getByRole("button", "Wait Cool down").tap();
+
+  // Assert
+  await expect(screen.getByLabel("Wait for")).toHaveValue("90");
+  await expect(screen.getByRole("combobox", "Unit: hours", { exact: true })).toBeVisible();
+  await expect(
+    screen.getByRole("region", "Output").getByRole("button", "Targets of output: none"),
+  ).toBeVisible();
+  await app.screenshot("wait-configured-after-reload");
 });
 
 /** The one-minute Wait's journey Run `key` holding `message` as its first arrival, Wait selected. */

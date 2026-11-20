@@ -7,6 +7,7 @@ import { startJourneyDiscord, discordFixture } from "./fixture/discord.ts";
 import { githubFixture, startJourneyGitHub } from "./fixture/github.ts";
 import { startHost } from "./fixture/host.ts";
 import { liveFixture } from "./fixture/live.ts";
+import { projectsFixture } from "./fixture/projects.ts";
 import { recordedServerUpdates, remoteAccessFixture } from "./fixture/remote-access.ts";
 import { reportingFixture } from "./fixture/reporting.ts";
 import { runImagesAndTitlesFixture } from "./fixture/run-images-and-titles.ts";
@@ -35,6 +36,7 @@ const modules = {
   discord: discordFixture(discord, host),
   github: githubFixture(github, host),
   definitions: definitionsFixture(host),
+  projects: projectsFixture(host),
   appearance: appearanceFixture(host),
   reporting: reportingFixture(host),
   runImagesAndTitles: runImagesAndTitlesFixture(host, scenarios),

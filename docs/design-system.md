@@ -215,15 +215,19 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   left-aligned title and a short body. A one-line hint without an explanation stays plain status
   text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
   list loading, no-match and error lines.
-- **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
-  NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
-  stays visible.
+- **Choice**: ChoiceMenu for every dropdown choice, a select-only combobox named by its field, with
+  or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
+  wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
+  workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
+  for a short exclusive choice that stays visible.
 - **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
   the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
   reader without a preview. Human-written text and Factory messages stay plain text.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
+  After its destination changes, a stored secret shows the Choose tag and adds Use stored key;
+  Save waits for a choice, and Undo or Cancel return to it.
 - **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
   relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the
   full local date and time for tooltips and accessible names.

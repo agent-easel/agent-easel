@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from "react";
-import { ChevronDown, CornerDownLeft } from "lucide-react";
+import { CornerDownLeft } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -8,29 +8,19 @@ import type {
   ValidationIssue,
   WaitUnit,
 } from "@t3-factory/contracts";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { TextLink } from "@/components/ui/text-link";
-import { cn } from "@/lib/utils";
 import { agentRuntimeMeta } from "@/lib/agent-display";
 import { FlowAgentLink } from "../components/app-link.tsx";
 import { continuationReference } from "../block-kind.ts";
+import { ChoiceMenu, type MenuChoice } from "./choice-menu.tsx";
 import { BlockExitConfiguration } from "./block-exit-configuration.tsx";
 import { ConditionOutputs, type ConditionEditing } from "./condition-rules.tsx";
 import { fieldAria } from "./field-state.ts";
 import { ProblemCard } from "./problem-card.tsx";
 import { fieldProblem, issueTag, type BlockIssue } from "./flow-readiness.tsx";
-import { NeedsModel } from "./needs-model.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
 import type { FlowWire } from "../flow-graph.ts";
@@ -185,62 +175,30 @@ function AgentPicker({
   onEdit: (block: FlowBlock) => void;
 }) {
   const chosen = agents.all.find((agent) => agent.id === block.agentId);
-  const choices = agents.placeable.map((agent) => ({
-    agent,
-    summary: agentRuntimeMeta(agent.execution, agents.capabilities),
-  }));
-  const ready = choices.filter(({ summary }) => summary);
-  const modelless = choices.filter(({ summary }) => !summary);
+  const choices = agents.placeable.map((agent): MenuChoice => {
+    const summary = agentRuntimeMeta(agent.execution, agents.capabilities);
+    return summary
+      ? { id: agent.id, label: agent.name, description: summary }
+      : { id: agent.id, label: agent.name, badge: "Needs a model", disabled: true };
+  });
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          id={id}
-          type="button"
-          variant="outline"
-          {...fieldAria(describedBy)}
-          className={cn("w-full justify-between font-normal", describedBy && "border-destructive")}
-        >
-          <span className={cn("truncate", !chosen && "text-muted-foreground")}>
-            {chosen?.name ?? (block.agentId ? "Unavailable Agent" : "Choose an Agent")}
-          </span>
-          <ChevronDown aria-hidden className="text-muted-foreground" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width)">
-        <DropdownMenuRadioGroup
-          value={block.agentId ?? ""}
-          onValueChange={(agentId) => onEdit({ ...block, agentId })}
-        >
-          {ready.map(({ agent, summary }) => (
-            <DropdownMenuRadioItem
-              key={agent.id}
-              value={agent.id}
-              indicatorPosition="right"
-              className="flex-col gap-0.5"
-            >
-              <span className="text-sm">{agent.name}</span>
-              <span className="text-xs text-muted-foreground">{summary}</span>
-            </DropdownMenuRadioItem>
-          ))}
-          {modelless.map(({ agent }) => (
-            <DropdownMenuRadioItem
-              key={agent.id}
-              value={agent.id}
-              disabled
-              indicatorPosition="right"
-              className="flex-col items-start gap-1"
-            >
-              <span className="text-sm">{agent.name}</span>
-              <NeedsModel />
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        {agents.placeable.length === 0 && (
-          <p className="px-3 py-1.5 text-sm text-muted-foreground">No Agents to place</p>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <ChoiceMenu
+      id={id}
+      label="Agent"
+      value={block.agentId ?? ""}
+      choices={[
+        ...choices.filter((choice) => !choice.disabled),
+        ...choices.filter((choice) => choice.disabled),
+      ]}
+      unlistedLabel={chosen?.name ?? "Unavailable Agent"}
+      disabled={false}
+      placeholder="Choose an Agent"
+      empty="No Agents to place"
+      describedBy={describedBy}
+      problemTone="error"
+      className="h-8 border-input bg-background"
+      onChange={(agentId) => onEdit({ ...block, agentId })}
+    />
   );
 }
 
@@ -304,7 +262,10 @@ function AgentBlockSettings({
   );
 }
 
-const WAIT_UNITS: readonly WaitUnit[] = ["minutes", "hours", "days"];
+const WAIT_UNITS = (["minutes", "hours", "days"] satisfies WaitUnit[]).map((unit) => ({
+  id: unit,
+  label: unit,
+}));
 
 /** A fixed relative duration; an empty amount saves the draft without one. */
 function WaitBlockSettings({
@@ -317,6 +278,7 @@ function WaitBlockSettings({
   onEdit: (block: FlowBlock) => void;
 }) {
   const amountId = useId();
+  const unitId = useId();
   const unit = block.duration?.unit ?? "minutes";
   return (
     <Field id={amountId} label="Wait for" problem={problem}>
@@ -334,26 +296,26 @@ function WaitBlockSettings({
             onEdit({ ...block, duration: Number.isFinite(amount) ? { amount, unit } : null });
           }}
         />
-        <NativeSelect
-          aria-label="Unit"
-          {...fieldAria(problem && `${amountId}-problem`)}
+        <ChoiceMenu
+          id={unitId}
+          label="Unit"
+          describedBy={problem ? `${amountId}-problem` : undefined}
+          problemTone="error"
           value={unit}
-          onChange={(e) =>
+          choices={WAIT_UNITS}
+          disabled={false}
+          placeholder="Choose a unit"
+          className="h-8 border-input bg-background"
+          onChange={(next) =>
             onEdit({
               ...block,
               duration: block.duration && {
                 amount: block.duration.amount,
-                unit: e.target.value as WaitUnit,
+                unit: next as WaitUnit,
               },
             })
           }
-        >
-          {WAIT_UNITS.map((option) => (
-            <NativeSelectOption key={option} value={option}>
-              {option}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+        />
       </div>
     </Field>
   );

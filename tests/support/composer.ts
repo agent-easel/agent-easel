@@ -11,9 +11,10 @@ async function selectComposerFlow(screen: Screen, flowName: string) {
   if (selected?.endsWith(`: ${flowName}`)) return;
 
   await trigger.tap();
-  await expect(screen.getByRole("menu")).toBeVisible();
-  await screen.getByRole("menuitemradio", { name: flowName, exact: true }).tap();
-  await expect(screen.getByRole("menu")).toBeHidden();
+  const list = screen.getByRole("listbox", "Flow", { exact: true });
+  await expect(list).toBeVisible();
+  await screen.getByRole("option", { name: flowName, exact: true }).tap();
+  await expect(list).toBeHidden();
 }
 
 /** Chooses a Project in the composer's picker by its title. */

@@ -1,8 +1,17 @@
-import { expect, type App, type Screen } from "e2e";
+import { expect, type App, type Locator, type Screen } from "e2e";
 import type { Browser } from "@e2e-dev/web";
 import { liveRun } from "./live.ts";
 import { findRun } from "./run-history.ts";
 import { applyRunState, prepareScenarios } from "./scenarios.ts";
+
+/** Chooses `decision` from the Decision menu of the Human answer form `answer`. */
+export async function chooseDecision(screen: Screen, answer: Locator, decision: string) {
+  await answer.getByRole("combobox", /^Decision/).tap();
+  await screen
+    .getByRole("listbox", "Decision", { exact: true })
+    .getByRole("option", decision, { exact: true })
+    .tap();
+}
 
 /**
  * Journey Run `key` of `flow`, whose Implement change `result` reached First review, where a person
@@ -22,7 +31,7 @@ export async function approveFirstReviewAtLength(
   const review = screen
     .getByRole("complementary", "Run inspector")
     .getByRole("form", "Answer First review", { exact: true });
-  await review.getByRole("combobox", "Decision").selectOption({ label: decision });
+  await chooseDecision(screen, review, decision);
   await review
     .getByRole("textbox", "Response", { exact: true })
     .fill(

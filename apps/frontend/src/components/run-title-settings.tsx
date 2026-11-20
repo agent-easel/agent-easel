@@ -282,6 +282,7 @@ function WorkerRows({
             onChange={chooseProvider}
             disabled={!editable}
             placeholder={providers ? "Choose a provider" : "—"}
+            empty="T3 offers no providers"
             className={rowChoiceClass}
           />
         }

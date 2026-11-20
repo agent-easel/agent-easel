@@ -19,6 +19,7 @@ import {
   installDesktopBridge,
   shortcutMod,
 } from "./support/keyboard-shortcuts.ts";
+import { chooseDecision } from "./support/human-answers.ts";
 
 beforeEach(async ({ app }) => {
   await prepareScenarios(app);
@@ -756,9 +757,7 @@ test("Tab skips the context links the clamped preview fades out and reaches Read
 test("an answer submits from the Human card while its context is long", async ({ app, screen }) => {
   // Arrange
   const { found, answer } = await openLongContextAnswer(app, screen);
-  await answer
-    .getByRole("combobox", "Decision")
-    .selectOption({ label: "Approve — ends this branch" });
+  await chooseDecision(screen, answer, "Approve — ends this branch");
 
   // Act
   await answer.getByRole("button", "Submit answer", { exact: true }).tap();

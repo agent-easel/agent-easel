@@ -153,23 +153,6 @@ function DropdownMenuCheckboxItem({
   );
 }
 
-/** A group heading inside a menu: Figma Text/Caption, uppercase and tertiary. */
-function DropdownMenuLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
-  return (
-    <DropdownMenuPrimitive.Label
-      data-slot="dropdown-menu-label"
-      className={cn(
-        "px-3 pt-2 pb-1 text-2xs font-medium text-subtle-foreground uppercase",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
 function DropdownMenuSeparator({
   className,
   ...props
@@ -235,7 +218,6 @@ export {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
