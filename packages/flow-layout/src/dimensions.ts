@@ -26,7 +26,6 @@ export type CanvasDimensions = {
     readonly statusLine: number;
   };
   readonly finish: {
-    /** The Finish block's title row; unlike a block's, it draws no activity line. */
     readonly title: number;
   };
   readonly port: {
@@ -55,7 +54,6 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly footerCount?: (block: B) => number;
   readonly reservedFooterCount?: number;
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
-  /** The canvas draws the Finish block, so it counts toward bounds and fit. */
   readonly finish?: boolean;
 };
 
@@ -122,8 +120,6 @@ export function createNodeGeometry<B extends LayoutBlock>(
           : 0) +
       (facts.flowInputStatus ? input.statusLine : 0),
   };
-  // The Finish block is drawn like a block whose rows are its endings; without endings it keeps
-  // one row for its hint.
   const finishEndingY = ports.firstExitY - rows.title + finishTitle;
   const finishBox = {
     ...graph.finish.position,
@@ -147,7 +143,6 @@ export function createNodeGeometry<B extends LayoutBlock>(
     incoming,
     flowInputBox,
     finishBox,
-    /** The first ending's port anchor below the Finish block's top. */
     finishEndingY,
     blockHeight,
     reservedHeight,

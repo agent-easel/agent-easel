@@ -347,7 +347,6 @@ function blockReadiness(
   });
 }
 
-/** A wire's target as readiness names it: a block, or "Finish · <ending>". */
 function targetLabel(
   graph: FlowGraphInput,
   blocks: ReadonlyMap<string, FlowBlockInput>,
@@ -419,10 +418,6 @@ function conditionOutputReadiness(graph: FlowGraphInput, add: IssueReporter) {
   });
 }
 
-/**
- * Each ending needs a distinct, non-blank name and at least one incoming wire. A Flow with no
- * endings is ready: its branches end on unconnected exits, as every Flow's did before Finish.
- */
 function finishReadiness(graph: FlowGraphInput, add: IssueReporter) {
   const wired = new Set(
     graph.connections.flatMap((edge) =>
@@ -545,10 +540,6 @@ export function continuationSources(graph: FlowGraphInput, blockId: string): str
   return graph.blocks.flatMap((block) => (sources.has(block.id) ? [block.id] : []));
 }
 
-/**
- * The distinct blocks a message leaving `sourceBlockId` by `exitId` is handed to, in wire order.
- * Wires into Finish endings hand nothing to a block; `handoffEndings` lists them.
- */
 export function handoffRecipients(
   connections: FlowGraphInput["connections"],
   sourceBlockId: string,
@@ -567,7 +558,6 @@ export function handoffRecipients(
   ];
 }
 
-/** The distinct endings a message leaving `sourceBlockId` by `exitId` enters, in wire order. */
 export function handoffEndings(
   connections: FlowGraphInput["connections"],
   sourceBlockId: string,

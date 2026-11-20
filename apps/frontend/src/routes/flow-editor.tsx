@@ -446,10 +446,6 @@ function useLiveReadiness(draft: FlowDraftModel, due: number | null) {
 
 const READINESS_DEBOUNCE_MS = 400;
 
-/**
- * Selecting a block or a readiness issue; an issue about a Condition rule also focuses that rule
- * in the block's configuration, and one about a Finish ending focuses that ending.
- */
 function useRuleFocus(
   select: (blockId: string | null) => void,
   thresholds: ReturnType<typeof useThresholdEntries>,
@@ -736,7 +732,6 @@ function EditorSettings({
   marks: ReturnType<typeof readinessMarks>;
   flowId: string;
   condition: (blockId: string) => ConditionEditing;
-  /** The Finish block's ending edits; removing an ending is a removal ⌘Z can undo. */
   finish: Omit<ComponentProps<typeof FinishSettings>, "graph" | "agents" | "issues">;
   /** Called with null to close the settings. */
   onClose: (selection: null) => void;
@@ -819,7 +814,6 @@ function SettingsPanel({
   footer,
   children,
 }: {
-  /** The panel's accessible name: Block settings, Flow input settings or Finish settings. */
   label: string;
   title: string;
   icon: typeof X;

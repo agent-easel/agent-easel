@@ -301,7 +301,6 @@ const ENDING_OUTPUTS: readonly unknown[] = [
 const ENDING_LIMIT = 100;
 const ENDING_TEXT_LIMIT = 4000;
 
-/** One ending's fields; a blank or repeated name is a readiness gap, not a save error. */
 function checkEnding(ending: unknown, path: string, ids: Set<string>, issue: IssueReporter) {
   if (!isRecord(ending)) {
     issue("invalid_ending", path, "Supply an ending with an ID, name and output setting.");
@@ -329,8 +328,6 @@ function checkEnding(ending: unknown, path: string, ids: Set<string>, issue: Iss
     issue("invalid_ending_output", `${path}.output`, "Choose none, optional or required output.");
 }
 
-/** The Finish block's position and endings; returns the ending IDs connections may enter. An
- * omitted Finish block has no endings. */
 function checkFinish(finish: unknown, issue: IssueReporter): ReadonlySet<string> {
   const ids = new Set<string>();
   if (finish === undefined) return ids;
@@ -391,7 +388,6 @@ const connectable = (exits: ConnectableExits, source: unknown, exitId: unknown) 
   return allowed === "inherited" ? isId(exitId) : typeof exitId === "string" && allowed.has(exitId);
 };
 
-/** The identity of a connection: its source exit and its target, down to the ending. */
 export function connectionKey(
   connection: Omit<FlowConnection, "targetEndingId"> & {
     readonly targetEndingId?: string | undefined;
@@ -405,7 +401,6 @@ export function connectionKey(
   ]);
 }
 
-/** A connection enters an existing block, or one existing ending of the Finish block. */
 const validTarget = (
   edge: Record<string, unknown>,
   blockIds: ReadonlySet<string>,
@@ -459,7 +454,6 @@ function checkGraph(graph: unknown, issue: IssueReporter) {
     );
   const blockIds = new Set<string>();
   const exits: ConnectableExits = new Map();
-  // The Finish block is always present and counts as one of the 500 blocks.
   if (graph.blocks.length >= 500 || graph.connections.length > 5000)
     issue(
       "graph_too_large",
@@ -639,11 +633,6 @@ export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput
   };
 }
 
-/**
- * Local exit names are stored trimmed, as Agent exit names are, so reports match them exactly;
- * Condition rule names and ending names likewise; Continuation prompts and Revisit instructions are
- * stored trimmed, as Agent prompts are.
- */
 function trimGraphText(graph: FlowGraphInput): FlowGraphInput {
   return {
     ...graph,

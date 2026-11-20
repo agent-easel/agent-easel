@@ -85,7 +85,6 @@ import {
 import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
 /** A new Flow starts with its Flow input block at the top-left of the canvas. */
 const NEW_FLOW_INPUT_POSITION = { x: 40, y: 50 };
-/** Where an unplaced Finish block goes in a positioned graph: right of every block. */
 const unplacedFinishPosition = (graph: Pick<FlowGraph, "blocks" | "flowInput">) =>
   defaultFinishPosition(graph, {
     flowInputWidth: AUTHORING_DIMENSIONS.flowInput.width,
@@ -303,7 +302,6 @@ export const makeDefinitions = (
         const graph: FlowGraph = {
           ...input,
           ...placed,
-          // An omitted Finish block has no endings and needs no arrangement of its own.
           finish: {
             endings: input.finish?.endings ?? [],
             position: input.finish?.position ?? unplacedFinishPosition(placed),
@@ -542,7 +540,6 @@ export const makeDefinitions = (
         graph: {
           ...flow.graph,
           blocks,
-          // Versions 1 and 2 carry no Finish block: their Flows arrive with an empty one.
           finish: flow.graph.finish ?? {
             endings: [],
             position: unplacedFinishPosition({ ...flow.graph, blocks }),

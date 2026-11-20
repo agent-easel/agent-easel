@@ -89,7 +89,6 @@ export function incomingIndex(graph: FlowGraph): IncomingIndex {
   };
   for (const targetBlockId of new Set(graph.flowInput.targetBlockIds))
     add(targetBlockId, { kind: "flow-input" });
-  // Wires into Finish attach to their ending's own port, never to a block input.
   for (const { sourceBlockId, exitId, targetBlockId } of graph.connections)
     if (targetBlockId !== FINISH_BLOCK_ID)
       add(targetBlockId, { kind: "exit", sourceBlockId, exitId });

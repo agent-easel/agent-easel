@@ -54,7 +54,6 @@ export function createCanvasGeometry(
       source,
       ...inputPoint(block, index),
     }));
-  /** Blocks by id; `FINISH_BLOCK_ID`, which no block may use, names the Finish block. */
   const focusBounds = (targetIds: readonly string[]) => {
     const ids = new Set(targetIds);
     const [first, ...rest] = [
@@ -68,9 +67,7 @@ export function createCanvasGeometry(
     flowInputBox,
     /** The Flow input and every block, in graph coordinates. */
     boxes: () => [flowInputBox, ...graph.blocks.map(blockBox), ...finishBoxes],
-    /** The Finish block, in graph coordinates. */
     finishBox,
-    /** Where a wire enters the ending at `index`, on the Finish block's left edge. */
     endingPoint: (index: number): Point => ({
       x: finishBox.x,
       y: finishBox.y + finishEndingY + index * ports.exitRow,

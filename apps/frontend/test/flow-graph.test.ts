@@ -126,7 +126,6 @@ it("undoing a Block removal brings back its wires into Finish endings unchanged"
   expect(undone.finish).toStrictEqual(before.finish);
 });
 
-/** `conditionFlow` with endings `delivered` and `blocked`; Otherwise enters `delivered`. */
 function endingFlow(): FlowGraph {
   const wired = conditionFlow([rule("first", 2)], ["first"]);
   const ending = (id: string) => ({

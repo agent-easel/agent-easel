@@ -140,7 +140,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       const runRow = yield* row(id);
       if (!runRow || runRow.archived_at) return;
       yield* driveBlockWork(runRow, yield* freshSnapshot(), phase);
-      // A reached ending, accepted in this pass or before a restart, stops and settles the Run.
       if (phase !== "observe" && (yield* store.awaitingEndingSettlement(id)))
         yield* actions.stopAndSettle(id, { authorization: "flow", reason: "finish" });
     });

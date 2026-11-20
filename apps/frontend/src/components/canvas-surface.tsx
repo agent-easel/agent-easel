@@ -84,19 +84,12 @@ export type CanvasFlowInputContent = {
   readonly port: CanvasPort;
 };
 
-/**
- * What an adapter draws in the Finish block. The surface draws its rows from `state`, one
- * labelled input port per ending on its left edge, sized from the block dimensions.
- */
 export type CanvasFinishContent = {
   readonly state: FinishBlockState;
   /** The frame's look: state and selection. */
   readonly className?: string;
-  /** Wraps the identity rows in the block's press target. */
   readonly press: (rows: ReactNode) => ReactNode;
-  /** Tags on the header, such as a readiness issue. */
   readonly trailing?: ReactNode;
-  /** `pending` marks the ending a connection being drawn will enter. */
   readonly endingPort: (ending: FlowEnding, pending: boolean) => CanvasPort;
 };
 
@@ -105,7 +98,6 @@ export type CanvasFinishContent = {
  * from the block dimensions; each node here fills its row.
  */
 export type CanvasBlockContent = {
-  /** The frame's look: state and selection. */
   readonly className: string;
   /**
    * The block's press target and the rows it wraps: the identity rows when exit rows hold their
@@ -135,7 +127,6 @@ export type CanvasGesture =
       readonly kind: "connect";
       readonly source: WireSource;
       readonly pointer: BlockPosition;
-      /** The block or ending the connection would enter. */
       readonly target: WireTarget | null;
     };
 
@@ -301,7 +292,6 @@ function SurfaceFinish({
   geometry: Geometry;
   dimensions: Dimensions;
   content: CanvasFinishContent;
-  /** The ending a connection being drawn will enter. */
   pendingEnding: string | null;
 }) {
   const rows = dimensions.block;
@@ -493,7 +483,6 @@ function GesturePreview({
   return <ConnectionPreview from={from} to={targetPoint(graph, geometry, gesture)} />;
 }
 
-/** Where a connection being drawn ends: its target's input or ending port, or the pointer. */
 function targetPoint(
   graph: CanvasGraph,
   geometry: Geometry,
@@ -557,7 +546,6 @@ type CanvasSurfaceProps = {
   /** The most status footers a block can draw; a local arrangement reserves room for them. */
   reservedFooters: number;
   flowInput: CanvasFlowInputContent;
-  /** The Finish block; without it the surface does not draw it or the wires into its endings. */
   finish?: CanvasFinishContent;
   block: (block: CanvasBlock) => CanvasBlockContent;
   wires: WirePresentation;

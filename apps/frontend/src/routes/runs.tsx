@@ -354,8 +354,6 @@ function RunFlowName({ run }: { run: RunDetail }) {
   );
 }
 
-/** While a confirmed Settle waits for its workers, the meta line says when it was asked, or the
- * ending whose result started it. */
 function lifecycleText(run: RunDetail) {
   if (run.result && run.settlement)
     return `Reached ${run.result.endingName} ${clockTime(run.result.acceptedAt)} · Stopping`;

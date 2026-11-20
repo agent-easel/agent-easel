@@ -18,8 +18,6 @@ function capturedEnding(run: RunDetail, endingId: string) {
   return run.definitions.flow.graph.finish.endings.find((ending) => ending.id === endingId);
 }
 
-/** "Implement change → PR opened · Visit 1": the source, its exit when named, and the visit that
- * delivered when the source is the worker that wrote it. */
 function fromText(run: RunDetail, result: RunResult) {
   const exit = capturedExits(run.definitions, result.sourceBlockId).find(
     (item) => item.id === result.exitId,
@@ -43,7 +41,6 @@ function authorKind(run: RunDetail, result: RunResult) {
   return run.definitions.flow.graph.blocks.find((block) => block.id === result.authorBlockId)?.kind;
 }
 
-/** The worker thread that wrote the result, when Factory knows it. */
 function workerLink(run: RunDetail, result: RunResult) {
   const threadId = result.origin?.threadId;
   return (
@@ -64,7 +61,6 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** From, who wrote it and when: a worker with its thread, or you for a Human step's answer. */
 function ResultFacts({ run, result }: { run: RunDetail; result: RunResult }) {
   const kind = authorKind(run, result);
   const link = kind === "agent" ? workerLink(run, result) : null;
@@ -86,8 +82,6 @@ function ResultFacts({ run, result }: { run: RunDetail; result: RunResult }) {
   );
 }
 
-/** The delivered output: Agent-written Markdown, a Human answer as plain text, none for an ending
- * whose output is None or a blank optional output. */
 function ResultOutput({ run, result }: { run: RunDetail; result: RunResult }) {
   if (!result.output) return null;
   if (authorKind(run, result) === "human")
@@ -108,7 +102,6 @@ function ResultOutput({ run, result }: { run: RunDetail; result: RunResult }) {
   );
 }
 
-/** A reached ending's output, or the Output missing flag, then its facts. */
 export function ResultDetails({ run, result }: { run: RunDetail; result: RunResult }) {
   if (result.outputMissing) {
     const ending = capturedEnding(run, result.endingId);
@@ -136,7 +129,6 @@ const noResult = {
   "not-reached": ["No result", "The Run ended without reaching an ending."],
 } as const;
 
-/** Why there is no result: the Run can still reach an ending, or it ended without one. */
 export function NoResult({ state }: { state: keyof typeof noResult }) {
   const [title, body] = noResult[state];
   return (
@@ -147,11 +139,6 @@ export function NoResult({ state }: { state: keyof typeof noResult }) {
   );
 }
 
-/**
- * Figma Run/ResultSection: the Run's result at the top of the overview, named by the ending it
- * reached, with Stopping while the Run stops its other workers. Absent when the captured Flow
- * declares no endings.
- */
 export function ResultSection({ run }: { run: RunDetail }) {
   const state = runResultState(run);
   if (state === "none") return null;

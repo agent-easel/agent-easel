@@ -16,12 +16,10 @@ import { blockName, NoResult, ResultDetails } from "./run-result-section.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { TechnicalDetails } from "./technical-details.tsx";
 
-/** "A", "A and B", "A, B and C". */
 function listed(names: readonly string[]) {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names[0];
 }
 
-/** What reaching the ending did to the Run's other work: the workers it stops or stopped. */
 function endedText(run: RunDetail, result: RunResult) {
   const reaching = `Reaching ${result.endingName}`;
   const at = clockTime(result.acceptedAt);
@@ -38,8 +36,6 @@ function endedText(run: RunDetail, result: RunResult) {
 
 const outputWords = { required: "Output required", optional: "Output optional" } as const;
 
-/** "Delivered · Reached 22:15 · Output required: URL of the PR opened". Before an ending is
- * reached every ending reads neutral, without Reached or Not reached. */
 function endingLine(ending: FlowEnding, result: RunResult | null) {
   const reached = result?.endingId === ending.id;
   const output =
@@ -55,7 +51,6 @@ function endingLine(ending: FlowEnding, result: RunResult | null) {
     .join(" · ");
 }
 
-/** "Delivered ← Implement change → PR opened" for each wire into an ending. */
 function incomingWires(run: RunDetail) {
   const { graph } = run.definitions.flow;
   return graph.connections.flatMap((connection) => {
@@ -71,10 +66,6 @@ function incomingWires(run: RunDetail) {
   });
 }
 
-/**
- * Figma RD57: the Finish block in the docked inspector: the Run result keyed by its ending, what
- * reaching it ended, the captured endings and the wires into them.
- */
 export function RunFinishView({ run, onBack }: { run: RunDetail; onBack: () => void }) {
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => {

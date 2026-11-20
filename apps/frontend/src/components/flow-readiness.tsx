@@ -12,11 +12,8 @@ import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
 import type { RuleFocus } from "./condition-rules.tsx";
 
-/** Selects a block, or with null clears the selection; `rule` also focuses one Condition rule
- * and `ending` one Finish ending (`FINISH_BLOCK_ID` selects the Finish block). */
 export type IssueSelect = (blockId: string | null, rule?: RuleFocus, ending?: string) => void;
 
-/** The Finish ending an issue path such as `graph.finish.endings.1.name` names. */
 function issueEnding(path: string, graph: FlowGraph): string | undefined {
   const index = /^graph\.finish\.endings\.(\d+)/.exec(path)?.[1];
   return index === undefined ? undefined : graph.finish.endings[Number(index)]?.id;
@@ -84,12 +81,6 @@ export const issueTag = (issue: ValidationIssue) => ISSUE_TAGS[issue.code] ?? "N
 /** One readiness issue of a Block, with the part of the Block its path names (`duration`, `rules.0`). */
 export type BlockIssue = { readonly issue: ValidationIssue; readonly field: string };
 
-/**
- * Where the readiness issues show: each Block's issues by the field they name, the Flow input's
- * issue, the Condition outputs that are not connected (`blockId` and output id joined by a NUL),
- * the Finish block's issues by the field within it (`endings.1.name`) and the endings no wire
- * enters.
- */
 export type ReadinessMarks = {
   readonly blocks: ReadonlyMap<string, readonly BlockIssue[]>;
   readonly flowInput: ValidationIssue | null;
@@ -125,7 +116,6 @@ function issueBlock(issue: ValidationIssue, graph: FlowGraph) {
   return selected ? { block: selected, field: "" } : null;
 }
 
-/** The Finish block's issues by the field within it, and the endings no wire enters. */
 function finishMarks(issues: readonly ValidationIssue[], graph: FlowGraph) {
   const finish: BlockIssue[] = [];
   const unconnectedEndings = new Set<string>();
@@ -144,7 +134,6 @@ export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph
   const blocks = new Map<string, BlockIssue[]>();
   const unconnectedOutputs = new Set<string>();
   const flowInput = readiness.issues.find((issue) => issue.code === "flow_input_required") ?? null;
-  // A Finish issue names no block, so `issueBlock` leaves it to `finishMarks`.
   for (const issue of readiness.issues) {
     const found = issue === flowInput ? null : issueBlock(issue, graph);
     if (!found) continue;

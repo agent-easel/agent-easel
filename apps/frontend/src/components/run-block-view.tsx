@@ -412,8 +412,6 @@ function BlockTechnicalDetails({
   );
 }
 
-/** Figma RD14: what the inspector shows instead of the overview, under **‹ Overview Esc**: its
- * icon, name, a line about it, its state and Close. */
 export function InspectedHeader({
   Icon,
   title,

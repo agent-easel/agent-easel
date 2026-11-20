@@ -60,7 +60,6 @@ type ConditionRuleRow = {
   from_arrival: number | null;
 };
 type HiddenExitRow = { flow_revision_id: string; block_id: string; exit_id: string };
-/** A connection enters a block, or a Finish ending when `target_block_id` is null. */
 type ConnectionRow = {
   flow_revision_id: string;
   source_block_id: string;

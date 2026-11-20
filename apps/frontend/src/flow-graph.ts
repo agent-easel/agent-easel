@@ -132,7 +132,6 @@ export function sameWire(a: FlowWire, b: FlowWire) {
   return connectionKey(wireConnection(a.source, a)) === connectionKey(wireConnection(b.source, b));
 }
 
-/** A node on the canvas: one block, the Flow input block or the Finish block. */
 export type CanvasNode =
   | { readonly kind: "block"; readonly blockId: string }
   | { readonly kind: "flow-input" }
@@ -143,8 +142,6 @@ export function sameNode(a: CanvasNode | null, b: CanvasNode | null) {
   return a?.kind === b?.kind;
 }
 
-/** Whether a wire leaves the node: from any of a block's exits, or from the Flow input. Nothing
- * leaves the Finish block. */
 export function leavesNode(wire: FlowWire, node: CanvasNode) {
   if (node.kind === "finish") return false;
   if (node.kind === "flow-input") return wire.source.kind === "flow-input";
@@ -157,14 +154,8 @@ export function hasWire(graph: FlowGraph, wire: FlowWire) {
   return graph.connections.some((c) => sameWire(connectionWire(c), wire));
 }
 
-/** Where a wire ends: a block's input, or one ending of the Finish block. */
 export type WireTarget = Pick<FlowWire, "targetBlockId" | "targetEndingId">;
 
-/**
- * Whether `source` may gain a wire to the target: any block or existing ending for an exit, only
- * Agent blocks for the Flow input (never a Human step, a Continuation or an ending), and never a
- * target the source already reaches.
- */
 export function canConnect(graph: FlowGraph, source: WireSource, target: WireTarget) {
   if (hasWire(graph, { source, ...target })) return false;
   if (target.targetBlockId === FINISH_BLOCK_ID)
@@ -228,7 +219,6 @@ export function removeBlock(graph: FlowGraph, blockId: string): FlowGraph {
   };
 }
 
-/** A new ending at the end of the list: no name or output yet. */
 export function addEnding(graph: FlowGraph): FlowGraph {
   const ending: FlowEnding = {
     id: uid(),
@@ -240,7 +230,6 @@ export function addEnding(graph: FlowGraph): FlowGraph {
   return { ...graph, finish: { ...graph.finish, endings: [...graph.finish.endings, ending] } };
 }
 
-/** Replaces an ending in place; its wires enter by id, so a rename keeps them. */
 export function replaceEnding(graph: FlowGraph, next: FlowEnding): FlowGraph {
   return {
     ...graph,
@@ -251,7 +240,6 @@ export function replaceEnding(graph: FlowGraph, next: FlowEnding): FlowGraph {
   };
 }
 
-/** Removes an ending and, in the same edit, every wire into it. */
 export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
   return {
     ...graph,
@@ -265,10 +253,6 @@ export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
   };
 }
 
-/**
- * The endings a removal took, back in their former places: each goes in after the nearest
- * ending that preceded it and still exists, or first.
- */
 function restoredEndings(
   current: readonly FlowEnding[],
   before: readonly FlowEnding[],
@@ -296,8 +280,6 @@ export function continuedThread(graph: FlowGraph, blockId: string): string | nul
   return agent ? `${agent.name || "Unnamed block"}'s thread` : null;
 }
 
-/** How an exit row names one wire's target: a block's name, or "Finish · <ending>"; undefined
- * for a target the graph lacks. */
 function recipientNames(graph: FlowGraph) {
   const names = new Map<string, string>();
   for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
@@ -311,10 +293,6 @@ function recipientNames(graph: FlowGraph) {
   };
 }
 
-/**
- * The names of the targets each exit's connections reach, in graph order, indexed once per graph
- * since a canvas asks for every exit row: a block's name, or "Finish · <ending>".
- */
 export function exitRecipients(graph: FlowGraph) {
   const name = recipientNames(graph);
   const recipients = new Map<string, (string | undefined)[]>();
@@ -328,10 +306,6 @@ export function exitRecipients(graph: FlowGraph) {
     recipients.get(JSON.stringify([blockId, exitId])) ?? [];
 }
 
-/**
- * The names of the targets each of one block's exits reaches, in graph order: a single pass that
- * keeps only that block's connections, for views that show one block rather than the whole canvas.
- */
 export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   const name = recipientNames(graph);
   const recipients = new Map<string, (string | undefined)[]>();
@@ -344,11 +318,6 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
 }
 
-/**
- * Undoes a removal that turned `before` into `after` on the current graph: blocks, endings and
- * wires the removal took come back, edits made since are kept, and a wire returns only while both
- * its ends exist; a wire into Finish needs its ending.
- */
 export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
   const has = (graph: FlowGraph, id: string) => graph.blocks.some((b) => b.id === id);
   const blocks = [

@@ -93,7 +93,6 @@ const CONDITION_OTHERWISE_FIELDS = ["id"];
  */
 interface FormatReader {
   readonly version: PortableFormatVersion;
-  /** Whether the Flow's graph holds the Finish block and connections may enter its endings. */
   readonly finish: boolean;
   readonly kindFields: ReadonlyMap<unknown, readonly string[]>;
   readonly kindChoice: string;
@@ -122,7 +121,6 @@ const VERSION_2: FormatReader = {
   kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
 };
 
-/** Version 3 is version 2 plus the Finish block, its endings and the connections entering them. */
 const VERSION_3: FormatReader = { ...VERSION_2, version: PORTABLE_DOCUMENT_VERSION, finish: true };
 
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
@@ -675,8 +673,6 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
       flowInput: graph!.flowInput as FlowInputBlock,
       connections: graph!.connections,
       blocks: graph!.blocks.map(portableBlock),
-      // The checked shape required the Finish block and its position in version 3 and nothing in
-      // earlier versions, which stay without one.
       ...(reader.finish ? { finish: graph!.finish as FlowFinishBlock } : {}),
     },
   };

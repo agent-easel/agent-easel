@@ -40,11 +40,6 @@ export const workerProvenance = (row: {
     ? { runId: row.run_id, activationId: row.origin_activation_id, threadId: row.origin_thread_id }
     : null;
 
-/**
- * The Handoffs a Final result version, a Human answer, a Wait arrival's forwarding, a Condition
- * arrival's selection or a Continuation's pass-through visit creates, named by that record's id. A
- * Final result's Handoffs stay held until its release; the others are released when created.
- */
 export type OutgoingHandoffs = {
   readonly kind: "report" | "human" | "wait" | "condition" | "pass";
   readonly id: string;
@@ -72,9 +67,6 @@ export function resultProvenance(sql: SqlClient.SqlClient, activationId: string)
   );
 }
 
-/** One Handoff per recipient block of `source` and one per ending its exit enters, deduplicated
- * by its cause. A Final result's Handoffs take its pending message, which the result then no
- * longer holds. */
 export function createHandoffs(
   sql: SqlClient.SqlClient,
   runRow: Pick<
@@ -94,8 +86,6 @@ export function createHandoffs(
     const endings = source.exitId
       ? handoffEndings(runRow.definitions.flow.graph.connections, source.blockId, source.exitId)
       : [];
-    // A Handoff names its recipient Block; one into an ending names the Finish block, whose row
-    // exists only for that and is never shown as a Block of the Run.
     if (endings.length)
       yield* sql`INSERT INTO run_blocks(run_id,block_id,name) VALUES(${runRow.id},${FINISH_BLOCK_ID},'Finish') ON CONFLICT DO NOTHING`;
     const recipients = [

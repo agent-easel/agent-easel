@@ -28,6 +28,28 @@ the invocation's work, private branches included, had finished. When Subflow is 
 
 No Subflow field is stored by the Finish block delivery.
 
+## Implementation constraints
+
+- The Finish block is always present, uses the reserved id `FINISH_BLOCK_ID` that no Block may take, and counts toward
+  the 500-block limit. A Handoff into an ending names the Finish block; that stored block row exists only for this and
+  is never shown as a Block of the Run. Layout node and port ids for the Flow input, the Finish block and its ending
+  ports live outside the Block namespaces, so no user-chosen Block id collides with them.
+- Accepting a Handoff into an ending, like one at a Condition, sends nothing to T3 and commits atomically. A failed
+  attempt commits nothing and leaves the Handoff pending for the next pass, so it is never noted as uncertain T3 work.
+  The acceptance records the result and closes the gate in one transaction; the Runner then starts the stop-and-settle,
+  also after a restart between the two commits.
+- The settlement reason is `finish` once the Run reached an ending, even when a user's Settle recorded the attempt
+  first. A Run with a result records its first stop attempt even when its authorization context was replaced: that
+  pass cannot stop the workers and raises **Settle could not stop workers** instead of leaving the Run Active without a
+  Problem.
+- The result's author is the block that wrote the message. A Wait, a Condition and a Continuation pass-through forward
+  an arrival's message unchanged, so the author is found by following that consecutive forwarding back to its source.
+- An exit wired straight to a Required ending is message-required in that Flow only; the Agent's own exit is unchanged.
+  Only direct wires count: an ending reached through another block does not make the exit message-required.
+- A Finish block nothing placed goes one layout layer gap right of the rightmost Flow input or block, level with the
+  Flow input and within the canvas limits. Migration 114 and format 1 and 2 imports give upgraded Flows an empty Finish
+  block at that position.
+
 ## Considered Options
 
 - **Wait for the other branches before settling**: rejected. The Run could stay Active long after its outcome was known,

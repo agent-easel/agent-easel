@@ -325,7 +325,6 @@ function ActorIcon({
 }) {
   if (title) return <TitleMark className="text-link" />;
   const kind = run.definitions.flow.graph.blocks.find((block) => block.id === actorId)?.kind;
-  // The Run and its Finish block share the Finish flag.
   const Icon = actorId && actorId !== FINISH_BLOCK_ID ? BLOCK_KINDS[kind ?? "agent"].Icon : Flag;
   return <Icon aria-hidden className="size-3 shrink-0 text-link" strokeWidth={1.75} />;
 }

@@ -64,7 +64,6 @@ export type SeedScenario = {
       /** The result of the Agent the Condition hands later approvals to. */
       extraApproval: Report;
     }
-  /** The first worker reached the Finish ending Shipped with its result while the second was Stopped. */
   | { state: "ending reached"; result: Report }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
   | ({ grill: Report; approval: string } & (

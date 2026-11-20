@@ -10,8 +10,6 @@ import { settleReportRejections } from "./report-diagnostics.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
-/** Why a Run settled: Factory found its work done (`automatic`), the user confirmed Settle
- * (`manual`) or the Run reached an ending (`finish`). */
 export type SettlementReason = "automatic" | "manual" | "finish";
 
 /** Settled leaves the main navigation and clears Snooze. */

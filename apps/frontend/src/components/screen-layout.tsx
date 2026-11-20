@@ -25,10 +25,6 @@ export function SettingsPanel({ children, hidden }: { children: ReactNode; hidde
   );
 }
 
-/**
- * A scrolling settings pane: a visible thin scrollbar, and a bottom fade while more content
- * follows. `className` sets the pane's padding; `fade` the colour the fade blends into.
- */
 export function ScrollPane({
   children,
   hidden,

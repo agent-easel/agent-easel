@@ -726,8 +726,6 @@ export async function scenariosFixture(host: Host) {
       },
     ],
     [
-      // Ship the fix reached Shipped while T3 holds the Stop of Explore an alternative, so the
-      // Run shows its result while Stopping until the journey ends the held turn.
       "ending-stopping",
       async (keyNamespace) => {
         const [first, second] = await twoWorkersStarted(

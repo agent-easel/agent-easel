@@ -62,14 +62,10 @@ function storedTarget(
     return unverified("Stored operation target cannot be verified.");
   return verified(target);
 }
-/** A Handoff into an ending names the Finish block, which is not one of the graph's blocks. */
 const targetKind = (runRow: RunRow, handoff: Handoff) =>
   handoff.block_id === FINISH_BLOCK_ID
     ? "finish"
     : runRow.definitions.flow.graph.blocks.find((block) => block.id === handoff.block_id)?.kind;
-/** Accepting a Handoff at a Condition or an ending sends nothing to T3 and commits atomically: a failed attempt,
- * such as unavailable storage, committed nothing, so the Handoff stays pending for the next pass.
- * It is never noted as uncertain T3 work. */
 const retriedNextPass = <A, R>(attempt: Effect.Effect<A, unknown, R>) =>
   attempt.pipe(
     Effect.asVoid,
@@ -86,11 +82,6 @@ export function openRunnerDispatch(
   images: RunImages,
   scheduleWait: (wait: ScheduledWait) => Effect.Effect<void, unknown>,
 ) {
-  /** A released Handoff to an Agent becomes a worker launch or a revisit send, a Continuation
-   * Handoff a prompt send or a pass-through, a Human Handoff an occurrence, a Wait Handoff an
-   * arrival whose wake-up is scheduled, a Condition Handoff a numbered, routed arrival, and the
-   * first Handoff into an ending the Run result. A held Handoff stays a Handoff; reservation asks
-   * again. */
   function prepareHandoff(
     runRow: RunRow,
     handoff: Handoff,

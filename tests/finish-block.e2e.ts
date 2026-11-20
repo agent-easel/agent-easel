@@ -10,16 +10,11 @@ const finishBlock = (screen: Screen) => screen.getByRole("article", "Finish bloc
 const ending = (screen: Screen, name: string) => screen.getByRole("region", `Ending ${name}`);
 const runResult = (screen: Screen) => screen.getByRole("region", "Run result");
 
-/** Adds an ending in the open Finish settings and names it. */
 async function addEnding(screen: Screen, name: string) {
   await screen.getByRole("button", "Add ending", { exact: true }).tap();
   await ending(screen, "Unnamed ending").getByLabel("Name", { exact: true }).fill(name);
 }
 
-/**
- * Saves a ready Flow whose Runtime worker's Done enters the Finish ending Delivered, which requires
- * the pull request URL, and answers its id.
- */
 async function saveDeliveredFlow(baseUrl: string | undefined, name: string) {
   const id = await saveSingleAgentFlow(baseUrl, name, "Runtime worker", {
     id: "worker",
@@ -77,7 +72,6 @@ test("endings wired in Studio keep a renamed ending's wire and drop a removed en
   await ending(screen, "Shipped").getByLabel("Output description").fill("URL of the pull request");
   await addEnding(screen, "Dropped");
   await addEnding(screen, "Needs a person");
-  // Fit the Finish block beside the open panel so each ending row stays in view while dragging.
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await screen
     .getByRole("button", "Connect exit ok of Coder")

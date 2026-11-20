@@ -803,7 +803,6 @@ export const handoffFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "parallel-block")],
   }));
 
-/** The ending every ending Flow shape declares, entered by the wire from Entry worker's "Done". */
 const SHIPPED_ENDING = (output: EndingOutput): FlowEnding => ({
   id: "shipped",
   name: "Shipped",
@@ -818,7 +817,6 @@ const shippedWire = (sourceBlockId: string, exitId: string): FlowGraph["connecti
   targetEndingId: "shipped",
 });
 
-/** Entry worker's "Done" is wired straight to the Finish ending Shipped, with `output`. */
 export const endingFlow =
   (output: EndingOutput): ReadyFlowShape =>
   (world) =>
@@ -829,7 +827,6 @@ export const endingFlow =
       finish: { endings: [SHIPPED_ENDING(output)] },
     }));
 
-/** Entry worker's "Done" goes to the Continuation Spec, whose output is wired to a Required Shipped. */
 export const continuationEndingFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Continuation ending", (agentId) => ({
     flowInput: flowInput("worker"),
@@ -1182,7 +1179,6 @@ export const selfLoopConditionFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "gate"), connection("gate", OTHERWISE, "worker")],
   }));
 
-/** An ending of the Finish block every ending Flow shape declares, with its expected output. */
 const ending = (id: string, name: string, output: EndingOutput) => ({
   id,
   name,
@@ -1194,7 +1190,6 @@ const finishWith = (...endings: ReturnType<typeof ending>[]) => ({
   position: { x: 1200, y: 0 },
   endings,
 });
-/** A wire from `sourceBlockId`'s `exitId` into ending `endingId`. */
 const endingConnection = (
   sourceBlockId: string,
   exitId: string,
@@ -1206,7 +1201,6 @@ const endingConnection = (
   targetEndingId: endingId,
 });
 
-/** Entry worker's "Done" enters the ending Delivered, whose output is `output`. */
 const singleEndingFlow =
   (output: EndingOutput): ReadyFlowShape =>
   (world) =>
@@ -1219,8 +1213,6 @@ const singleEndingFlow =
 export const optionalEndingFlow = singleEndingFlow("optional");
 export const silentEndingFlow = singleEndingFlow("none");
 
-/** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" enters
- * Delivered and Second entry's "Done" enters Could not complete. */
 export const racingEndingsFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Racing endings", (agentId) => ({
     flowInput: flowInput("worker", "second"),
@@ -1235,8 +1227,6 @@ export const racingEndingsFlow: ReadyFlowShape = (world) =>
     ),
   }));
 
-/** Entry worker and Second entry both start from the Flow input; Entry worker's "Done" enters
- * Delivered and Second entry's "Done" goes to a Human Review. */
 export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Ending beside review", (agentId) => ({
     flowInput: flowInput("worker", "second"),
@@ -1248,8 +1238,6 @@ export const endingBesideReviewFlow: ReadyFlowShape = (world) =>
     finish: finishWith(ending("delivered", "Delivered", "optional")),
   }));
 
-/** Entry worker's "Done" goes to a Human Review whose Approve reaches the Gate, whose Otherwise
- * enters the Required ending Delivered. */
 export const reviewedEndingFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Reviewed ending", (agentId) => ({
     flowInput: flowInput("worker"),
@@ -1262,7 +1250,6 @@ export const reviewedEndingFlow: ReadyFlowShape = (world) =>
     finish: finishWith(ending("delivered", "Delivered", "required")),
   }));
 
-/** Factory observed until the Run recorded its Run result. */
 export function endingReached(world: ScenarioWorld, runId: string) {
   return reach("ending reached", () =>
     observeFor("observe the Run result", world, runId, (run) => run.result !== null),

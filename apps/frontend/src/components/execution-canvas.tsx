@@ -559,8 +559,6 @@ function executionBlock(
   };
 }
 
-/** The Finish block's Run state: neutral while an ending can still be reached, then the reached
- * ending, or none once the Run ended without one. */
 function finishState(run: RunDetail): FinishBlockState {
   const { result } = run;
   if (result)
@@ -568,7 +566,6 @@ function finishState(run: RunDetail): FinishBlockState {
   return runResultState(run) === "not-yet" ? { kind: "pending" } : { kind: "none-reached" };
 }
 
-/** The reached ending's port is drawn in the primary text colour, as its name. */
 const reachedPort: CanvasPort = { className: "border-[1.5px] border-foreground bg-background" };
 
 function executionFinish(

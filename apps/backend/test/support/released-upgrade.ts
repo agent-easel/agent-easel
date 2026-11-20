@@ -104,15 +104,11 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
         revisitInstruction: "",
       };
 
-/** Migration 114 places a released Flow's empty Finish block 80 px right of its rightmost node
- * (the Flow input is 200 px wide, a block 240 px), level with the Flow input. */
 const upgradedFinishPosition = ({ flowInput, blocks }: ReleasedFlow["graph"]) => ({
   x: Math.max(flowInput.position.x + 200, ...blocks.map((block) => block.position.x + 240)) + 80,
   y: flowInput.position.y,
 });
 
-/** A released Flow as current Factory reads it: the same revision and wires in the project
- * checkout, its block exits Flow-local and an empty Finish block right of every block. */
 export const currentFlow = <F extends Omit<ReleasedFlow, "readiness">>(flow: F) => ({
   ...flow,
   graph: {
@@ -180,7 +176,6 @@ export function currentRun(
     gateOpen: lifecycle === "settled",
     // Upgrading starts no manual settlement: a released Settled Run keeps its open gate.
     settlement: null,
-    // Released Flows had no endings, so no released Run has a Run result.
     result: null,
     definitions: capturedDefinitions(snapshot),
     currentFlowRevision,

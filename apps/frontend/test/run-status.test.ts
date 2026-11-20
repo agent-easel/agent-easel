@@ -104,7 +104,6 @@ it("a Settled Run with a stale block is not reported Not live", () => {
   expect(freshness).toStrictEqual({ live: true });
 });
 
-/** A Run whose captured Flow declares one ending. */
 function runWithEnding() {
   const run = runDetail();
   const graph = run.definitions.flow.graph;

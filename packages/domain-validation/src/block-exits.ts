@@ -109,17 +109,10 @@ export function effectiveExits(
   ];
 }
 
-/** An exit as the worker reads it: the endings it is directly wired to, and `messageRequired` as
- * this Flow makes it. */
 export interface ExitWithEndings extends EffectiveExit {
   readonly endings: readonly FlowEnding[];
 }
 
-/**
- * The exits `block` offers with the Finish endings each is wired straight to. An exit wired to a
- * Required ending is message-required in this Flow only; the Agent's own exit is unchanged. Only
- * direct wires count: an ending reached through another block does not.
- */
 export function exitsWithEndings(
   block: FlowBlockInput,
   graph: Pick<FlowGraphInput, "connections" | "finish">,

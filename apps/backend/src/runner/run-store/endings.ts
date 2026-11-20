@@ -10,8 +10,6 @@ import { arrivingHandoff, clearSpentArrivalMessages, workerProvenance } from "./
 import type { Handoff } from "./records.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
-/** Why a competing delivery into an ending, or work the Run still owed when it settled after its
- * ending, never ran. */
 export const CANCELLED_ON_FINISH = "cancelled-on-Finish";
 
 type RunResultRow = {
@@ -42,7 +40,6 @@ const runResult = (row: RunResultRow): RunResult => ({
   acceptedAt: row.accepted_at,
 });
 
-/** The Run's recorded result; null before an ending is reached and for a Run that reached none. */
 export function readRunResult(sql: SqlClient.SqlClient, runId: string) {
   return Effect.map(
     sql<RunResultRow>`SELECT r.*,t.thread_id AS origin_thread_id FROM run_results r LEFT JOIN run_thread_bindings t ON t.id=r.binding_id WHERE r.run_id=${runId}`,
@@ -50,9 +47,6 @@ export function readRunResult(sql: SqlClient.SqlClient, runId: string) {
   );
 }
 
-/** The block that wrote a Handoff's message. A Wait forwards its arrival's message unchanged, a
- * Condition routes it unchanged and a Continuation passes a later message through unchanged, so a
- * message from any of them was written by that arrival's source, through consecutive forwarding. */
 function messageWriter(sql: SqlClient.SqlClient, handoff: Handoff) {
   return Effect.gen(function* () {
     const [writer] = yield* sql<{
@@ -74,16 +68,6 @@ function messageWriter(sql: SqlClient.SqlClient, handoff: Handoff) {
 export function openRunEndings(database: RunnerDatabase) {
   const ownerToken = database.owner.token;
 
-  /**
-   * Accepts a released Handoff into an ending as the Run result. `current` is the snapshot the
-   * caller read the release at; `generation` is required unless the release is durable. Guards:
-   * owner, open gate, live authorization context and the generation when given; the Handoff is
-   * still pending. In one transaction it records the result, closes the gate for good, cancels
-   * every other delivery into an ending and a pending Run title generation, appends "Reached
-   * ending", acknowledges the delivery and advances the generation. Stopping and settling the Run
-   * follows from the recorded result (see `awaitingEndingSettlement`). A replayed delivery answers its original acceptance; a delivery that
-   * finds the gate closed records nothing and answers undefined.
-   */
   function reachEnding(current: RunRow, handoff: Handoff, generation: number | undefined) {
     return database.mutate(current.id, (sql) =>
       Effect.gen(function* (): Effect.fn.Return<RunResult | undefined, unknown> {
@@ -132,8 +116,6 @@ export function openRunEndings(database: RunnerDatabase) {
     );
   }
 
-  /** Whether the unarchived, unsettled Run has its result but no stop-and-settle recorded yet: the
-   * acceptance committed and the Runner, after it or after a restart, starts stopping the Run. */
   const awaitingEndingSettlement = (runId: string) =>
     database.transaction((sql) =>
       Effect.map(

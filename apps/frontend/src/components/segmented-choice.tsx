@@ -1,11 +1,6 @@
 import { RadioGroup } from "radix-ui";
 import { cn } from "@/lib/utils";
 
-/**
- * Figma Settings v2/Segmented: a short exclusive choice in one bordered track, with radio
- * semantics. `sm` is the compact track of Figma Studio/DuplicateAgentRow; `fill` stretches the
- * track over its row in equal segments, as a Finish ending's Output (Figma SegmentedChoice).
- */
 export function SegmentedChoice<Value extends string>({
   labelledBy,
   value,

@@ -171,7 +171,6 @@ function blockView(
     reason: continuation ? "continuation" : visitReason(cause),
     ...(continuation ? { prompt: graphBlock.prompt } : {}),
     ...(revisitInstruction ? { revisitInstruction, revisitRule: REVISIT_RULE } : {}),
-    // A Continuation's single output is read as `output`; it has no exit to name.
     exits: continuation ? [] : exits.map(workerExit),
     ...(continuation
       ? { output: { messageRequired: exits[0]!.messageRequired, endings: exits[0]!.endings } }

@@ -40,9 +40,7 @@ export type RuntimeReply = {
   readonly revisitInstruction?: string;
   /** How the Revisit instruction relates to the Agent's requirements; given with it. */
   readonly revisitRule?: string;
-  /** Each exit with the Finish endings it is wired straight to; `messageRequired` is this Flow's. */
   readonly exits?: readonly (BlockExit & { readonly endings: readonly FlowEnding[] })[];
-  /** A prompted Continuation's single output, with the endings it is wired straight to. */
   readonly output?: {
     readonly messageRequired: boolean;
     readonly endings: readonly FlowEnding[];
@@ -71,7 +69,6 @@ export type RuntimeReply = {
   }[];
   /** The Run's constant-size Condition summaries, not their histories. */
   readonly conditions?: readonly ConditionSummary[];
-  /** The Run result once the Run reached an ending, else null. */
   readonly result?: RunResult | null;
   /** One Condition evidence page: its arrivals, window high-water and next cursor. */
   readonly arrivals?: readonly ConditionArrivalEvidence[];

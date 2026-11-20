@@ -13,7 +13,6 @@ import { appendTimelineEvent } from "./steps.ts";
 const pending: DeliveryState = "pending";
 const cancelled: DeliveryState = "cancelled";
 
-/** The user action, or the Run's reached ending, that ends a Run's automatic work, with the reasons it records. */
 const CUTOFFS = {
   archive: { intentProblem: "cancelled-on-Archive", attentionReason: "archived" },
   settle: { intentProblem: "cancelled-on-Settle", attentionReason: "manual-settlement" },
@@ -100,7 +99,6 @@ export function cancelOwedWork(
       { problem: null },
     );
     // Archive clears every Wait and Condition message, including those kept for their recipients;
-    // settlement keeps the ones a recipient's visit still reads. Outcomes, deadlines,
     // numbers, selections and identities stay.
     if (cutoff === "archive") {
       yield* sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${id}`;

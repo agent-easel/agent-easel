@@ -66,11 +66,6 @@ export function runFreshness(run: RunDetail, observationsUnavailable: boolean): 
   return { live: false, lastObservedAt };
 }
 
-/**
- * What the Run overview's Result section shows: nothing when the captured Flow declares no
- * endings, as for Runs started before endings existed; until a result, whether one can still be
- * reached, which ends once Settle, Archive or an ending closes the Run's gate.
- */
 export function runResultState(run: RunDetail) {
   if (run.result) return "reached";
   if (!run.definitions.flow.graph.finish.endings.length) return "none";

@@ -60,13 +60,10 @@ function flowInputPortId() {
   return "out:flow-input";
 }
 
-// Outside the `in:` namespace, so no Block's input port id can collide with an ending's.
 function finishPortId(endingIndex: number) {
   return `ending:${endingIndex}`;
 }
 
-/** The Finish block as a layout reserves it: a block-wide node in the last layer with one input
- * port per ending, in ending order. */
 function finishNode<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayoutDimensions<B>) {
   const { ports } = dims;
   const { firstEndingY } = dims.finish;
@@ -90,14 +87,8 @@ function finishNode<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayo
   } satisfies ElkNode;
 }
 
-/** The gap a layout leaves between layers, which the default Finish placement keeps too. */
 const LAYER_GAP = 80;
 
-/**
- * Where a Finish block goes when nothing placed it: one layer gap right of the rightmost Flow
- * input or block, level with the Flow input, within the canvas limits. Upgraded Flows were given
- * the same position.
- */
 export function defaultFinishPosition(
   graph: Pick<FlowGraph, "blocks" | "flowInput">,
   dimensions: { readonly flowInputWidth: number; readonly blockWidth: number },

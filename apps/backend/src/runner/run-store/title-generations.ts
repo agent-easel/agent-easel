@@ -179,11 +179,6 @@ const CANCELLED = {
   finish: "The Run reached an ending before a generated title arrived.",
 } as const;
 
-/**
- * Archive, manual settlement and a reached ending end a pending generation in the transaction that closes the Run's
- * handoff gate, including a launch not sent yet. One whose deadline already passed records the
- * timeout, with its diagnostic, that its wake-up had not recorded yet.
- */
 export function cancelTitleGeneration(
   sql: SqlClient.SqlClient,
   runId: string,

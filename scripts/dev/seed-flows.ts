@@ -153,8 +153,6 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
   };
 }
 
-/** Two workers start from one prompt; the first one's Done enters the ending Shipped and the
- * second one's enters Dropped, so whichever finishes first ends the Run and stops the other. */
 function createEndingsFlow(factory: Factory, agents: DemoAgents) {
   const done = [blockExit("done", "Done", "Done")];
   return saveFlow(factory, "Demo · Ship or drop", {

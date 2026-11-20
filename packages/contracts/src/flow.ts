@@ -87,25 +87,17 @@ export interface FlowConnection {
   readonly sourceBlockId: string;
   readonly exitId: string;
   readonly targetBlockId: string;
-  /** Which ending the connection enters when `targetBlockId` is `FINISH_BLOCK_ID`; absent otherwise. */
   readonly targetEndingId?: string;
 }
-/** What an ending carries: no output, output that may be given, or output that must be given. */
 export type EndingOutput = "none" | "optional" | "required";
-/** One declared way a Flow can end. Wires enter it by `id`, so renaming keeps them. */
 export interface FlowEnding {
   readonly id: string;
-  /** Stored trimmed; blank or repeated only in a draft, where readiness reports it. */
   readonly name: string;
-  /** Empty when the ending has no description. */
   readonly description: string;
   readonly output: EndingOutput;
-  /** What the output should contain; used when `output` is not `none`, empty when unset. */
   readonly outputDescription: string;
 }
-/** The id connections and the Flow input name the Finish block by; no Block may use it. */
 export const FINISH_BLOCK_ID = "finish";
-/** The single, always-present end of a Flow, with its ordered endings; it has no worker. */
 export interface FlowFinishBlock {
   readonly position: { readonly x: number; readonly y: number };
   readonly endings: readonly FlowEnding[];
@@ -136,7 +128,6 @@ export interface FlowGraphInput {
   readonly blocks: readonly FlowBlockInput[];
   readonly connections: readonly FlowConnection[];
   readonly flowInput: OptionalPosition<FlowInputBlock>;
-  /** Omitted, the Flow has no endings and its Finish block is placed right of every block. */
   readonly finish?: OptionalPosition<FlowFinishBlock>;
 }
 /** Where a new worktree starts: the Project repository's default branch or a named Git ref. */

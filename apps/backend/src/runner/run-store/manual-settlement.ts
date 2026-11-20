@@ -48,9 +48,6 @@ const authorizationReplaced = (sql: SqlClient.SqlClient, runId: string) =>
     (rows) => rows.length > 0,
   );
 
-/** Whether a replaced authorization refuses a stop-and-settle attempt. A Run that reached an
- * ending records its first attempt even so: that pass cannot stop the workers and raises Settle
- * could not stop workers instead of leaving the Run Active with no Problem. */
 const refusedForReplacedAuthorization = (sql: SqlClient.SqlClient, runId: string, retry: boolean) =>
   Effect.gen(function* () {
     if (!retry && (yield* sql`SELECT 1 FROM run_results WHERE run_id=${runId}`).length)
@@ -66,7 +63,6 @@ export type BoundWorker = {
   readonly link: string | null;
 };
 
-/** The reasons a confirmed stop-and-settle records; automatic settlement has no stop attempt. */
 export type StopSettlementReason = Exclude<SettlementReason, "automatic">;
 
 type SettlementRow = {
@@ -324,15 +320,6 @@ export function openRunManualSettlement(database: RunnerDatabase) {
       }),
     );
 
-  /** The user confirms stopping the Run's workers to settle it. Guards: the Run exists, is not
-   * Archived, this backend owns the database and no known authorization context replaced the
-   * Run's, also while T3 is unavailable: such a settlement could never complete. The first attempt
-   * for a Run with a result skips the last guard. A Settled Run is left unchanged. The first
-   * confirmation closes the handoff gate, cancelling a pending Run title generation, and starts attempt 1; a later one starts the next
-   * attempt only while the current attempt has an unresolved worker or launch. Both record this
-   * backend as the attempt's owner, the bound workers as stopping and "settlement requested", and advance the
-   * generation. The first confirmation records `reason`, or `finish` for a Run with a result, which the settled Run keeps; a later one
-   * retries under the recorded reason. Answers whether an attempt started. */
   function acceptSettlement(
     id: string,
     reason: StopSettlementReason,
@@ -353,8 +340,6 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           if (settlement?.state !== "unresolved") return { ok: true as const, value: false };
           yield* sql`UPDATE run_settlements SET attempt=attempt+1,attempt_owner=${ownerToken},attempted_at=${time},stop_pass_at=NULL WHERE run_id=${id}`;
         } else {
-          // A Run that reached an ending settles because of it, even when the user's Settle
-          // records the attempt before the Runner does.
           const [result] = yield* sql`SELECT 1 FROM run_results WHERE run_id=${id}`;
           const recorded: StopSettlementReason = result ? "finish" : reason;
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
@@ -469,14 +454,6 @@ export function openRunManualSettlement(database: RunnerDatabase) {
       }),
     );
 
-  /** Settles `run` manually once the caller's fresh reads, made at `run`'s generation, confirmed
-   * every bound worker finished. Guards: owner, not Archived, not Settled, the generation, no
-   * launch whose outcome is unresolved and, when the Run has workers, its live authorization
-   * context. Closes the gate, cancels owed automatic work with the recorded reason's cutoff,
-   * leaves each reserved or uncertain send uncertain without its payload, records each worker's
-   * runs as the reads showed them ended, without raising attention or replacing a recorded
-   * Problem, records "worker stopped" for each worker whose Stop T3 acknowledged, settles the Run (clearing Snooze and
-   * Woke) and advances the generation. Answers whether the Run settled. */
   function completeSettlement(run: RunRow, workers: readonly SettledWorker[]) {
     const id = run.id;
     return database.mutate(id, (sql) =>

@@ -21,7 +21,6 @@ import { ScrollPane } from "./screen-layout.tsx";
 import { SegmentedChoice } from "./segmented-choice.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 
-/** The most endings a Finish block holds, as for Agent exits. */
 const ENDING_LIMIT = 100;
 
 const OUTPUTS = [
@@ -30,17 +29,12 @@ const OUTPUTS = [
   ["required", "Required"],
 ] as const satisfies readonly (readonly [EndingOutput, string])[];
 
-/** One wire into an ending, as its Incoming row names it. */
 type IncomingWire = {
   readonly key: string;
   readonly label: string;
   readonly messageRequired: boolean;
 };
 
-/**
- * Every ending's incoming wires, in connection order: "<block> → <exit>", and whether that exit
- * must carry a message in this Flow (its own setting or a Required ending it leads to).
- */
 function incomingWires(graph: FlowGraph, agents: readonly AgentDefinition[]) {
   const byEnding = new Map<string, IncomingWire[]>();
   const exits = new Map(
@@ -67,11 +61,6 @@ function incomingWires(graph: FlowGraph, agents: readonly AgentDefinition[]) {
   return (endingId: string): readonly IncomingWire[] => byEnding.get(endingId) ?? [];
 }
 
-/**
- * Moves focus to an ending's name once its card is rendered, scrolling it into view: after a
- * readiness issue about it is selected, or after **Add ending** added it. A new request object
- * asks again.
- */
 function useEndingFocus(list: HTMLElement | null, requested: { endingId: string } | null) {
   const pending = useRef<string | null>(null);
   useLayoutEffect(() => {
@@ -91,10 +80,6 @@ function useEndingFocus(list: HTMLElement | null, requested: { endingId: string 
   };
 }
 
-/**
- * The Finish block's settings: its endings as stacked cards, in order, with **Add ending**, and
- * the note that reaching an ending ends the Run.
- */
 export function FinishSettings({
   graph,
   agents,
@@ -106,11 +91,8 @@ export function FinishSettings({
 }: {
   graph: FlowGraph;
   agents: readonly AgentDefinition[];
-  /** The Finish block's readiness issues by the field within it, such as `endings.1.name`. */
   issues: readonly BlockIssue[];
-  /** Selecting a readiness issue asks to show and focus its ending; a new object asks again. */
   focus: { endingId: string } | null;
-  /** Adds an ending and answers its id. */
   onAdd: () => string;
   onEdit: (ending: FlowEnding) => void;
   onRemove: (endingId: string) => void;
@@ -182,7 +164,6 @@ export function FinishSettings({
   );
 }
 
-/** One labelled row of an ending card: a 72 px label beside its control. */
 function EndingRow({
   label,
   htmlFor,
@@ -193,7 +174,6 @@ function EndingRow({
   label: string;
   htmlFor?: string;
   labelId?: string;
-  /** The label aligns with the first line of a multi-line value. */
   top?: boolean;
   children: ReactNode;
 }) {

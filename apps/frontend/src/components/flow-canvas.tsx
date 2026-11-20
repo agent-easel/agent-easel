@@ -50,7 +50,6 @@ export type DropAt = (x: number, y: number, grab: GrabOffset) => Placement | nul
 /** The selection id of the Flow input, whose settings hold its targets. */
 export const FLOW_INPUT = "flow-input";
 
-/** The selection id of the Finish block, whose settings hold its endings; no block may use it. */
 export const FINISH = FINISH_BLOCK_ID;
 
 /** Space the floating readiness summary covers above the graph. */
@@ -99,13 +98,6 @@ function useMoveDrag(
   };
 }
 
-/**
- * A wire being drawn from an exit's port or the Flow input's port. The whole target block is
- * the drop zone, and on the Finish block each ending's row; an exit may reach any block,
- * including its own block and earlier blocks, and any ending, and the Flow input only Agent
- * blocks. The draft changes once, on a drop over a target that the source may reach and does
- * not already reach; any other drop, or a cancel, keeps it.
- */
 function useConnectDrag(
   surface: RefObject<HTMLElement | null>,
   points: RefObject<CanvasPoints | null>,
@@ -252,10 +244,6 @@ function connectionHandle(
 /** A hidden or removed wired exit keeps its own endpoint but cannot start a connection. */
 const unavailablePort: CanvasPort = { className: "border-[1.5px] border-attention bg-background" };
 
-/**
- * `accepting` marks an input a wire being drawn from the Flow input may reach; `problem` an
- * ending no exit leads to yet.
- */
 const incomingPort =
   (accepting: boolean, problem = false) =>
   (pending: boolean): CanvasPort => ({
@@ -511,10 +499,6 @@ function authoringBlock({
   };
 }
 
-/**
- * The Finish block: moved like a block, with one input port per ending that a wire from an exit
- * may enter. Selecting it opens its endings; it cannot be removed.
- */
 function authoringFinish({
   marks,
   selected,
@@ -527,9 +511,7 @@ function authoringFinish({
   marks: ReadinessMarks;
   selected: boolean;
   dragging: boolean;
-  /** A connection being drawn would enter one of its endings. */
   connectTarget: boolean;
-  /** The source of a wire being drawn, if any; the Flow input reaches no ending. */
   pendingSource: WireSource | null;
   onSelect: () => void;
   drag: DragHandlers;
@@ -633,8 +615,6 @@ type FlowCanvasProps = {
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
   placementRef: RefObject<DropAt | null>;
-  /** A block, the Flow input or the Finish block, or null for empty canvas, which clears every
-   * selection. */
   onSelect: (blockId: string | null) => void;
   onSelectWire: (wire: FlowWire) => void;
   onDeleteWire: (wire: FlowWire) => void;

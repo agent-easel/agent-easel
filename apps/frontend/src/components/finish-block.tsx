@@ -3,20 +3,12 @@ import { Flag } from "lucide-react";
 import type { FlowEnding } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 
-/**
- * What the Finish block shows (Figma Studio/FinishBlock). `authoring` is the Flow editor, where
- * an unconnected ending reads in the error colour. A Run's Finish block is `pending` while no
- * ending is reached (endings stay neutral), then `reached` with the ending and its time, or
- * `none-reached` once the Run ended without one.
- */
 export type FinishBlockState =
   | { readonly kind: "authoring"; readonly unconnected: ReadonlySet<string> }
   | { readonly kind: "pending" }
   | { readonly kind: "reached"; readonly endingId: string; readonly time: string }
   | { readonly kind: "none-reached" };
 
-/** Whether the block draws its ending rows: every state with endings, and the authoring hint
- * without any. A Run's Finish block without endings is its header only. */
 export function finishShowsRows(state: FinishBlockState, endings: number) {
   return endings > 0 || state.kind === "authoring";
 }
@@ -27,7 +19,6 @@ function finishSummary(state: FinishBlockState, endings: number) {
   return endings === 1 ? "1 ending" : `${endings} endings`;
 }
 
-/** The Finish block's header and title rows: the Flag kind icon, FINISH, Finish and a summary. */
 export function finishIdentity(state: FinishBlockState, endings: number, trailing?: ReactNode) {
   return {
     header: (
@@ -51,12 +42,10 @@ export function finishIdentity(state: FinishBlockState, endings: number, trailin
   };
 }
 
-/** The row class of one ending; the reached ending is filled. */
 export function finishRowClass(state: FinishBlockState, ending: FlowEnding) {
   return cn(state.kind === "reached" && state.endingId === ending.id && "bg-muted");
 }
 
-/** One ending row: its name, and in a Run with a reached ending whether this one was reached. */
 export function FinishEndingRow({
   ending,
   state,
@@ -92,7 +81,6 @@ export function FinishEndingRow({
   );
 }
 
-/** The one row of an authoring Finish block without endings. */
 export function FinishHint() {
   return (
     <span className="truncate text-xs font-medium text-muted-foreground">

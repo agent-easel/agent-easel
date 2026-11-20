@@ -34,9 +34,6 @@ const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> 
   ),
 };
 
-/** What lets Factory stop a Run's executing workers to settle it: the user's confirmation of
- * Settle, or the Flow itself when the Run reached an ending (no dialog). The reason it records
- * follows from who authorized it. */
 export type StopAndSettle =
   | { readonly authorization: "user-confirmed"; readonly reason: "manual" }
   | { readonly authorization: "flow"; readonly reason: "finish" };
@@ -262,9 +259,6 @@ export function openRunActions({
     );
   }
 
-  /** Records the authorized stop-and-settle attempt with its reason, closing the gate before any
-   * Stop, answers the Run as stopping and forks the first pass. A repeat while stopping changes
-   * nothing; one on an unresolved settlement starts the next attempt. */
   function beginStopAndSettle(id: string, request: StopAndSettle) {
     return Effect.gen(function* (): Effect.fn.Return<Result<RunSettlementOutcome>, unknown> {
       const accepted = yield* store.acceptSettlement(id, request.reason);
@@ -275,8 +269,6 @@ export function openRunActions({
     });
   }
 
-  /** Stops the Run's workers and settles it for an authorization that needs no dialog, as the
-   * Flow's. Refused while Factory closes and for an Archived Run. */
   function stopAndSettle(
     id: string,
     request: StopAndSettle,

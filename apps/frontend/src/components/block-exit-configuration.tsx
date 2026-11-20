@@ -45,13 +45,10 @@ export function PanelHeading({ children }: { children: string }) {
 
 const cardClass = "grid divide-y overflow-hidden rounded-lg border";
 
-/** One choice of a target select: a block, or an ending of the Finish block. */
 type TargetChoice = {
   readonly key: string;
   readonly target: WireTarget;
-  /** How the open menu lists it. */
   readonly label: string;
-  /** How the closed select names it. */
   readonly name: string;
 };
 
@@ -76,11 +73,6 @@ function targetChoices(graph: FlowGraph, source: WireSource) {
   return { blocks: blocks.filter(offered), endings: endings.filter(offered) };
 }
 
-/**
- * The keyboard way to connect a source: a multi-select of the Blocks it may reach and, for an
- * exit, the Finish block's endings ("Finish → Delivered"), with the connected ones checked. Each
- * choice adds or removes one connection; the closed select names every target.
- */
 export function TargetSelect({
   graph,
   source,
@@ -141,7 +133,6 @@ export function TargetSelect({
   );
 }
 
-/** What one ending an exit leads to expects of its message; nothing for Output None. */
 function endingExpectation(ending: FlowEnding) {
   const description = ending.outputDescription.trim();
   if (ending.output === "required")
@@ -153,7 +144,6 @@ function endingExpectation(ending: FlowEnding) {
   return null;
 }
 
-/** Under an exit's target select: what each ending it leads to expects of its message. */
 function EndingExpectations({ exit }: { exit: ExitWithEndings | undefined }) {
   const lines = (exit?.endings ?? []).flatMap((ending) => {
     const text = endingExpectation(ending);
@@ -179,7 +169,6 @@ export function BlockExitConfiguration({
   onEdit: (block: FlowBlock) => void;
   onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
-  // An exit wired straight to a Required ending must carry a message in this Flow.
   const exits = new Map(exitsWithEndings(block, graph, agents).map((exit) => [exit.id, exit]));
   const target = (exitId: string, label: string) => (
     <>
@@ -332,7 +321,6 @@ function LocalExitCard({
   onRemove,
 }: {
   exit: BlockExit;
-  /** Whether this Flow requires a message, such as when the exit leads to a Required ending. */
   messageRequired: boolean;
   target: ReactNode;
   onEdit: (exit: BlockExit) => void;
@@ -388,7 +376,6 @@ function LocalExitCard({
           />
           Message required
         </Label>
-        {/* The checkbox shows the exit's own setting; the tag, a requirement its ending adds. */}
         {messageRequired && !exit.messageRequired && (
           <StatusBadge kind="neutral">Message required</StatusBadge>
         )}

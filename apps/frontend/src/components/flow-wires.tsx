@@ -41,7 +41,6 @@ type Geometry = ReturnType<typeof createCanvasGeometry>;
 
 type Point = { x: number; y: number };
 
-/** Where a wire enters its target: the port's point, the target's bottom and the approach lane. */
 type WireEnd = { readonly input: Point; readonly bottom: number; readonly lane: number };
 
 function blockEnd(geometry: Geometry, target: CanvasBlock, incomingIndex: number): WireEnd {
@@ -52,7 +51,6 @@ function blockEnd(geometry: Geometry, target: CanvasBlock, incomingIndex: number
   };
 }
 
-/** A wire from `from` into the target's port, as the presentation draws it. */
 function routedPath(
   kind: WirePresentation["kind"],
   from: Point,
@@ -84,10 +82,6 @@ function blocksById(graph: CanvasGraph) {
   return blocks;
 }
 
-/**
- * Where each connection ends and how its target is named: a block's input port, or, while the
- * canvas draws the Finish block, its ending's port; null for a target that is not drawn.
- */
 function wireEnds(graph: CanvasGraph, geometry: Geometry, finish: boolean) {
   const blocks = blocksById(graph);
   const endings = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
@@ -114,10 +108,6 @@ function wireEnds(graph: CanvasGraph, geometry: Geometry, finish: boolean) {
   };
 }
 
-/**
- * Every connection's wire, in graph order; a wire whose source or target is missing, or that
- * enters an ending while the canvas does not draw the Finish block, is not drawn.
- */
 export function exitWires(
   graph: CanvasGraph,
   kind: WirePresentation["kind"],
@@ -197,7 +187,6 @@ export function FlowWires({
   graph: CanvasGraph;
   geometry: Geometry;
   presentation: WirePresentation;
-  /** The canvas draws the Finish block, so wires into its endings are drawn too. */
   finish: boolean;
   /** ELK orthogonal paths keyed like `flow-input:<id>` or `<source>:<exit>:<target>`. */
   routes: ReadonlyMap<string, WireRoute> | null;
