@@ -534,14 +534,12 @@ it("a recovered save keeps drafts another tab saved while this tab's writes fail
   const setup = composer(context);
   const write = setup.storage.setItem.getMockImplementation();
   assert(write);
-  let blocked = true;
-  setup.storage.setItem.mockImplementation((key, value) => {
-    if (blocked) throw new Error("Quota exceeded");
-    write(key, value);
+  setup.storage.setItem.mockImplementation(() => {
+    throw new Error("Quota exceeded");
   });
   setup.draft.openFresh();
   setup.draft.edit({ segments: plain("Unsaved here") });
-  blocked = false;
+  setup.storage.setItem.mockImplementation(write);
   const other = reopen(setup).draft;
   other.openFresh();
   other.edit({ segments: plain("Other tab") });

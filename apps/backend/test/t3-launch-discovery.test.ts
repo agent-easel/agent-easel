@@ -27,16 +27,19 @@ function thread(fields: Record<string, unknown>) {
   };
 }
 
+function listedThreads(threads: unknown[], read: () => unknown = () => thread({})) {
+  return async (name: string) =>
+    name === "t3_thread_list" ? { projectId: "project-1", threads, nextCursor: null } : read();
+}
+
 it("a listed worker keeps the parent proved by its thread read", async () => {
   // Arrange
   const listed = thread({});
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return { projectId: "project-1", threads: [listed], nextCursor: null };
+  const call = listedThreads([listed], () => {
     reads += 1;
     return thread({ parentThreadId: "parent-9" });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -51,11 +54,7 @@ it("a listed worker keeps the parent proved by its thread read", async () => {
 
 it("a listed worker with no parent in the list or the thread read stays unresolved", async () => {
   // Arrange
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return { projectId: "project-1", threads: [thread({})], nextCursor: null };
-    return thread({});
-  };
+  const call = listedThreads([thread({})]);
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -67,16 +66,10 @@ it("a listed worker with no parent in the list or the thread read stays unresolv
 it("a non-string parent withholds the launch search", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [thread({ parentThreadId: 4 })],
-        nextCursor: null,
-      };
+  const call = listedThreads([thread({ parentThreadId: 4 })], () => {
     reads += 1;
     return thread({ parentThreadId: null });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -89,16 +82,10 @@ it("a non-string parent withholds the launch search", async () => {
 it("an explicit top-level parent in the list is accepted without another read", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [thread({ parentThreadId: null })],
-        nextCursor: null,
-      };
+  const call = listedThreads([thread({ parentThreadId: null })], () => {
     reads += 1;
     return thread({ parentThreadId: "parent-9" });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -146,16 +133,10 @@ it("a null worktree is the project checkout and a missing workspace stays unprov
 it("a listed null worktree stays a project-checkout candidate", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [thread({ parentThreadId: null, workspaceRoot: null })],
-        nextCursor: null,
-      };
+  const call = listedThreads([thread({ parentThreadId: null, workspaceRoot: null })], () => {
     reads += 1;
     return thread({ parentThreadId: null, workspaceRoot: "/other" });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -171,16 +152,10 @@ it("a listed null worktree stays a project-checkout candidate", async () => {
 it("a non-string workspace withholds the launch search", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [thread({ parentThreadId: null, workspaceRoot: 4 })],
-        nextCursor: null,
-      };
+  const call = listedThreads([thread({ parentThreadId: null, workspaceRoot: 4 })], () => {
     reads += 1;
     return thread({ parentThreadId: null });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -224,38 +199,35 @@ it("a live thread read proves identity from the nested thread and its worktree",
 it("a nested thread read supplies the project, parent, workspace and branch the list omitted", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [
-          {
-            threadId: "thread-1",
-            title,
-            interactionMode: "default",
-            providerInstanceId: "codex-main",
-            model: "gpt-6.1-sol",
-            options: { reasoning: "low" },
-            recentRuns: [execution()],
-          },
-        ],
-        nextCursor: null,
-      };
-    reads += 1;
-    return {
-      thread: {
+  const call = listedThreads(
+    [
+      {
         threadId: "thread-1",
         title,
-        projectId: "project-from-thread",
-        parentThreadId: null,
-        worktreePath: "/repo",
-        branch: "factory/run-1",
+        interactionMode: "default",
         providerInstanceId: "codex-main",
         model: "gpt-6.1-sol",
+        options: { reasoning: "low" },
+        recentRuns: [execution()],
       },
-      recentRuns: [execution()],
-    };
-  };
+    ],
+    () => {
+      reads += 1;
+      return {
+        thread: {
+          threadId: "thread-1",
+          title,
+          projectId: "project-from-thread",
+          parentThreadId: null,
+          worktreePath: "/repo",
+          branch: "factory/run-1",
+          providerInstanceId: "codex-main",
+          model: "gpt-6.1-sol",
+        },
+        recentRuns: [execution()],
+      };
+    },
+  );
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -277,27 +249,22 @@ it("a nested thread read supplies the project, parent, workspace and branch the 
 
 it("a missing project id stays unproven when the thread read also omits it", async () => {
   // Arrange
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [
-          {
-            threadId: "thread-1",
-            title,
-            parentThreadId: null,
-            workspaceRoot: "/repo",
-            interactionMode: "default",
-            providerInstanceId: "codex-main",
-            model: "gpt-6.1-sol",
-            options: { reasoning: "low" },
-            recentRuns: [execution()],
-          },
-        ],
-        nextCursor: null,
-      };
-    return thread({ projectId: undefined });
-  };
+  const call = listedThreads(
+    [
+      {
+        threadId: "thread-1",
+        title,
+        parentThreadId: null,
+        workspaceRoot: "/repo",
+        interactionMode: "default",
+        providerInstanceId: "codex-main",
+        model: "gpt-6.1-sol",
+        options: { reasoning: "low" },
+        recentRuns: [execution()],
+      },
+    ],
+    () => thread({ projectId: undefined }),
+  );
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -309,16 +276,10 @@ it("a missing project id stays unproven when the thread read also omits it", asy
 it("a non-string project id withholds the launch search", async () => {
   // Arrange
   let reads = 0;
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [thread({ projectId: 4, parentThreadId: null })],
-        nextCursor: null,
-      };
+  const call = listedThreads([thread({ projectId: 4, parentThreadId: null })], () => {
     reads += 1;
     return thread({ projectId: "project-1" });
-  };
+  });
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);
@@ -330,18 +291,10 @@ it("a non-string project id withholds the launch search", async () => {
 
 it("another titled thread that omits its parent does not withhold a proved worker", async () => {
   // Arrange
-  const call = async (name: string) => {
-    if (name === "t3_thread_list")
-      return {
-        projectId: "project-1",
-        threads: [
-          thread({ threadId: "thread-other", title: "Other" }),
-          thread({ parentThreadId: null }),
-        ],
-        nextCursor: null,
-      };
-    return thread({});
-  };
+  const call = listedThreads([
+    thread({ threadId: "thread-other", title: "Other" }),
+    thread({ parentThreadId: null }),
+  ]);
 
   // Act
   const found = await discoverLaunches(call, "project-1", title);

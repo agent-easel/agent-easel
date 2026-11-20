@@ -39,25 +39,19 @@ receives only environment variables listed in its task's `cache.env` or
 `cache.untrackedEnv` plus Vite+ system defaults, so a script that needs another
 variable becomes a `vite.config.ts` task that lists it.
 
-During implementation, use focused tests and `pnpm check:static` for feedback.
-The successful pre-push hook is the final full local gate: do not run `pnpm check`
-or repeat all its constituent commands immediately before pushing the unchanged
-tree. When handing back unpublished implementation work, run `pnpm check:static`
-and the affected suite. Reuse matching completed results and record which state
-they covered. A source-only reviewer inspects code and existing evidence;
-implementation gates belong to the implementer, and CI observation and operational
-diagnosis belong to the PR completion stage.
+Follow the [verification cadence](testing.md#verification-cadence) for local
+implementation, handoff and PR completion. A source-only reviewer inspects code
+and existing evidence.
 
 The hook checks the working tree, including uncommitted changes, not only the
 pushed commits; commit or discard local changes before pushing so the result
 matches what you push.
 
+## The edit hook
+
 Agent sessions whose harness loads the repository's edit hook (`.claude/settings.json`) also run
 `scripts/agent-edit-check.mjs` after every file edit: it formats the edited file and
 returns its `vp lint` findings to the agent, so steps 1 and 4 fail less often at push.
-
-`pnpm test:e2e` is **not** in the hook. Run it before opening a PR that touches
-UI or a user journey; see [testing policy](testing.md#behavior-tests-vs-e2e-journeys).
 
 ## CI and manual checks
 

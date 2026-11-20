@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import { expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import type { StudioLiveMessage } from "@t3-factory/contracts";
 import {
   assertOk,
@@ -9,7 +8,15 @@ import {
   reviewerExits,
   sampleAgentInput,
 } from "./support/domain-setup.ts";
-import { appliedStudio, liveClient, liveReads, publicStudio, subscribe } from "./support/live.ts";
+import {
+  appliedStudio,
+  failSecondRead,
+  liveClient,
+  liveReads,
+  publicStudio,
+  raceReads,
+  subscribe,
+} from "./support/live.ts";
 import { remoteServer } from "./support/remote-clients.ts";
 import { flowFile } from "./support/definition-import.ts";
 import { controlledExecution } from "./support/scenarios.ts";
@@ -264,26 +271,16 @@ it("a Studio snapshot raced on every read is not current until its catch-up is d
   // Arrange
   const { factory } = await reviewedFlow(c);
   const changes = makeLiveChanges();
-  let racedReads = 0;
   const reads = liveReads(factory);
-  const live = makeLiveStreams(
-    changes,
-    {
-      ...reads,
-      readStudio: () =>
-        reads.readStudio().pipe(
-          Effect.tap(() =>
-            racedReads++ < 3
-              ? Effect.promise(async () => {
-                  assertOk(await factory.createAgent(sampleAgentInput(`Raced ${racedReads}`)));
-                  changes.definitionsChanged();
-                })
-              : Effect.void,
-          ),
-        ),
+  const readStudio = raceReads(
+    reads.readStudio(),
+    async (index) => {
+      assertOk(await factory.createAgent(sampleAgentInput(`Raced ${index}`)));
+      changes.definitionsChanged();
     },
-    (read) => read,
+    { through: 3 },
   );
+  const live = makeLiveStreams(changes, { ...reads, readStudio: () => readStudio }, (read) => read);
 
   // Act
   const studio = subscribe(c, live.watchStudio());
@@ -299,22 +296,10 @@ it("a failed Studio re-read stays unsynchronized until a later read succeeds", a
   // Arrange
   const { factory } = await reviewedFlow(c);
   const changes = makeLiveChanges();
-  let reads = 0;
-  const publicReads = liveReads(factory);
+  const reads = liveReads(factory);
   const live = makeLiveStreams(
     changes,
-    {
-      ...publicReads,
-      readStudio: () =>
-        Effect.suspend(() =>
-          reads++ === 1
-            ? Effect.succeed({
-                ok: false as const,
-                error: { code: "internal" as const, message: "Storage is busy.", issues: [] },
-              })
-            : publicReads.readStudio(),
-        ),
-    },
+    { ...reads, readStudio: failSecondRead(reads.readStudio) },
     (read) => read,
   );
   const studio = subscribe(c, live.watchStudio());

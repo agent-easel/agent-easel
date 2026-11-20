@@ -2,7 +2,7 @@ import { assert, expect, it } from "@effect/vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Result } from "@t3-factory/contracts";
+import type { FlowGraph, Result } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
 import { HttpServerResponse } from "effect/http";
 import { loadConfiguration } from "../src/config.ts";
@@ -43,6 +43,17 @@ import {
   WAIT_OUTPUT,
   waitBlock,
 } from "./support/scenarios.ts";
+
+function remapAgentPlacements(
+  blocks: FlowGraph["blocks"],
+  imported: ReadonlyMap<string, string | undefined>,
+) {
+  return blocks.map((block) =>
+    block.kind === "agent" && block.agentId !== null
+      ? { ...block, agentId: imported.get(block.agentId) }
+      : block,
+  );
+}
 
 it("a file that is not JSON is rejected as not JSON and nothing is created", async (context) => {
   // Arrange
@@ -534,11 +545,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     workspace: saved.workspace,
     graph: {
       ...saved.graph,
-      blocks: saved.graph.blocks.map((block) =>
-        block.kind === "agent" && block.agentId !== null
-          ? { ...block, agentId: imported.get(block.agentId) }
-          : block,
-      ),
+      blocks: remapAgentPlacements(saved.graph.blocks, imported),
     },
   });
 });

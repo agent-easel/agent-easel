@@ -520,10 +520,9 @@ it("the Flow editor opens at 100 percent with the Flow input at the left margin 
   expect(view.scale).toBe(1);
   expect(shown(flowInput)[0]).toBeGreaterThanOrEqual(0);
   expect(shown(flowInput)[1]).toBeLessThanOrEqual(surface.width);
-  for (const box of blocks) {
-    const [left, right] = shown(box);
-    expect(left >= surface.width || right <= surface.width).toBe(true);
-  }
+  expect(
+    blocks.map(shown).filter(([left, right]) => left < surface.width && right > surface.width),
+  ).toStrictEqual([]);
 });
 
 it("a diagonal clearance keeps the minimal shift with every Block wholly in or out", () => {

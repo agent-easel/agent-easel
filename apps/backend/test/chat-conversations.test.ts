@@ -19,6 +19,7 @@ import {
   requestMessages,
   systemText,
   THREAD,
+  transcriptEvidence,
   toolResults,
   userEnvelopes,
 } from "./support/chat-conversation.ts";
@@ -183,15 +184,7 @@ it("a later invocation in the thread carries earlier admitted messages with thei
   });
 
   // Assert
-  expect(
-    requestMessages(model, 2).map((message) =>
-      message.role === "tool"
-        ? { role: "tool", content: JSON.parse(message.content as string) as unknown }
-        : message.role === "assistant" && message.tool_calls
-          ? { role: "assistant", calls: message.tool_calls.map((call) => call.function.name) }
-          : { role: message.role, content: message.role === "system" ? "…" : message.content },
-    ),
-  ).toStrictEqual([
+  expect(requestMessages(model, 2).map(transcriptEvidence)).toStrictEqual([
     { role: "system", content: "…" },
     {
       role: "user",

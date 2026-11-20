@@ -1,5 +1,5 @@
-import { beforeEach, test } from "./support/test.ts";
-import { expect } from "e2e";
+import { afterEach, beforeEach, test } from "./support/test.ts";
+import { describe, expect } from "e2e";
 import {
   blockOnModelLessLaterReview,
   fillReadyComposer,
@@ -135,19 +135,30 @@ test("a rejected Start shows one row per cause and only says that no Run was cre
   await app.screenshot("after-start-rejected");
 });
 
-test("losing Factory shows Factory offline and does not send the owner to T3 settings", async ({
-  fixture,
-  app,
-  screen,
-  browser,
-}) => {
-  // The host browser talks to the fixture directly. Offline drops only a remote browser's sockets.
-  await openRemoteBrowser(app);
-  await openApproved(app, "/runs/new");
-  await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
-  await screen.getByLabel("Initial prompt", { exact: false }).fill("Stay while Factory is offline");
-  await fixture.remoteAccess.offline();
-  try {
+describe("Factory becomes unavailable", () => {
+  afterEach(async ({ fixture, browser }) => {
+    await fixture.remoteAccess.online();
+    await browser.clearCookies({ name: "fixture_remote" });
+  });
+
+  test("losing Factory shows Factory offline and does not send the owner to T3 settings", async ({
+    fixture,
+    app,
+    screen,
+  }) => {
+    // Arrange
+    // The host browser talks to the fixture directly. Offline drops only a remote browser's sockets.
+    await openRemoteBrowser(app);
+    await openApproved(app, "/runs/new");
+    await expect(screen.getByRole("button", "New Run (+)")).toBeEnabled();
+    await screen
+      .getByLabel("Initial prompt", { exact: false })
+      .fill("Stay while Factory is offline");
+
+    // Act
+    await fixture.remoteAccess.offline();
+
+    // Assert
     await expect(screen.getByText("Factory offline", { exact: true })).toBeVisible({
       timeout: 15_000,
     });
@@ -156,10 +167,7 @@ test("losing Factory shows Factory offline and does not send the owner to T3 set
       screen.getByRole("link", "Open T3 connection settings", { exact: true }),
     ).toHaveCount(0);
     await app.screenshot("after-factory-offline");
-  } finally {
-    await fixture.remoteAccess.online();
-    await browser.clearCookies({ name: "fixture_remote" });
-  }
+  });
 });
 
 test("a chosen Flow that is not ready carries its reason on the one error card", async ({

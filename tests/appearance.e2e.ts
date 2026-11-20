@@ -260,6 +260,17 @@ for (const { choice, mode, initialChoice, initialMode } of [
   });
 }
 
+async function recordMirrorAppearanceStorage(browser: Browser) {
+  await browser.evaluate(() => {
+    const tab = (window as AppearanceMirrorHost).__appearanceMirror!;
+    tab.addEventListener("storage", (event) => {
+      if (event.key === "factory.appearance")
+        tab.document.documentElement.dataset.appearanceStorageEvent = event.newValue ?? "";
+    });
+    return null;
+  });
+}
+
 test("a loading tab picks up System saved after first paint", async ({ app, screen, browser }) => {
   // Arrange
   await browser.emulateMedia({ colorScheme: "light" });
@@ -279,14 +290,7 @@ test("a loading tab picks up System saved after first paint", async ({ app, scre
   });
   await openAppearanceMirror(browser);
   await expect.poll(() => mirroredChoice(browser)).toEqual([null, "dark"]);
-  await browser.evaluate(() => {
-    const tab = (window as AppearanceMirrorHost).__appearanceMirror!;
-    tab.addEventListener("storage", (event) => {
-      if (event.key === "factory.appearance")
-        tab.document.documentElement.dataset.appearanceStorageEvent = event.newValue ?? "";
-    });
-    return null;
-  });
+  await recordMirrorAppearanceStorage(browser);
   await screen.getByRole("radio", "System").tap();
   await expect
     .poll(() =>

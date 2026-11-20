@@ -15,6 +15,7 @@ import {
   applyStudioChange,
   type LiveEnvelope,
   type NavigationLiveMessage,
+  type Result,
   type RunDetail,
   type RunViewLiveMessage,
   type RunLiveMessage,
@@ -192,14 +193,30 @@ export const liveReads = (factory: Factory): Parameters<typeof makeLiveStreams>[
   getAppearance: () => Effect.die(new Error("Replaced-read live streams serve no appearance.")),
 });
 
-/** Commit after capturing the first read, before the subscriber receives its value. */
-export function raceFirstRead<A, E>(read: Effect.Effect<A, E>, commit: () => Promise<void>) {
-  let first = true;
+/** Commit after capturing a read, before the subscriber receives its value. */
+export function raceReads<A, E>(
+  read: Effect.Effect<A, E>,
+  commit: (index: number) => Promise<void>,
+  { from = 1, through = from }: { from?: number; through?: number } = {},
+) {
+  let reads = 0;
   return read.pipe(
     Effect.tap(() => {
-      if (!first) return Effect.void;
-      first = false;
-      return Effect.promise(commit);
+      const index = ++reads;
+      return index >= from && index <= through ? Effect.promise(() => commit(index)) : Effect.void;
     }),
   );
+}
+
+export function failSecondRead<A, E>(read: () => Effect.Effect<Result<A>, E>) {
+  let reads = 0;
+  return () =>
+    Effect.suspend(() =>
+      ++reads === 2
+        ? Effect.succeed({
+            ok: false as const,
+            error: { code: "internal" as const, message: "Storage is busy.", issues: [] },
+          })
+        : read(),
+    );
 }
