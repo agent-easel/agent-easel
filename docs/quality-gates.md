@@ -65,9 +65,9 @@ Follow the [verification cadence](testing.md#verification-cadence) for local
 implementation, handoff and PR completion. A source-only reviewer inspects code
 and existing evidence.
 
-The hook rejects pushes with staged or unstaged tracked changes. Each outgoing
-branch creation or update must point to the current `HEAD`. Tags and ref deletions
-are exempt from the `HEAD` requirement.
+Each outgoing branch creation or update must point to the current `HEAD`, with
+no staged or unstaged tracked changes. Tags and ref deletions are exempt from both
+checks.
 
 ## Ad-hoc e2e configs
 
