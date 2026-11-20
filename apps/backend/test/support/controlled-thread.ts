@@ -109,6 +109,29 @@ export function startQueuedSend(t3: ControlledT3, threadId: string, runId: strin
       send.reference = { ...send.reference, status: "running", delivery: "started" };
 }
 
+/** T3 cancels a turn queued on the thread: run `runId` shows status cancelled with `start` as its
+ * start evidence (an explicit null start never ran), and its wait answers settled. A run the
+ * thread does not show yet takes the next ordinal and becomes the thread's latest run. */
+export function queuedRunCancelled(
+  t3: ControlledT3,
+  threadId: string,
+  runId: string,
+  start: { readonly startedAt?: string | null },
+) {
+  const prior = statedThread(t3, threadId, "queued turn cancelled");
+  const queued = prior.recentRuns.find((run) => run.runId === runId);
+  const ordinal = 1 + Math.max(0, ...prior.recentRuns.map((run) => run.ordinal ?? 0));
+  const cancelled = { runId, status: "cancelled", ordinal: queued?.ordinal ?? ordinal, ...start };
+  t3.executionObservations.set(threadId, {
+    ...prior,
+    ...(queued ? {} : { latestRunId: runId }),
+    recentRuns: queued
+      ? prior.recentRuns.map((run) => (run.runId === runId ? cancelled : run))
+      : [...prior.recentRuns, cancelled],
+  });
+  answerDelegatedWait(t3, threadId, runId, "settled", "cancelled");
+}
+
 /** A turn ends: run `runId` of the thread ends with `status`, and T3 answers its delegated wait
  * as settled. A send whose run this is shows the same status. */
 export function endThreadRun(

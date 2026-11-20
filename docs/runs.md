@@ -676,7 +676,8 @@ Block's current visit. Factory returns acceptance only after saving it. The mode
   worker thread without a report is a **missing-report Problem**, also after a notification or reply turn; a worker waiting on
   delegated or background work T3 has not settled stays working. A failed, cancelled or interrupted latest run is a Problem until
   a later run of that thread completes or the Block reports; it does not return for that run, and a later failed run is a new
-  Problem. Missing-report Problems persist across restart and renewed work;
+  Problem. A queued turn T3 cancels before it starts, after a finished report, is no Problem and does not hold the
+  result. Missing-report Problems persist across restart and renewed work;
   there is no automatic retry or dismiss-as-success.
 - **Working**: an Agent on its task reports `to: "working"` with a message when the visit's work starts. The block stays
   working and shows the message on the canvas, in its details and in the Run row; it selects no exit, releases nothing and is
