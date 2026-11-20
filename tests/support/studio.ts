@@ -5,6 +5,28 @@ import { saveFlowCopy } from "./flows.ts";
 
 export type StudioFixtures = { app: App; screen: Screen; browser: Browser };
 
+/**
+ * Runs `observe` while every Trigger check the page sends is held, so a journey can watch a check
+ * that is still running. The checks are released before this returns, also when `observe` throws:
+ * the runner settles held requests before any teardown, so a later release would leave a failed
+ * journey waiting for its cleanup budget instead of reporting the failure.
+ */
+export async function whileTriggerChecksHeld(browser: Browser, observe: () => Promise<void>) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await browser.route("**/api/triggers/*/run", async (route) => {
+    await held;
+    await route.continue();
+  });
+  try {
+    await observe();
+  } finally {
+    release();
+  }
+}
+
 export async function openStudioAgent({ app, screen }: StudioFixtures, name: string) {
   const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", name);
   await app.open(`/studio/agents/${agent.id}`);

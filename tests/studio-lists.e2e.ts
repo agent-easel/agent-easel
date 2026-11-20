@@ -5,6 +5,7 @@ import { expect, type App, type Screen } from "e2e";
 import type { Result, TriggerDefinition } from "../packages/contracts/src/index.ts";
 import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
 import { refuseFlowCreate } from "./support/flows.ts";
+import { whileTriggerChecksHeld } from "./support/studio.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -439,42 +440,24 @@ test("a Trigger's menu offers Check now, Edit and Remove", async ({
   await shot(app, browser, "triggers-menu");
 });
 
-/**
- * A journey whose Trigger checks the page holds until `heldChecks.release()`, so the journey
- * observes a running check for as long as it needs; teardown releases a check still held.
- */
-const heldCheckTest = test.extend<{ heldChecks: { release(): void } }>({
-  heldChecks: async ({ browser }, use) => {
-    let release = () => {};
-    const held = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await browser.route("**/api/triggers/*/run", async (route) => {
-      await held;
-      await route.continue();
-    });
-    await use({ release });
-    release();
-  },
-});
+test("Check now shows Checking… while the check is running", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await openTriggers(app, fixture, checkName);
 
-heldCheckTest(
-  "Check now shows Checking… while the check is running",
-  async ({ app, screen, browser, fixture, heldChecks }) => {
-    // Arrange: `heldChecks` holds the check until this journey releases it.
-    await openTriggers(app, fixture, checkName);
-
+  await whileTriggerChecksHeld(browser, async () => {
     // Act
     await checkNow(screen, checkName);
 
     // Assert
     await expect(screen.getByText("Checking…", { exact: true })).toBeVisible();
     await shot(app, browser, "triggers-checking");
-
-    // Cleanup: let the observed check finish; teardown releases it if an assertion failed first.
-    heldChecks.release();
-  },
-);
+  });
+});
 
 test("Check now with no ready issue reports nothing ready to start", async ({
   app,
