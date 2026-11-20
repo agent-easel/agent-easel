@@ -337,6 +337,28 @@ it("a turn T3 cancels before it starts, first seen beside a running later turn b
     problem: "execution-failed",
   });
 });
+it("a queued turn T3 cancels before it starts, first seen beside a running later turn after the worker reported, shows no Problem in work history", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const f = { ...setup, ...(await resultReported(setup.world, atWork)) };
+  queuedRunCancelled(f.t3, "thread-1", "execution-cancelled", { startedAt: null });
+  turnBegins(f.world, f, "execution-next");
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.executions.find((e) => e.executionId === "execution-cancelled")).toMatchObject({
+    engineStatus: "cancelled",
+    problem: null,
+  });
+  expect(run.value.attention.filter((a) => a.kind === "execution-failed")).toStrictEqual([]);
+  expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
+  expect(f.t3.launches.size).toBe(1);
+});
 it("a queued turn T3 cancels after it started, after the worker reported, holds the result with a Problem", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);

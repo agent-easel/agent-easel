@@ -98,9 +98,10 @@ export function recordExecution(
   });
 }
 
-/** The Problem recorded on `execution`: a failed run is an execution failure. After a finished
- * report, a run T3 cancelled before it started that is newer than the deciding run did no work
- * and records none; once recorded cancelled, it keeps that classification when newer runs follow. */
+/** The Problem recorded on `execution`: a failed run is an execution failure. A run T3 cancelled
+ * before it started that does not decide the Block's failure keeps the classification recorded
+ * when it was first seen cancelled: none when that was after a finished report, since it did no
+ * work, and an execution failure otherwise. */
 function executionProblem(
   execution: ExecutionRead,
   deciding: ExecutionRead | null,
@@ -110,8 +111,8 @@ function executionProblem(
   if (!failedRun(execution.status)) return null;
   if (!cancelledBeforeStart(execution) || execution.runId === deciding?.runId)
     return "execution-failed";
-  if (finished && deciding && (execution.ordinal ?? 0) > (deciding.ordinal ?? 0)) return null;
-  return recordedCancelled ? "keep" : "execution-failed";
+  if (recordedCancelled) return "keep";
+  return finished ? null : "execution-failed";
 }
 
 function recordExecutions(
