@@ -236,13 +236,16 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   browser,
 }) => {
   // Arrange
-  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", "UI exit worker");
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const agentName = `UI exit worker ${suffix}`;
+  const flowName = `Block exit configuration ${suffix}`;
+  const agent = await copyAgentDefinition(app.baseUrl, "Sample worker", agentName);
   await browser.setViewport({ width: 1600, height: 1000 });
   await app.open("/studio/flows");
   await screen.getByRole("button", "New Flow").tap();
-  await screen.getByLabel("Flow name").fill("Block exit configuration");
+  await screen.getByLabel("Flow name").fill(flowName);
   await screen.getByRole("button", "Create Flow").tap();
-  await screen.getByRole("button", "Add UI exit worker").tap();
+  await screen.getByRole("button", `Add ${agentName}`, { exact: true }).tap();
   await screen.getByLabel("Name", { exact: true }).fill("Implement");
   await screen.getByRole("button", "Add Human step").tap();
   await screen.getByRole("button", "Close block settings").tap();
@@ -284,11 +287,11 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   await expect(
     panel.getByRole("button", "Targets of local exit github-url: Human step"),
   ).toBeVisible();
-  await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(readinessSummary(screen, "Ready")).toBeVisible();
+  await saveFlowWithReadiness(screen, "Ready");
   await app.screenshot("inherited-and-local-exits");
   await panel.getByLabel("Exit name", { exact: true }).fill("finish");
   await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expectFlowSaved(screen);
   await expectFlowBlocked(screen, /Implement: local exit "finish" has the same name/);
   await app.screenshot("local-exit-name-conflict");
   await panel.getByLabel("Exit name", { exact: true }).fill("github-url");
@@ -314,7 +317,7 @@ test("configure inherited and local Block exits, preserve wired hidden exits and
   assert.equal(saved.value.graph.connections[1]?.exitId, block.localExits[0]?.id);
 
   // A saved Agent edit is read by both Flows, including collision and removed-exit readiness.
-  const copyId = await saveFlowCopy(app.baseUrl, "Block exit configuration", "Another exit Flow", {
+  const copyId = await saveFlowCopy(app.baseUrl, flowName, `Another exit Flow ${suffix}`, {
     mode: "checkout",
   });
   await updateAgentExits(app.baseUrl, agent, [
