@@ -15,19 +15,16 @@ type ThreadRunRead = WorkerThread["thread"]["recentRuns"][number];
 export const cancelledBeforeStart = (run: ThreadRunRead) =>
   run.status === "cancelled" && run.startedAt === null;
 
-/** The run whose status decides the Block's execution failure. After a finished report, a later
- * run of the Block's own that T3 cancelled before it started did no work, so the newest run that
- * started decides; the turn that produced the report can still fail the Block. Otherwise the
- * latest run. */
+/** The run whose status decides the Block's execution failure: the latest run, unless it did no
+ * work after the Block's finished report (`noWork`); then the newest other run decides, so the
+ * turn that produced the report can still fail the Block. */
 export function decidingRun(
   { thread, latest }: WorkerThread,
-  current: ReportStatus,
-  ownedByBlock: (runId: string) => boolean,
+  noWork: (run: ThreadRunRead) => boolean,
 ) {
-  if (current !== "finished" || !latest || !cancelledBeforeStart(latest)) return latest;
-  if (!ownedByBlock(latest.runId)) return latest;
+  if (!latest || !noWork(latest)) return latest;
   return thread.recentRuns
-    .filter((run) => !cancelledBeforeStart(run))
+    .filter((run) => !noWork(run))
     .reduce<ThreadRunRead | null>(
       (best, run) => (!best || (run.ordinal ?? 0) >= (best.ordinal ?? 0) ? run : best),
       null,

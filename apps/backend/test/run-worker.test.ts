@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import {
   blockLaunch,
+  failNextThreadRead,
   clearStoredExecution,
   launchedBlockId,
   workerMessage,
@@ -358,6 +359,29 @@ it("a queued turn T3 cancels before it starts, first seen beside a running later
   expect(run.value.attention.filter((a) => a.kind === "execution-failed")).toStrictEqual([]);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
   expect(f.t3.launches.size).toBe(1);
+});
+it("a turn T3 cancels before it starts, ahead of the reporting turn, keeps its Problem when the report-time read fails", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const idle = await workingReportedIdle(setup.world, atWork);
+  queuedRunCancelled(setup.t3, "thread-1", "execution-cancelled", { startedAt: null });
+  const reporting = turnBegins(setup.world, idle, "execution-reporting");
+  failNextThreadRead(setup.t3);
+  const f = { ...setup, ...(await resultReported(setup.world, reporting)) };
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.executions.find((e) => e.executionId === "execution-cancelled")).toMatchObject({
+    engineStatus: "cancelled",
+    problem: "execution-failed",
+  });
+  expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
+  expect(f.t3.launches.size).toBe(2);
 });
 it("a queued turn T3 cancels after it started, after the worker reported, holds the result with a Problem", async (c) => {
   // Arrange
