@@ -27,6 +27,8 @@ export const serverUpdateActions = (app: FixtureApp) => remoteAccess(app).server
 /** An approved profile opens the upgrade review from the footer's downloaded-update control. */
 export async function openUpgradeReview(app: FixtureApp, screen: Screen, scope: string) {
   await openApproved(app, "/runs/new");
+  // The server install is a write. New Run becomes enabled when live delivery is current.
+  await expect(screen.getByRole("button", "New Run (+)", { exact: true })).toBeEnabled();
   await screen.getByRole("button", `Update downloaded · Click to upgrade ${scope}`).tap();
   await expect(
     screen.getByRole(

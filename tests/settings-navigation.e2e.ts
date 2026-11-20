@@ -151,6 +151,7 @@ for (const { mode, ring } of focusRings)
 
     // Arrange
     const edit = screen.getByRole("button", "Edit address", { exact: true });
+    await expect(edit).toBeEnabled();
     await edit.focus();
     await browser.keyboard.press("Shift+Tab");
 
