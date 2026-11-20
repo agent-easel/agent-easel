@@ -542,7 +542,11 @@ export const makeDefinitions = (
         graph: {
           ...flow.graph,
           blocks,
-          finish: { endings: [], position: unplacedFinishPosition({ ...flow.graph, blocks }) },
+          // Versions 1 and 2 carry no Finish block: their Flows arrive with an empty one.
+          finish: flow.graph.finish ?? {
+            endings: [],
+            position: unplacedFinishPosition({ ...flow.graph, blocks }),
+          },
         },
         workspace: flow.workspace,
         savedAt: now,

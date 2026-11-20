@@ -4,6 +4,7 @@ import {
   type AgentExecutionSettings,
   type CommitImportInput,
   type FlowBlockInput,
+  type FlowFinishBlock,
   type FlowInputBlock,
   type FlowWorkspace,
   type ImportedDocument,
@@ -75,6 +76,8 @@ const OPTION_FIELDS = ["id", "value"];
 const EXIT_FIELDS = ["id", "name", "description", "messageRequired"];
 const FLOW_FIELDS = ["name", "graph", "workspace"];
 const GRAPH_FIELDS = ["blocks", "connections", "flowInput"];
+const FINISH_FIELDS = ["position", "endings"];
+const ENDING_FIELDS = ["id", "name", "description", "output", "outputDescription"];
 const FLOW_INPUT_FIELDS = ["position", "targetBlockIds"];
 const CONNECTION_FIELDS = ["sourceBlockId", "exitId", "targetBlockId"];
 const POSITION_FIELDS = ["x", "y"];
@@ -90,6 +93,8 @@ const CONDITION_OTHERWISE_FIELDS = ["id"];
  */
 interface FormatReader {
   readonly version: PortableFormatVersion;
+  /** Whether the Flow's graph holds the Finish block and connections may enter its endings. */
+  readonly finish: boolean;
   readonly kindFields: ReadonlyMap<unknown, readonly string[]>;
   readonly kindChoice: string;
 }
@@ -104,19 +109,24 @@ const VERSION_1_KIND_FIELDS: ReadonlyMap<unknown, readonly string[]> = new Map([
 /** Version 1 holds no Condition block, so its definitions already are the current model. */
 const VERSION_1: FormatReader = {
   version: 1,
+  finish: false,
   kindFields: VERSION_1_KIND_FIELDS,
   kindChoice: "an Agent, Human, Wait or Continuation block",
 };
 
 /** Version 2 is version 1 plus the Condition block. */
 const VERSION_2: FormatReader = {
-  version: PORTABLE_DOCUMENT_VERSION,
+  version: 2,
+  finish: false,
   kindFields: new Map([...VERSION_1_KIND_FIELDS, ["condition", ["rules", "otherwise"]]]),
   kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
 };
 
+/** Version 3 is version 2 plus the Finish block, its endings and the connections entering them. */
+const VERSION_3: FormatReader = { ...VERSION_2, version: PORTABLE_DOCUMENT_VERSION, finish: true };
+
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2].map((reader) => [reader.version, reader]),
+  [VERSION_1, VERSION_2, VERSION_3].map((reader) => [reader.version, reader]),
 );
 
 type Issues = ValidationIssue[];
@@ -328,7 +338,8 @@ function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
   const fields = checkFields(flow, "flow", FLOW_FIELDS, [], subject, issues);
   if (!fields) return;
   if ("graph" in fields) {
-    const graph = checkFields(fields.graph, "flow.graph", GRAPH_FIELDS, [], subject, issues);
+    const graphFields = reader.finish ? [...GRAPH_FIELDS, "finish"] : GRAPH_FIELDS;
+    const graph = checkFields(fields.graph, "flow.graph", graphFields, [], subject, issues);
     checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
       checkBlockShape(
         block,
@@ -344,11 +355,12 @@ function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
           connection,
           `flow.graph.connections.${index}`,
           CONNECTION_FIELDS,
-          [],
+          reader.finish ? ["targetEndingId"] : [],
           subject,
           issues,
         ),
     );
+    if (graph && "finish" in graph) checkFinishShape(graph.finish, issues);
     if (graph && "flowInput" in graph) {
       const path = "flow.graph.flowInput";
       const input = checkFields(graph.flowInput, path, FLOW_INPUT_FIELDS, [], subject, issues);
@@ -357,6 +369,18 @@ function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
     }
   }
   if ("workspace" in fields) checkWorkspaceShape(fields.workspace, issues);
+}
+
+function checkFinishShape(finish: unknown, issues: Issues) {
+  const path = "flow.graph.finish";
+  const subject = "The Flow's Finish block";
+  const fields = checkFields(finish, path, FINISH_FIELDS, [], subject, issues);
+  if (!fields) return;
+  if ("position" in fields)
+    checkFields(fields.position, `${path}.position`, POSITION_FIELDS, [], subject, issues);
+  checkList(fields.endings, `${path}.endings`, subject, issues).forEach((ending, index) =>
+    checkFields(ending, `${path}.endings.${index}`, ENDING_FIELDS, [], subject, issues),
+  );
 }
 
 function checkBlockShape(
@@ -608,7 +632,7 @@ function flowDocument(
 ): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
-  const flow = decodeFlow(fields.flow as Record<string, unknown>);
+  const flow = decodeFlow(fields.flow as Record<string, unknown>, reader);
   if (!flow.ok) return flow;
   return {
     ok: true,
@@ -626,7 +650,7 @@ function flowIssue(entry: ValidationIssue, blocks: readonly unknown[]): Validati
 }
 
 /** The Flow domain validator over the file's Flow, with each Agent block's key in its id's place. */
-function decodeFlow(flow: Record<string, unknown>): Result<PortableFlow> {
+function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result<PortableFlow> {
   const blocks = flowBlocks(flow);
   const validated = validateCreateFlow({
     ...flow,
@@ -651,6 +675,9 @@ function decodeFlow(flow: Record<string, unknown>): Result<PortableFlow> {
       flowInput: graph!.flowInput as FlowInputBlock,
       connections: graph!.connections,
       blocks: graph!.blocks.map(portableBlock),
+      // The checked shape required the Finish block and its position in version 3 and nothing in
+      // earlier versions, which stay without one.
+      ...(reader.finish ? { finish: graph!.finish as FlowFinishBlock } : {}),
     },
   };
   const oversized = flowSizeIssue(decoded);

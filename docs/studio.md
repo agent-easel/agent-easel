@@ -646,12 +646,12 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 2, whatever the definition holds:
+Every export writes portable document format version 3, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -685,7 +685,7 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 2,
+  "formatVersion": 3,
   "kind": "flow",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -718,7 +718,8 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
         { "sourceBlockId": "gate", "exitId": "ask", "targetBlockId": "approve" },
         { "sourceBlockId": "gate", "exitId": "otherwise", "targetBlockId": "review" }
       ],
-      "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] }
+      "flowInput": { "position": { "x": 0, "y": 0 }, "targetBlockIds": ["review"] },
+      "finish": { "position": { "x": 960, "y": 0 }, "endings": [] }
     },
     "workspace": { "mode": "worktree", "base": { "kind": "default" } }
   },
@@ -737,6 +738,9 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 - `flow` holds the Flow's name, saved graph and workspace setting: block and exit ids, positions, wires, hidden exits, Flow-local exits,
   Revisit instructions, Waits, Human steps, Continuations and Conditions with their rule ids, names and thresholds, exactly as saved. An
   unfinished draft keeps its gaps, such as a Wait without a duration or a rule with `"fromArrival": null`.
+- `graph.finish` is the [Finish block](#finish-block): its `position` and its `endings` (`id`, `name`, `description`, `output`,
+  `outputDescription`) in order. A wire into an ending is a connection with `targetBlockId: "finish"` and the ending's `targetEndingId`.
+  Ending ids are document-local like exit ids and are kept as saved. A version-3 Flow always carries `finish`, even with no endings.
 - Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
   carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
   missing or removed. There is no fallback to local ids or names.
@@ -744,11 +748,15 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 Export refuses, with the reason, a file another installation could not import: an Agent or Flow whose save request exceeds 2 MB, or a file
 over 16 MiB.
 
-**Format versions.** Import reads versions 1 and 2, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
-version-1 file holding a Condition is rejected at that block as an unknown block kind, as before. Files exported before version 2 import
-unchanged. A newer version is refused and asks to update Factory. Writing version 2 for every export is an intentional compatibility break:
-an installation that reads only version 1 (release 0.6.0 and earlier) refuses every newly exported file, even an ordinary Agent or a Flow
-without a Condition, and asks to be updated before it can import it. Stored definitions, revisions and Run history are not affected.
+**Format versions.** Import reads versions 1, 2 and 3, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
+version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
+endings and the connections entering them; a version-1 or version-2 file holding `finish` or `targetEndingId` is rejected at that field as
+unknown, and a version-3 Flow file without `finish` is rejected as missing it. Files exported before version 3 import unchanged, and their
+Flows arrive with an empty Finish block placed right of every block. A newer version is refused and asks to update Factory. Writing version 3
+for every export is an intentional compatibility break: an installation that reads only versions 1 and 2 refuses every newly exported file,
+even an ordinary Agent or a Flow without endings, and asks to be updated before it can import it; it refuses before creating anything.
+Stored definitions, revisions and Run history are not affected. Import limits and receipts are unchanged: the receipt fingerprint covers the
+document under the file's own version, so retrying an earlier-version commit still replays its receipt.
 
 ### Import
 

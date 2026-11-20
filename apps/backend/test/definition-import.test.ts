@@ -89,7 +89,7 @@ it("a newer format version is rejected before its definitions are read and asks 
 
   // Act
   const review = await factory.reviewImport(
-    fileBody(agentFile({ unreadable: true }, { formatVersion: 3 })),
+    fileBody(agentFile({ unreadable: true }, { formatVersion: 4 })),
   );
 
   // Assert
@@ -99,7 +99,7 @@ it("a newer format version is rejected before its definitions are read and asks 
       code: "unsupported_format_version",
       path: "formatVersion",
       message:
-        "This file uses format version 3, which this Factory cannot read. Update Factory to import it.",
+        "This file uses format version 4, which this Factory cannot read. Update Factory to import it.",
     },
   ]);
 });
@@ -521,7 +521,7 @@ it("a committed Flow file arrives as exported with its Agents' keys replaced by 
     }),
   );
   const { document } = assertOk(await factory.exportFlow(created.id));
-  expect(document.formatVersion).toBe(2);
+  expect(document.formatVersion).toBe(3);
 
   // Act
   const committed = assertOk(
@@ -607,8 +607,97 @@ it("a version-1 Flow file from an earlier release still commits as the Flow it h
         { id: "review", kind: "agent", agentId: committed.value.agents[0]!.id },
         { id: "approve", kind: "human" },
       ],
+      finish: { endings: [] },
     },
   });
+});
+
+it("a version-2 Flow file commits with an empty Finish block placed right of its blocks", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const file = flowFile();
+
+  // Act
+  const committed = assertOk(
+    await factory.commitImport({
+      requestId: "import-flow",
+      document: file,
+      selections: { "agent-1": controlledExecution() },
+    }),
+  );
+
+  // Assert
+  const flow = assertOk(await factory.getFlow(committed.flowId!));
+  expect(flow.graph.finish.endings).toStrictEqual([]);
+  expect(flow.graph.finish.position.x).toBeGreaterThan(480);
+});
+
+it("a version-2 Flow file holding a Finish block is rejected at it, as version 2 has none", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const { flow, ...file } = flowFile();
+  const graph = { ...flow.graph, finish: { position: { x: 700, y: 0 }, endings: [] } };
+
+  // Act
+  const review = await factory.reviewImport(fileBody({ ...file, flow: { ...flow, graph } }));
+
+  // Assert
+  assert(!review.ok);
+  expect(review.error.issues.map(({ code, path }) => ({ code, path }))).toStrictEqual([
+    { code: "unknown_field", path: "flow.graph.finish" },
+  ]);
+});
+
+it("a committed version-3 Flow file keeps its endings and the wires entering them", async (context) => {
+  // Arrange
+  const { factory } = await openFactoryWithApprovedT3(context);
+  const coder = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
+  const created = assertOk(await factory.createFlow({ name: "Deliver" }));
+  const delivered = {
+    id: "delivered",
+    name: "Delivered",
+    description: "The change is merged.",
+    output: "required",
+    outputDescription: "URL of the PR opened",
+  } as const;
+  const gaveUp = { ...delivered, id: "gave-up", name: "Gave up", output: "none" } as const;
+  const wire = (exitId: string, targetEndingId: string) => ({
+    sourceBlockId: "coder",
+    exitId,
+    targetBlockId: "finish",
+    targetEndingId,
+  });
+  const saved = assertOk(
+    await factory.updateFlow(created.id, {
+      name: created.name,
+      expectedRevision: created.revision,
+      expectedProjectId: created.projectId,
+      workspace: created.workspace,
+      graph: {
+        flowInput: flowInput("coder"),
+        blocks: [agentBlock("coder", "Coder", coder.id, { x: 200, y: 20 })],
+        connections: [wire("done", "delivered")],
+        finish: { position: { x: 600, y: 20 }, endings: [delivered, gaveUp] },
+      },
+    }),
+  );
+  const { document } = assertOk(await factory.exportFlow(created.id));
+  const reread = await factory.reviewImport(fileBody(document));
+  expect(reread.ok).toBe(true);
+
+  // Act
+  const committed = assertOk(
+    await factory.commitImport({
+      requestId: "import-flow",
+      document,
+      selections: { "agent-1": controlledExecution() },
+    }),
+  );
+
+  // Assert
+  const flow = assertOk(await factory.getFlow(committed.flowId!));
+  expect(flow.graph.finish).toStrictEqual(saved.graph.finish);
+  expect(flow.graph.connections).toStrictEqual([wire("done", "delivered")]);
 });
 
 it("retrying a Flow commit whose file lists the same content with fields reordered returns the original result", async (context) => {
