@@ -98,29 +98,25 @@ export function recordExecution(
   });
 }
 
-/** The Problem recorded on `execution`: a failed run is an execution failure, unless it did no
- * work after the Block's finished report. A run T3 cancelled before it started that is already
- * recorded cancelled keeps its classification once it no longer decides. */
+/** The Problem recorded on `execution`: a failed run is an execution failure, unless T3 cancelled
+ * it before it started after the Block's finished report (`cancelledAfterReport`). A run cancelled
+ * before it started keeps the classification recorded when it was first seen cancelled once it no
+ * longer decides. */
 function executionProblem(
   execution: ExecutionRead,
   deciding: ExecutionRead | null,
-  noWork: boolean,
+  cancelledAfterReport: boolean,
   recordedCancelled: boolean,
 ): "execution-failed" | null | "keep" {
   if (!failedRun(execution.status)) return null;
   if (execution.runId === deciding?.runId) return "execution-failed";
-  if (noWork) return null;
-  return cancelledBeforeStart(execution) && recordedCancelled ? "keep" : "execution-failed";
+  if (cancelledBeforeStart(execution) && recordedCancelled) return "keep";
+  return cancelledAfterReport ? null : "execution-failed";
 }
 
-/** The ordinal of the turn the Block's current finished report came from, when Factory observed
- * that turn at acceptance; null otherwise. */
-function reportingOrdinal(
-  sql: SqlClient.SqlClient,
-  runId: string,
-  blockId: string,
-  recordOf: (executionId: string) => { readonly ordinal: number | null } | undefined,
-) {
+/** The Block's current finished report: when it was accepted and the turn it came from, when
+ * Factory observed that turn at acceptance. Null while the current report is not finished. */
+function currentFinishedReport(sql: SqlClient.SqlClient, runId: string, blockId: string) {
   return Effect.gen(function* () {
     const activation = (yield* currentReports(sql, runId)).find(
       (entry) => entry.blockId === blockId,
@@ -128,9 +124,9 @@ function reportingOrdinal(
     if (activation?.report?.status !== "finished") return null;
     const [report] = yield* sql<{
       reporting_execution_id: string | null;
-    }>`SELECT reporting_execution_id FROM runtime_reports WHERE activation_id=${activation.activationId} AND status='finished' ORDER BY rowid DESC LIMIT 1`;
-    const reporting = report?.reporting_execution_id;
-    return reporting ? (recordOf(reporting)?.ordinal ?? null) : null;
+      accepted_at: string;
+    }>`SELECT reporting_execution_id,accepted_at FROM runtime_reports WHERE activation_id=${activation.activationId} AND status='finished' ORDER BY rowid DESC LIMIT 1`;
+    return report ?? null;
   });
 }
 
@@ -141,7 +137,7 @@ function recordExecutions(
   bindingId: string,
   { thread }: WorkerThread,
   deciding: ExecutionRead | null,
-  noWork: (execution: ExecutionRead) => boolean,
+  cancelledAfterReport: (execution: ExecutionRead) => boolean,
   recordedCancelled: (runId: string) => boolean,
   time: string,
 ) {
@@ -161,7 +157,7 @@ function recordExecutions(
         executionProblem(
           execution,
           deciding,
-          noWork(execution),
+          cancelledAfterReport(execution),
           recordedCancelled(execution.runId),
         ),
         time,
@@ -308,18 +304,33 @@ function recordWorkerThread(
       block_id: string;
       engine_status: string;
       ordinal: number | null;
-    }>`SELECT execution_id,block_id,engine_status,ordinal FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
+      observed_at: string;
+    }>`SELECT execution_id,block_id,engine_status,ordinal,observed_at FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
     const recordOf = (runId: string) => recorded.find((entry) => entry.execution_id === runId);
     const ownerOf = (runId: string) => recordOf(runId)?.block_id ?? block.block_id;
-    const reportedAfter = yield* reportingOrdinal(sql, run.id, block.block_id, recordOf);
-    // After the Block's finished report, a later run of its own that T3 cancelled before it
-    // started did no work.
+    const report = yield* currentFinishedReport(sql, run.id, block.block_id);
+    const reportingOrdinal = report?.reporting_execution_id
+      ? (recordOf(report.reporting_execution_id)?.ordinal ?? null)
+      : null;
+    // After the Block's finished report, a run of its own that T3 cancelled before it started did
+    // no work and does not decide its failure.
     const noWork = (execution: ExecutionRead) =>
-      reportedAfter !== null &&
+      report !== null &&
       cancelledBeforeStart(execution) &&
-      ownerOf(execution.runId) === block.block_id &&
-      execution.ordinal !== undefined &&
-      execution.ordinal > reportedAfter;
+      ownerOf(execution.runId) === block.block_id;
+    // It was cancelled after the report when it is newer than the reporting turn, or Factory saw it
+    // not yet cancelled after the report was accepted.
+    const cancelledAfterReport = (execution: ExecutionRead) => {
+      if (!report || !noWork(execution)) return false;
+      const prior = recordOf(execution.runId);
+      if (prior && prior.engine_status !== "cancelled" && prior.observed_at >= report.accepted_at)
+        return true;
+      return (
+        reportingOrdinal !== null &&
+        execution.ordinal !== undefined &&
+        execution.ordinal > reportingOrdinal
+      );
+    };
     const deciding = decidingRun(worker, noWork);
     yield* recordExecutions(
       sql,
@@ -328,7 +339,7 @@ function recordWorkerThread(
       binding.id,
       worker,
       deciding,
-      noWork,
+      cancelledAfterReport,
       (runId) => recordOf(runId)?.engine_status === "cancelled",
       time,
     );
