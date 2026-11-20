@@ -1,5 +1,7 @@
 import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { CircleDashed, type LucideIcon } from "lucide-react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
+import type { SettingKind } from "./components/status-badge.tsx";
 import { api } from "./api.ts";
 import { useLiveStudio } from "./live/studio.ts";
 import { useRefreshSchedule } from "./refresh-schedule.ts";
@@ -30,7 +32,12 @@ export function agentReportingStatus(
       launchSkill: null,
     };
   if (!targets)
-    return { state: "checking", label: "Checking reporting…", message: "", launchSkill: null };
+    return {
+      state: "checking",
+      label: "Checking reporting…",
+      message: "",
+      launchSkill: null,
+    };
   const target =
     targets.find((target) => target.instances.includes(providerInstanceId)) ??
     targets.find((target) => target.instances.length === 0 && target.status === "needs-attention");
@@ -65,7 +72,11 @@ type ReportingInstallState = {
 };
 
 const ReportingStateContext = createContext<
-  | (ReportingReads & ReportingInstallState & { refresh: () => Promise<void>; readDetails: string })
+  | (ReportingReads &
+      ReportingInstallState & {
+        refresh: () => Promise<void>;
+        readDetails: string;
+      })
   | null
 >(null);
 
@@ -165,5 +176,56 @@ export function reportingSummary(reads: ReportingReads): ReportingStatus {
         message: "Agent reporting needs attention",
         launchSkill: null,
       }
-    : { state: "installed", label: "Reporting installed", message: "", launchSkill: null };
+    : {
+        state: "installed",
+        label: "Reporting installed",
+        message: "",
+        launchSkill: null,
+      };
+}
+
+const providerNames: Record<string, string> = {
+  claudeAgent: "Claude",
+  codex: "Codex",
+  cursor: "Cursor",
+  grok: "Grok",
+};
+
+/** A harness's name in Factory, from its T3 provider driver. */
+export const providerName = (provider: string) => providerNames[provider] ?? provider;
+
+/** A target the reporting install can act on now: Install, or Repair of Factory's own entry. */
+export const installable = (target: ReportingInstallation) =>
+  target.actions.install || target.actions.repair;
+
+export interface TargetStatus {
+  kind: SettingKind;
+  label: string;
+  badge?: { icon: LucideIcon };
+}
+
+const statuses: Record<ReportingInstallation["status"], TargetStatus> = {
+  "not-installed": {
+    label: "Not installed",
+    kind: "attention",
+    badge: { icon: CircleDashed },
+  },
+  installed: { label: "Installed", kind: "success" },
+  "needs-attention": { label: "Needs attention", kind: "attention" },
+  unsupported: { label: "Not available", kind: "neutral" },
+};
+
+/** A harness row's status badge, including an install running or failed in this session. */
+export function targetStatus(
+  target: ReportingInstallation,
+  running: boolean,
+  failed: boolean,
+): TargetStatus {
+  if (running)
+    return {
+      kind: "checking",
+      label: target.actions.repair ? "Repairing…" : "Installing…",
+    };
+  if (failed) return { kind: "error", label: "Install failed" };
+  return statuses[target.status];
 }

@@ -32,6 +32,7 @@ const unknownTarget = (message: string): ReportingInstallation =>
     provider: "Unknown",
     instances: [],
     path: null,
+    skillsPath: null,
     status: "needs-attention",
     message,
     launchSkill: null,
@@ -128,6 +129,34 @@ function disabledInstances(settings: Record<string, unknown>): Set<string> {
   );
 }
 
+/**
+ * Reporting drivers with no instance T3 keeps on, by the same settings and enablement rule as
+ * discovery. A missing or unreadable settings file names none.
+ */
+export async function reportingDriversOffInT3(stateDirectory: string): Promise<string[]> {
+  try {
+    const settings = record(
+      JSON.parse(await readFile(join(stateDirectory, "settings.json"), "utf8")),
+    );
+    const disabled = disabledInstances(settings);
+    const instances = Object.entries(record(settings.providerInstances));
+    const on = new Set(
+      instances
+        .filter(([id]) => !disabled.has(id))
+        .map(([, instance]) => field(instance, "driver")),
+    );
+    return [
+      ...new Set(
+        instances
+          .map(([, instance]) => field(instance, "driver"))
+          .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
+      ),
+    ].map(String);
+  } catch {
+    return [];
+  }
+}
+
 const targetFor = Effect.fn(function* (
   id: string,
   raw: unknown,
@@ -140,6 +169,7 @@ const targetFor = Effect.fn(function* (
       provider: String(driver),
       instances: [id],
       path: null,
+      skillsPath: null,
       status: "unsupported",
       message: providerReporting(driver).explanation,
       launchSkill: null,
@@ -172,6 +202,7 @@ const targetFor = Effect.fn(function* (
         ...base,
         id: createHash("sha256").update(path).digest("hex"),
         path,
+        skillsPath: profile.skillsFolder(resolved),
         status: "not-installed",
         message: profile.home.message,
       });
@@ -185,6 +216,7 @@ const targetFor = Effect.fn(function* (
       ...base,
       id: createHash("sha256").update(path).digest("hex"),
       path,
+      skillsPath: profile.skillsFolder(directory),
       status: "not-installed",
       message: resolved.assumedDefault
         ? "Using the standard home for this OS user. If T3 inherits a custom configuration directory at launch, verify that directory manually before installing."
@@ -197,6 +229,7 @@ const targetFor = Effect.fn(function* (
         withReportingInstallationActions({
           ...base,
           path: null,
+          skillsPath: null,
           status: "needs-attention" as const,
           message: `Restore the accessible harness home or use manual setup. ${error instanceof Error ? error.message : "Configuration unavailable."}`,
         }),

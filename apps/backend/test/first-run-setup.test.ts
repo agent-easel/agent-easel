@@ -48,6 +48,7 @@ it("a running T3's runtime file proposes its MCP address and version, and unknow
     value: {
       completed: false,
       detectedT3: { endpoint: "http://127.0.0.1:3773/mcp", serverVersion: "0.1.11" },
+      harnessesOffInT3: [],
     },
   });
 });
@@ -85,7 +86,10 @@ it.for([
   const setup = await factory.getFirstRunSetup();
 
   // Assert
-  expect(setup).toStrictEqual({ ok: true, value: { completed: false, detectedT3: null } });
+  expect(setup).toStrictEqual({
+    ok: true,
+    value: { completed: false, detectedT3: null, harnessesOffInT3: [] },
+  });
 });
 
 it("a runtime file in the overridden T3 state directory is the one detection reads", async (c) => {
@@ -112,6 +116,32 @@ it("a runtime file in the overridden T3 state directory is the one detection rea
   expect(setup.value.detectedT3?.endpoint).toBe("http://127.0.0.1:5000/mcp");
 });
 
+it("installable harnesses T3 keeps off are named, by T3's enablement rule", async (c) => {
+  // Arrange
+  const { state, open } = await freshHome(c);
+  await writeFile(
+    join(state, "settings.json"),
+    JSON.stringify({
+      providerInstances: {
+        claude: { driver: "claudeAgent", enabled: true, config: {} },
+        cursor: { driver: "cursor", config: {} },
+        grok: { driver: "grok", enabled: false, config: {} },
+        "codex-work": { driver: "codex", enabled: false, config: {} },
+        "codex-main": { driver: "codex", config: {} },
+        pi: { driver: "pi", config: {} },
+      },
+    }),
+  );
+  const factory = await open();
+
+  // Act
+  const setup = await factory.getFirstRunSetup();
+
+  // Assert
+  assert(setup.ok);
+  expect(setup.value.harnessesOffInT3).toStrictEqual(["cursor", "grok"]);
+});
+
 it("recorded completion persists across a backend restart", async (c) => {
   // Arrange
   const { harness, open } = await freshHome(c);
@@ -125,7 +155,7 @@ it("recorded completion persists across a backend restart", async (c) => {
   // Assert
   expect(await second.getFirstRunSetup()).toStrictEqual({
     ok: true,
-    value: { completed: true, detectedT3: null },
+    value: { completed: true, detectedT3: null, harnessesOffInT3: [] },
   });
   expect(harness.databasePath).toContain("factory.sqlite");
 });

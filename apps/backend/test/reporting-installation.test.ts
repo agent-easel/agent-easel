@@ -89,6 +89,7 @@ it.for([
       runtimeEvidence: "UNVERIFIED",
     });
     expect(result.value.path).toBe(join(await realpath(home), config));
+    expect(result.value.skillsPath).toBe(join(await realpath(home), skills));
     expect(await readFile(join(home, config), "utf8")).toBe(after);
     expect(await readFile(join(home, skills, "factory-block", "SKILL.md"), "utf8")).toBe(
       FACTORY_BLOCK_SKILL,
@@ -128,6 +129,7 @@ it("a configured Claude config directory keeps its config and skills directly in
   assert(result.ok);
   expect(result.value.status).toBe("installed");
   expect(result.value.path).toBe(join(await realpath(configDirectory), ".claude.json"));
+  expect(result.value.skillsPath).toBe(join(await realpath(configDirectory), "skills"));
   expect(await readFile(join(configDirectory, "skills", "factory-block", "SKILL.md"), "utf8")).toBe(
     FACTORY_BLOCK_SKILL,
   );

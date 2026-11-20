@@ -1,32 +1,20 @@
-import { CircleDashed } from "lucide-react";
 import { MutationGate } from "@/client-gate";
 import { useEffect, useId, useState } from "react";
 import type { ReportingInstallation } from "@t3-factory/contracts";
 import { api } from "../api.ts";
 import { Button } from "@/components/ui/button";
 import { ProblemCard } from "../components/problem-card.tsx";
+import { ReportingTargetProblem } from "../components/reporting-target-problem.tsx";
 import { TechnicalDetails } from "../components/technical-details.tsx";
 import { SettingsGroup, SettingsPage, SettingsRow } from "../components/settings-page.tsx";
-import { StatusBadge, type SettingKind } from "../components/status-badge.tsx";
-import { targetNeedsAttention, useReportingState } from "../reporting-state.tsx";
-
-const statuses: Record<ReportingInstallation["status"], { label: string; kind: SettingKind }> = {
-  "not-installed": { label: "Not installed", kind: "attention" },
-  installed: { label: "Installed", kind: "success" },
-  "needs-attention": { label: "Needs attention", kind: "attention" },
-  unsupported: { label: "Not available", kind: "neutral" },
-};
-const providerNames: Record<string, string> = {
-  claudeAgent: "Claude",
-  codex: "Codex",
-  cursor: "Cursor",
-  grok: "Grok",
-};
-
-const providerName = (target: ReportingInstallation) =>
-  providerNames[target.provider] ?? target.provider;
-const installable = (target: ReportingInstallation) =>
-  target.actions.install || target.actions.repair;
+import { StatusBadge } from "../components/status-badge.tsx";
+import {
+  installable,
+  providerName,
+  targetNeedsAttention,
+  targetStatus,
+  useReportingState,
+} from "../reporting-state.tsx";
 
 export function RuntimeSettings() {
   const { targets, refresh, error, readDetails, running, failures, install } = useReportingState();
@@ -153,7 +141,7 @@ function ReportingResults({
         ))}
       </SettingsGroup>
       {targets.map((target) => (
-        <TargetProblem key={target.id} target={target} failure={failures[target.id]} />
+        <ReportingTargetProblem key={target.id} target={target} failure={failures[target.id]} />
       ))}
     </>
   );
@@ -184,16 +172,6 @@ function targetAction({ actions }: ReportingInstallation) {
   if (actions.repair) return "Repair";
   if (actions.reinstall) return "Reinstall";
   return null;
-}
-
-function targetStatus(target: ReportingInstallation, running: boolean, failed: boolean) {
-  if (running)
-    return {
-      kind: "checking",
-      label: target.actions.repair ? "Repairing…" : "Installing…",
-    } as const;
-  if (failed) return { kind: "error", label: "Install failed" } as const;
-  return statuses[target.status];
 }
 
 function TargetDescription({
@@ -244,7 +222,7 @@ function TargetRow({
   onInstall: () => void;
 }) {
   const actionId = useId();
-  const name = providerName(target);
+  const name = providerName(target.provider);
   const action = targetAction(target);
   const status = targetStatus(target, running, failed);
   return (
@@ -254,11 +232,7 @@ function TargetRow({
         description={<TargetDescription target={target} instances={instances} />}
         control={(text) => (
           <>
-            <StatusBadge
-              role="status"
-              kind={status.kind}
-              {...(status.label === "Not installed" ? { icon: CircleDashed } : {})}
-            >
+            <StatusBadge role="status" kind={status.kind} {...status.badge}>
               {status.label}
             </StatusBadge>
             {action && (
@@ -284,42 +258,4 @@ function TargetRow({
       )}
     </div>
   );
-}
-
-function TargetProblem({
-  target,
-  failure,
-}: {
-  target: ReportingInstallation;
-  failure?: string | undefined;
-}) {
-  const name = providerName(target);
-  const details = [target.path, failure ?? target.message].filter(Boolean).join("\n");
-  if (failure)
-    return (
-      <ProblemCard tone="error" title={`Couldn’t install for ${name}`} details={details}>
-        Check the configuration permissions, then install again.
-      </ProblemCard>
-    );
-  if (target.status === "needs-attention") {
-    const missing = !target.path && target.message.includes("ENOENT");
-    return (
-      <ProblemCard
-        tone="attention"
-        title={
-          missing
-            ? `${name}’s configuration folder is missing`
-            : `${name}’s reporting configuration needs attention`
-        }
-        details={details}
-      >
-        {missing
-          ? "Restore it on the Factory host, then check again."
-          : target.actions.repair
-            ? "Repair the configuration, then start a fresh T3 session."
-            : "Review Technical details and fix the configuration on the Factory host."}
-      </ProblemCard>
-    );
-  }
-  return null;
 }

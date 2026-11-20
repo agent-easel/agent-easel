@@ -22,6 +22,8 @@ export interface ReportingInstallation {
   readonly provider: string;
   readonly instances: readonly string[];
   readonly path: string | null;
+  /** The harness skills folder Factory writes its skills into, beside `path`. */
+  readonly skillsPath: string | null;
   /** `unsupported`: the provider has no Factory reporting yet; there is nothing to install. */
   readonly status: "not-installed" | "installed" | "needs-attention" | "unsupported";
   readonly message: string;
@@ -73,6 +75,8 @@ export interface DetectedT3 {
 export interface FirstRunSetup {
   readonly completed: boolean;
   readonly detectedT3: DetectedT3 | null;
+  /** Provider drivers Factory can install into that T3 keeps off, for the install step's caption. */
+  readonly harnessesOffInT3: readonly string[];
 }
 
 export interface ConfigureConnectionInput {
