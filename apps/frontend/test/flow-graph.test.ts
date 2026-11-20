@@ -4,8 +4,10 @@ import { conditionRoutes } from "../src/components/flow-block.tsx";
 import {
   canvasGraph,
   blockExitRecipients,
+  canConnect,
   exitRecipients,
   removeBlock,
+  removeEnding,
   replaceBlock,
   undoRemoval,
 } from "../src/flow-graph.ts";
@@ -122,6 +124,68 @@ it("undoing a Block removal brings back its wires into Finish endings unchanged"
   // Assert
   expect(undone.connections).toStrictEqual(before.connections);
   expect(undone.finish).toStrictEqual(before.finish);
+});
+
+/** `conditionFlow` with endings `delivered` and `blocked`; Otherwise enters `delivered`. */
+function endingFlow(): FlowGraph {
+  const wired = conditionFlow([rule("first", 2)], ["first"]);
+  const ending = (id: string) => ({
+    id,
+    name: id,
+    description: "",
+    output: "none" as const,
+    outputDescription: "",
+  });
+  return {
+    ...wired,
+    connections: [
+      ...wired.connections,
+      {
+        sourceBlockId: "gate",
+        exitId: "otherwise",
+        targetBlockId: "finish",
+        targetEndingId: "delivered",
+      },
+    ],
+    finish: { ...wired.finish, endings: [ending("delivered"), ending("blocked")] },
+  };
+}
+
+it("undoing an ending removal brings the ending back in its place with its wires", () => {
+  // Arrange
+  const before = endingFlow();
+  const after = removeEnding(before, "delivered");
+  const edited = { ...after, flowInput: { ...after.flowInput, position: { x: 90, y: 40 } } };
+
+  // Act
+  const undone = undoRemoval(edited, before, after);
+
+  // Assert
+  expect(after.connections).toStrictEqual(before.connections.slice(0, 1));
+  expect(undone.finish.endings).toStrictEqual(before.finish.endings);
+  expect(undone.connections).toStrictEqual(before.connections);
+  expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
+});
+
+it("an exit reaches each ending at most once, and the Flow input reaches no ending", () => {
+  // Arrange
+  const graph = endingFlow();
+  const otherwise = { kind: "exit", sourceBlockId: "gate", exitId: "otherwise" } as const;
+
+  // Act
+  const reachable = {
+    wired: canConnect(graph, otherwise, { targetBlockId: "finish", targetEndingId: "delivered" }),
+    open: canConnect(graph, otherwise, { targetBlockId: "finish", targetEndingId: "blocked" }),
+    missing: canConnect(graph, otherwise, { targetBlockId: "finish", targetEndingId: "gone" }),
+    flowInput: canConnect(
+      graph,
+      { kind: "flow-input" },
+      { targetBlockId: "finish", targetEndingId: "blocked" },
+    ),
+  };
+
+  // Assert
+  expect(reachable).toStrictEqual({ wired: false, open: true, missing: false, flowInput: false });
 });
 
 it("each exit's recipients follow connection order, and a missing target has no name", () => {

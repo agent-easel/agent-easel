@@ -57,6 +57,8 @@ export type GeometryFacts<B extends LayoutBlock = LayoutBlock> = {
   readonly footerCount?: (block: B) => number;
   readonly reservedFooterCount?: number;
   readonly emptyGraphSize?: { readonly width: number; readonly height: number } | undefined;
+  /** The canvas draws the Finish block, so it counts toward bounds and fit. */
+  readonly finish?: boolean;
 };
 
 export const AUTHORING_DIMENSIONS: CanvasDimensions = {
@@ -121,6 +123,20 @@ export function createNodeGeometry<B extends LayoutBlock>(
           : 0) +
       (facts.flowInputStatus ? input.statusLine : 0),
   };
+  // The Finish block is drawn like a block whose rows are its endings; without endings it keeps
+  // one row for its hint.
+  const finishBox = {
+    ...graph.finish.position,
+    width: rows.width,
+    height:
+      rows.border * 2 +
+      rows.header +
+      rows.title +
+      rows.divider +
+      rows.exitPaddingTop +
+      rows.exitPaddingBottom +
+      Math.max(1, graph.finish.endings.length) * rows.exitRow,
+  };
   const reservedHeight = (block: B) =>
     Math.max(
       blockHeight(block),
@@ -130,6 +146,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
     ports,
     incoming,
     flowInputBox,
+    finishBox,
     blockHeight,
     reservedHeight,
     incomingGrowth: (block: B) => bodyHeight(block) - baseHeight(block),

@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { FINISH_BLOCK_ID, type FlowConnection } from "@t3-factory/contracts";
 import { wireRouteKey } from "@t3-factory/flow-layout";
 import { fixedShortcuts, formatShortcut } from "../keyboard-shortcuts.ts";
 import { Button } from "@/components/ui/button";
@@ -38,20 +39,30 @@ export type WirePresentation =
 
 type Geometry = ReturnType<typeof createCanvasGeometry>;
 
-/** A wire from `from` into the target's input port, as the presentation draws it. */
+type Point = { x: number; y: number };
+
+/** Where a wire enters its target: the port's point, the target's bottom and the approach lane. */
+type WireEnd = { readonly input: Point; readonly bottom: number; readonly lane: number };
+
+function blockEnd(geometry: Geometry, target: CanvasBlock, incomingIndex: number): WireEnd {
+  return {
+    input: geometry.inputPoint(target, incomingIndex),
+    bottom: target.position.y + geometry.blockHeight(target),
+    lane: incomingIndex,
+  };
+}
+
+/** A wire from `from` into the target's port, as the presentation draws it. */
 function routedPath(
   kind: WirePresentation["kind"],
-  geometry: Geometry,
-  from: { x: number; y: number },
+  from: Point,
   fromBottom: number,
-  target: CanvasBlock,
-  incomingIndex: number,
+  { input, bottom, lane }: WireEnd,
 ) {
-  const input = geometry.inputPoint(target, incomingIndex);
-  if (kind === "curved") return wirePath(from, input, incomingApproachLane(incomingIndex));
-  const below = Math.max(fromBottom, target.position.y + geometry.blockHeight(target)) + 24;
+  if (kind === "curved") return wirePath(from, input, incomingApproachLane(lane));
+  const below = Math.max(fromBottom, bottom) + 24;
   return {
-    d: orthogonalWirePath(from, input, below, incomingApproachLane(incomingIndex)),
+    d: orthogonalWirePath(from, input, below, incomingApproachLane(lane)),
     label: null,
   };
 }
@@ -73,35 +84,69 @@ function blocksById(graph: CanvasGraph) {
   return blocks;
 }
 
-/** Every connection's wire, in graph order; a wire whose source or target is missing is not drawn. */
+/**
+ * Where each connection ends and how its target is named: a block's input port, or, while the
+ * canvas draws the Finish block, its ending's port; null for a target that is not drawn.
+ */
+function wireEnds(graph: CanvasGraph, geometry: Geometry, finish: boolean) {
+  const blocks = blocksById(graph);
+  const endings = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
+  const finishBottom = geometry.finishBox.y + geometry.finishBox.height;
+  return (connection: FlowConnection): (WireEnd & { name: string }) | null => {
+    if (connection.targetBlockId === FINISH_BLOCK_ID) {
+      const index = endings.get(connection.targetEndingId ?? "");
+      if (!finish || index === undefined) return null;
+      const name = graph.finish.endings[index]?.name || "Unnamed ending";
+      return {
+        input: geometry.endingPoint(index),
+        bottom: finishBottom,
+        lane: 0,
+        name: `Finish · ${name}`,
+      };
+    }
+    const target = blocks.get(connection.targetBlockId);
+    if (!target) return null;
+    const source = connectionWire(connection).source;
+    return {
+      ...blockEnd(geometry, target, geometry.incomingPortIndex(target.id, source)),
+      name: target.name || "Unnamed block",
+    };
+  };
+}
+
+/**
+ * Every connection's wire, in graph order; a wire whose source or target is missing, or that
+ * enters an ending while the canvas does not draw the Finish block, is not drawn.
+ */
 export function exitWires(
   graph: CanvasGraph,
   kind: WirePresentation["kind"],
   geometry: Geometry,
   routes: ReadonlyMap<string, WireRoute> | undefined,
+  finish = false,
 ): Wire[] {
   const blocks = blocksById(graph);
+  const end = wireEnds(graph, geometry, finish);
   return graph.connections.flatMap((connection): Wire[] => {
     const source = blocks.get(connection.sourceBlockId);
-    const target = blocks.get(connection.targetBlockId);
+    const target = end(connection);
     if (!source || !target) return [];
     const wire = connectionWire(connection);
-    const key = wireRouteKey(wire.source, connection.targetBlockId);
+    const key = wireRouteKey(wire.source, connection.targetBlockId, connection.targetEndingId);
     const routed = routes?.get(key);
     const from = geometry.exitPoint(source, connection.exitId);
     const fromBottom = source.position.y + geometry.blockHeight(source);
-    const incomingIndex = geometry.incomingPortIndex(connection.targetBlockId, wire.source);
     return [
       {
         key,
         wire,
-        path: routed ?? routedPath(kind, geometry, from, fromBottom, target, incomingIndex),
+        path: routed ?? routedPath(kind, from, fromBottom, target),
         exit:
           source.kind === "continuation"
             ? null
             : geometry.exit(source, connection.exitId)?.name || "exit",
         source: source.name || "Unnamed block",
-        target: target.name || "Unnamed block",
+        target: target.name,
       },
     ];
   });
@@ -125,7 +170,7 @@ function flowInputWires(
       {
         key,
         wire: { source: { kind: "flow-input" }, targetBlockId },
-        path: routed ?? routedPath(kind, geometry, from, from.y, target, incomingIndex),
+        path: routed ?? routedPath(kind, from, from.y, blockEnd(geometry, target, incomingIndex)),
         exit: null,
         source: "Flow input",
         target: target.name || "Unnamed block",
@@ -147,10 +192,13 @@ export function FlowWires({
   routes,
   pendingWire,
   emphasized,
+  finish,
 }: {
   graph: CanvasGraph;
   geometry: Geometry;
   presentation: WirePresentation;
+  /** The canvas draws the Finish block, so wires into its endings are drawn too. */
+  finish: boolean;
   /** ELK orthogonal paths keyed like `flow-input:<id>` or `<source>:<exit>:<target>`. */
   routes: ReadonlyMap<string, WireRoute> | null;
   /** Rendered separately by the drag preview, but reserves its incoming port. */
@@ -160,7 +208,7 @@ export function FlowWires({
   const routed = routes ?? undefined;
   const { kind } = presentation;
   const visible = (item: { wire: FlowWire }) => !pendingWire || !sameWire(item.wire, pendingWire);
-  const connections = exitWires(graph, kind, geometry, routed).filter(visible);
+  const connections = exitWires(graph, kind, geometry, routed, finish).filter(visible);
   const inputs = flowInputWires(graph, kind, geometry, routed).filter(visible);
   const wires = [...inputs, ...connections];
   const selection = presentation.kind === "curved" ? presentation : null;

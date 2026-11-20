@@ -393,13 +393,29 @@ first message sends the prompt to that conversation and waits for its response, 
 Every Flow has one **Flow input block** (**FLOW INPUT** / **Flow input** / **Run prompt**): one output port, no input or exits, and it cannot be removed; selecting it
 opens its settings with a **Starts** target select. The Agent blocks it connects to start a Run, each with the same prompt in its own session; no block is marked "entry".
 
+Every Flow also has one **Finish block** (**FINISH** / **Finish** / *N* endings), placed right of the other blocks by default. It is not in the
+library, has no Remove block and is moved like a block. Each [ending](../GLOSSARY.md#ending) is a row with its own labelled input port on the
+left edge, in ending order: the one exception to one input port per incoming wire, so several wires converge on their ending's port. Without
+endings the block reads **No endings** with the hint **Add endings in its settings**. Selecting it opens **Finish** settings: a short
+explanation, one card per ending with **Name**, **Description**, **Output** (**None**, **Optional** or **Required**), **Output desc.** (hidden
+for None) and **Incoming**, which lists each wire as *Block* → *exit* with a **Message required** tag where that exit must carry a message, or
+the **Not connected** tag and "No exit leads to this ending yet.". **Remove ending *name*** removes the ending and its wires in the same edit,
+without confirmation; ⌘Z restores both. Renaming keeps the wires. **+ Add ending** appends an unnamed ending with Output None and focuses its
+name; at 100 endings it is disabled with **Up to 100 endings** beside it. Endings keep their order and cannot be reordered. With none the panel
+shows **No endings yet** — "Without endings, the Run ends as it does today, when its branches stop. Add an ending to give the Run a result." A
+note, **Reaching an ending ends the Run**, says that the first ending reached sets the Run's result and stops other branches at once while
+their workspace edits stay. Long wires into the Finish block are drawn as they are.
+
 **Connections.** Dragging from an exit's output port (right edge dot) onto a block is the primary way to connect: any block, including earlier blocks and the source
 itself, and one exit may be dragged to several blocks, each drop adding one connection (independent fan-out). A dashed preview snaps
 to the highlighted target's input port and the draft changes once on a valid drop; dropping on empty canvas, the port itself, an already connected block or pressing
 Escape changes nothing. Drag from the Flow input port (**Connect Flow input**) the same way; while doing so only Agent blocks highlight their input port and other
 blocks dim. Ports take no keyboard focus. The keyboard path is the **→ target** select on each exit and output row of the settings panel, and on the Flow input's
 **Starts**: a multi-select that lists only valid destinations (for the Flow input, Agent blocks), marks connected blocks with ✓ and adds or removes one connection on
-each choice; the closed select names every target (**→ Approve scope, Code review**). Click a wire to select it (the block panel closes); each wire is also a keyboard button (**Connection *exit* from *source* to *target***). With a
+each choice; the closed select names every target (**→ Approve scope, Code review**). Exit and output selects also list each ending as **Finish → *ending*** after the blocks; the closed select names it **Finish · *ending***, and
+dragging a wire onto an ending's row on the Finish block connects to that ending. The Flow input reaches no ending. Under an exit wired to an
+ending, its row reads **Ending expects: *output description*** for a Required ending or **Ending takes an optional message: *…*** for an
+Optional one, and an exit wired straight to a Required ending shows **Message required**, in this Flow only. Click a wire to select it (the block panel closes); each wire is also a keyboard button (**Connection *exit* from *source* to *target***). With a
 connection selected, Delete/Backspace (outside form controls) or the **Delete connection** button removes it. Removing a block or exit removes its connections.
 
 **Exits.** An Agent block offers its Agent's exits, minus those hidden in this Flow, followed by its Flow-local exits; inherited exits cannot be edited in a Flow. Hiding exits and adding
@@ -471,8 +487,8 @@ focus returns to ⋯ when an item's dialog closes.
 
 **Save** follows the [one Save rule](design-system.md#components-and-interaction). It
 accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave. **⌘Z** (Ctrl+Z
-elsewhere) undoes the last structural edit until Save: a removed block together with its wires, or a removed wire; edits made since are kept, and a text field
-keeps its own undo.
+elsewhere) undoes the last structural edit until Save: a removed block together with its wires, a removed Finish ending together with its wires, or a removed
+wire; edits made since are kept, and a text field keeps its own undo.
 
 Readiness is live: an unsaved draft is checked through the backend shortly after each change, with no Check readiness button, and again after a newer saved
 revision, keeping the local draft against one, a change to an Agent the draft places or a change of the Flow's owner. A check result applies only to the
@@ -480,7 +496,7 @@ content, baseline revision, owner and placed Agent revisions it was requested fo
 revisions Studio does not show yet, is discarded, and edits never wait for a check. A clean draft shows the readiness Studio received with its saved revision
 and the Agents shown. The summary at the canvas's top-left is a **Ready** badge, or **Not ready** with **N issues** and a chevron that opens one row per issue.
 Each row selects its block and opens its settings at the affected field; a Condition rule issue also scrolls to that rule and focuses its name or arrival
-number. The issue text is the one the Flows list and the composer show. A block with an issue, the Flow input included, shows an Error outline and a short tag
+number, and a Finish ending issue selects the Finish block and focuses that ending's name. The issue text is the one the Flows list and the composer show. A block with an issue, the Flow input and the Finish block included, shows an Error outline and a short tag
 (**No duration**, **Not connected**, **Needs a model** and so on); a selected one keeps the outline with the selection ring outside it, and the affected
 settings field shows the Error border and the same tag. When no placeable Agent exists, the issue **Connect the Flow input to at least one Agent** offers
 **New Agent**. Actionable issues: a Flow input connected to no Agent, a missing Agent reference, block and local exit names, a block without exits, a local exit
@@ -851,9 +867,8 @@ which no block may use. Any exit or output may enter an ending, including Human 
 Continuation outputs and every Condition output with Otherwise, several wires may enter one ending, and a rename keeps the wires
 because they enter by ID. A create or save that omits `finish` saves no endings and places the Finish block one layer right of
 every block, level with the Flow input; Flows saved before the Finish block existed received the same empty, rightmost Finish block on
-upgrade, with every wire unchanged. A Flow with no endings is ready. Reaching an ending does not end a Run yet: a wire into an
-ending stops its branch there like an unconnected exit. Studio does not display the Finish block yet; its saves keep the Finish block,
-its endings and their wires unchanged, and undoing a block removal restores its wires into endings.
+upgrade, with every wire unchanged. A Flow with no endings is ready. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
+[Canvas and block configuration](#canvas-and-block-configuration).
 
 ### Validation
 

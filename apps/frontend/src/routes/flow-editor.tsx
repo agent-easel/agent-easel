@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type FocusEvent,
   type ReactNode,
   type RefObject,
@@ -24,6 +25,7 @@ import type {
 import {
   CircleAlert,
   Copy,
+  Flag,
   FolderGit2,
   MoreHorizontal,
   RefreshCw,
@@ -53,7 +55,8 @@ import { useStudioNavigation } from "../settings-navigation.ts";
 import { BlockConfiguration, type BlockAgents } from "../components/block-inspector.tsx";
 import { PanelHeading, TargetSelect } from "../components/block-exit-configuration.tsx";
 import { BlockLibrary, NewAgentLink } from "../components/block-library.tsx";
-import { FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
+import { FINISH, FlowCanvas, FLOW_INPUT, type DropAt } from "../components/flow-canvas.tsx";
+import { FinishSettings } from "../components/finish-settings.tsx";
 import {
   IssueLink,
   ReadinessPanel,
@@ -76,12 +79,15 @@ import { StatusBadge } from "../components/status-badge.tsx";
 import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
+  addEnding,
   addWire,
   hasWire,
   newBlock,
   removeBlock,
+  removeEnding,
   removeWire,
   replaceBlock,
+  replaceEnding,
   undoRemoval,
   type BlockPosition,
   type FlowWire,
@@ -305,6 +311,7 @@ function useCanvasSelection(
   if (
     selected !== null &&
     selected !== FLOW_INPUT &&
+    selected !== FINISH &&
     !graph.blocks.some((block) => block.id === selected)
   )
     setSelected(null);
@@ -441,21 +448,25 @@ const READINESS_DEBOUNCE_MS = 400;
 
 /**
  * Selecting a block or a readiness issue; an issue about a Condition rule also focuses that rule
- * in the block's configuration.
+ * in the block's configuration, and one about a Finish ending focuses that ending.
  */
 function useRuleFocus(
   select: (blockId: string | null) => void,
   thresholds: ReturnType<typeof useThresholdEntries>,
 ) {
   const [ruleFocus, setRuleFocus] = useState<{ blockId: string; rule: RuleFocus } | null>(null);
-  const selectIssue: IssueSelect = (blockId, rule) => {
+  const [endingFocus, setEndingFocus] = useState<{ endingId: string } | null>(null);
+  const selectIssue: IssueSelect = (blockId, rule, ending) => {
     select(blockId);
     setRuleFocus(blockId && rule ? { blockId, rule } : null);
+    setEndingFocus(ending ? { endingId: ending } : null);
   };
   return {
     selectIssue,
+    endingFocus,
     selectBlock(blockId: string | null) {
       setRuleFocus(null);
+      setEndingFocus(null);
       select(blockId);
     },
     conditionEditing: (blockId: string): ConditionEditing => ({
@@ -469,6 +480,7 @@ function useRuleFocus(
 /** The selected Block and the next one it connects to, which the canvas keeps in view. */
 function revealed(graph: FlowGraph, selected: string | null): readonly string[] {
   if (selected === null || selected === FLOW_INPUT) return [];
+  if (selected === FINISH) return [FINISH];
   const next = graph.connections.find((c) => c.sourceBlockId === selected)?.targetBlockId;
   return next && next !== selected ? [selected, next] : [selected];
 }
@@ -514,7 +526,10 @@ export function FlowDetail({
   );
   const thresholds = useThresholdEntries(graph);
   useFlowDraftGuard(draft, id, reportDraft, thresholds.invalid);
-  const { selectBlock, selectIssue, conditionEditing } = useRuleFocus(select, thresholds);
+  const { selectBlock, selectIssue, conditionEditing, endingFocus } = useRuleFocus(
+    select,
+    thresholds,
+  );
   const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
   // A Project that left T3 leaves its Flow read-only until it is moved or removed.
   const readOnly = owner.gone;
@@ -592,6 +607,16 @@ export function FlowDetail({
           marks={marks}
           flowId={id}
           condition={conditionEditing}
+          finish={{
+            focus: endingFocus,
+            onAdd: () => {
+              const next = addEnding(graph);
+              change(next);
+              return next.finish.endings.at(-1)!.id;
+            },
+            onEdit: (ending) => change(replaceEnding(graph, ending)),
+            onRemove: (endingId) => remove(removeEnding(graph, endingId)),
+          }}
           onClose={select}
           onEdit={editBlock}
           onWireChange={(wire, connected) => {
@@ -699,6 +724,7 @@ function EditorSettings({
   marks,
   flowId,
   condition,
+  finish,
   onClose,
   onEdit,
   onWireChange,
@@ -710,6 +736,8 @@ function EditorSettings({
   marks: ReturnType<typeof readinessMarks>;
   flowId: string;
   condition: (blockId: string) => ConditionEditing;
+  /** The Finish block's ending edits; removing an ending is a removal ⌘Z can undo. */
+  finish: Omit<ComponentProps<typeof FinishSettings>, "graph" | "agents" | "issues">;
   /** Called with null to close the settings. */
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
@@ -734,6 +762,18 @@ function EditorSettings({
             onWireChange={onWireChange}
           />
         </section>
+      </SettingsPanel>
+    );
+  if (selected === FINISH)
+    return (
+      <SettingsPanel
+        label="Finish settings"
+        title="Finish"
+        icon={Flag}
+        iconClassName="text-muted-foreground"
+        onClose={close}
+      >
+        <FinishSettings graph={graph} agents={agents.all} issues={marks.finish} {...finish} />
       </SettingsPanel>
     );
   const block = graph.blocks.find((b) => b.id === selected);
@@ -774,14 +814,16 @@ function SettingsPanel({
   label,
   title,
   icon: Icon,
+  iconClassName = "text-link",
   onClose,
   footer,
   children,
 }: {
-  /** The panel's accessible name: Block settings, or Flow input settings. */
+  /** The panel's accessible name: Block settings, Flow input settings or Finish settings. */
   label: string;
   title: string;
   icon: typeof X;
+  iconClassName?: string;
   onClose: () => void;
   footer?: ReactNode;
   children: ReactNode;
@@ -789,7 +831,7 @@ function SettingsPanel({
   return (
     <aside aria-label={label} className="flex w-90 shrink-0 flex-col border-l bg-card">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-        <Icon aria-hidden className="size-4 text-link" />
+        <Icon aria-hidden className={cn("size-4", iconClassName)} />
         <h2 className="text-sm font-semibold">{title}</h2>
         <span className="flex-1" />
         <KeyChip>Esc</KeyChip>

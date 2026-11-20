@@ -1,12 +1,20 @@
 import { useId, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, Plus, Trash2 } from "lucide-react";
-import type { AgentDefinition, BlockExit, FlowBlock, FlowGraph } from "@t3-factory/contracts";
+import {
+  FINISH_BLOCK_ID,
+  type AgentDefinition,
+  type BlockExit,
+  type FlowBlock,
+  type FlowEnding,
+  type FlowGraph,
+} from "@t3-factory/contracts";
 import type { WireSource } from "@t3-factory/flow-layout";
 import {
   CONTINUATION_EXIT,
-  effectiveExits,
+  exitsWithEndings,
   inheritedExits,
   WAIT_OUTPUT,
+  type ExitWithEndings,
 } from "@t3-factory/domain-validation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +22,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -22,7 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { randomId } from "@/lib/ids";
-import { canConnect, hasWire, type FlowWire } from "../flow-graph.ts";
+import { canConnect, hasWire, type FlowWire, type WireTarget } from "../flow-graph.ts";
 import { StatusBadge } from "./status-badge.tsx";
 
 type AgentBlock = Extract<FlowBlock, { kind: "agent" }>;
@@ -36,10 +45,41 @@ export function PanelHeading({ children }: { children: string }) {
 
 const cardClass = "grid divide-y overflow-hidden rounded-lg border";
 
+/** One choice of a target select: a block, or an ending of the Finish block. */
+type TargetChoice = {
+  readonly key: string;
+  readonly target: WireTarget;
+  /** How the open menu lists it. */
+  readonly label: string;
+  /** How the closed select names it. */
+  readonly name: string;
+};
+
+function targetChoices(graph: FlowGraph, source: WireSource) {
+  const blocks = graph.blocks.map((block): TargetChoice => ({
+    key: `block:${block.id}`,
+    target: { targetBlockId: block.id },
+    label: block.name || "Unnamed block",
+    name: block.name || "Unnamed block",
+  }));
+  const endings = graph.finish.endings.map((ending): TargetChoice => {
+    const name = ending.name || "Unnamed ending";
+    return {
+      key: `ending:${ending.id}`,
+      target: { targetBlockId: FINISH_BLOCK_ID, targetEndingId: ending.id },
+      label: `Finish → ${name}`,
+      name: `Finish · ${name}`,
+    };
+  });
+  const offered = (choice: TargetChoice) =>
+    hasWire(graph, { source, ...choice.target }) || canConnect(graph, source, choice.target);
+  return { blocks: blocks.filter(offered), endings: endings.filter(offered) };
+}
+
 /**
- * The keyboard way to connect a source: a multi-select of the Blocks it may reach, with the
- * connected ones checked. Each choice adds or removes one connection; the closed select names
- * every target.
+ * The keyboard way to connect a source: a multi-select of the Blocks it may reach and, for an
+ * exit, the Finish block's endings ("Finish → Delivered"), with the connected ones checked. Each
+ * choice adds or removes one connection; the closed select names every target.
  */
 export function TargetSelect({
   graph,
@@ -53,12 +93,23 @@ export function TargetSelect({
   label: string;
   onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
-  const wired = (targetBlockId: string) => hasWire(graph, { source, targetBlockId });
-  const choices = graph.blocks.filter(
-    (block) => wired(block.id) || canConnect(graph, source, block.id),
+  const wired = (choice: TargetChoice) => hasWire(graph, { source, ...choice.target });
+  const { blocks, endings } = targetChoices(graph, source);
+  const names = [...blocks, ...endings]
+    .filter(wired)
+    .map((choice) => choice.name)
+    .join(", ");
+  const item = (choice: TargetChoice) => (
+    <DropdownMenuCheckboxItem
+      key={choice.key}
+      checked={wired(choice)}
+      onCheckedChange={(checked) => {
+        onWireChange({ source, ...choice.target }, checked);
+      }}
+    >
+      <span className="truncate">{choice.label}</span>
+    </DropdownMenuCheckboxItem>
   );
-  const targets = choices.filter((block) => wired(block.id));
-  const names = targets.map((block) => block.name || "Unnamed block").join(", ");
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -79,23 +130,40 @@ export function TargetSelect({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width)">
-        {choices.length === 0 && (
+        {blocks.length === 0 && endings.length === 0 && (
           <p className="px-3 py-1.5 text-sm text-muted-foreground">No Blocks to connect</p>
         )}
-        {choices.map((block) => (
-          <DropdownMenuCheckboxItem
-            key={block.id}
-            checked={wired(block.id)}
-            onCheckedChange={(checked) => {
-              onWireChange({ source, targetBlockId: block.id }, checked);
-            }}
-          >
-            <span className="truncate">{block.name || "Unnamed block"}</span>
-          </DropdownMenuCheckboxItem>
-        ))}
+        {blocks.map(item)}
+        {blocks.length > 0 && endings.length > 0 && <DropdownMenuSeparator />}
+        {endings.map(item)}
       </DropdownMenuContent>
     </DropdownMenu>
   );
+}
+
+/** What one ending an exit leads to expects of its message; nothing for Output None. */
+function endingExpectation(ending: FlowEnding) {
+  const description = ending.outputDescription.trim();
+  if (ending.output === "required")
+    return description ? `Ending expects: ${description}` : "Ending expects a message.";
+  if (ending.output === "optional")
+    return description
+      ? `Ending takes an optional message: ${description}`
+      : "Ending takes an optional message.";
+  return null;
+}
+
+/** Under an exit's target select: what each ending it leads to expects of its message. */
+function EndingExpectations({ exit }: { exit: ExitWithEndings | undefined }) {
+  const lines = (exit?.endings ?? []).flatMap((ending) => {
+    const text = endingExpectation(ending);
+    return text ? [{ id: ending.id, text }] : [];
+  });
+  return lines.map((line) => (
+    <p key={line.id} className="text-label text-muted-foreground">
+      {line.text}
+    </p>
+  ));
 }
 
 export function BlockExitConfiguration({
@@ -111,13 +179,18 @@ export function BlockExitConfiguration({
   onEdit: (block: FlowBlock) => void;
   onWireChange: (wire: FlowWire, connected: boolean) => void;
 }) {
+  // An exit wired straight to a Required ending must carry a message in this Flow.
+  const exits = new Map(exitsWithEndings(block, graph, agents).map((exit) => [exit.id, exit]));
   const target = (exitId: string, label: string) => (
-    <TargetSelect
-      graph={graph}
-      source={{ kind: "exit", sourceBlockId: block.id, exitId }}
-      label={label}
-      onWireChange={onWireChange}
-    />
+    <>
+      <TargetSelect
+        graph={graph}
+        source={{ kind: "exit", sourceBlockId: block.id, exitId }}
+        label={label}
+        onWireChange={onWireChange}
+      />
+      <EndingExpectations exit={exits.get(exitId)} />
+    </>
   );
   if (block.kind === "wait" || block.kind === "continuation")
     return (
@@ -131,7 +204,7 @@ export function BlockExitConfiguration({
       <section aria-label="Exits" className="grid gap-2">
         <PanelHeading>Exits</PanelHeading>
         <ul className={cardClass}>
-          {effectiveExits(block, agents).map((exit) => (
+          {[...exits.values()].map((exit) => (
             <li key={exit.id} aria-label={`Exit ${exit.name}`} className="grid gap-2 px-3 py-2.5">
               <span className="flex flex-wrap items-center gap-2 text-sm">
                 {exit.name}
@@ -153,7 +226,10 @@ export function BlockExitConfiguration({
             {inherited.map((exit) => (
               <InheritedExit
                 key={exit.id}
-                exit={exit}
+                exit={{
+                  ...exit,
+                  messageRequired: exits.get(exit.id)?.messageRequired ?? exit.messageRequired,
+                }}
                 block={block}
                 onEdit={onEdit}
                 target={target(exit.id, `exit ${exit.name}`)}

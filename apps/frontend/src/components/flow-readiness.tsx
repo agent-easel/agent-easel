@@ -1,14 +1,26 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleAlert } from "lucide-react";
-import type { FlowGraph, FlowReadiness, ValidationIssue } from "@t3-factory/contracts";
+import {
+  FINISH_BLOCK_ID,
+  type FlowGraph,
+  type FlowReadiness,
+  type ValidationIssue,
+} from "@t3-factory/contracts";
 import { Surface } from "@/components/ui/surface";
 import { TextLink } from "@/components/ui/text-link";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "./status-badge.tsx";
 import type { RuleFocus } from "./condition-rules.tsx";
 
-/** Selects a block, or with null clears the selection; `rule` also focuses one Condition rule. */
-export type IssueSelect = (blockId: string | null, rule?: RuleFocus) => void;
+/** Selects a block, or with null clears the selection; `rule` also focuses one Condition rule
+ * and `ending` one Finish ending (`FINISH_BLOCK_ID` selects the Finish block). */
+export type IssueSelect = (blockId: string | null, rule?: RuleFocus, ending?: string) => void;
+
+/** The Finish ending an issue path such as `graph.finish.endings.1.name` names. */
+function issueEnding(path: string, graph: FlowGraph): string | undefined {
+  const index = /^graph\.finish\.endings\.(\d+)/.exec(path)?.[1];
+  return index === undefined ? undefined : graph.finish.endings[Number(index)]?.id;
+}
 
 /** The Condition rule control an issue path such as `graph.blocks.2.rules.5.fromArrival` names. */
 function issueRule(path: string, graph: FlowGraph): RuleFocus | undefined {
@@ -23,6 +35,7 @@ function issueRule(path: string, graph: FlowGraph): RuleFocus | undefined {
 function issueSelection(path: string, graph: FlowGraph): string | null | undefined {
   const block = /^graph\.blocks\.(\d+)/.exec(path)?.[1];
   if (block) return graph.blocks[Number(block)]?.id ?? null;
+  if (path.startsWith("graph.finish")) return FINISH_BLOCK_ID;
   const connection = /^graph\.connections\.(\d+)/.exec(path)?.[1];
   if (connection) return graph.connections[Number(connection)]?.sourceBlockId ?? null;
   if (!path.startsWith("graph.flowInput")) return undefined;
@@ -33,7 +46,8 @@ function issueSelection(path: string, graph: FlowGraph): string | null | undefin
 
 function selectIssue(issue: ValidationIssue, graph: FlowGraph, onSelect: IssueSelect) {
   const selection = issueSelection(issue.path, graph);
-  if (selection !== undefined) onSelect(selection, issueRule(issue.path, graph));
+  if (selection !== undefined)
+    onSelect(selection, issueRule(issue.path, graph), issueEnding(issue.path, graph));
 }
 
 /** The short tag a Block, or the field an issue names, shows for each readiness issue. */
@@ -60,6 +74,9 @@ const ISSUE_TAGS: Readonly<Record<string, string>> = {
   unreachable_block: "Not connected",
   flow_input_required: "Not connected",
   flow_input_wait: "Not an Agent",
+  ending_name_required: "No name",
+  ending_name_duplicate: "Duplicate name",
+  ending_unconnected: "Not connected",
 };
 
 export const issueTag = (issue: ValidationIssue) => ISSUE_TAGS[issue.code] ?? "Not ready";
@@ -69,18 +86,24 @@ export type BlockIssue = { readonly issue: ValidationIssue; readonly field: stri
 
 /**
  * Where the readiness issues show: each Block's issues by the field they name, the Flow input's
- * issue, and the Condition outputs that are not connected (`blockId` and output id joined by a NUL).
+ * issue, the Condition outputs that are not connected (`blockId` and output id joined by a NUL),
+ * the Finish block's issues by the field within it (`endings.1.name`) and the endings no wire
+ * enters.
  */
 export type ReadinessMarks = {
   readonly blocks: ReadonlyMap<string, readonly BlockIssue[]>;
   readonly flowInput: ValidationIssue | null;
   readonly unconnectedOutputs: ReadonlySet<string>;
+  readonly finish: readonly BlockIssue[];
+  readonly unconnectedEndings: ReadonlySet<string>;
 };
 
 const noMarks: ReadinessMarks = {
   blocks: new Map(),
   flowInput: null,
   unconnectedOutputs: new Set(),
+  finish: [],
+  unconnectedEndings: new Set(),
 };
 
 export const outputKey = (blockId: string, outputId: string) => `${blockId}\u0000${outputId}`;
@@ -102,11 +125,26 @@ function issueBlock(issue: ValidationIssue, graph: FlowGraph) {
   return selected ? { block: selected, field: "" } : null;
 }
 
+/** The Finish block's issues by the field within it, and the endings no wire enters. */
+function finishMarks(issues: readonly ValidationIssue[], graph: FlowGraph) {
+  const finish: BlockIssue[] = [];
+  const unconnectedEndings = new Set<string>();
+  for (const issue of issues) {
+    const own = /^graph\.finish\.?(.*)$/.exec(issue.path);
+    if (!own) continue;
+    finish.push({ issue, field: own[1] ?? "" });
+    const ending = issueEnding(issue.path, graph);
+    if (issue.code === "ending_unconnected" && ending) unconnectedEndings.add(ending);
+  }
+  return { finish, unconnectedEndings };
+}
+
 export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph): ReadinessMarks {
   if (!readiness?.issues.length) return noMarks;
   const blocks = new Map<string, BlockIssue[]>();
   const unconnectedOutputs = new Set<string>();
   const flowInput = readiness.issues.find((issue) => issue.code === "flow_input_required") ?? null;
+  // A Finish issue names no block, so `issueBlock` leaves it to `finishMarks`.
   for (const issue of readiness.issues) {
     const found = issue === flowInput ? null : issueBlock(issue, graph);
     if (!found) continue;
@@ -116,7 +154,7 @@ export function readinessMarks(readiness: FlowReadiness | null, graph: FlowGraph
       issue.code === "condition_output_unconnected" ? unconnectedOutput(block, field) : undefined;
     if (output) unconnectedOutputs.add(outputKey(block.id, output));
   }
-  return { blocks, flowInput, unconnectedOutputs };
+  return { blocks, flowInput, unconnectedOutputs, ...finishMarks(readiness.issues, graph) };
 }
 
 /** The first issue whose path is within this settings field. */
