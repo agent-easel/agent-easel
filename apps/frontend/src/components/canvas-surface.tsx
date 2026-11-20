@@ -317,7 +317,13 @@ function SurfaceFinish({
       className={cn("absolute flex flex-col rounded-lg bg-card", content.className)}
       style={{ left: box.x, top: box.y, width: rows.width, borderWidth: rows.border }}
     >
-      {content.press(<IdentityRows rows={rows} header={identity.header} title={identity.title} />)}
+      {content.press(
+        <IdentityRows
+          rows={{ header: rows.header, title: dimensions.finish.title }}
+          header={identity.header}
+          title={identity.title}
+        />,
+      )}
       {finishShowsRows(state, endings.length) && (
         <>
           <span className="bg-border" style={{ height: rows.divider }} />

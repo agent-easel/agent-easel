@@ -18,8 +18,16 @@ export function createCanvasGeometry(
 ) {
   const rows = dimensions.block;
   const input = dimensions.flowInput;
-  const { ports, incoming, flowInputBox, finishBox, blockHeight, reservedHeight, incomingGrowth } =
-    createNodeGeometry(graph, dimensions, facts);
+  const {
+    ports,
+    incoming,
+    flowInputBox,
+    finishBox,
+    finishEndingY,
+    blockHeight,
+    reservedHeight,
+    incomingGrowth,
+  } = createNodeGeometry(graph, dimensions, facts);
   const finishBoxes = facts.finish ? [finishBox] : [];
   const rowOf = exitRows(graph.blocks);
   const blockBox = (block: CanvasBlock) => ({
@@ -65,7 +73,7 @@ export function createCanvasGeometry(
     /** Where a wire enters the ending at `index`, on the Finish block's left edge. */
     endingPoint: (index: number): Point => ({
       x: finishBox.x,
-      y: finishBox.y + ports.firstExitY + index * ports.exitRow,
+      y: finishBox.y + finishEndingY + index * ports.exitRow,
     }),
     blockHeight,
     bounds,

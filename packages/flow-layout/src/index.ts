@@ -29,6 +29,7 @@ const BLOCK_NODE_PREFIX = "block:";
 /** The canvas's block geometry as a layout reserves it; `labels` reserves room for exit labels. */
 export type FlowLayoutDimensions<B extends LayoutBlock = LayoutBlock> = {
   readonly flowInput: { readonly width: number; readonly height: number; readonly outputY: number };
+  readonly finish: { readonly firstEndingY: number };
   readonly blockWidth: number;
   readonly blockHeight: (block: B) => number;
   readonly ports: {
@@ -72,11 +73,12 @@ function finishPortId(endingIndex: number) {
  * port per ending, in ending order. */
 function finishNode<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayoutDimensions<B>) {
   const { ports } = dims;
+  const { firstEndingY } = dims.finish;
   const rows = Math.max(1, graph.finish.endings.length);
   return {
     id: FINISH_NODE_ID,
     width: dims.blockWidth,
-    height: ports.firstExitY + rows * ports.exitRow,
+    height: firstEndingY + rows * ports.exitRow,
     layoutOptions: {
       "org.eclipse.elk.portConstraints": "FIXED_POS",
       "org.eclipse.elk.layered.layering.layerConstraint": "LAST_SEPARATE",
@@ -86,7 +88,7 @@ function finishNode<B extends LayoutBlock>(graph: LayoutGraph<B>, dims: FlowLayo
       width: 0,
       height: 0,
       x: 0,
-      y: ports.firstExitY + index * ports.exitRow,
+      y: firstEndingY + index * ports.exitRow,
       layoutOptions: { "org.eclipse.elk.port.side": "WEST" },
     })),
   } satisfies ElkNode;

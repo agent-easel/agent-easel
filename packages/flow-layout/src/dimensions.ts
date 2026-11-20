@@ -27,6 +27,10 @@ export type CanvasDimensions = {
      * title generation there. */
     readonly statusLine: number;
   };
+  readonly finish: {
+    /** The Finish block's title row; unlike a block's, it draws no activity line. */
+    readonly title: number;
+  };
   readonly port: {
     /** The drawn circle. */
     readonly size: number;
@@ -84,6 +88,7 @@ export const AUTHORING_DIMENSIONS: CanvasDimensions = {
     promptImages: 0,
     statusLine: 0,
   },
+  finish: { title: 44 },
   port: { size: 12, handle: 20, highlight: 16 },
 };
 
@@ -96,6 +101,7 @@ export function createNodeGeometry<B extends LayoutBlock>(
   const rows = dimensions.block;
   const input = dimensions.flowInput;
   const ports = dimensionPorts(dimensions);
+  const finishTitle = dimensions.finish.title;
   const baseHeight = (block: B) =>
     rows.border * 2 +
     rows.header +
@@ -125,13 +131,14 @@ export function createNodeGeometry<B extends LayoutBlock>(
   };
   // The Finish block is drawn like a block whose rows are its endings; without endings it keeps
   // one row for its hint.
+  const finishEndingY = ports.firstExitY - rows.title + finishTitle;
   const finishBox = {
     ...graph.finish.position,
     width: rows.width,
     height:
       rows.border * 2 +
       rows.header +
-      rows.title +
+      finishTitle +
       rows.divider +
       rows.exitPaddingTop +
       rows.exitPaddingBottom +
@@ -147,6 +154,8 @@ export function createNodeGeometry<B extends LayoutBlock>(
     incoming,
     flowInputBox,
     finishBox,
+    /** The first ending's port anchor below the Finish block's top. */
+    finishEndingY,
     blockHeight,
     reservedHeight,
     incomingGrowth: (block: B) => bodyHeight(block) - baseHeight(block),
@@ -166,6 +175,7 @@ export function createFlowLayoutDimensions<B extends LayoutBlock>(
       height: geometry.flowInputBox.height,
       outputY: dimensions.flowInput.outputY,
     },
+    finish: { firstEndingY: geometry.finishEndingY },
     blockWidth: dimensions.block.width,
     blockHeight: geometry.reservedHeight,
     ports: { ...geometry.ports, inputSpacing: INCOMING_PORT_SPACING },

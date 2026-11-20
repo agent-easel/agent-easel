@@ -34,6 +34,31 @@ it("execution graph bounds enclose the status footers a block draws", () => {
   expect(bounds).toStrictEqual({ minX: -100, minY: 0, width: 740, height: 456.5 });
 });
 
+it("the execution Finish block reserves no activity line, and its ending ports agree with the layout", () => {
+  // Arrange
+  const ending = (id: string) =>
+    ({ id, name: id, description: "", output: "none", outputDescription: "" }) as const;
+  const graph = {
+    ...geometryGraph(),
+    finish: { position: { x: 800, y: 0 }, endings: [ending("delivered"), ending("blocked")] },
+  };
+  const geometry = createCanvasGeometry(graph, EXECUTION_DIMENSIONS, { finish: true });
+
+  // Act
+  const finishPorts = buildElkGraph(
+    graph,
+    createFlowLayoutDimensions(graph, EXECUTION_DIMENSIONS),
+  ).children?.find((node) => node.id === "finish")?.ports;
+
+  // Assert
+  expect(geometry.finishBox).toStrictEqual({ x: 800, y: 0, width: 240, height: 123 });
+  expect([geometry.endingPoint(0), geometry.endingPoint(1)]).toStrictEqual([
+    { x: 800, y: 83.5 },
+    { x: 800, y: 105.5 },
+  ]);
+  expect(finishPorts?.map((port) => port.y)).toStrictEqual([83.5, 105.5]);
+});
+
 it("incoming ports keep Flow input first, then connections in graph order, 18 px apart", () => {
   // Arrange
   const graph = geometryGraph();
