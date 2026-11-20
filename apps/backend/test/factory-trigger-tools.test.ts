@@ -8,6 +8,7 @@ import {
   failingGitHubCall,
   movedRepository,
   otherProjectWatcher,
+  remoteMovesAfterFirstRead,
   reviewingWorld,
   startedIssues,
   triggerEdit,
@@ -250,6 +251,57 @@ it("a new-draft preview stopped by a launch blocker answers that problem and sti
     issues: [],
     problem: { code: "start_blocked" },
     repository: { saved: null, detected: { nodeId: "R_atlas" } },
+  });
+});
+
+it("a new-draft preview whose Project's remote moves after Factory detected the repository answers the move and offers no repository to create on", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  remoteMovesAfterFirstRead(world, { ...movedRepository, visibility: "public" });
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_preview_trigger",
+    arguments: draftSettings(world),
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toMatchObject({
+    issues: [],
+    problem: {
+      code: "github_repository_mismatch",
+      message: expect.stringContaining(movedRepository.nameWithOwner),
+    },
+    warnings: [],
+    repository: { saved: null, detected: null },
+  });
+});
+
+it("a new-draft preview stopped by a launch blocker still answers a remote that moved after detection and offers no repository to create on", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  world.t3.contract.support.launch = false;
+  remoteMovesAfterFirstRead(world, { ...movedRepository, visibility: "public" });
+  const client = await factoryMcpClient(c, world.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_preview_trigger",
+    arguments: draftSettings(world),
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  expect(toolReply(result)).toMatchObject({
+    issues: [],
+    problem: {
+      code: "github_repository_mismatch",
+      message: expect.stringContaining(movedRepository.nameWithOwner),
+    },
+    warnings: [],
+    repository: { saved: null, detected: null },
   });
 });
 

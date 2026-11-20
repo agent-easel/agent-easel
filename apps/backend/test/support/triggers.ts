@@ -305,6 +305,19 @@ export function failingGitHubCall(github: ControlledGitHub, failing: GitHubCall)
   };
 }
 
+/** The Project's folder names `repository` from GitHub's second read of it on, as a remote changed between reads. */
+export function remoteMovesAfterFirstRead(
+  world: { readonly github: ControlledGitHub; readonly project: FactoryProject },
+  repository: GitHubRepository,
+) {
+  let reads = 0;
+  world.github.beforeAnswer = async (call) => {
+    if (call !== "repository" || ++reads < 2) return;
+    delete world.github.beforeAnswer;
+    world.github.repositories.set(world.project.workspaceRoot, repository);
+  };
+}
+
 /** Starts saving `edit` and holds it at GitHub's answer to its query, before anything is written. */
 export async function pendingTriggerUpdate(
   world: Awaited<ReturnType<typeof reviewingWorld>>,

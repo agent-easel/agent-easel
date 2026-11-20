@@ -515,7 +515,8 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
   /**
    * What a check of `subject` would start now and what would wait, without starting or writing,
    * and the repository the Project's folder names, also read when a problem stopped the plan
-   * before GitHub.
+   * before GitHub. A folder that no longer names the subject's repository is the problem even when
+   * another one stopped the plan first, so nothing previewed on one repository is offered for another.
    */
   const preview = (subject: AdmissionSubject) =>
     admissionPlan(subject).pipe(
@@ -525,7 +526,22 @@ export function makeTriggerCheck(deps: TriggerCheckDeps) {
             plan.repository === undefined
               ? projectRepository(subject.projectId)
               : Effect.succeed(plan.repository)
-          ).pipe(Effect.map((repository) => ({ repository, issues: [], problem: plan.problem })));
+          ).pipe(
+            Effect.map((repository) => {
+              const { nodeId } = subject.github.repository;
+              const moved = nodeId !== null && repository && repository.nodeId !== nodeId;
+              return {
+                repository,
+                issues: [],
+                problem: moved
+                  ? gitHubFailed({
+                      reason: "repository_mismatch",
+                      nameWithOwner: repository.nameWithOwner,
+                    })
+                  : plan.problem,
+              };
+            }),
+          );
         return Effect.succeed({
           repository: plan.repository,
           problem: null,

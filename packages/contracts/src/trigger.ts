@@ -216,8 +216,9 @@ export interface TriggerPreview {
    */
   readonly revision: number | null;
   /**
-   * The repository the Project's folder names now, as GitHub answered, which a preview without a
-   * repository evaluated; null when GitHub could not be read.
+   * The repository the preview evaluated, as GitHub answered: the one the Project's folder names
+   * now, which must be the requested one when the preview named a repository. Null when GitHub
+   * could not be read or the folder names another repository than the requested one.
    */
   readonly repository: TriggerRepositoryChoice | null;
 }

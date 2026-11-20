@@ -482,7 +482,9 @@ export const makeTriggers = (
     /**
      * A check's reads and admission rules for `settings`, on the saved Trigger `target` when given;
      * nothing starts and nothing is written. Settings without a repository evaluate the one the
-     * Project's folder names. The repository's warnings hold even when a problem stops the check.
+     * Project's folder names. The repository's warnings hold even when a problem stops the check,
+     * and the reply names a repository only when GitHub's answer is the evaluated one, so its
+     * warnings and the repository it names never describe different repositories.
      */
     const preview = (
       settings: TriggerPreviewSettings,
@@ -519,7 +521,7 @@ export const makeTriggers = (
             ],
             login: login?.ok ? login.value.login : null,
             revision: saved && previewsSaved(saved, settings, nodeId) ? saved.revision : null,
-            repository: detected,
+            repository: evaluated,
           },
         };
       });
