@@ -88,8 +88,16 @@ Then run `pnpm check:ui-evidence --pr <PR>`, the same validator as CI;
 that already holds HTTPS image URLs.
 Record the base/head commit, viewport, scenario and command alongside the images.
 Capture After only after the last application edit; rebuild and repeat the affected
-journey if the UI changes afterward. Inspect both image sets yourself, including
-long text and each worker link. The **UI evidence attachments** CI check only
+journey if the UI changes afterward. Inspect the evidence yourself, including
+long text and each worker link, without reading raw PNGs one by one (each Read
+costs context; one session read 44 images repeatedly). After the final build run
+`pnpm e2e:evidence-diff .e2e/proof/<change>/before .e2e/proof/<change>/after`.
+It pairs views by name, writes one `before | after | diff` contact sheet per
+changed view to `.e2e/proof/<change>/contact-sheets/` and prints each view as
+changed (with diff %), unchanged or unpaired. Read the summary, then each changed
+sheet once; unchanged views need no image, and an unpaired view is the only case
+for reading a raw PNG. Do not re-read after intermediate fixes; rebuild, recapture
+and diff once. The **UI evidence attachments** CI check only
 checks that one row of the two-column Before | After table holds an embedded HTTPS
 image in both cells, outside HTML comments and code, accepting alt text with nested or escaped brackets;
 it does not check their content, provenance or comparability. A non-empty reason under `### No UI evidence`

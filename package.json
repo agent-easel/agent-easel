@@ -22,6 +22,7 @@
     "desktop:package:beta": "pnpm build && pnpm --filter @t3-factory/desktop package --beta",
     "desktop:probe": "node apps/desktop/scripts/probe-package.mjs",
     "e2e:screenshots": "pnpm e2e:prepare && e2e run tests/screenshots.e2e.ts --trace on --output .e2e/screenshots",
+    "e2e:evidence-diff": "node scripts/ui-evidence-diff.mjs",
     "e2e:explore": "e2e explore --config e2e.explore.config.ts",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
@@ -40,6 +41,8 @@
     "e2e": "0.22.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "fallow": "3.38.1",
+    "pixelmatch": "8.0.0",
+    "pngjs": "7.0.0",
     "typescript": "5.9.3",
     "vite-plus": "1.4.0"
   },
