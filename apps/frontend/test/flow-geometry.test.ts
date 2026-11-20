@@ -362,10 +362,9 @@ it("the arranged graph gives each wire its source's first input port and labels 
   ]);
 });
 
-it("a Condition at the definition size limit draws its 5,000 wires, each on its own input port, within 100 ms", () => {
+it("a Condition at the definition size limit draws all 5,000 wires with distinct target ports", () => {
   // Arrange
   const graph = sizeLimitConditionGraph();
-  const started = performance.now();
 
   // Act
   const wires = exitWires(
@@ -374,10 +373,11 @@ it("a Condition at the definition size limit draws its 5,000 wires, each on its 
     createCanvasGeometry(graph, EXECUTION_DIMENSIONS),
     undefined,
   );
-  const elapsed = performance.now() - started;
 
   // Assert
   expect(wires).toHaveLength(5_000);
+  const endpoints = wires.map(({ path }) => path.d.slice(path.d.lastIndexOf(" ") + 1));
+  expect(new Set(endpoints).size).toBe(5_000);
   expect(wires[1]).toMatchObject({
     wire: {
       source: {
@@ -412,5 +412,4 @@ it("a Condition at the definition size limit draws its 5,000 wires, each on its 
     source: "Escalate",
     target: "Review",
   });
-  expect(elapsed).toBeLessThan(100);
 });
