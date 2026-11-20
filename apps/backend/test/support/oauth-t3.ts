@@ -72,6 +72,9 @@ export async function oauthT3(
     /** `t3_attachment_prepare_upload` and its signed upload route on this origin. */
     attachments?: boolean;
     themeRead?: (args: Record<string, unknown>) => unknown;
+    /** Protected-resource metadata always answers with a server error; the SDK treats it as
+     * optional, so a grant is approved and refreshed without caching it. */
+    resourceMetadataUnavailable?: boolean;
   } = {},
 ) {
   /** Bytes received on signed upload addresses, with the Authorization header each POST carried. */
@@ -387,7 +390,9 @@ export async function oauthT3(
     const url = new URL(request.url ?? "/", base);
     const body = await requestBody(request);
     if (url.pathname.startsWith("/.well-known/oauth-protected-resource"))
-      json(response, 200, { resource: base + "/mcp", authorization_servers: [base] });
+      if (options.resourceMetadataUnavailable)
+        json(response, 503, { error: "temporarily_unavailable" });
+      else json(response, 200, { resource: base + "/mcp", authorization_servers: [base] });
     else if (url.pathname === "/.well-known/oauth-authorization-server")
       json(response, 200, authorizationServerMetadata());
     else if (url.pathname === "/register") {

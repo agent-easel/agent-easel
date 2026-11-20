@@ -71,7 +71,7 @@ async function createDemoProject(factory: Factory, t3: PersistentT3, home: strin
       "The development simulator does not call an external model or modify your real repositories.\n",
   );
   const project = requireSuccess(await factory.addRepository({ path: root }));
-  t3.projects = t3.projects.map((item) =>
+  t3.projects.catalog = t3.projects.catalog.map((item) =>
     item.projectId === project.projectId
       ? {
           ...item,
@@ -115,7 +115,7 @@ async function createDemoAgents(factory: Factory, t3: PersistentT3) {
   ] as const) {
     const agent = requireSuccess(
       await factory.createAgent(
-        controlledAgent(t3.environmentId, {
+        controlledAgent(t3.connection.environmentId, {
           name,
           prompt,
           exits,
@@ -177,8 +177,8 @@ export async function seedDevelopment(
   github: ControlledGitHub,
   home: string,
 ) {
-  await createDemoReporting(home, t3.environmentId);
-  t3.approve();
+  await createDemoReporting(home, t3.connection.environmentId);
+  t3.connection.approve();
   // Runtime readiness requires a loopback hostname. Port zero cannot target a live T3 server.
   requireSuccess(
     await factory.configureConnection({ endpoint: "http://127.0.0.1:0/demo-only/mcp" }),
@@ -276,7 +276,7 @@ async function generatedTitleRun(
 
 /** The user confirmed Settle while T3 cannot stop the worker, so the settlement stays unresolved. */
 export async function settlementUnresolved(context: SeedContext, worker: Worker) {
-  context.t3.support.stop = false;
+  context.t3.contract.support.stop = false;
   try {
     requireSuccess(await context.factory.settleRun(worker.runId, { stopWorkers: true }));
     await observeFor(
@@ -286,7 +286,7 @@ export async function settlementUnresolved(context: SeedContext, worker: Worker)
       (run) => run.settlement?.state === "unresolved",
     );
   } finally {
-    context.t3.support.stop = true;
+    context.t3.contract.support.stop = true;
   }
 }
 

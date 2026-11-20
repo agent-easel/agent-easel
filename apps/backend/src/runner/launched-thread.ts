@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { LaunchCandidate, LaunchDiscovery, LaunchPayload, T3Adapter } from "../adapters/t3.ts";
+import type { LaunchCandidate, LaunchDiscovery, LaunchPayload, T3Threads } from "../t3/threads.ts";
 import { runTarget, type RunRow } from "./runner-types.ts";
 import { launchedInWorkspace } from "./run-workspace.ts";
 
@@ -11,7 +11,7 @@ function unavailableLaunch(): LaunchDiscovery {
 type LaunchScope = Pick<RunRow, "endpoint" | "environment_id" | "t3_project_id" | "workspace_root">;
 
 /** The only thread in the project that carries the saved launch title, if exactly one does. */
-function soleTitledCandidate(t3: T3Adapter, scope: LaunchScope, title: string) {
+function soleTitledCandidate(t3: T3Threads, scope: LaunchScope, title: string) {
   return Effect.tryPromise({
     try: () => t3.discoverLaunchCandidates(runTarget(scope), title).catch(unavailableLaunch),
     catch: unavailableLaunch,
@@ -29,7 +29,7 @@ function soleTitledCandidate(t3: T3Adapter, scope: LaunchScope, title: string) {
  * thread in the project with the saved title, top-level with the saved workspace and settings,
  * and exactly one matching execution. Undefined when evidence is missing, ambiguous or incomplete.
  */
-export function verifiedLaunchedThread(t3: T3Adapter, scope: LaunchScope, payload: LaunchPayload) {
+export function verifiedLaunchedThread(t3: T3Threads, scope: LaunchScope, payload: LaunchPayload) {
   return Effect.gen(function* () {
     const candidate = yield* soleTitledCandidate(t3, scope, payload.title);
     if (!candidate || !sameWorkerSettings(payload, scope, candidate)) return undefined;

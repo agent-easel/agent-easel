@@ -13,7 +13,7 @@ import type {
 import type { GitHubIssue, GitHubRepository } from "../../src/adapters/github.ts";
 import type { LiveStreams } from "../../src/live-streams.ts";
 import type { ControlledGitHub, ControlledIssue } from "./controlled-github.ts";
-import { holdInspection, START_INSPECTIONS } from "./controlled-t3.ts";
+import { START_INSPECTIONS } from "./controlled-t3.ts";
 import type { Factory } from "../../src/index.ts";
 import { spawnFactoryProcess } from "./factory-process.ts";
 import { appliedStudio, subscribe } from "./live.ts";
@@ -182,7 +182,7 @@ export async function reopenedAfterCrashedCheck(
   await writeFile(
     fixturePath,
     JSON.stringify({
-      projects: world.t3.projects,
+      projects: world.t3.projects.catalog,
       repositories: [...world.github.repositories],
       issues: world.github.issues,
     }),
@@ -220,7 +220,7 @@ export async function startedIssues(f: Factory, projectId: string) {
  * own launch-blocker read inspects T3 as that Start does.
  */
 export async function pendingCheck(world: Awaited<ReturnType<typeof checkingWorld>>) {
-  const { inspecting, release } = holdInspection(world.t3, START_INSPECTIONS);
+  const { inspecting, release } = world.t3.contract.holdInspection(START_INSPECTIONS);
   const checked = world.f.runTrigger(world.trigger.id);
   await inspecting;
   return { checked, release };

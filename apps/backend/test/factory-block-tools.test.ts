@@ -96,7 +96,7 @@ it("the launch message states the Block id and issues no tool ref", async (c) =>
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  const message = [...fixture.t3.launches.values()][0]?.payload.message;
+  const message = [...fixture.t3.threads.launches.values()][0]?.payload.message;
   expect(message).toMatch(/^\$factory-block\n\nFactory Block id: [0-9a-f-]{36}\. /);
   expect(message).not.toContain("Factory tool ref");
 });
@@ -141,7 +141,7 @@ it("an unknown Block id is refused with repair guidance", async (c) => {
 it("a worker reads its Block while Factory is still confirming its launch", async (c) => {
   // Arrange
   const setup = await prepared(c);
-  setup.t3.discoverAvailable = false;
+  setup.t3.threads.discoverAvailable = false;
   const fixture = { ...setup, ...(await launchUncertain(setup.world, setup.input)) };
 
   // Act
@@ -212,7 +212,7 @@ it("a revisit message states the same Block id as the launch", async (c) => {
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.sends.values()][0]?.payload.message).toContain(
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toContain(
     `Factory Block id: ${fixture.blockId}.`,
   );
 });
@@ -227,7 +227,7 @@ it("a feedback revisit carries the Revisit instruction under its conflict rule, 
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.sends.values()][0]?.payload.message).toMatch(
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toMatch(
     workerMessage(
       "Revisit instruction for this later visit of your Block. It decides the scope of this visit; your Agent's role, criteria, exits and reporting rules still apply. A narrower scope never permits skipping a required check or accepting a defect that has evidence; if you cannot reconcile the two, say so in your report. Your Block's previous finished result is available from factory_get_run.\n" +
         "Verify the fixes and the newly affected scope.\n\n" +
@@ -247,7 +247,7 @@ it("a revisit with a Revisit instruction shows an empty incoming result as (no m
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.sends.values()][0]?.payload.message).toMatch(
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toMatch(
     /\nVerify the fixes and the newly affected scope\.\n\nIncoming message:\n\(no message\)$/,
   );
 });
@@ -262,7 +262,7 @@ it("a revisit without a Revisit instruction is the incoming result alone, as bef
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.sends.values()][0]?.payload.message).toMatch(
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toMatch(
     workerMessage("Implemented the requested result."),
   );
 });
@@ -276,7 +276,7 @@ it("the first visit carries the Agent prompt without the Revisit instruction", a
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.launches.values()][0]?.payload.message).toMatch(
+  expect([...fixture.t3.threads.launches.values()][0]?.payload.message).toMatch(
     workerMessage("Follow repository instructions."),
   );
 });

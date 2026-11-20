@@ -148,7 +148,7 @@ it("an unregistered repository root is explained without selecting or registerin
 it("an unavailable Project for the conversation's root is explained instead of matched", async (c) => {
   // Arrange
   const fixture = await prepared(c);
-  fixture.t3.projects = [];
+  fixture.t3.projects.catalog = [];
   const client = await factoryMcpClient(c, fixture.f);
 
   // Act
@@ -225,7 +225,7 @@ it("a Start of a Flow another Project owns is refused with a next step to list t
     next: "No Run was created. Offer the user the Flows from factory_list_flows with this projectId, or the Flow's owning Project; changing a Flow's owning Project is their separate decision.",
   });
   expect(await fixture.f.listRuns(other.id)).toStrictEqual({ ok: true, value: [] });
-  expect(fixture.t3.launches.size).toBe(0);
+  expect(fixture.t3.threads.launches.size).toBe(0);
 });
 
 it("a Start whose reply was lost returns the same Run with its title provenance when retried after restart, without another worker launch", async (c) => {
@@ -254,7 +254,7 @@ it("a Start whose reply was lost returns the same Run with its title provenance 
   const run = await restored.getRun(navigation.value[0]!.id);
   assert(run.ok);
   expect(run.value.titleProvenance).toBe("automatic");
-  expect(fixture.t3.launches.size).toBe(1);
+  expect(fixture.t3.threads.launches.size).toBe(1);
 });
 
 it("a session Start accepted before title provenance existed replays to its Run with legacy provenance when retried after the upgrade", async (c) => {

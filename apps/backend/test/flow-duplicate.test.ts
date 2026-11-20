@@ -214,7 +214,9 @@ it("a Duplicate into a Project that became unavailable after the preview is refu
   // Arrange
   const { factory, t3, second, flow } = await projectFlowToDuplicate(context);
   const plan = assertOk(await factory.previewFlowDuplicate(flow.id, { projectId: second.id }));
-  t3.projects = t3.projects.filter((project) => project.projectId !== second.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== second.projectId,
+  );
   assertOk(await factory.recheckProjects());
 
   // Act
@@ -236,7 +238,9 @@ it("a Duplicate into a Project that became unavailable after the preview is refu
 it("a Flow of an unavailable Project is rescued into another Project with copies of its Project Agents", async (context) => {
   // Arrange
   const { factory, t3, first, second, releaser, flow } = await projectFlowToDuplicate(context);
-  t3.projects = t3.projects.filter((project) => project.projectId !== first.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter(
+    (project) => project.projectId !== first.projectId,
+  );
   assertOk(await factory.recheckProjects());
   const plan = assertOk(await factory.previewFlowDuplicate(flow.id, { projectId: second.id }));
 
@@ -258,7 +262,7 @@ it("a Flow of an unavailable Project is rescued into another Project with copies
 it("a Flow of an unavailable Project is rescued as a global Flow that places no out-of-rule Agent", async (context) => {
   // Arrange
   const { factory, t3, releaser, flow } = await projectFlowToDuplicate(context);
-  t3.projects = [];
+  t3.projects.catalog = [];
   assertOk(await factory.recheckProjects());
   const plan = assertOk(await factory.previewFlowDuplicate(flow.id, { projectId: null }));
 

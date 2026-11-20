@@ -6,7 +6,7 @@ import { startServer } from "../../../apps/backend/src/server.ts";
 import { loadConfiguration } from "../../../apps/backend/src/config.ts";
 import type { ControlledGitHub } from "../../../apps/backend/test/support/controlled-github.ts";
 import { ControlledGit } from "../../../apps/backend/test/support/controlled-git.ts";
-import { ControlledT3 } from "../../../apps/backend/test/support/controlled-t3.ts";
+import { ControlledT3Connection } from "../../../apps/backend/test/support/controlled-t3-connection.ts";
 import { PersistentT3 } from "../../../scripts/dev/persistent-t3.ts";
 import { seedDevelopment } from "../../../scripts/dev/seed.ts";
 import { requireCurrentUiBuild } from "../../../scripts/ui-build.ts";
@@ -37,7 +37,7 @@ export async function startHost(
   });
   const t3 = new PersistentT3(home, false);
   // Use the real pending-approval simulation for remote connection journeys.
-  t3.authorize = ControlledT3.prototype.authorize.bind(t3);
+  t3.connection.authorize = ControlledT3Connection.prototype.authorize.bind(t3.connection);
   const server = await startServer(
     { ...config, port: 0 },
     {
@@ -51,10 +51,10 @@ export async function startHost(
   const factory = server.factory;
   factory.setRuntimeBackendUrl(`http://127.0.0.1:${server.address.port}`);
   const world = await seedDevelopment(factory, t3, doubles.github, home);
-  t3.approve();
+  t3.connection.approve();
   let advancing: Promise<void> | undefined;
   const timer = setInterval(() => {
-    advancing ??= t3.advance().finally(() => {
+    advancing ??= t3.threads.advance().finally(() => {
       advancing = undefined;
     });
   }, 100);

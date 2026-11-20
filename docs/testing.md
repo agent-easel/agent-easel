@@ -3,7 +3,9 @@
 What deserves a test, how to structure it, and which suite it belongs in.
 
 Backend behavior tests exercise public Factory operations with temporary SQLite
-and a controlled T3 adapter. They are application integration tests: persistence
+and controlled T3 modules. Tests configure the same concerns that live Factory
+composes over one connection: authorization, contract inspection, threads, Projects
+and environment, and appearance. They are application integration tests: persistence
 is part of the workflow being checked. Pure exported domain rules can be tested
 without a database. External fixtures own simulated T3 state independently of Factory so
 restart checks can retain it. Close the owning backend before a recovery process opens
@@ -128,7 +130,7 @@ their cause; do not add retries or larger per-test timeouts.
 - **Behavior tests** (`pnpm test`) own business rules, branches, races and recovery.
   They are fast and run in the [pre-push gate](quality-gates.md).
 - **E2E journeys** (`tests/*.e2e.ts`, `pnpm test:e2e`) drive the built UI in
-  Chromium against a controlled T3 adapter. Add one only for a user-visible
+  Chromium against controlled T3 modules. Add one only for a user-visible
   journey that crosses UI, HTTP and backend, and keep it on the happy path plus
   the states the user must see. Do not re-test in E2E what a unit test already
   covers. E2E is not part of the pre-push hook; run it before opening a PR that

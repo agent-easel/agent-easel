@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
-import type { T3Adapter, T3ContractSnapshot, T3Endpoint } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
+import type { T3ContractSnapshot } from "../t3/contract.ts";
+import type { T3Endpoint } from "../t3/connection.ts";
 import { recoverOperation } from "./runner-effects.ts";
 
 /** A thread Factory owns under one T3 authorization context, such as a Run's worker or title
@@ -18,7 +20,7 @@ type OwnedThreadRequest = {
  * it is sent, only while the pass's T3 contract snapshot supports it and carries the owner's
  * authorization context. Requests are best effort: nothing waits for or confirms them.
  */
-export function openOwnedThreads(t3: T3Adapter) {
+export function openOwnedThreads(t3: T3Threads) {
   /** Undefined unless the snapshot is the owner's and supports the request; otherwise a sender
    * that answers whether T3 accepted the request. */
   function requester<R extends OwnedThreadRequest>(

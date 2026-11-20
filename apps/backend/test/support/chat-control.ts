@@ -98,7 +98,7 @@ export async function chatControlWorld(c: TestContext) {
   const root = join(harness.processHome, "project");
   await mkdir(root);
   const t3 = new ControlledT3();
-  t3.approve();
+  t3.connection.approve();
   const open = () => harness.open({ t3, discordApiUrl: discord.apiUrl, connectionRetryMs: 60_000 });
   const factory = await open();
   await factory.configureConnection({ endpoint: "http://127.0.0.1:3773/mcp" });

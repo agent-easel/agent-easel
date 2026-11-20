@@ -1,5 +1,5 @@
 import { optionAvailability, resolveAgentModel } from "@t3-factory/domain-validation";
-import type { T3ProviderCapability } from "./adapters/t3.ts";
+import type { T3ProviderCapability } from "./t3/projects.ts";
 import { providerReporting } from "./reporting-drivers.ts";
 import { failure } from "./result.ts";
 import type {

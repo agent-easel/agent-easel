@@ -1,5 +1,4 @@
 import { expect, it, type TestContext } from "@effect/vitest";
-import { recordThreadFacts } from "./support/controlled-thread.ts";
 import { desktopAttention } from "./support/desktop-attention.ts";
 import { currentConnection, desktopProfile, selectServer } from "./support/desktop-client.ts";
 import { remotePrepared, remoteServer } from "./support/remote-clients.ts";
@@ -11,7 +10,7 @@ type Prepared = Awaited<ReturnType<typeof remotePrepared>>;
 async function nativeQuestionAsked({ server, t3, input }: Prepared) {
   const world = { factory: server.factory, t3 };
   const worker = await workerLaunched(world, input);
-  recordThreadFacts(t3, worker.threadId, { pendingRequestCount: 1 });
+  t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 1 });
   await observeFor("observe the native question", world, worker.runId, (run) =>
     run.attention.some((matter) => matter.kind === "native-request" && !matter.settledAt),
   );

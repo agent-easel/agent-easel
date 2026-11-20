@@ -134,9 +134,9 @@ function runTransitions(context: Context) {
       return generatedTitleApplied(context, run.id, title);
     },
     "Stop taken while the turn continues": (run: RunDetail) =>
-      t3.holdStops(run.threadBindings.map((binding) => binding.threadId)),
+      t3.threads.holdStops(run.threadBindings.map((binding) => binding.threadId)),
     "stopped turns ended": (run: RunDetail) =>
-      t3.finishHeldStops(run.threadBindings.map((binding) => binding.threadId)),
+      t3.threads.finishHeldStops(run.threadBindings.map((binding) => binding.threadId)),
   };
 }
 
@@ -269,11 +269,11 @@ async function createFixtureScenarioSet(host: Host) {
   });
 
   // Exercise published defaults and mixed value domains through the Agent editor.
-  t3.controlledProviders[0] = {
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders[0] = {
+    ...t3.projects.controlledProviders[0]!,
     models: [
       {
-        ...t3.controlledProviders[0]!.models[0]!,
+        ...t3.projects.controlledProviders[0]!.models[0]!,
         options: [
           {
             id: "reasoning",
@@ -298,18 +298,20 @@ async function createFixtureScenarioSet(host: Host) {
     ],
   };
   // A second discovered model gives Studio settings a real choice of models.
-  t3.controlledProviders[0] = {
-    ...t3.controlledProviders[0],
+  t3.projects.controlledProviders[0] = {
+    ...t3.projects.controlledProviders[0],
     models: [
-      ...t3.controlledProviders[0].models,
+      ...t3.projects.controlledProviders[0].models,
       {
-        ...t3.controlledProviders[0].models[0],
+        ...t3.projects.controlledProviders[0].models[0],
         id: "gpt-6-astra",
         label: "GPT 6 Astra",
       },
     ],
   };
-  const unselectedModelOptions = controlledExecution(t3.environmentId, { modelOptions: [] });
+  const unselectedModelOptions = controlledExecution(t3.connection.environmentId, {
+    modelOptions: [],
+  });
   requireSuccess(
     await factory.createAgent({
       name: "Sample worker",
@@ -350,7 +352,7 @@ async function createFixtureScenarioSet(host: Host) {
       "base64",
     ),
   );
-  t3.projects = t3.projects.map((entry) =>
+  t3.projects.catalog = t3.projects.catalog.map((entry) =>
     entry.projectId === runtimeProject.projectId
       ? { ...entry, faviconPath: "project-icon.png" }
       : entry,
@@ -454,7 +456,7 @@ async function createOwnershipSet(
       env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home },
     });
     const added = requireSuccess(await factory.addRepository({ path: root }));
-    t3.projects = t3.projects.map((entry) =>
+    t3.projects.catalog = t3.projects.catalog.map((entry) =>
       entry.projectId === added.projectId ? { ...entry, title } : entry,
     );
     requireSuccess(await factory.recheckProjects());
@@ -499,7 +501,7 @@ async function createOwnershipSet(
     }),
   );
   await projectFlow("Docs refresh", docs.id, writer.id);
-  t3.projects = t3.projects.filter((entry) => entry.projectId !== docs.projectId);
+  t3.projects.catalog = t3.projects.catalog.filter((entry) => entry.projectId !== docs.projectId);
   requireSuccess(await factory.recheckProjects());
 }
 

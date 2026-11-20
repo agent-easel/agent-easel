@@ -13,15 +13,8 @@ import type {
   Result,
   RunDetail,
 } from "@t3-factory/contracts";
-import { holdInspection, START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
-import {
-  beginThreadRun,
-  busyAgainOnSend,
-  endThreadRun,
-  recordLaunchedThread,
-  recordThreadFacts,
-  type ThreadFacts,
-} from "./controlled-thread.ts";
+import type { ThreadFacts } from "./controlled-t3-threads.ts";
+import { START_INSPECTIONS, type ControlledT3 } from "./controlled-t3.ts";
 
 type AgentShape = Extract<FlowBlock, { kind: "agent" }>;
 export type ScenarioAgentBlock = { [Key in keyof AgentShape]: AgentShape[Key] };
@@ -112,14 +105,14 @@ export async function enableRunTitlesWithCheapModel(
   factory: Pick<FactoryOperations, "updateRunTitleSetting">,
   t3: ControlledT3,
 ) {
-  const [provider] = t3.controlledProviders;
-  t3.controlledProviders[0] = {
+  const [provider] = t3.projects.controlledProviders;
+  t3.projects.controlledProviders[0] = {
     ...provider!,
     models: [...provider!.models, { id: cheapTitleModel.modelId, label: "GPT 6.1 Luna" }],
   };
   await enableRunTitles(factory, cheapTitleModel);
   return () => {
-    t3.controlledProviders[0] = provider!;
+    t3.projects.controlledProviders[0] = provider!;
   };
 }
 /**
@@ -129,9 +122,9 @@ export async function enableRunTitlesWithCheapModel(
  */
 function afterStartPreflight(t3: ControlledT3, action: () => void) {
   let inspections = 0;
-  t3.beforeInspection = () => {
+  t3.contract.beforeInspection = () => {
     if (++inspections <= START_INSPECTIONS) return;
-    delete t3.beforeInspection;
+    delete t3.contract.beforeInspection;
     action();
   };
 }
@@ -150,7 +143,7 @@ export function withdrawTitleModelAfterStartCheck(t3: ControlledT3, withdraw: ()
 export function reauthorizeDuringTitleDispatch(t3: ControlledT3) {
   return new Promise<void>((resolve) =>
     afterStartPreflight(t3, () => {
-      t3.approve("controlled-grant-3");
+      t3.connection.approve("controlled-grant-3");
       resolve();
     }),
   );
@@ -168,10 +161,10 @@ export function reauthorizeDuringTitleEligibility(
 ) {
   return new Promise<void>((resolve) =>
     afterStartPreflight(t3, () => {
-      const read = t3.orchestratorCapabilities.bind(t3);
-      t3.orchestratorCapabilities = async (target) => {
-        t3.orchestratorCapabilities = read;
-        t3.approve("controlled-grant-3");
+      const read = t3.projects.orchestratorCapabilities.bind(t3.projects);
+      t3.projects.orchestratorCapabilities = async (target) => {
+        t3.projects.orchestratorCapabilities = read;
+        t3.connection.approve("controlled-grant-3");
         await factory.recheckConnection();
         resolve();
         return read(target);
@@ -183,14 +176,16 @@ export function reauthorizeDuringTitleEligibility(
 export function holdTitleThreadLaunch(t3: ControlledT3) {
   let release = () => {};
   const held = new Promise<void>((resolve) => (release = resolve));
-  t3.beforeLaunch = async (payload) => {
+  t3.threads.beforeLaunch = async (payload) => {
     if (payload.title.startsWith("Factory title · ")) await held;
   };
   return release;
 }
 /** The title thread's launch T3 recorded; Flow workers are titled `Factory #<n> · …`. */
 const titleThreadEntry = (t3: ControlledT3) =>
-  [...t3.launches.values()].find((launch) => launch.payload.title.startsWith("Factory title · "));
+  [...t3.threads.launches.values()].find((launch) =>
+    launch.payload.title.startsWith("Factory title · "),
+  );
 const titleThreadLaunch = (t3: ControlledT3) => titleThreadEntry(t3)?.payload;
 /** The title thread T3 launched. */
 export function titleThreadReference(t3: ControlledT3) {
@@ -200,8 +195,8 @@ export function titleThreadReference(t3: ControlledT3) {
 }
 /** T3 accepts the title thread's launch but its reply is lost; Flow worker launches answer. */
 export function loseTitleThreadLaunchReply(t3: ControlledT3) {
-  const launch = t3.launchThread.bind(t3);
-  t3.launchThread = async (target, payload) => {
+  const launch = t3.threads.launchThread.bind(t3.threads);
+  t3.threads.launchThread = async (target, payload) => {
     const reference = await launch(target, payload);
     if (payload.title.startsWith("Factory title · "))
       throw Error("Lost response after remote acceptance");
@@ -210,9 +205,9 @@ export function loseTitleThreadLaunchReply(t3: ControlledT3) {
 }
 /** Resolves with the next Stop request T3 receives for the title thread it launched. */
 export function titleThreadStopRequested(t3: ControlledT3) {
-  const stop = t3.stopThread.bind(t3);
+  const stop = t3.threads.stopThread.bind(t3.threads);
   return new Promise<{ threadId: string; clientRequestId: string }>((resolve) => {
-    t3.stopThread = async (target, payload) => {
+    t3.threads.stopThread = async (target, payload) => {
       await stop(target, payload);
       if (payload.threadId === titleThreadEntry(t3)?.reference.threadId) resolve(payload);
     };
@@ -220,18 +215,18 @@ export function titleThreadStopRequested(t3: ControlledT3) {
 }
 /** The Stop requests T3 received for the title thread. */
 export const titleThreadStops = (t3: ControlledT3) =>
-  t3.threadStops.filter((stop) => stop.threadId === titleThreadReference(t3).threadId);
+  t3.threads.threadStops.filter((stop) => stop.threadId === titleThreadReference(t3).threadId);
 /** The title thread's turn ends without a title: T3 shows it finished. */
 export async function titleThreadEnds(t3: ControlledT3) {
   const { threadId, runId } = titleThreadReference(t3);
-  await recordLaunchedThread(t3, threadId);
-  endThreadRun(t3, threadId, runId);
+  await t3.threads.recordLaunchedThread(threadId);
+  t3.threads.endThreadRun(threadId, runId);
 }
 /** Resolves once T3 has recorded the title thread's launch request, also a rejected one. */
 export async function titleThreadLaunchRecorded(t3: ControlledT3) {
   let launch = titleThreadLaunch(t3);
   while (!launch) {
-    await t3.nextLaunch();
+    await t3.threads.nextLaunch();
     launch = titleThreadLaunch(t3);
   }
   return launch;
@@ -243,7 +238,7 @@ export function titleGenerationLaunched(world: ScenarioWorld, runId: string) {
     const run = await observeFor("observe the title thread", world, runId, (current) =>
       Boolean(current.titleGeneration?.threadLink),
     );
-    const launch = [...world.t3.launches.values()].find((entry) =>
+    const launch = [...world.t3.threads.launches.values()].find((entry) =>
       entry.payload.title.startsWith(`Factory title · Run #${run.number} · `),
     );
     if (!launch)
@@ -476,7 +471,7 @@ export function workerHandle(
   if (!block?.threadId || !block.executionId)
     stepFailed("worker handle", `${run.title} has no launched ${flowBlockId} worker.`);
   const threadId = block.threadId;
-  const launch = [...world.t3.launches.values()].find(
+  const launch = [...world.t3.threads.launches.values()].find(
     (entry) => entry.reference.threadId === threadId,
   );
   return {
@@ -512,7 +507,7 @@ const workersLaunched = (run: RunDetail) =>
 export async function launchedWorkers(world: ScenarioWorld, runId: string) {
   const run = await observeFor("launch the workers", world, runId, workersLaunched);
   const workers = run.activations.map((activation) => workerHandle(world, run, activation.blockId));
-  for (const worker of workers) await recordLaunchedThread(world.t3, worker.threadId);
+  for (const worker of workers) await world.t3.threads.recordLaunchedThread(worker.threadId);
   return { run, workers };
 }
 
@@ -549,21 +544,21 @@ export const report = (world: ScenarioWorld, worker: WorkerHandle, fields: Repor
   submitReport("report", world, worker, fields);
 
 /** Resolves with the next worker launch T3 records, also one background work issues. */
-export const nextLaunch = (world: ScenarioWorld) => world.t3.nextLaunch();
+export const nextLaunch = (world: ScenarioWorld) => world.t3.threads.nextLaunch();
 
 /** Resolves with the next send T3 records, also one background work issues. */
-export const nextSend = (world: ScenarioWorld) => world.t3.nextSend();
+export const nextSend = (world: ScenarioWorld) => world.t3.threads.nextSend();
 
 /** The worker's next T3 turn begins as run `runId`; the returned handle is on that run. */
 export function turnBegins(world: ScenarioWorld, worker: WorkerHandle, runId: string) {
-  beginThreadRun(world.t3, worker.threadId, runId);
+  world.t3.threads.beginThreadRun(worker.threadId, runId);
   return { ...worker, executionId: runId };
 }
 
 /** T3 runs Factory's latest send to the worker's thread as its next turn; the returned handle is
  * on that run. */
 export function sentTurnBegins(world: ScenarioWorld, worker: WorkerHandle) {
-  const send = [...world.t3.sends.values()]
+  const send = [...world.t3.threads.sends.values()]
     .filter((item) => item.payload.threadId === worker.threadId)
     .at(-1);
   if (!send) stepFailed("sent turn begins", `T3 received no send on ${worker.threadId}.`);
@@ -572,15 +567,16 @@ export function sentTurnBegins(world: ScenarioWorld, worker: WorkerHandle) {
 
 /** The worker's current turn ends with `status` and T3 answers its delegated wait as settled. */
 function turnEnds(world: ScenarioWorld, worker: WorkerHandle, status = "completed") {
-  endThreadRun(world.t3, worker.threadId, worker.executionId, status);
+  world.t3.threads.endThreadRun(worker.threadId, worker.executionId, status);
 }
 
 /** Every run of the worker's thread, earlier ones included, ends with `status`, each with its
  * delegated wait settled. */
 export function allTurnsEnd(world: ScenarioWorld, worker: WorkerHandle, status = "completed") {
-  const thread = world.t3.executionObservations.get(worker.threadId);
+  const thread = world.t3.threads.executionObservations.get(worker.threadId);
   if (!thread) stepFailed("all turns end", `thread ${worker.threadId} has no stated observation.`);
-  for (const run of thread.recentRuns) endThreadRun(world.t3, worker.threadId, run.runId, status);
+  for (const run of thread.recentRuns)
+    world.t3.threads.endThreadRun(worker.threadId, run.runId, status);
 }
 
 /** The single-worker Flow's content variants: its Agent's exits, the exits the Flow hides or adds,
@@ -611,7 +607,7 @@ async function workerAgent(
     await world.factory.createAgent({
       name: "Worker",
       prompt: "Follow repository instructions.",
-      execution: controlledExecution(world.t3.environmentId),
+      execution: controlledExecution(world.t3.connection.environmentId),
       exits,
       projectId,
     }),
@@ -1208,8 +1204,8 @@ export const worktreeReviewFlow: ReadyFlowShape = (world) =>
 export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow> {
   const agent = await workerAgent(world, "create the entry Agent");
   const { t3 } = world;
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "later-provider",
   });
   const later = [];
@@ -1235,7 +1231,7 @@ export async function blockedLaterFlow(world: ScenarioWorld): Promise<ReadyFlow>
     ],
     connections: later.map((_, index) => connection("worker", "done", `later-${index}`)),
   });
-  t3.controlledProviders.pop();
+  t3.projects.controlledProviders.pop();
   return { agent, flow };
 }
 
@@ -1436,7 +1432,7 @@ export function snoozed(world: ScenarioWorld, worker: WorkerHandle) {
  * Factory observed the settlement unresolved and raised its Problem. */
 export function settleUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
   return reach("settlement unresolved", async () => {
-    world.t3.support.stop = false;
+    world.t3.contract.support.stop = false;
     stepResult(
       "confirm Settle",
       await world.factory.settleRun(worker.runId, { stopWorkers: true }),
@@ -1453,7 +1449,7 @@ export function settleUnresolved(world: ScenarioWorld, worker: WorkerHandle) {
 export function woke(world: ScenarioWorld, worker: WorkerHandle) {
   return reach("woke", async () => {
     await snoozed(world, worker);
-    recordThreadFacts(world.t3, worker.threadId, { pendingRequestCount: 1 });
+    world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 1 });
     await observeFor("observe the native request", world, worker.runId, (run) =>
       Boolean(unsettled("native-request")(run)),
     );
@@ -1469,7 +1465,7 @@ export function repositoryFactsObserved(
   repository: NonNullable<ThreadFacts["repository"]>,
 ) {
   return reach("repository facts observed", async () => {
-    recordThreadFacts(world.t3, worker.threadId, { repository });
+    world.t3.threads.recordThreadFacts(worker.threadId, { repository });
     await observeFor("observe the repository", world, worker.runId, (run) =>
       run.repositories.some(
         (item) =>
@@ -1634,12 +1630,12 @@ export function reportRecoveryLeftUnfinished(world: ScenarioWorld, worker: Worke
  * launch as uncertain, with its recovery unresolved. */
 export function launchUncertain(world: ScenarioWorld, start: unknown) {
   return reach("launch uncertain", async () => {
-    world.t3.loseLaunchReply = true;
+    world.t3.threads.loseLaunchReply = true;
     const started = stepResult("start a Run", await world.factory.startRun(start));
     await observeFor("observe the lost launch", world, started.id, (run) =>
       run.intents.some((intent) => intent.kind === "launch" && intent.state === "uncertain"),
     );
-    world.t3.loseLaunchReply = false;
+    world.t3.threads.loseLaunchReply = false;
     return { runId: started.id };
   });
 }
@@ -1663,7 +1659,7 @@ export function twoRunsOfOneFlow(world: ScenarioWorld, first: unknown, second: u
 /** The worker of Flow block `flowBlockId`, with T3 showing its first turn running. */
 async function launchedWorker(world: ScenarioWorld, run: RunDetail, flowBlockId: string) {
   const worker = workerHandle(world, run, flowBlockId);
-  await recordLaunchedThread(world.t3, worker.threadId);
+  await world.t3.threads.recordLaunchedThread(worker.threadId);
   return worker;
 }
 
@@ -1932,7 +1928,7 @@ export function laterResultReturning(
     const later = await nextWorkerLaunched("observe the later worker", world, review);
     await reportedAs("report the result", world, later, finishedReport());
     turnEnds(world, later);
-    busyAgainOnSend(world.t3, first.threadId);
+    world.t3.threads.busyAgainOnSend(first.threadId);
     return later;
   });
 }
@@ -1989,7 +1985,7 @@ export function twoWorkersStarted(world: ScenarioWorld, start: unknown) {
  * the pass's support answers are read after the release. */
 export function imageDispatchHeld(world: ScenarioWorld, start: unknown) {
   return reach("image dispatch held", async () => {
-    const { release } = holdInspection(world.t3, START_INSPECTIONS);
+    const { release } = world.t3.contract.holdInspection(START_INSPECTIONS);
     const started = stepResult("start a Run", await world.factory.startRun(start));
     return { runId: started.id, release };
   });

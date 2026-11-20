@@ -11,7 +11,6 @@ import {
   workerAtWork,
   workerFinal,
 } from "./support/scenarios.ts";
-import { answerDelegatedWait } from "./support/controlled-thread.ts";
 import { sweepDuringNextThreadRead } from "./support/run-worker.ts";
 
 it("a rejected worker report explains the rejection without changing execution state or retaining its message", async (c) => {
@@ -52,7 +51,7 @@ it("a rejected worker report explains the rejection without changing execution s
   );
   expect(JSON.stringify(run.value)).not.toContain("PRIVATE_REPORT_CONTENT");
   expect(run.value.reports).toStrictEqual([]);
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 
 it("a corrected accepted report settles its rejection Problem", async (c) => {
@@ -102,7 +101,7 @@ it("a rejected report remains explained after completion and backend restart", a
   expect(run.value.attention).toContainEqual(
     expect.objectContaining({ kind: "missing-report", settledAt: null }),
   );
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 
 it("Request report refuses a stale missing-report Problem while delegated work is unsettled", async (c) => {
@@ -110,7 +109,7 @@ it("Request report refuses a stale missing-report Problem while delegated work i
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...(await missingReport(setup.world, atWork)) };
-  answerDelegatedWait(f.t3, "thread-1", "execution-1", "pending", "completed");
+  f.t3.threads.answerDelegatedWait("thread-1", "execution-1", "pending", "completed");
 
   // Act
   const result = await f.f.requestReport(f.runId, { blockId: f.missing.blockId });
@@ -118,7 +117,7 @@ it("Request report refuses a stale missing-report Problem while delegated work i
   // Assert
   assert(!result.ok);
   expect(result.error.code).toBe("conflict");
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.recoveries).toStrictEqual([]);
@@ -139,7 +138,7 @@ it("Request report is accepted when a background sweep observes the unchanged wo
   expect(result.value.recoveries).toMatchObject([
     { blockId: f.missing.blockId, sourceExecutionId: "execution-1" },
   ]);
-  expect(f.t3.sends.size).toBe(1);
+  expect(f.t3.threads.sends.size).toBe(1);
 });
 
 it("repeated rejected reports keep one pending diagnostic without launching work", async (c) => {
@@ -159,7 +158,7 @@ it("repeated rejected reports keep one pending diagnostic without launching work
   expect(
     run.value.attention.filter((a) => a.kind === "report-problem" && !a.settledAt),
   ).toHaveLength(1);
-  expect(f.t3.sends.size).toBe(0);
+  expect(f.t3.threads.sends.size).toBe(0);
 });
 
 it("successful linked recovery settles the original rejection while preserving its diagnostic history", async (c) => {

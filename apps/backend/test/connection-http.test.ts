@@ -40,7 +40,7 @@ it("authorize rejects a cross-site POST without the factory request header", asy
   expect(((await response.json()) as { ok: boolean }).ok).toBe(false);
   expect(response.headers.get("access-control-allow-origin")).toBe(null);
   expect(await server.factory.getConnection()).toStrictEqual(before);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("authorize rejects an untrusted origin even with the factory request header", async (c) => {
@@ -59,7 +59,7 @@ it("authorize rejects an untrusted origin even with the factory request header",
   // Assert
   expect(response.status).toBe(403);
   expect(await server.factory.getConnection()).toStrictEqual(before);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("authorize accepts a same-origin factory request and starts authorization once", async (c) => {
@@ -76,7 +76,7 @@ it("authorize accepts a same-origin factory request and starts authorization onc
 
   // Assert
   expect(response.status).toBe(200);
-  expect(t3.authorizationStarts).toBe(1);
+  expect(t3.connection.authorizationStarts).toBe(1);
 });
 
 it("HTTP rejects hostile Host headers", async (c) => {

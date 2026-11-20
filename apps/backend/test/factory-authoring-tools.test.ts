@@ -142,8 +142,8 @@ it("an Agent save on a revision Studio has replaced is refused with a conflict a
 it("an Agent save choosing a provider without Factory reporting support is refused and keeps the revision", async (c) => {
   // Arrange
   const { factory, t3, client } = await authoringMcpClient(c);
-  t3.controlledProviders.push({
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
     providerInstanceId: "future-main",
     driverKind: "future",
   });
@@ -206,7 +206,7 @@ it("factory_get_agent reports unknown settings and keeps the saved model while T
   // Arrange
   const { factory, t3, client } = await authoringMcpClient(c);
   const saved = assertOk(await factory.createAgent(sampleAgentInput("Coder")));
-  t3.capabilitiesAvailable = false;
+  t3.projects.capabilitiesAvailable = false;
 
   // Act
   const result = await client.callTool({

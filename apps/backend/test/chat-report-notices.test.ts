@@ -20,7 +20,6 @@ import {
   settleUnresolved,
   woke,
 } from "./support/scenarios.ts";
-import { stopsEndThreads } from "./support/controlled-thread.ts";
 import { chatStartedRun, messageShows } from "./support/status-cards.ts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
@@ -196,8 +195,8 @@ it("settling the Run after Settle could not stop its workers edits the Problem n
   const { runId, worker } = await chatStartedRun(world);
   await settleUnresolved(world.world, worker);
   const notice = await noticeCreated(world.discord);
-  world.world.t3.support.stop = true;
-  stopsEndThreads(world.world.t3);
+  world.world.t3.contract.support.stop = true;
+  world.world.t3.threads.stopsEndThreads();
 
   // Act
   const settledRun = await world.factory.settleRun(runId, { stopWorkers: true });

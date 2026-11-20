@@ -36,7 +36,7 @@ it("a project absent from T3 keeps its selected history and last known icon", as
   const icon = { kind: "emoji" as const, emoji: "🧪" };
   const { factory, t3, original } = await iconProject(context, icon);
   assert((await factory.selectProject({ id: original.id })).ok);
-  t3.projects = [];
+  t3.projects.catalog = [];
 
   // Act
   const catalog = await factory.recheckProjects();

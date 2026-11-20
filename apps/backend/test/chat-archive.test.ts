@@ -52,7 +52,7 @@ it("the requester's confirmation archives exactly the reviewed Run started in Fa
   expect(answer).toBe(ACCEPTED);
   expect(await lifecycleOf(world.factory, world.runId)).toBe("archived");
   await interrupt;
-  expect(world.t3.threadStops).toHaveLength(1);
+  expect(world.t3.threads.threadStops).toHaveLength(1);
   await world.discord.createdMessages(3);
   expect(world.discord.created[2]!.content).toBe(
     "✅ **Run #1 archived** — Improve search\nOwed automatic work and pending Human/Wait items cancelled · T3 asked once to interrupt workers (not confirmed) · nothing rolled back",
@@ -77,7 +77,7 @@ it("a Run archived in Factory meanwhile is not this action's Archive: the confir
   expect(world.discord.created[2]!.content).toBe(
     "❌ **Archive not accepted** — Run #1 · Improve search\nThis Run was already archived elsewhere.",
   );
-  expect(world.t3.threadStops).toHaveLength(1);
+  expect(world.t3.threads.threadStops).toHaveLength(1);
 });
 
 it("two clicks racing on one Archive review archive once and request interruption once", async (c) => {
@@ -95,7 +95,7 @@ it("two clicks racing on one Archive review archive once and request interruptio
   // Assert
   expect(answers).toContain(ACCEPTED);
   await interrupt;
-  expect(world.t3.threadStops).toHaveLength(1);
+  expect(world.t3.threads.threadStops).toHaveLength(1);
   expect(await lifecycleOf(world.factory, world.runId)).toBe("archived");
 });
 
@@ -135,7 +135,7 @@ it("after a restart that interrupted an accepted Archive's receipt, the repeated
   expect(answer).toBe(
     "You already confirmed this review. Factory archived Run #1 · Improve search.",
   );
-  expect(world.t3.threadStops).toHaveLength(1);
+  expect(world.t3.threads.threadStops).toHaveLength(1);
   const settings = await reopened.getDiscordSettings();
   assert(settings.ok);
   expect(settings.value.delivery.problems).toStrictEqual([

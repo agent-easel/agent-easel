@@ -118,7 +118,7 @@ export async function demoStart(
 export function delegatedWorkPending(world: SeedContext, worker: WorkerHandle, subagents: number) {
   return reach("delegated work pending", async () => {
     for (let index = 0; index < subagents; index++)
-      world.t3.delegate(worker.threadId, worker.executionId);
+      world.t3.threads.delegate(worker.threadId, worker.executionId);
     await observeFor("observe the idle worker", world, worker.runId, idleWorking(worker));
     return worker;
   });

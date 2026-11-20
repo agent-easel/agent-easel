@@ -10,7 +10,7 @@ import type {
   T3Connection,
 } from "@t3-factory/contracts";
 import { parseAppearancePresentation } from "@t3-factory/domain-validation";
-import type { T3Adapter, T3ThemeRead } from "../adapters/t3.ts";
+import type { T3AppearanceReader, T3ThemeRead } from "../t3/appearance.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import { periodicWorker } from "../periodic.ts";
 import { presentThemeModes } from "./palette-mapping.ts";
@@ -77,7 +77,7 @@ function present(environmentId: string, followed: Followed): AppearancePresentat
  * receive, and never affects connection readiness, Start, execution or Run attention.
  */
 export const makeAppearance = (
-  t3: T3Adapter,
+  t3: T3AppearanceReader,
   getConnection: () => Effect.Effect<Result<T3Connection>>,
   intervalMs: number,
   changes: LiveChanges,

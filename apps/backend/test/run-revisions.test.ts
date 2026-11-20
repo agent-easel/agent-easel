@@ -66,7 +66,7 @@ it("a block first activated after its Agent was edited and removed and the backe
   const run = await reopened.getRun(f.runId);
   assert(run.ok);
   expect(run.value.activations.map((a) => a.blockId)).toStrictEqual(["worker", "parallel-block"]);
-  const launches = [...f.t3.launches.values()].map((launch) => launch.payload);
+  const launches = [...f.t3.threads.launches.values()].map((launch) => launch.payload);
   expect(launches[0]!.message).toMatch(workerMessage("Follow repository instructions."));
   expect(launches[1]!.message).toMatch(workerMessage("Follow repository instructions."));
   expect(launches[1]!.modelSelection).toEqual({
@@ -101,7 +101,7 @@ it("a Run in a Project that overrides its global Agent launches the worker with 
 
   // Assert
   assert(started.ok);
-  const [launch] = [...t3.launches.values()].map((entry) => entry.payload);
+  const [launch] = [...t3.threads.launches.values()].map((entry) => entry.payload);
   expect(launch!.modelSelection).toEqual({
     instanceId: "codex-main",
     model: "gpt-6.1-sol",

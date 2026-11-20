@@ -37,7 +37,7 @@ it("a project observation reaches launch-choice subscribers without another read
   assertOk(await factory.recheckProjects());
   const choices = subscribe(c, factory.live.watchLaunchChoices());
   await choices.until((messages) => messages.length > 0);
-  t3.projects = [{ ...t3.projects[0]!, title: "Renamed clone", available: false }];
+  t3.projects.catalog = [{ ...t3.projects.catalog[0]!, title: "Renamed clone", available: false }];
 
   // Act
   const observed = assertOk(await factory.recheckProjects());
