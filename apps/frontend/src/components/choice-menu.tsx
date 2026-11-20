@@ -134,13 +134,10 @@ export function ChoiceMenu({
     label,
     labelledBy,
     trigger.label,
-    `${shown ?? placeholder}${badgeSuffix(selected)}`,
+    triggerText(shown, placeholder, selected),
   );
-  const { listSearch, ...root } = useChoiceList({ choices, onChange, composer });
+  const { listSearch, dialog, ...root } = useChoiceList({ choices, onChange, composer });
   const valueId = useId();
-  const valueIds = trigger.describesValue
-    ? [`${valueId}-label`, ...(trigger.detail ? [`${valueId}-detail`] : [])]
-    : [];
   return (
     <Select.Root {...root} value={listValue} disabled={disabled}>
       <ChoiceTrigger
@@ -148,14 +145,14 @@ export function ChoiceMenu({
         name={names.trigger}
         required={required}
         busy={composer?.busy}
-        dialog={!!listSearch || !choices.length}
+        dialog={dialog}
         describedBy={describedBy}
-        valueIds={valueIds}
+        valueIds={valueIds(valueId, trigger)}
         problemTone={problemTone}
         className={className}
       >
         <ChoiceValue
-          id={trigger.describesValue ? valueId : undefined}
+          id={valueId}
           shown={shown}
           placeholder={placeholder}
           selected={selected}
@@ -259,8 +256,14 @@ function useChoiceList({
     composer && pickerShowsSearch(choices.length)
       ? { ...composer.search, query, onQuery: setQuery }
       : undefined;
-  return { open, onOpenChange, onValueChange, listSearch };
+  // With search or nothing to choose, the popup is a dialog.
+  const dialog = !!listSearch || !choices.length;
+  return { open, onOpenChange, onValueChange, listSearch, dialog };
 }
+
+/** The ids of the shown label and detail, when they describe the trigger. */
+const valueIds = (id: string, { describesValue, detail }: TriggerExtras) =>
+  describesValue ? [`${id}-label`, ...(detail ? [`${id}-detail`] : [])] : [];
 
 /**
  * A busy trigger is disabled for assistive technology only; with search or nothing to choose, the
@@ -273,7 +276,7 @@ const triggerState = (busy: boolean | undefined, dialog: boolean) => ({
 
 /**
  * The trigger's content: its prefix, the chosen icon, label, badge and detail, or the placeholder.
- * With an `id`, the label and detail carry ids derived from it.
+ * The label and detail carry ids derived from `id`, for a trigger they describe.
  */
 function ChoiceValue({
   id,
@@ -282,7 +285,7 @@ function ChoiceValue({
   selected,
   extras: { glyph, prefix, icon, detail },
 }: {
-  id: string | undefined;
+  id: string;
   shown: string | undefined;
   placeholder: string;
   selected: MenuChoice | undefined;
@@ -294,7 +297,7 @@ function ChoiceValue({
       {prefix && <span className="shrink-0 text-subtle-foreground">{prefix}</span>}
       {icon && selected?.icon && <span className="flex shrink-0">{selected.icon}</span>}
       <span
-        id={id && `${id}-label`}
+        id={`${id}-label`}
         data-slot="choice-value"
         className={cn("min-w-0 truncate", !shown && "text-muted-foreground")}
       >
@@ -303,13 +306,13 @@ function ChoiceValue({
       {selected?.badge && (
         <StatusBadge kind={selected.badgeKind ?? "attention"}>{selected.badge}</StatusBadge>
       )}
-      <TriggerDetail id={id && `${id}-detail`} detail={detail} />
+      <TriggerDetail id={`${id}-detail`} detail={detail} />
     </>
   );
 }
 
 /** The detail fills the trigger's free width, truncated from its start so a path keeps its end. */
-function TriggerDetail({ id, detail }: { id: string | undefined; detail: string | undefined }) {
+function TriggerDetail({ id, detail }: { id: string; detail: string | undefined }) {
   if (!detail) return <span className="flex-1" />;
   return (
     <span
@@ -358,7 +361,7 @@ function ChoiceList({
   const handlers = useSearchFocus(searchRef, listRef);
   const status = listStatus(choices, matches, empty, search?.noMatch);
   const statusId = useId();
-  const parts = listParts(name, opensDown, !!search, status ? statusId : undefined);
+  const parts = listParts(name, opensDown, !!search, { id: statusId, status });
   return (
     <Select.Portal>
       <Select.Content
@@ -384,9 +387,7 @@ function ChoiceList({
         <Select.Viewport ref={viewportRef} {...parts.list}>
           <ChoiceRows choices={choices} listValue={listValue} shows={matches} />
         </Select.Viewport>
-        {/* Without search the popup is the listbox unless it is empty, which never changes
-            while it is open, so the status mounts only to say why. */}
-        {(search || status) && <ListStatus id={statusId} status={status} />}
+        <ListStatus id={statusId} status={status} searching={!!search} />
         {opensDown && <ListFade viewport={viewport} watch={`${query}:${choices.length}`} />}
       </Select.Content>
     </Select.Portal>
@@ -401,15 +402,14 @@ const opensDownClass = "max-h-[calc(var(--radix-select-content-available-height)
 
 /**
  * The popup and its list. Without search the popup is the named listbox; with search it is a
- * named dialog holding the search and the listbox. While no choice shows, which `statusId` says,
- * there is no listbox: a listbox must hold options, so the popup is a named dialog the status
- * describes.
+ * named dialog holding the search and the listbox. While a status says why no choice shows, there
+ * is no listbox: a listbox must hold options, so the popup is a named dialog the status describes.
  */
 function listParts(
   name: ListName,
   opensDown: boolean,
   searching: boolean,
-  statusId: string | undefined,
+  status: { id: string; status: string | undefined },
 ) {
   const content = {
     ...name,
@@ -422,9 +422,9 @@ function listParts(
     opensDown && "[scrollbar-color:var(--border-strong)_transparent]",
   );
   const list = { className: cn(scrollbar, searching && "p-1") };
-  if (statusId)
+  if (status.status)
     return {
-      content: { ...content, role: "dialog", "aria-describedby": statusId },
+      content: { ...content, role: "dialog", "aria-describedby": status.id },
       list: { ...list, role: "presentation" },
     };
   if (!searching) return { content, list };
@@ -442,8 +442,21 @@ function listStatus(
   return choices.some(matches) ? undefined : noMatch;
 }
 
-/** Why the popup shows no choice; empty while it shows some, so a later reason is announced. */
-function ListStatus({ id, status }: { id: string; status: string | undefined }) {
+/**
+ * Why the popup shows no choice. With search it stays mounted, empty while choices show, so a
+ * search that stops matching is announced. Without search the popup is the listbox unless it is
+ * empty, which never changes while it is open, so the status mounts only to say why.
+ */
+function ListStatus({
+  id,
+  status,
+  searching,
+}: {
+  id: string;
+  status: string | undefined;
+  searching: boolean;
+}) {
+  if (!status && !searching) return null;
   return (
     <p id={id} role="status" className={cn(status && "px-3 py-2 text-sm text-muted-foreground")}>
       {status}
@@ -549,7 +562,12 @@ function choiceNames(
   };
 }
 
-const badgeSuffix = (choice: MenuChoice | undefined) => (choice?.badge ? `, ${choice.badge}` : "");
+/** What the trigger reads after its label: the shown value or the placeholder, and its badge. */
+const triggerText = (
+  shown: string | undefined,
+  placeholder: string,
+  selected: MenuChoice | undefined,
+) => `${shown ?? placeholder}${selected?.badge ? `, ${selected.badge}` : ""}`;
 
 /** Runs of adjacent choices of one group; a choice's list value is its index. */
 function groupChoices(choices: readonly MenuChoice[]) {

@@ -244,6 +244,13 @@ async function openNewFlow(app: App, screen: Screen) {
   return screen.getByRole("dialog", "New Flow", { exact: true });
 }
 
+/** New Flow with Project chosen as its owner kind; answers the dialog's Owning Project field. */
+async function openProjectOwnedNewFlow(app: App, screen: Screen) {
+  const dialog = await openNewFlow(app, screen);
+  await dialog.getByRole("radio", "Project", { exact: true }).tap();
+  return dialog.getByRole("combobox", "Owning Project", { exact: true });
+}
+
 test("New Flow opens quiet, with Create Flow unavailable and Global chosen", async ({
   app,
   screen,
@@ -268,11 +275,10 @@ test("a Project-owned New Flow lists the Projects that can own it", async ({
   browser,
 }) => {
   // Arrange
-  const dialog = await openNewFlow(app, screen);
-  await dialog.getByRole("radio", "Project", { exact: true }).tap();
+  const owner = await openProjectOwnedNewFlow(app, screen);
 
   // Act
-  await dialog.getByRole("combobox", "Owning Project", { exact: true }).tap();
+  await owner.tap();
 
   // Assert
   await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
@@ -285,9 +291,7 @@ test("a chosen Owning Project describes its field with the Project's title and p
   browser,
 }) => {
   // Arrange
-  const dialog = await openNewFlow(app, screen);
-  await dialog.getByRole("radio", "Project", { exact: true }).tap();
-  const owner = dialog.getByRole("combobox", "Owning Project", { exact: true });
+  const owner = await openProjectOwnedNewFlow(app, screen);
   await owner.tap();
 
   // Act
