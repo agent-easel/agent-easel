@@ -11,8 +11,9 @@ import type {
  * peer must understand; raise the minimum only when older peers can no longer
  * interoperate safely. Application release numbers never decide compatibility.
  */
-export const FACTORY_PROTOCOL = 19;
-/** Protocol 19 adds Agent Create reservations. Older clients still create without a reservation.
+export const FACTORY_PROTOCOL = 20;
+/** Protocol 20 adds the worker thread's confirmed completion to Run detail. Older clients
+ * ignore that field. Protocol 19 adds Agent Create reservations; older clients create without one.
  * Protocol 18 adds the Trigger operations, Studio's Trigger list and the Run origin, which
  * protocol 17 clients ignore. Protocol 17 Flows and Agents have an owning Project and Flow
  * validation is per Flow, naming each placed Agent's revision and owner, which older clients can
@@ -21,8 +22,8 @@ export const FACTORY_PROTOCOL = 19;
  * kind, whose Block id is null. Protocol 14 theme-color presentations and sources carry no
  * appearance grant. */
 export const FACTORY_MINIMUM_PEER_PROTOCOL = 17;
-/** The current UI needs host-issued Agent Create reservations before it can send Create. */
-export const FACTORY_MINIMUM_SERVER_PROTOCOL = 19;
+/** The current UI needs confirmed worker completion to offer Request report. */
+export const FACTORY_MINIMUM_SERVER_PROTOCOL = 20;
 
 export const CLIENT_LABEL_LIMIT = 80;
 

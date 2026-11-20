@@ -78,6 +78,7 @@ function runBlock(
     executionId: block.execution_id,
     link: threadHref(block.link),
     engineStatus: block.engine_status,
+    workerFinished: block.worker_finished === 1,
     reportStatus: block.report_status,
     workingMessage: progress?.message ?? null,
     progressOverdue:

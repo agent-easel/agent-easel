@@ -412,8 +412,12 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **19**. A server accepts clients from protocol **17**. The current client
-requires a protocol **19** server for [Agent Create reservations](studio.md#agent-definitions).
+The current protocol is **20**. A server accepts clients from protocol **17**. The current client
+requires a protocol **20** server for the `workerFinished` field in Run detail. That field lets
+the client distinguish a completed turn from a finished worker thread when offering **Request report**.
+Older clients ignore the field and the server still checks their requests before dispatch.
+
+Protocol **19** adds [Agent Create reservations](studio.md#agent-definitions).
 Clients on protocols 17 and 18 can still create Agents without a reservation. A protocol 19 client
 shows the server update gate when the server does not support reservations.
 

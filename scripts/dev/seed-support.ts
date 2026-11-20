@@ -113,8 +113,8 @@ export async function demoStart(
 
 /** Named Run state only the persistent simulator reaches, from a worker at work: the worker
  * delegated to `subagents` simulated subagents that keep running, and its own turn completed. T3
- * answers its delegated wait as pending, so Factory observed it idle in working without a missing
- * report. */
+ * answers its delegated wait as pending, so Factory observes the completed turn while the Block
+ * stays working. */
 export function delegatedWorkPending(world: SeedContext, worker: WorkerHandle, subagents: number) {
   return reach("delegated work pending", async () => {
     for (let index = 0; index < subagents; index++)

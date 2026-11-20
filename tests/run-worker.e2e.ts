@@ -469,6 +469,27 @@ test("a worker idle in working shows its message on the canvas and in its Run pr
   await app.screenshot("worker-working-message");
 });
 
+test("a completed worker turn with delegated work still running shows Working", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { id } = await prepareScenario(app, "working");
+  await applyRunState(app, id, "working reported", "Delegated the project picker update.");
+  await app.open(`/runs/${id}`);
+
+  // Act
+  await screen.getByRole("button", "Agent Implement change", { exact: false }).tap();
+
+  // Assert
+  const details = screen.getByRole("complementary", "Run inspector");
+  await expect(details).toContainText("Delegated the project picker update.");
+  await expect(details.getByText("Working", { exact: true })).toBeVisible();
+  await expect(details.getByText("Needs input", { exact: true })).toHaveCount(0);
+  await expect(details.getByRole("button", "Request report", { exact: true })).toHaveCount(0);
+  await app.screenshot("worker-with-delegated-work");
+});
+
 test("Request report asks a worker idle in working to assess its existing work", async ({
   app,
   screen,
