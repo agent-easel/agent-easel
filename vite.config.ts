@@ -37,7 +37,14 @@ export default defineConfig({
     tasks: {
       "gate:static": {
         command: "true",
-        dependsOn: ["format:check", "check:scenarios", "fallow", "lint", "typecheck"],
+        dependsOn: [
+          "format:check",
+          "check:e2e-configs",
+          "check:scenarios",
+          "fallow",
+          "lint",
+          "typecheck",
+        ],
         cache: false,
       },
       // Tests and the build start only after the static checks pass: they would compete with
@@ -45,6 +52,15 @@ export default defineConfig({
       "gate:dynamic": { command: "true", dependsOn: ["test", "build"], cache: false },
       "gate:check": { command: "vp run gate:static && vp run gate:dynamic", cache: false },
     },
+  },
+  // Pre-commit: format, then fix lint, only the staged files. `vp staged` stashes unstaged hunks
+  // of partially staged files while the tasks run and restores them afterwards, so only what was
+  // staged is rewritten and re-staged. Generated output and Markdown are skipped as in `fmt`/`lint`.
+  staged: {
+    "*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,css,html,yml,yaml}": [
+      "vp fmt --no-error-on-unmatched-pattern",
+      "vp lint --fix --no-error-on-unmatched-pattern",
+    ],
   },
   fmt: {
     printWidth: 100,

@@ -44,6 +44,18 @@ function addCommits(head, exclusions) {
   for (const commit of output.split("\n").filter(Boolean)) commits.add(commit);
 }
 
+// The pre-push gate validates the working tree, so it must be the commit being pushed.
+function checkBranchCheckout(destination, local) {
+  if (local !== git("rev-parse", "HEAD")) {
+    throw new Error(
+      `Pre-push: ${destination} would be updated to ${local}. Check out that commit before pushing.`,
+    );
+  }
+  if (git("status", "--porcelain", "--untracked-files=no")) {
+    throw new Error("Pre-push: commit, stash, or discard tracked changes before pushing.");
+  }
+}
+
 function checkPush(remote) {
   if (!remote) throw new Error("Expected the pre-push remote name.");
   // Exclude main even for a new branch or one that incorporated newer main commits.
@@ -51,8 +63,9 @@ function checkPush(remote) {
   for (const line of readFileSync(0, "utf8").trim().split("\n").filter(Boolean)) {
     const fields = line.split(/\s+/);
     if (fields.length !== 4) throw new Error("Expected Git pre-push ref updates on stdin.");
-    const [, local, , previous] = fields;
+    const [, local, destination, previous] = fields;
     if (/^0+$/.test(sha(local))) continue;
+    if (destination.startsWith("refs/heads/")) checkBranchCheckout(destination, local);
     const exclusions = [sha(main)];
     if (!/^0+$/.test(sha(previous))) exclusions.push(previous);
     // A tag can point to an annotated tag object rather than directly to a commit.

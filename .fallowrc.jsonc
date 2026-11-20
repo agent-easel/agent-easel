@@ -8,8 +8,6 @@
     // e2e journeys and the app server e2e.config.ts launches by path.
     "tests/*.e2e.ts",
     "tests/support/server.ts",
-    // Claude Code runs the post-edit hook by path from .claude/settings.json.
-    "scripts/agent-edit-check.mjs",
     // Desktop: Electron loads the preload and utility-process entries by path, and
     // electron-builder reads its configuration file by name.
     "apps/desktop/src/backend-host.ts",

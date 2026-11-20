@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Formats and lint-fixes the staged files and re-stages them (`staged` in vite.config.ts).
+# The full gate runs at push; see docs/quality-gates.md.
+set -eu
+
+pnpm exec vp staged

@@ -141,7 +141,7 @@ their cause; do not add retries or larger per-test timeouts.
 
 | Stage | Run |
 | --- | --- |
-| Per edit | Use the edit hook for formatting and lint feedback, and run the focused unit or integration test for the behavior you changed. See [edit-hook setup](quality-gates.md#the-edit-hook). |
+| Per edit | Run the focused unit or integration test for the behavior you changed; the [pre-commit hook](quality-gates.md#the-pre-commit-hook) formats and lint-fixes staged files. |
 | Handoff without a push | Run `pnpm check:static`, the affected unit suites and `pnpm test:e2e:affected [base-ref]` for journey coverage. |
 | Before pushing | Push with the [pre-push hook](quality-gates.md#the-pre-push-hook) enabled. It runs the full cached `pnpm check`. Reuse completed checks for unchanged inputs and skip a duplicate manual gate immediately before the push. |
 | Pull request CI | [Controlled UI journeys](#pr-journey-check) is authoritative for the full suite. |
