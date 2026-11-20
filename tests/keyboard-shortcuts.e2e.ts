@@ -177,6 +177,8 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
   await app.open("/runs/new");
   await expect(screen.getByRole("button", "New Run (+)", { exact: true })).toBeEnabled();
   await fillReadyComposer(screen, "Ship the picker");
+  const start = screen.getByRole("button", "Start", { exact: true });
+  await expect(start).toBeEnabled();
   await screen.getByLabel("Initial prompt", { exact: false }).tap();
   // Each control that receives focus from here on is numbered in the order it was reached.
   await browser.evaluate(`(() => {
@@ -193,7 +195,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
   await browser.keyboard.press("Tab");
 
   // Assert
-  await expect(screen.getByRole("button", "Start", { exact: true })).toBeFocused();
+  await expect(start).toBeFocused();
   await expect(screen.getByRole("button", /^Select project: /)).toHaveAttribute(
     "data-focus-order",
     "1",
@@ -206,10 +208,7 @@ test("Tab moves from the composer prompt through Project, Flow and image attachm
     "data-focus-order",
     "3",
   );
-  await expect(screen.getByRole("button", "Start", { exact: true })).toHaveAttribute(
-    "data-focus-order",
-    "4",
-  );
+  await expect(start).toHaveAttribute("data-focus-order", "4");
 });
 
 test("the fake desktop bridge enables Mod+N for New Run", async ({ app, screen, browser }) => {
