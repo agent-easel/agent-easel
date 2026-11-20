@@ -91,11 +91,15 @@ function markdownComponents(density: Density): Components {
     ),
     th: styled("th", "border px-2 py-1 text-left font-semibold text-foreground"),
     td: styled("td", "border px-2 py-1 align-top"),
-    a: ({ href, title, children }) =>
+    a: ({ node: _node, target: _target, rel: _rel, href, children, className, ...props }) =>
       href === undefined ? (
         children
       ) : (
-        <TextLink href={href} title={title} className="inline p-0 [font-weight:inherit]">
+        <TextLink
+          {...props}
+          href={href}
+          className={cn("inline p-0 [font-weight:inherit]", className)}
+        >
           {children}
         </TextLink>
       ),
