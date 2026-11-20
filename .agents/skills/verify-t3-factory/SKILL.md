@@ -116,7 +116,10 @@ journey if the UI changes afterward. Inspect the evidence yourself, including
 long text and each worker link, without reading raw PNGs one by one (each Read
 costs context; one session read 44 images repeatedly). `pnpm e2e:evidence` already ran
 `pnpm e2e:evidence-diff <output>/before <output>/after` (run it alone for sets captured
-another way). It pairs views by name, writes one `before | after | diff` contact sheet per
+another way). Both runs fast-forward CSS transitions to their end state, and a pixel
+counts as changed only above a small colour distance, so builds with no UI difference
+diff as unchanged; a fixture-order change in a base older than the stable Flow order can
+still show as changed. It pairs views by name, writes one `before | after | diff` contact sheet per
 changed view to `.e2e/proof/<change>/contact-sheets/` and prints each view as
 changed (with diff %), unchanged or unpaired. Read the summary, then each changed
 sheet once; unchanged views need no image, and an unpaired view is the only case

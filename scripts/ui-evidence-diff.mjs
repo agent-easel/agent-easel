@@ -8,6 +8,11 @@ const GUTTER = 8;
 const MAX_SHEET_WIDTH = 1800;
 const GUTTER_COLOR = [128, 128, 128, 255];
 
+// pixelmatch's colour-distance threshold. Identical builds can differ by a few 1/255 steps of
+// compositing dither (6 at most, measured) and must read as unchanged, while a 1px border moved
+// by 12/255 or a changed label must not. 0.05 flags a grey step of about 13/255 or more.
+const PIXEL_THRESHOLD = 0.05;
+
 const byName = (a, b) => a.localeCompare(b);
 
 function listPngs(root, dir = root) {
@@ -34,7 +39,9 @@ export function compareImages(beforePng, afterPng) {
   const before = pad(beforePng, width, height);
   const after = pad(afterPng, width, height);
   const diff = Buffer.alloc(width * height * 4);
-  const changedPixels = pixelmatch(before, after, diff, width, height, { threshold: 0.1 });
+  const changedPixels = pixelmatch(before, after, diff, width, height, {
+    threshold: PIXEL_THRESHOLD,
+  });
   return { width, height, before, after, diff, changedPixels };
 }
 
