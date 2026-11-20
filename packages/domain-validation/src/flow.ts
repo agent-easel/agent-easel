@@ -4,6 +4,7 @@ import {
   type CreateFlowInput,
   type DuplicateFlowInput,
   type FlowDuplicateAgentChoice,
+  type FlowConnection,
   type FlowGraphInput,
   type FlowWorkspace,
   type PreviewFlowDuplicateInput,
@@ -323,6 +324,20 @@ const connectable = (exits: ConnectableExits, source: unknown, exitId: unknown) 
   return allowed === "inherited" ? isId(exitId) : typeof exitId === "string" && allowed.has(exitId);
 };
 
+/** The identity of a connection: its source exit and its target, down to the ending. */
+export function connectionKey(
+  connection: Omit<FlowConnection, "targetEndingId"> & {
+    readonly targetEndingId?: string | undefined;
+  },
+): string {
+  return JSON.stringify([
+    connection.sourceBlockId,
+    connection.exitId,
+    connection.targetBlockId,
+    connection.targetEndingId ?? null,
+  ]);
+}
+
 function checkConnections(
   connections: readonly unknown[],
   blockIds: ReadonlySet<string>,
@@ -341,7 +356,7 @@ function checkConnections(
       issue("invalid_connection", path, "Connect an existing source exit to an existing block.");
       return;
     }
-    const key = JSON.stringify([edge.sourceBlockId, edge.exitId, edge.targetBlockId]);
+    const key = connectionKey(edge as unknown as FlowConnection);
     if (edges.has(key))
       issue("duplicate_connection", path, "This exit is already connected to that block.");
     edges.add(key);

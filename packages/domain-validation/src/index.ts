@@ -587,6 +587,7 @@ export function resolveAgentModel(
   return { provider, model };
 }
 
+export { connectionKey } from "./flow.ts";
 export {
   duplicateTreatment,
   mayPlaceAgent,

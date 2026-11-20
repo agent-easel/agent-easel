@@ -87,6 +87,8 @@ export interface FlowConnection {
   readonly sourceBlockId: string;
   readonly exitId: string;
   readonly targetBlockId: string;
+  /** Which ending of the target Finish block the connection enters; absent for other targets. */
+  readonly targetEndingId?: string;
 }
 /** The single, always-present source of a Flow; its targets start a Run in parallel. */
 export interface FlowInputBlock {

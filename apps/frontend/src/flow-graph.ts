@@ -8,6 +8,7 @@ import {
   type RunDefinitions,
 } from "@t3-factory/contracts";
 import {
+  connectionKey,
   continuationSources,
   effectiveExits,
   type EffectiveExit,
@@ -92,17 +93,41 @@ export function replaceBlock(graph: FlowGraph, next: FlowBlock): FlowGraph {
  * A wire on the canvas: an exit's connection, or the Flow input reaching one of its
  * targets. Wires have no id; a source reaching a target is the identity.
  */
-export type FlowWire = { readonly source: WireSource; readonly targetBlockId: string };
+export type FlowWire = {
+  readonly source: WireSource;
+  readonly targetBlockId: string;
+  readonly targetEndingId?: string;
+};
 
 export function connectionWire(connection: FlowConnection): FlowWire {
-  const { sourceBlockId, exitId, targetBlockId } = connection;
-  return { source: { kind: "exit", sourceBlockId, exitId }, targetBlockId };
+  const { sourceBlockId, exitId, targetBlockId, targetEndingId } = connection;
+  return {
+    source: { kind: "exit", sourceBlockId, exitId },
+    targetBlockId,
+    ...(targetEndingId ? { targetEndingId } : {}),
+  };
+}
+
+function wireConnection(
+  source: { readonly sourceBlockId: string; readonly exitId: string },
+  { targetBlockId, targetEndingId }: FlowWire,
+): Parameters<typeof connectionKey>[0] {
+  return {
+    sourceBlockId: source.sourceBlockId,
+    exitId: source.exitId,
+    targetBlockId,
+    targetEndingId,
+  };
 }
 
 export function sameWire(a: FlowWire, b: FlowWire) {
-  if (a.targetBlockId !== b.targetBlockId || a.source.kind !== b.source.kind) return false;
-  if (a.source.kind === "flow-input" || b.source.kind === "flow-input") return true;
-  return a.source.sourceBlockId === b.source.sourceBlockId && a.source.exitId === b.source.exitId;
+  if (a.source.kind === "flow-input" || b.source.kind === "flow-input")
+    return (
+      a.source.kind === b.source.kind &&
+      a.targetBlockId === b.targetBlockId &&
+      a.targetEndingId === b.targetEndingId
+    );
+  return connectionKey(wireConnection(a.source, a)) === connectionKey(wireConnection(b.source, b));
 }
 
 /** A node on the canvas: one block, or the Flow input block. */
@@ -140,7 +165,7 @@ export function canConnect(graph: FlowGraph, source: WireSource, targetBlockId: 
 
 export function addWire<G extends FlowGraph | CanvasGraph>(
   graph: G,
-  { source, targetBlockId }: FlowWire,
+  { source, targetBlockId, targetEndingId }: FlowWire,
 ): G {
   if (source.kind === "flow-input")
     return {
@@ -153,7 +178,10 @@ export function addWire<G extends FlowGraph | CanvasGraph>(
   const { sourceBlockId, exitId } = source;
   return {
     ...graph,
-    connections: [...graph.connections, { sourceBlockId, exitId, targetBlockId }],
+    connections: [
+      ...graph.connections,
+      { sourceBlockId, exitId, targetBlockId, ...(targetEndingId ? { targetEndingId } : {}) },
+    ],
   };
 }
 
