@@ -293,7 +293,7 @@ function BlockerRow({
     <li>
       <button
         type="button"
-        className="flex w-full items-center gap-2 rounded-sm py-1.5 outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        className="flex w-full items-center gap-2 rounded-sm py-1.5 outline-none hover:bg-accent focus-ring"
         onClick={() =>
           void openStudio(
             "graph" in definition

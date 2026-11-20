@@ -181,6 +181,17 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   the `--ring` outline on keyboard focus, and a disabled action is at 50% opacity. In-app routes
   wrap AppLink, which stays the typed-route link; external links open in a new tab; actions are
   buttons.
+- **Navigation row**: NavRow, wrapping a typed AppLink with `asChild`. Compact rows are 32 px
+  tall, for Settings, and can carry a status or attention marker; Regular rows are 34 px tall,
+  for Studio, and can carry a trailing count. The selected row uses `bg-sidebar-accent`,
+  primary text and `aria-current="page"`; unselected rows use secondary text and a hover fill.
+  Both densities use the shared focus ring. The command palette, menus and library rows keep
+  their own components.
+- **Keyboard focus**: the shared focus ring, the `focus-ring` utility: 3 px of `--ring` at half
+  opacity on keyboard focus. A field or bordered control adds the `--ring` border beside it; a
+  surface or full-width row whose outer ring would be clipped adds the inset modifier. A
+  deliberate destructive or attention tone and an invalid field override it; TextLink replaces
+  it with its outline.
 - **Raw facts**: Technical details, closed by default with **Copy details**, as labelled rows
   or one raw error. Other closed secondary facts use the same disclosure.
 - **Field state**: the shared field-state helper sets `aria-invalid` and `aria-describedby` from

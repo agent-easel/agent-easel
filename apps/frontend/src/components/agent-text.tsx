@@ -196,7 +196,7 @@ function TextReader({
           tabIndex={0}
           role="region"
           aria-label={result ? "Result text" : "Reader text"}
-          className="min-h-0 flex-1 overflow-y-auto px-7 py-5.5 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
+          className="min-h-0 flex-1 overflow-y-auto px-7 py-5.5 outline-none focus-ring focus-visible:ring-inset"
         >
           {children}
         </div>
