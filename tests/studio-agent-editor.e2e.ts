@@ -303,3 +303,37 @@ test("an open Project Agent stays listed under its Project while the search hide
   );
   await app.screenshot("agents-open-agent-kept-in-search");
 });
+
+test("Escape on an open Agent leaves the Agents list open with no Agent selected", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await openStudioAgent({ app, screen, browser }, "Escape to Agents");
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Studio", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("region", "Agent editor", { exact: true })).toHaveCount(0);
+  await expect(screen.getByLabel("Search Agents", { exact: true })).toBeVisible();
+});
+
+test("Escape on a New Agent whose only change is its owner asks before discarding it", async ({
+  app,
+  browser,
+  screen,
+}) => {
+  // Arrange
+  await app.open("/studio/agents/new");
+  await screen.getByRole("radio", "Project", { exact: true }).tap();
+  await screen.getByRole("heading", "Agents", { exact: true }).tap();
+
+  // Act
+  await browser.keyboard.press("Escape");
+
+  // Assert
+  await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toBeVisible();
+});
