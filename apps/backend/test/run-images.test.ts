@@ -161,7 +161,7 @@ it("an image Start whose image is not uploaded reports the missing digest and cr
     `images.${sha256Hex(screenshots.blue.data)}`,
   ]);
   expect(await f.f.listRuns(f.project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(f.t3.launches.size).toBe(0);
+  expect(f.t3.threads.launches.size).toBe(0);
 });
 
 it("an image Start whose declared size differs from its upload is rejected", async (c) => {
@@ -223,7 +223,7 @@ it("an image Start is rejected when T3 cannot receive attachments and creates no
   // Arrange
   const f = await prepared(c);
   await stageImages(f.f, allScreenshots);
-  f.t3.support.attachmentLimit = null;
+  f.t3.contract.support.attachmentLimit = null;
 
   // Act
   const started = await f.f.startRun(imageStart(f.input));
@@ -258,7 +258,7 @@ it("replaying an accepted image Start returns its Run although T3 no longer acce
   const request = imageStart(f.input);
   const accepted = await f.f.startRun(request);
   assert(accepted.ok);
-  f.t3.support.attachmentLimit = null;
+  f.t3.contract.support.attachmentLimit = null;
 
   // Act
   const replayed = await f.f.startRun(request);

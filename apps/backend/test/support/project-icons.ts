@@ -2,7 +2,7 @@ import { assert, expect, type TestContext } from "@effect/vitest";
 import { mkdir, realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ProjectIcon } from "@t3-factory/contracts";
-import { LiveT3Adapter } from "../../src/index.ts";
+import { makeLiveT3 } from "../../src/index.ts";
 import { factoryHarness } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import { oauthT3 } from "./oauth-t3.ts";
@@ -10,8 +10,8 @@ import { oauthT3 } from "./oauth-t3.ts";
 export async function iconProject(context: TestContext, projectIcon: ProjectIcon) {
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
-  t3.projects = [
+  t3.connection.authorized = true;
+  t3.projects.catalog = [
     {
       projectId: "icon-project",
       title: "Icon project",
@@ -34,7 +34,7 @@ export async function liveIconProjects(context: TestContext) {
   context.onTestFinished(() => external.close());
   let authorizationUrl = "";
   const factory = await harness.open({
-    t3: new LiveT3Adapter({
+    t3: makeLiveT3({
       credentialsDirectory: join(dirname(harness.databasePath), "credentials"),
       callbackPort: 0,
       openBrowser: async (url) => {

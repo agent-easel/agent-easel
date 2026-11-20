@@ -182,6 +182,17 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   It underlines on hover only, shows the `--ring` outline on keyboard focus, and a disabled action
   is at 50% opacity. In-app routes wrap AppLink, which stays the typed-route link; external links
   open in a new tab; actions are buttons.
+- **Navigation row**: NavRow, wrapping a typed AppLink with `asChild`. Compact rows are 32 px
+  tall, for Settings, and can carry a status or attention marker; Regular rows are 34 px tall,
+  for Studio, and can carry a trailing count. The selected row uses `bg-sidebar-accent`,
+  primary text and `aria-current="page"`; unselected rows use secondary text and a hover fill.
+  Both densities use the shared focus ring. The command palette, menus and library rows keep
+  their own components.
+- **Keyboard focus**: the shared focus ring, the `focus-ring` utility: 3 px of `--ring` at half
+  opacity on keyboard focus. A field or bordered control adds the `--ring` border beside it; a
+  surface or full-width row whose outer ring would be clipped adds the inset modifier. A
+  deliberate destructive or attention tone and an invalid field override it; TextLink replaces
+  it with its outline.
 - **Raw facts**: Technical details, closed by default with **Copy details**, as labelled rows
   or one raw error. Other closed secondary facts use the same disclosure.
 - **Field state**: the shared field-state helper sets `aria-invalid` and `aria-describedby` from
@@ -205,15 +216,19 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   left-aligned title and a short body. A one-line hint without an explanation stays plain status
   text, not an EmptyState: the sidebar's "No Runs yet", the command palette's "No matches", and
   list loading, no-match and error lines.
-- **Choice**: ChoiceMenu where choices carry descriptions, badges or disabled reasons;
-  NativeSelect for a plain list of values; SegmentedChoice for a short exclusive choice that
-  stays visible.
+- **Choice**: ChoiceMenu for every dropdown choice, a select-only combobox named by its field, with
+  or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
+  wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
+  workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
+  for a short exclusive choice that stays visible.
 - **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
   the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
   reader without a preview. Human-written text and Factory messages stay plain text.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
+  After its destination changes, a stored secret shows the Choose tag and adds Use stored key;
+  Save waits for a choice, and Undo or Cancel return to it.
 - **Times**: the shared time formats: a wall clock (`20:31`), day and time (`today 20:31`),
   relative age (`just now`, `12 min ago`; `12m` in the sidebar), `Edited yesterday`, and the
   full local date and time for tooltips and accessible names.

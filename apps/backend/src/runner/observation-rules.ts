@@ -8,6 +8,29 @@ export const failedRun = (status: string | undefined) =>
   status === "interrupted" ||
   status === "rolled_back";
 
+type ThreadRunRead = WorkerThread["thread"]["recentRuns"][number];
+
+/** A run T3 cancelled before it started. Only an explicit null start counts: a read without start
+ * evidence does not show that the run did no work. */
+export const cancelledBeforeStart = (run: ThreadRunRead) =>
+  run.status === "cancelled" && run.startedAt === null;
+
+/** The run whose status decides the Block's execution failure: the latest run, unless it did no
+ * work after the Block's finished report (`noWork`); then the newest other run decides, so the
+ * turn that produced the report can still fail the Block. */
+export function decidingRun(
+  { thread, latest }: WorkerThread,
+  noWork: (run: ThreadRunRead) => boolean,
+) {
+  if (!latest || !noWork(latest)) return latest;
+  return thread.recentRuns
+    .filter((run) => !noWork(run))
+    .reduce<ThreadRunRead | null>(
+      (best, run) => (!best || (run.ordinal ?? 0) >= (best.ordinal ?? 0) ? run : best),
+      null,
+    );
+}
+
 /** The status of the current report of the Block's activation, if any. */
 type ReportStatus = "finished" | "working" | undefined;
 

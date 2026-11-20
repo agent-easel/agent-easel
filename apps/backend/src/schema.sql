@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: chat_access_test
+-- Newest applied migration: report_reporting_execution
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -1207,7 +1207,7 @@ CREATE TABLE runtime_reports (
   accepted_at TEXT NOT NULL,
   completion_eligible_at TEXT,
   activation_id TEXT REFERENCES run_activations(id),
-  result_message TEXT,
+  result_message TEXT, reporting_execution_id TEXT,
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );
 

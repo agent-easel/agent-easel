@@ -17,7 +17,7 @@ it("a worktree Start from a missing custom ref is rejected with a Flow workspace
     { code: "workspace_ref_missing", path: "workspace.base.ref" },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("a worktree Start without a resolvable default branch is rejected with a Flow workspace issue and launches nothing", async (c) => {
@@ -37,7 +37,7 @@ it("a worktree Start without a resolvable default branch is rejected with a Flow
     { code: "workspace_default_branch_missing", path: "workspace.base" },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("saving a different workspace after Start leaves the Run's captured project checkout", async (c) => {
@@ -66,7 +66,7 @@ it("a worktree Start is rejected before any Run when T3 cannot launch into workt
   const { f, t3, input, project } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
-  t3.support.worktreeLaunch = false;
+  t3.contract.support.worktreeLaunch = false;
 
   // Act
   const result = await f.startRun(input);

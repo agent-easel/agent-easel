@@ -81,6 +81,8 @@ async function controlledProvider() {
 }
 
 let provider: Awaited<ReturnType<typeof controlledProvider>>;
+/** A second provider a journey moves the Language model to, closed in teardown. */
+let movedProvider: Awaited<ReturnType<typeof controlledProvider>> | null = null;
 /** Runs a journey started through chat and leaves for teardown to archive. */
 const startedRuns: string[] = [];
 
@@ -90,6 +92,8 @@ beforeEach(async ({ browser }) => {
 });
 
 afterEach(async ({ app }) => {
+  await movedProvider?.close();
+  movedProvider = null;
   // Journeys share one fixture; a later journey must start with Chat control Off and without
   // this journey's Runs.
   for (const runId of startedRuns.splice(0)) {
@@ -109,8 +113,8 @@ async function chatModelSettings(baseUrl: string | undefined) {
 /** Fills the Language model's provider, base URL and model for the controlled provider. */
 async function fillChatModel(screen: Screen) {
   const connection = screen.getByRole("region", "Connection");
-  await connection.getByRole("button", /^Provider: /).tap();
-  await screen.getByRole("menuitemradio", /^OpenAI-compatible/).tap();
+  await connection.getByRole("combobox", /^Provider: /).tap();
+  await screen.getByRole("option", /^OpenAI-compatible/).tap();
   await connection.getByLabel("Base URL").fill(provider.baseUrl);
   await connection.getByLabel("Model").fill("ui-model");
   return connection;
@@ -150,6 +154,126 @@ test("the host saves a keyed Language model, tests the saved connection and neve
   const settings = await chatModelSettings(app.baseUrl);
   expect(settings).toMatchObject({ ok: true, value: { configuration: { keyConfigured: true } } });
   assert(!JSON.stringify(settings).includes("sk-ui-journey"));
+});
+
+/**
+ * The Language model saved with `key` for the controlled provider through the host API, open in
+ * Settings with its Base URL moved to a second provider, so the stored key needs a choice.
+ */
+async function storedKeyMoved(app: App, screen: Screen, key: string) {
+  const model = await chatModelSettings(app.baseUrl);
+  assert(model.ok);
+  const saved = await hostCall(app.baseUrl, "PUT", "/api/chat-control/model", {
+    revision: model.value.configuration.revision,
+    providerKind: "openai-compatible",
+    baseUrl: provider.baseUrl,
+    model: "ui-model",
+    key: { kind: "replace", value: key },
+  });
+  assert(saved.ok, JSON.stringify(saved));
+  movedProvider = await controlledProvider();
+  await app.open("/settings/chat-control/model");
+  const connection = screen.getByRole("region", "Connection");
+  await connection.getByLabel("Base URL").fill(movedProvider.baseUrl);
+  await expectKeyUndecided(screen);
+  return { connection, moved: movedProvider };
+}
+
+/**
+ * The stored key waits for the owner's choice: the Choose tag, the key field invalid and described
+ * by its attention card, and no Save.
+ */
+async function expectKeyUndecided(screen: Screen) {
+  const connection = screen.getByRole("region", "Connection");
+  const keyField = connection.getByRole("group", "API key", { exact: true });
+  await expect(keyField.getByText("Choose", { exact: true })).toBeVisible();
+  await expect(keyField).toHaveAttribute("aria-invalid", "true");
+  await expect(keyField).toHaveAttribute("aria-describedby", "chat-model-key-problem");
+  await expect(screen.getByText("Send the stored key to the new address?")).toBeVisible();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+}
+
+test("a stored key the host chose to use at a new address is the one the new provider receives", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { connection, moved } = await storedKeyMoved(app, screen, "sk-ui-moved");
+  await app.screenshot("chat-model-key-choose");
+  await connection.getByRole("button", "Use stored key", { exact: true }).tap();
+  await expect(connection.getByText("Stored · used at the new address")).toBeVisible();
+  await expect(screen.getByText("Send the stored key to the new address?")).toHaveCount(0);
+  await app.screenshot("chat-model-key-reused");
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expect(connection.getByRole("button", "Replace the API key")).toBeVisible();
+
+  // Act
+  await screen.getByRole("button", "Test connection").tap();
+
+  // Assert
+  await expect(screen.getByText("Test passed", { exact: true })).toBeVisible();
+  assert.deepStrictEqual(
+    moved.requests.map((headers) => headers.authorization),
+    ["Bearer sk-ui-moved"],
+  );
+  expect(await chatModelSettings(app.baseUrl)).toMatchObject({
+    ok: true,
+    value: { configuration: { baseUrl: moved.baseUrl, keyConfigured: true } },
+  });
+});
+
+test("after the address changes, Replace opens a blank key field that can't be saved", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { connection } = await storedKeyMoved(app, screen, "sk-ui-blank");
+
+  // Act
+  await connection.getByRole("button", "Replace the API key").tap();
+
+  // Assert
+  await expect(connection.getByLabel("API key")).toBeFocused();
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeDisabled();
+  await app.screenshot("chat-model-key-replace-open");
+});
+
+test("after the address changes, Cancel on a replacement returns to the stored-key choice", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { connection } = await storedKeyMoved(app, screen, "sk-ui-kept");
+  await connection.getByRole("button", "Replace the API key").tap();
+  await expect(connection.getByLabel("API key")).toBeFocused();
+
+  // Act
+  await connection.getByRole("button", "Cancel", { exact: true }).tap();
+
+  // Assert
+  await expectKeyUndecided(screen);
+});
+
+test("after the address changes, removing the stored key saves the new address without a key", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { connection, moved } = await storedKeyMoved(app, screen, "sk-ui-removed");
+  await connection.getByRole("button", "Remove the API key").tap();
+  await expect(connection.getByText("None", { exact: true })).toBeVisible();
+  await expect(connection.getByRole("button", "Undo removing the API key")).toBeVisible();
+  await app.screenshot("chat-model-key-removed");
+
+  // Act
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+
+  // Assert
+  await expect(connection.getByLabel("API key")).toBeVisible();
+  expect(await chatModelSettings(app.baseUrl)).toMatchObject({
+    ok: true,
+    value: { configuration: { baseUrl: moved.baseUrl, keyConfigured: false } },
+  });
 });
 
 test("leaving the Language model page with unsaved edits asks before discarding them", async ({

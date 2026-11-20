@@ -25,10 +25,10 @@ const liveCatalog = {
 
 it("orchestrator capability reads preserve live model option values and choices", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await authorizedLiveOAuth(c, { capabilities: () => liveCatalog });
+  const { projects, endpoint } = await authorizedLiveOAuth(c, { capabilities: () => liveCatalog });
 
   // Act
-  const providers = await adapter.orchestratorCapabilities({ endpoint });
+  const providers = await projects.orchestratorCapabilities({ endpoint });
 
   // Assert
   expect(providers[0]!.models[0]!.options).toStrictEqual([

@@ -1,5 +1,5 @@
 import * as Effect from "effect/Effect";
-import type { ExecutionObservation, T3Adapter } from "../adapters/t3.ts";
+import type { ExecutionObservation, T3Threads } from "../t3/threads.ts";
 import {
   passedThrough,
   type Delivery,
@@ -57,7 +57,7 @@ const neverRan = (thread: ExecutionObservation) =>
 /** Asks the Handoff release rule for one Final result version. The Run store answers what the
  * release still waits for and applies the local part; this reads the T3 part, whether the source
  * worker thread is finished, at `run`'s generation. A replaced version is never released. */
-function releaseResult(store: RunStore, t3: T3Adapter, run: RunRow, reportId: string) {
+function releaseResult(store: RunStore, t3: T3Threads, run: RunRow, reportId: string) {
   return Effect.gen(function* () {
     const wait = yield* store.releaseWait(run, reportId);
     if (wait.released) return true;
@@ -74,7 +74,7 @@ function releaseResult(store: RunStore, t3: T3Adapter, run: RunRow, reportId: st
  * creates no activation; reservation asks again. */
 export function releaseAtPreparation(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   run: RunRow,
   record: Handoff | Delivery,
 ) {
@@ -101,7 +101,7 @@ export function releaseAtPreparation(
  * released. */
 export function previousVisitReleased(
   store: RunStore,
-  t3: T3Adapter,
+  t3: T3Threads,
   current: RunRow,
   previous: { readonly result_id: string | null },
 ) {
@@ -113,7 +113,7 @@ export function previousVisitReleased(
 /** The release rule again when a pending send from a Handoff is reserved, since T3 calls or a
  * restart may intervene after preparation. The revisit's recipient thread must also owe no other
  * Block's task and be finished, or never have run. */
-export function releaseAtReservation(store: RunStore, t3: T3Adapter, run: RunRow, send: Delivery) {
+export function releaseAtReservation(store: RunStore, t3: T3Threads, run: RunRow, send: Delivery) {
   return Effect.gen(function* (): Effect.fn.Return<Release | Ungated, unknown> {
     if (send.state !== "pending" || sourceOf(send).kind === "none") return { state: "ungated" };
     const release = yield* releaseAtPreparation(store, t3, run, send);
@@ -127,7 +127,7 @@ export function releaseAtReservation(store: RunStore, t3: T3Adapter, run: RunRow
 
 /** Releases each Continuation result whose worker thread is finished, so its response is
  * forwarded even when no Handoff asks for the release. */
-export function releaseContinuationResults(store: RunStore, t3: T3Adapter, run: RunRow) {
+export function releaseContinuationResults(store: RunStore, t3: T3Threads, run: RunRow) {
   return Effect.gen(function* () {
     for (const reportId of yield* store.heldContinuationResults(run.id)) {
       const current = yield* store.readRun(run.id);

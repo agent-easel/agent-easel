@@ -1,10 +1,8 @@
 import { assert, expect, it } from "@effect/vitest";
 import { dirname, join } from "node:path";
-import { LiveT3Adapter } from "../src/index.ts";
-import { T3Failure } from "../src/adapters/t3.ts";
-import { attachmentSupport } from "../src/adapters/t3-contract.ts";
+import { makeLiveT3, type T3Modules } from "../src/index.ts";
+import { T3Failure } from "../src/t3/connection.ts";
 import type { ControlledT3 } from "./support/controlled-t3.ts";
-import { authorizedLiveOAuth, reportReadSchema } from "./support/boundaries-setup.ts";
 import { launchFixture } from "./support/launch-fixture.ts";
 import { screenshots } from "./support/run-images.ts";
 import { factoryHarness } from "./support/factory.ts";
@@ -17,11 +15,11 @@ import {
   wireWorker,
 } from "./support/worker-contract.ts";
 
-/** The controlled T3 answers launch support as the live adapter inspected it at `endpoint`. */
-async function answerLaunchSupportFrom(adapter: LiveT3Adapter, endpoint: string, t3: ControlledT3) {
-  const { launch } = (await adapter.inspect({ endpoint })).support;
-  const inspect = t3.inspect.bind(t3);
-  t3.inspect = async (target) => {
+/** The controlled T3 answers launch support from the live contract inspection at `endpoint`. */
+async function answerLaunchSupportFrom(live: T3Modules, endpoint: string, t3: ControlledT3) {
+  const { launch } = (await live.contract.inspect({ endpoint })).support;
+  const inspect = t3.contract.inspect.bind(t3.contract);
+  t3.contract.inspect = async (target) => {
     const inspection = await inspect(target);
     return { ...inspection, support: { ...inspection.support, launch } };
   };
@@ -29,10 +27,10 @@ async function answerLaunchSupportFrom(adapter: LiveT3Adapter, endpoint: string,
 
 it("a worker observation reads its branch independently of its explicitly linked PR", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await repositoryWorker(c);
+  const { threads, endpoint } = await repositoryWorker(c);
 
   // Act
-  const observation = await adapter.readExecution({ endpoint }, "thread-1");
+  const observation = await threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   expect(observation.repository).toStrictEqual({
@@ -51,10 +49,10 @@ it("a worker observation reads its branch independently of its explicitly linked
 
 it("a worker PR cannot supply an executable link to Factory clients", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await repositoryWorker(c, "javascript:alert(1)");
+  const { threads, endpoint } = await repositoryWorker(c, "javascript:alert(1)");
 
   // Act
-  const observation = adapter.readExecution({ endpoint }, "thread-1");
+  const observation = threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   await expect(observation).rejects.toThrow("Invalid worker pull request URL.");
@@ -63,10 +61,10 @@ import { allTurnsEnd, finishedReport, report, turnBegins } from "./support/scena
 
 it("a captured checkout worker retains exact execution identity from its nested thread read", async (c) => {
   // Arrange
-  const { adapter, endpoint } = await capturedWorker(c);
+  const { threads, endpoint } = await capturedWorker(c);
 
   // Act
-  const observation = await adapter.readExecution({ endpoint }, "thread-1");
+  const observation = await threads.readExecution({ endpoint }, "thread-1");
 
   // Assert
   expect(observation).toMatchObject({
@@ -124,7 +122,7 @@ it("a reported worker's result stays held while T3's delegated wait times out", 
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
   expect(run.value.blocks[0]?.state).toBe("working");
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("a delegated wait answered for another run keeps a reported result held", async (c) => {
@@ -140,7 +138,7 @@ it("a delegated wait answered for another run keeps a reported result held", asy
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
-  expect(f.t3.launches.size).toBe(1);
+  expect(f.t3.threads.launches.size).toBe(1);
 });
 
 it("a reported worker's result is released when the live thread read and delegated wait show it finished", async (c) => {
@@ -156,83 +154,17 @@ it("a reported worker's result is released when the live thread read and delegat
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.reports[0]?.completionEligibleAt).toEqual(expect.any(String));
-  expect(f.t3.launches.size).toBe(2);
-});
-
-it("launch support permits an absent runtime mode without inventing replay proof", async (c) => {
-  // Arrange
-  const { adapter, external } = await launchFixture(c);
-
-  // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.checkout;
-
-  // Assert
-  expect(support.supported).toBe(true);
-  expect(support.retryScope).toBe(null);
-});
-
-it("a launch replay proof that cannot be established leaves only launch support unknown", async (c) => {
-  // Arrange
-  const { adapter, external, failProof } = await launchFixture(c);
-  failProof();
-
-  // Act
-  const inspection = await adapter.inspect({ endpoint: external.endpoint });
-
-  // Assert
-  expect(inspection.state).toBe("ready");
-  expect(inspection.support.launch.checkout).toStrictEqual({
-    supported: false,
-    retryScope: null,
-    explanation: null,
-  });
-  expect(inspection.support.launch.worktree.supported).toBe(false);
-  expect(inspection.support.attachmentLimit).toBe(8);
-});
-
-it("a send replay proof that cannot be established leaves only send support unknown", async (c) => {
-  // Arrange
-  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
-  const sendSchema = {
-    type: "object",
-    properties: {
-      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
-      mode: { type: "string", enum: ["queue"] },
-    },
-  };
-  const { adapter, endpoint } = await authorizedLiveOAuth(
-    c,
-    { sendSchema, send: () => ({}), readSchema: reportReadSchema },
-    {
-      adapter: {
-        sendRecoveryScope: async () => {
-          throw new Error("The replay proof could not be established.");
-        },
-      },
-    },
-  );
-
-  // Act
-  const inspection = await adapter.inspect({ endpoint });
-
-  // Assert
-  expect(inspection.state).toBe("ready");
-  expect(inspection.support.send).toStrictEqual({
-    supported: false,
-    retryScope: null,
-    explanation: null,
-  });
-  expect(inspection.support.reportReads).toBe(true);
+  expect(f.t3.threads.launches.size).toBe(2);
 });
 
 it("an image upload posts its exact bytes to T3's signed upload address without the OAuth bearer", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { threads, external } = await launchFixture(c);
   const upload = { name: "image-1-screenshot.png", mimeType: "image/png", sizeBytes: 0 };
   const data = screenshots.red.data;
 
   // Act
-  const attachmentId = await adapter.uploadAttachment(
+  const attachmentId = await threads.uploadAttachment(
     { endpoint: external.endpoint },
     { ...upload, sizeBytes: data.byteLength },
     data,
@@ -249,7 +181,7 @@ it("an image upload posts its exact bytes to T3's signed upload address without 
 
 it("a malformed upload address from T3 is an invalid answer that never reveals the address", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { threads, external } = await launchFixture(c);
   external.malformUploadAddresses();
   const data = screenshots.red.data;
   const upload = {
@@ -259,7 +191,7 @@ it("a malformed upload address from T3 is an invalid answer that never reveals t
   };
 
   // Act
-  const uploaded = adapter.uploadAttachment({ endpoint: external.endpoint }, upload, data);
+  const uploaded = threads.uploadAttachment({ endpoint: external.endpoint }, upload, data);
 
   // Assert
   await expect(uploaded).rejects.toStrictEqual(
@@ -268,38 +200,9 @@ it("a malformed upload address from T3 is an invalid answer that never reveals t
   expect(external.uploads).toStrictEqual([]);
 });
 
-it("T3 advertising upload preparation and launch attachments supports image launches", async (c) => {
-  // Arrange
-  const { adapter, external } = await launchFixture(c);
-
-  // Act
-  const support = attachmentSupport(
-    (await adapter.inspect({ endpoint: external.endpoint })).support,
-    8,
-  );
-
-  // Assert
-  expect(support.supported).toBe(true);
-});
-
-it("a launch schema without attachments does not support image launches", async (c) => {
-  // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
-  delete (schema.properties as Record<string, unknown>).attachments;
-
-  // Act
-  const support = attachmentSupport(
-    (await adapter.inspect({ endpoint: external.endpoint })).support,
-    1,
-  );
-
-  // Assert
-  expect(support.supported).toBe(false);
-});
-
 it("a launch sends its uploaded attachments with the first message", async (c) => {
   // Arrange
-  const { adapter, external, payload, seen } = await launchFixture(c);
+  const { threads, external, payload, seen } = await launchFixture(c);
   const attachments = [
     {
       type: "image" as const,
@@ -311,26 +214,15 @@ it("a launch sends its uploaded attachments with the first message", async (c) =
   ];
 
   // Act
-  await adapter.launchThread({ endpoint: external.endpoint }, { ...payload, attachments });
+  await threads.launchThread({ endpoint: external.endpoint }, { ...payload, attachments });
 
   // Assert
   expect(seen).toStrictEqual([{ ...payload, attachments }]);
 });
 
-it("T3's workspace strategy schema supports worktree launches", async (c) => {
-  // Arrange
-  const { adapter, external } = await launchFixture(c);
-
-  // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.worktree;
-
-  // Assert
-  expect(support.supported).toBe(true);
-});
-
 it("Start rejects worktree support that cannot express whether T3 fetches origin", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   const strategy = (
     schema.properties as { workspaceStrategy: { properties: Record<string, unknown> } }
   ).workspaceStrategy;
@@ -338,7 +230,7 @@ it("Start rejects worktree support that cannot express whether T3 fetches origin
   const { f, t3, input } = await prepared(c, {
     workspace: { mode: "worktree", base: { kind: "default" } },
   });
-  await answerLaunchSupportFrom(adapter, external.endpoint, t3);
+  await answerLaunchSupportFrom(live, external.endpoint, t3);
 
   // Act
   const result = await f.startRun(input);
@@ -349,39 +241,15 @@ it("Start rejects worktree support that cannot express whether T3 fetches origin
     { code: "launch_unsupported", path: "connection.contract" },
   ]);
   expect(await f.listRuns(input.projectId)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
-});
-
-it("worktree launch support is refused when the strategy cannot name an existing worktree", async (c) => {
-  // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
-  Object.assign(schema.properties!, {
-    workspaceStrategy: {
-      type: "object",
-      properties: {
-        type: { type: "string", enum: ["root", "worktree"] },
-        baseRef: { type: "string" },
-        branch: { type: "string" },
-      },
-    },
-  });
-
-  // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.launch.worktree;
-
-  // Assert
-  expect(support).toMatchObject({
-    supported: false,
-    explanation: expect.stringMatching(/worktree/),
-  });
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("Start rejects a schema requiring runtime mode before accepting work", async (c) => {
   // Arrange
-  const { adapter, external, schema } = await launchFixture(c);
+  const { live, external, schema } = await launchFixture(c);
   schema.required = ["runtimeMode"];
   const { f, t3, input } = await prepared(c);
-  await answerLaunchSupportFrom(adapter, external.endpoint, t3);
+  await answerLaunchSupportFrom(live, external.endpoint, t3);
 
   // Act
   const blocked = await f.startRun(input);
@@ -404,7 +272,7 @@ it("SDK launch without an exact execution reference remains uncertain", async (c
   fixture.malformed();
 
   // Act
-  const result = fixture.adapter.launchThread(
+  const result = fixture.threads.launchThread(
     { endpoint: fixture.external.endpoint },
     fixture.payload,
   );
@@ -415,10 +283,10 @@ it("SDK launch without an exact execution reference remains uncertain", async (c
 
 it("execution observation preserves native requests and renewed work references", async (c) => {
   // Arrange
-  const { adapter, external } = await launchFixture(c);
+  const { threads, external } = await launchFixture(c);
 
   // Act
-  const observation = await adapter.readExecution({ endpoint: external.endpoint }, "thread");
+  const observation = await threads.readExecution({ endpoint: external.endpoint }, "thread");
 
   // Assert
   expect(observation.recentRuns[0]?.runId).toBe("exact");
@@ -426,6 +294,8 @@ it("execution observation preserves native requests and renewed work references"
   expect(observation.latestRunId).toBe("newer-direct-activity");
   expect(observation.recentRuns[1]?.ordinal).toBe(2);
   expect(observation.recentRuns[0]?.sourceAt).toBe("2026-11-01T08:01:00.000Z");
+  expect(observation.recentRuns[0]).not.toHaveProperty("startedAt");
+  expect(observation.recentRuns[2]?.startedAt).toBeNull();
 });
 
 it("a worktree thread read exposes the worktree path and branch T3 bound", async (c) => {
@@ -434,7 +304,7 @@ it("a worktree thread read exposes the worktree path and branch T3 bound", async
   fixture.attachWorktree();
 
   // Act
-  const observation = await fixture.adapter.readExecution(
+  const observation = await fixture.threads.readExecution(
     { endpoint: fixture.external.endpoint },
     "thread",
   );
@@ -444,51 +314,6 @@ it("a worktree thread read exposes the worktree path and branch T3 bound", async
     workspaceRoot: "/worktrees/factory-run-1",
     repository: { branch: "factory/run-1" },
   });
-});
-
-it("send replay proof stays independent from launch recovery scope", async (c) => {
-  // Arrange
-  const h = await factoryHarness(c);
-  let proof: string | null = null;
-  const sendSchema: Record<string, unknown> = {
-    type: "object",
-    properties: {
-      ...Object.fromEntries(
-        ["environmentId", "threadId", "clientRequestId", "message"].map((f) => [
-          f,
-          { type: "string" },
-        ]),
-      ),
-      mode: { type: "string", enum: ["auto", "queue", "steer"] },
-    },
-  };
-  const external = await oauthT3({ sendSchema, send: () => ({ threadId: "thread", runId: "x" }) });
-  c.onTestFinished(() => external.close());
-  let approval = "";
-  const adapter = new LiveT3Adapter({
-    credentialsDirectory: join(dirname(h.databasePath), "credentials"),
-    callbackPort: 0,
-    openBrowser: async (url) => {
-      approval = url;
-    },
-    launchRecoveryScope: async () => "launch-proof-is-not-send-proof",
-    sendRecoveryScope: async () => proof,
-  });
-  const f = await h.open({ t3: adapter });
-  await f.configureConnection({ endpoint: external.endpoint });
-  await f.authorizeConnection();
-  expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
-  await f.recheckConnection();
-  expect((await adapter.inspect({ endpoint: external.endpoint })).support.send.supported).toBe(
-    true,
-  );
-  proof = "send-continuity-and-retention";
-
-  // Act
-  const support = (await adapter.inspect({ endpoint: external.endpoint })).support.send;
-
-  // Assert
-  expect(support.retryScope).toBe(proof);
 });
 
 it("sendMessage returns the exact queued run reference from the live SDK", async (c) => {
@@ -521,14 +346,14 @@ it("sendMessage returns the exact queued run reference from the live SDK", async
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
@@ -542,7 +367,7 @@ it("sendMessage returns the exact queued run reference from the live SDK", async
   };
 
   // Act
-  const sent = await adapter.sendMessage({ endpoint: external.endpoint }, payload);
+  const sent = await live.threads.sendMessage({ endpoint: external.endpoint }, payload);
 
   // Assert
   expect(sent.runId).toBe("queued-exact");
@@ -557,14 +382,14 @@ it("sendMessage rejects malformed live responses as uncertain", async (c) => {
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
@@ -578,7 +403,7 @@ it("sendMessage rejects malformed live responses as uncertain", async (c) => {
   };
 
   // Act
-  const rejection = adapter.sendMessage({ endpoint: external.endpoint }, payload);
+  const rejection = live.threads.sendMessage({ endpoint: external.endpoint }, payload);
 
   // Assert
   await expect(rejection).rejects.toThrow(/uncertain/);
@@ -603,21 +428,21 @@ it("a thread read without a pending native request count is rejected rather than
   });
   c.onTestFinished(() => external.close());
   let approval = "";
-  const adapter = new LiveT3Adapter({
+  const live = makeLiveT3({
     credentialsDirectory: join(dirname(h.databasePath), "credentials"),
     callbackPort: 0,
     openBrowser: async (url) => {
       approval = url;
     },
   });
-  const f = await h.open({ t3: adapter });
+  const f = await h.open({ t3: live });
   await f.configureConnection({ endpoint: external.endpoint });
   await f.authorizeConnection();
   expect((await fetch(external.approvalUrl(approval))).status).toBe(200);
   await f.recheckConnection();
 
   // Act
-  const rejection = adapter.readExecution({ endpoint: external.endpoint }, "thread");
+  const rejection = live.threads.readExecution({ endpoint: external.endpoint }, "thread");
 
   // Assert
   await expect(rejection).rejects.toThrow(/Invalid thread observation/);

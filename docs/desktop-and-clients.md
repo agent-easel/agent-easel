@@ -372,7 +372,7 @@ approved client may call: it only reopens a pending approval or starts one for t
 saved endpoint in the host's browser, and never changes a ready or incompatible grant
 (see [T3 connection](t3-integration.md#authorizing)). Its
 response is the ordinary `T3Connection` status; consent URLs, OAuth state, verifier
-and tokens stay in the host adapter. The remote UI hides host-only controls, and the server enforces that boundary independently.
+and tokens stay on the Factory host. The remote UI hides host-only controls, and the server enforces that boundary independently.
 
 ## Client identity, approval and revocation
 

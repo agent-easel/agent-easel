@@ -1,4 +1,5 @@
 import { runFactoryProcess, spawnFactoryProcess } from "./support/factory-process.ts";
+import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-projects.ts";
 import { assert, expect, it } from "@effect/vitest";
 import { once } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
@@ -6,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync, StatementSync } from "node:sqlite";
 import { restoreLaunches } from "./support/lifecycle-setup.ts";
 import { dirname, join } from "node:path";
-import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   blockedLaterFlow,
@@ -50,19 +50,19 @@ it("editing an Agent preserves the dispatched Run definitions", async (c) => {
   const run = await f.getRun(started.value.id);
   assert(run.ok);
   expect(run.value.definitions.agents[0]?.prompt).toBe("Follow repository instructions.");
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("a lost worker launch acknowledgement recovers the same thread and execution after restart", async (c) => {
   // Arrange
   const { h, f, t3, input } = await prepared(c);
-  t3.loseLaunchReply = true;
+  t3.threads.loseLaunchReply = true;
   const accepted = await f.startRun(input);
   assert(accepted.ok);
   await f.reconcileRuns();
-  const original = [...t3.launches.values()][0]!.reference;
+  const original = [...t3.threads.launches.values()][0]!.reference;
   await f.close();
-  t3.loseLaunchReply = false;
+  t3.threads.loseLaunchReply = false;
 
   // Act
   const restored = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -74,19 +74,19 @@ it("a lost worker launch acknowledgement recovers the same thread and execution 
   expect(r.value.blocks[0]?.threadId).toBe(original.threadId);
   expect(r.value.blocks[0]?.executionId).toBe(original.runId);
   expect(r.value.blocks[0]?.recovery).toBeNull();
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("changed grant identity leaves an uncertain worker launch unresolved", async (c) => {
   // Arrange
   const { h, f, t3, input } = await prepared(c);
-  t3.loseLaunchReply = true;
+  t3.threads.loseLaunchReply = true;
   const accepted = await f.startRun(input);
   assert(accepted.ok);
   await f.reconcileRuns();
   await f.close();
-  t3.loseLaunchReply = false;
-  t3.approve("different-grant");
+  t3.threads.loseLaunchReply = false;
+  t3.connection.approve("different-grant");
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -97,27 +97,30 @@ it("changed grant identity leaves an uncertain worker launch unresolved", async 
   expect(r.value.runCoordinator).toBeNull();
   expect(r.value.blocks[0]?.threadId).toBeNull();
   expect(r.value.blocks[0]?.recovery).toBe("pending");
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("runtime readiness without report support blocks Start", async (c) => {
   // Arrange
   const { f, t3, input } = await prepared(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
 
   // Act
   const blocked = await f.startRun(input);
 
   // Assert
   assert(!blocked.ok);
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("a fresh process cannot displace a live database owner", async (c) => {
   // Arrange
   const { h, t3, input } = await prepared(c);
   const fixturePath = join(dirname(h.databasePath), "external-engine.json");
-  await writeFile(fixturePath, JSON.stringify({ input, projects: t3.projects, launches: [] }));
+  await writeFile(
+    fixturePath,
+    JSON.stringify({ input, projects: t3.projects.catalog, launches: [] }),
+  );
   // Act
   const child = runFactoryProcess(
     [
@@ -140,7 +143,10 @@ it("SIGKILL of the live owner allows recovery of an uncertain Run conversation l
   // Arrange
   const { h, f, t3, input } = await prepared(c);
   const fixturePath = join(dirname(h.databasePath), "external-engine.json");
-  await writeFile(fixturePath, JSON.stringify({ input, projects: t3.projects, launches: [] }));
+  await writeFile(
+    fixturePath,
+    JSON.stringify({ input, projects: t3.projects.catalog, launches: [] }),
+  );
   function spawnChild(mode: string) {
     return spawnFactoryProcess(
       [
@@ -174,17 +180,17 @@ it("SIGKILL of the live owner allows recovery of an uncertain Run conversation l
   expect(r.value.blocks[0]?.threadId).toBe("thread-1");
   expect(r.value.blocks[0]?.executionId).toBe("execution-1");
   expect(r.value.blocks[0]?.recovery).toBeNull();
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("runtime readiness rejects a saved model option outside the permitted domain", async (c) => {
   // Arrange
   const { f, t3, project, agent } = await prepared(c);
-  t3.controlledProviders[0] = {
-    ...t3.controlledProviders[0]!,
+  t3.projects.controlledProviders[0] = {
+    ...t3.projects.controlledProviders[0]!,
     models: [
       {
-        ...t3.controlledProviders[0]!.models[0]!,
+        ...t3.projects.controlledProviders[0]!.models[0]!,
         options: [
           {
             id: "reasoning",
@@ -215,13 +221,13 @@ it("runtime readiness rejects a saved model option outside the permitted domain"
 it("an unproven retry scope still binds the searched worker and does not launch another", async (c) => {
   // Arrange
   const { h, f, t3, input } = await prepared(c);
-  t3.loseLaunchReply = true;
+  t3.threads.loseLaunchReply = true;
   const accepted = await f.startRun(input);
   assert(accepted.ok);
   await f.reconcileRuns();
   await f.close();
-  t3.loseLaunchReply = false;
-  t3.support.launchRetryScope = null;
+  t3.threads.loseLaunchReply = false;
+  t3.contract.support.launchRetryScope = null;
 
   // Act
   const changed = await h.open({ t3, connectionRetryMs: 60_000 });
@@ -232,7 +238,7 @@ it("an unproven retry scope still binds the searched worker and does not launch 
   expect(r.value.blocks[0]?.threadId).toBe("thread-1");
   expect(r.value.blocks[0]?.executionId).toBe("execution-1");
   expect(r.value.blocks[0]?.recovery).toBeNull();
-  expect(t3.launches.size).toBe(1);
+  expect(t3.threads.launches.size).toBe(1);
 });
 
 it("reusing a Start request key with different input is rejected", async (c) => {
@@ -290,7 +296,7 @@ it("Start reports all blocked later Agents while the entry Agent is ready and cr
     expect.stringContaining("Accessibility reviewer:"),
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("Start refuses a Flow whose later-branch Agent Needs a model through readiness and creates no Run", async (c) => {
@@ -310,7 +316,7 @@ it("Start refuses a Flow whose later-branch Agent Needs a model through readines
     },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("Start reports a model-less Agent and an Agent that cannot be read, and creates no Run", async (c) => {
@@ -346,7 +352,7 @@ it("Start reports a model-less Agent and an Agent that cannot be read, and creat
     },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("a Project Flow starts in its owning Project and its Run shows no owner", async (c) => {
@@ -384,13 +390,13 @@ it("Start refuses a Project Flow in another Project and creates no Run", async (
   ]);
   expect(await f.listRuns(other.id)).toStrictEqual({ ok: true, value: [] });
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("Start refuses a Project Flow whose Project T3 no longer lists, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.projects = [];
+  t3.projects.catalog = [];
 
   // Act
   const result = await f.startRun(input);
@@ -406,7 +412,7 @@ it("Start refuses a Project Flow whose Project T3 no longer lists, with that rea
 it("Start refuses a Project Flow whose repository directory is missing, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.projects = t3.projects.map((entry) => ({ ...entry, available: false }));
+  t3.projects.catalog = t3.projects.catalog.map((entry) => ({ ...entry, available: false }));
 
   // Act
   const result = await f.startRun(input);
@@ -422,7 +428,7 @@ it("Start refuses a Project Flow whose repository directory is missing, with tha
 it("Start refuses a Project Flow while T3 is unreachable, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.available = false;
+  t3.connection.available = false;
 
   // Act
   const result = await f.startRun(input);
@@ -438,7 +444,7 @@ it("Start refuses a Project Flow while T3 is unreachable, with that reason, and 
 it("Start refuses an Agent whose report support its T3 snapshot lacked, though a later check finds it, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
-  t3.support.reportReads = false;
+  t3.contract.support.reportReads = false;
   changeReportSupportAtCapabilityRead(t3, () => f.recheckConnection(), true);
 
   // Act
@@ -453,7 +459,7 @@ it("Start refuses an Agent whose report support its T3 snapshot lacked, though a
 it("Start refuses with a recheck-and-retry explanation when T3's launch replay proof cannot be established, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c);
-  t3.support.launchProofFails = true;
+  t3.contract.support.launchProofFails = true;
 
   // Act
   const result = await f.startRun(input);
@@ -474,7 +480,7 @@ it("Start refuses with a recheck-and-retry explanation when T3's launch replay p
 it("Start refuses a Project Flow after T3 switched environment, with that reason, and creates no Run", async (c) => {
   // Arrange
   const { f, t3, input, project } = await prepared(c, projectWorkerFlow);
-  t3.environmentId = "other-environment";
+  t3.connection.environmentId = "other-environment";
 
   // Act
   const result = await f.startRun(input);
@@ -505,16 +511,16 @@ it("Start refuses a global Flow whose Agent became a Project Agent through readi
     },
   ]);
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 it("an Agent owner change while Start validates is caught at acceptance and creates no Run", async (c) => {
   // Arrange
   const { h, f, t3, input, agent, project } = await prepared(c);
-  const readCatalog = t3.orchestratorCapabilities.bind(t3);
-  t3.orchestratorCapabilities = async (target) => {
+  const readCatalog = t3.projects.orchestratorCapabilities.bind(t3.projects);
+  t3.projects.orchestratorCapabilities = async (target) => {
     // The Agent's readiness check reads the model catalog after Start read the Agent.
-    t3.orchestratorCapabilities = readCatalog;
+    t3.projects.orchestratorCapabilities = readCatalog;
     ownerChangedInStorage(h.databasePath, { kind: "agent", id: agent.id }, project.id);
     return readCatalog(target);
   };
@@ -526,7 +532,7 @@ it("an Agent owner change while Start validates is caught at acceptance and crea
   assert(!result.ok);
   expect(result.error.code).toBe("conflict");
   expect(await f.listRuns(project.id)).toStrictEqual({ ok: true, value: [] });
-  expect(t3.launches.size).toBe(0);
+  expect(t3.threads.launches.size).toBe(0);
 });
 
 /**

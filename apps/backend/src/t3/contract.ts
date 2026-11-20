@@ -1,7 +1,54 @@
-import type { T3Contract } from "@t3-factory/contracts";
+import type { ConnectionState, FlowWorkspace, T3Contract } from "@t3-factory/contracts";
 import { isReportingDriver } from "../reporting-drivers.ts";
-import type { LaunchSupport, ReportSupport, T3Support } from "./t3.ts";
+import type { T3ConnectionReason, T3Endpoint } from "./connection.ts";
 
+export interface T3ContractReader {
+  inspect(target: T3Endpoint): Promise<T3Inspection>;
+}
+
+export interface T3Inspection {
+  readonly state: ConnectionState;
+  readonly reason: T3ConnectionReason;
+  /** Opaque grant lineage, never an access/refresh token or client secret. */
+  readonly authorizationIdentity?: string;
+  readonly contract?: T3Contract;
+  /** Every support answer of this inspection; nothing is supported unless T3 is ready. */
+  readonly support: T3Support;
+}
+export interface ReportSupport {
+  readonly supported: boolean;
+  readonly explanation: string;
+}
+/** What T3's advertised tools let Factory do, as one inspection found them. */
+export interface T3Support {
+  /** A worktree Run's workers also need `worktree` and `existing_worktree` launches. */
+  readonly launch: Readonly<Record<FlowWorkspace["mode"], LaunchSupport>>;
+  /** The most images one launch may carry through `t3_attachment_prepare_upload`; null when T3
+   * advertises no uploaded attachments with a request key. */
+  readonly attachmentLimit: number | null;
+  readonly send: LaunchSupport;
+  readonly settle: ReportSupport;
+  readonly stop: ReportSupport;
+  /** Whether public thread reads can retrieve reporting activity, before any harness check. */
+  readonly reportReads: boolean;
+}
+/** One connection check's answer: the authorization context, only while T3 is ready, and the
+ * support answers of the same inspection. `answered` is false when T3 could not be reached for
+ * it, so a missing context is no evidence that authorization changed. */
+export interface T3ContractSnapshot {
+  readonly contextId: string | null;
+  readonly answered: boolean;
+  readonly support: T3Support;
+}
+export interface LaunchSupport {
+  readonly supported: boolean;
+  /** Non-null only when the adapter can establish continuity AND retained replay keys.
+   * Matching version/schema alone is insufficient. Changes invalidate uncertain replay. */
+  readonly retryScope: string | null;
+  /** Null when a replay proof could not be established, so whether T3 supports the operation is
+   * unknown; each caller explains what that means for its operation. */
+  readonly explanation: string | null;
+}
 type ToolSchema = T3Contract["tools"][number]["inputSchema"] | undefined;
 type SchemaProperty = {
   type?: string;

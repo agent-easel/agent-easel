@@ -1,6 +1,5 @@
 import { isNotice, noticesIn } from "./chat-actions.ts";
 import type { ControlledDiscord } from "./controlled-discord.ts";
-import { recordThreadFacts } from "./controlled-thread.ts";
 import { observeFor, type ScenarioWorld, type WorkerHandle } from "./scenarios.ts";
 
 /** Resolves with the `ordinal`-th notice Discord shows (1 is the first) once it exists. */
@@ -14,13 +13,13 @@ const pendingNativeRequest = (run: Awaited<ReturnType<typeof observeFor>>) =>
 
 /** T3 shows a pending native request in the worker's thread and Factory observed it. */
 export async function nativeRequestShown(world: ScenarioWorld, worker: WorkerHandle) {
-  recordThreadFacts(world.t3, worker.threadId, { pendingRequestCount: 1 });
+  world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 1 });
   await observeFor("observe the native request", world, worker.runId, pendingNativeRequest);
 }
 
 /** The request was answered in T3, which shows none pending, and Factory settled it. */
 export async function nativeRequestAnswered(world: ScenarioWorld, worker: WorkerHandle) {
-  recordThreadFacts(world.t3, worker.threadId, { pendingRequestCount: 0 });
+  world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 0 });
   await observeFor(
     "observe the native request answered",
     world,

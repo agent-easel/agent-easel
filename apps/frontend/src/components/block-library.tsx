@@ -261,7 +261,7 @@ function LibraryItem({
       {ghost && <BlockGhost ghost={ghost} kind={kind} name={name} agent={agent} />}
       <DragButton
         aria-label={`Add ${name}`}
-        className="group flex min-h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
+        className="group flex min-h-13 w-full shrink-0 cursor-grab items-center gap-2 rounded-lg py-1.5 pr-2 pl-1.5 text-left outline-none hover:bg-accent focus-ring active:cursor-grabbing"
         onDragMove={(x, y) => {
           // Over the canvas the ghost sits where the block will land, clamping included.
           const placement = dropAt(x, y, GHOST_GRAB);

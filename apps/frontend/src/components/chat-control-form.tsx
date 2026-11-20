@@ -228,7 +228,7 @@ export function FieldRow({
 }: {
   label: ReactNode;
   /** The field the label names; omit when the row holds several controls. */
-  htmlFor?: string;
+  htmlFor?: string | undefined;
   tag?: ReactNode;
   secondary?: ReactNode;
   children: ReactNode;
@@ -258,76 +258,115 @@ export function FieldRow({
 /** What a save does with a stored secret. */
 export type SecretChoice = "keep" | "replace" | "remove";
 
-interface SecretFieldProps {
+/** After its destination changed: keep is undecided, and reuse sends it to the new destination. */
+export type MovedSecretChoice = SecretChoice | "reuse";
+
+interface SecretFieldBase {
   id: string;
   label: string;
   stored: boolean;
-  choice: SecretChoice;
   value: string;
   placeholder: string;
   state?: FieldState | undefined;
   /** The field-state tag, shown after Stored or after the open field. */
   tag?: ReactNode;
   disabled: boolean;
-  onChoice: (choice: SecretChoice) => void;
   onValue: (value: string) => void;
 }
+
+type SecretFieldProps = SecretFieldBase &
+  (
+    | { destinationChanged?: false; choice: SecretChoice; onChoice: (choice: SecretChoice) => void }
+    | {
+        /** The stored secret's destination changed, so the owner decides where it goes. */
+        destinationChanged: true;
+        choice: MovedSecretChoice;
+        onChoice: (choice: MovedSecretChoice) => void;
+      }
+  );
 
 /**
  * The API key or bot token as the standard bordered, masked field. A stored secret shows Stored
  * with Replace and Remove; Replace opens the masked field with Cancel, and Remove shows None with
- * Undo until Save. A blank field never clears a stored secret.
+ * Undo until Save. After its destination changed, a stored secret also offers Use stored key and
+ * stays undecided until one is chosen; Undo and Cancel return to that choice. A blank field never
+ * clears a stored secret.
  */
 export function SecretField(props: SecretFieldProps) {
-  return props.stored && props.choice !== "replace" ? (
-    <StoredSecret {...props} />
-  ) : (
-    <OpenSecret {...props} />
-  );
+  return secretInputShown(props) ? <OpenSecret {...props} /> : <StoredSecret {...props} />;
 }
 
-function StoredSecret({ label, choice, state, tag, disabled, onChoice }: SecretFieldProps) {
-  const removing = choice === "remove";
-  return (
-    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-      <span className={removing ? "text-muted-foreground" : "text-foreground"}>
-        {removing ? "None" : "Stored"}
-      </span>
-      {tag}
-      <span className="flex-1" />
-      {removing ? (
+/**
+ * Whether SecretField shows its masked input, the only control a row label can name; otherwise
+ * the stored secret is a named group of choices.
+ */
+export const secretInputShown = ({ stored, choice }: { stored: boolean; choice: string }) =>
+  !stored || choice === "replace";
+
+function StoredSecret(props: SecretFieldProps) {
+  const { label, choice, state, tag, disabled, onChoice } = props;
+  const group = {
+    role: "group",
+    "aria-label": label,
+    ...fieldAria(state?.cardId),
+    className: "flex min-w-0 flex-1 flex-wrap items-center gap-2",
+  };
+  if (choice === "remove" || choice === "reuse")
+    return (
+      <div {...group}>
+        <span className={choice === "remove" ? "text-muted-foreground" : "text-foreground"}>
+          {choice === "remove" ? "None" : "Stored · used at the new address"}
+        </span>
+        {tag}
+        <span className="flex-1" />
         <Button
           type="button"
           variant="outline"
-          aria-label={`Undo removing the ${label}`}
+          aria-label={
+            choice === "remove" ? `Undo removing the ${label}` : `Undo using the stored ${label}`
+          }
           disabled={disabled}
           onClick={() => onChoice("keep")}
         >
           Undo
         </Button>
-      ) : (
-        <>
+      </div>
+    );
+  return (
+    <div {...group}>
+      <span className="text-foreground">Stored</span>
+      {tag}
+      {/* The choices move to their own line together, and wrap there only when it is too narrow. */}
+      <div className="ml-auto flex flex-wrap justify-end gap-2">
+        {props.destinationChanged && (
           <Button
             type="button"
             variant="outline"
-            aria-label={`Replace the ${label}`}
-            aria-describedby={state?.cardId}
             disabled={disabled}
-            onClick={() => onChoice("replace")}
+            onClick={() => props.onChoice("reuse")}
           >
-            Replace
+            Use stored key
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            aria-label={`Remove the ${label}`}
-            disabled={disabled}
-            onClick={() => onChoice("remove")}
-          >
-            Remove
-          </Button>
-        </>
-      )}
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={`Replace the ${label}`}
+          disabled={disabled}
+          onClick={() => onChoice("replace")}
+        >
+          Replace
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={`Remove the ${label}`}
+          disabled={disabled}
+          onClick={() => onChoice("remove")}
+        >
+          Remove
+        </Button>
+      </div>
     </div>
   );
 }

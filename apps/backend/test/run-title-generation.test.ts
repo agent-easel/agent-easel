@@ -102,7 +102,7 @@ it("a title model T3 no longer offers skips generation with a diagnostic on the 
   const fixture = await prepared(c);
   const withdraw = await enableRunTitlesWithCheapModel(fixture.f, fixture.t3);
   withdraw();
-  const launched = fixture.t3.nextLaunch();
+  const launched = fixture.t3.threads.nextLaunch();
 
   // Act
   const started = await fixture.f.startRun(fixture.input);
@@ -173,7 +173,7 @@ it("a replayed Start keeps its pending generation and decides nothing again afte
   expect(replayed.value.titleProvenance).toBe("automatic");
   expect(replayed.value.titleGeneration).toStrictEqual(launched.value.titleGeneration);
   expect(replayed.value.titleGeneration?.state).toBe("pending");
-  expect(fixture.t3.launches.size).toBe(2);
+  expect(fixture.t3.threads.launches.size).toBe(2);
   const setting = await fixture.f.getRunTitleSetting();
   assert(setting.ok);
   expect(setting.value.diagnostic).toBeNull();
@@ -274,7 +274,7 @@ it("a pending generation launches one top-level title thread in the Project chec
   assert(started.ok);
   const launch = await titleGenerationLaunched(fixture.world, started.value.id);
   expect(launch).toStrictEqual({
-    environmentId: fixture.t3.environmentId,
+    environmentId: fixture.t3.connection.environmentId,
     projectId: fixture.project.projectId,
     clientRequestId: `factory-title:${started.value.id}`,
     title: `Factory title · Run #1 · ${started.value.id}`,
@@ -341,7 +341,7 @@ it("the Flow's worker launches while the title thread's launch is still unanswer
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
   c.onTestFinished(holdTitleThreadLaunch(fixture.t3));
-  const workerLaunch = fixture.t3.nextLaunch();
+  const workerLaunch = fixture.t3.threads.nextLaunch();
 
   // Act
   const started = await fixture.f.startRun(fixture.input);
@@ -379,16 +379,16 @@ it("a title model T3 withdrew after Start is skipped just before dispatch with a
     outcome: "skipped",
     message: "T3 does not offer gpt-6.1-luna for Codex.",
   });
-  expect([...fixture.t3.launches.values()].map((launch) => launch.payload.title)).toStrictEqual([
-    "Factory #1 · 1 Entry worker",
-  ]);
+  expect(
+    [...fixture.t3.threads.launches.values()].map((launch) => launch.payload.title),
+  ).toStrictEqual(["Factory #1 · 1 Entry worker"]);
 });
 
 it("a title thread launch T3 rejects records the generation failed with a diagnostic on the setting and keeps the automatic title", async (c) => {
   // Arrange
   const fixture = await prepared(c);
   await enableRunTitles(fixture.f);
-  fixture.t3.rejectLaunch = true;
+  fixture.t3.threads.rejectLaunch = true;
 
   // Act
   const started = await fixture.f.startRun(fixture.input);
@@ -450,8 +450,8 @@ it("a Run whose title is still pending settles once its worker finished, with no
   expect(run.value.lifecycle).toBe("settled");
   expect(run.value.titleGeneration?.state).toBe("pending");
   expect(run.value.attention).toStrictEqual([]);
-  expect(fixture.t3.settlements).toStrictEqual([{ threadId: worker.threadId }]);
-  expect(fixture.t3.threadStops).toStrictEqual([]);
+  expect(fixture.t3.threads.settlements).toStrictEqual([{ threadId: worker.threadId }]);
+  expect(fixture.t3.threads.threadStops).toStrictEqual([]);
   expect(await fixture.f.listAttention()).toStrictEqual({ ok: true, value: [] });
 });
 
@@ -545,7 +545,7 @@ it("a restart after a lost title thread launch reply binds the launched thread b
     state: "pending",
     threadLink: expect.stringContaining(titleThreadReference(fixture.t3).threadId),
   });
-  expect(fixture.t3.launchCalls).toBe(2);
+  expect(fixture.t3.threads.launchCalls).toBe(2);
 });
 
 it("a title applied while its launch reply is lost still gets its title thread bound by provenance, linked and stopped", async (c) => {
@@ -575,7 +575,7 @@ it("a title applied while its launch reply is lost still gets its title thread b
   expect(titleThreadStops(fixture.t3)).toStrictEqual([
     { threadId, clientRequestId: expect.any(String) },
   ]);
-  expect(fixture.t3.launchCalls).toBe(2);
+  expect(fixture.t3.threads.launchCalls).toBe(2);
 });
 
 it("Archive while a title launch reply is lost still recovers the title thread and stops it", async (c) => {
@@ -599,7 +599,7 @@ it("Archive while a title launch reply is lost still recovers the title thread a
   const run = await fixture.f.getRun(started.value.id);
   assert(run.ok);
   expect(run.value.titleGeneration?.threadLink).toContain(threadId);
-  expect(fixture.t3.launchCalls).toBe(2);
+  expect(fixture.t3.threads.launchCalls).toBe(2);
 });
 
 it("a restart before the deadline recovers and stops the title thread of a generation renamed while its launch reply was lost", async (c) => {
@@ -629,7 +629,7 @@ it("a restart before the deadline recovers and stops the title thread of a gener
   expect(titleThreadStops(fixture.t3)).toStrictEqual([
     { threadId, clientRequestId: expect.any(String) },
   ]);
-  expect(fixture.t3.launchCalls).toBe(2);
+  expect(fixture.t3.threads.launchCalls).toBe(2);
 });
 
 it("a title launch recorded under an authorization context that reauthorization replaced is never sent, also after a restart", async (c) => {
@@ -652,7 +652,7 @@ it("a title launch recorded under an authorization context that reauthorization 
   expect(run.value.titleGeneration).toMatchObject({ state: "pending", threadLink: null });
   expect(titleEvents(run.value)).toStrictEqual([]);
   expect(
-    [...fixture.t3.launches.values()].filter((launch) =>
+    [...fixture.t3.threads.launches.values()].filter((launch) =>
       launch.payload.title.startsWith("Factory title · "),
     ),
   ).toStrictEqual([]);
@@ -672,7 +672,7 @@ it("a title launch is never sent when reauthorization replaces its authorization
   // Assert
   assert(started.ok);
   expect(
-    [...fixture.t3.launches.values()].filter((launch) =>
+    [...fixture.t3.threads.launches.values()].filter((launch) =>
       launch.payload.title.startsWith("Factory title · "),
     ),
   ).toStrictEqual([]);
@@ -710,7 +710,7 @@ it("a title thread that finishes without a valid title records failed quietly wi
     outcome: "failed",
     message: "The title thread finished without submitting a valid title.",
   });
-  expect(fixture.t3.settlements).toStrictEqual([
+  expect(fixture.t3.threads.settlements).toStrictEqual([
     { threadId: titleThreadReference(fixture.t3).threadId },
   ]);
   expect(titleThreadStops(fixture.t3)).toStrictEqual([]);
@@ -733,7 +733,7 @@ it("after a title is applied, Factory requests one keyed Stop of the title threa
   expect(titleThreadStops(fixture.t3)).toStrictEqual([
     { threadId: titleThreadReference(fixture.t3).threadId, clientRequestId: expect.any(String) },
   ]);
-  expect(fixture.t3.settlements).toStrictEqual([]);
+  expect(fixture.t3.threads.settlements).toStrictEqual([]);
 });
 
 it("a title thread Stop requested before a restart is not requested again after it", async (c) => {

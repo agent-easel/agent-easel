@@ -1,7 +1,7 @@
 # Development scenarios and maintenance workflow
 
-`pnpm dev` is a persistent demo environment: a real SQLite database and a simulated T3 adapter. Its Agents and Runs launch no real models, need no OAuth and install no repository MCP configuration.
-`pnpm dev:prod` and `pnpm start` use the live adapter. The simulator is developer evidence, not proof of live T3 integration.
+`pnpm dev` is a persistent demo environment: a real SQLite database and a simulated T3 engine. Its Agents and Runs launch no real models, need no OAuth and install no repository MCP configuration.
+`pnpm dev:prod` and `pnpm start` connect to live T3. The simulator is developer evidence, not proof of live T3 integration.
 
 ## Seed lifecycle and isolation
 
@@ -89,7 +89,7 @@ needs no edit to the seed or to this document; describe product behavior in its 
 1. **Choose the observable case.** Read the product contract and the catalog above. State the screen, precondition, user action and expected result, and reuse an entry that already reaches that state.
 2. **Create through public operations.** Add a new named state in `apps/backend/test/support/scenarios.ts` (one only the persistent simulator can reach, such as delegated subagent work, beside it in
    `scripts/dev/seed-support.ts`) and a new scenario as one entry in the exported list in `scripts/dev/seed-scenarios.ts`. Use Factory operations and drive external execution and report evidence through
-   the controlled adapter, with stable logical request keys and descriptive demo content. Check every `Result`. A fresh seed must reach the intended state without direct SQL edits, network access or model
+   the simulated T3 engine, with stable logical request keys and descriptive demo content. Check every `Result`. A fresh seed must reach the intended state without direct SQL edits, network access or model
    workloads.
 3. **Preserve lifecycle.** Seed only a fresh demo database; keep user edits on ordinary startup and restore simulator state before reconciling retained Runs. Keep saved simulator state compatible with its
    restoration; incompatible changes need an explicit version change and reset or migration policy. A second startup must preserve identifiers, counts and Run states without duplicating or overwriting

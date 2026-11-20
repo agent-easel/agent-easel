@@ -16,7 +16,7 @@ it("an approved client opens authorization in the host browser for the host's sa
   expect(reply.body.value.state).toBe("authorization-required");
   expect(reply.body.value.authorizationPending).toBe(true);
   expect(reply.body.value.endpoint).toBe("https://t3.example/mcp");
-  expect(t3.authorizationStarts).toBe(1);
+  expect(t3.connection.authorizationStarts).toBe(1);
 });
 
 it("opening authorization again within the cooldown does not open the host browser again", async (c) => {
@@ -30,8 +30,8 @@ it("opening authorization again within the cooldown does not open the host brows
   // Assert
   assert(reply.body.ok);
   expect(reply.body.value.authorizationPending).toBe(true);
-  expect(t3.authorizationStarts).toBe(1);
-  expect(t3.reopenedApprovals).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(1);
+  expect(t3.connection.reopenedApprovals).toBe(0);
 });
 
 it("a revoked client cannot open authorization on the host", async (c) => {
@@ -44,7 +44,7 @@ it("a revoked client cannot open authorization on the host", async (c) => {
 
   // Assert
   expect(reply.status).toBe(401);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("a client still waiting for host approval cannot open authorization on the host", async (c) => {
@@ -58,7 +58,7 @@ it("a client still waiting for host approval cannot open authorization on the ho
 
   // Assert
   expect(reply.status).toBe(401);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("an approved client cannot change the host's saved T3 endpoint", async (c) => {
@@ -82,7 +82,7 @@ it("an approved client cannot change the host's saved T3 endpoint", async (c) =>
 it("an approved client cannot reauthorize and replace the host's ready grant", async (c) => {
   // Arrange
   const { server, laptop, t3 } = await remoteConnection(c);
-  t3.approve();
+  t3.connection.approve();
   const ready = await server.factory.recheckConnection();
   assert(ready.ok);
 
@@ -94,5 +94,5 @@ it("an approved client cannot reauthorize and replace the host's ready grant", a
   const connection = await server.factory.getConnection();
   assert(connection.ok);
   expect(connection.value.authorizationContext).toStrictEqual(ready.value.authorizationContext);
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });

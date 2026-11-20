@@ -109,7 +109,7 @@ function RoleOption({
     <button
       type="button"
       onClick={onChoose}
-      className="flex items-start gap-3 rounded-md border bg-background p-4 text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      className="flex items-start gap-3 rounded-md border bg-background p-4 text-left outline-none hover:bg-accent focus-ring"
     >
       <Icon
         aria-hidden

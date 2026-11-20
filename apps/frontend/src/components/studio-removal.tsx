@@ -181,10 +181,7 @@ function RemovalBlocker({
         <Surface
           tone="inset"
           asChild
-          className={cn(
-            blockerRowClass,
-            "text-left outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
-          )}
+          className={cn(blockerRowClass, "text-left outline-none hover:bg-accent focus-ring")}
         >
           <button type="button" onClick={onOpen}>
             {body}

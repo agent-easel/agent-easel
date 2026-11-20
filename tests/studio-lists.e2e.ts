@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import type { Browser } from "@e2e-dev/web";
-import { expect } from "e2e";
+import { expect, type App, type Screen } from "e2e";
 import type { Result, TriggerDefinition } from "../packages/contracts/src/index.ts";
-import { exportDefinitionFile, ownedFlow } from "./support/owners.ts";
+import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
+import { refuseFlowCreate } from "./support/flows.ts";
+import { descriptionOf, whileTriggerChecksHeld } from "./support/studio.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -142,25 +144,110 @@ test("Flows, Agents and Triggers share one header, toolbar and group heading", a
   await shot(app, browser, "triggers-grouped");
 });
 
-test("the Flows owner filter, a search with no match, and Light", async ({
+test("the Flows owner filter lists All, Global and each Project", async ({
   app,
   screen,
   browser,
 }) => {
+  // Arrange
   await app.open("/studio/flows");
   await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
-  await screen.getByRole("button", "Owner filter: All", { exact: true }).tap();
-  await expect(screen.getByRole("menuitemradio", "All owners", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("menuitemradio", /^Northwind/)).toBeVisible();
+
+  // Act
+  await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
+
+  // Assert
+  const owners = screen.getByRole("listbox", "Owner filter", { exact: true });
+  await expect(owners.getByRole("option", "All", { exact: true })).toBeVisible();
+  await expect(owners.getByRole("option", "Global", { exact: true })).toBeVisible();
+  await expect(owners.getByRole("option", /^Northwind/)).toBeVisible();
   await shot(app, browser, "flows-owner-filter");
-  await screen.getByRole("menuitemradio", "All owners", { exact: true }).tap();
+});
+
+/** The Flows list filtered on a new Project titled `title`, whose id is returned. */
+async function filterOnNewProject(
+  app: App,
+  screen: Screen,
+  fixture: { projects: { add(input: { title: string }): Promise<{ id: string }> } },
+  title: string,
+) {
+  const { id } = await fixture.projects.add({ title });
+  await app.open("/studio/flows");
+  await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
+  await screen.getByRole("option", title, { exact: true }).tap();
+  await expect(
+    screen.getByRole("combobox", `Owner filter: ${title}`, { exact: true }),
+  ).toBeVisible();
+  return id;
+}
+
+test("the Owner filter names a filtered Project that left the catalog Unknown Project", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const id = await filterOnNewProject(app, screen, fixture, "Journey · Leaving Project");
+
+  // Act
+  await fixture.projects.forget({ id });
+
+  // Assert
+  await expect(
+    screen.getByRole("combobox", "Owner filter: Unknown Project", { exact: true }),
+  ).toBeVisible();
+  await shot(app, browser, "owner-filter-unknown-project");
+});
+
+test("New Flow from a filter on a Project that left the catalog describes its owner as Unknown Project", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const id = await filterOnNewProject(app, screen, fixture, "Journey · Gone owner");
+  await fixture.projects.forget({ id });
+  await expect(
+    screen.getByRole("combobox", "Owner filter: Unknown Project", { exact: true }),
+  ).toBeVisible();
+
+  // Act
+  await screen.getByRole("button", "New Flow", { exact: true }).tap();
+
+  // Assert
+  const owner = screen
+    .getByRole("dialog", "New Flow", { exact: true })
+    .getByRole("combobox", "Owning Project", { exact: true });
+  await expect(owner).toContainText("Unknown Project");
+  expect(await descriptionOf(browser, owner)).toMatch(/^Unknown Project /);
+  await shot(app, browser, "new-flow-unknown-owner");
+});
+
+test("a Flows search with no match says so", async ({ app, screen, browser }) => {
+  // Arrange
+  await app.open("/studio/flows");
+  await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
+
+  // Act
   await screen.getByLabel("Search Flows", { exact: true }).fill("zzzz-no-such-flow");
+
+  // Assert
   await expect(screen.getByText("No matching Flows", { exact: true })).toBeVisible();
   await shot(app, browser, "flows-search-no-match");
+});
 
+test("the Flows list in Light", async ({ app, screen, browser }) => {
+  // Arrange
   await app.open("/settings/appearance");
   await screen.getByRole("radio", "Light", { exact: true }).tap();
+  await expect(screen.getByRole("radio", "Light", { exact: true })).toBeChecked();
+
+  // Act
   await app.open("/studio/flows");
+
+  // Assert
   await expect(screen.getByRole("link", /Launch blocked draft/)).toBeVisible();
   await shot(app, browser, "flows-light");
 });
@@ -185,63 +272,116 @@ test("a Flow whose Project left T3 stays listed and its menu only moves or remov
   await shot(app, browser, "flows-not-in-t3-menu");
 });
 
-test("New Flow stays quiet until a name is entered, and one card reports a failed create", async ({
+/** The New Flow dialog, opened from the Flows list. */
+async function openNewFlow(app: App, screen: Screen) {
+  await app.open("/studio/flows");
+  await screen.getByRole("button", "New Flow", { exact: true }).tap();
+  return screen.getByRole("dialog", "New Flow", { exact: true });
+}
+
+/** New Flow with Project chosen as its owner kind; answers the dialog's Owning Project field. */
+async function openProjectOwnedNewFlow(app: App, screen: Screen) {
+  const dialog = await openNewFlow(app, screen);
+  await dialog.getByRole("radio", "Project", { exact: true }).tap();
+  return dialog.getByRole("combobox", "Owning Project", { exact: true });
+}
+
+test("New Flow opens quiet, with Create Flow unavailable and Global chosen", async ({
   app,
   screen,
   browser,
 }) => {
+  // Arrange
   await app.open("/studio/flows");
+
+  // Act
   await screen.getByRole("button", "New Flow", { exact: true }).tap();
+
+  // Assert
   const dialog = screen.getByRole("dialog", "New Flow", { exact: true });
   await expect(dialog.getByRole("button", "Create Flow", { exact: true })).toBeDisabled();
   await expect(dialog.getByRole("radio", "Global", { exact: true })).toBeChecked();
   await shot(app, browser, "new-flow-blank");
-  await dialog.getByRole("radio", "Project", { exact: true }).tap();
-  await dialog.getByRole("button", "Owning Project", { exact: true }).tap();
-  await expect(screen.getByRole("menuitemradio", /^Northwind/)).toBeVisible();
-  await shot(app, browser, "new-flow-owner");
-  await screen.getByRole("menuitemradio", /^Northwind/).tap();
+});
 
-  await browser.route("**/api/flows", async (route) => {
-    if (route.request.method !== "POST") return route.continue();
-    await route.fulfill({
-      status: 503,
-      json: { ok: false, error: { code: "validation", message: "Unavailable", issues: [] } },
-    });
-  });
+test("a Project-owned New Flow lists the Projects that can own it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const owner = await openProjectOwnedNewFlow(app, screen);
+
+  // Act
+  await owner.tap();
+
+  // Assert
+  await expect(screen.getByRole("option", /^Northwind/)).toBeVisible();
+  await shot(app, browser, "new-flow-owner");
+});
+
+test("a chosen Owning Project describes its field with the Project's title and path", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const owner = await openProjectOwnedNewFlow(app, screen);
+  await owner.tap();
+
+  // Act
+  await screen.getByRole("option", /^Northwind/).tap();
+
+  // Assert
+  expect(await descriptionOf(browser, owner)).toMatch(/^Northwind \S*\/northwind$/);
+});
+
+test("a failed New Flow create reports one card and keeps the entered name", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const dialog = await openNewFlow(app, screen);
+  await refuseFlowCreate(browser);
   await dialog.getByLabel("Flow name", { exact: true }).fill("Unsaved draft");
+
+  // Act
   await dialog.getByRole("button", "Create Flow", { exact: true }).tap();
+
+  // Assert
   await expect(dialog.getByRole("alert")).toContainText("Couldn’t create the Flow");
   await expect(dialog.getByLabel("Flow name")).toHaveValue("Unsaved draft");
   await shot(app, browser, "new-flow-failed");
 });
 
-test("Import reviews a Flow file whose Agent needs a model, and rejects a file it cannot read", async ({
-  app,
-  screen,
-  browser,
-}) => {
-  await browser.setViewport(viewport);
-  const northwind = await ownedFlow(app.baseUrl, "Northwind release");
-  const exported = await exportDefinitionFile(app.baseUrl, "flow", northwind.id);
-  const document = JSON.parse(await readFile(exported, "utf8")) as {
-    agents: { model: unknown }[];
-  };
-  assert(document.agents.length > 0);
-  for (const agent of document.agents) agent.model = null;
-  const needsModel = exported.replace(/\.json$/, ".needs-model.json");
-  await writeFile(needsModel, JSON.stringify(document));
-  const rejected = exported.replace(/\.json$/, ".rejected.json");
-  await writeFile(rejected, "{ not json");
+/** An exported Northwind Flow file, beside which the Import journeys write their variants. */
+async function northwindExport(baseUrl: string | undefined) {
+  const northwind = await ownedFlow(baseUrl, "Northwind release");
+  return exportDefinitionFile(baseUrl, "flow", northwind.id);
+}
 
+/** The Flows list, ready to import. */
+async function openFlowsForImport(app: App, screen: Screen) {
   await app.open("/studio/flows");
   await expect(screen.getByRole("heading", "Flows", { exact: true })).toBeVisible();
   await expect(screen.getByRole("button", "Import", { exact: true })).toBeEnabled();
+}
+
+test("Import reviews a Flow file whose Agent needs a model", async ({ app, screen, browser }) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  const needsModel = await exportWithoutAgentModels(await northwindExport(app.baseUrl));
+  await openFlowsForImport(app, screen);
+
+  // Act
   await screen.getByLabel("Choose a Factory export file").setInputFiles([needsModel]);
+
+  // Assert
   const review = screen.getByRole("dialog", /^Import “/);
   await expect(review).toContainText("Imported prompts run with your T3 permissions");
   await expect(review).toContainText("Read them in Studio before you start a Run.");
-  const model = review.getByRole("button", /^Model for Northwind QA/);
+  const model = review.getByRole("combobox", /^Model for Northwind QA/);
   await expect(model).toHaveAttribute("aria-invalid", "true");
   const cardId = await model.getAttribute("aria-describedby");
   await expect(browser.locator(`[id=${JSON.stringify(cardId)}]`)).toContainText(
@@ -250,9 +390,23 @@ test("Import reviews a Flow file whose Agent needs a model, and rejects a file i
   await expect(review.getByRole("group", /Northwind QA/)).toContainText("Needs a model");
   await expect(review.getByRole("button", "Import", { exact: true })).toBeEnabled();
   await shot(app, browser, "import-needs-model");
-  await review.getByRole("button", "Cancel", { exact: true }).tap();
+});
 
+test("Import rejects a file it cannot read and offers another file", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport(viewport);
+  const rejected = (await northwindExport(app.baseUrl)).replace(/\.json$/, ".rejected.json");
+  await writeFile(rejected, "{ not json");
+  await openFlowsForImport(app, screen);
+
+  // Act
   await screen.getByLabel("Choose a Factory export file").setInputFiles([rejected]);
+
+  // Assert
   const refused = screen.getByRole("dialog", /^Import “/);
   await expect(refused.getByRole("alert")).toBeVisible();
   await expect(refused.getByRole("button", "Choose another file", { exact: true })).toBeVisible();
@@ -357,66 +511,186 @@ test("a New Agent draft whose name is cleared keeps Create Agent neutral and dis
   await expect(create).toHaveAttribute("data-variant", "outline");
 });
 
-test("Triggers with none yet, and Check now reports nothing ready, one Run, or several", async ({
+test("Triggers with none yet shows its empty state without an owner filter", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange: no Trigger exists at the start of a journey.
+
+  // Act
+  await app.open("/studio/triggers");
+
+  // Assert
+  await expect(screen.getByRole("heading", "No Triggers yet", { exact: true })).toBeVisible();
+  await expect(screen.getByLabel("Search Triggers", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("combobox", "Owner filter: All")).toHaveCount(0);
+  await shot(app, browser, "triggers-empty");
+});
+
+const checkName = "Journey · Check feedback";
+
+/** The Triggers list holding one Trigger named `name`. */
+async function openTriggers(
+  app: App,
+  fixture: { github: { trigger(input: { name: string }): Promise<unknown> } },
+  name: string,
+) {
+  await fixture.github.trigger({ name });
+  await app.open("/studio/triggers");
+}
+
+/** Check now from the actions menu of the Trigger named `name`. */
+async function checkNow(screen: Screen, name: string) {
+  await screen.getByRole("button", `${name} actions`, { exact: true }).tap();
+  await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
+}
+
+test("a Trigger's menu offers Check now, Edit and Remove", async ({
   app,
   screen,
   browser,
   fixture,
 }) => {
-  await app.open("/studio/triggers");
-  await expect(screen.getByRole("heading", "No Triggers yet", { exact: true })).toBeVisible();
-  await expect(screen.getByLabel("Search Triggers", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("button", "Owner filter: All")).toHaveCount(0);
-  await shot(app, browser, "triggers-empty");
+  // Arrange
+  await openTriggers(app, fixture, checkName);
 
-  const name = "Journey · Check feedback";
-  await fixture.github.trigger({ name });
-  await app.open("/studio/triggers");
-  await screen.getByRole("button", `${name} actions`, { exact: true }).tap();
+  // Act
+  await screen.getByRole("button", `${checkName} actions`, { exact: true }).tap();
+
+  // Assert
   await expect(screen.getByRole("menuitem", "Check now", { exact: true })).toBeVisible();
   await expect(screen.getByRole("menuitem", "Edit", { exact: true })).toBeVisible();
   await expect(screen.getByRole("menuitem", "Remove", { exact: true })).toBeVisible();
   await shot(app, browser, "triggers-menu");
+});
 
-  let release = () => {};
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
+test("Check now shows Checking… while the check is running", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await openTriggers(app, fixture, checkName);
+
+  await whileTriggerChecksHeld(browser, async () => {
+    // Act
+    await checkNow(screen, checkName);
+
+    // Assert
+    await expect(screen.getByText("Checking…", { exact: true })).toBeVisible();
+    await shot(app, browser, "triggers-checking");
   });
-  await browser.route("**/api/triggers/*/run", async (route) => {
-    await held;
-    await route.continue();
-  });
-  await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
-  await expect(screen.getByText("Checking…", { exact: true })).toBeVisible();
-  await shot(app, browser, "triggers-checking");
-  release();
+});
+
+test("Check now with no ready issue reports nothing ready to start", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  await openTriggers(app, fixture, checkName);
+
+  // Act
+  await checkNow(screen, checkName);
+
+  // Assert
   await expect(screen.getByText("Nothing ready to start", { exact: true })).toBeVisible();
   await shot(app, browser, "triggers-nothing-ready");
-  await browser.unroute("**/api/triggers/*/run");
+});
 
+test("Check now that starts one Run links that Run from the row", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
   await fixture.github.issue({ number: 11, title: "Ship the toggle", labels: ["factory:ready"] });
-  await screen.getByRole("button", `${name} actions`, { exact: true }).tap();
-  await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
+  await openTriggers(app, fixture, checkName);
+
+  // Act
+  await checkNow(screen, checkName);
+
+  // Assert
   await expect(screen.getByRole("link", "1 Run", { exact: true })).toHaveAttribute(
     "href",
     /^\/runs\/[^/]+$/,
   );
-  await expect(screen.getByRole("link", new RegExp(name)).getByRole("button")).toHaveCount(0);
+  await expect(screen.getByRole("link", new RegExp(checkName)).getByRole("button")).toHaveCount(0);
   await shot(app, browser, "triggers-started-one");
+});
 
-  // A second Trigger, with three free slots, so the Run already started does not consume them.
-  const many = "Journey · Three runs";
-  await fixture.github.trigger({ name: many });
-  await allowRuns(app.baseUrl, many, 3);
-  await fixture.github.issue({ number: 12, title: "Ship the footer", labels: ["factory:ready"] });
-  await fixture.github.issue({ number: 13, title: "Ship the header", labels: ["factory:ready"] });
-  await fixture.github.issue({ number: 14, title: "Ship the title", labels: ["factory:ready"] });
+/**
+ * A Trigger named `name` with three free slots and three ready issues numbered from `first`, open
+ * in the Triggers list. Each journey uses its own issues, so no issue already has a Run.
+ */
+async function threeReady(
+  app: App,
+  fixture: {
+    github: {
+      trigger(input: { name: string }): Promise<unknown>;
+      issue(input: { number: number; title: string; labels: string[] }): Promise<unknown>;
+    };
+  },
+  name: string,
+  first: number,
+) {
+  await fixture.github.trigger({ name });
+  await allowRuns(app.baseUrl, name, 3);
+  await fixture.github.issue({
+    number: first,
+    title: "Ship the footer",
+    labels: ["factory:ready"],
+  });
+  await fixture.github.issue({
+    number: first + 1,
+    title: "Ship the header",
+    labels: ["factory:ready"],
+  });
+  await fixture.github.issue({
+    number: first + 2,
+    title: "Ship the title",
+    labels: ["factory:ready"],
+  });
   await app.open("/studio/triggers");
-  await screen.getByRole("button", `${many} actions`, { exact: true }).tap();
-  await screen.getByRole("menuitem", "Check now", { exact: true }).tap();
+}
+
+test("Check now that starts several Runs reports their count on the row", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Three runs";
+  await threeReady(app, fixture, name, 12);
+
+  // Act
+  await checkNow(screen, name);
+
+  // Assert
   await expect(screen.getByRole("button", "3 Runs", { exact: true })).toBeVisible();
-  await expect(screen.getByRole("link", new RegExp(many)).getByRole("button")).toHaveCount(0);
+  await expect(screen.getByRole("link", new RegExp(name)).getByRole("button")).toHaveCount(0);
+});
+
+test("the count of Runs a check started lists each of them", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const name = "Journey · Three runs listed";
+  await threeReady(app, fixture, name, 15);
+  await checkNow(screen, name);
+  await expect(screen.getByRole("button", "3 Runs", { exact: true })).toBeVisible();
+
+  // Act
   await screen.getByRole("button", "3 Runs", { exact: true }).tap();
+
+  // Assert
   await expect(screen.getByRole("menuitem")).toHaveCount(3);
   await shot(app, browser, "triggers-started-three");
 });

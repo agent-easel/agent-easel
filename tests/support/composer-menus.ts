@@ -13,7 +13,7 @@ export async function openComposerMenus(app: App, browser: Browser, screen: Scre
     localStorage.removeItem("factory-run-drafts:browser");
   })()`);
   await browser.reload();
-  await expect(screen.getByRole("button", /^Select Flow: /)).toBeVisible();
+  await expect(screen.getByRole("combobox", /^Select Flow: /)).toBeVisible();
 }
 
 export async function readFactoryJson<T>(baseUrl: string | undefined, path: string) {
@@ -23,17 +23,20 @@ export async function readFactoryJson<T>(baseUrl: string | undefined, path: stri
   return body.value;
 }
 
+/** The open Flow list, named like its field. */
+export const flowList = (screen: Screen) => screen.getByRole("listbox", "Flow", { exact: true });
+
 export async function openFlowMenu(screen: Screen) {
-  await screen.getByRole("button", /^Select Flow: /).tap();
-  await expect(screen.getByRole("group", "Flows")).toBeVisible();
+  await screen.getByRole("combobox", /^Select Flow: /).tap();
+  await expect(flowList(screen)).toBeVisible();
 }
 
-/** Chooses a ready Flow. The menu closes and the field shows that Flow. */
+/** Chooses a ready Flow. The list closes and the field shows that Flow. */
 export async function chooseComposerFlow(screen: Screen, name: string) {
   await openFlowMenu(screen);
-  await screen.getByRole("menuitemradio", name, { exact: true }).tap();
-  await expect(screen.getByRole("menu")).toBeHidden();
-  await expect(screen.getByRole("button", `Select Flow: ${name}`, { exact: true })).toBeVisible();
+  await screen.getByRole("option", name, { exact: true }).tap();
+  await expect(flowList(screen)).toBeHidden();
+  await expect(screen.getByRole("combobox", `Select Flow: ${name}`, { exact: true })).toBeVisible();
 }
 
 /** A page evaluation's string result. Page values are JSON, so this rejects anything else. */

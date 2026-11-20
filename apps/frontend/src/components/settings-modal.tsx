@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Link } from "@tanstack/react-router";
 import {
   Monitor,
   BotMessageSquare,
@@ -42,14 +41,15 @@ import {
 import {
   useSettings,
   useSettingsNavigation,
-  useSettingsOptions,
   type SettingsSelection,
 } from "../settings-navigation.ts";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogSurface } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NavRow } from "@/components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { SettingsLink } from "./app-link.tsx";
 import { WorkspaceDialogHeader } from "./workspace-dialog-header.tsx";
 
 type ClientScope = ReturnType<typeof useClientScope>;
@@ -386,7 +386,6 @@ function useSectionAttention(tab: SettingsSection["tab"]) {
 }
 
 function SettingsNavItem({ section, active }: { section: SettingsSection; active: boolean }) {
-  const options = useSettingsOptions({ tab: section.tab });
   const { connection, presentation: state } = useConnectionState();
   const presentation = settingsConnectionPresentation(connection, state);
   const status = connectionStatusLabel(presentation);
@@ -398,33 +397,34 @@ function SettingsNavItem({ section, active }: { section: SettingsSection; active
   else if (!attention && locked) marker = "Managed on the Factory host";
   const Icon = section.icon;
   return (
-    <Link
-      {...options}
-      aria-label={marker ? `${section.label}, ${marker}` : section.label}
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex h-8 items-center gap-2 rounded-md px-2 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50",
-        active ? "bg-sidebar-accent text-foreground" : "text-muted-foreground",
-      )}
-    >
-      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
-      <span className="min-w-0 flex-1 truncate">{section.label}</span>
-      {section.tab === "connection" && (
-        <ConnectionStateDot presentation={presentation} label={status} />
-      )}
-      {attention && (
-        <span
-          aria-hidden
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            attention === "failing" ? "bg-destructive" : "bg-attention",
-          )}
-        />
-      )}
-      {locked && (
-        <Lock aria-hidden className="size-3.5 shrink-0 text-subtle-foreground" strokeWidth={1.5} />
-      )}
-    </Link>
+    <NavRow asChild density="compact" selected={active}>
+      <SettingsLink
+        selection={{ tab: section.tab }}
+        aria-label={marker ? `${section.label}, ${marker}` : section.label}
+      >
+        <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} />
+        <span className="min-w-0 flex-1 truncate">{section.label}</span>
+        {section.tab === "connection" && (
+          <ConnectionStateDot presentation={presentation} label={status} />
+        )}
+        {attention && (
+          <span
+            aria-hidden
+            className={cn(
+              "size-1.5 shrink-0 rounded-full",
+              attention === "failing" ? "bg-destructive" : "bg-attention",
+            )}
+          />
+        )}
+        {locked && (
+          <Lock
+            aria-hidden
+            className="size-3.5 shrink-0 text-subtle-foreground"
+            strokeWidth={1.5}
+          />
+        )}
+      </SettingsLink>
+    </NavRow>
   );
 }
 

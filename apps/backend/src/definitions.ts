@@ -55,7 +55,7 @@ import {
   validateUpdateFlow,
 } from "@t3-factory/domain-validation";
 import { emptyCapabilities, readyCapabilities, unsupportedReportingFailure } from "./agents.ts";
-import type { T3Adapter } from "./adapters/t3.ts";
+import type { T3Projects } from "./t3/projects.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { LiveChanges } from "./live-changes.ts";
 import { failure } from "./result.ts";
@@ -240,7 +240,7 @@ const createClockMillis = Clock.monotonicTimeNanos.pipe(
 );
 
 export const makeDefinitions = (
-  t3: T3Adapter,
+  t3: T3Projects,
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
   projects: { readCatalog(): Effect.Effect<Result<ProjectCatalog>, unknown> },
   changes: LiveChanges,

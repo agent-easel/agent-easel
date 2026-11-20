@@ -36,14 +36,14 @@ it.effect("transient T3 outages reconnect to ready without a manual recheck", (c
     // Arrange
     const harness = yield* Effect.promise(() => factoryHarness(context));
     const t3 = new ControlledT3();
-    t3.authorized = true;
+    t3.connection.authorized = true;
     const factory = yield* harness.service({ t3, connectionRetryMs: 1000 });
     yield* factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
-    t3.available = false;
+    t3.connection.available = false;
     yield* factory.recheckConnection();
 
     // Act
-    t3.available = true;
+    t3.connection.available = true;
     yield* TestClock.adjust(1000);
 
     // Assert
@@ -57,33 +57,33 @@ it("revoked refresh requires explicit reauthorization and does not auto-start th
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   const factory = await harness.open({ t3, connectionRetryMs: 10 });
   await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
-  t3.compatible = true;
-  t3.authorized = false;
+  t3.contract.compatible = true;
+  t3.connection.authorized = false;
 
   // Act
   await factory.recheckConnection();
 
   // Assert
   expect((await readConnection(factory)).state).toBe("authorization-required");
-  expect(t3.authorizationStarts).toBe(0);
+  expect(t3.connection.authorizationStarts).toBe(0);
 });
 
 it("successful reauthorization replaces the stored authorization context", async (context) => {
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   const factory = await harness.open({ t3, connectionRetryMs: 10 });
   await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
   const original = await readConnection(factory);
-  t3.authorized = false;
+  t3.connection.authorized = false;
   await factory.recheckConnection();
   await factory.authorizeConnection();
   expect((await readConnection(factory)).authorizationContext).toBe(null);
-  t3.approve();
+  t3.connection.approve();
 
   // Act
   await factory.recheckConnection();
@@ -92,14 +92,14 @@ it("successful reauthorization replaces the stored authorization context", async
   const approved = await readConnection(factory);
   expect(approved.state).toBe("ready");
   expect(approved.authorizationContext?.id).not.toBe(original.authorizationContext?.id);
-  expect(t3.authorizationStarts).toBe(1);
+  expect(t3.connection.authorizationStarts).toBe(1);
 });
 
 it("changing the saved endpoint creates a new authorization binding", async (context) => {
   // Arrange
   const harness = await factoryHarness(context);
   const t3 = new ControlledT3();
-  t3.authorized = true;
+  t3.connection.authorized = true;
   const factory = await harness.open({ t3, connectionRetryMs: 10 });
   await factory.configureConnection({ endpoint: "http://localhost:3773/mcp" });
   await factory.recheckConnection();

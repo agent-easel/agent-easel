@@ -35,7 +35,7 @@ it("a newer finished report before release replaces the held result and only it 
     { reportId: run.value.reports[0]?.id, state: "cancelled" },
     { reportId: run.value.reports[1]?.id, state: "acknowledged" },
   ]);
-  expect(f.t3.launches.size).toBe(2);
+  expect(f.t3.threads.launches.size).toBe(2);
   const next = await f.f.runtime.block({
     arguments: { blockId: launchedBlockId(f.t3, "Parallel work") },
   });
@@ -80,7 +80,7 @@ it("after release a same-exit finished report updates the result without relaunc
   expect(run.value.intents.filter((i) => i.reportId === versions[1])).toStrictEqual([]);
   const view = await f.f.runtime.run({ arguments: { blockId: f.blockId } });
   expect(view.blocks?.find((block) => block.blockId === "worker")?.result).toBe("Updated result.");
-  expect(f.t3.launches.size).toBe(2);
+  expect(f.t3.threads.launches.size).toBe(2);
 });
 
 it("after release a different-exit finished report hands off to that exit's Block while the earlier one keeps running", async (c) => {
@@ -104,7 +104,7 @@ it("after release a different-exit finished report hands off to that exit's Bloc
     "parallel-block",
     "follow-up",
   ]);
-  expect([...f.t3.launches.values()].map((launch) => launch.payload.title)).toStrictEqual([
+  expect([...f.t3.threads.launches.values()].map((launch) => launch.payload.title)).toStrictEqual([
     "Factory #1 · 1 Entry worker",
     "Factory #1 · 2 Parallel work",
     "Factory #1 · 3 Follow-up",
@@ -112,7 +112,7 @@ it("after release a different-exit finished report hands off to that exit's Bloc
   expect(run.value.blocks.find((block) => block.blockId === "parallel-block")?.state).toBe(
     "working",
   );
-  expect(f.t3.threadStops).toStrictEqual([]);
+  expect(f.t3.threads.threadStops).toStrictEqual([]);
 });
 
 it("a different-exit result after release stays held while the worker thread is still running", async (c) => {
@@ -131,7 +131,7 @@ it("a different-exit result after release stays held while the worker thread is 
   const run = await f.f.getRun(f.runId);
   assert(run.ok);
   expect(run.value.intents.find((i) => i.blockId === "follow-up")?.state).toBe("pending");
-  expect(f.t3.launches.size).toBe(2);
+  expect(f.t3.threads.launches.size).toBe(2);
 });
 
 it("repeating the result from a later turn settles an execution failure recorded after it", async (c) => {

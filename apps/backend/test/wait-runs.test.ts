@@ -76,7 +76,7 @@ it.effect(
       expect(Date.parse(waiting.arrival.deadlineAt) - Date.parse(waiting.arrival.startedAt)).toBe(
         WAIT_MINUTES * MINUTE,
       );
-      expect(f.t3.launches.size).toBe(2);
+      expect(f.t3.threads.launches.size).toBe(2);
       const followUp = yield* f.factory.runtime.block({
         arguments: { blockId: launchBlockId(launched.message) },
       });
@@ -123,7 +123,7 @@ it.effect("a Wait's output reaches each of its two recipients once", (c) =>
       "follow-up",
       "notify",
     ]);
-    expect(f.t3.launches.size).toBe(3);
+    expect(f.t3.threads.launches.size).toBe(3);
   }),
 );
 
@@ -279,7 +279,7 @@ it.effect(
       expect(
         run.value.intents.filter((intent) => intent.waitArrivalId === arrival!.id),
       ).toHaveLength(1);
-      expect(f.t3.launches.size).toBe(2);
+      expect(f.t3.threads.launches.size).toBe(2);
     }),
 );
 
@@ -292,13 +292,13 @@ it.effect(
       const worker = yield* Effect.promise(() => workerAtWork(f.world, f.input));
       yield* Effect.promise(() => resultReported(f.world, worker));
       yield* Effect.promise(() => resultReleasedToWait(f.world, worker));
-      f.t3.available = false;
+      f.t3.connection.available = false;
       yield* TestClock.adjust(WAIT_MINUTES * MINUTE);
       const forwarded = yield* f.factory.getRun(worker.runId);
       assert(forwarded.ok);
       expect(forwarded.value.waitArrivals[0]?.state).toBe("forwarded");
       yield* f.close;
-      f.t3.available = true;
+      f.t3.connection.available = true;
       const followUpLaunch = nextLaunch(f.world);
 
       // Act
@@ -312,7 +312,7 @@ it.effect(
       expect(
         run.value.intents.filter((intent) => intent.blockId === "follow-up").map((i) => i.kind),
       ).toStrictEqual(["launch"]);
-      expect(f.t3.launches.size).toBe(2);
+      expect(f.t3.threads.launches.size).toBe(2);
     }),
 );
 
@@ -397,7 +397,7 @@ it.effect(
       expect(run.value.activations.map((activation) => activation.blockId)).toStrictEqual([
         "worker",
       ]);
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
     }),
 );
 
@@ -426,7 +426,7 @@ it.effect(
         settlement: { state: "stopping" },
       });
       expect(run.value.waitArrivals).toMatchObject([{ id: waiting.arrival.id, state: "pending" }]);
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
     }),
 );
 
@@ -465,7 +465,7 @@ it.effect(
       expect(run.value.intents.filter((intent) => intent.blockId === "follow-up")).toStrictEqual(
         [],
       );
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
     }),
 );
 
@@ -496,7 +496,7 @@ it.effect("Archive racing the deadline leaves no forwarded work to deliver", (c)
         (intent) => intent.blockId === "follow-up" && intent.state !== "cancelled",
       ),
     ).toStrictEqual([]);
-    expect(f.t3.launches.size).toBe(1);
+    expect(f.t3.threads.launches.size).toBe(1);
   }),
 );
 
@@ -588,7 +588,7 @@ it.effect(
       expect(sent.threadId).toBe(worker.threadId);
       expect(sent.message).toContain("Write the spec from what we agreed.");
       expect(sent.message).not.toContain("Reply from");
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
       expect(waiting.arrival.origin).toMatchObject({
         runId: worker.runId,
         threadId: worker.threadId,
@@ -621,7 +621,7 @@ it.effect(
         'Write the spec from what we agreed.\n\nReply from the Human step "Review" (Approve):\nSpec it without SMS login.',
       );
       expect(launchBlockId(sent.message)).not.toBe(worker.blockId);
-      expect(f.t3.launches.size).toBe(1);
+      expect(f.t3.threads.launches.size).toBe(1);
       expect(waiting.arrival.origin).toMatchObject({
         runId: worker.runId,
         threadId: worker.threadId,

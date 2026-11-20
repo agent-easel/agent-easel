@@ -40,7 +40,7 @@ it.effect(
       // Assert
       const presentation = latestAppearance(messages)?.presentation;
       expect(presentation?.theme).toStrictEqual({ id: "ocean", name: "Ocean" });
-      expect(presentation?.environmentId).toBe(t3.environmentId);
+      expect(presentation?.environmentId).toBe(t3.connection.environmentId);
       expect(presentation?.modes.light.kind).toBe("inherited");
       expect(presentation?.modes.dark.kind).toBe("inherited");
     }),
@@ -306,7 +306,7 @@ it.effect(
 
       // Assert
       assert(source.ok);
-      expect(source.value?.environmentId).toBe(t3.environmentId);
+      expect(source.value?.environmentId).toBe(t3.connection.environmentId);
     }),
 );
 
@@ -316,7 +316,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { factory, t3, live } = yield* followingService(context);
-      t3.available = false;
+      t3.connection.available = false;
 
       // Act
       assert((yield* factory.configureConnection({ endpoint: "http://127.0.0.1:4888/mcp" })).ok);
@@ -335,7 +335,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { factory, t3, live } = yield* followingService(context);
-      t3.environmentId = "replacement-environment";
+      t3.connection.environmentId = "replacement-environment";
 
       // Act
       assert((yield* factory.recheckConnection()).ok);
@@ -357,7 +357,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { factory, t3, live } = yield* followingService(context);
-      t3.authorized = false;
+      t3.connection.authorized = false;
 
       // Act
       const rechecked = yield* factory.recheckConnection();
@@ -380,7 +380,7 @@ it.effect("a transient outage keeps the last colors", (context) =>
     const { t3, live } = yield* followingService(context);
 
     // Act
-    t3.available = false;
+    t3.connection.available = false;
 
     // Assert
     const messages = yield* nextRead(
@@ -411,7 +411,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { harness, t3 } = yield* stoppedFollowingService(context);
-      t3.available = false;
+      t3.connection.available = false;
 
       // Act
       const factory = yield* harness.service({ t3, connectionRetryMs: 1_000 });
@@ -433,7 +433,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { harness, t3 } = yield* stoppedFollowingService(context);
-      t3.available = false;
+      t3.connection.available = false;
       const factory = yield* harness.service({ t3, connectionRetryMs: 1_000 });
       const restored = subscribe(context, factory.live.watchAppearance());
       yield* Effect.promise(() =>
@@ -443,7 +443,7 @@ it.effect(
       );
       const live = subscribe(context, factory.live.watchAppearance());
       t3.appearance.defaultTheme = "iris";
-      t3.available = true;
+      t3.connection.available = true;
 
       // Act
       const messages = yield* nextRead(
@@ -463,7 +463,7 @@ it.effect(
     Effect.gen(function* () {
       // Arrange
       const { harness, t3 } = yield* stoppedFollowingService(context);
-      t3.available = false;
+      t3.connection.available = false;
       const factory = yield* harness.service({ t3, connectionRetryMs: 1_000 });
       const restored = subscribe(context, factory.live.watchAppearance());
       yield* Effect.promise(() =>

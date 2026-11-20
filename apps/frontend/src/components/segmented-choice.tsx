@@ -36,7 +36,7 @@ export function SegmentedChoice<Value extends string>({
           key={option}
           value={option}
           className={cn(
-            "rounded-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50",
+            "rounded-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-ring disabled:pointer-events-none disabled:opacity-50",
             size === "sm" ? "h-5.5 px-2.5 text-2xs" : "h-6.5 px-3 text-sm",
             "data-[state=checked]:bg-sidebar-accent data-[state=checked]:text-foreground",
             // Forced colors drop the fill; system highlight colors keep the selection visible.

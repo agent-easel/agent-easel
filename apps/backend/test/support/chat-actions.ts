@@ -12,7 +12,6 @@ import {
   type CreatedMessage,
   type InteractionAnswer,
 } from "./controlled-discord.ts";
-import { holdInspection } from "./controlled-t3.ts";
 import { preparedService } from "./prepared-runner.ts";
 import {
   humanReviewFlow,
@@ -190,7 +189,7 @@ export async function pendingStart(
   customId: string,
   options: Parameters<typeof clicked>[4] = {},
 ) {
-  const { inspecting, release } = holdInspection(world.t3);
+  const { inspecting, release } = world.t3.contract.holdInspection();
   const answer = clicked(world.discord, customId, "610000000000000090", 1, options);
   await inspecting;
   return { answer, release };

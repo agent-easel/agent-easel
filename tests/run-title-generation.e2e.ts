@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { beforeEach, test } from "./support/test.ts";
-import { expect } from "e2e";
+import { expect, type App, type Screen } from "e2e";
 import type {
   Result,
   RunTitleSetting,
@@ -28,21 +28,25 @@ async function runTitleSetting(baseUrl: string | undefined, input?: UpdateRunTit
   return result.value;
 }
 
+/** Run titles Settings opened with generation saved off. */
+async function openRunTitlesOff(app: App, screen: Screen) {
+  await runTitleSetting(app.baseUrl, { enabled: false, model: null });
+  await app.open("/settings/run-titles");
+  const generation = screen.getByRole("region", "Generation");
+  return { generation, toggle: generation.getByRole("switch", "Generate Run titles") };
+}
+
 beforeEach(async ({ browser }) => {
   await browser.setViewport({ width: 1440, height: 900 });
 });
 
-test("Run title generation enables locally and saves when the host chooses a provider", async ({
+test("turning on Run title generation without a provider stays on this page, unsaved", async ({
   app,
   screen,
-  browser,
 }) => {
   // Arrange
-  await runTitleSetting(app.baseUrl, { enabled: false, model: null });
-  await app.open("/settings/run-titles");
-  const generation = screen.getByRole("region", "Generation");
-  const toggle = generation.getByRole("switch", "Generate Run titles");
-  await expect(generation.getByRole("button", /^Provider: /)).toHaveCount(0);
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
+  await expect(generation.getByRole("combobox", /^Provider: /)).toHaveCount(0);
 
   // Act
   await toggle.tap();
@@ -51,16 +55,62 @@ test("Run title generation enables locally and saves when the host chooses a pro
   await expect(toggle).toBeChecked();
   await expect(screen.getByText("Not saved yet")).toBeVisible();
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
-  await generation.getByRole("button", /^Provider: /).tap();
-  await screen.getByRole("menuitemradio", "Codex", { exact: true }).tap();
+});
+
+test("with no provider in T3, the Provider list says so instead of showing an empty list", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  await fixture.runImagesAndTitles.noProviders();
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
+  await toggle.tap();
+  await expect(toggle).toBeChecked();
+
+  // Act
+  await generation.getByRole("combobox", /^Provider: /).tap();
+
+  // Assert
+  const list = screen.getByRole("dialog", "Provider", { exact: true });
+  await expect(list.getByRole("status")).toHaveText("T3 offers no providers");
+  await expect(screen.getByRole("listbox")).toHaveCount(0);
+  await expect(screen.getByRole("option")).toHaveCount(0);
+  await app.screenshot("run-titles-no-providers");
+});
+
+test("choosing a provider after turning Run title generation on saves it", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
+  await toggle.tap();
+  await expect(screen.getByText("Not saved yet")).toBeVisible();
+  await generation.getByRole("combobox", /^Provider: /).tap();
+
+  // Act
+  await screen.getByRole("option", "Codex", { exact: true }).tap();
+
+  // Assert
   await expect(screen.getByText("Not saved yet")).toHaveCount(0);
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({
     enabled: true,
     model: { providerInstanceId: "codex-main", modelId: "gpt-6.1-sol" },
   });
-  await browser.reload();
-  await expect(toggle).toBeChecked();
-  await expect(generation.getByRole("button", /^Model: GPT /)).toBeVisible();
+});
+
+test("saved Run title generation opens on with its model", async ({ app, screen }) => {
+  // Arrange
+  await runTitleSetting(app.baseUrl, { enabled: true, model: titleModel });
+
+  // Act
+  await app.open("/settings/run-titles");
+
+  // Assert
+  const generation = screen.getByRole("region", "Generation");
+  await expect(generation.getByRole("switch", "Generate Run titles")).toBeChecked();
+  await expect(generation.getByRole("combobox", /^Model: GPT /)).toBeVisible();
   await app.screenshot("run-titles-host-on");
 });
 

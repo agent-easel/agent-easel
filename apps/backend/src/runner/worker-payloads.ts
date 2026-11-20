@@ -1,6 +1,7 @@
 import type { BlockExit, RunDefinitions } from "@t3-factory/contracts";
 import { HUMAN_EXITS } from "@t3-factory/domain-validation";
-import type { LaunchPayload, SendPayload, T3Target } from "../adapters/t3.ts";
+import type { LaunchPayload, SendPayload } from "../t3/threads.ts";
+import type { T3Target } from "../t3/connection.ts";
 import { attachmentName } from "../run-images.ts";
 import { conversationReportInstructions } from "./report-instructions.ts";
 

@@ -1,5 +1,5 @@
 import { expect, type TestContext } from "@effect/vitest";
-import type { LaunchPayload } from "../../src/adapters/t3.ts";
+import type { LaunchPayload } from "../../src/t3/threads.ts";
 import { authorizedLiveOAuth } from "./boundaries-setup.ts";
 
 export async function launchFixture(c: TestContext) {
@@ -34,7 +34,7 @@ export async function launchFixture(c: TestContext) {
   const exactReads: string[] = [];
   let proof: string | null = null;
   let proofFails = false;
-  const { adapter, external } = await authorizedLiveOAuth(
+  const { live, threads, external } = await authorizedLiveOAuth(
     c,
     {
       attachments: true,
@@ -87,12 +87,13 @@ export async function launchFixture(c: TestContext) {
               ordinal: 2,
               startedAt: "2026-11-01T08:02:00.000Z",
             },
+            { runId: "cancelled-before-start", status: "cancelled", ordinal: 3, startedAt: null },
           ],
         };
       },
     },
     {
-      adapter: {
+      contract: {
         launchRecoveryScope: async () => {
           if (proofFails) throw new Error("The replay proof could not be established.");
           return proof;
@@ -115,7 +116,8 @@ export async function launchFixture(c: TestContext) {
     },
   };
   return {
-    adapter,
+    live,
+    threads,
     external,
     schema,
     payload,

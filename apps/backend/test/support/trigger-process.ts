@@ -14,9 +14,9 @@ const [databasePath, fixturePath, stage, triggerId] = process.argv.slice(2);
 const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
 const crash = async () => process.exit(86);
 const t3 = new ControlledT3();
-t3.approve();
-t3.projects = fixture.projects;
-if (stage === "accepted") t3.beforeLaunch = crash;
+t3.connection.approve();
+t3.projects.catalog = fixture.projects;
+if (stage === "accepted") t3.threads.beforeLaunch = crash;
 const github = new ControlledGitHub();
 for (const [root, repository] of fixture.repositories) github.repositories.set(root, repository);
 github.issues.push(...fixture.issues);
@@ -32,7 +32,7 @@ if (stage === "preflight") {
   // The check's own launch-blocker read inspects T3 as its Start does; the next inspection is that
   // Start's T3 contract snapshot.
   let inspections = 0;
-  t3.beforeInspection = async () => {
+  t3.contract.beforeInspection = async () => {
     if (++inspections === START_INSPECTIONS + 1) await crash();
   };
 }

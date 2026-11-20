@@ -5,24 +5,20 @@ import { ControlledGit } from "./controlled-git.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 const [databasePath, fixturePath, mode] = process.argv.slice(2);
 const fixture = JSON.parse(await readFile(fixturePath!, "utf8"));
-class ExternalEngine extends ControlledT3 {
-  override async launchThread(
-    target: import("../../src/adapters/t3.ts").T3Endpoint,
-    payload: import("../../src/adapters/t3.ts").LaunchPayload,
-  ) {
-    const reference = await super.launchThread(target, payload);
-    await writeFile(
-      fixturePath!,
-      JSON.stringify({ ...fixture, launches: [...this.launches.entries()] }),
-    );
-    if (mode === "crash") process.exit(86); // accepted externally; reservation still on disk
-    return reference;
-  }
-}
-const t3 = new ExternalEngine();
-t3.approve();
-t3.projects = fixture.projects;
-for (const [key, value] of fixture.launches ?? []) t3.launches.set(key, value);
+const t3 = new ControlledT3();
+const launchThread = t3.threads.launchThread.bind(t3.threads);
+t3.threads.launchThread = async (target, payload) => {
+  const reference = await launchThread(target, payload);
+  await writeFile(
+    fixturePath!,
+    JSON.stringify({ ...fixture, launches: [...t3.threads.launches.entries()] }),
+  );
+  if (mode === "crash") process.exit(86); // accepted externally; reservation still on disk
+  return reference;
+};
+t3.connection.approve();
+t3.projects.catalog = fixture.projects;
+for (const [key, value] of fixture.launches ?? []) t3.threads.launches.set(key, value);
 try {
   const f = await openFactory({
     databasePath: databasePath!,

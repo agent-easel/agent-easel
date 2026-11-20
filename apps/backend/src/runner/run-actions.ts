@@ -7,7 +7,7 @@ import type {
 } from "@t3-factory/contracts";
 import { TASK_TITLE_LIMIT } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
-import type { T3Adapter } from "../adapters/t3.ts";
+import type { T3Threads } from "../t3/threads.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
 import type { RuntimeReply, RuntimeReport } from "../runtime-types.ts";
@@ -18,6 +18,7 @@ import { recoveryReady } from "./runner-recovery.ts";
 import type { RunnerSettlement } from "./runner-settle.ts";
 import { runTarget, type RunnerLifecycle } from "./runner-types.ts";
 import { fingerprint } from "../fingerprint.ts";
+import { now } from "../time.ts";
 
 /** Why Continue now changed nothing. */
 const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> = {
@@ -59,7 +60,7 @@ export function openRunActions({
   reconcileTitleGeneration,
 }: {
   store: RunStore;
-  t3: T3Adapter;
+  t3: T3Threads;
   ownedThreads: OwnedThreads;
   lifecycle: RunnerLifecycle;
   freshSnapshot: ContractSnapshots["fresh"];
@@ -133,8 +134,9 @@ export function openRunActions({
       if (!located) return { code: "UNKNOWN_BLOCK" };
       // The report belongs to the thread's current turn, which T3 may not have shown Factory yet.
       const run = yield* store.readRun(located.run_id);
+      const observedSince = yield* now;
       if (run?.gate_open) yield* drive(run.id, "observe");
-      const verdict = yield* store.acceptReport(located.run_id, publicId, report);
+      const verdict = yield* store.acceptReport(located.run_id, publicId, report, observedSince);
       if (report.status === "finished" && verdict.code === "ACCEPTED" && !isClosed())
         yield* fork(drive(located.run_id, "dispatch"));
       return verdict;

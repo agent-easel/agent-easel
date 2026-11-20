@@ -1,5 +1,5 @@
 import { demoImages, demoPullRequest, type DemoImage } from "./seed-support.ts";
-import type { ThreadFacts } from "../../apps/backend/test/support/controlled-thread.ts";
+import type { ThreadFacts } from "../../apps/backend/test/support/controlled-t3-threads.ts";
 
 /** The demo Agents the seeded Flows place, by stable key. */
 export type DemoAgents = Record<"worker" | "reviewer" | "accessibility" | "releaseNotes", string>;
