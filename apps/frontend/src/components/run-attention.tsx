@@ -14,6 +14,7 @@ import { ProblemCard } from "./problem-card.tsx";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Surface } from "@/components/ui/surface";
+import { TextLink } from "@/components/ui/text-link";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../api.ts";
 import {
@@ -492,14 +493,20 @@ function SettlementActions({ run }: { run: RunDetail }) {
   }
   const retryButton = (
     <MutationGate>
-      <Button
-        size="sm"
-        variant={busy ? "outline" : primary === "retry" ? "default" : "link"}
-        disabled={busy}
-        onClick={() => void retry()}
-      >
-        {busy ? "Retrying settlement…" : "Retry settlement"}
-      </Button>
+      {busy || primary === "retry" ? (
+        <Button
+          size="sm"
+          variant={busy ? "outline" : "default"}
+          disabled={busy}
+          onClick={() => void retry()}
+        >
+          {busy ? "Retrying settlement…" : "Retry settlement"}
+        </Button>
+      ) : (
+        <TextLink className="text-xs" onClick={() => void retry()}>
+          Retry settlement
+        </TextLink>
+      )}
     </MutationGate>
   );
   return (

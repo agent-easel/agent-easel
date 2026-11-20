@@ -398,6 +398,35 @@ const reportLinks = [
   "- [Link 12](https://example.com/atlas/12)",
 ].join("\n");
 
+test("Working report footnotes describe each reference and link back to it", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const id = await liveRun(app, "report-footnotes");
+  const report = `See the review notes.[^review]\n\n${reportLinks}\n\n[^review]: Checked on Chromium.`;
+  await applyRunState(app, id, "working reported and idle", report);
+  await app.open(`/runs/${id}`);
+  const review = screen
+    .getByRole("region", "Needs input")
+    .getByRole("article", "Review Implement change in T3");
+
+  // Act
+  await review.getByRole("button", "Read full report", { exact: true }).tap();
+
+  // Assert
+  const reader = screen.getByRole("dialog", "Implement change · Working report", { exact: true });
+  const reference = reader.getByRole("link", "1", { exact: true });
+  const heading = reader.getByRole("heading", "Footnotes", { exact: true });
+  const descriptionId = await heading.getAttribute("id");
+  assert(descriptionId);
+  await expect(reference).toHaveAttribute("aria-describedby", descriptionId);
+  const referenceId = await reference.getAttribute("id");
+  assert(referenceId);
+  const backlink = reader.getByRole("link", "Back to reference 1", { exact: true });
+  await expect(backlink).toHaveAttribute("href", `#${referenceId}`);
+});
+
 test("at a 10 px browser font size, Tab skips the Working report links the clamped preview fades out or hides", async ({
   app,
   screen,

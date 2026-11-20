@@ -33,7 +33,7 @@ export function OpenInT3({
   return (
     <TextLink
       href={href}
-      trailing="external"
+      trailingIcon={ExternalLink}
       className={cn("w-fit shrink-0 whitespace-nowrap", className)}
     >
       Open in T3

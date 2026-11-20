@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CirclePause, CircleX } from "lucide-react";
+import { CirclePause, CircleX, ExternalLink } from "lucide-react";
 import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
@@ -200,7 +200,7 @@ function PreviewIssue({ issue }: { issue: TriggerPreviewIssue }) {
       <TextLink
         href={issue.url}
         tone="neutral"
-        trailing="external"
+        trailingIcon={ExternalLink}
         className="min-w-0 flex-1 text-sm font-normal"
       >
         <span className="min-w-0 truncate">{issue.title}</span>

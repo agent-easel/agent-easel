@@ -25,7 +25,16 @@ import {
 } from "../composer-launch.ts";
 import { useLiveDelivery, useTransport, type TransportState } from "../transport.ts";
 import { useNavigate } from "@tanstack/react-router";
-import { CircleHelp, CloudOff, Info, Play, Unplug, Workflow } from "lucide-react";
+import {
+  ChevronRight,
+  CircleHelp,
+  CloudOff,
+  ExternalLink,
+  Info,
+  Play,
+  Unplug,
+  Workflow,
+} from "lucide-react";
 import { ProjectPicker, useProjectCatalog } from "../components/project-picker.tsx";
 import { TextLink } from "@/components/ui/text-link";
 import { SettingsLink, StudioLink } from "../components/app-link.tsx";
@@ -447,7 +456,7 @@ function RefreshProjects({ model }: { model: Composer }) {
 function CauseLink({ cause }: { cause: StartCause }) {
   if (cause.destination === "reporting")
     return (
-      <TextLink asChild trailing="chevron">
+      <TextLink asChild trailingIcon={ChevronRight}>
         <SettingsLink selection={{ tab: "agent-reporting" }}>
           Open Settings → Agent reporting
         </SettingsLink>
@@ -455,20 +464,20 @@ function CauseLink({ cause }: { cause: StartCause }) {
     );
   if (cause.destination === "connection")
     return (
-      <TextLink asChild trailing="chevron">
+      <TextLink asChild trailingIcon={ChevronRight}>
         <SettingsLink selection={{ tab: "connection" }}>Open T3 connection settings</SettingsLink>
       </TextLink>
     );
   if (cause.destination === "flows")
     return (
-      <TextLink asChild trailing="chevron">
+      <TextLink asChild trailingIcon={ChevronRight}>
         <StudioLink selection={{ tab: "flows", flowId: cause.flowId }}>
           Open Studio → Flows
         </StudioLink>
       </TextLink>
     );
   return (
-    <TextLink asChild trailing="chevron">
+    <TextLink asChild trailingIcon={ChevronRight}>
       <StudioLink selection={{ tab: "agents" }}>Open Studio → Agents</StudioLink>
     </TextLink>
   );
@@ -530,7 +539,7 @@ function connectionLaunchNotice(model: Composer) {
         icon={Info}
         title="Connect Factory to T3"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>Open T3 connection</SettingsLink>
           </TextLink>
         }
@@ -544,7 +553,7 @@ function connectionLaunchNotice(model: Composer) {
         icon={Unplug}
         title="T3 is disconnected"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
               Open T3 connection settings
             </SettingsLink>
@@ -562,7 +571,7 @@ function connectionLaunchNotice(model: Composer) {
         tone="attention"
         title="Authorize Factory in T3"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
               Open T3 connection settings
             </SettingsLink>
@@ -580,7 +589,7 @@ function connectionLaunchNotice(model: Composer) {
         tone="attention"
         title="T3 version is incompatible"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <SettingsLink selection={{ tab: "connection" }}>
               Open T3 connection settings
             </SettingsLink>
@@ -650,7 +659,7 @@ function setupLaunchNotice(model: Composer) {
         action={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
             <RefreshProjects model={model} />
-            <TextLink trailing="external" href={T3_APP_URL}>
+            <TextLink trailingIcon={ExternalLink} href={T3_APP_URL}>
               Open T3
             </TextLink>
           </span>
@@ -680,7 +689,7 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Create your first Agent"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <StudioLink selection={{ tab: "agents" }}>Go to Agents</StudioLink>
           </TextLink>
         }
@@ -694,7 +703,7 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Set up an Agent"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <StudioLink selection={{ tab: "agents" }}>Go to Agents</StudioLink>
           </TextLink>
         }
@@ -708,7 +717,7 @@ function setupLaunchNotice(model: Composer) {
         icon={Info}
         title="Create your first Flow"
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <StudioLink selection={{ tab: "flows" }}>Go to Flows</StudioLink>
           </TextLink>
         }
@@ -723,7 +732,7 @@ function setupLaunchNotice(model: Composer) {
         tone="error"
         title={`No ready Flows for ${card.projectTitle}`}
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <StudioLink selection={{ tab: "flows" }}>Open Flows in Studio</StudioLink>
           </TextLink>
         }
@@ -737,7 +746,7 @@ function setupLaunchNotice(model: Composer) {
         tone="error"
         title={`“${card.flowName}” isn’t ready to run`}
         action={
-          <TextLink asChild trailing="chevron">
+          <TextLink asChild trailingIcon={ChevronRight}>
             <StudioLink selection={{ tab: "flows", flowId: card.flowId }}>
               Open {card.flowName} in Flows
             </StudioLink>

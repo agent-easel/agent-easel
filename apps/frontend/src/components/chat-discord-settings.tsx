@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Unplug } from "lucide-react";
+import { ExternalLink, Unplug } from "lucide-react";
 import type {
   DiscordCheckOutcome,
   DiscordSettings,
@@ -410,7 +410,7 @@ function HeaderActions({ page, settings }: { page: DiscordPage; settings: Discor
   return (
     <>
       {needsSetupGuide(settings) && (
-        <TextLink href={SETUP_GUIDE_URL} trailing="external">
+        <TextLink href={SETUP_GUIDE_URL} trailingIcon={ExternalLink}>
           Setup guide
         </TextLink>
       )}

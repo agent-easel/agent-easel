@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import type { RunPullRequest, RunWorkerRepository } from "@t3-factory/contracts";
-import { GitBranch, GitPullRequest } from "lucide-react";
+import { ExternalLink, GitBranch, GitPullRequest } from "lucide-react";
 import { TextLink } from "@/components/ui/text-link";
 
 export function repositorySummary(workers: readonly RunWorkerRepository[]) {
@@ -61,7 +61,7 @@ export function RunRepositories({
           <GitPullRequest aria-hidden className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
             {links ? (
-              <TextLink href={pr.url} trailing="external" className="break-all">
+              <TextLink href={pr.url} trailingIcon={ExternalLink} className="break-all">
                 {pr.repository} #{pr.number}
               </TextLink>
             ) : (

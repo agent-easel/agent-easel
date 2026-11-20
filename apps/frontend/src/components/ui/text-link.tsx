@@ -1,17 +1,11 @@
 import type { ComponentProps, ReactNode } from "react";
-import { ChevronRight, ExternalLink } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Slot } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 const tones = {
   link: "text-link",
   neutral: "text-muted-foreground hover:text-foreground focus-visible:text-foreground",
-} as const;
-
-const trailingIcons = {
-  none: null,
-  chevron: <ChevronRight aria-hidden className="size-3.5 shrink-0" strokeWidth={1.5} />,
-  external: <ExternalLink aria-hidden className="size-3.5 shrink-0" strokeWidth={1.5} />,
 } as const;
 
 // Size and leading come from the surrounding text. The ring overrides undo AppLink's own focus
@@ -22,8 +16,7 @@ const base =
 type TextLinkStyle = {
   /** `neutral` is secondary text that turns primary on hover and focus. */
   tone?: keyof typeof tones;
-  /** `chevron` moves forward in the app; `external` leaves it or opens T3. */
-  trailing?: keyof typeof trailingIcons;
+  trailingIcon?: LucideIcon;
   className?: string;
   children: ReactNode;
 };
@@ -51,14 +44,16 @@ type TextLinkProps = TextLinkStyle &
  */
 export function TextLink({
   tone = "link",
-  trailing = "none",
+  trailingIcon: TrailingIcon,
   className,
   children,
   asChild,
   ...props
 }: TextLinkProps) {
   const classes = cn(base, tones[tone], className);
-  const icon = trailingIcons[trailing];
+  const icon = TrailingIcon && (
+    <TrailingIcon aria-hidden className="size-3.5 shrink-0" strokeWidth={1.5} />
+  );
   if (asChild)
     return (
       <Slot.Root data-slot="text-link" className={classes} {...props}>

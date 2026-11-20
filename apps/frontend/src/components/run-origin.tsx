@@ -1,5 +1,5 @@
 import type { RunOrigin } from "@t3-factory/contracts";
-import { CircleDashed, Zap } from "lucide-react";
+import { CircleDashed, ExternalLink, Zap } from "lucide-react";
 import { TextLink } from "@/components/ui/text-link";
 import { InspectorSection } from "./inspector-section.tsx";
 
@@ -51,7 +51,7 @@ export function RunOriginSection({ origin }: { origin: RunOrigin }) {
       <TextLink
         href={origin.url}
         tone="neutral"
-        trailing="external"
+        trailingIcon={ExternalLink}
         className="flex min-w-0 gap-2 text-sm"
       >
         <CircleDashed aria-hidden className="size-3.5 shrink-0" strokeWidth={1.75} />

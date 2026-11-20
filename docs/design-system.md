@@ -178,11 +178,12 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   layout and content stay at the call site. A popover or other primitive that renders its own
   element takes Surface's classes instead of nesting a Surface.
 - **Text link**: TextLink, for inline links and link-style actions. Its Link tone uses `--link`;
-  Neutral keeps secondary text and turns primary on hover and focus. A trailing chevron moves
-  forward in the app; the external ↗ leaves it or opens T3. It underlines on hover only, shows
-  the `--ring` outline on keyboard focus, and a disabled action is at 50% opacity. In-app routes
-  wrap AppLink, which stays the typed-route link; external links open in a new tab; actions are
-  buttons.
+  Neutral keeps secondary text and turns primary on hover and focus. The optional trailing icon
+  accepts any Lucide icon component. Common choices are `ChevronRight` for forward navigation in
+  the app, `ExternalLink` for leaving the app or opening T3, and `Maximize2` for opening a reader.
+  It underlines on hover only, shows the `--ring` outline on keyboard focus, and a disabled action
+  is at 50% opacity. In-app routes wrap AppLink, which stays the typed-route link; external links
+  open in a new tab; actions are buttons.
 - **Navigation row**: NavRow, wrapping a typed AppLink with `asChild`. Compact rows are 32 px
   tall, for Settings, and can carry a status or attention marker; Regular rows are 34 px tall,
   for Studio, and can carry a trailing count. The selected row uses `bg-sidebar-accent`,
