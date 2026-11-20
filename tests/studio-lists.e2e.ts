@@ -164,14 +164,13 @@ test("the Flows owner filter lists All, Global and each Project", async ({
   await shot(app, browser, "flows-owner-filter");
 });
 
-test("the Owner filter names a filtered Project that left the catalog Unknown Project", async ({
-  app,
-  screen,
-  browser,
-  fixture,
-}) => {
-  // Arrange
-  const title = "Journey · Leaving Project";
+/** The Flows list filtered on a new Project titled `title`, whose id is returned. */
+async function filterOnNewProject(
+  app: App,
+  screen: Screen,
+  fixture: { projects: { add(input: { title: string }): Promise<{ id: string }> } },
+  title: string,
+) {
   const { id } = await fixture.projects.add({ title });
   await app.open("/studio/flows");
   await screen.getByRole("combobox", "Owner filter: All", { exact: true }).tap();
@@ -179,6 +178,17 @@ test("the Owner filter names a filtered Project that left the catalog Unknown Pr
   await expect(
     screen.getByRole("combobox", `Owner filter: ${title}`, { exact: true }),
   ).toBeVisible();
+  return id;
+}
+
+test("the Owner filter names a filtered Project that left the catalog Unknown Project", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const id = await filterOnNewProject(app, screen, fixture, "Journey · Leaving Project");
 
   // Act
   await fixture.projects.forget({ id });
@@ -188,6 +198,31 @@ test("the Owner filter names a filtered Project that left the catalog Unknown Pr
     screen.getByRole("combobox", "Owner filter: Unknown Project", { exact: true }),
   ).toBeVisible();
   await shot(app, browser, "owner-filter-unknown-project");
+});
+
+test("New Flow from a filter on a Project that left the catalog describes its owner as Unknown Project", async ({
+  app,
+  screen,
+  browser,
+  fixture,
+}) => {
+  // Arrange
+  const id = await filterOnNewProject(app, screen, fixture, "Journey · Gone owner");
+  await fixture.projects.forget({ id });
+  await expect(
+    screen.getByRole("combobox", "Owner filter: Unknown Project", { exact: true }),
+  ).toBeVisible();
+
+  // Act
+  await screen.getByRole("button", "New Flow", { exact: true }).tap();
+
+  // Assert
+  const owner = screen
+    .getByRole("dialog", "New Flow", { exact: true })
+    .getByRole("combobox", "Owning Project", { exact: true });
+  await expect(owner).toContainText("Unknown Project");
+  expect(await descriptionOf(browser, owner)).toMatch(/^Unknown Project /);
+  await shot(app, browser, "new-flow-unknown-owner");
 });
 
 test("a Flows search with no match says so", async ({ app, screen, browser }) => {

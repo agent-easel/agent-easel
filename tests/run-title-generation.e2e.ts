@@ -57,6 +57,28 @@ test("turning on Run title generation without a provider stays on this page, uns
   expect(await runTitleSetting(app.baseUrl)).toMatchObject({ enabled: false, model: null });
 });
 
+test("with no provider in T3, the Provider list says so instead of showing an empty list", async ({
+  app,
+  screen,
+  fixture,
+}) => {
+  // Arrange
+  await fixture.runImagesAndTitles.noProviders();
+  const { generation, toggle } = await openRunTitlesOff(app, screen);
+  await toggle.tap();
+  await expect(toggle).toBeChecked();
+
+  // Act
+  await generation.getByRole("combobox", /^Provider: /).tap();
+
+  // Assert
+  const list = screen.getByRole("dialog", "Provider", { exact: true });
+  await expect(list.getByRole("status")).toHaveText("T3 offers no providers");
+  await expect(screen.getByRole("listbox")).toHaveCount(0);
+  await expect(screen.getByRole("option")).toHaveCount(0);
+  await app.screenshot("run-titles-no-providers");
+});
+
 test("choosing a provider after turning Run title generation on saves it", async ({
   app,
   screen,

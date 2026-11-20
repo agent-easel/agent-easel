@@ -115,7 +115,7 @@ export function ChoiceMenu({
   placeholder: string;
   /** What the trigger shows for a value that is not one of the choices. */
   unlistedLabel?: string | undefined;
-  /** What the list says when there is nothing to choose. */
+  /** What the list says when there is nothing to choose; "Nothing to choose" unless given. */
   empty?: string;
   /** Trigger size where the form is denser than the composer, such as a Settings row. */
   className?: string;
@@ -438,7 +438,8 @@ function listStatus(
   empty: string | undefined,
   noMatch: string | undefined,
 ) {
-  if (!choices.length) return empty;
+  // An empty list always says why, so its popup is a described dialog, never an empty listbox.
+  if (!choices.length) return empty ?? "Nothing to choose";
   return choices.some(matches) ? undefined : noMatch;
 }
 

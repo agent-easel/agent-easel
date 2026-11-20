@@ -340,6 +340,8 @@ function OwningProjectMenu({
         choices={projectChoices(targets, ` — can’t own new ${plural}`)}
         disabled={disabled}
         placeholder="Choose a Project"
+        // A chosen Project the catalog no longer holds keeps its resolved title.
+        unlistedLabel={chosen.title}
         trigger={{ icon: true, detail: chosen.detail ?? "", describesValue: true }}
         describedBy={describedBy}
         problemTone="error"
@@ -412,6 +414,7 @@ export function OwnerTargetMenu({
         choices={ownerChoices(picker.targets, unavailableReason)}
         disabled={disabled}
         placeholder="Choose an owner"
+        unlistedLabel={picker.chosen.title}
         trigger={{ icon: true, detail: context, describesValue: true }}
         describedBy={picker.blocked ? `${id}-status` : undefined}
         problemTone="error"

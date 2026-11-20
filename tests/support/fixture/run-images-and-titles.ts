@@ -19,6 +19,10 @@ export function runImagesAndTitlesFixture(
   const providers = [...t3.controlledProviders];
   return {
     actions: {
+      /** T3 offers no provider until the reset. */
+      noProviders() {
+        t3.controlledProviders.splice(0, t3.controlledProviders.length);
+      },
       attachments({ supported }: { supported: boolean }) {
         t3.support.attachmentLimit = supported ? 8 : null;
       },
