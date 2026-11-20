@@ -28,6 +28,7 @@
     "format:check": "vp fmt --check",
     "lint": "vp lint",
     "fallow": "fallow dead-code --fail-on-issues --quiet --no-cache && fallow dupes --fail-on-issues --quiet --no-cache && fallow health --complexity --fail-on-issues --quiet --no-cache",
+    "check:e2e-configs": "node scripts/check-e2e-configs.mjs",
     "check:git-attribution": "node scripts/check-git-attribution.mjs",
     "check:ui-evidence": "node scripts/check-ui-evidence.mjs",
     "prepare": "vp config --no-agent",
