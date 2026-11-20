@@ -1,0 +1,4 @@
+interface:
+  display_name: "Delete Comments"
+  short_description: "Audit comments and ratchet down existing prose"
+  default_prompt: "Use $delete-comment to audit and remove comments in this repository."

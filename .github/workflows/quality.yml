@@ -45,6 +45,8 @@ jobs:
         run: node scripts/check-git-attribution.mjs --event "$GITHUB_EVENT_PATH"
       - name: "Full code gate for PR ${{ github.event.pull_request.number || 0 }}: ${{ github.event.pull_request.base.sha || github.event.before }}..${{ github.event.pull_request.head.sha || github.sha }}"
         if: env.RUN_CODE == 'true'
+        env:
+          FACTORY_COMMENT_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           pnpm install --frozen-lockfile
           pnpm check

@@ -28,7 +28,7 @@
     "e2e:explore": "e2e explore --config e2e.explore.config.ts",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
-    "lint": "vp lint",
+    "lint": "vp run lint:workspace",
     "fallow": "fallow dead-code --fail-on-issues --quiet --no-cache && fallow dupes --fail-on-issues --quiet --no-cache && fallow health --complexity --fail-on-issues --quiet --no-cache",
     "check:e2e-configs": "node scripts/check-e2e-configs.mjs",
     "check:git-attribution": "node scripts/check-git-attribution.mjs",

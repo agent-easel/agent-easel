@@ -461,6 +461,7 @@ unwired rules, so the block stays a usable size; a later unwired rule is connect
 **Auto-arrange** lays out the draft left to right (Flow input leftmost, correction edges returning left, including disconnected blocks and loops, with orthogonal routes) and fits the
 result. Progress is shown; an error, the 15-second limit, an edit or a drag leaves the draft intact. Positions are draft changes persisted by **Save**; routed wires are transient and recomputed
 on load only when the saved positions can be preserved, so blocks never move on reload. Manual edits return to normal wire paths.
+Studio and backend authoring share the [layout geometry](adr/0003-share-flow-canvas-geometry-with-auto-layout.md).
 
 The canvas shares the Run canvas toolbar: icon-only zoom, **Fit Flow**, **Auto-arrange** and keyboard shortcuts, each with its tooltip, and no hint text. Scale is 20%–200%; **+**/**−** zoom around the viewport center and **0** fits (bare keys leave browser zoom alone; bindings in
 [Keyboard shortcuts](keyboard-shortcuts.md)); pinch or **Mod**+wheel (Command on macOS, Control elsewhere) zooms at the pointer, including Safari pinch; plain scroll, arrow keys and dragging
