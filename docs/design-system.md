@@ -243,8 +243,8 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   success check, then the title and its one-sentence reason. The heading names the state, so it
   is announced without colour.
 - **Setup harness**: HarnessRow (Figma Setup/HarnessRow) for one agent harness in First-run
-  setup: the harness name, the configuration paths Factory writes and its install status badge,
-  as a group named after the harness. Rows sit in a grouped Surface.
+  setup: the harness name, the configuration paths Factory writes, the installation's own message
+  and its install status badge, as a group named after the harness. Rows sit in a grouped Surface.
 - **Canvas**: the canvas surface, which owns block geometry, ports, wires and the dot grid for
   both the Flow editor and the execution canvas.
 

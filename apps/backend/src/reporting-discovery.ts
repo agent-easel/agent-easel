@@ -4,7 +4,12 @@ import { readFile, realpath, stat, lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { createHash } from "node:crypto";
-import type { ReportingInstallation, T3Connection } from "@t3-factory/contracts";
+import {
+  REPORTING_DISCOVERY_REFUSED,
+  REPORTING_NONE_ENABLED,
+  type ReportingInstallation,
+  type T3Connection,
+} from "@t3-factory/contracts";
 import { isLocalEndpoint } from "./endpoint-local.ts";
 import { withReportingInstallationActions } from "./reporting-installation-actions.ts";
 import { isReportingDriver, providerReporting } from "./reporting-drivers.ts";
@@ -26,9 +31,9 @@ function expandHomePath(value: string, home: string): string {
   return value;
 }
 
-const unknownTarget = (message: string): ReportingInstallation =>
+const unknownTarget = (message: string, id = REPORTING_DISCOVERY_REFUSED): ReportingInstallation =>
   withReportingInstallationActions({
-    id: "unavailable",
+    id,
     provider: "Unknown",
     instances: [],
     path: null,
@@ -307,7 +312,12 @@ export const discoverReporting = Effect.fn(function* (
     }
     return grouped.size
       ? [...grouped.values()]
-      : [unknownTarget("No enabled provider instances found in local T3 settings.")];
+      : [
+          unknownTarget(
+            "No enabled provider instances found in local T3 settings.",
+            REPORTING_NONE_ENABLED,
+          ),
+        ];
   }).pipe(
     Effect.catchCause((cause) => {
       const error = Cause.squash(cause);

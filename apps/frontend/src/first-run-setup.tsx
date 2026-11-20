@@ -9,11 +9,13 @@ import {
   Unplug,
   Workflow,
 } from "lucide-react";
-import type {
-  DetectedT3,
-  FirstRunSetup,
-  ReportingInstallation,
-  T3Connection,
+import {
+  REPORTING_DISCOVERY_REFUSED,
+  REPORTING_NONE_ENABLED,
+  type DetectedT3,
+  type FirstRunSetup,
+  type ReportingInstallation,
+  type T3Connection,
 } from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -40,25 +42,31 @@ const detectionRecheckMs = 2000;
 /**
  * The last full-window state before the application: until the host records First-run setup
  * as completed, no product route mounts. Completion is read only from the setup status, never
- * from the live connection, so a later T3 outage does not bring this screen back. Approved
- * clients keep re-reading it while visible, because only the host can complete setup.
+ * from the live connection, so a later T3 outage does not bring this screen back. The status is
+ * re-read while visible until completed: approved clients wait for the host to complete it, and
+ * the host follows T3's detection and the harnesses T3 keeps off.
  */
 export function FirstRunSetupGate({ children }: { children: ReactNode }) {
   const remote = useClientScope() === "remote";
   const [setup, setSetup] = useState<FirstRunSetup | null>(null);
-  const { failure, refresh } = useRefreshSchedule({
+  const { failure, refresh, supersede } = useRefreshSchedule({
     read: api.getFirstRunSetup,
     apply: setSetup,
     intervalMs: detectionRecheckMs,
-    watching: setup !== null && !setup.completed && (remote || !setup.detectedT3),
+    watching: setup !== null && !setup.completed,
   });
   useEffect(() => {
     void refresh();
   }, [refresh]);
+  // A read that started before completion was recorded must not reopen the screen.
+  const completed = (recorded: FirstRunSetup) => {
+    supersede();
+    setSetup(recorded);
+  };
   if (setup?.completed) return children;
   if (setup && remote) return <HostSetupProgressScreen onCheckAgain={refresh} />;
   if (setup)
-    return <FirstRunSetupScreen setup={setup} onCheckAgain={refresh} onCompleted={setSetup} />;
+    return <FirstRunSetupScreen setup={setup} onCheckAgain={refresh} onCompleted={completed} />;
   if (failure)
     return (
       <GateScreen
@@ -177,7 +185,12 @@ function InstallStepHeader({
         number={2}
         state="done"
         title={`Installed in ${names(listed.map((target) => target.provider))}`}
-        detail="factory-runtime MCP · $factory-block · factory-start-run · setup-factory"
+        detail={
+          // Reporting is installed without the optional skills when their copies are missing or old.
+          listed.every((target) => target.launchSkill === "current")
+            ? "factory-runtime MCP · $factory-block · factory-start-run · setup-factory"
+            : "factory-runtime MCP · $factory-block"
+        }
       />
     );
   if (!connected)
@@ -292,13 +305,17 @@ function InstallStep({
   onCheckAgain: () => Promise<void>;
 }) {
   const { targets, error, readDetails, refresh, running, failures, install } = useReportingState();
-  // The shared read may still hold the answer from before T3 was Connected.
+  // The shared read may still hold the answer from before T3 was Connected, and a harness turned
+  // on or off in T3 changes the caption: the list is read again with it.
   const [checked, setChecked] = useState(false);
+  const offKey = offInT3.join(" ");
   useEffect(() => {
     void refresh().finally(() => setChecked(true));
-  }, [refresh]);
+  }, [refresh, offKey]);
   const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
-  const caption = offInT3.length > 0 && (
+  // Discovery could not read T3's harnesses: turning one on in T3 would not help.
+  const refusal = targets?.find((target) => target.id === REPORTING_DISCOVERY_REFUSED);
+  const caption = !refusal && offInT3.length > 0 && (
     <p className="text-2xs font-medium text-subtle-foreground">
       {offInT3.length === 1
         ? `${names(offInT3)} is off in T3. Turn it on there to include it.`
@@ -324,13 +341,24 @@ function InstallStep({
         Checking harnesses…
       </StatusBadge>
     );
+  else if (refusal)
+    content = (
+      <ProblemCard
+        tone="attention"
+        density="compact"
+        title="Couldn’t check your harnesses"
+        action={<TextLink onClick={checkAgain}>Check again</TextLink>}
+      >
+        {refusal.message}
+      </ProblemCard>
+    );
   else if (!listed.length)
     content = (
       <ProblemCard
         tone="attention"
         density="compact"
         title="Turn on a harness in T3"
-        details={targets?.find((target) => target.instances.length === 0)?.message}
+        details={targets?.find((target) => target.id === REPORTING_NONE_ENABLED)?.message}
         action={<TextLink onClick={checkAgain}>Check again</TextLink>}
       >
         None of the harnesses Factory installs into is on in T3. Turn one on in T3’s settings, then
@@ -394,7 +422,10 @@ function InstallStep({
   );
 }
 
-/** The listed harnesses with each one's paths and live install status. */
+/**
+ * The listed harnesses with each one's paths, message and live install status. A target needing
+ * attention or whose install failed explains itself in its problem card instead.
+ */
 function HarnessList({
   listed,
   className,
@@ -410,6 +441,9 @@ function HarnessList({
           key={target.id}
           name={providerName(target.provider)}
           paths={[target.path, target.skillsPath].filter((path) => path !== null)}
+          message={
+            target.status === "needs-attention" || failures[target.id] ? undefined : target.message
+          }
           status={targetStatus(target, running === target.id, !!failures[target.id])}
         />
       ))}
@@ -456,6 +490,28 @@ const runningTitle = (detected: DetectedT3) =>
     ? `T3 ${detected.serverVersion} is running on this computer`
     : "T3 is running on this computer";
 
+/** One step action at a time, with its failure shown below the step. */
+function useStepOperation() {
+  const [busy, setBusy] = useState(false);
+  const [operationError, setOperationError] = useState("");
+  const run = async (operation: () => Promise<void>) => {
+    setBusy(true);
+    setOperationError("");
+    await operation()
+      .catch((cause: unknown) => setOperationError(String(cause)))
+      .finally(() => setBusy(false));
+  };
+  const errorCard = operationError && (
+    <ProblemCard
+      tone="error"
+      density="compact"
+      title="Couldn’t connect to T3"
+      details={operationError}
+    />
+  );
+  return { busy, run, errorCard };
+}
+
 /**
  * Connect saves the address through the existing configure operation, then starts the existing
  * host authorization; waiting, reopening and advancing follow the live connection.
@@ -468,79 +524,19 @@ function ConnectStep({
   onCheckAgain: () => Promise<void>;
 }) {
   const { connection, presentation, setConnection } = useConnectionState();
-  const [busy, setBusy] = useState(false);
-  // Explanations of a failed attempt belong to an attempt made here, not to the saved state.
-  const [attempted, setAttempted] = useState(false);
-  const [operationError, setOperationError] = useState("");
+  const { busy, run, errorCard } = useStepOperation();
   const [draft, setDraft] = useState("");
   const invalid = !!draft.trim() && !allowedAddress(draft);
-  const run = async (operation: () => Promise<void>) => {
-    setBusy(true);
-    setOperationError("");
-    await operation()
-      .catch((cause: unknown) => setOperationError(String(cause)))
-      .finally(() => setBusy(false));
-  };
   const connect = (endpoint: string) =>
     run(async () => {
-      setAttempted(true);
       setConnection(await api.configureConnection({ endpoint }));
       setConnection(await api.authorizeConnection());
     });
-  const reopen = () =>
-    run(async () => {
-      setConnection(await api.openConnectionAuthorization());
-    });
-  const errorCard = operationError && (
-    <ProblemCard
-      tone="error"
-      density="compact"
-      title="Couldn’t connect to T3"
-      details={operationError}
-    />
-  );
-  const endpoint = connection?.endpoint;
-  if (presentation === "authorization-required" && connection?.authorizationPending && endpoint)
-    return (
-      <div className="grid gap-3 pl-8.5">
-        <T3Row
-          title={
-            detected?.endpoint === endpoint ? runningTitle(detected) : "T3 at the entered address"
-          }
-          endpoint={endpoint}
-        >
-          <span role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <LoaderCircle
-              aria-hidden
-              strokeWidth={1.5}
-              className="size-3.5 animate-spin text-link motion-reduce:animate-none"
-            />
-            Waiting for approval
-          </span>
-        </T3Row>
-        <ProblemCard
-          tone="info"
-          density="compact"
-          title="Approve Factory in your browser"
-          action={
-            <MutationGate>
-              <TextLink trailingIcon={ExternalLink} disabled={busy} onClick={() => void reopen()}>
-                Reopen approval page
-              </TextLink>
-            </MutationGate>
-          }
-        >
-          T3’s approval page is open in the browser on this computer. This screen moves on by itself
-          once you approve.
-        </ProblemCard>
-        {errorCard}
-      </div>
-    );
+  if (presentation === "authorization-required" && connection?.authorizationPending)
+    return <WaitingForApproval connection={connection} detected={detected} />;
   return (
     <div className="grid gap-3 pl-8.5">
-      {!busy && (
-        <AttemptProblem connection={connection} presentation={presentation} attempted={attempted} />
-      )}
+      {!busy && <AttemptProblem connection={connection} presentation={presentation} />}
       {errorCard}
       {detected ? (
         <>
@@ -566,7 +562,12 @@ function ConnectStep({
           Start T3 Code here and this step finds it by itself — or enter its address below.
         </ProblemCard>
       )}
-      <Disclosure label="Use another address · how to find it" defaultOpen={!detected}>
+      {/* Remounted when detection changes, so each state starts as its design opens it. */}
+      <Disclosure
+        key={detected ? "detected" : "not-found"}
+        label="Use another address · how to find it"
+        defaultOpen={!detected}
+      >
         <div className="pl-4.5">
           <T3AddressHelp invalid={invalid}>
             <T3AddressForm
@@ -584,15 +585,78 @@ function ConnectStep({
   );
 }
 
-/** The connection's own explanation of why it is not Connected after an attempt from here. */
+/** Figma F03: approval waits in the host's browser, which Reopen asks to open again. */
+function WaitingForApproval({
+  connection,
+  detected,
+}: {
+  connection: T3Connection;
+  detected: DetectedT3 | null;
+}) {
+  const { setConnection } = useConnectionState();
+  const { busy, run, errorCard } = useStepOperation();
+  /** The explanation a Reopen answered, when it changed it: the host browser could not open. */
+  const [reopenProblem, setReopenProblem] = useState("");
+  const reopen = () =>
+    run(async () => {
+      const before = connection.explanation;
+      const reopened = await api.openConnectionAuthorization();
+      setConnection(reopened);
+      // An unchanged answer repeats the shown state; a changed one is a failure, or ends one.
+      if (reopened.explanation !== before)
+        setReopenProblem((shown) => (before === shown ? "" : reopened.explanation));
+    });
+  // The host rechecks within seconds and then no longer reports the failed open.
+  const reopenFailed = !!reopenProblem && connection.explanation === reopenProblem;
+  const endpoint = connection.endpoint ?? "";
+  return (
+    <div className="grid gap-3 pl-8.5">
+      <T3Row
+        title={
+          detected?.endpoint === endpoint ? runningTitle(detected) : "T3 at the entered address"
+        }
+        endpoint={endpoint}
+      >
+        <span role="status" className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <LoaderCircle
+            aria-hidden
+            strokeWidth={1.5}
+            className="size-3.5 animate-spin text-link motion-reduce:animate-none"
+          />
+          Waiting for approval
+        </span>
+      </T3Row>
+      <ProblemCard
+        tone={reopenFailed ? "attention" : "info"}
+        density="compact"
+        title="Approve Factory in your browser"
+        action={
+          <MutationGate>
+            <TextLink trailingIcon={ExternalLink} disabled={busy} onClick={() => void reopen()}>
+              Reopen approval page
+            </TextLink>
+          </MutationGate>
+        }
+      >
+        {reopenFailed
+          ? connection.explanation
+          : "T3’s approval page is open in the browser on this computer. This screen moves on by itself once you approve."}
+      </ProblemCard>
+      {errorCard}
+    </div>
+  );
+}
+
+/**
+ * The connection's own explanation of why it is not Connected. A fresh host has no saved address,
+ * so a saved one means an attempt was made, here, before a reload or in another host window.
+ */
 function AttemptProblem({
   connection,
   presentation,
-  attempted,
 }: {
   connection: T3Connection | null;
   presentation: ConnectionPresentation;
-  attempted: boolean;
 }) {
   if (!connection) return null;
   if (presentation === "incompatible")
@@ -606,7 +670,10 @@ function AttemptProblem({
         {connection.explanation}
       </ProblemCard>
     );
-  if (!attempted || (presentation !== "authorization-required" && presentation !== "unavailable"))
+  if (
+    !connection.endpoint ||
+    (presentation !== "authorization-required" && presentation !== "unavailable")
+  )
     return null;
   return (
     <ProblemCard
