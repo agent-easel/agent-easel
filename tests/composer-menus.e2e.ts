@@ -526,6 +526,9 @@ test("a chosen not-ready Flow stays invalid and explained while another card has
   expect(pageString(await browser.evaluate(flowDescription))).toBe(
     "“Model-less later review” isn’t ready to run.",
   );
+  await expect(
+    screen.getByRole("alert").filter({ hasText: "“Model-less later review” isn’t ready to run." }),
+  ).toHaveCount(1);
   await app.screenshot("after-flow-not-ready-disconnected");
 });
 

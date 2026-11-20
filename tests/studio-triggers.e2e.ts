@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import type {
   Result,
@@ -266,14 +267,20 @@ async function repairingTriggerFlow(app: App, screen: Screen) {
 
 /** That Flow's Agent opened over the Flow and the Trigger. */
 async function agentOverRepair(app: App, screen: Screen) {
-  await repairingTriggerFlow(app, screen);
+  const repairing = await repairingTriggerFlow(app, screen);
   await screen.getByRole("link", "Open Agent", { exact: true }).tap();
   await expect(screen.getByRole("heading", "Agents", { exact: true })).toBeVisible();
+  return repairing;
 }
 
-/** Back to Trigger from that edited Flow, asking whether to discard the Flow draft. */
-async function discardPrompt(app: App, screen: Screen) {
-  const repairing = await repairingTriggerFlow(app, screen);
+/**
+ * Back to Trigger from that edited Flow after its Agent was opened over it and closed, asking
+ * whether to discard the Flow draft.
+ */
+async function discardPrompt(app: App, screen: Screen, browser: Browser) {
+  const repairing = await agentOverRepair(app, screen);
+  await browser.keyboard.press("Escape");
+  await expect(screen.getByLabel("Flow name", { exact: true })).toHaveValue(flowDraftName);
   await screen.getByRole("button", "Back to Trigger", { exact: true }).tap();
   return { ...repairing, discard: screen.getByRole("dialog", "Discard unsaved changes?") };
 }
@@ -324,13 +331,13 @@ test("going back to the Trigger from an edited Flow asks before discarding the F
   await expect(screen.getByRole("dialog", "Discard unsaved changes?")).toBeVisible();
 });
 
-test("discarding the Flow draft returns to the Trigger with its edits", async ({
+test("discarding the Flow draft after its Agent was opened and closed returns to the Trigger with its edits", async ({
   app,
   browser,
   screen,
 }) => {
   // Arrange
-  const { flowPicker, flowToRepair, discard } = await discardPrompt(app, screen);
+  const { flowPicker, flowToRepair, discard } = await discardPrompt(app, screen, browser);
 
   // Act
   await discard.getByRole("button", "Discard changes", { exact: true }).tap();

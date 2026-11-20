@@ -306,7 +306,8 @@ function FlowField({ model }: { model: Composer }) {
         Flow
       </Label>
       {problem.explanation && (
-        <span id={flowNotReadyId} className="sr-only">
+        // The field's explanation while another card has priority, announced like an error card.
+        <span id={flowNotReadyId} role="alert" className="sr-only">
           {problem.explanation}
         </span>
       )}

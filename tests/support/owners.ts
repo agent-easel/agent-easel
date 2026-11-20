@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentDefinition, FlowDraft, Result } from "../../packages/contracts/src/index.ts";
 import { listAgentDefinitions } from "./agents.ts";
@@ -89,6 +89,21 @@ export async function projectFlowPlacing(
       },
     }),
   });
+}
+
+/** Writes a copy of a Flow export file whose Agents have no model, beside the export. */
+export async function exportWithoutAgentModels(exported: string) {
+  const document = JSON.parse(await readFile(exported, "utf8")) as { agents: { model: unknown }[] };
+  assert(document.agents.length > 0);
+  const path = exported.replace(/\.json$/, ".needs-model.json");
+  await writeFile(
+    path,
+    JSON.stringify({
+      ...document,
+      agents: document.agents.map((agent) => ({ ...agent, model: null })),
+    }),
+  );
+  return path;
 }
 
 /** Saves a saved Agent's or Flow's export document as a file Import can choose. */

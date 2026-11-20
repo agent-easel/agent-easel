@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import type { Browser } from "@e2e-dev/web";
 import { expect, type App, type Screen } from "e2e";
 import type { Result, TriggerDefinition } from "../packages/contracts/src/index.ts";
-import { exportDefinitionFile, ownedFlow } from "./support/owners.ts";
+import { exportDefinitionFile, exportWithoutAgentModels, ownedFlow } from "./support/owners.ts";
+import { refuseFlowCreate } from "./support/flows.ts";
 import { test } from "./support/test.ts";
 
 const viewport = { width: 1440, height: 900 };
@@ -258,13 +259,7 @@ test("a failed New Flow create reports one card and keeps the entered name", asy
 }) => {
   // Arrange
   const dialog = await openNewFlow(app, screen);
-  await browser.route("**/api/flows", async (route) => {
-    if (route.request.method !== "POST") return route.continue();
-    await route.fulfill({
-      status: 503,
-      json: { ok: false, error: { code: "validation", message: "Unavailable", issues: [] } },
-    });
-  });
+  await refuseFlowCreate(browser);
   await dialog.getByLabel("Flow name", { exact: true }).fill("Unsaved draft");
 
   // Act
@@ -292,14 +287,7 @@ async function openFlowsForImport(app: App, screen: Screen) {
 test("Import reviews a Flow file whose Agent needs a model", async ({ app, screen, browser }) => {
   // Arrange
   await browser.setViewport(viewport);
-  const exported = await northwindExport(app.baseUrl);
-  const document = JSON.parse(await readFile(exported, "utf8")) as {
-    agents: { model: unknown }[];
-  };
-  assert(document.agents.length > 0);
-  for (const agent of document.agents) agent.model = null;
-  const needsModel = exported.replace(/\.json$/, ".needs-model.json");
-  await writeFile(needsModel, JSON.stringify(document));
+  const needsModel = await exportWithoutAgentModels(await northwindExport(app.baseUrl));
   await openFlowsForImport(app, screen);
 
   // Act
@@ -451,27 +439,42 @@ test("a Trigger's menu offers Check now, Edit and Remove", async ({
   await shot(app, browser, "triggers-menu");
 });
 
-test("Check now shows Checking… while the check is running", async ({
-  app,
-  screen,
-  browser,
-  fixture,
-}) => {
-  // Arrange
-  await openTriggers(app, fixture, checkName);
-  // The check answers after a pause long enough to see it running, then settles on its own.
-  await browser.route("**/api/triggers/*/run", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    await route.continue();
-  });
-
-  // Act
-  await checkNow(screen, checkName);
-
-  // Assert
-  await expect(screen.getByText("Checking…", { exact: true })).toBeVisible();
-  await shot(app, browser, "triggers-checking");
+/**
+ * A journey whose Trigger checks the page holds until `heldChecks.release()`, so the journey
+ * observes a running check for as long as it needs; teardown releases a check still held.
+ */
+const heldCheckTest = test.extend<{ heldChecks: { release(): void } }>({
+  heldChecks: async ({ browser }, use) => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await browser.route("**/api/triggers/*/run", async (route) => {
+      await held;
+      await route.continue();
+    });
+    await use({ release });
+    release();
+  },
 });
+
+heldCheckTest(
+  "Check now shows Checking… while the check is running",
+  async ({ app, screen, browser, fixture, heldChecks }) => {
+    // Arrange: `heldChecks` holds the check until this journey releases it.
+    await openTriggers(app, fixture, checkName);
+
+    // Act
+    await checkNow(screen, checkName);
+
+    // Assert
+    await expect(screen.getByText("Checking…", { exact: true })).toBeVisible();
+    await shot(app, browser, "triggers-checking");
+
+    // Cleanup: let the observed check finish; teardown releases it if an assertion failed first.
+    heldChecks.release();
+  },
+);
 
 test("Check now with no ready issue reports nothing ready to start", async ({
   app,
@@ -529,8 +532,21 @@ async function threeReady(
 ) {
   await fixture.github.trigger({ name });
   await allowRuns(app.baseUrl, name, 3);
-  for (const [offset, title] of ["Ship the footer", "Ship the header", "Ship the title"].entries())
-    await fixture.github.issue({ number: first + offset, title, labels: ["factory:ready"] });
+  await fixture.github.issue({
+    number: first,
+    title: "Ship the footer",
+    labels: ["factory:ready"],
+  });
+  await fixture.github.issue({
+    number: first + 1,
+    title: "Ship the header",
+    labels: ["factory:ready"],
+  });
+  await fixture.github.issue({
+    number: first + 2,
+    title: "Ship the title",
+    labels: ["factory:ready"],
+  });
   await app.open("/studio/triggers");
 }
 

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import type { Browser } from "@e2e-dev/web";
 import { expect, type Screen } from "e2e";
 import {
   DEFINITION_REQUEST_LIMIT_BYTES,
@@ -13,6 +14,17 @@ import type {
 } from "../../packages/contracts/src/index.ts";
 
 const mutation = { "content-type": "application/json", "X-Factory-Request": "1" };
+
+/** Every Flow create the page sends is refused as unavailable; reads still reach Factory. */
+export async function refuseFlowCreate(browser: Browser) {
+  await browser.route("**/api/flows", async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    await route.fulfill({
+      status: 503,
+      json: { ok: false, error: { code: "validation", message: "Unavailable", issues: [] } },
+    });
+  });
+}
 
 async function flowRequest(baseUrl: string | undefined, path: string, init?: RequestInit) {
   const result = (await (await fetch(new URL(path, baseUrl), init)).json()) as Result<unknown>;
