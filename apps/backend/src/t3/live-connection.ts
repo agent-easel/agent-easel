@@ -173,7 +173,7 @@ function classifiedFailure(record: CallRecord, error: unknown): T3Failure {
 }
 
 /** Runs one T3 call with its own record; it rejects only with that call's classified failure. */
-async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Promise<A> {
+export async function classifiedCall<A>(work: (record: CallRecord) => Promise<A>): Promise<A> {
   const record: CallRecord = { unavailable: false };
   try {
     return await currentCall.run(record, () => work(record));
