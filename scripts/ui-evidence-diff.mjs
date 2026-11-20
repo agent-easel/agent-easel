@@ -39,10 +39,15 @@ export function compareImages(beforePng, afterPng) {
   const before = pad(beforePng, width, height);
   const after = pad(afterPng, width, height);
   const diff = Buffer.alloc(width * height * 4);
-  const changedPixels = pixelmatch(before, after, diff, width, height, {
+  // pixelmatch blends its inputs to grey in place; copies keep the sheet panels in colour.
+  const changedPixels = pixelmatch(Buffer.from(before), Buffer.from(after), diff, width, height, {
     threshold: PIXEL_THRESHOLD,
   });
-  return { width, height, before, after, diff, changedPixels };
+  const resized =
+    beforePng.width !== afterPng.width || beforePng.height !== afterPng.height
+      ? `${beforePng.width}x${beforePng.height} -> ${afterPng.width}x${afterPng.height}`
+      : undefined;
+  return { width, height, before, after, diff, changedPixels, resized };
 }
 
 function sheetOf({ width, height, before, after, diff }) {
@@ -95,6 +100,11 @@ export function buildEvidenceDiff(beforeDir, afterDir, outDir) {
   const afterViews = new Set(listPngs(afterDir));
   const changed = [];
   const unchanged = [];
+  for (const input of [beforeDir, afterDir]) {
+    if (!relative(outDir, input).startsWith("..")) {
+      throw new Error(`out-dir ${outDir} must not be or contain an input set (${input})`);
+    }
+  }
   rmSync(outDir, { recursive: true, force: true });
   for (const view of [...beforeViews].filter((name) => afterViews.has(name)).sort(byName)) {
     const result = compareImages(
@@ -109,7 +119,7 @@ export function buildEvidenceDiff(beforeDir, afterDir, outDir) {
     mkdirSync(dirname(sheetPath), { recursive: true });
     writeFileSync(sheetPath, PNG.sync.write(sheetOf(result)));
     const percent = (result.changedPixels / (result.width * result.height)) * 100;
-    changed.push({ view, percent, sheetPath });
+    changed.push({ view, percent, sheetPath, resized: result.resized });
   }
   const onlyBefore = [...beforeViews].filter((name) => !afterViews.has(name)).sort(byName);
   const onlyAfter = [...afterViews].filter((name) => !beforeViews.has(name)).sort(byName);
@@ -120,7 +130,8 @@ export function buildEvidenceDiff(beforeDir, afterDir, outDir) {
     "",
     "Changed:",
     ...changed.map(
-      ({ view, percent, sheetPath }) => `  ${percent.toFixed(2)}%  ${view}  ${sheetPath}`,
+      ({ view, percent, sheetPath, resized }) =>
+        `  ${percent.toFixed(2)}%  ${view}  ${sheetPath}${resized ? `  (size ${resized}; padding counts as changed)` : ""}`,
     ),
     "Unchanged (no image to read):",
     ...unchanged.map((view) => `  ${view}`),

@@ -75,13 +75,16 @@ const SETTLE_ANIMATIONS = `(() => {
 })();`;
 
 /** Runs the spec in one checkout with the project's own config, narrowed to that one file. */
-function runSpec(root, spec, resultsDir) {
-  const specPath = relative(root, resolve(root, spec));
+function runSpec(root, specPath, resultsDir) {
   // The generated config is the one thing both builds share, so the settling applies to a base
   // that predates it. It replaces each target's engine, which assumes the project's web engine
   // takes no other options.
+  // run() exits the process on a failed spec and SIGINT skips finally, so remove it on exit.
+  const configPath = join(root, CONFIG_NAME);
+  process.once("exit", () => rmSync(configPath, { force: true }));
+  process.once("SIGINT", () => process.exit(130));
   writeFileSync(
-    join(root, CONFIG_NAME),
+    configPath,
     `import base from "./e2e.config.ts";
 import { web } from "@e2e-dev/web";
 const engine = web({ initScripts: [${JSON.stringify(SETTLE_ANIMATIONS)}] });
@@ -92,31 +95,30 @@ export default {
 };
 `,
   );
-  try {
-    rmSync(resultsDir, { recursive: true, force: true });
-    run(
-      "pnpm",
-      [
-        "exec",
-        "e2e",
-        "run",
-        "--config",
-        CONFIG_NAME,
-        specPath,
-        "--output",
-        relative(root, resultsDir),
-      ],
-      root,
-    );
-  } finally {
-    rmSync(join(root, CONFIG_NAME), { force: true });
-  }
+  rmSync(resultsDir, { recursive: true, force: true });
+  run(
+    "pnpm",
+    [
+      "exec",
+      "e2e",
+      "run",
+      "--config",
+      CONFIG_NAME,
+      specPath,
+      "--output",
+      relative(root, resultsDir),
+    ],
+    root,
+  );
+  rmSync(configPath, { force: true });
 }
 
 const { base, output, spec } = parseArgs(process.argv.slice(2));
 const repo = git(["rev-parse", "--show-toplevel"], process.cwd());
 const specFile = resolve(repo, spec);
 if (!existsSync(specFile)) fail(`Spec not found: ${spec}`);
+// Repo-relative, so an absolute spec argument still resolves inside each checkout.
+const specPath = relative(repo, specFile);
 const outDir = resolve(repo, output);
 if (relative(repo, outDir).startsWith("..") || isAbsolute(relative(repo, outDir))) {
   fail("--output must be inside the repository (use .e2e/proof/<change>)");
@@ -124,7 +126,7 @@ if (relative(repo, outDir).startsWith("..") || isAbsolute(relative(repo, outDir)
 
 const baseDir = baseWorktree(repo, base);
 // An untracked or ignored spec (for example under .e2e/) is not in the base checkout.
-const baseSpec = join(baseDir, relative(repo, specFile));
+const baseSpec = join(baseDir, specPath);
 if (baseSpec !== specFile) {
   mkdirSync(dirname(baseSpec), { recursive: true });
   cpSync(specFile, baseSpec);
@@ -136,10 +138,10 @@ run("pnpm", ["build"], repo);
 const beforeDir = join(outDir, "before");
 const afterDir = join(outDir, "after");
 const baseRun = join(baseDir, ".e2e", "evidence-run");
-runSpec(baseDir, spec, baseRun);
+runSpec(baseDir, specPath, baseRun);
 rmSync(beforeDir, { recursive: true, force: true });
 mkdirSync(dirname(beforeDir), { recursive: true });
 cpSync(baseRun, beforeDir, { recursive: true });
-runSpec(repo, spec, afterDir);
+runSpec(repo, specPath, afterDir);
 
 console.log(buildEvidenceDiff(beforeDir, afterDir, join(outDir, "contact-sheets")));

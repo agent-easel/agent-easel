@@ -28,3 +28,14 @@ void test("compositing dither below the threshold is unchanged", () => {
 void test("a 1px border colour change is detected", () => {
   assert.equal(compareImages(view(), withRow(view(), 5, 20)).changedPixels, 40);
 });
+
+void test("the before and after panels keep their colour", () => {
+  const before = view();
+  const after = withRow(view(), 5, 20);
+  const result = compareImages(before, after);
+  assert.deepEqual([...result.before.subarray(0, 4)], [...DARK, 255]);
+  assert.deepEqual(
+    [...result.after.subarray(5 * 40 * 4, 5 * 40 * 4 + 3)],
+    DARK.map((v) => v + 20),
+  );
+});
