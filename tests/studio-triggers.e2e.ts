@@ -475,6 +475,14 @@ test("discarding the Flow draft after its Agent was opened and closed returns to
   await expect(flowPicker).toHaveAttribute("aria-describedby", "trigger-flow-problem");
 });
 
+async function loseTriggerCreateReply(browser: Browser) {
+  await browser.route("**/api/triggers", async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    await route.fetch();
+    await route.abort();
+  });
+}
+
 test("an unknown Create with a saved Trigger offers to open it without creating again", async ({
   app,
   browser,
@@ -484,11 +492,7 @@ test("an unknown Create with a saved Trigger offers to open it without creating 
   const name = "Journey · Lost Create reply";
   await app.open("/studio/triggers/new/github-issues");
   await fillTrigger(screen, name);
-  await browser.route("**/api/triggers", async (route) => {
-    if (route.request.method !== "POST") return route.continue();
-    await route.fetch();
-    await route.abort();
-  });
+  await loseTriggerCreateReply(browser);
 
   // Act
   await screen.getByRole("button", "Save", { exact: true }).tap();

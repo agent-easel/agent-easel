@@ -84,6 +84,18 @@ async function launchedAttachments(app: App, number: number) {
   return launches.map((launch) => launch.attachments);
 }
 
+async function loseStagedImageBeforeStart(browser: Browser) {
+  let uploads = 0;
+  await browser.route("**/api/run-images/*", async (route) => {
+    const method = route.request.method;
+    if (method === "HEAD") return route.fulfill({ status: 404, body: "" });
+    if (method === "PUT" && uploads++ === 0)
+      return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+    return route.continue();
+  });
+  return () => uploads;
+}
+
 test("picked screenshots survive reload and every Flow-input worker receives the same originals", async ({
   app,
   screen,
@@ -261,14 +273,7 @@ test("an image Factory reports missing at Start is uploaded again and the Run st
   // Arrange
   await composeWithImages(app, screen, browser, "UI images missing upload", ["green"]);
   await expect(thumbnails(screen)).toHaveCount(1);
-  let uploads = 0;
-  await browser.route("**/api/run-images/*", async (route) => {
-    const method = route.request.method;
-    if (method === "HEAD") return route.fulfill({ status: 404, body: "" });
-    if (method === "PUT" && uploads++ === 0)
-      return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
-    return route.continue();
-  });
+  const uploadCount = await loseStagedImageBeforeStart(browser);
 
   // Act
   await screen.getByRole("button", "Start", { exact: true }).tap();
@@ -277,7 +282,7 @@ test("an image Factory reports missing at Start is uploaded again and the Run st
   await expect(
     screen.getByRole("heading", "UI images missing upload", { exact: true }),
   ).toBeVisible();
-  expect(uploads).toBe(2);
+  assert.equal(uploadCount(), 2);
   expect(await runsTitled(app.baseUrl, "UI images missing upload")).toHaveLength(1);
 });
 

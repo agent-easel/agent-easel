@@ -133,10 +133,30 @@ their cause; do not add retries or larger per-test timeouts.
   Chromium against controlled T3 modules. Add one only for a user-visible
   journey that crosses UI, HTTP and backend, and keep it on the happy path plus
   the states the user must see. Do not re-test in E2E what a unit test already
-  covers. E2E is not part of the pre-push hook; run it before opening a PR that
-  touches UI or a user journey (see [UI verification](#ui-verification)).
+  covers. Follow the [verification cadence](#verification-cadence) for when to run journeys.
   Use AAA when adding or changing E2E tests; the current behavior-test cleanup does
   not require migrating untouched E2E journeys.
+
+### Verification cadence
+
+| Stage | Run |
+| --- | --- |
+| Per edit | Use the edit hook for formatting and lint feedback, and run the focused unit or integration test for the behavior you changed. See [edit-hook setup](quality-gates.md#the-edit-hook). |
+| Handoff without a push | Run `pnpm check:static`, the affected unit suites and `pnpm test:e2e:affected [base-ref]` for journey coverage. |
+| Before pushing | Push with the [pre-push hook](quality-gates.md#the-pre-push-hook) enabled. It runs the full cached `pnpm check`. Reuse completed checks for unchanged inputs and skip a duplicate manual gate immediately before the push. |
+| Pull request CI | [Controlled UI journeys](#pr-journey-check) is authoritative for the full suite. |
+| PR completion | Read the failing shard's report and trace, then reproduce the failing spec with `pnpm test:e2e tests/<name>.e2e.ts`. If the shard failed during setup, diagnose that step from its logs. |
+
+The local affected command compares the working tree with the merge base of HEAD
+and the supplied Git ref (default `origin/main`), including untracked files, deletions
+and both sides of renames. It runs changed journey specs that still exist and the
+specs mapped to changed feature paths. It skips a diff limited to prose, standalone
+unit tests or deleted specs. Changes to `tests/support/`, the journey config,
+shared fixture inputs (including the development seed and backend test doubles),
+or unmapped paths run the full suite. Inspect the selection with
+`node scripts/select-ui-journeys.mjs --affected [base-ref]`; `null` means all specs
+and `[]` means no specs. For a known journey, pass the spec directly to
+`pnpm test:e2e`. Both pnpm commands build before running journeys.
 
 ### Fixture modules
 
@@ -224,8 +244,9 @@ Before finishing a test change:
    Arrange/Act/Assert blocks, one behavior under test, and observable assertions.
    The behavior named by the test must be its Act; Arrange establishes only its
    prerequisites.
-2. Keep test bodies straight-line: no loops, conditionals or try/catch. Put
-   reusable setup in support factories rather than hiding several Acts in a helper.
+2. Keep test bodies straight-line. Lint rejects loops, conditional statements,
+   ternaries and try blocks in unit and journey test callbacks, including nested
+   callbacks. Put reusable setup in support factories and keep the Act visible.
 3. Remove trivial, redundant or implementation-mirroring tests. Record which
    expectation was redundant or why the test did not protect important behavior.
    Preserve distinct failure, race, recovery and security cases; a failing test
@@ -275,7 +296,7 @@ From the root, after `pnpm install --frozen-lockfile`:
 ```sh
 pnpm e2e:prepare       # reuse the UI when its content signature matches
 pnpm exec e2e run tests/smoke.e2e.ts --trace on --output .e2e/doctor
-pnpm test:e2e          # build, then all controlled UI regression journeys
+pnpm test:e2e:affected # build, then run the affected controlled UI regression journeys
 pnpm e2e:screenshots   # build and capture named PNGs
 pnpm exec e2e run tests/flow-authoring.e2e.ts --trace on --video on --output .e2e/proof/my-change
 ```

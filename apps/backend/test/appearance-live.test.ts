@@ -37,10 +37,8 @@ async function authorizedFactory(
   return { factory, appearance: live.appearance, directory };
 }
 
-it("Factory follows T3's published default theme over the authorized T3 connection without another pairing", async (context) => {
-  // Arrange
-  const reads: unknown[] = [];
-  const external = await oauthT3({
+function publishedNightfall(reads: unknown[]) {
+  return oauthT3({
     themeRead: (args) => {
       reads.push(args);
       return args.themeId === "nightfall"
@@ -53,6 +51,12 @@ it("Factory follows T3's published default theme over the authorized T3 connecti
           };
     },
   });
+}
+
+it("Factory follows T3's published default theme over the authorized T3 connection without another pairing", async (context) => {
+  // Arrange
+  const reads: unknown[] = [];
+  const external = await publishedNightfall(reads);
   context.onTestFinished(() => external.close());
 
   // Act

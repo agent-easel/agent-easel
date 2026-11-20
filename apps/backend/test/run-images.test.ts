@@ -169,9 +169,9 @@ it("an image Start whose declared size differs from its upload is rejected", asy
   const f = await prepared(c);
   await stageImages(f.f, allScreenshots);
   const request = imageStart(f.input);
-  const images = request.images.map((image, index) =>
-    index === 2 ? { ...image, sizeBytes: image.sizeBytes + 1 } : image,
-  );
+  const [red, green, blue] = request.images;
+  assert(red && green && blue);
+  const images = [red, green, { ...blue, sizeBytes: blue.sizeBytes + 1 }];
 
   // Act
   const started = await f.f.startRun({ ...request, images });

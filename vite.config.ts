@@ -80,6 +80,11 @@ export default defineConfig({
     },
     overrides: [
       {
+        files: ["**/*.test.{js,mjs,ts,tsx}", "tests/*.e2e.ts"],
+        jsPlugins: [{ name: "test-bodies", specifier: "./scripts/lint/test-bodies.mjs" }],
+        rules: { "test-bodies/straight-line": "error" },
+      },
+      {
         files: ["packages/*/src/**", "apps/frontend/src/**"],
         rules: { "import/no-nodejs-modules": "error" },
       },

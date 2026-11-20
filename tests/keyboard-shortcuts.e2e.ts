@@ -22,6 +22,8 @@ const modShiftE = `${shortcutMod}+Shift+E`;
 const modSlash = `${shortcutMod}+/`;
 const inspectorHint = process.platform === "darwin" ? "⌘." : "Ctrl+.";
 
+const customDesktopNewRunHint = process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N";
+
 test("palette Enter opens the selected Flow", async ({ app, screen, browser }) => {
   // Arrange
   await app.open("/runs/new");
@@ -232,7 +234,7 @@ test("Settings Reset restores the desktop default for New Run", async ({
   // Arrange
   const newRunGroup = await recordDesktopNewRunCandidate(app, screen, browser);
   await screen.getByRole("button", "Save", { exact: true }).tap();
-  await expect(newRunGroup).toContainText(process.platform === "darwin" ? "⇧⌘N" : "Ctrl+Shift+N");
+  await expect(newRunGroup).toContainText(customDesktopNewRunHint);
 
   // Act
   await newRunGroup.getByRole("button", "Reset New Run").tap();

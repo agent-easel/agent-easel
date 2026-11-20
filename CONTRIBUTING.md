@@ -67,16 +67,8 @@ Tests protect important business behavior through public operations. Read the
 documentation-only changes do not need new tests.
 
 For UI or user-journey changes, use the
-[Factory verification workflow](.agents/skills/verify-t3-factory/SKILL.md) and run the
-relevant controlled Chromium journeys after building. The full suite is:
-
-```sh
-pnpm build
-pnpm test:e2e
-```
-
-PRs also receive the **Controlled UI journeys** check; see
-[PR journey check](docs/testing.md#pr-journey-check) for what it selects and proves.
+[Factory verification workflow](.agents/skills/verify-t3-factory/SKILL.md) and follow
+the [verification cadence](docs/testing.md#verification-cadence).
 
 Browser installation may be needed on first use; see [UI verification](docs/testing.md#ui-verification).
 Controlled tests do not certify live provider compatibility. Do not run paid
