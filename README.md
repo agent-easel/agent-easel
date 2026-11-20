@@ -129,7 +129,7 @@ For endpoint setup, configuration and client access, see
 | `pnpm build` | Build the workspace, including desktop bundles |
 | `pnpm start` | Serve the built app with production data |
 | `pnpm check` | Format check, fallow, lint, typecheck, behavior tests and build |
-| `pnpm test:e2e` | Controlled Chromium journeys; build first |
+| `pnpm test:e2e` | Prepare the frontend and run controlled Chromium journeys |
 | `pnpm desktop:package` | Create a local macOS arm64 developer package |
 
 `pnpm dev:prod` provides source reload against **real production data and T3**.
