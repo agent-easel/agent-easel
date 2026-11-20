@@ -44,6 +44,7 @@ import {
   resultResponse,
   runImageResponse,
   sendFaviconResponse,
+  optionalStandardBody,
   standardBody,
   writeJsonResponse,
   type RouteTrust,
@@ -461,7 +462,7 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
         answer(() => factory.setTriggerEnabled(parameters.id, input)),
     },
     runTrigger: {
-      body: standardBody,
+      body: optionalStandardBody,
       handle: ({ parameters, input }) => answer(() => factory.runTrigger(parameters.id, input)),
     },
     previewNewTrigger: {

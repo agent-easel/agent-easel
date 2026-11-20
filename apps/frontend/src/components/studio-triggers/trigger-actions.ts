@@ -13,6 +13,10 @@ type TriggerFailure = { readonly name: string; readonly message: string } | null
 const changedSinceReview = (cause: unknown) =>
   cause instanceof ApiError && cause.detail.issues[0]?.code === "trigger_changed";
 
+/** Factory refused a check because another revision was saved after the one it named. */
+const staleCheck = (cause: unknown) =>
+  cause instanceof ApiError && cause.detail.issues.some((issue) => issue.code === "stale_revision");
+
 /**
  * Enable, disable, Run and Remove for the Triggers screens. The results arrive through Studio's
  * live list; only a refusal is kept here to show. Enabling happens only after a review, confirms
@@ -89,10 +93,19 @@ export function useTriggerActions(
     /** What a check of the saved Trigger would start now; it starts and changes nothing. */
     preview: (trigger: TriggerDefinition) =>
       definitions.previewTrigger(trigger.id, currentSettings(trigger)),
-    /** Checks the revision on screen; a refusal because another was saved shows as the failure. */
-    run: (trigger: TriggerDefinition) =>
+    /**
+     * Checks the revision on screen. A refusal because another was saved goes to `onStale`, the
+     * caller's saved-revision notice, when it has one; otherwise it shows as the failure.
+     */
+    run: (trigger: TriggerDefinition, onStale?: () => void) =>
       perform(trigger, "run", () =>
-        definitions.runTrigger(trigger.id, { expectedRevision: trigger.revision }),
+        definitions
+          .runTrigger(trigger.id, { expectedRevision: trigger.revision })
+          .catch((cause) => {
+            if (!onStale || !staleCheck(cause)) throw cause;
+            onStale();
+            return undefined;
+          }),
       ),
     remove: (trigger: TriggerDefinition) =>
       perform(trigger, "remove", () => definitions.removeTrigger(trigger.id).then(() => true)),

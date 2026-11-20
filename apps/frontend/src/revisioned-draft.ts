@@ -445,6 +445,15 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
       publish();
     },
     /**
+     * An action bound to the saved revision was refused because another is saved: the same
+     * revision conflict a stale save enters, with the newer revision named once Studio holds it.
+     */
+    noteStaleRevision() {
+      if (!saved || removed || conflict.status !== "none") return;
+      conflict = { status: "detected", revision: null };
+      publish();
+    },
+    /**
      * Sends the draft. Notices wait for the reply; a stale save enters the same conflict as a
      * revision saved elsewhere, and a removal noted meanwhile beats the reply.
      */

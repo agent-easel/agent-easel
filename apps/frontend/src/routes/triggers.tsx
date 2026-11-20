@@ -254,7 +254,7 @@ function useTriggerEditor({
   }
 
   async function check(target: TriggerDefinition) {
-    const result = await actions.run(target);
+    const result = await actions.run(target, draft.noteStaleRevision);
     if (result) setChecked(result);
   }
 

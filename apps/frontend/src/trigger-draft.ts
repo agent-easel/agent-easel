@@ -307,6 +307,7 @@ export function createTriggerDraft(trigger: TriggerDefinition | null, source: Tr
     },
     dismissUpdate: draft.dismissUpdate,
     compare: draft.compare,
+    noteStaleRevision: draft.noteStaleRevision,
     loadLatest: draft.takeLatest,
     keepEdits(revision: number) {
       draft.keep(revision);

@@ -234,7 +234,7 @@ export const triggerOperations = {
    * Checks an enabled Trigger once, whether or not its schedule is on, and answers it with the
    * check's summary and the Runs it started. Every limit of a scheduled check applies. Those Runs
    * are not stored on the Trigger. The body may name the revision to check, which is refused as
-   * stale when another is saved; an empty object checks whatever is saved.
+   * stale when another is saved; a request without a body checks whatever is saved.
    */
   runTrigger: operation<RunTriggerInput, TriggerCheckReply>()({
     method: "POST",

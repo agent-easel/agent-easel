@@ -496,3 +496,32 @@ it("an approved client creates a Trigger over REST that the host lists", async (
     value: [reply.body.value.trigger],
   });
 });
+
+it("a run check over REST needs no body, and a stale expectedRevision is refused as a conflict", async (c) => {
+  // Arrange
+  const { laptop, github, project, flow } = await remotePrepared(c);
+  github.repositories.set(project.workspaceRoot, atlasRepository);
+  const created = await laptop.send<TriggerSave>("POST", "/api/triggers", {
+    kind: "github_issues",
+    name: "Ready issues",
+    projectId: project.id,
+    flowId: flow.id,
+    github: { repositoryNodeId: atlasRepository.nodeId },
+  });
+  assert(created.body.ok);
+  const path = `/api/triggers/${created.body.value.trigger.id}/run`;
+
+  // Act
+  const withoutBody = await laptop.send("POST", path);
+  const stale = await laptop.send("POST", path, { expectedRevision: 99 });
+
+  // Assert
+  expect(withoutBody.body).toMatchObject({
+    ok: false,
+    error: { code: "conflict", issues: [{ code: "trigger_disabled" }] },
+  });
+  expect(stale.body).toMatchObject({
+    ok: false,
+    error: { code: "conflict", issues: [{ code: "stale_revision" }] },
+  });
+});

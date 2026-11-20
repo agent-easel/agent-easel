@@ -45,3 +45,46 @@ it("a case-insensitive Trigger name already in Studio disables saving the draft"
   disconnect();
   close();
 });
+
+it("a check refused for a newer revision enters the revision conflict a stale save enters", () => {
+  // Arrange
+  const saved: TriggerDefinition = {
+    id: "trigger-1",
+    kind: "github_issues",
+    name: "Ready issues",
+    enabled: true,
+    projectId: "atlas",
+    flowId: "global",
+    schedule: { enabled: true, intervalMinutes: 5 },
+    maxActiveRuns: 2,
+    revision: 3,
+    nextCheckAt: null,
+    latestCheck: null,
+    error: null,
+    github: {
+      repository: { host: "github.com", nameWithOwner: "factory-demo/atlas", nodeId: "atlas" },
+      query: "label:factory:ready",
+      readyLabel: "factory:ready",
+    },
+    createdAt: "2026-11-10T09:00:00.000Z",
+    updatedAt: "2026-11-10T09:00:00.000Z",
+  };
+  const { definitions, close } = deliveredStudio({ flows: [], agents: [], triggers: [saved] });
+  const draft = createTriggerDraft(saved, definitions);
+  const disconnect = draft.connect();
+  draft.edit({ name: "Renamed" });
+
+  // Act
+  draft.noteStaleRevision();
+
+  // Assert
+  expect(draft.getSnapshot()).toMatchObject({
+    saved: { revision: 3 },
+    content: { name: "Renamed" },
+    dirty: true,
+    conflict: { status: "detected", revision: null },
+    canSave: false,
+  });
+  disconnect();
+  close();
+});

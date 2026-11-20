@@ -597,7 +597,7 @@ edit saves against the revision it started from, so a revision saved elsewhere m
 Turning a Trigger on advances its revision, so an edit begun while it was off, which needed no review then, is refused
 the same way and must be reviewed against the enabled Trigger. **Check now**, **Enable and check** and **Apply and check** then run
 only the revision on screen: **Check now** sends the revision it shows, the other two the revision the enable or save returned. A check
-refused because another revision was saved meanwhile starts nothing and shows its refusal, which names that revision. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
+refused because another revision was saved meanwhile starts nothing. In the Trigger editor, **Check now** and **Apply and check** show it as the saved-elsewhere notice a stale save shows; a check started from the list, or from the enable review, shows its refusal, which names that revision. While creating, the review also offers **Save**, which saves the Trigger off. A later saved revision of the Flow or its Agents applies to the next Start without another review, as in
 New Run.
 
 An edit widens what can start when it changes the Project or repository, the query or the Flow, or raises **Max active
@@ -634,7 +634,7 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 | `GET /api/triggers/:id` | Read one Trigger |
 | `PUT /api/triggers/:id` | Save settings against `expectedRevision` |
 | `PUT /api/triggers/:id/enabled` | Disable, or enable the `reviewedRevision` a preview showed |
-| `POST /api/triggers/:id/run` | Run one check now. The JSON body may carry `expectedRevision`: a Trigger saved or enabled since is refused as a stale-revision conflict, starting nothing. `{}` checks whatever is saved |
+| `POST /api/triggers/:id/run` | Run one check now. The JSON body may carry `expectedRevision`: a Trigger saved or enabled since is refused as a stale-revision conflict, starting nothing. A request without a body checks whatever is saved |
 | `POST /api/triggers/preview` | Review what a new Trigger would start; starts and saves nothing |
 | `POST /api/triggers/:id/preview` | Review what a Trigger, or an edit of it, would start; starts and saves nothing |
 | `DELETE /api/triggers/:id` | Remove a Trigger |
