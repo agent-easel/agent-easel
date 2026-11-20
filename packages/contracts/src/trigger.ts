@@ -148,7 +148,15 @@ export interface TriggerReadiness {
     | { readonly ready: true; readonly login: string }
     | { readonly ready: false; readonly problem: string };
   readonly repository:
-    | { readonly ready: true; readonly repository: TriggerRepositoryChoice }
+    | {
+        readonly ready: true;
+        readonly repository: TriggerRepositoryChoice;
+        /**
+         * What the editor should show before any preview: the same warning a preview carries
+         * when another saved Trigger watches this repository.
+         */
+        readonly warnings: readonly ValidationIssue[];
+      }
     | { readonly ready: false; readonly problem: string }
     | null;
   /** The same readiness New Run shows for the Flow. */
@@ -204,11 +212,14 @@ export interface TriggerCheckReply extends TriggerDefinition {
 
 /** The Trigger operations the Factory facade implements; any approved client may call them. */
 export const triggerOperations = {
-  /** Query parameters may be empty: readiness then covers only what was chosen. */
+  /**
+   * Query parameters may be empty: readiness then covers only what was chosen. `triggerId` names
+   * the saved Trigger being edited, which the shared-repository warning leaves out.
+   */
   getTriggerReadiness: operation<never, TriggerReadiness>()({
     method: "GET",
     path: "/api/triggers/readiness",
-    query: ["projectId", "flowId"],
+    query: ["projectId", "flowId", "triggerId"],
   }),
   listTriggers: operation<never, readonly TriggerDefinition[]>()({
     method: "GET",

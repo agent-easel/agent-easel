@@ -215,8 +215,14 @@ const sharedRepositoryPreviewWarnings = (
 /** A Project refusal or GitHub's answer for the Project's folder. */
 function repositoryReadiness(
   repository: GitHubRead<GitHubRepository> | Result<never>,
+  watching: readonly string[],
 ): TriggerReadiness["repository"] {
-  if (repository.ok) return { ready: true, repository: repository.value };
+  if (repository.ok)
+    return {
+      ready: true,
+      repository: repository.value,
+      warnings: sharedRepositoryPreviewWarnings(watching, repository.value),
+    };
   return {
     ready: false,
     problem:
@@ -385,7 +391,7 @@ export const makeTriggers = (
         );
       });
 
-    const readiness = (projectId: string, flowId: string) =>
+    const readiness = (projectId: string, flowId: string, triggerId: string) =>
       Effect.gen(function* (): Effect.fn.Return<Result<TriggerReadiness>, unknown> {
         const project = projectId ? yield* hostLocalProject(projectId) : null;
         const repository =
@@ -393,6 +399,9 @@ export const makeTriggers = (
           (project.ok
             ? yield* Effect.promise(() => github.repository(project.value.workspaceRoot))
             : project);
+        const watching = repository?.ok
+          ? yield* triggersWatching(sql, repository.value.nodeId, triggerId || null)
+          : [];
         const login = yield* Effect.promise(() =>
           github.readiness(repository?.ok ? repository.value.host : "github.com"),
         );
@@ -403,7 +412,7 @@ export const makeTriggers = (
             gitHub: login.ok
               ? { ready: true, login: login.value.login }
               : { ready: false, problem: gitHubRepairGuidance(login.failure) },
-            repository: repository && repositoryReadiness(repository),
+            repository: repository && repositoryReadiness(repository, watching),
             flow: flow && flowReadiness(flow, projectId),
           },
         };

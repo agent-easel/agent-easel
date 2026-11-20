@@ -320,7 +320,7 @@ async function detectRepository(
 ): Promise<Result<TriggerRepositoryChoice>> {
   if (typeof projectId !== "string" || projectId === "")
     return invalid("invalid_id", "projectId", "Include projectId from factory_list_projects.");
-  const readiness = await factory.getTriggerReadiness(projectId, "");
+  const readiness = await factory.getTriggerReadiness(projectId, "", "");
   if (!readiness.ok) return readiness;
   const { repository } = readiness.value;
   return repository?.ready

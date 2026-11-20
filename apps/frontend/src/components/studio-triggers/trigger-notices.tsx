@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { TriggerDefinition, TriggerRepository } from "@t3-factory/contracts";
+import type { TriggerDefinition, ValidationIssue } from "@t3-factory/contracts";
 import { Button } from "@/components/ui/button";
 import { TextLink } from "@/components/ui/text-link";
 import { api } from "../../api.ts";
@@ -51,35 +51,20 @@ export function TriggerGuidance({ message }: { message: string }) {
   );
 }
 
-export function otherRepositoryWatchers(
-  triggers: readonly TriggerDefinition[] | null,
-  repository: TriggerRepository | null,
-  ownId?: string,
-) {
-  return (
-    triggers?.filter(
-      (entry) => entry.id !== ownId && entry.github.repository.nodeId === repository?.nodeId,
-    ) ?? []
-  );
-}
-
+/** The backend's warning that another saved Trigger watches `repository`, from a preview or readiness. */
 export function SharedRepositoryCard({
   repository,
-  watchers,
+  warnings,
 }: {
   repository: string;
-  watchers: readonly TriggerDefinition[];
+  warnings: readonly ValidationIssue[];
 }) {
-  if (!watchers.length) return null;
-  const names = watchers.map((entry) => entry.name).join(", ");
-  return (
+  const warning = warnings.find((entry) => entry.code === "trigger_repository_shared");
+  return warning ? (
     <ProblemCard tone="attention" title={`Another Trigger watches ${repository}`}>
-      {watchers.length === 1
-        ? `Trigger ${names} already watches`
-        : `Triggers ${names} already watch`}{" "}
-      {repository}. Each Trigger starts its own Runs for the issues it matches.
+      {warning.message}
     </ProblemCard>
-  );
+  ) : null;
 }
 
 export function TriggerFieldNotices({

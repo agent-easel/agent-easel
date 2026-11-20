@@ -444,7 +444,13 @@ function triggerRoutes(factory: Factory): RouteEntries<typeof triggerOperations>
   return {
     getTriggerReadiness: {
       handle: ({ parameters }) =>
-        answer(() => factory.getTriggerReadiness(parameters.projectId, parameters.flowId)),
+        answer(() =>
+          factory.getTriggerReadiness(
+            parameters.projectId,
+            parameters.flowId,
+            parameters.triggerId,
+          ),
+        ),
     },
     listTriggers: { handle: () => answer(() => factory.listTriggers()) },
     createTrigger: {

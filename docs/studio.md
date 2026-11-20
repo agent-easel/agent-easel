@@ -568,7 +568,7 @@ The repository and Flow fields show their own readiness. A problem with `gh` has
 **Check again**. The pinned footer holds **Save**, which creates the Trigger off and opens its edit
 page, and **Review and enable**, which stays neutral; Save follows the
 [one Save rule](design-system.md#components-and-interaction). When another Trigger already watches the same repository, the
-form warns before saving; the review's warning comes from the backend preview. Saving is still available.
+form warns before saving, from the warning the backend's readiness answer carries for the Project's repository and the Trigger being edited; the review's warning comes from the backend preview, with the same wording. Saving is still available.
 
 **Editing.** The header shows the enable switch and a **status strip**. The strip shows the latest
 check, its health, started Runs, issues waiting for a slot, and the next scheduled check, or the
@@ -628,7 +628,7 @@ refused. Factory MCP's [Trigger tools](t3-integration.md#trigger-tools) list, re
 
 | HTTP | Purpose |
 | --- | --- |
-| `GET /api/triggers/readiness?projectId=&flowId=` | Check `gh`, the Project's repository and the Flow |
+| `GET /api/triggers/readiness?projectId=&flowId=&triggerId=` | Check `gh`, the Project's repository (with the same-repository warning, leaving out `triggerId`) and the Flow |
 | `GET /api/triggers` | List Triggers |
 | `POST /api/triggers` | Create a Trigger, saved disabled |
 | `GET /api/triggers/:id` | Read one Trigger |

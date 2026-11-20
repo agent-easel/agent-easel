@@ -7,6 +7,7 @@ import { StatusBadge } from "../status-badge.tsx";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { TextLink } from "@/components/ui/text-link";
+import { SharedRepositoryCard } from "./trigger-notices.tsx";
 import { openedAgo, problemHeadline } from "./trigger-text.ts";
 
 /** What one review shows and how it commits. */
@@ -129,7 +130,7 @@ function ReviewBody({
       {read.status === "failed" && <ProblemCard tone="error" icon={CircleX} title={read.message} />}
       {read.status === "answered" && (
         <>
-          <SharedRepositoryWarning repository={review.repository} preview={read.preview} />
+          <SharedRepositoryCard repository={review.repository} warnings={read.preview.warnings} />
           <PreviewResult preview={read.preview} />
         </>
       )}
@@ -160,22 +161,6 @@ function usePreview(load: () => Promise<TriggerPreview>): PreviewRead {
     };
   }, [load]);
   return read?.load === load ? read.read : { status: "loading" };
-}
-
-/** The backend preview's warning that another saved Trigger watches the same repository. */
-function SharedRepositoryWarning({
-  repository,
-  preview,
-}: {
-  repository: string;
-  preview: TriggerPreview;
-}) {
-  const warning = preview.warnings.find((entry) => entry.code === "trigger_repository_shared");
-  return warning ? (
-    <ProblemCard tone="attention" title={`Another Trigger watches ${repository}`}>
-      {warning.message}
-    </ProblemCard>
-  ) : null;
 }
 
 function PreviewResult({ preview }: { preview: TriggerPreview }) {

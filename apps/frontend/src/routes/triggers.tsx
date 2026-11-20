@@ -38,7 +38,6 @@ import {
 import { reviewSummary, type TriggerNames } from "../components/studio-triggers/trigger-text.ts";
 import {
   EditorNotices,
-  otherRepositoryWatchers,
   SharedRepositoryCard,
   TriggerFieldNotices,
 } from "../components/studio-triggers/trigger-notices.tsx";
@@ -188,7 +187,7 @@ function useOpenedTriggerDraft(
   useEffect(() => draft.connect(), [draft]);
   useDraftGuard(draft, draftId, reportDraft);
   const state = useTriggerDraftSnapshot(draft);
-  const { read, retry } = useTriggerReadiness(state.content.projectId);
+  const { read, retry } = useTriggerReadiness(state.content.projectId, trigger?.id ?? "");
   const readiness = read.status === "answered" ? read.readiness : undefined;
   const answer = readiness?.repository;
   useEffect(() => {
@@ -234,12 +233,12 @@ function useTriggerEditor({
   const [checked, setChecked] = useState<TriggerCheckReply>();
   const pending = shown ? actions.state.pending.get(shown.id) : undefined;
   const { content } = state;
-  const triggers = useStudioRead(definitions, "triggers").value;
   const validation = triggerFormReadiness(state, names, host);
   const { canSave } = validation;
   const ghProblem = readinessNotice(validation.ghProblem, shown?.error?.code);
   const repositoryName = content.repository?.nameWithOwner ?? "";
-  const watchers = otherRepositoryWatchers(triggers, content.repository, shown?.id);
+  const detected = host.readiness?.repository;
+  const warnings = detected?.ready ? detected.warnings : [];
 
   async function finishSave(enable: boolean) {
     const saved = await draft.save();
@@ -288,7 +287,7 @@ function useTriggerEditor({
     canSubmit,
     closeBlocked,
     fieldsLocked,
-    sharedRepository: { watchers, repository: repositoryName },
+    sharedRepository: { warnings, repository: repositoryName },
     reviewActions: { review, reviewDraft, closeReview, finishSave },
     check,
     saveOff,

@@ -5,6 +5,7 @@ import { triggerSaved } from "./support/scenarios.ts";
 import {
   atlasRepository,
   movedRepository,
+  otherProjectWatcher,
   pendingTriggerUpdate,
   remoteProject,
   reviewingWorld,
@@ -408,16 +409,50 @@ it("readiness names the login @me resolves to, the Project's repository and the 
   const { f, project, flow } = await triggerWorld(c);
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, flow.id);
+  const readiness = await f.getTriggerReadiness(project.id, flow.id, "");
 
   // Assert
   expect(readiness).toStrictEqual({
     ok: true,
     value: {
       gitHub: { ready: true, login: "factory-maintainer" },
-      repository: { ready: true, repository: atlasRepository },
+      repository: { ready: true, repository: atlasRepository, warnings: [] },
       flow: { ready: true, issues: [] },
     },
+  });
+});
+
+it("readiness warns that other Triggers watch the Project's repository, never naming the Trigger being edited", async (c) => {
+  // Arrange
+  const world = await triggerWorld(c);
+  const own = await triggerSaved(world.f, world.triggerInput);
+  await otherProjectWatcher(world, "Docs issues");
+
+  // Act
+  const forNewDraft = await world.f.getTriggerReadiness(world.project.id, "", "");
+  const forOwnEditor = await world.f.getTriggerReadiness(world.project.id, "", own.id);
+
+  // Assert
+  assert(forNewDraft.ok && forOwnEditor.ok);
+  expect(forNewDraft.value.repository).toMatchObject({
+    ready: true,
+    warnings: [
+      {
+        code: "trigger_repository_shared",
+        message:
+          "Triggers Docs issues, Ready issues already watch factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+      },
+    ],
+  });
+  expect(forOwnEditor.value.repository).toMatchObject({
+    ready: true,
+    warnings: [
+      {
+        code: "trigger_repository_shared",
+        message:
+          "Trigger Docs issues already watches factory-maintainer/atlas. Each Trigger starts its own Runs for the issues it matches.",
+      },
+    ],
   });
 });
 
@@ -427,7 +462,7 @@ it("readiness reports gh missing from the Factory host", async (c) => {
   github.found = false;
 
   // Act
-  const readiness = await f.getTriggerReadiness("", "");
+  const readiness = await f.getTriggerReadiness("", "", "");
 
   // Assert
   assert(readiness.ok);
@@ -447,7 +482,7 @@ it("readiness reports gh signed out on the Factory host", async (c) => {
   github.signedIn = false;
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, "");
+  const readiness = await f.getTriggerReadiness(project.id, "", "");
 
   // Assert
   assert(readiness.ok);
@@ -464,7 +499,7 @@ it("readiness reports a repository the host's login cannot read", async (c) => {
   github.failures.set("repository", { reason: "unreadable", message: "Not Found (HTTP 404)" });
 
   // Act
-  const readiness = await f.getTriggerReadiness(project.id, "");
+  const readiness = await f.getTriggerReadiness(project.id, "", "");
 
   // Assert
   assert(readiness.ok);
