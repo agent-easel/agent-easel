@@ -32,7 +32,7 @@ which sets `core.hooksPath` to `.vite-hooks/_` (generated, ignored by Git). Chec
 it with `pnpm exec vp hooks status`; run `pnpm exec vp hooks enable` if a fresh
 clone or worktree does not trigger the hook.
 
-The hook first checks attribution in the commits being pushed, then runs
+The hook verifies the checkout and attribution in the commits being pushed, then runs
 `pnpm check`, which runs these steps through the Vite+ task runner (`vp run`,
 tasks in the root `vite.config.ts` `run`):
 
@@ -65,9 +65,9 @@ Follow the [verification cadence](testing.md#verification-cadence) for local
 implementation, handoff and PR completion. A source-only reviewer inspects code
 and existing evidence.
 
-The hook checks the working tree, including uncommitted changes, not only the
-pushed commits; commit or discard local changes before pushing so the result
-matches what you push.
+The hook rejects pushes with staged or unstaged tracked changes. Each outgoing
+branch creation or update must point to the current `HEAD`. Tags and ref deletions
+are exempt from the `HEAD` requirement.
 
 ## Ad-hoc e2e configs
 

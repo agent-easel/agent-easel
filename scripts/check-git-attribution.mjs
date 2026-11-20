@@ -46,13 +46,21 @@ function addCommits(head, exclusions) {
 
 function checkPush(remote) {
   if (!remote) throw new Error("Expected the pre-push remote name.");
+  if (git("status", "--porcelain", "--untracked-files=no")) {
+    throw new Error("Pre-push: commit, stash, or discard tracked changes before pushing.");
+  }
   // Exclude main even for a new branch or one that incorporated newer main commits.
   const main = git("rev-parse", "--verify", `refs/remotes/${remote}/main`);
   for (const line of readFileSync(0, "utf8").trim().split("\n").filter(Boolean)) {
     const fields = line.split(/\s+/);
     if (fields.length !== 4) throw new Error("Expected Git pre-push ref updates on stdin.");
-    const [, local, , previous] = fields;
+    const [, local, destination, previous] = fields;
     if (/^0+$/.test(sha(local))) continue;
+    if (destination.startsWith("refs/heads/") && local !== git("rev-parse", "HEAD")) {
+      throw new Error(
+        `Pre-push: ${destination} would be updated to ${local}. Check out that commit before pushing.`,
+      );
+    }
     const exclusions = [sha(main)];
     if (!/^0+$/.test(sha(previous))) exclusions.push(previous);
     // A tag can point to an annotated tag object rather than directly to a commit.
