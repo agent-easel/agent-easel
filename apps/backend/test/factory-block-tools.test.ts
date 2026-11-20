@@ -227,13 +227,10 @@ it("a feedback revisit carries the Revisit instruction under its conflict rule, 
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toMatch(
-    workerMessage(
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toBe(
+    `Factory Block id: ${fixture.blockId}.\n\n` +
       "Revisit instruction for this later visit of your Block. It decides the scope of this visit; your Agent's role, criteria, exits and reporting rules still apply. A narrower scope never permits skipping a required check or accepting a defect that has evidence; if you cannot reconcile the two, say so in your report. Your Block's previous finished result is available from factory_get_run.\n" +
-        "Verify the fixes and the newly affected scope.\n\n" +
-        "Incoming message:\n" +
-        "Implemented the requested result.",
-    ),
+      "Verify the fixes and the newly affected scope.\n\nIncoming message:\nImplemented the requested result.",
   );
 });
 
@@ -262,8 +259,8 @@ it("a revisit without a Revisit instruction is the incoming result alone, as bef
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toMatch(
-    workerMessage("Implemented the requested result."),
+  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toBe(
+    `Factory Block id: ${fixture.blockId}.\n\nImplemented the requested result.`,
   );
 });
 

@@ -1,11 +1,10 @@
-import { effectiveExits } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import { newId } from "../../ids.ts";
 import { failure } from "../../result.ts";
 import type { RunRow } from "../runner-types.ts";
 import { runTarget } from "../runner-types.ts";
 import { now } from "../../time.ts";
-import { requestReportPayload } from "../worker-payloads.ts";
+import { workerRevisitPayload } from "../worker-payloads.ts";
 import { settleAttention } from "./attention.ts";
 import { blockHasUnresolvedWork, createDelivery } from "./deliveries.ts";
 import { guardsHold } from "./guards.ts";
@@ -70,11 +69,6 @@ export function openRunRequestReport(database: RunnerDatabase) {
         const [problem] = yield* sql<{
           id: string;
         }>`SELECT id FROM run_attention WHERE run_id=${current.id} AND block_id=${blockId} AND kind='missing-report' AND execution_id=${executionId} AND settled_at IS NULL`;
-        const { definitions } = current;
-        const graphBlock = definitions.flow.graph.blocks.find((block) => block.id === blockId)!;
-        // A Continuation's worker finishes without naming an exit.
-        const exits =
-          graphBlock.kind === "continuation" ? [] : effectiveExits(graphBlock, definitions.agents);
         yield* createDelivery(sql, {
           id: intentId,
           runId: current.id,
@@ -83,11 +77,11 @@ export function openRunRequestReport(database: RunnerDatabase) {
           cause: "recovery:" + intentId,
           target: { ...runTarget(current), blockId, threadId },
           requestKey: key,
-          payload: requestReportPayload(
+          payload: workerRevisitPayload(
             { environmentId: current.environment_id },
             threadId,
             key,
-            exits,
+            "Factory Request report: assess the existing work without repeating the task.",
             block!.public_id,
           ),
           contextId: current.context_id,
