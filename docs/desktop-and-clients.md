@@ -415,10 +415,21 @@ on the OS trust store, so they need the Factory CA installed or a provided certi
 
 ## Protocol compatibility
 
-The current protocol is **19**. A server accepts clients from protocol **17**. The current client
-requires a protocol **19** server for [Agent Create reservations](studio.md#agent-definitions).
-Clients on protocols 17 and 18 can still create Agents without a reservation. A protocol 19 client
-shows the server update gate when the server does not support reservations.
+The current protocol is **20**. A server accepts clients from protocol **20**, and the current
+client requires a protocol **20** server, so only protocol 20 peers interoperate.
+
+Protocol 20 adds the [First-run setup](t3-integration.md#first-run-setup) status read
+(`GET /api/setup`) and the host-only completion (`POST /api/setup/complete`). Every client reads the
+status before it opens the application and waits on the setup screen until the host completes it.
+A protocol 19 or older server lacks the read, so a current client shows the server update gate
+instead of waiting for a status that never comes. A protocol 19 or older client never reads the
+status and would open the application while the host's setup is incomplete, so the server refuses
+it at the handshake and it shows the client update gate; its approved credentials and stored data
+are kept. This is an intentional transport break; it needs no stored-data migration of its own.
+
+Protocol 19 added [Agent Create reservations](studio.md#agent-definitions). Clients on protocols
+17 and 18 could still create Agents without a reservation, and a protocol 19 client showed the
+server update gate when the server did not support reservations.
 
 Protocol 18 adds the [Trigger operations](studio.md#trigger-http-api)
 over the product HTTP API, a `triggers` list to the Studio live subscription (snapshots and change
