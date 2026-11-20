@@ -133,7 +133,7 @@ if (baseSpec !== specFile) {
 }
 
 console.log("Building current tree");
-run("pnpm", ["build"], repo);
+run("pnpm", ["e2e:prepare"], repo);
 
 const beforeDir = join(outDir, "before");
 const afterDir = join(outDir, "after");

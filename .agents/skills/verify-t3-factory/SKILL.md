@@ -17,7 +17,7 @@ Run from the repository root. `e2e.config.ts` drives `tests/*.e2e.ts`;
 
 ## CLI cheat-sheet
 
-Run from the repository root; `pnpm build` first after application edits.
+Run from the repository root; `pnpm e2e:prepare` first after application edits.
 
 | Need | Command |
 | --- | --- |
