@@ -35,12 +35,15 @@ function controlledReads() {
   const pending: { resolve: (value: string) => void; reject: (cause: unknown) => void }[] = [];
   const applied: string[] = [];
   const failures: unknown[] = [];
+  /** Each change of whether a read that may still apply is outstanding. */
+  const outstanding: boolean[] = [];
   const schedule = createRefreshSchedule<string>({
     read: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
     apply: (value) => applied.push(value),
     failed: (failure) => failures.push(failure && failure.cause),
+    pending: (value) => outstanding.push(value),
   });
-  return { schedule, pending, applied, failures };
+  return { schedule, pending, applied, failures, outstanding };
 }
 
 it("a hidden page stops reading and reads again as soon as it is visible", async () => {
@@ -135,4 +138,58 @@ it("a closed schedule applies no answer and stops its interval", async () => {
   // Assert
   expect(applied).toStrictEqual([]);
   expect(pending).toHaveLength(1);
+});
+
+it("a requested read stays pending until its answer applies", async () => {
+  // Arrange
+  const { schedule, pending, applied, outstanding } = controlledReads();
+  const reading = schedule.refresh();
+
+  // Act
+  pending[0]?.resolve("fresh");
+  await reading;
+
+  // Assert
+  expect(outstanding).toStrictEqual([true, false]);
+  expect(applied).toStrictEqual(["fresh"]);
+});
+
+it("an earlier read answering while a newer one is outstanding leaves the schedule pending", async () => {
+  // Arrange
+  const { schedule, pending, applied, outstanding } = controlledReads();
+  const earlier = schedule.refresh();
+  void schedule.refresh();
+
+  // Act
+  pending[0]?.resolve("earlier");
+  await earlier;
+
+  // Assert
+  expect(outstanding).toStrictEqual([true]);
+  expect(applied).toStrictEqual([]);
+});
+
+it("an action's answer ends the pending read it replaces", () => {
+  // Arrange
+  const { schedule, outstanding } = controlledReads();
+  void schedule.refresh();
+
+  // Act
+  schedule.supersede();
+
+  // Assert
+  expect(outstanding).toStrictEqual([true, false]);
+});
+
+it("a failed read is no longer pending", async () => {
+  // Arrange
+  const { schedule, pending, outstanding } = controlledReads();
+  const reading = schedule.refresh();
+
+  // Act
+  pending[0]?.reject(new Error("offline"));
+  await reading;
+
+  // Assert
+  expect(outstanding).toStrictEqual([true, false]);
 });

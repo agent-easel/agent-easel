@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
 import { CircleDashed, type LucideIcon } from "lucide-react";
 import type { AgentDefinition, ReportingInstallation } from "@t3-factory/contracts";
 import type { SettingKind } from "./components/status-badge.tsx";
@@ -75,6 +75,15 @@ const ReportingStateContext = createContext<
   | (ReportingReads &
       ReportingInstallState & {
         refresh: () => Promise<void>;
+        /**
+         * Reads the list again for `scope`, such as the connected T3 and the harnesses it keeps
+         * off; null means no scope the list can answer for yet.
+         */
+        refreshFor: (scope: string | null) => Promise<void>;
+        /** The scope the applied list answers for: current when its read started, and still. */
+        answeredFor: string | null;
+        /** A read requested since `targets` applied is outstanding, so they may be out of date. */
+        refreshing: boolean;
         readDetails: string;
       })
   | null
@@ -85,13 +94,33 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const [targets, setTargets] = useState<readonly ReportingInstallation[] | null>(null);
   const [running, setRunning] = useState<string | null>(null);
   const [failures, setFailures] = useState<Record<string, string>>({});
+  const [answeredFor, setAnsweredFor] = useState<string | null>(null);
   const installing = useRef(false);
+  const scope = useRef<string | null>(null);
   const agents = useLiveStudio().value?.agents ?? null;
-  const { failure, refresh, supersede } = useRefreshSchedule({
-    read: api.getReportingInstallations,
-    apply: setTargets,
+  const {
+    failure,
+    pending: refreshing,
+    refresh,
+    supersede,
+  } = useRefreshSchedule({
+    read: async () => {
+      const readFor = scope.current;
+      return { readFor, targets: await api.getReportingInstallations() };
+    },
+    apply: ({ readFor, targets }) => {
+      setTargets(targets);
+      setAnsweredFor(readFor === scope.current ? readFor : null);
+    },
     intervalMs: 30_000,
   });
+  const refreshFor = useCallback(
+    async (next: string | null) => {
+      scope.current = next;
+      if (next !== null) await refresh();
+    },
+    [refresh],
+  );
   const reads: ReportingReads = failure
     ? {
         targets: null,
@@ -133,7 +162,17 @@ export function ReportingStateProvider({ children }: { children: ReactNode }) {
   const readDetails = failure ? String(failure.cause) : "";
   return (
     <ReportingStateContext.Provider
-      value={{ ...reads, refresh, readDetails, running, failures, install }}
+      value={{
+        ...reads,
+        refresh,
+        refreshFor,
+        answeredFor,
+        refreshing,
+        readDetails,
+        running,
+        failures,
+        install,
+      }}
     >
       {children}
     </ReportingStateContext.Provider>

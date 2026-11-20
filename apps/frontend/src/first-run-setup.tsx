@@ -66,7 +66,7 @@ export function FirstRunSetupGate({ children }: { children: ReactNode }) {
     setSetup(recorded);
   };
   if (setup?.completed) return children;
-  if (setup && remote) return <HostSetupProgressScreen onCheckAgain={refresh} />;
+  if (setup && remote) return <HostSetupProgressScreen setup={setup} onCheckAgain={refresh} />;
   if (setup)
     return <FirstRunSetupScreen setup={setup} onCheckAgain={refresh} onCompleted={completed} />;
   if (failure)
@@ -102,6 +102,25 @@ const nothingToInstall = (
   targets.some((target) => target.kind === "discovery-refused") ||
   (listed.length > 0 && !listed.some(installable));
 
+/**
+ * The connection and reporting list both setup screens follow. The list is read again whenever T3
+ * becomes Connected or the harnesses it keeps off change, and is `listed` once such a read has
+ * applied; a later read for the same T3 and caption keeps it in view. It is `current` while no
+ * newer read is outstanding as well: Open Factory and an approved client's status rest on that.
+ */
+function useSetupProgress(setup: FirstRunSetup) {
+  const { presentation } = useConnectionState();
+  const { targets, refreshFor, answeredFor, refreshing } = useReportingState();
+  const connected = presentation === "ready";
+  const key = connected ? setup.harnessesOffInT3.join(" ") : null;
+  useEffect(() => {
+    void refreshFor(key);
+  }, [key, refreshFor]);
+  const answered = key !== null && answeredFor === key;
+  const listed = answered && targets ? targets.filter(listedTarget) : null;
+  return { connected, targets, listed, current: answered && !refreshing };
+}
+
 const names = (providers: readonly string[]) =>
   new Intl.ListFormat("en", { type: "conjunction" }).format(providers.map(providerName));
 
@@ -114,10 +133,7 @@ function FirstRunSetupScreen({
   onCheckAgain: () => Promise<void>;
   onCompleted: (setup: FirstRunSetup) => void;
 }) {
-  const { presentation } = useConnectionState();
-  const { targets } = useReportingState();
-  const connected = presentation === "ready";
-  const listed = connected && targets ? targets.filter(listedTarget) : null;
+  const { connected, listed, current } = useSetupProgress(setup);
   const ready = installedEverywhere(listed);
   return (
     <GateScreen
@@ -145,6 +161,7 @@ function FirstRunSetupScreen({
           {connected && !ready && (
             <InstallStep
               listed={listed}
+              current={current}
               offInT3={setup.harnessesOffInT3}
               onCheckAgain={onCheckAgain}
               onCompleted={onCompleted}
@@ -152,7 +169,7 @@ function FirstRunSetupScreen({
           )}
         </li>
       </ol>
-      {ready && <ReadyStep reminder onCompleted={onCompleted} />}
+      {ready && <ReadyStep reminder current={current} onCompleted={onCompleted} />}
     </GateScreen>
   );
 }
@@ -247,17 +264,18 @@ function InstallStepHeader({
  * host's actions: only the host saves the endpoint, authorizes or completes setup, and
  * installing belongs with it. Progress comes from the host screen's connection and reporting reads.
  */
-function HostSetupProgressScreen({ onCheckAgain }: { onCheckAgain: () => Promise<void> }) {
-  const { connection, presentation } = useConnectionState();
-  const { targets, refresh } = useReportingState();
-  const connected = presentation === "ready";
-  const listed = connected && targets ? targets.filter(listedTarget) : null;
+function HostSetupProgressScreen({
+  setup,
+  onCheckAgain,
+}: {
+  setup: FirstRunSetup;
+  onCheckAgain: () => Promise<void>;
+}) {
+  const { connection } = useConnectionState();
+  const { refresh } = useReportingState();
+  const { connected, targets, listed, current } = useSetupProgress(setup);
   const installed = installedEverywhere(listed);
-  const manual = !!targets && !!listed && nothingToInstall(targets, listed);
-  // The shared reporting read may still hold the answer from before the host Connected.
-  useEffect(() => {
-    if (connected) void refresh();
-  }, [connected, refresh]);
+  const manual = current && !!targets && !!listed && nothingToInstall(targets, listed);
   return (
     <GateScreen
       size="wide"
@@ -315,26 +333,23 @@ function HostSetupProgressScreen({ onCheckAgain }: { onCheckAgain: () => Promise
  */
 function InstallStep({
   listed,
+  current,
   offInT3,
   onCheckAgain,
   onCompleted,
 }: {
+  /** Null until a reporting read requested for the connected T3 and its caption has applied. */
   listed: readonly ReportingInstallation[] | null;
+  /** The reporting list answers for the connected T3 and the current caption. */
+  current: boolean;
   offInT3: readonly string[];
   onCheckAgain: () => Promise<void>;
   onCompleted: (setup: FirstRunSetup) => void;
 }) {
   const { targets, error, readDetails, refresh } = useReportingState();
-  // The shared read may still hold the answer from before T3 was Connected, and a harness turned
-  // on or off in T3 changes the caption: the list is read again with it.
-  const [checked, setChecked] = useState(false);
-  const offKey = offInT3.join(" ");
-  useEffect(() => {
-    void refresh().finally(() => setChecked(true));
-  }, [refresh, offKey]);
   const checkAgain = () => void Promise.all([refresh(), onCheckAgain()]);
   // Discovery could not read T3's harnesses: turning one on in T3 would not help.
-  const refusal = targets?.find((target) => target.kind === "discovery-refused");
+  const refusal = listed && targets?.find((target) => target.kind === "discovery-refused");
   const caption = !refusal && offInT3.length > 0 && (
     <p className="text-2xs font-medium text-subtle-foreground">
       {offInT3.length === 1
@@ -355,7 +370,7 @@ function InstallStep({
         Check that Factory is running, then check again.
       </ProblemCard>
     );
-  else if (!listed || !checked)
+  else if (!listed)
     content = (
       <StatusBadge kind="checking" role="status">
         Checking harnesses…
@@ -374,7 +389,7 @@ function InstallStep({
           it from Settings → Agent reporting, or{" "}
           <TextLink href={MANUAL_REPORTING_URL}>set it up by hand</TextLink>.
         </ProblemCard>
-        <ReadyStep reminder={false} onCompleted={onCompleted} />
+        <ReadyStep reminder={false} current={current} onCompleted={onCompleted} />
       </>
     );
   else if (!listed.length)
@@ -390,7 +405,7 @@ function InstallStep({
         check again.
       </ProblemCard>
     );
-  else content = <HarnessInstall listed={listed} onCompleted={onCompleted} />;
+  else content = <HarnessInstall listed={listed} current={current} onCompleted={onCompleted} />;
   return (
     <div className="grid gap-3 pl-8.5">
       {content}
@@ -405,9 +420,11 @@ function InstallStep({
  */
 function HarnessInstall({
   listed,
+  current,
   onCompleted,
 }: {
   listed: readonly ReportingInstallation[];
+  current: boolean;
   onCompleted: (setup: FirstRunSetup) => void;
 }) {
   const { running, failures, install } = useReportingState();
@@ -459,6 +476,7 @@ function HarnessInstall({
       {pending.length === 0 && (
         <ReadyStep
           reminder={listed.some((target) => target.status === "installed")}
+          current={current}
           onCompleted={onCompleted}
         />
       )}
@@ -495,13 +513,19 @@ function HarnessList({
   );
 }
 
-/** Open Factory records completion on the host before the application opens. */
+/**
+ * Open Factory records completion on the host before the application opens. It waits while the
+ * reporting list it rests on is being read again, since that read can bring something to install.
+ */
 function ReadyStep({
   reminder,
+  current,
   onCompleted,
 }: {
   /** Something was installed, so new agent sessions are needed to load it. */
   reminder: boolean;
+  /** The reporting list Open Factory rests on is current; until then it is disabled. */
+  current: boolean;
   onCompleted: (setup: FirstRunSetup) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -529,7 +553,7 @@ function ReadyStep({
       )}
       <div className="flex justify-end">
         <MutationGate>
-          <Button disabled={busy} onClick={() => void complete()}>
+          <Button disabled={busy || !current} onClick={() => void complete()}>
             Open Factory
           </Button>
         </MutationGate>
