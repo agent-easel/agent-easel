@@ -10,20 +10,25 @@ async function profileDirectory(context: TestContext) {
   return directory;
 }
 
-it("a chosen Light appearance is still chosen when the installation opens again", async (context) => {
-  // Arrange
-  const directory = await profileDirectory(context);
-  const store = await SettingsStore.open(directory);
-  await store.update({ appearance: "light" });
+it.for(["light", "dark"] as const)(
+  "a stored %s appearance survives upgrading the installation",
+  async (appearance, context) => {
+    // Arrange
+    const directory = await profileDirectory(context);
+    await writeFile(
+      join(directory, "desktop-settings.json"),
+      JSON.stringify({ version: 1, appearance }),
+    );
 
-  // Act
-  const reopened = await SettingsStore.open(directory);
+    // Act
+    const store = await SettingsStore.open(directory);
 
-  // Assert
-  expect(reopened.get().appearance).toBe("light");
-});
+    // Assert
+    expect(store.get().appearance).toBe(appearance);
+  },
+);
 
-it("settings saved before appearance and alerts existed open Dark with Notifications and the Dock badge on, and keep the installation's role", async (context) => {
+it("settings saved before appearance and alerts existed open in System with Notifications and the Dock badge on, and keep the installation's role", async (context) => {
   // Arrange
   const directory = await profileDirectory(context);
   await writeFile(
@@ -49,7 +54,7 @@ it("settings saved before appearance and alerts existed open Dark with Notificat
     launchAtLogin: true,
     menuBarIcon: false,
     updateChannel: "beta",
-    appearance: "dark",
+    appearance: "system",
     notifications: true,
     dockBadge: true,
     showRunDetails: false,

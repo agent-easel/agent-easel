@@ -38,8 +38,8 @@ contextBridge.exposeInMainWorld("factoryDesktop", {
   installUpdate: () => ipcRenderer.invoke(channels.installUpdate),
   setUpdateChannel: (channel: string) =>
     ipcRenderer.invoke(channels.setUpdateChannel, String(channel)),
-  setAppearance: (appearance: string) =>
-    ipcRenderer.invoke(channels.setAppearance, String(appearance)),
+  setAppearance: (preference: string) =>
+    ipcRenderer.invoke(channels.setAppearance, String(preference)),
   setMenuState: (state: unknown) => ipcRenderer.invoke(channels.setMenuState, state),
   onMenuCommand(listener) {
     // The main process sends only ids it built its menu from.

@@ -6,13 +6,14 @@ parallel stylesheets, global element styling or per-screen color palettes.
 
 ## Light and Dark
 
-**Settings → Appearance** offers exactly **Light** and **Dark**; Dark is the
-default and there is no System mode. The choice is local to the client, never sent to the
-server, and available on every connection gate and while offline; see
-[Desktop and approved clients](desktop-and-clients.md#appearance).
+**Settings → Appearance** offers **System**, **Light** and **Dark**. System is the
+default and follows the device's appearance while the client is open. Light and Dark
+fix the effective mode to the selected appearance. The preference belongs to the client
+and is available on every connection gate and while offline.
+See [Desktop and approved clients](desktop-and-clients.md#appearance).
 
-The mode is `data-appearance` on `<html>`. Every color token, `color-scheme` (native
-controls and scrollbars), the `dark:` variant and the browser `theme-color` follow it, so a
+The effective Light or Dark mode is `data-appearance` on `<html>`. Every color token,
+`color-scheme` (native controls and scrollbars), the `dark:` variant and the browser `theme-color` follow it, so a
 change applies at once without a reload. Color transitions are suspended for that instant
 so controls do not fade one by one. Light is its own baseline, not an inversion of Dark:
 white canvases and zinc structure, primary actions at a darker indigo, and status colors at
@@ -24,8 +25,9 @@ system palette in either mode; meaning stays carried by labels and icons.
 ### T3 theme colors
 
 With [theme colors](t3-integration.md#theme-colors), every color token can come
-from the T3 environment's default theme instead of the baseline, separately per mode: the local
-mode still picks Light or Dark, and a mode without an accepted T3 half keeps its baseline.
+from the T3 environment's default theme instead of the baseline, separately per mode.
+The effective appearance picks the palette. A mode without an accepted T3 palette keeps
+its baseline.
 Appearance shows **Following T3** when either mode uses T3 colors, **Checking** during the read,
 and **Factory colors** otherwise. Factory keeps its own typography, geometry, radii, shadows and motion.
 

@@ -1,7 +1,10 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateChannel } from "@t3-factory/contracts";
-import type { Appearance, DesktopAlertSettings } from "@t3-factory/contracts/desktop-bridge";
+import type {
+  AppearancePreference,
+  DesktopAlertSettings,
+} from "@t3-factory/contracts/desktop-bridge";
 
 /** How this client trusts its server: a pinned Factory authority, or the system's trust store. */
 export type ServerTrust =
@@ -29,7 +32,7 @@ export interface DesktopSettings extends DesktopAlertSettings {
   readonly menuBarIcon: boolean;
   /** Null until chosen: the installation follows the track of the build it runs. */
   readonly updateChannel: UpdateChannel | null;
-  readonly appearance: Appearance;
+  readonly appearance: AppearancePreference;
 }
 
 const initialSettings: DesktopSettings = {
@@ -39,7 +42,7 @@ const initialSettings: DesktopSettings = {
   launchAtLogin: false,
   menuBarIcon: false,
   updateChannel: null,
-  appearance: "dark",
+  appearance: "system",
   notifications: true,
   dockBadge: true,
   showRunDetails: false,
@@ -71,8 +74,7 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
   const server = value.server === null || value.server === undefined ? null : value.server;
   if (server !== null && !isServer(server)) return undefined;
   // The update channel, menu-bar icon, appearance and alert switches were added within version
-  // 1; files without them follow the build's channel, keep the icon hidden, open Dark, notify
-  // and badge, and keep Run details out of notifications.
+  // 1. Preserve explicit Light and Dark, including Dark written by earlier versions by default.
   return {
     version: 1,
     role,
@@ -83,7 +85,8 @@ function parseSettings(raw: unknown): DesktopSettings | undefined {
       value.updateChannel === "stable" || value.updateChannel === "beta"
         ? value.updateChannel
         : null,
-    appearance: value.appearance === "light" ? "light" : "dark",
+    appearance:
+      value.appearance === "light" || value.appearance === "dark" ? value.appearance : "system",
     notifications: value.notifications !== false,
     dockBadge: value.dockBadge !== false,
     showRunDetails: value.showRunDetails === true,

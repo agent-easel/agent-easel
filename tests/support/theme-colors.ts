@@ -29,8 +29,7 @@ export function themeColors(app: FixtureApp) {
      * version).
      */
     async withPublishedThemes() {
-      await appearance.publish();
-      await appearance.setDefaultTheme({ theme: "ocean" });
+      await appearance.publish({ defaultTheme: "ocean" });
     },
     /** `t3 theme set <id>` on the controlled T3 environment. */
     setDefaultTheme: (theme: string) => appearance.setDefaultTheme({ theme }),
@@ -52,8 +51,7 @@ export function themeColors(app: FixtureApp) {
      * address shows its Appearance settings, so the host panel keeps its own mode.
      */
     async followNightfallInApprovedBrowser() {
-      await appearance.publish();
-      await appearance.setDefaultTheme({ theme: "nightfall" });
+      await appearance.publish({ defaultTheme: "nightfall" });
       await app.open(otherAddress(remoteBrowserPath));
       await app.open(otherAddress(approvedBrowserPath("/settings/appearance")));
     },
@@ -62,6 +60,7 @@ export function themeColors(app: FixtureApp) {
 
 /** The host panel's Appearance settings, following T3's Ocean theme in Dark. */
 export async function hostFollowingOcean({ app, browser }: { app: FixtureApp; browser: Browser }) {
+  await browser.emulateMedia({ colorScheme: "dark" });
   const colors = themeColors(app);
   await colors.followOcean();
   await app.open("/settings/appearance");
@@ -82,6 +81,7 @@ export async function clientWithCachedOcean({
   screen: Screen;
   browser: Browser;
 }) {
+  await browser.emulateMedia({ colorScheme: "dark" });
   const colors = themeColors(app);
   await colors.followOcean();
   await colors.openApprovedClient(screen);

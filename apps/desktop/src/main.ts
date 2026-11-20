@@ -33,6 +33,7 @@ import {
 } from "@t3-factory/contracts";
 import type {
   Appearance,
+  AppearancePreference,
   DesktopAlertSettings,
   DesktopMenuState,
   DesktopResult,
@@ -68,6 +69,10 @@ const documentationUrl = "https://github.com/alimek/t3-factory/tree/main/docs#re
 
 /** Each mode's `--background` in the frontend's styles.css, painted while the page loads. */
 const windowBackground: Record<Appearance, string> = { light: "#ffffff", dark: "#09090b" };
+
+function effectiveAppearance(): Appearance {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+}
 
 const failed = (message: string): Extract<DesktopResult, { ok: false }> => ({ ok: false, message });
 
@@ -278,7 +283,7 @@ function openWindow() {
     title: "T3 Factory",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 17 },
-    backgroundColor: windowBackground[store.get().appearance],
+    backgroundColor: windowBackground[effectiveAppearance()],
     // Windows and Linux show the application menu bar on Alt; macOS ignores this option.
     autoHideMenuBar: true,
     webPreferences: {
@@ -446,23 +451,25 @@ async function setUpdateChannel(channel: unknown): Promise<DesktopResult> {
   return { ok: true };
 }
 
-/**
- * Native chrome and dialogs follow Factory's chosen appearance rather than the macOS one;
- * CSS color-scheme cannot style the title bar.
- */
-function applyNativeAppearance(appearance: Appearance) {
-  nativeTheme.themeSource = appearance;
-  if (window && !window.isDestroyed()) window.setBackgroundColor(windowBackground[appearance]);
+function updateWindowBackground() {
+  if (window && !window.isDestroyed())
+    window.setBackgroundColor(windowBackground[effectiveAppearance()]);
 }
 
-async function setAppearance(appearance: unknown): Promise<DesktopResult> {
-  if (appearance !== "light" && appearance !== "dark") return failed("Choose Light or Dark.");
+function applyNativeAppearance(preference: AppearancePreference) {
+  nativeTheme.themeSource = preference;
+  updateWindowBackground();
+}
+
+async function setAppearance(preference: unknown): Promise<DesktopResult> {
+  if (preference !== "system" && preference !== "light" && preference !== "dark")
+    return failed("Choose System, Light or Dark.");
   try {
-    await store.update({ appearance });
+    await store.update({ appearance: preference });
   } catch (error) {
     return failed(`The appearance could not be saved: ${String(error)}`);
   }
-  applyNativeAppearance(appearance);
+  applyNativeAppearance(preference);
   return { ok: true };
 }
 
@@ -604,7 +611,7 @@ const bridgeHandlers: BridgeHandlers = {
   },
   installUpdate: () => installUpdate(),
   setUpdateChannel: (_frame, channel: unknown) => setUpdateChannel(channel),
-  setAppearance: (_frame, appearance: unknown) => setAppearance(appearance),
+  setAppearance: (_frame, preference: unknown) => setAppearance(preference),
   setMenuState: (_frame, state: unknown) => {
     const publication = parseMenuState(state);
     if (!publication.ok) return failed(publication.message);
@@ -647,7 +654,7 @@ function registerUi() {
     factoryProtocolHandler({
       uiDirectory,
       target: apiTarget,
-      appearance: () => store.get().appearance,
+      appearance: () => ({ mode: effectiveAppearance(), preference: store.get().appearance }),
     }),
   );
 }
@@ -697,6 +704,7 @@ if (!app.requestSingleInstanceLock()) {
 async function start() {
   store = await SettingsStore.open(app.getPath("userData"));
   applyNativeAppearance(store.get().appearance);
+  nativeTheme.on("updated", updateWindowBackground);
   // A newly issued credential replaces the attention subscription at once.
   approvedClient = await ApprovedClient.open(store, safeStorage, followAttention);
   backend = new BackendSupervisor(
