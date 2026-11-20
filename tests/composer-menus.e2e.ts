@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtempDisposable } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -574,62 +574,62 @@ test("the Project menu lists available projects and Refresh projects", async ({
   await app.screenshot("after-project-menu");
 });
 
+async function addProjectsForSearch(baseUrl: string | undefined, directory: string) {
+  for (let index = 0; index < 8; index += 1) {
+    const root = join(directory, String(index));
+    await mkdir(root);
+    await promisify(execFile)("git", ["init", root]);
+    const response = await fetch(new URL("/api/projects", baseUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Factory-Request": "1" },
+      body: JSON.stringify({ path: root }),
+    });
+    const body = (await response.json()) as Result<unknown>;
+    assert(body.ok, JSON.stringify(body));
+  }
+}
+
 test("Project search appears after more than seven projects and keeps the path ending", async ({
   app,
   screen,
   browser,
 }) => {
   // Arrange
-  const roots: string[] = [];
-  try {
-    for (let index = 0; index < 8; index += 1) {
-      const root = await mkdtemp(join(tmpdir(), "factory-menu-evidence-"));
-      roots.push(root);
-      await promisify(execFile)("git", ["init", root]);
-      const response = await fetch(new URL("/api/projects", app.baseUrl), {
-        method: "POST",
-        headers: { "content-type": "application/json", "X-Factory-Request": "1" },
-        body: JSON.stringify({ path: root }),
-      });
-      const body = (await response.json()) as Result<unknown>;
-      assert(body.ok, JSON.stringify(body));
-    }
-    await selectComposerProject(screen, "Northwind");
+  await using directory = await mkdtempDisposable(join(tmpdir(), "factory-menu-evidence-"));
+  await addProjectsForSearch(app.baseUrl, directory.path);
+  await selectComposerProject(screen, "Northwind");
 
-    // Act
-    await openProjectMenu(screen);
+  // Act
+  await openProjectMenu(screen);
 
-    // Assert
-    const search = screen.getByRole("searchbox", "Search projects", { exact: true });
-    await expect(search).toBeVisible();
-    const ratio = Number(await browser.evaluate(placeholderContrast("Search projects")));
-    expect(ratio).toBeGreaterThanOrEqual(4.5);
-    const path = JSON.parse(
-      pageString(
-        await browser.evaluate(`(() => {
-          const row = [...document.querySelectorAll("[data-project-id]")].find((item) =>
-            (item.getAttribute("aria-label") ?? "").includes("factory-menu-evidence-"),
-          );
-          const path = row?.querySelector("[dir=rtl]");
-          return JSON.stringify({
-            dir: path?.getAttribute("dir"),
-            title: path?.getAttribute("title") ?? "",
-            text: path?.textContent ?? "",
-          });
-        })()`),
-      ),
-    ) as { dir: string; title: string; text: string };
-    expect(path.dir).toBe("rtl");
-    expect(path.title).toContain("factory-menu-evidence-");
-    expect(path.text).toBe(path.title);
-    await browser.evaluate(settled);
-    await app.screenshot("after-project-many");
-    await search.fill("zzzz-no-such-project");
-    await expect(screen.getByText("No matching projects", { exact: true })).toBeVisible();
-    await expect(screen.getByRole("menuitem", "Refresh projects", { exact: true })).toBeVisible();
-    await browser.evaluate(settled);
-    await app.screenshot("after-project-no-match");
-  } finally {
-    await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
-  }
+  // Assert
+  const search = screen.getByRole("searchbox", "Search projects", { exact: true });
+  await expect(search).toBeVisible();
+  const ratio = Number(await browser.evaluate(placeholderContrast("Search projects")));
+  expect(ratio).toBeGreaterThanOrEqual(4.5);
+  const path = JSON.parse(
+    pageString(
+      await browser.evaluate(`(() => {
+        const row = [...document.querySelectorAll("[data-project-id]")].find((item) =>
+          (item.getAttribute("aria-label") ?? "").includes("factory-menu-evidence-"),
+        );
+        const path = row?.querySelector("[dir=rtl]");
+        return JSON.stringify({
+          dir: path?.getAttribute("dir"),
+          title: path?.getAttribute("title") ?? "",
+          text: path?.textContent ?? "",
+        });
+      })()`),
+    ),
+  ) as { dir: string; title: string; text: string };
+  expect(path.dir).toBe("rtl");
+  expect(path.title).toContain("factory-menu-evidence-");
+  expect(path.text).toBe(path.title);
+  await browser.evaluate(settled);
+  await app.screenshot("after-project-many");
+  await search.fill("zzzz-no-such-project");
+  await expect(screen.getByText("No matching projects", { exact: true })).toBeVisible();
+  await expect(screen.getByRole("menuitem", "Refresh projects", { exact: true })).toBeVisible();
+  await browser.evaluate(settled);
+  await app.screenshot("after-project-no-match");
 });

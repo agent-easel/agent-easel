@@ -204,10 +204,10 @@ function beginRun(
   ready: boolean,
   navigate: ReturnType<typeof useNavigate>,
 ) {
-  return async () => {
+  return async (confirmCompletedIssues = false) => {
     if (draft.busy) return;
     if (!draft.pending && (!draft.text.trim() || !ready)) return;
-    const runId = await runDraft.start();
+    const runId = await runDraft.start(confirmCompletedIssues);
     if (runId) void navigate({ to: "/runs/$runId", params: { runId } });
   };
 }
@@ -620,6 +620,26 @@ function outcomeLaunchNotice(model: Composer) {
         }
       >
         {card.message}
+      </ProblemCard>
+    );
+  if (
+    card.kind === "start-rejected" &&
+    draft.issues.some((issue) => issue.code === "completed_issue")
+  )
+    return (
+      <ProblemCard
+        density="compact"
+        tone="attention"
+        title="Review completed GitHub work"
+        action={
+          <MutationGate>
+            <TextLink disabled={draft.busy} onClick={() => void start(true)}>
+              Start anyway
+            </TextLink>
+          </MutationGate>
+        }
+      >
+        {draft.issues.map((issue) => issue.message).join(" ")}
       </ProblemCard>
     );
   if (card.kind === "start-rejected")

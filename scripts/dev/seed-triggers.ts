@@ -25,6 +25,7 @@ export async function createDemoTriggers(
 ) {
   const { factory } = context;
   const repository = github.nameRepository(project.workspaceRoot, "factory-demo/atlas");
+  github.openIssue(repository, { number: 41, title: "Index search results" }).open = false;
   github.openIssue(repository, {
     number: 42,
     title: "Show keyboard shortcuts in the help menu",

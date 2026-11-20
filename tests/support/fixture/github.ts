@@ -64,8 +64,8 @@ export function githubFixture(github: ControlledGitHub, { factory, world }: Host
         return github.nameRepository(projectFolder, nameWithOwner, visibility);
       },
       /** Someone opens issue `number` in the Project's repository; each label gets a `labeled` event. */
-      issue(issue: { number: number; title: string; labels?: string[] }) {
-        github.openIssue(projectRepository(), issue);
+      issue(issue: { number: number; title: string; labels?: string[]; open?: boolean }) {
+        github.openIssue(projectRepository(), issue).open = issue.open ?? true;
       },
       /**
        * An enabled Trigger named `name`, with its schedule off, that starts the seed's focused-change

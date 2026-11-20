@@ -221,9 +221,9 @@ test("Flow Duplicate into Global keeps or copies global Agents, copies the Proje
   const copyId = new URL(await browser.url()).pathname.split("/").at(-1)!;
   const copy = await readFlow(app.baseUrl, copyId);
   assert.equal(copy.projectId, null);
-  const placed = copy.graph.blocks.flatMap((block) =>
-    block.kind === "agent" ? [block.agentId] : [],
-  );
+  const placed = copy.graph.blocks
+    .filter((block) => block.kind === "agent")
+    .map((block) => block.agentId);
   assert.equal(placed.length, 2);
   assert(!placed.includes(shared.id) && !placed.includes(qa.id));
   assert.deepEqual((await readFlow(app.baseUrl, flow.id)).graph, flow.graph);

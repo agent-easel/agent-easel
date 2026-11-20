@@ -645,3 +645,26 @@ it("after a crash once Start accepted an issue's Run, the next check starts no s
   expect(checked.value.latestCheck).toMatchObject({ started: 0, waiting: 0 });
   expect(await startedIssues(recovered, world.project.id)).toStrictEqual([1]);
 });
+
+it("a Trigger skips its ready issue when the issue has a merged closing PR", async (c) => {
+  // Arrange
+  const world = await checkingWorld(c);
+  world.readyIssue(9, "Ship search").mergedClosingPr =
+    "https://github.com/factory-maintainer/atlas/pull/12";
+
+  // Act
+  const checked = await world.f.runTrigger(world.trigger.id);
+
+  // Assert
+  assert(checked.ok);
+  expect(checked.value.latestCheck).toMatchObject({
+    started: 0,
+    notStarted: [
+      {
+        issue: "factory-maintainer/atlas#9",
+        reason: expect.stringContaining("merged closing pull request"),
+      },
+    ],
+  });
+  expect(await startedIssues(world.f, world.project.id)).toEqual([]);
+});

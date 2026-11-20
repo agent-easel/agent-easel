@@ -54,6 +54,11 @@ export const launchTools: Tool[] = [
           description:
             "A Flow id from factory_list_flows with this projectId: a global Flow or a Flow this Project owns.",
         },
+        confirmCompletedIssues: {
+          type: "boolean",
+          description:
+            "Only after showing the completed_issue warning and receiving explicit confirmation to start anyway.",
+        },
         input: {
           type: "string",
           description:

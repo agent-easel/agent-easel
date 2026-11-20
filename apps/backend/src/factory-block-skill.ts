@@ -60,6 +60,7 @@ A rejected report carries a \`reason\` and a \`next\` step; follow \`next\`. A r
 - A validation code such as \`MESSAGE_REQUIRED\`, \`EXIT_NOT_ALLOWED\`, \`INVALID_EXIT\` or \`FEEDBACK_REQUIRED\`: fix the arguments and call again.
 - \`WAITING_RETIRED\`: you followed an outdated instruction. Do not report the question; end the turn with it as your final message.
 - \`UNKNOWN_BLOCK\` or \`BLOCK_ID_REQUIRED\`: copy the Block id exactly from the latest \`Factory Block id:\` line and call again.
+- If \`factory_update_block\` fails with \`ECONNREFUSED\` or “factory-runtime not connected”, reconnect to factory-runtime, then retry the same report with the same Block id and arguments. Wait for its acknowledgement before treating the report as delivered.
 - \`RUNTIME_UNAVAILABLE\` or no reply at all: Factory may not have recorded the report. Repeat the same call; an identical report returns the same acknowledgement.
 
 If reporting still fails, say in chat which report you could not make and the error, then end the turn.

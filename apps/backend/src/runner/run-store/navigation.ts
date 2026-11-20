@@ -7,7 +7,7 @@ import {
   type RunNavigationEntry,
 } from "@t3-factory/contracts";
 import * as Effect from "effect/Effect";
-import { currentWorkingMessages } from "./current-report.ts";
+import { currentProgress } from "./current-report.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { readRunSettlementStates } from "./manual-settlement.ts";
 import { pendingRunWork } from "./settlement.ts";
@@ -68,10 +68,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             engine_status: string | null;
           }>`SELECT run_id,block_id,state,freshness,report_status,engine_status FROM run_blocks WHERE run_id IN (SELECT id FROM runs WHERE archived_at IS NULL) ORDER BY rowid`;
           const working = new Map(
-            (yield* currentWorkingMessages(sql)).map((row) => [
-              `${row.run_id}/${row.block_id}`,
-              row.message,
-            ]),
+            (yield* currentProgress(sql)).map((row) => [`${row.runId}/${row.blockId}`, row]),
           );
           const byRun = new Map<string, RunNavigationEntry["blocks"][number][]>();
           const reviewInT3 = new Set(
@@ -81,6 +78,8 @@ export function openRunNavigation(database: RunnerDatabase) {
                   state: block.state,
                   reportStatus: block.report_status,
                   engineStatus: block.engine_status,
+                  progressOverdue:
+                    working.get(`${block.run_id}/${block.block_id}`)?.overdue ?? false,
                 }),
               )
               .map((block) => block.run_id),
@@ -96,7 +95,7 @@ export function openRunNavigation(database: RunnerDatabase) {
             entries.push({
               state: block.state,
               freshness: block.freshness,
-              workingMessage: working.get(`${block.run_id}/${block.block_id}`) ?? null,
+              workingMessage: working.get(`${block.run_id}/${block.block_id}`)?.message ?? null,
             });
             byRun.set(block.run_id, entries);
           }
@@ -168,6 +167,7 @@ export function openRunNavigation(database: RunnerDatabase) {
                 pendingWork: !!row.pending_work,
                 attention: {
                   needsInput:
+                    active &&
                     settlement === null &&
                     (reviewInT3.has(row.id) ||
                       matters.some((matter) => matter.presentation === "needs-input")),

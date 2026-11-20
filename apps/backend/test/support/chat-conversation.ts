@@ -196,3 +196,13 @@ export const operatingService = (
 
 /** Waits for a promise inside an Effect test. */
 export const until = <A>(promise: () => Promise<A>) => Effect.promise(promise);
+
+export function transcriptEvidence(message: ReturnType<typeof requestMessages>[number]) {
+  if (message.role === "tool") {
+    return { role: "tool", content: JSON.parse(message.content as string) as unknown };
+  }
+  if (message.role === "assistant" && message.tool_calls) {
+    return { role: "assistant", calls: message.tool_calls.map((call) => call.function.name) };
+  }
+  return { role: message.role, content: message.role === "system" ? "…" : message.content };
+}

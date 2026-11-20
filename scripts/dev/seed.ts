@@ -1,3 +1,4 @@
+import { threeHoursAgo } from "../../apps/backend/test/support/seed-clock.ts";
 import {
   seedScenarioList,
   type DemoAgents,
@@ -35,6 +36,7 @@ import {
   waitContinuedNow,
   woke,
   workerAtWork,
+  workingReported,
   workingReportedIdle,
   worktreeBound,
 } from "../../apps/backend/test/support/scenarios.ts";
@@ -217,6 +219,12 @@ export async function seedScenario(
     scenario.attachments,
     namespace,
   );
+  if (scenario.state === "progress overdue") {
+    const worker = await threeHoursAgo(async () =>
+      workingReported(context, await workerAtWork(context, start), "Checking the indexing job."),
+    );
+    return worker.runId;
+  }
   if (scenario.state === "two workers started from one prompt") {
     const workers = await twoWorkersStarted(context, start);
     for (const [index, repository] of scenario.repositories.entries())
@@ -314,6 +322,7 @@ async function finishScenario(
         | "Run worktree bound"
         | "results released to a Wait"
         | "results released to a Condition"
+        | "progress overdue"
         | "settlement unresolved"
         | "generated title applied";
     }

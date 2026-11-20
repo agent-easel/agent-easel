@@ -1,3 +1,4 @@
+import type { Browser } from "@e2e-dev/web";
 import { beforeEach, test } from "./support/test.ts";
 import { expect } from "e2e";
 import { createStudioFlow, removeFlowElsewhere } from "./support/flows.ts";
@@ -75,6 +76,24 @@ test("Back to a created Agent removed after its first live appearance shows not 
   await app.screenshot("created-agent-removed-before-back");
 });
 
+async function reviseAgentBeforeLosingCreateReply(
+  browser: Browser,
+  baseUrl: string | undefined,
+  original: string,
+  revised: string,
+) {
+  await browser.route("**/api/agents", async (route) => {
+    if (route.request.method !== "POST") return route.continue();
+    const reply = await route.fetch();
+    if (reply.status !== 201)
+      return route.fulfill({ status: reply.status, body: await reply.text() });
+    const agent = (await listAgentDefinitions(baseUrl)).find((entry) => entry.name === original);
+    if (!agent) throw new Error("The Create did not reach Factory.");
+    await saveAgentElsewhere(baseUrl, agent, { name: revised });
+    await route.abort();
+  });
+}
+
 test("a skewed browser clock does not prevent Create or recovery of its lost reply", async ({
   app,
   browser,
@@ -91,18 +110,7 @@ test("a skewed browser clock does not prevent Create or recovery of its lost rep
   await browser.evaluate(
     "Date.now = (() => { const now = Date.now; return () => now() - 60_000; })()",
   );
-  await browser.route("**/api/agents", async (route) => {
-    if (route.request.method !== "POST") return route.continue();
-    const reply = await route.fetch();
-    if (reply.status !== 201)
-      return route.fulfill({ status: reply.status, body: await reply.text() });
-    const agent = (await listAgentDefinitions(app.baseUrl)).find(
-      (entry) => entry.name === original,
-    );
-    if (!agent) throw new Error("The Create did not reach Factory.");
-    await saveAgentElsewhere(app.baseUrl, agent, { name: revised });
-    await route.abort();
-  });
+  await reviseAgentBeforeLosingCreateReply(browser, app.baseUrl, original, revised);
 
   // Act
   await screen.getByRole("button", "Create Agent", { exact: true }).tap();

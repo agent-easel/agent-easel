@@ -22,7 +22,7 @@ on:
         required: false
         type: string
       run-checks:
-        description: Run the quality gate and browser journeys; false only when the exact tree already passed them
+        description: Run the quality gate and full browser suite here when the exact tree still needs validation
         required: true
         type: boolean
     secrets:
@@ -102,6 +102,11 @@ jobs:
         run: |
           pnpm exec e2e-web install chromium
           pnpm exec e2e run --trace on --output .e2e/release/journeys
+      - name: Check macOS keyboard shortcuts
+        if: inputs.channel == 'beta'
+        run: |
+          pnpm exec e2e-web install chromium
+          pnpm test:e2e tests/keyboard-shortcuts.e2e.ts --retries 0 --trace on --output .e2e/release/macos-shortcuts
       - name: Build, sign and notarize
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}

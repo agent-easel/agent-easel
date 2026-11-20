@@ -10,7 +10,7 @@ import {
   type WorkerHandle,
 } from "./scenarios.ts";
 
-/** A first or later visit message: the Block skill, the Block id line, then the turn's body. */
+/** A launch message: the Block skill, the Block id line, then the turn's body. */
 export function workerMessage(body: string) {
   return new RegExp(
     `^\\$factory-block\\n\\nFactory Block id: [0-9a-f-]{36}\\. Pass it as blockId to factory_get_block, factory_get_run, factory_get_run_image and factory_update_block\\.\\n\\n${body.replaceAll(".", "\\.")}$`,

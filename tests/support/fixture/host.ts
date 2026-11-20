@@ -1,3 +1,4 @@
+import { seedClock } from "../../../apps/backend/test/support/seed-clock.ts";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,12 +44,28 @@ export async function startHost(
     {
       t3,
       git: new ControlledGit(),
+      clock: seedClock,
       connectionRetryMs: 1000,
       reportingStateDirectory: join(home, "reporting-t3-state"),
       ...doubles,
     },
   );
   const factory = server.factory;
+  const writable: { -readonly [K in keyof typeof factory]: (typeof factory)[K] } = factory;
+  // The Flow list orders by creation time, then by random id. Flows the seed creates within one
+  // millisecond would otherwise swap places between runs, which Before/After evidence reads as UI
+  // change.
+  const createFlow = factory.createFlow.bind(factory);
+  let lastFlowMillisecond = 0;
+  writable.createFlow = async (input) => {
+    while (Date.now() <= lastFlowMillisecond)
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    try {
+      return await createFlow(input);
+    } finally {
+      lastFlowMillisecond = Date.now();
+    }
+  };
   factory.setRuntimeBackendUrl(`http://127.0.0.1:${server.address.port}`);
   const world = await seedDevelopment(factory, t3, doubles.github, home);
   t3.connection.approve();

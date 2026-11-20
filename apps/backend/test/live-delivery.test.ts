@@ -13,7 +13,8 @@ import { prepared } from "./support/prepared-runner.ts";
 import {
   appliedRun,
   liveReads,
-  raceFirstRead,
+  raceReads,
+  failSecondRead,
   subscribe,
   watchNavigation,
   watchRun,
@@ -138,7 +139,7 @@ it("the first Run snapshot includes a report committed during its read", async (
 
   const changes = makeLiveChanges();
   // Built once: the first execution of this read commits a report while it runs.
-  const racedRead = raceFirstRead(
+  const racedRead = raceReads(
     Effect.promise(() => f.f.getRun(f.runId)),
     async () => {
       expect(await report(f.world, worker, workingReport())).toBe("ACCEPTED");
@@ -174,25 +175,17 @@ it("a snapshot raced on every read is not current until its catch-up is delivere
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   const changes = makeLiveChanges();
-  let racedReads = 0;
+  const getRun = raceReads(
+    Effect.promise(() => f.f.getRun(f.runId)),
+    async (index) => {
+      assert((await f.f.renameRun(f.runId, { title: `Raced ${index}` })).ok);
+      changes.runChanged(f.runId);
+    },
+    { through: 3 },
+  );
   const live = makeLiveStreams(
     changes,
-    {
-      ...liveReads(f.f),
-      getRun: () =>
-        Effect.promise(() => f.f.getRun(f.runId)).pipe(
-          Effect.tap(() =>
-            racedReads++ < 3
-              ? Effect.promise(async () => {
-                  expect((await f.f.renameRun(f.runId, { title: `Raced ${racedReads}` })).ok).toBe(
-                    true,
-                  );
-                  changes.runChanged(f.runId);
-                })
-              : Effect.void,
-          ),
-        ),
-    },
+    { ...liveReads(f.f), getRun: () => getRun },
     (read) => read,
   );
 
@@ -253,23 +246,17 @@ it("a re-read raced by another commit is not current until its catch-up arrives"
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   const changes = makeLiveChanges();
-  let reads = 0;
+  const getRun = raceReads(
+    Effect.promise(() => f.f.getRun(f.runId)),
+    async () => {
+      assert((await f.f.renameRun(f.runId, { title: "Raced later" })).ok);
+      changes.runChanged(f.runId);
+    },
+    { from: 2 },
+  );
   const live = makeLiveStreams(
     changes,
-    {
-      ...liveReads(f.f),
-      getRun: () =>
-        Effect.promise(() => f.f.getRun(f.runId)).pipe(
-          Effect.tap(() =>
-            reads++ === 1
-              ? Effect.promise(async () => {
-                  expect((await f.f.renameRun(f.runId, { title: "Raced later" })).ok).toBe(true);
-                  changes.runChanged(f.runId);
-                })
-              : Effect.void,
-          ),
-        ),
-    },
+    { ...liveReads(f.f), getRun: () => getRun },
     (read) => read,
   );
   const run = subscribe(c, watchRun(live, f.runId));
@@ -289,19 +276,10 @@ it("a failed re-read marks the view not current until a later read succeeds", as
   const setup = await prepared(c, handoffFlow);
   const f = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
   const changes = makeLiveChanges();
-  let reads = 0;
+  const reads = liveReads(f.f);
   const live = makeLiveStreams(
     changes,
-    {
-      ...liveReads(f.f),
-      getRun: () =>
-        reads++ === 1
-          ? Effect.succeed({
-              ok: false as const,
-              error: { code: "internal" as const, message: "Storage is busy.", issues: [] },
-            })
-          : Effect.promise(() => f.f.getRun(f.runId)),
-    },
+    { ...reads, getRun: failSecondRead(() => reads.getRun(f.runId)) },
     (read) => read,
   );
   const run = subscribe(c, watchRun(live, f.runId));

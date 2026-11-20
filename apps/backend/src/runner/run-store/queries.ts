@@ -28,7 +28,7 @@ import { readRunDefinitions } from "./run-definitions.ts";
 import { readRunWorkspace } from "./workspace-read.ts";
 import { WORKTREE_REJECTED } from "../run-workspace.ts";
 import { attentionRows } from "./runner-attention.ts";
-import { currentWorkingMessages } from "./current-report.ts";
+import { currentProgress } from "./current-report.ts";
 import type { DeliveryRecord, ResultRecord } from "./records.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { runLifecycle } from "./lifecycle.ts";
@@ -61,7 +61,8 @@ const unresolved = ["pending", "reserved", "uncertain"];
 function runBlock(
   block: BlockRow,
   intents: readonly DeliveryRecord[],
-  workingMessage: string | null,
+  progress: { message: string | null; overdue: boolean } | undefined,
+  active: boolean,
 ): RunDetail["blocks"][number] {
   const recovering = intents.some(
     (intent) =>
@@ -78,7 +79,11 @@ function runBlock(
     link: threadHref(block.link),
     engineStatus: block.engine_status,
     reportStatus: block.report_status,
-    workingMessage,
+    workingMessage: progress?.message ?? null,
+    progressOverdue:
+      active &&
+      (block.state === "working" || block.state === "sent") &&
+      (progress?.overdue ?? false),
     problem: block.problem,
     pendingRequestCount: block.pending_request_count,
     observedAt: block.observed_at,
@@ -304,10 +309,9 @@ export function openRunQueries(database: RunnerDatabase) {
           forwarded_at: string | null;
         }>`SELECT * FROM continuation_visits WHERE run_id=${id} ORDER BY rowid`;
         const attention = yield* attentionRows(sql, id);
-        const working = new Map(
-          (yield* currentWorkingMessages(sql, id)).map((row) => [row.block_id, row.message]),
-        );
+        const working = new Map((yield* currentProgress(sql, id)).map((row) => [row.blockId, row]));
         const { definitions } = runRow;
+        const lifecycle = runLifecycle(runRow);
         return {
           ok: true as const,
           value: {
@@ -335,12 +339,12 @@ export function openRunQueries(database: RunnerDatabase) {
             rootWork: yield* readRootWork(sql, id),
             ...(yield* coordinationRead(sql, id)),
             startedAt: runRow.started_at,
-            lifecycle: runLifecycle(runRow),
+            lifecycle,
             gateOpen: !!runRow.gate_open,
             settlement: yield* readRunSettlement(sql, runRow),
             generation: runRow.generation,
             blocks: blocks.map((block) =>
-              runBlock(block, intents, working.get(block.block_id) ?? null),
+              runBlock(block, intents, working.get(block.block_id), lifecycle === "active"),
             ),
             reports: reports.map(runReport),
             executions: executions.map(runExecution),

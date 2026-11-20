@@ -1,3 +1,4 @@
+import { completedStartIssues, type StartIssue } from "./start-issues.ts";
 import { entryMessagesTooLong } from "./runner-block-workers.ts";
 import type { EffectOperations } from "../effect-operations.ts";
 import { newId } from "../ids.ts";
@@ -28,6 +29,7 @@ import {
   type StartPrompt,
 } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
+import type { GitHubAdapter } from "../adapters/github.ts";
 import type { GitAdapter } from "../adapters/git.ts";
 import { attachmentSupport, type T3ContractSnapshot } from "../t3/contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
@@ -48,6 +50,7 @@ import type { RunImages } from "../run-images.ts";
 import type { RunnerTitleGeneration } from "../run-titles.ts";
 /** A trusted caller's authority, refreshed after preflight and fenced with local acceptance. */
 export interface StartAuthorization {
+  readonly triggerIssue?: StartIssue;
   readonly check: Effect.Effect<Result<undefined>, unknown>;
   /**
    * Local state only: this runs inside the Run acceptance transaction after the accepted Run's
@@ -242,6 +245,7 @@ export function openRunnerStart(
   freshSnapshot: ContractSnapshots["fresh"],
   refreshProjects: EffectOperations<FactoryOperations>["recheckProjects"],
   git: GitAdapter,
+  github: GitHubAdapter,
   lifecycle: RunnerLifecycle,
   checkAgent: RunnerOptions["checkAgent"],
   planTitleGeneration: RunnerTitleGeneration["planTitleGeneration"],
@@ -298,6 +302,18 @@ export function openRunnerStart(
       const definitions: RunDefinitions = { flow, agents };
       const ready = prepareStartWork(definitions, prompt.value);
       if (!ready.ok) return ready;
+
+      const warnings = yield* Effect.promise(() =>
+        completedStartIssues(
+          github,
+          project,
+          promptText(prompt.value.segments),
+          input.confirmCompletedIssues === true,
+          authorization?.triggerIssue,
+        ),
+      );
+      if (warnings.length)
+        return failure("validation", "Review completed GitHub work before starting.", warnings);
       const runId = yield* newId,
         taskId = yield* newId;
       const plan: StartPlan = {
@@ -338,7 +354,7 @@ export function openRunnerStart(
     authorization?: StartAuthorization,
   ): Effect.Effect<Result<RunDetail>, unknown> {
     return Effect.gen(function* () {
-      const { requestId, projectId, flowId, input } = (
+      const { requestId, projectId, flowId, input, confirmCompletedIssues } = (
         rawInput && typeof rawInput === "object" ? rawInput : {}
       ) as Record<string, unknown>;
       if (typeof input !== "string")
@@ -352,6 +368,7 @@ export function openRunnerStart(
           requestId,
           projectId,
           flowId,
+          confirmCompletedIssues,
           segments: [{ type: "text", text: input }],
           images: [],
           title: promptTitle(input) ?? "",

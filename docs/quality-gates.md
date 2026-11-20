@@ -1,7 +1,28 @@
 # Quality gates
 
-Every push runs a local gate. A red gate means the change is not ready; fix the
-cause, then push again.
+Guardrails live in the repository's Git hooks and `pnpm check`, not in any agent
+harness. Two tiers:
+
+| Tier | Runs | Scope | Fails on |
+| ---- | ---- | ----- | -------- |
+| Pre-commit | every commit | staged files only | lint errors `--fix` cannot resolve |
+| Pre-push | every push | the whole repository (`pnpm check`) | any gate step below |
+
+A red gate means the change is not ready; fix the cause, then push again.
+
+## The pre-commit hook
+
+`.vite-hooks/pre-commit` runs `vp staged`, configured by `staged` in the root
+`vite.config.ts`. For each staged source, JSON, CSS, HTML or YAML file it runs
+`vp fmt` and then `vp lint --fix`, and stages the result. It fails on a file
+that `vp fmt` cannot parse and on lint errors that `--fix` cannot resolve; type errors, fallow findings and tests stay
+with the pre-push gate. Markdown is not formatted, as in the gate.
+
+A partially staged file is handled by `vp staged` (the lint-staged approach):
+it stashes the unstaged hunks, runs the tools on the staged content, re-stages
+that, then restores the unstaged hunks. Formatting therefore never pulls an
+unstaged hunk into the commit, and a failed run restores the original state.
+Never bypass it with `--no-verify`.
 
 ## The pre-push hook
 
@@ -11,22 +32,23 @@ which sets `core.hooksPath` to `.vite-hooks/_` (generated, ignored by Git). Chec
 it with `pnpm exec vp hooks status`; run `pnpm exec vp hooks enable` if a fresh
 clone or worktree does not trigger the hook.
 
-The hook first checks attribution in the commits being pushed, then runs
+The hook verifies the checkout and attribution in the commits being pushed, then runs
 `pnpm check`, which runs these steps through the Vite+ task runner (`vp run`,
 tasks in the root `vite.config.ts` `run`):
 
 | Step | Command | Catches |
 | ---- | --- | --- |
 | 1 | `pnpm format:check` | Files not formatted by the Vite+ formatter (`vite.config.ts` `fmt`) |
-| 2 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
-| 3 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
-| 4 | `pnpm lint` | Vite+ lint rule violations (`vite.config.ts` `lint`, type-aware, warnings fail) |
-| 5 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
-| 6 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
-| 7 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
+| 2 | `pnpm check:e2e-configs` | Any `e2e.*.config.ts` in the working tree other than `e2e.config.ts` and `e2e.explore.config.ts`, tracked or untracked, ignored output directories included (dependency directories excepted) |
+| 3 | `pnpm check:scenarios` | A stale, missing or malformed generated Run catalog in [development scenarios](dev-scenarios.md#run-catalog) |
+| 4 | `pnpm fallow` | [fallow](https://fallow.tools) findings across the whole repository: unused code and dependencies, duplication, complexity, circular dependencies |
+| 5 | `pnpm lint` | Vite+ lint rule violations (`vite.config.ts` `lint`, type-aware, warnings fail) |
+| 6 | `pnpm typecheck` | Type errors in every workspace package, backend test code and `tests/*.e2e.ts` |
+| 7 | `pnpm test` | Failing backend, desktop and frontend rule tests through Vite+, then repository script tests through `node --test` (see [testing policy](testing.md)) |
+| 8 | `pnpm build` | Compile, declaration and bundling errors in the shippable output; no earlier step may depend on build output |
 
-Steps 1–5 are `pnpm check:static`. They run in parallel and need no build output.
-Steps 6 and 7 start in parallel only after all static steps pass, so the CPU-heavy
+Steps 1–6 are `pnpm check:static`. They run in parallel and need no build output.
+Steps 7 and 8 start in parallel only after all static steps pass, so the CPU-heavy
 backend suite never competes with them and a static failure stops the gate early.
 The gate stops at the first failing step; run it again after the fix to reach the next one.
 
@@ -39,25 +61,19 @@ receives only environment variables listed in its task's `cache.env` or
 `cache.untrackedEnv` plus Vite+ system defaults, so a script that needs another
 variable becomes a `vite.config.ts` task that lists it.
 
-During implementation, use focused tests and `pnpm check:static` for feedback.
-The successful pre-push hook is the final full local gate: do not run `pnpm check`
-or repeat all its constituent commands immediately before pushing the unchanged
-tree. When handing back unpublished implementation work, run `pnpm check:static`
-and the affected suite. Reuse matching completed results and record which state
-they covered. A source-only reviewer inspects code and existing evidence;
-implementation gates belong to the implementer, and CI observation and operational
-diagnosis belong to the PR completion stage.
+Follow the [verification cadence](testing.md#verification-cadence) for local
+implementation, handoff and PR completion. A source-only reviewer inspects code
+and existing evidence.
 
-The hook checks the working tree, including uncommitted changes, not only the
-pushed commits; commit or discard local changes before pushing so the result
-matches what you push.
+Each outgoing branch creation or update must point to the current `HEAD`, with
+no staged or unstaged tracked changes. Tags and ref deletions are exempt from both
+checks.
 
-Agent sessions whose harness loads the repository's edit hook (`.claude/settings.json`) also run
-`scripts/agent-edit-check.mjs` after every file edit: it formats the edited file and
-returns its `vp lint` findings to the agent, so steps 1 and 4 fail less often at push.
+## Ad-hoc e2e configs
 
-`pnpm test:e2e` is **not** in the hook. Run it before opening a PR that touches
-UI or a user journey; see [testing policy](testing.md#behavior-tests-vs-e2e-journeys).
+Capture UI evidence with `pnpm e2e:evidence` and run the affected journeys with
+`pnpm test:e2e:affected`. A one-off `e2e.*.config.ts` is not a supported
+alternative; delete it, because `pnpm check:static` fails while one exists.
 
 ## CI and manual checks
 
@@ -101,7 +117,8 @@ validation for pushes to `main` runs inside the Quality workflow.
 **Controlled UI journeys** is a separate PR check that runs the complete
 controlled Chromium suite, or reports an explicit not-applicable success for
 documentation/review-only changes; see [PR journey check](testing.md#pr-journey-check).
-Release/beta journeys and the local pre-push gate are unchanged.
+[Beta builds](release.md#beta-builds) reuse a passing full suite for the same
+tree or run the same three shards before packaging.
 
 For frontend changes, **UI evidence attachments** runs
 `scripts/check-ui-evidence.mjs --pr <number>` to check that a row of the PR body's
