@@ -388,7 +388,7 @@ it("a turn T3 cancels before it starts, ahead of the reporting turn, keeps its P
   expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
   expect(f.t3.launches.size).toBe(2);
 });
-it("a queued turn T3 cancels before the reporting turn reports keeps its Problem though it is newer", async (c) => {
+it("a queued turn T3 cancels before the reporting turn reports keeps its Problem and holds the result though it is newer", async (c) => {
   // Arrange
   const setup = await prepared(c, handoffFlow);
   const atWork = await workerAtWork(setup.world, setup.input);
@@ -407,8 +407,9 @@ it("a queued turn T3 cancels before the reporting turn reports keeps its Problem
     engineStatus: "cancelled",
     problem: "execution-failed",
   });
-  expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
-  expect(f.t3.launches.size).toBe(2);
+  expect(run.value.blocks[0]).toMatchObject({ state: "error", problem: "execution-failed" });
+  expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
+  expect(f.t3.launches.size).toBe(1);
 });
 it("a turn queued after the report and cancelled before it starts releases the result when the report-time read failed", async (c) => {
   // Arrange
@@ -417,6 +418,53 @@ it("a turn queued after the report and cancelled before it starts releases the r
   failNextThreadRead(setup.t3);
   const f = { ...setup, ...(await resultHeld(setup.world, atWork)) };
   queueUserMessage(f.t3, "thread-1", "execution-queued");
+  await f.f.reconcileRuns();
+  endThreadRun(f.t3, "thread-1", "execution-1");
+  queuedRunCancelled(f.t3, "thread-1", "execution-queued", { startedAt: null });
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.executions.find((e) => e.executionId === "execution-queued")).toMatchObject({
+    engineStatus: "cancelled",
+    problem: null,
+  });
+  expect(run.value.attention.filter((a) => a.kind === "execution-failed")).toStrictEqual([]);
+  expect(run.value.blocks[0]).toMatchObject({ state: "finished", problem: null });
+  expect(f.t3.launches.size).toBe(2);
+});
+it("a turn T3 cancels before the report, first seen as the latest after a failed report-time read, holds the result", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const idle = await workingReportedIdle(setup.world, atWork);
+  const reporting = turnBegins(setup.world, idle, "execution-reporting");
+  queuedRunCancelled(setup.t3, "thread-1", "execution-cancelled", { startedAt: null });
+  failNextThreadRead(setup.t3);
+  const f = { ...setup, ...(await resultReported(setup.world, reporting)) };
+
+  // Act
+  await f.f.reconcileRuns();
+
+  // Assert
+  const run = await f.f.getRun(f.runId);
+  assert(run.ok);
+  expect(run.value.attention.find((a) => a.kind === "execution-failed")).toMatchObject({
+    executionId: "execution-cancelled",
+    settledAt: null,
+  });
+  expect(run.value.reports[0]?.completionEligibleAt).toBeNull();
+  expect(f.t3.launches.size).toBe(1);
+});
+it("a turn queued and cancelled before it starts after a recovered read showed the reporting turn latest releases the result", async (c) => {
+  // Arrange
+  const setup = await prepared(c, handoffFlow);
+  const atWork = await workerAtWork(setup.world, setup.input);
+  failNextThreadRead(setup.t3);
+  const f = { ...setup, ...(await resultHeld(setup.world, atWork)) };
   await f.f.reconcileRuns();
   endThreadRun(f.t3, "thread-1", "execution-1");
   queuedRunCancelled(f.t3, "thread-1", "execution-queued", { startedAt: null });

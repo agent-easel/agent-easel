@@ -98,20 +98,19 @@ export function recordExecution(
   });
 }
 
-/** The Problem recorded on `execution`: a failed run is an execution failure, unless T3 cancelled
- * it before it started after the Block's finished report (`cancelledAfterReport`). A run cancelled
- * before it started keeps the classification recorded when it was first seen cancelled once it no
- * longer decides. */
+/** The Problem recorded on `execution`: a failed run is an execution failure, unless it did no work
+ * after the Block's finished report (`noWork`). A run cancelled before it started keeps the
+ * classification recorded when it was first seen cancelled once it no longer decides. */
 function executionProblem(
   execution: ExecutionRead,
   deciding: ExecutionRead | null,
-  cancelledAfterReport: boolean,
+  noWork: boolean,
   recordedCancelled: boolean,
 ): "execution-failed" | null | "keep" {
   if (!failedRun(execution.status)) return null;
   if (execution.runId === deciding?.runId) return "execution-failed";
   if (cancelledBeforeStart(execution) && recordedCancelled) return "keep";
-  return cancelledAfterReport ? null : "execution-failed";
+  return noWork ? null : "execution-failed";
 }
 
 /** The Block's current finished report: when it was accepted and the turn it came from, when
@@ -137,7 +136,7 @@ function recordExecutions(
   bindingId: string,
   { thread }: WorkerThread,
   deciding: ExecutionRead | null,
-  cancelledAfterReport: (execution: ExecutionRead) => boolean,
+  noWork: (execution: ExecutionRead) => boolean,
   recordedCancelled: (runId: string) => boolean,
   time: string,
 ) {
@@ -157,7 +156,7 @@ function recordExecutions(
         executionProblem(
           execution,
           deciding,
-          cancelledAfterReport(execution),
+          noWork(execution),
           recordedCancelled(execution.runId),
         ),
         time,
@@ -305,30 +304,40 @@ function recordWorkerThread(
       engine_status: string;
       ordinal: number | null;
       observed_at: string;
-    }>`SELECT execution_id,block_id,engine_status,ordinal,observed_at FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
+      problem: string | null;
+    }>`SELECT execution_id,block_id,engine_status,ordinal,observed_at,problem FROM run_executions WHERE run_id=${run.id} AND thread_id=${thread.threadId}`;
     const recordOf = (runId: string) => recorded.find((entry) => entry.execution_id === runId);
     const ownerOf = (runId: string) => recordOf(runId)?.block_id ?? block.block_id;
     const report = yield* currentFinishedReport(sql, run.id, block.block_id);
     const reportingOrdinal = report?.reporting_execution_id
       ? (recordOf(report.reporting_execution_id)?.ordinal ?? null)
       : null;
+    // The newest run an observation after the report's acceptance showed: T3 shows the run with
+    // the highest ordinal as the latest, so a newer run did not exist yet.
+    const seenAfterReport = report
+      ? Math.max(
+          -1,
+          ...recorded
+            .filter((entry) => entry.observed_at >= report.accepted_at)
+            .map((entry) => entry.ordinal ?? -1),
+        )
+      : -1;
     // After the Block's finished report, a run of its own that T3 cancelled before it started did
-    // no work and does not decide its failure.
-    const noWork = (execution: ExecutionRead) =>
-      report !== null &&
-      cancelledBeforeStart(execution) &&
-      ownerOf(execution.runId) === block.block_id;
-    // It was cancelled after the report when it is newer than the reporting turn, or Factory saw it
-    // not yet cancelled after the report was accepted.
-    const cancelledAfterReport = (execution: ExecutionRead) => {
-      if (!report || !noWork(execution)) return false;
+    // no work when the evidence shows it was cancelled after the report: it is newer than the
+    // reporting turn or than every run an observation after acceptance showed, or that
+    // observation showed it not yet cancelled. Once recorded cancelled, its recorded Problem keeps
+    // that judgement. Otherwise it is an execution failure as before.
+    const noWork = (execution: ExecutionRead) => {
+      if (!report || !cancelledBeforeStart(execution)) return false;
+      if (ownerOf(execution.runId) !== block.block_id) return false;
       const prior = recordOf(execution.runId);
-      if (prior && prior.engine_status !== "cancelled" && prior.observed_at >= report.accepted_at)
-        return true;
+      if (prior?.engine_status === "cancelled") return prior.problem === null;
+      if (prior && prior.observed_at >= report.accepted_at) return true;
+      const ordinal = execution.ordinal;
+      if (ordinal === undefined) return false;
       return (
-        reportingOrdinal !== null &&
-        execution.ordinal !== undefined &&
-        execution.ordinal > reportingOrdinal
+        (reportingOrdinal !== null && ordinal > reportingOrdinal) ||
+        (seenAfterReport >= 0 && ordinal > seenAfterReport)
       );
     };
     const deciding = decidingRun(worker, noWork);
@@ -339,7 +348,7 @@ function recordWorkerThread(
       binding.id,
       worker,
       deciding,
-      cancelledAfterReport,
+      noWork,
       (runId) => recordOf(runId)?.engine_status === "cancelled",
       time,
     );
