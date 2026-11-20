@@ -34,6 +34,13 @@ const waitRefusals: Record<Exclude<WaitForwarding, "forwarded">, Result<never>> 
   ),
 };
 
+/** What lets Factory stop a Run's executing workers to settle it: the user's confirmation of
+ * Settle, or the Flow itself when the Run reached an ending (no dialog). The reason it records
+ * follows from who authorized it. */
+export type StopAndSettle =
+  | { readonly authorization: "user-confirmed"; readonly reason: "manual" }
+  | { readonly authorization: "flow"; readonly reason: "finish" };
+
 /** A plain object whose only allowed field is an optional boolean `stopWorkers`: a misspelled or
  * misplaced authorization flag is a validation error, never a declined Settle. */
 function validSettleInput(input: unknown): input is SettleRunInput {
@@ -246,14 +253,35 @@ export function openRunActions({
           if (!run) return failure("not_found", "This Run does not exist.");
           if (run.archived_at) return failure("conflict", "An archived Run cannot be settled.");
           if (!stopWorkers) return yield* settlement.settleIfFinished(id);
-          const accepted = yield* store.acceptSettlement(id);
-          if (!accepted.ok) return accepted;
-          const outcome = yield* settlement.currentOutcome(id);
-          if (accepted.value) yield* fork(settlement.advanceSettlement(id));
-          return outcome;
+          return yield* beginStopAndSettle(id, {
+            authorization: "user-confirmed",
+            reason: "manual",
+          });
         }),
       ),
     );
+  }
+
+  /** Records the authorized stop-and-settle attempt with its reason, closing the gate before any
+   * Stop, answers the Run as stopping and forks the first pass. A repeat while stopping changes
+   * nothing; one on an unresolved settlement starts the next attempt. */
+  function beginStopAndSettle(id: string, request: StopAndSettle) {
+    return Effect.gen(function* (): Effect.fn.Return<Result<RunSettlementOutcome>, unknown> {
+      const accepted = yield* store.acceptSettlement(id, request.reason);
+      if (!accepted.ok) return accepted;
+      const outcome = yield* settlement.currentOutcome(id);
+      if (accepted.value) yield* fork(settlement.advanceSettlement(id));
+      return outcome;
+    });
+  }
+
+  /** Stops the Run's workers and settles it for an authorization that needs no dialog, as the
+   * Flow's. Refused while Factory closes and for an Archived Run. */
+  function stopAndSettle(
+    id: string,
+    request: StopAndSettle,
+  ): Effect.Effect<Result<RunSettlementOutcome>, unknown> {
+    return followTitleCleanup(id, whenOpen(beginStopAndSettle(id, request)));
   }
 
   /** Request report checks eligibility and T3 readiness, records the request and dispatches it
@@ -344,6 +372,7 @@ export function openRunActions({
     updateTask,
     archiveRun,
     settleRun,
+    stopAndSettle,
     requestReport,
   };
 }

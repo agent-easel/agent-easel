@@ -1,5 +1,6 @@
 import type { ControlledT3Threads } from "./support/controlled-t3-threads.ts";
 import { assert, expect, it } from "@effect/vitest";
+import { DatabaseSync } from "node:sqlite";
 import {
   changeAuthorizationAfterNextRead,
   failInspectionAfterNextRead,
@@ -453,6 +454,27 @@ it("an unresolved manual settlement refuses Human answers without asking for inp
     settlement: "unresolved",
     attention: { needsInput: false },
   });
+});
+
+it("a confirmed Settle records manual as its settlement reason", async (c) => {
+  // Arrange
+  const setup = await prepared(c, fanOutFlow);
+  const [first] = await twoWorkersStarted(setup.world, setup.input);
+  setup.t3.threads.stopsEndThreads();
+
+  // Act
+  assert((await setup.f.settleRun(first.runId, { stopWorkers: true })).ok);
+
+  // Assert
+  const database = new DatabaseSync(setup.h.databasePath, { readOnly: true });
+  const rows = database.prepare("SELECT run_id, reason FROM run_settlements").all() as {
+    run_id: string;
+    reason: string;
+  }[];
+  database.close();
+  expect(rows.map((row) => ({ ...row }))).toStrictEqual([
+    { run_id: first.runId, reason: "manual" },
+  ]);
 });
 
 it("confirming Settle stops every worker and settles the Run once fresh reads show them finished", async (c) => {

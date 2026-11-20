@@ -10,17 +10,21 @@ import { settleReportRejections } from "./report-diagnostics.ts";
 import type { RunnerDatabase } from "./database.ts";
 import { advanceGeneration, appendTimelineEvent } from "./steps.ts";
 
+/** Why a Run settled: Factory found its work done (`automatic`), the user confirmed Settle
+ * (`manual`) or the Run reached an ending (`finish`). */
+export type SettlementReason = "automatic" | "manual" | "finish";
+
 /** Settled leaves the main navigation and clears Snooze. */
 export function markSettled(
   sql: SqlClient.SqlClient,
   runId: string,
-  cause: "automatic" | "manual",
+  reason: SettlementReason,
   time: string,
 ) {
   return Effect.gen(function* () {
     yield* sql`UPDATE runs SET settled_at=${time} WHERE id=${runId}`;
     yield* clearSnooze(sql, runId);
-    yield* appendTimelineEvent(sql, { kind: "run-settled", runId, cause, observedAt: time });
+    yield* appendTimelineEvent(sql, { kind: "run-settled", runId, reason, observedAt: time });
   });
 }
 

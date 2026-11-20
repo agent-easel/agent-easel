@@ -13,7 +13,7 @@ import { writeBlockState } from "./blocks.ts";
 import { currentReports } from "./current-report.ts";
 import { cancelOwedWork } from "./owed-work.ts";
 import type { BlockState } from "./states.ts";
-import { markSettled } from "./settlement.ts";
+import { markSettled, type SettlementReason } from "./settlement.ts";
 import type { WorkerThread } from "../worker-thread.ts";
 import { recordExecution } from "./observation.ts";
 import { raiseSettlementAttention } from "./attention.ts";
@@ -56,7 +56,11 @@ export type BoundWorker = {
   readonly link: string | null;
 };
 
+/** The reasons a confirmed stop-and-settle records; automatic settlement has no stop attempt. */
+export type StopSettlementReason = Exclude<SettlementReason, "automatic">;
+
 type SettlementRow = {
+  readonly reason: StopSettlementReason;
   readonly requested_at: string;
   readonly attempt: number;
   readonly attempt_owner: string;
@@ -317,8 +321,12 @@ export function openRunManualSettlement(database: RunnerDatabase) {
    * confirmation closes the handoff gate, cancelling a pending Run title generation, and starts attempt 1; a later one starts the next
    * attempt only while the current attempt has an unresolved worker or launch. Both record this
    * backend as the attempt's owner, the bound workers as stopping and "settlement requested", and advance the
-   * generation. Answers whether an attempt started. */
-  function acceptSettlement(id: string): Effect.Effect<Result<boolean>, unknown> {
+   * generation. The first confirmation records `reason`, which the settled Run keeps; a later one
+   * retries under the recorded reason. Answers whether an attempt started. */
+  function acceptSettlement(
+    id: string,
+    reason: StopSettlementReason,
+  ): Effect.Effect<Result<boolean>, unknown> {
     return withLifecycle<boolean>(database, id, (sql, run) =>
       Effect.gen(function* () {
         if (run.archived_at) return failure("conflict", "An archived Run cannot be settled.");
@@ -337,7 +345,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
         } else {
           yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
           yield* cancelTitleGeneration(sql, id, time, "settle");
-          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at) VALUES(${id},${time},1,${ownerToken},${time})`;
+          yield* sql`INSERT INTO run_settlements(run_id,requested_at,attempt,attempt_owner,attempted_at,reason) VALUES(${id},${time},1,${ownerToken},${time},${reason})`;
         }
         const attempt = (current?.attempt ?? 0) + 1;
         for (const worker of yield* boundWorkerRows(sql, id))
@@ -470,6 +478,9 @@ export function openRunManualSettlement(database: RunnerDatabase) {
           settled_at: string | null;
         }>`SELECT settled_at FROM runs WHERE id=${id}`;
         if (current?.settled_at) return false;
+        const [recorded] = yield* sql<{
+          reason: StopSettlementReason;
+        }>`SELECT reason FROM run_settlements WHERE run_id=${id}`;
         if ((yield* unresolvedLaunchRows(sql, id)).length) return false;
         const time = yield* now;
         yield* sql`UPDATE runs SET gate_open=0 WHERE id=${id}`;
@@ -512,7 +523,7 @@ export function openRunManualSettlement(database: RunnerDatabase) {
               engineStatus: worker.latest?.status ?? null,
               observedAt: time,
             });
-        yield* markSettled(sql, id, "manual", time);
+        yield* markSettled(sql, id, recorded?.reason ?? "manual", time);
         yield* sql`UPDATE runtime_reports SET completion_eligible_at=COALESCE(completion_eligible_at,${time}) WHERE run_id=${id}`;
         yield* advanceGeneration(sql, id);
         return true;

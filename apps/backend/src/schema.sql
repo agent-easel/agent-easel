@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: first_run_setup
+-- Newest applied migration: settlement_reason
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -988,7 +988,7 @@ CREATE TABLE run_settlements (
   attempt_owner TEXT NOT NULL,
   attempted_at TEXT NOT NULL,
   stop_pass_at TEXT
-);
+, reason TEXT NOT NULL DEFAULT 'manual' CHECK (reason IN ('manual', 'finish')));
 
 CREATE TABLE run_snooze_attention (
   run_id TEXT NOT NULL REFERENCES run_presentation(run_id),
