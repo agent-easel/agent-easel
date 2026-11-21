@@ -67,6 +67,27 @@ it("a session Start while Generate Run titles is on records a pending generation
   });
 });
 
+it("a session Start of a bare issue reference receives its accepted automatic title while the Run takes the derived title", async (c) => {
+  // Arrange
+  const fixture = await prepared(c);
+  await enableRunTitles(fixture.f);
+  const client = await factoryMcpClient(c, fixture.f);
+
+  // Act
+  const result = await client.callTool({
+    name: "factory_start_run",
+    arguments: { ...startArguments(fixture), input: "#42" },
+  });
+
+  // Assert
+  expect(result.isError).toBe(false);
+  const reply = toolReply(result);
+  expect(reply.run.title).toBe("#42");
+  const run = await fixture.f.getRun(reply.run.id);
+  assert(run.ok);
+  expect(run.value.title).toBe("Issue #42");
+});
+
 it("the Project listing tells a conversation that Generate Run titles is on, so its review can say the title may be replaced", async (c) => {
   // Arrange
   const fixture = await prepared(c);
