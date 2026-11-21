@@ -60,20 +60,19 @@ function assertDirectHomeSupported(instance: Record<string, unknown>) {
     );
 }
 
+function providerEnvironmentValue(instance: Record<string, unknown>, name: string) {
+  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
+  const value = variables.findLast((item) => item.name === name)?.value;
+  return typeof value === "string" ? value : undefined;
+}
+
 function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedHome) {
   assertDirectHomeSupported(instance);
   const config = record(instance.config ?? {});
-  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
   const configuredHome = typeof config.homePath === "string" ? config.homePath.trim() : "";
-  const environmentHome = variables.findLast((item) => item.name === home.envName)?.value;
-  const rawHome =
-    configuredHome.length > 0
-      ? configuredHome
-      : typeof environmentHome === "string"
-        ? environmentHome.trim()
-        : "";
+  const rawHome = configuredHome || providerEnvironmentValue(instance, home.envName)?.trim();
   const userHome = homedir();
-  if (rawHome.length > 0) {
+  if (rawHome) {
     const expanded = expandHomePath(rawHome, userHome);
     if (!isAbsolute(expanded))
       throw Error(
@@ -86,6 +85,37 @@ function resolveReportingHome(instance: Record<string, unknown>, home: ResolvedH
     assumedDefault: true,
   };
 }
+
+function vibeReportingHome(instance: Record<string, unknown>) {
+  const variables = Array.isArray(instance.environment) ? instance.environment.map(record) : [];
+  if (
+    variables.some(
+      ({ name, valueRedacted }) =>
+        valueRedacted === true && ["VIBE_HOME", "HOME", "VIBE_MCP_SERVERS"].includes(String(name)),
+    )
+  )
+    throw Error(
+      "Vibe's effective configuration depends on redacted T3 settings. Use manual setup.",
+    );
+  if (providerEnvironmentValue(instance, "VIBE_MCP_SERVERS"))
+    throw Error(
+      "VIBE_MCP_SERVERS can override Vibe's configuration. Review it before manual setup.",
+    );
+  const userHome = providerEnvironmentValue(instance, "HOME") || homedir();
+  const home = expandHomePath(
+    providerEnvironmentValue(instance, "VIBE_HOME") || "~/.vibe",
+    userHome,
+  );
+  if (!isAbsolute(home) || !isAbsolute(userHome))
+    throw Error("Set an absolute VIBE_HOME and HOME in this T3 provider's environment.");
+  return home;
+}
+
+const realpathIfPresent = (directory: string) =>
+  realpath(directory).catch((error) => {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return directory;
+    throw error;
+  });
 
 async function antigravityConfigDirectory(stateDirectory: string, instanceId: string) {
   const state = await realpath(stateDirectory);
@@ -114,6 +144,21 @@ async function antigravityConfigDirectory(stateDirectory: string, instanceId: st
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
+
+function reportingHarness(instance: unknown): unknown {
+  const driver = field(instance, "driver");
+  if (driver !== "acpRegistry") return driver;
+  const config = field(instance, "config");
+  const id = field(config, "agentId");
+  const source = field(config, "source");
+  const command = field(config, "commandPath");
+  return typeof id === "string" &&
+    id.trim() === "mistral-vibe" &&
+    (source === undefined || source === "registry") &&
+    (command === undefined || (typeof command === "string" && command.trim() === ""))
+    ? "mistral-vibe"
+    : driver;
+}
 
 /**
  * Drivers T3 leaves off until the user turns them on. T3 holds this default in its code, not in
@@ -173,12 +218,12 @@ export async function reportingDriversOffInT3(stateDirectory: string): Promise<s
     const on = new Set(
       instances
         .filter(([id]) => !disabled.has(id))
-        .map(([, instance]) => field(instance, "driver")),
+        .map(([, instance]) => reportingHarness(instance)),
     );
     return [
       ...new Set(
         instances
-          .map(([, instance]) => field(instance, "driver"))
+          .map(([, instance]) => reportingHarness(instance))
           .filter((driver) => isReportingDriver(driver) && !on.has(driver)),
       ),
     ].map(String);
@@ -193,7 +238,7 @@ const targetFor = Effect.fn(function* (
   raw: unknown,
 ): Generator<Effect.Effect<unknown, unknown>, ReportingInstallation, never> {
   const instance = record(raw);
-  const driver = instance.driver;
+  const driver = reportingHarness(instance);
   if (!isReportingDriver(driver))
     return withReportingInstallationActions({
       id,
@@ -241,14 +286,12 @@ const targetFor = Effect.fn(function* (
     }
     if (profile.home.kind === "fixed") {
       const directory = join(homedir(), profile.home.directory);
-      const resolved = yield* boundary(() => realpath(directory)).pipe(
-        Effect.catch((error) =>
-          (error as NodeJS.ErrnoException).code === "ENOENT"
-            ? Effect.succeed(directory)
-            : Effect.fail(error),
-        ),
-      );
+      const resolved = yield* boundary(() => realpathIfPresent(directory));
       return targetAt(resolved, profile.home.message);
+    }
+    if (profile.home.kind === "vibe") {
+      const directory = yield* boundary(() => realpathIfPresent(vibeReportingHome(instance)));
+      return targetAt(directory, "Install once for all Vibe instances using this home.");
     }
     const resolved = resolveReportingHome(instance, profile.home);
     const directory = yield* boundary(() => realpath(resolved.directory));

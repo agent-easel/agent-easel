@@ -107,7 +107,6 @@ function validatedHarness(
       "agent.execution",
       "Selected environment/provider/model/options are unavailable; no settings were substituted.",
     );
-  return provider.driverKind;
 }
 function runtimeContractIssues(connection: T3Connection): ValidationIssue[] {
   const tools = connection.contract?.tools ?? [];
@@ -210,10 +209,10 @@ const openRuntimeSetup = Effect.fn(function* (
         `Choose an environment, provider and model for ${a.value.name} in Studio → Agents.`,
       );
     const agent = { ...a.value, execution };
-    const driver = validatedHarness(context, agent, readyCapabilities(cap));
+    validatedHarness(context, agent, readyCapabilities(cap));
     const root = yield* boundary(() => git.resolveRepository(context.endpoint, p.workspaceRoot));
     if (root !== p.workspaceRoot) throw Error("Project source checkout changed");
-    return { c: connection, a: agent, driver, snapshot };
+    return { c: connection, a: agent, snapshot };
   });
   /**
    * Explicit reporting: the connected contract, an installed Factory MCP and report support.
@@ -241,7 +240,7 @@ const openRuntimeSetup = Effect.fn(function* (
       // under the snapshot's context only when the connection still has it now.
       sameContext(readyConnection(yield* ops.getConnection()).context.id, s.snapshot);
       if (installed.ok) issues.push(...installed.value.issues);
-      const reporting = reportSupport(s.snapshot.support, s.driver);
+      const reporting = reportSupport(s.snapshot.support);
       if (!reporting.supported)
         issues.push({
           code: "reporting_unsupported",

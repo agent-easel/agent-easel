@@ -97,6 +97,7 @@ export function readyCapabilities(
   environments: AgentCapabilities["environments"],
   providers: readonly T3ProviderCapability[],
   checkedAt: string,
+  vibeInstances: ReadonlySet<string>,
 ): AgentCapabilities {
   return {
     state: "ready",
@@ -105,7 +106,11 @@ export function readyCapabilities(
     environments,
     providers: providers.map((provider) => ({
       ...provider,
-      reporting: providerReporting(provider.driverKind),
+      reporting: providerReporting(
+        provider.driverKind === "acpRegistry" && vibeInstances.has(provider.providerInstanceId)
+          ? "mistral-vibe"
+          : provider.driverKind,
+      ),
     })),
   };
 }

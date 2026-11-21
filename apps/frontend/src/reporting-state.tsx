@@ -237,6 +237,7 @@ export const providerNames: Readonly<Record<string, string>> = {
   codex: "Codex",
   cursor: "Cursor",
   grok: "Grok",
+  "mistral-vibe": "Mistral Vibe",
 };
 
 /** A harness's name in Factory, from its T3 provider driver. */

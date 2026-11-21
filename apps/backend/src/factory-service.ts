@@ -111,11 +111,16 @@ export const makeFactoryService = (
     );
     const projects = yield* makeProjects(t3.projects, git, connection, intervalMs, changes);
     yield* projects.recheckProjects();
+    const t3StateDirectory =
+      options.reportingStateDirectory ??
+      process.env.FACTORY_T3_STATE_DIRECTORY ??
+      join(homedir(), ".t3", "userdata");
     const definitions = yield* makeDefinitions(
       t3.projects,
       connection,
       projects,
       changes,
+      t3StateDirectory,
       options.applicationVersion ?? "source",
     );
     let runner: Effect.Success<ReturnType<typeof makeRunner>>;
@@ -132,10 +137,6 @@ export const makeFactoryService = (
     const clients = yield* makeClientAccess;
     const images = yield* makeRunImages(join(dirname(options.databasePath), "images"));
     let runtimeBackendUrl = options.runtimeBackendUrl ?? "http://127.0.0.1:4310";
-    const t3StateDirectory =
-      options.reportingStateDirectory ??
-      process.env.FACTORY_T3_STATE_DIRECTORY ??
-      join(homedir(), ".t3", "userdata");
     const firstRunSetup = yield* makeFirstRunSetup(t3StateDirectory);
     const reportingContext = yield* Layer.build(
       ReportingInstaller.ReportingInstallerLayer(

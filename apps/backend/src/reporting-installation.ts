@@ -7,6 +7,7 @@ import { constants } from "node:fs";
 import { access, lstat, readFile, mkdir, open, rename, unlink } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { parse } from "smol-toml";
 import type { ReportingInstallation, Result, T3Connection } from "@t3-factory/contracts";
 import { FACTORY_BLOCK_SKILL } from "./factory-block-skill.ts";
@@ -33,8 +34,71 @@ function harnessProfile(target: ReportingInstallation): HarnessProfile {
 const harnessSkillPath = (profile: HarnessProfile, configPath: string, skill: string) =>
   join(profile.skillsFolder(dirname(configPath)), skill, "SKILL.md");
 
-const tomlEntry = (url: string) =>
-  `\n[mcp_servers.factory-runtime]\nurl = ${JSON.stringify(url)}\n`;
+function tomlEntry(profile: HarnessProfile, url: string) {
+  const table =
+    profile.config.format === "toml-array" ? "[[mcp_servers]]" : "[mcp_servers.factory-runtime]";
+  const fields = Object.entries(profile.entry(url)).map(
+    ([key, value]) => `${key} = ${JSON.stringify(value)}`,
+  );
+  return `\n${table}\n${fields.join("\n")}\n`;
+}
+
+function vibeMcpServers(config: Record<string, unknown>) {
+  const servers = config.mcp_servers ?? [];
+  if (!Array.isArray(servers)) throw Error("Vibe's mcp_servers must be an array.");
+  return servers.map((server) => ({ ...record(server) }));
+}
+
+function vibeMcpEntry(config: Record<string, unknown>) {
+  const entries = vibeMcpServers(config).filter(({ name }) => name === "factory-runtime");
+  if (entries.length > 1)
+    throw Error("Vibe has multiple factory-runtime MCP entries. Review them manually.");
+  return entries[0];
+}
+
+const VIBE_INLINE_MCP_ARRAY = /^[ \t]*(?:mcp_servers|"mcp_servers"|'mcp_servers')[ \t]*=[ \t]*\[/m;
+
+function registeredVibe(
+  before: string,
+  config: Record<string, unknown>,
+  block: string,
+  entry: Record<string, string>,
+  previous?: string,
+) {
+  const servers = vibeMcpServers(config);
+  const inline = (value: string) => "{ " + value.trim().split("\n").slice(1).join(", ") + " }";
+  const candidates =
+    previous === undefined
+      ? [
+          { text: before + block, servers: [...servers, entry] },
+          {
+            text: before.replace(
+              VIBE_INLINE_MCP_ARRAY,
+              (header) => header + inline(block) + (servers.length ? ", " : ""),
+            ),
+            servers: [entry, ...servers],
+          },
+        ]
+      : [before.replace(previous, block), before.replace(inline(previous), inline(block))].map(
+          (text) => ({
+            text,
+            servers: servers.map((server) => (server.name === entry.name ? entry : server)),
+          }),
+        );
+  for (const candidate of candidates) {
+    try {
+      const parsed = parse(candidate.text);
+      const actual = { ...parsed, mcp_servers: vibeMcpServers(parsed) };
+      if (isDeepStrictEqual(actual, { ...config, mcp_servers: candidate.servers }))
+        return candidate.text;
+    } catch {
+      continue;
+    }
+  }
+  throw Error(
+    "Factory could not update Vibe's mcp_servers without changing other settings. Review the factory-runtime entry manually.",
+  );
+}
 
 async function skillMatches(path: string) {
   try {
@@ -168,16 +232,16 @@ function registered(
   url: string,
   replacingUrl?: string,
 ) {
-  if (profile.config.format === "toml") {
-    // Replace only the exact block Factory appended, keeping comments and formatting.
-    if (replacingUrl !== undefined && !before.includes(tomlEntry(replacingUrl)))
+  if (profile.config.format !== "json") {
+    const previous = replacingUrl === undefined ? undefined : tomlEntry(profile, replacingUrl);
+    const entry = tomlEntry(profile, url);
+    if (profile.config.format === "toml-array")
+      return registeredVibe(before, config, entry, profile.entry(url), previous);
+    if (previous !== undefined && !before.includes(previous))
       throw Error(
         "The Factory registration was edited. Review the factory-runtime entry manually.",
       );
-    const after =
-      replacingUrl === undefined
-        ? `${before}${tomlEntry(url)}`
-        : before.replace(tomlEntry(replacingUrl), tomlEntry(url));
+    const after = previous !== undefined ? before.replace(previous, entry) : before + entry;
     parse(after);
     return after;
   }
@@ -196,9 +260,12 @@ function registered(
  * for another address is replaced only on `repair`; any other entry is left for review.
  */
 function configChange(profile: HarnessProfile, before: string, url: string, repair = false) {
-  const toml = profile.config.format === "toml";
+  const toml = profile.config.format !== "json";
   const config = toml ? parse(before) : record(JSON.parse(before || "{}"));
-  const existing = record(config[toml ? "mcp_servers" : "mcpServers"] ?? {})["factory-runtime"];
+  const existing =
+    profile.config.format === "toml-array"
+      ? vibeMcpEntry(config)
+      : record(config[toml ? "mcp_servers" : "mcpServers"] ?? {})["factory-runtime"];
   if (existing === undefined) return registered(profile, before, config, url);
   const saved = record(existing);
   const urlKey = profile.config.urlKey ?? "url";
