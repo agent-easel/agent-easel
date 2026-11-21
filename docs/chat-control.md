@@ -131,10 +131,9 @@ logins, until a session of that bot becomes ready. When a newly
 authenticated session reports another application, that is an **application replacement**: the
 shared conversations are cleared, the previous application's waiting consent ends for good, its
 messages are no longer edited and eligible Runs get new status cards from the new bot (see
-[Confirmation](#confirmation), [Status cards](#status-cards) and
-[Attention notices](#attention-notices)). A new token of the same
-application keeps everything. When the owner replaces the token, the page warns that a token from
-another bot replaces the current one.
+[Confirmation](#confirmation), [Status cards](#status-cards), [Attention notices](#attention-notices)
+and [Completion notices](#completion-notices)). A new token of the same application keeps everything.
+When the owner replaces the token, the page warns that a token from another bot replaces the current one.
 
 ### On and Off
 
@@ -400,9 +399,10 @@ never Run content. Because a turn keeps its newest compact facts first, the late
 survive into the next invocation, so a search or read that needs more tool calls than one invocation
 allows continues in the next one.
 
-A reply to a Factory message that identifies a Run will give the model only that Run's ID for a fresh
-read, never the message's content. No message Factory publishes identifies a Run yet, so replying to a
-bot message adds nothing to the request.
+Replying to a Status card, attention notice, catch-up or completion notice from the operating
+application in the same thread gives the model only the Run's ID for a fresh read. Factory reads
+within the current Project grants for the thread's channel and keeps the referenced message's text
+out of the model input.
 
 ### Shared conversation
 
@@ -646,7 +646,12 @@ nonce that stays the same for that message, and Factory asks Discord to enforce 
 returns the message an earlier create with the same nonce made, for a few minutes, instead of creating
 another. When the connection dropped or Discord answered with a server error, so the outcome is
 unproven, Factory asks again with the same nonce at most twice, within one minute of the first
-request. A returned message ID reconciles that create. A refusal after an earlier unproven attempt
+request. For queued deliveries, revoking the destination's Project grant stops those re-attempts,
+even if the grant returns before Discord answers. A returned message ID reconciles the create.
+An in-flight receipt, Status card, attention notice or catch-up with an unproven outcome keeps its
+duplicate warning in Settings. Retry requires the Project grant and the host's acceptance of the
+duplicate risk. A definite first refusal of a revoked create cancels that delivery.
+A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
 window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
 and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Discord lists
@@ -670,18 +675,25 @@ delivery is independent of the Run's card.
 ### Status cards
 
 Each chat-started Run has one status card in its originating thread, which Factory edits as the Run
-changes; it is the accepted Start's only message. It is deliberately small: one line with the Run's
-number, title, state (Active, Snoozed, Settled or Archived) and Flow, then only what is happening now:
-a confirmed Settle still stopping workers, active Blocks, pending Waits with their deadlines, and
-pending Needs input and Problems. An observation that is stale or not yet made is shown as such, never
-as a Problem. Block starts, results, Wait progress and lifecycle changes edit the card; they never post
-a message, and the card never carries results, report bodies or prompts: participants read those with
-Read Run. Long lists are summarized so the card always fits one message. Each line leads with an emoji
-for its state (for example 🟢 Active, 💤 Snoozed, ✅ Settled, 🗄️ Archived; ⚙️ working, ⏳ waiting,
-⚠️ Problem, 🙋 Needs input, ⏰ Wait deadline), and Wait deadlines are Discord timestamps that each
-reader's client shows relative to now in their own time zone. The card mentions nobody. Replying to the
-card points Factory's conversation at its Run: the model receives only the Run's ID and reads the Run
-afresh within the thread's current scope, never the card's text.
+changes. Its header shows the Run's number, title, lifecycle and Flow. A confirmed Settle still
+stopping workers or an unresolved settlement Problem appears below the header. Each Block from
+the captured Flow revision has one row, in breadth-first order from the Flow input's targets.
+Any remaining Blocks follow in canvas order from left to right, then top to bottom, with Block ID
+breaking ties.
+
+A Block's pending Problem takes precedence over Needs input, a pending Wait, working or
+Continuation sent, stopped, finished, and not started. Native T3 requests and workers awaiting
+review direct the reader to T3. When several arrivals are waiting on a Block, its row shows the
+earliest deadline as a relative Discord timestamp and counts the pending arrivals. Observation
+staleness and observations that have yet to be made appear on the relevant Block rows. Settled and
+Archived Runs retain their final Block states. Use Read Run for Finish endings, results, report
+bodies and prompts.
+
+To fit Discord's 2,000-character limit, Factory summarizes not-started Blocks at the bottom first,
+then finished Blocks at the top if needed. It omits remaining overflow rows only when those
+summaries still leave insufficient room. The card mentions nobody. Replying to the card points
+Factory's conversation at its Run using the Run ID, and the model reads the Run afresh within the
+thread's current scope.
 
 Factory captures what each card owes from the Run's committed facts, not from the live updates the
 Factory UI receives: a change to a chat-started Run, every Access save and every backend start bring
@@ -691,12 +703,17 @@ or changes the Run. While Off, during a Discord outage or while the backend is s
 update waits; once a session serves again, Factory edits the card to the Run's current state rather
 than replaying what happened meanwhile. A card the Run owes, because it was never posted or shows an
 older state, stays owed however old it is; a card that already shows a Settled or Archived Run gets
-nothing more.
+nothing more. An upgrade to the all-Block layout refreshes existing Archived cards in place when
+the same application can still edit them.
 
 An Access save that stops the thread's channel granting the Run's Project cancels the card's owed
 update and nothing accrues while it stays revoked. After a regrant, Factory corrects a card it already
 posted to the Run's current state without a new message, and posts a card it never managed to post only
-if the Run is Active or Snoozed or has pending Needs input or Problems. Removing the requester from Access
+if the Run is Active or Snoozed or has pending Needs input or Problems. Revocation stops further
+create attempts. Factory records a message ID or definitive refusal from the request already sent.
+An unproven create keeps its warning through revocation and regrant. Retry requires the restored
+grant and the host's acceptance of the duplicate risk. A refusal of that Retry leaves the original
+create unproven and another Retry requires a fresh choice. Removing the requester from Access
 does not stop the card: it depends on the channel's grant and the bot's access.
 
 Editing in an archived thread needs it unarchived: when Discord refuses the edit because the thread is
@@ -721,10 +738,8 @@ stays unknown. Rotating the same application's token keeps editing the same card
 
 ### Attention notices
 
-Besides the card, Factory posts a new message in a chat-started Run's originating thread only when the
-Run needs someone, because an edit notifies nobody: an attention notice for new Needs input or Problem
-matters. Block starts, results, Wait progress and every lifecycle change, Settle and Archive included,
-only edit the card. Attention follows the Run's own attention: a pending Human step or native T3
+Factory posts an attention notice in a chat-started Run's originating thread when the Run has new
+Needs input or Problem matters. Attention follows the Run's own attention: a pending Human step or native T3
 question or permission is Needs input, and a missing report, an execution failure, a report problem or a
 Condition integrity Problem or a confirmed Settle that could not stop workers
 ([Settled Runs](runs.md#settled-runs)) is a Problem; an Agent's ordinary conversation and Waits are not attention, and a stale or not yet made
@@ -734,10 +749,15 @@ answering still goes through the complete review and the requester's confirmatio
 
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
 own short line with its Block, up to eight per notice; the settlement Problem is about the
-Run and names no Block, and a retried Settle keeps its one notice. When a matter resolves, Factory
-edits the notice that announced it to show that line resolved, without posting anything. Notices
-mention nobody: every Factory message allows no mentions, and an `@` in a Run title or Block name is
-followed by an invisible space so it cannot read as a user, role or mass mention.
+Run and names no Block, and a retried Settle keeps its one notice. When Factory posts an attention
+notice or catch-up, it mentions only the user who confirmed the Run's Start, if that user is still
+allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
+notice still posts to a permitted thread when the requester has been removed. When any matter
+resolves, Factory updates its line or the compacted count in place and removes the heading's
+mention without notifying anyone.
+An `@` in a Run title, Flow name or Block name is followed by an invisible space so it cannot form a
+user, role or mass mention. An idle or overdue worker shown as awaiting review in T3 does not create
+an attention notice unless the Run records an attention matter.
 
 Factory captures notices with the card from the Run's committed facts, comparing the Run's pending
 matters with what its notices already accounted for. So a matter that appeared and resolved between
@@ -762,6 +782,30 @@ with waits, a create still unproven after its nonce re-attempts is unknown and o
 Settings with their correction. A notice Discord proved deleted is not recreated: its pending matters
 stay on the card. A notice never created whose matters all resolved, including one that failed or whose
 create is unknown, is no longer owed and leaves Settings.
+
+### Completion notices
+
+When a chat-started Run becomes Settled, Factory posts one completion notice in its originating
+thread. The same notice covers automatic settlement, reaching a Finish ending and confirmed manual
+settlement. It names the Run, says it finished and invites a reply to inspect the result or choose
+what to do next. Finish ending names, results, report bodies and prompts stay out of the message.
+Factory checks the requester's saved Access before each send and mentions only that user while
+allowed. The thread still receives the notice if the requester was removed and the Project grant
+remains in place.
+
+A Run that stays Settled keeps its one notice. Returning to Active retires any unposted completion
+from that cycle and allows a new notice on the next settlement. Archive likewise retires an unposted
+completion and creates none. The database records which settlement Factory accounted for by the
+sequence of its Run timeline event, so a fast return to Active between reporting captures still
+starts a new cycle. Existing Settled Runs are baselined when an installation upgrades.
+
+Settlements while Chat control is Off, during a Gateway outage or recovered on backend restart are
+posted when a session serves again if the Run is still Settled and the channel's Project grant
+remains in place. Revoking the grant cancels undelivered completions. A regrant takes the Run's
+current settlement as its baseline. An application replacement can send a completion still owed.
+Earlier delivered messages are never posted again, even if deleted. Delayed or refused creates
+appear under **Completion notice** in Settings → Discord → Delivery, with Retry after correction
+and a duplicate warning for an unproven create.
 
 ## Support limits
 
