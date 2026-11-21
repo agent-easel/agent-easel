@@ -18,15 +18,15 @@
     "@t3-factory/domain-validation": "workspace:*",
     "effect": "4.1.2",
     "electron-updater": "6.8.11",
-    "ws": "8.22.1"
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@electron/rebuild": "4.2.1",
     "@t3-factory/frontend": "workspace:*",
     "@types/ws": "8.18.2",
-    "electron": "45.2.1",
+    "electron": "45.4.1",
     "electron-builder": "26.18.0",
     "esbuild": "0.28.2",
-    "vite-plus": "1.4.0"
+    "vite-plus": "1.7.0"
   }
 }

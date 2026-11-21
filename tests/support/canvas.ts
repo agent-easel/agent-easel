@@ -80,15 +80,8 @@ export async function runCanvasCenterOffset(screen: Screen, blockName: string) {
 export const runCanvasHorizontalOffset = async (screen: Screen, blockName: string) =>
   Math.abs((await runCanvasCenterOffset(screen, blockName)).x);
 
-/** Opens a live build-and-review Run with the implementing Block active and following on. */
-export async function openFollowedReviewRun(
-  app: App,
-  screen: Screen,
-  browser: Browser,
-  key: string,
-) {
+async function openFollowedRun(app: App, screen: Screen, browser: Browser, run: string) {
   await browser.setViewport({ width: 1600, height: 1000 });
-  const run = await liveRun(app, key, "review");
   await app.open(`/runs/${run}`);
   const canvas = screen.getByRole("region", "Execution canvas");
   await expect(
@@ -98,26 +91,30 @@ export async function openFollowedReviewRun(
   return canvas;
 }
 
+/** Opens a live build-and-review Run with the implementing Block active and following on. */
+export async function openFollowedReviewRun(
+  app: App,
+  screen: Screen,
+  browser: Browser,
+  key: string,
+) {
+  const run = await liveRun(app, key, "review");
+  return openFollowedRun(app, screen, browser, run);
+}
+
 export async function openFollowedLargeRun(
   app: App,
   screen: Screen,
   browser: Browser,
   key: string,
 ) {
-  await browser.setViewport({ width: 1600, height: 1000 });
   const flow = await saveLargeFlow(app.baseUrl, `Canvas culling · Large Run ${key} ${Date.now()}`, {
     fillers: 150,
     wires: 1200,
     columns: 8,
   });
   const run = await liveRun(app, key, { id: flow });
-  await app.open(`/runs/${run}`);
-  const canvas = screen.getByRole("region", "Execution canvas");
-  await expect(
-    canvas.getByRole("button", "Agent Implement change, Working", { exact: true }),
-  ).toBeVisible();
-  await expect(canvas).toHaveAttribute("data-following", "true");
-  return canvas;
+  return openFollowedRun(app, screen, browser, run);
 }
 
 /** The reviewer is centered, following has resumed, and the unseen-progress marker is cleared. */

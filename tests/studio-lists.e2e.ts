@@ -41,7 +41,7 @@ async function revealGroup(browser: Browser, label: string) {
 }
 
 async function listChrome(browser: Browser, title: string): Promise<ListChrome> {
-  return browser.evaluate(`(() => {
+  return browser.evaluate<ListChrome>(`(() => {
     const round = (value) => Math.round(value);
     const heading = [...document.querySelectorAll("h1")].find((node) => node.textContent.trim() === ${JSON.stringify(title)});
     const page = heading.closest(".content-start");
@@ -59,7 +59,7 @@ async function listChrome(browser: Browser, title: string): Promise<ListChrome> 
       search: { x: round(searchBox.x), y: round(searchBox.y) },
       group: { x: round(groupBox.x), y: round(groupBox.y) },
     };
-  })()`) as Promise<ListChrome>;
+  })()`);
 }
 
 function sameChrome(left: ListChrome, right: ListChrome, label: string) {
