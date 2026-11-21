@@ -484,16 +484,6 @@ function graphSizeIssue(
   };
 }
 
-export function portableFlowSizeIssue(
-  graph: Pick<FlowGraphInput, "blocks" | "connections" | "finish">,
-) {
-  return graphSizeIssue(
-    graph.blocks.length,
-    graph.connections.length,
-    portableBlockLimit(graph.finish),
-  );
-}
-
 export function flowEditSizeRefusal(
   graph: FlowGraphInput,
   saved: FlowGraphInput,

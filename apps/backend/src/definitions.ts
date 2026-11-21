@@ -17,6 +17,7 @@ import {
   type AgentCapabilities,
   type AgentCreateOutcome,
   type AgentDefinition,
+  type CommitImportInput,
   type AgentProjectOverride,
   type FactoryOperations,
   type FlowBlock,
@@ -39,6 +40,7 @@ import {
 import {
   agentCaptureBytes,
   CANVAS_COORD_MESSAGE,
+  bindPortableBlocks,
   compositionReadiness,
   duplicateTreatment,
   executionForProject,
@@ -85,7 +87,7 @@ import {
   definitionExport,
   importReview,
   portableAgent,
-  portableFlow,
+  portableComposition,
   unsupportedSelections,
 } from "./portable-definitions.ts";
 import { readImportReceipt, replayedImport, writeImportReceipt } from "./import-receipts.ts";
@@ -641,20 +643,19 @@ export const makeDefinitions = (
       yield* appendAgentRevision(sql, copy);
       return copy;
     });
-    /** Creates an imported Flow at revision 1 with its Agent keys replaced by the new Agents' ids;
-     * block and exit ids, positions and the workspace arrive as exported. */
     const importFlow = Effect.fnUntraced(function* (
+      id: string,
       flow: PortableFlow,
       agentIds: ReadonlyMap<string, string>,
+      flowIds: ReadonlyMap<string, string>,
       projectId: OwningProject,
       now: string,
     ) {
-      const id = yield* newId;
-      const blocks = flow.graph.blocks.map((block): FlowBlock => {
-        if (block.kind !== "agent") return block;
-        const { agentKey, ...rest } = block;
-        return { ...rest, agentId: agentKey === null ? null : agentIds.get(agentKey)! };
-      });
+      const blocks = bindPortableBlocks(
+        flow.graph.blocks,
+        (key) => agentIds.get(key)!,
+        (key) => flowIds.get(key)!,
+      );
       yield* sql`INSERT INTO flows (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
       yield* appendFlowRevision(sql, {
         id,
@@ -671,7 +672,50 @@ export const makeDefinitions = (
         workspace: flow.workspace,
         savedAt: now,
       });
-      return id;
+    });
+    const insertImportedDefinitions = Effect.fnUntraced(function* (
+      commit: CommitImportInput,
+      projectId: OwningProject,
+      now: string,
+    ) {
+      const document = commit.document;
+      const agents = yield* Effect.forEach(document.agents, (entry) =>
+        newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
+      );
+      const flowEntries =
+        document.kind === "flow" && document.formatVersion === 5 ? document.flows : [];
+      const flows = yield* Effect.forEach(flowEntries, (entry) =>
+        newId.pipe(Effect.map((id) => ({ key: entry.key, id }))),
+      );
+      const legacyFlowId =
+        document.kind === "flow" && document.formatVersion !== 5 ? yield* newId : null;
+      const agentIds = new Map(agents.map(({ key, id }) => [key, id]));
+      const flowIds = new Map(flows.map(({ key, id }) => [key, id]));
+      for (const entry of document.agents) {
+        const id = agentIds.get(entry.key)!;
+        yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
+        yield* appendAgentRevision(sql, {
+          id,
+          name: entry.name,
+          prompt: entry.prompt,
+          execution: commit.selections[entry.key] ?? null,
+          exits: entry.exits,
+          projectOverrides: [],
+          revision: 1,
+          updatedAt: now,
+        });
+      }
+      let flowId = legacyFlowId;
+      if (document.kind === "flow") {
+        if (document.formatVersion === 5) {
+          for (const entry of document.flows)
+            yield* importFlow(flowIds.get(entry.key)!, entry, agentIds, flowIds, projectId, now);
+          flowId = flowIds.get(document.rootFlowKey)!;
+        } else {
+          yield* importFlow(legacyFlowId!, document.flow, agentIds, flowIds, projectId, now);
+        }
+      }
+      return { agents, flowId, ...(flows.length ? { flows } : {}) };
     });
     const operations: DefinitionOperations = {
       createFlow(input) {
@@ -1234,21 +1278,22 @@ export const makeDefinitions = (
           const capabilities = yield* loadCapabilities();
           return yield* transaction(
             Effect.gen(function* () {
-              const [flow] = yield* readCurrentFlows(sql, id);
-              if (!flow) return flowNotFound();
-              if (flow.graph.blocks.some((block) => block.kind === "subflow"))
-                return failure(
-                  "validation",
-                  "Exporting a Flow that places a Subflow is not available yet. Nothing was exported.",
-                  [
-                    {
-                      code: "subflow_export_unavailable",
-                      path: "graph",
-                      message: "Export a Flow without Subflow blocks.",
-                    },
-                  ],
-                );
-              const portable = portableFlow(flow, yield* readCurrentAgents(sql), capabilities);
+              const current = yield* currentFlowsById;
+              const root = current.get(id);
+              if (!root) return flowNotFound();
+              const seen = new Map([[id, root]]);
+              const pending = [...root.graph.blocks].reverse();
+              for (let block = pending.pop(); block; block = pending.pop()) {
+                if (block.kind !== "subflow" || block.flowId === null || seen.has(block.flowId))
+                  continue;
+                const child = current.get(block.flowId);
+                if (!child) continue;
+                seen.set(child.id, child);
+                pending.push(...[...child.graph.blocks].reverse());
+              }
+              const flows = [...seen.values()];
+              const agents = placedAgents(flows, yield* readCurrentAgents(sql));
+              const portable = portableComposition(flows, agents, capabilities);
               return definitionExport(
                 {
                   format: PORTABLE_DOCUMENT_FORMAT,
@@ -1256,11 +1301,9 @@ export const makeDefinitions = (
                   kind: "flow",
                   factoryVersion,
                   exportedAt: yield* currentTime,
-                  flow: portable.flow,
-                  agents: portable.agents,
+                  ...portable,
                 },
-                portable.revisions,
-                flow,
+                agents,
               );
             }),
           );
@@ -1300,34 +1343,7 @@ export const makeDefinitions = (
                 const unsupported = unsupportedSelections(commit, capabilities);
                 if (unsupported) return unsupported;
                 const now = yield* currentTime;
-                const agents = yield* Effect.forEach(commit.document.agents, (entry) =>
-                  Effect.gen(function* () {
-                    const id = yield* newId;
-                    yield* sql`INSERT INTO agents (id, created_at, project_id) VALUES (${id}, ${now}, ${projectId})`;
-                    yield* appendAgentRevision(sql, {
-                      id,
-                      name: entry.name,
-                      prompt: entry.prompt,
-                      execution: commit.selections[entry.key] ?? null,
-                      exits: entry.exits,
-                      projectOverrides: [],
-                      revision: 1,
-                      updatedAt: now,
-                    });
-                    return { key: entry.key, id };
-                  }),
-                );
-                const document = commit.document;
-                const flowId =
-                  document.kind === "flow"
-                    ? yield* importFlow(
-                        document.flow,
-                        new Map(agents.map((a) => [a.key, a.id])),
-                        projectId,
-                        now,
-                      )
-                    : null;
-                const result: ImportResult = { agents, flowId };
+                const result = yield* insertImportedDefinitions(commit, projectId, now);
                 yield* writeImportReceipt(sql, commit, now, result);
                 return { ok: true as const, value: result };
               }),

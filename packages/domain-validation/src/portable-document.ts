@@ -3,6 +3,7 @@ import {
   PORTABLE_DOCUMENT_VERSION,
   type AgentExecutionSettings,
   type CommitImportInput,
+  type FlowBlock,
   type FlowBlockInput,
   type FlowFinishBlock,
   type FlowInputBlock,
@@ -13,6 +14,7 @@ import {
   type PortableDocument,
   type PortableFlow,
   type PortableFlowBlock,
+  type PortableFlowEntry,
   type PortableFormatVersion,
   type PortableModelHint,
   type Result,
@@ -31,6 +33,7 @@ export const PORTABLE_DOCUMENT_LIMIT_BYTES = 16_777_216;
 
 /** The most Agents one portable document may bundle. */
 export const PORTABLE_DOCUMENT_AGENT_LIMIT = 500;
+const PORTABLE_DOCUMENT_FLOW_LIMIT = 500;
 
 /** The exact file text of a portable document; export measures this text against the import limit. */
 export function portableDocumentText(document: PortableDocument): string {
@@ -70,6 +73,7 @@ const ENVELOPE_FIELDS = [
   "agents",
 ];
 const FLOW_ENVELOPE_FIELDS = [...ENVELOPE_FIELDS, "flow"];
+const V5_FLOW_ENVELOPE_FIELDS = [...ENVELOPE_FIELDS, "flows", "rootFlowKey"];
 const AGENT_FIELDS = ["key", "name", "prompt", "model", "exits"];
 const HINT_FIELDS = ["providerInstanceId", "modelId", "modelOptions"];
 const OPTION_FIELDS = ["id", "value"];
@@ -125,15 +129,22 @@ const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: true };
 
 const VERSION_4: FormatReader = {
   ...VERSION_3,
-  version: PORTABLE_DOCUMENT_VERSION,
+  version: 4,
   kindFields: new Map([
     ...VERSION_3.kindFields,
     ["agent", ["agentKey", "hiddenExitIds", "localExits", "revisitInstruction", "revisitContext"]],
   ]),
 };
 
+const VERSION_5: FormatReader = {
+  ...VERSION_4,
+  version: 5,
+  kindFields: new Map([...VERSION_4.kindFields, ["subflow", ["flowKey"]]]),
+  kindChoice: "an Agent, Human, Wait, Continuation, Condition or Subflow block",
+};
+
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2, VERSION_3, VERSION_4].map((reader) => [reader.version, reader]),
+  [VERSION_1, VERSION_2, VERSION_3, VERSION_4, VERSION_5].map((reader) => [reader.version, reader]),
 );
 
 type Issues = ValidationIssue[];
@@ -169,7 +180,7 @@ export function parsePortableFile(data: Uint8Array): Result<ImportedDocument> {
   } catch {
     return rejected("validation", [issue("not_json", "document", NOT_JSON_MESSAGE)]);
   }
-  return decodePortableDocument(value);
+  return validatePortableDocument(value);
 }
 
 /**
@@ -178,27 +189,45 @@ export function parsePortableFile(data: Uint8Array): Result<ImportedDocument> {
  * validators and each definition's save size. Messages name Agents, blocks and fields, never
  * prompt text.
  */
-function decodePortableDocument(value: unknown): Result<ImportedDocument> {
+export function validatePortableDocument(value: unknown): Result<ImportedDocument> {
   const envelope = checkEnvelope(value);
   if (!envelope.ok) return envelope;
   const { fields, reader } = envelope.value;
+  const counts = countIssue(fields);
+  if (counts) return rejected("too_large", [counts]);
   const agents = fields.agents;
-  if (Array.isArray(agents) && agents.length > PORTABLE_DOCUMENT_AGENT_LIMIT)
-    return rejected("too_large", [
-      issue(
-        "too_many_agents",
-        "agents",
-        `This file bundles ${agents.length} Agents; an import accepts at most ${PORTABLE_DOCUMENT_AGENT_LIMIT}.`,
-      ),
-    ]);
   const shape = shapeIssues(fields, reader);
   if (shape.length > 0) return rejected("validation", shape);
   const entries = agents as readonly Record<string, unknown>[];
-  const references = referenceIssues(fields, entries);
+  const flows = checkedFlows(fields);
+  const references = referenceIssues(fields, entries, flows);
   if (references.length > 0) return rejected("validation", references);
   return fields.kind === "flow"
-    ? flowDocument(fields, reader, entries)
+    ? flowDocument(fields, reader, entries, flows)
     : agentDocument(fields, reader, entries);
+}
+
+function countIssue(fields: Record<string, unknown>): ValidationIssue | undefined {
+  const agents = fields.agents;
+  if (Array.isArray(agents) && agents.length > PORTABLE_DOCUMENT_AGENT_LIMIT)
+    return issue(
+      "too_many_agents",
+      "agents",
+      `This file bundles ${agents.length} Agents; an import accepts at most ${PORTABLE_DOCUMENT_AGENT_LIMIT}. First over the limit: ${agentLabel(agents[PORTABLE_DOCUMENT_AGENT_LIMIT], PORTABLE_DOCUMENT_AGENT_LIMIT)}.`,
+    );
+  const flows = fields.flows;
+  if (
+    fields.formatVersion === 5 &&
+    fields.kind === "flow" &&
+    Array.isArray(flows) &&
+    flows.length > PORTABLE_DOCUMENT_FLOW_LIMIT
+  )
+    return issue(
+      "too_many_flows",
+      "flows",
+      `This file bundles ${flows.length} Flows; an import accepts at most ${PORTABLE_DOCUMENT_FLOW_LIMIT}. First over the limit: ${flowLabel(flows[PORTABLE_DOCUMENT_FLOW_LIMIT], PORTABLE_DOCUMENT_FLOW_LIMIT)}.`,
+    );
+  return undefined;
 }
 
 function checkEnvelope(
@@ -236,12 +265,15 @@ function checkEnvelope(
 }
 
 /** How messages name an Agent: its name when the file gives a usable one, else its position. */
-function agentLabel(agent: unknown, index: number): string {
-  const name = isRecord(agent) ? agent.name : undefined;
+function definitionLabel(kind: string, value: unknown, index: number): string {
+  const name = isRecord(value) ? value.name : undefined;
   return typeof name === "string" && name.trim().length > 0 && name.trim().length <= 200
-    ? `Agent "${name.trim()}"`
-    : `Agent ${index + 1}`;
+    ? `${kind} "${name.trim()}"`
+    : `${kind} ${index + 1}`;
 }
+
+const agentLabel = (value: unknown, index: number) => definitionLabel("Agent", value, index);
+const flowLabel = (value: unknown, index: number) => definitionLabel("Flow", value, index);
 
 /** How messages name a block: its name when the file gives a usable one, else its position. */
 function blockLabel(block: unknown, index: number): string {
@@ -277,7 +309,7 @@ function checkFields(
         ),
       );
   for (const field of required)
-    if (!(field in value))
+    if (!Object.hasOwn(value, field))
       issues.push(issue("missing_field", `${path}.${field}`, `${subject} is missing ${field}.`));
   return value;
 }
@@ -297,7 +329,12 @@ function checkList(
 function shapeIssues(fields: Record<string, unknown>, reader: FormatReader): Issues {
   const issues: Issues = [];
   const flow = fields.kind === "flow";
-  const envelope = flow ? FLOW_ENVELOPE_FIELDS : ENVELOPE_FIELDS;
+  const bundle = reader.version === 5;
+  const envelope = !flow
+    ? ENVELOPE_FIELDS
+    : bundle
+      ? V5_FLOW_ENVELOPE_FIELDS
+      : FLOW_ENVELOPE_FIELDS;
   const document = checkFields(fields, "document", envelope, [], "The file", issues);
   for (const field of ["factoryVersion", "exportedAt"])
     if (field in fields && typeof fields[field] !== "string")
@@ -306,7 +343,12 @@ function shapeIssues(fields: Record<string, unknown>, reader: FormatReader): Iss
   agents.forEach((agent, index) =>
     checkAgentShape(agent, `agents.${index}`, agentLabel(agent, index), issues),
   );
-  if (flow && document && "flow" in document) checkFlowShape(document.flow, reader, issues);
+  if (flow && bundle)
+    checkList(document?.flows, "flows", "The file", issues).forEach((entry, index) =>
+      checkFlowShape(entry, `flows.${index}`, flowLabel(entry, index), reader, issues),
+    );
+  else if (flow && document && "flow" in document)
+    checkFlowShape(document.flow, "flow", "The Flow", reader, issues);
   // The document's own unknown fields are addressed at the top level, not under "document".
   return issues.map((entry) => ({ ...entry, path: entry.path.replace(/^document\.?/, "") }));
 }
@@ -340,46 +382,54 @@ function checkAgentShape(agent: unknown, path: string, subject: string, issues: 
   );
 }
 
-function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
-  const subject = "The Flow";
-  const fields = checkFields(flow, "flow", FLOW_FIELDS, [], subject, issues);
+function checkFlowShape(
+  flow: unknown,
+  path: string,
+  subject: string,
+  reader: FormatReader,
+  issues: Issues,
+) {
+  const required = reader.version === 5 ? ["key", ...FLOW_FIELDS] : FLOW_FIELDS;
+  const fields = checkFields(flow, path, required, [], subject, issues);
   if (!fields) return;
-  if ("graph" in fields) {
-    const graphFields = reader.finish ? [...GRAPH_FIELDS, "finish"] : GRAPH_FIELDS;
-    const graph = checkFields(fields.graph, "flow.graph", graphFields, [], subject, issues);
-    checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
-      checkBlockShape(
-        block,
-        `flow.graph.blocks.${index}`,
-        blockLabel(block, index),
-        reader,
-        issues,
-      ),
-    );
-    checkList(graph?.connections, "flow.graph.connections", subject, issues).forEach(
-      (connection, index) =>
-        checkFields(
-          connection,
-          `flow.graph.connections.${index}`,
-          CONNECTION_FIELDS,
-          reader.finish ? ["targetEndingId"] : [],
-          subject,
-          issues,
-        ),
-    );
-    if (graph && "finish" in graph) checkFinishShape(graph.finish, issues);
-    if (graph && "flowInput" in graph) {
-      const path = "flow.graph.flowInput";
-      const input = checkFields(graph.flowInput, path, FLOW_INPUT_FIELDS, [], subject, issues);
-      if (input && "position" in input)
-        checkFields(input.position, `${path}.position`, POSITION_FIELDS, [], subject, issues);
-    }
-  }
-  if ("workspace" in fields) checkWorkspaceShape(fields.workspace, issues);
+  if ("graph" in fields) checkGraphShape(fields.graph, `${path}.graph`, subject, reader, issues);
+  if ("workspace" in fields) checkWorkspaceShape(fields.workspace, `${path}.workspace`, issues);
 }
 
-function checkFinishShape(finish: unknown, issues: Issues) {
-  const path = "flow.graph.finish";
+function checkGraphShape(
+  value: unknown,
+  path: string,
+  subject: string,
+  reader: FormatReader,
+  issues: Issues,
+) {
+  const graphFields = reader.finish ? [...GRAPH_FIELDS, "finish"] : GRAPH_FIELDS;
+  const graph = checkFields(value, path, graphFields, [], subject, issues);
+  if (!graph) return;
+  checkList(graph.blocks, `${path}.blocks`, subject, issues).forEach((block, index) =>
+    checkBlockShape(block, `${path}.blocks.${index}`, blockLabel(block, index), reader, issues),
+  );
+  checkList(graph.connections, `${path}.connections`, subject, issues).forEach(
+    (connection, index) =>
+      checkFields(
+        connection,
+        `${path}.connections.${index}`,
+        CONNECTION_FIELDS,
+        reader.finish ? ["targetEndingId"] : [],
+        subject,
+        issues,
+      ),
+  );
+  if ("finish" in graph) checkFinishShape(graph.finish, `${path}.finish`, issues);
+  if ("flowInput" in graph) {
+    const inputPath = `${path}.flowInput`;
+    const input = checkFields(graph.flowInput, inputPath, FLOW_INPUT_FIELDS, [], subject, issues);
+    if (input && "position" in input)
+      checkFields(input.position, `${inputPath}.position`, POSITION_FIELDS, [], subject, issues);
+  }
+}
+
+function checkFinishShape(finish: unknown, path: string, issues: Issues) {
   const subject = "The Flow's Finish block";
   const fields = checkFields(finish, path, FINISH_FIELDS, [], subject, issues);
   if (!fields) return;
@@ -430,17 +480,17 @@ function checkBlockShape(
   }
 }
 
-function checkWorkspaceShape(workspace: unknown, issues: Issues) {
+function checkWorkspaceShape(workspace: unknown, path: string, issues: Issues) {
   const subject = "The Flow's workspace";
   const worktree = isRecord(workspace) && workspace.mode === "worktree";
   const required = worktree ? ["mode", "base"] : ["mode"];
-  const fields = checkFields(workspace, "flow.workspace", required, [], subject, issues);
+  const fields = checkFields(workspace, path, required, [], subject, issues);
   // Any other mode or base is the workspace validator's to report.
   if (!worktree || !isRecord(fields?.base)) return;
   const base = fields.base;
   checkFields(
     base,
-    "flow.workspace.base",
+    `${path}.base`,
     base.kind === "ref" ? ["kind", "ref"] : ["kind"],
     [],
     subject,
@@ -448,63 +498,93 @@ function checkWorkspaceShape(workspace: unknown, issues: Issues) {
   );
 }
 
-/**
- * Keys are well-formed and unique. An Agent file holds exactly one Agent; in a Flow file every
- * Agent block's key resolves or is null, and every bundled Agent is referenced.
- */
-function referenceIssues(
-  fields: Record<string, unknown>,
-  agents: readonly Record<string, unknown>[],
-): Issues {
-  const issues: Issues = [];
-  const flow = fields.kind === "flow";
-  if (!flow && agents.length !== 1)
-    issues.push(issue("invalid_agent_count", "agents", "An Agent file holds exactly one Agent."));
-  const seen = new Set<unknown>();
-  agents.forEach((agent, index) => {
-    const path = `agents.${index}.key`;
-    if (typeof agent.key !== "string" || !KEY_PATTERN.test(agent.key))
+interface CheckedFlow {
+  readonly fields: Record<string, unknown>;
+  readonly path: string;
+}
+
+function checkedFlows(fields: Record<string, unknown>): readonly CheckedFlow[] {
+  if (fields.kind !== "flow") return [];
+  return fields.formatVersion === 5
+    ? (fields.flows as Record<string, unknown>[]).map((entry, index) => ({
+        fields: entry,
+        path: `flows.${index}`,
+      }))
+    : [{ fields: fields.flow as Record<string, unknown>, path: "flow" }];
+}
+
+function checkedKeys(
+  entries: readonly { key: unknown; path: string; subject: string }[],
+  issues: Issues,
+) {
+  const keys = new Set<string>();
+  for (const { key, path, subject } of entries) {
+    if (typeof key !== "string" || !KEY_PATTERN.test(key)) {
       issues.push(
         issue(
           "invalid_key",
           path,
-          `${agentLabel(agent, index)} needs a key of up to 64 letters, digits, "-" or "_", starting with a letter.`,
+          `${subject} needs a key of up to 64 letters, digits, "-" or "_", starting with a letter.`,
         ),
       );
-    else if (seen.has(agent.key))
-      issues.push(issue("duplicate_key", path, `${agentLabel(agent, index)} repeats another key.`));
-    seen.add(agent.key);
-  });
-  if (flow) issues.push(...agentKeyIssues(fields.flow as Record<string, unknown>, agents, seen));
-  return issues;
+      continue;
+    }
+    if (keys.has(key)) issues.push(issue("duplicate_key", path, `${subject} repeats another key.`));
+    keys.add(key);
+  }
+  return keys;
 }
 
-/** The checked shape guarantees a Flow's graph of block objects. */
-const flowBlocks = (flow: Record<string, unknown>) =>
-  (flow.graph as { blocks: readonly Record<string, unknown>[] }).blocks;
-
-function agentKeyIssues(
-  flow: Record<string, unknown>,
+function referenceIssues(
+  fields: Record<string, unknown>,
   agents: readonly Record<string, unknown>[],
-  keys: ReadonlySet<unknown>,
+  flows: readonly CheckedFlow[],
 ): Issues {
   const issues: Issues = [];
-  const referenced = new Set<unknown>();
-  flowBlocks(flow).forEach((block, index) => {
-    if (block.kind !== "agent" || block.agentKey === null) return;
-    if (typeof block.agentKey === "string" && keys.has(block.agentKey))
-      referenced.add(block.agentKey);
-    else
+  const agentKeys = checkedKeys(
+    agents.map((agent, index) => ({
+      key: agent.key,
+      path: `agents.${index}.key`,
+      subject: agentLabel(agent, index),
+    })),
+    issues,
+  );
+  if (fields.kind === "agent") {
+    if (agents.length !== 1)
+      issues.unshift(
+        issue("invalid_agent_count", "agents", "An Agent file holds exactly one Agent."),
+      );
+    return issues;
+  }
+  const bundle = fields.formatVersion === 5;
+  const flowKeys = bundle
+    ? checkedKeys(
+        flows.map(({ fields: flow, path }, index) => ({
+          key: flow.key,
+          path: `${path}.key`,
+          subject: flowLabel(flow, index),
+        })),
+        issues,
+      )
+    : new Set<string>();
+  const usedAgents = new Set<string>();
+  const children = new Map<unknown, readonly string[]>();
+  for (const flow of flows)
+    children.set(flow.fields.key, blockKeyIssues(flow, agentKeys, flowKeys, usedAgents, issues));
+  if (bundle) {
+    const root = fields.rootFlowKey;
+    if (typeof root !== "string" || !flowKeys.has(root))
       issues.push(
         issue(
-          "unknown_agent_key",
-          `flow.graph.blocks.${index}.agentKey`,
-          `${blockLabel(block, index)} names no Agent in this file; its agentKey must be a bundled Agent's key or null.`,
+          "unknown_root_flow_key",
+          "rootFlowKey",
+          "The rootFlowKey must name a Flow bundled in this file.",
         ),
       );
-  });
+    else checkReachability(root, flows, children, issues);
+  }
   agents.forEach((agent, index) => {
-    if (!referenced.has(agent.key))
+    if (!usedAgents.has(agent.key as string))
       issues.push(
         issue(
           "unreferenced_agent",
@@ -514,6 +594,67 @@ function agentKeyIssues(
       );
   });
   return issues;
+}
+
+const flowBlocks = (flow: Record<string, unknown>) =>
+  (flow.graph as { blocks: readonly Record<string, unknown>[] }).blocks;
+
+function blockKeyIssues(
+  { fields, path }: CheckedFlow,
+  agentKeys: ReadonlySet<string>,
+  flowKeys: ReadonlySet<string>,
+  usedAgents: Set<string>,
+  issues: Issues,
+) {
+  const children: string[] = [];
+  flowBlocks(fields).forEach((block, index) => {
+    if (block.kind !== "agent" && block.kind !== "subflow") return;
+    const agent = block.kind === "agent";
+    const field = agent ? "agentKey" : "flowKey";
+    const key = block[field];
+    if (key === null) return;
+    if (typeof key === "string" && (agent ? agentKeys : flowKeys).has(key)) {
+      if (agent) usedAgents.add(key);
+      else children.push(key);
+      return;
+    }
+    const kind = agent ? "Agent" : "Flow";
+    issues.push(
+      issue(
+        agent ? "unknown_agent_key" : "unknown_flow_key",
+        `${path}.graph.blocks.${index}.${field}`,
+        `${blockLabel(block, index)} names no ${kind} in this file; its ${field} must be a bundled ${kind}'s key or null.`,
+      ),
+    );
+  });
+  return children;
+}
+
+function checkReachability(
+  root: string,
+  flows: readonly CheckedFlow[],
+  children: ReadonlyMap<unknown, readonly string[]>,
+  issues: Issues,
+) {
+  const reachable = new Set([root]);
+  const pending = [root];
+  for (const key of pending) {
+    for (const child of children.get(key) ?? []) {
+      if (reachable.has(child)) continue;
+      reachable.add(child);
+      pending.push(child);
+    }
+  }
+  flows.forEach(({ fields, path }, index) => {
+    if (!reachable.has(fields.key as string))
+      issues.push(
+        issue(
+          "unreachable_flow",
+          path,
+          `${flowLabel(fields, index)} is bundled but unreachable from the root Flow.`,
+        ),
+      );
+  });
 }
 
 /** Each issue of one Agent, addressed under `agents.N` and naming the Agent. */
@@ -566,9 +707,11 @@ function definitionSizeIssue(
   agent: PortableAgent,
   path: string,
   execution: unknown,
+  version: PortableFormatVersion,
 ): ValidationIssue | undefined {
   const { name, prompt, exits } = agent;
-  return !definitionSaveFits({ name, prompt, execution, exits })
+  const overrides = version === 5 ? { projectOverrides: [] } : {};
+  return !definitionSaveFits({ name, prompt, execution, exits, ...overrides })
     ? issue(
         "definition_too_large",
         path,
@@ -595,12 +738,7 @@ function decodeAgents(entries: readonly Record<string, unknown>[]): Result<Porta
   const decoded = entries.map(decodeAgent);
   const invalid = decoded.flatMap((result) => (result.ok ? [] : result.error.issues));
   if (invalid.length > 0) return rejected("validation", invalid);
-  const agents = decoded.map((result) => (result as { value: PortableAgent }).value);
-  const oversized = agents.flatMap(
-    (agent, index) => definitionSizeIssue(agent, `agents.${index}`, agent.model) ?? [],
-  );
-  if (oversized.length > 0) return rejected("too_large", oversized);
-  return { ok: true, value: agents };
+  return { ok: true, value: decoded.flatMap((result) => (result.ok ? [result.value] : [])) };
 }
 
 /**
@@ -626,47 +764,87 @@ function agentDocument(
 ): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
+  const oversized = agentSizeIssues(agents.value, reader.version);
+  if (oversized.length) return rejected("too_large", oversized);
   return {
     ok: true,
     value: { ...envelopeOf(fields, reader, "agent"), agents: [agents.value[0]!] },
   };
 }
 
+function agentSizeIssues(agents: readonly PortableAgent[], version: PortableFormatVersion) {
+  return agents.flatMap(
+    (agent, index) => definitionSizeIssue(agent, `agents.${index}`, agent.model, version) ?? [],
+  );
+}
+
 function flowDocument(
   fields: Record<string, unknown>,
   reader: FormatReader,
   entries: readonly Record<string, unknown>[],
+  flows: readonly CheckedFlow[],
 ): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
-  const flow = decodeFlow(fields.flow as Record<string, unknown>, reader);
-  if (!flow.ok) return flow;
-  return {
-    ok: true,
-    value: { ...envelopeOf(fields, reader, "flow"), flow: flow.value, agents: agents.value },
-  };
+  const decoded: PortableFlowEntry[] = [];
+  for (const flow of flows) {
+    const result = decodeFlow(flow, reader);
+    if (!result.ok) return result;
+    decoded.push({ key: flow.fields.key as string, ...result.value });
+  }
+  const oversized = [
+    ...agentSizeIssues(agents.value, reader.version),
+    ...decoded.flatMap((flow, index) => flowSizeIssue(flow, flows[index]!.path) ?? []),
+  ];
+  if (oversized.length > 0) return rejected("too_large", oversized);
+  const envelope = { ...envelopeOf(fields, reader, "flow"), agents: agents.value };
+  if (reader.version === 5)
+    return {
+      ok: true,
+      value: {
+        ...envelope,
+        formatVersion: reader.version,
+        rootFlowKey: fields.rootFlowKey as string,
+        flows: decoded,
+      },
+    };
+  const { key: _key, ...flow } = decoded[0]!;
+  return { ok: true, value: { ...envelope, formatVersion: reader.version, flow } };
 }
 
-/** A Flow issue addressed under `flow`, naming its block when it has one. */
-function flowIssue(entry: ValidationIssue, blocks: readonly unknown[]): ValidationIssue {
+function flowIssue(
+  entry: ValidationIssue,
+  blocks: readonly unknown[],
+  prefix: string,
+  flow: unknown,
+): ValidationIssue {
   const block = /^graph\.blocks\.(\d+)/.exec(entry.path);
   const index = Number(block?.[1]);
-  const subject = block ? blockLabel(blocks[index], index) : "The Flow";
-  const path = entry.path.replace(/^(graph\.blocks\.\d+)\.agentId$/, "$1.agentKey");
-  return issue(entry.code, `flow.${path}`, `${subject}: ${entry.message}`);
+  const subject = block
+    ? blockLabel(blocks[index], index)
+    : prefix === "flow"
+      ? "The Flow"
+      : flowLabel(flow, Number(prefix.split(".")[1]));
+  const path = entry.path.replace(/^(graph\.blocks\.\d+)\.(agent|flow)Id$/, "$1.$2Key");
+  return issue(entry.code, `${prefix}.${path}`, `${subject}: ${entry.message}`);
 }
 
 /** The Flow domain validator over the file's Flow, with each Agent block's key in its id's place. */
-function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result<PortableFlow> {
+function decodeFlow(
+  { fields: flow, path }: CheckedFlow,
+  reader: FormatReader,
+): Result<PortableFlow> {
   const blocks = flowBlocks(flow);
   const validated = validateCreateFlow(
     {
       ...flow,
       graph: {
         ...(flow.graph as Record<string, unknown>),
-        blocks: blocks.map(({ agentKey, ...block }) =>
-          block.kind === "agent" ? { ...block, agentId: agentKey } : block,
-        ),
+        blocks: blocks.map(({ agentKey, flowKey, ...block }) => {
+          if (block.kind === "agent") return { ...block, agentId: agentKey };
+          if (block.kind === "subflow") return { ...block, flowId: flowKey };
+          return block;
+        }),
       },
     },
     "portable",
@@ -674,7 +852,7 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
   if (!validated.ok)
     return rejected(
       "validation",
-      validated.error.issues.map((entry) => flowIssue(entry, blocks)),
+      validated.error.issues.map((entry) => flowIssue(entry, blocks, path, flow)),
     );
   const { name, graph, workspace } = validated.value;
   // The checked shape required every position, Revisit instruction and the workspace.
@@ -688,11 +866,14 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
       ...(reader.finish ? { finish: graph!.finish as FlowFinishBlock } : {}),
     },
   };
-  const oversized = flowSizeIssue(decoded);
-  return oversized ? rejected("too_large", [oversized]) : { ok: true, value: decoded };
+  return { ok: true, value: decoded };
 }
 
 function portableBlock(block: FlowBlockInput): PortableFlowBlock {
+  if (block.kind === "subflow") {
+    const { flowId, ...rest } = block;
+    return { ...rest, flowKey: flowId } as PortableFlowBlock;
+  }
   if (block.kind !== "agent") return block as PortableFlowBlock;
   const { agentId, ...rest } = block;
   return {
@@ -702,21 +883,34 @@ function portableBlock(block: FlowBlockInput): PortableFlowBlock {
   } as PortableFlowBlock;
 }
 
-/** A created Agent's id has this length, so the Flow's save request is measured exactly. */
-const CREATED_AGENT_ID = "00000000-0000-4000-8000-000000000000";
+const CREATED_DEFINITION_ID = "00000000-0000-4000-8000-000000000000";
 
-/** The issue when the imported Flow's later save request would exceed the definition limit. */
-function flowSizeIssue(flow: PortableFlow): ValidationIssue | undefined {
-  const blocks = flow.graph.blocks.map((block) => {
-    if (block.kind !== "agent") return block;
-    const { agentKey, ...rest } = block;
-    return { ...rest, agentId: agentKey === null ? null : CREATED_AGENT_ID };
+export function bindPortableBlocks(
+  blocks: readonly PortableFlowBlock[],
+  agentId: (key: string) => string,
+  flowId: (key: string) => string,
+): FlowBlock[] {
+  return blocks.map((block) => {
+    if (block.kind === "agent") {
+      const { agentKey, ...rest } = block;
+      return { ...rest, agentId: agentKey === null ? null : agentId(agentKey) };
+    }
+    if (block.kind === "subflow") {
+      const { flowKey, ...rest } = block;
+      return { ...rest, flowId: flowKey === null ? null : flowId(flowKey) };
+    }
+    return block;
   });
+}
+
+function flowSizeIssue(flow: PortableFlow, path: string): ValidationIssue | undefined {
+  const newId = () => CREATED_DEFINITION_ID;
+  const blocks = bindPortableBlocks(flow.graph.blocks, newId, newId);
   const request = { name: flow.name, graph: { ...flow.graph, blocks }, workspace: flow.workspace };
   return !definitionSaveFits(request)
     ? issue(
         "definition_too_large",
-        "flow",
+        path,
         `Flow "${flow.name}" is larger than the 2 MB a definition may be.`,
       )
     : undefined;
@@ -789,14 +983,19 @@ export function validateCommitImport(input: unknown): Result<CommitImportInput> 
     return rejected("validation", [
       issue("invalid_request_id", "requestId", "Send a request id of up to 256 characters."),
     ]);
-  if (jsonByteLength(fields.document) > PORTABLE_DOCUMENT_LIMIT_BYTES) return documentTooLarge();
-  const document = decodePortableDocument(fields.document);
+  if (jsonByteLength(fields) > PORTABLE_DOCUMENT_LIMIT_BYTES) return documentTooLarge();
+  const document = validatePortableDocument(fields.document);
   if (!document.ok) return document;
   const selections = decodeSelections(document.value, fields.selections);
   if (!selections.ok) return selections;
   const oversized = document.value.agents.flatMap(
     (agent, index) =>
-      definitionSizeIssue(agent, `agents.${index}`, selections.value[agent.key]) ?? [],
+      definitionSizeIssue(
+        agent,
+        `agents.${index}`,
+        selections.value[agent.key],
+        document.value.formatVersion,
+      ) ?? [],
   );
   if (oversized.length > 0) return rejected("too_large", oversized);
   const projectId = parseOwningProject(fields);

@@ -34,17 +34,3 @@ it("Start refuses a ready Flow that places a Subflow and creates no Run", async 
   ]);
   expect(await f.listRunNavigation()).toStrictEqual({ ok: true, value: [] });
 });
-
-it("Export refuses a Flow that places a Subflow", async (c) => {
-  // Arrange
-  const { f, parent } = await readyComposition(c);
-
-  // Act
-  const exported = await f.exportFlow(parent.id);
-
-  // Assert
-  assert(!exported.ok);
-  expect(exported.error.issues.map((issue) => issue.code)).toStrictEqual([
-    "subflow_export_unavailable",
-  ]);
-});

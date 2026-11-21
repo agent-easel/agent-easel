@@ -16,7 +16,10 @@ function downloadFile(name: string, text: string) {
 
 /** A file name from the Flow's or Agent's name, e.g. `code-reviewer.agent.json`. */
 function exportFileName({ document }: DefinitionExport): string {
-  const name = document.kind === "flow" ? document.flow.name : document.agents[0].name;
+  const name =
+    document.kind === "flow"
+      ? document.flows.find(({ key }) => key === document.rootFlowKey)!.name
+      : document.agents[0].name;
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
