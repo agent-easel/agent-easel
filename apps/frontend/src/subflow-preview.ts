@@ -1,4 +1,6 @@
 import {
+  SUBFLOW_EXPANDED_BLOCKS_LIMIT,
+  SUBFLOW_EXPANDED_CONNECTIONS_LIMIT,
   type AgentDefinition,
   type FlowBlock,
   type FlowDraft,
@@ -25,7 +27,6 @@ const SUBFLOW_PADDING = { top: 20, right: 32, bottom: 20, left: 32 } as const;
 const SUBFLOW_MIN_WIDTH = 360;
 const SUBFLOW_MIN_HEIGHT = 180;
 const BROKEN_EXIT_STEP = 24;
-const MAX_PREVIEW_NODES = 120;
 const executionFooters = () => 2;
 
 const BUDGET_CODES: ReadonlySet<string> = new Set([
@@ -141,8 +142,18 @@ type PreviewBuild = {
   readonly affected: ReadonlySet<string>;
   readonly arranged?: boolean | undefined;
   readonly revisions: Map<string, PreviewGeometry>;
-  remaining: number;
+  remainingBlocks: number;
+  remainingConnections: number;
 };
+
+function previewBudget(graph: CanvasGraph, execution: boolean) {
+  return execution
+    ? { remainingBlocks: Infinity, remainingConnections: Infinity }
+    : {
+        remainingBlocks: SUBFLOW_EXPANDED_BLOCKS_LIMIT - graph.blocks.length,
+        remainingConnections: SUBFLOW_EXPANDED_CONNECTIONS_LIMIT - graph.connections.length,
+      };
+}
 
 function buildSubflowPreview(
   block: CanvasBlock,
@@ -151,7 +162,7 @@ function buildSubflowPreview(
 ): SubflowPreview | null {
   const { flows, ancestors, runCollapsed, affected, revisions } = build;
   if (block.kind !== "subflow" || block.flowId === null) return null;
-  if (ancestors.has(block.flowId) || build.remaining <= 0) return null;
+  if (ancestors.has(block.flowId)) return null;
   const childFlow = flows.get(block.flowId);
   if (!childFlow) return null;
   const cached = revisions.get(childFlow.id);
@@ -164,9 +175,11 @@ function buildSubflowPreview(
       cached.innerGeometry,
       cached.innerPreviews,
     );
-  const childNodes = childFlow.graph.blocks.length + 2;
-  if (childNodes > build.remaining) return null;
-  build.remaining -= childNodes;
+  const { blocks, connections } = childFlow.graph;
+  if (blocks.length > build.remainingBlocks || connections.length > build.remainingConnections)
+    return null;
+  build.remainingBlocks -= blocks.length;
+  build.remainingConnections -= connections.length;
   const geometry = buildPreviewGeometry(childFlow, path, build);
   if (share) revisions.set(childFlow.id, geometry);
   return frameSubflow(
@@ -290,7 +303,7 @@ export function computeSubflowPreviews({
     affected,
     arranged,
     revisions: new Map(),
-    remaining: runCollapsed ? Number.POSITIVE_INFINITY : MAX_PREVIEW_NODES,
+    ...previewBudget(graph, runCollapsed !== undefined),
   };
   for (const block of graph.blocks) {
     if (block.kind !== "subflow") continue;

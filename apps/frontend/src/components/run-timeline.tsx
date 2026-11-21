@@ -1,4 +1,3 @@
-import { invocationSummary } from "./run-subflow.tsx";
 import { ResultCard, resultVersion } from "./run-result.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
 import { useState } from "react";
@@ -7,7 +6,6 @@ import {
   FINISH_BLOCK_ID,
   type RunAttention,
   type RunDetail,
-  type SubflowInvocation,
 } from "@t3-factory/contracts";
 import { capturedExits, FINISH_SELECTION, type CanvasBlockSelection } from "../flow-graph.ts";
 import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Flag, History } from "lucide-react";
@@ -423,11 +421,11 @@ function useTimelineFilter() {
 export function RunTimeline({
   run,
   selectedBlockId,
-  invocation,
+  invocationSummary,
 }: {
   run: RunDetail;
   selectedBlockId: CanvasBlockSelection | null;
-  invocation?: SubflowInvocation | null | undefined;
+  invocationSummary: string | undefined;
 }) {
   const [expanded, toggle] = useTimelineOpen();
   const [filter, setFilter] = useTimelineFilter();
@@ -436,7 +434,7 @@ export function RunTimeline({
   const keyEvents = rows.flatMap((row) => (row.kind === "event" ? [row.event] : []));
   // Collapsed, the bar names only the event count; the details open with the list.
   const count = expanded && filter === "key" ? `${keyEvents.length} key events` : `${total} events`;
-  const summary = invocation ? invocationSummary(run, invocation) : count;
+  const summary = invocationSummary ?? count;
   return (
     <section className="flex min-h-10 flex-col bg-sidebar" aria-label="Timeline">
       <Tabs

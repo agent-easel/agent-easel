@@ -140,10 +140,6 @@ function acceptFinal(
   });
 }
 
-/** One verdict for the Block's current activation, in this order: an Archived Run, a Run whose
- * manual settlement closed its gate (a report from stopped work never revives it), a protocol
- * violation, a repeat of the current report, then exit resolution and acceptance. The latest
- * report is the activation's current state, so a newer finished report replaces the result. */
 function decide(
   sql: SqlClient.SqlClient,
   target: ReportTarget,
@@ -152,6 +148,8 @@ function decide(
 ) {
   return Effect.gen(function* (): Effect.fn.Return<RuntimeReply, unknown> {
     const { runRow, block } = target;
+    if (runRow.archived_at) return RUN_ARCHIVED;
+    if (!runRow.gate_open) return runRow.settled_at ? RUN_SETTLED : RUN_SETTLING;
     if (runRow.definitions.invocation) {
       const [scope] = yield* sql<{
         state: string;
@@ -173,8 +171,6 @@ function decide(
         };
       }
     }
-    if (runRow.archived_at) return RUN_ARCHIVED;
-    if (!runRow.gate_open) return runRow.settled_at ? RUN_SETTLED : RUN_SETTLING;
     const protocol = nonFinalRejection(report);
     if (protocol) return protocol;
     const content = reportFingerprint(report);

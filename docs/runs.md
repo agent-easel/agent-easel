@@ -688,12 +688,12 @@ the Block and worker visit recorded for that matter.
 A placement shows its queued count separately from the invocation on display. By default it
 shows the oldest unfinished invocation, then the newest finished invocation when the queue
 drains. The Run inspector pages invocation history newest first. Selecting an invocation
-pauses Follow and keeps that invocation open as new work arrives. Condition arrival pages
+pauses Follow and keeps that invocation open as new work arrives and its recipient statuses change. Condition arrival pages
 use the selected invocation's Condition identity.
 
-The group, inspector and compact Timeline show the selected invocation and the chosen ending's
-release state. The inspector shows the output, source exit and visit, producing worker, and
-each returned delivery's recipient disposition. **Nothing returned** means the invocation
+The group summary, inspector and compact Timeline show the selected invocation's release state,
+producing worker and visit, and the recipient dispositions. The inspector also shows the output
+and source exit. **Nothing returned** means the invocation
 finished without reaching an ending. It appears in history and in the settled Run overview.
 A real empty output and **Output missing** have separate labels. During stopping the inspector
 shows each worker's Stop request and its acknowledgment. Release waits for verified stopping.

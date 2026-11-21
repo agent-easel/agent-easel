@@ -136,7 +136,8 @@ export function openRunInvocations(database: RunnerDatabase) {
         FROM subflow_invocations i WHERE i.run_id=${run.id} AND i.state='active'
         AND NOT EXISTS(SELECT 1 FROM subflow_invocations j WHERE j.parent_id=i.id AND j.state IN ('queued','active','stopping'))
         AND NOT EXISTS(SELECT 1 FROM run_blocks b WHERE b.invocation_id=i.id AND (
-          (b.thread_id IS NOT NULL AND (b.state<>'finished' OR b.worker_finished=0 OR b.freshness<>'fresh'))
+          b.state='error'
+          OR (b.thread_id IS NOT NULL AND (b.state<>'finished' OR b.worker_finished=0 OR b.freshness<>'fresh'))
           OR EXISTS(SELECT 1 FROM operation_intents w WHERE w.run_id=b.run_id AND w.block_id=b.block_id AND w.state IN ('pending','reserved','uncertain'))
           OR EXISTS(SELECT 1 FROM human_occurrences h WHERE h.run_id=b.run_id AND h.block_id=b.block_id AND h.state='pending')
           OR EXISTS(SELECT 1 FROM wait_arrivals w WHERE w.run_id=b.run_id AND w.block_id=b.block_id AND w.state='pending')

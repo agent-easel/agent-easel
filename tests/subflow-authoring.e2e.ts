@@ -23,10 +23,21 @@ async function apiJson<T>(
   return result.value;
 }
 
-async function createReviewPanelFlow(baseUrl: string | undefined, name: string) {
+async function createReviewPanelFlow(baseUrl: string | undefined, name: string, workers = 1) {
   const agents = await apiJson<AgentDefinition[]>(baseUrl, "/api/agents");
   const reviewer = agents.find((agent) => agent.name === "Sample worker") ?? agents[0];
   assert(reviewer);
+  const blocks = Array.from({ length: workers }, (_, index) => ({
+    id: index === 0 ? "security" : `review-${index}`,
+    name: index === 0 ? "Security review" : `Review worker ${index}`,
+    kind: "agent",
+    agentId: reviewer.id,
+    position: { x: 320 + (index % 10) * 270, y: 120 + Math.floor(index / 10) * 150 },
+    hiddenExitIds: [],
+    localExits: [],
+    revisitInstruction: "",
+    revisitContext: "keep",
+  }));
   return apiJson<FlowDraft>(baseUrl, "/api/flows", {
     method: "POST",
     headers: mutation,
@@ -34,20 +45,8 @@ async function createReviewPanelFlow(baseUrl: string | undefined, name: string) 
       name,
       workspace: { mode: "checkout" },
       graph: {
-        flowInput: { position: { x: 40, y: 120 }, targetBlockIds: ["security"] },
-        blocks: [
-          {
-            id: "security",
-            name: "Security review",
-            kind: "agent",
-            agentId: reviewer.id,
-            position: { x: 320, y: 120 },
-            hiddenExitIds: [],
-            localExits: [],
-            revisitInstruction: "",
-            revisitContext: "keep",
-          },
-        ],
+        flowInput: { position: { x: 40, y: 120 }, targetBlockIds: blocks.map(({ id }) => id) },
+        blocks,
         connections: [
           {
             sourceBlockId: "security",
@@ -205,7 +204,11 @@ test("placing a saved Flow renders an expanded Subflow group, wires exits, colla
   await app.screenshot("s1-subflow-cycle-disabled");
 });
 
-async function createDistantSubflowParent(baseUrl: string | undefined, childId: string) {
+async function createDistantSubflowParent(
+  baseUrl: string | undefined,
+  childId: string,
+  distance = 4500,
+) {
   return apiJson<FlowDraft>(baseUrl, "/api/flows", {
     method: "POST",
     headers: mutation,
@@ -227,7 +230,7 @@ async function createDistantSubflowParent(baseUrl: string | undefined, childId: 
             name: "Distant wait",
             kind: "wait",
             duration: { amount: 1, unit: "minutes" },
-            position: { x: 320, y: 4500 },
+            position: { x: 320, y: distance },
           },
         ],
         connections: [
@@ -244,7 +247,7 @@ async function createDistantSubflowParent(baseUrl: string | undefined, childId: 
           },
         ],
         finish: {
-          position: { x: 700, y: 4500 },
+          position: { x: 700, y: distance },
           endings: [
             {
               id: "done",
@@ -265,6 +268,31 @@ async function wirePathD(browser: { evaluate: <T>(expr: string) => Promise<T> },
     `document.querySelector(${JSON.stringify(`g[aria-label="${label}"] path:nth-of-type(2)`)})?.getAttribute("d") ?? null`,
   );
 }
+
+test("a ready Subflow preview with 119 child Blocks expands by default and can reopen", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1600, height: 1000 });
+  const child = await createReviewPanelFlow(app.baseUrl, "Large review panel", 119);
+  const parent = await createDistantSubflowParent(app.baseUrl, child.id, 1000);
+  await app.open(`/studio/flows/${parent.id}`);
+  await expect(readinessSummary(screen, "Ready")).toBeVisible();
+  const group = screen.getByRole("article", "Subflow Review stage", { exact: true });
+  await expect(group).toBeVisible();
+  await group.getByRole("button", "Collapse Review stage", { exact: true }).tap();
+
+  // Act
+  await screen.getByRole("button", "Expand Review stage", { exact: true }).tap();
+
+  // Assert
+  await expect(group).toBeVisible();
+  await expect(group).toContainText("Incoming message");
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await app.screenshot("studio-large-subflow-expanded");
+});
 
 test("an expanded Subflow group culls offscreen with invariant crossing wire, stays pinned while focused and auto-arranges cleanly", async ({
   app,

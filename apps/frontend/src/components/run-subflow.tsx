@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { TextLink } from "@/components/ui/text-link";
 import { clockTime } from "../time-format.ts";
 import type { RunSubflows } from "../run-subflows.ts";
-import { blockName, deliveryRecipientName, deliveryWorker } from "../run-evidence.ts";
+import { blockName, deliveryRecipientName, deliveryWorker, resultVisit } from "../run-evidence.ts";
+import type { CanvasBlockSelection } from "../flow-graph.ts";
 import { InspectorHeading } from "./inspector-section.tsx";
 import { ResultDetails } from "./run-result-section.tsx";
 import { OpenInT3 } from "./open-in-t3.tsx";
@@ -46,10 +47,11 @@ function invocationDelivery(invocation: SubflowInvocation) {
   }
 }
 
-export function invocationSummary(run: RunDetail, invocation: SubflowInvocation) {
+function invocationSummary(run: RunDetail, invocation: SubflowInvocation) {
   const { ending } = invocation;
   const delivery = invocationDelivery(invocation);
   const worker = ending?.origin && deliveryWorker(run, ending.origin);
+  const visit = ending && resultVisit(run, ending);
   const output = ending?.outputMissing
     ? "Output missing"
     : ending?.output === ""
@@ -61,12 +63,28 @@ export function invocationSummary(run: RunDetail, invocation: SubflowInvocation)
     delivery,
     output,
     worker && `Worker ${blockName(run, worker.blockId)}`,
+    visit && `Visit ${visit.number}`,
     ending?.recipients
       .map((item) => `${deliveryRecipientName(run, item)} ${item.disposition}`)
       .join(", "),
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+export function inspectedInvocationSummary(
+  subflows: RunSubflows,
+  selected: CanvasBlockSelection | null,
+) {
+  const path = typeof selected === "string" ? subflows.byBlock.get(selected)?.path : undefined;
+  if (!path) return undefined;
+  const placement = subflows.placements.get(path);
+  const inspected = placement?.invocation
+    ? placement
+    : subflows.placements.get(path.slice(0, path.lastIndexOf("/")));
+  return inspected?.invocation
+    ? invocationSummary(inspected.parent.run, inspected.invocation)
+    : undefined;
 }
 
 export function SubflowInvocationHeader({
@@ -125,19 +143,23 @@ function InvocationHistory({
       <InspectorHeading title="Invocation history" />
       {page && (
         <ul className="space-y-2">
-          {page.invocations.map((invocation) => (
-            <li key={invocation.id} className="flex flex-wrap items-center gap-x-2 text-sm">
-              <TextLink
-                onClick={() => onSelect(invocation)}
-                aria-current={placement.invocation?.id === invocation.id ? "true" : undefined}
-              >
-                Invocation {invocation.number} · {invocationOutcome(invocation)}
-              </TextLink>
-              <span className="text-xs text-muted-foreground">
-                {invocationDelivery(invocation)}
-              </span>
-            </li>
-          ))}
+          {page.invocations.map((entry) => {
+            const selected = placement.invocation?.id === entry.id;
+            const invocation = selected ? placement.invocation : entry;
+            return (
+              <li key={invocation.id} className="flex flex-wrap items-center gap-x-2 text-sm">
+                <TextLink
+                  onClick={() => onSelect(invocation)}
+                  aria-current={selected ? "true" : undefined}
+                >
+                  Invocation {invocation.number} · {invocationOutcome(invocation)}
+                </TextLink>
+                <span className="text-xs text-muted-foreground">
+                  {invocationDelivery(invocation)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
       {error && (

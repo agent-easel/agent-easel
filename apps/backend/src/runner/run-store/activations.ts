@@ -177,7 +177,7 @@ export function openRunActivations(database: RunnerDatabase) {
           block!.public_id,
           strategy,
           images,
-          current.definitions.subflows?.length ? message : undefined,
+          target.flowInput ? message : undefined,
           current.definitions.invocation ? " · " + handoff.block_id : "",
         );
         const plan = {

@@ -9,7 +9,29 @@ import {
 import type { OwningProject } from "@t3-factory/domain-validation";
 import type { Factory } from "../../src/index.ts";
 import { assertOk, discoveredClones, sampleAgentInput } from "./domain-setup.ts";
-import { agentBlock, connection, flowInput } from "./scenarios.ts";
+import { agentBlock, connection, flowInput, launchedWorkers } from "./scenarios.ts";
+import { prepared } from "./prepared-runner.ts";
+
+export async function parallelFinish(context: TestContext) {
+  const setup = await prepared(context);
+  const { f, input, agent, world } = setup;
+  const child = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
+  const graph = placingGraph(child.id);
+  const parent = await savedFlow(f, {
+    name: "Parallel Finish",
+    graph: {
+      ...graph,
+      flowInput: flowInput("root", "inner-0"),
+      blocks: [agentBlock("root", "Root worker", agent.id), ...graph.blocks],
+      connections: [toEnding("root", "done", "done")],
+    },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const {
+    workers: [root, inner],
+  } = await launchedWorkers(world, started.id);
+  return { ...setup, runId: started.id, root: root!, inner: inner! };
+}
 
 type Position = { readonly x: number; readonly y: number };
 

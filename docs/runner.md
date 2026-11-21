@@ -609,7 +609,9 @@ inside its parent invocation. Different placements can execute at the same time.
 invocation's workers, repeated visits, Conditions, Continuations, Human occurrences and Wait
 arrivals use the invocation's own Block identities. Direct Flow input passes Start text and
 images through entry-only chains. Other arrivals pass their exact text, including empty Human
-approval. In a worktree Run, the first Agent in depth-first saved Flow-input order creates the
+approval. An Agent connected to an invoked Flow's input gets that invocation's input in its
+first prompt. Ordinary Handoffs expose their message through the recipient's result or feedback fields.
+In a worktree Run, the first Agent in depth-first saved Flow-input order creates the
 worktree. The remaining starters join after it binds.
 
 The first released delivery accepted at an invocation's Finish records its ending and closes
@@ -624,9 +626,10 @@ Verified closure releases one result through the matching ending ID, retaining t
 worker and activation through forwarding Blocks. Output None releases empty text. Blank
 Required output records **Output missing** without raising a Problem. A quiet invocation
 without an ending records **Nothing returned**. Pending Human, Wait, delivery, child invocation
-or integrity work keeps the invocation open. Queue advancement commits with the outcome.
-A parent cutoff cancels an owed return and preserves the accepted ending. A late report for
-a closed Block records an informational event. A parent Continuation on the same worker
+or integrity work and unresolved Block errors keep the invocation open. Queue advancement commits
+with the outcome. A parent cutoff cancels an owed return and preserves the accepted ending.
+A late report for a closed Block records an informational event while the Run gate is open.
+Archive and a closed Run gate take precedence. A parent Continuation on the same worker
 thread gets the ending name and unchanged output beside its prompt, then reports with its own Block id.
 
 ## Run title generations

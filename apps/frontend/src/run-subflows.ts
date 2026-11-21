@@ -148,17 +148,19 @@ export function useRunSubflows(run: RunDetail) {
     [run.subflows],
   );
   const runId = run.id;
+  const { events, intents, subflows } = run;
   const refreshKey = JSON.stringify(
     [...pinned.values()].flatMap((invocation) => {
       const live = summaries.get(invocation.placementBlockId)?.defaultInvocation;
-      return live?.id === invocation.id ? [] : [[invocation.id, live?.id ?? null]];
+      return live?.id === invocation.id ? [] : [invocation.id];
     }),
   );
 
   useEffect(() => {
+    if (!pinned.size) return;
     let current = true;
-    const requests = JSON.parse(refreshKey) as [string, string | null][];
-    for (const [invocationId] of requests) {
+    const requests = JSON.parse(refreshKey) as string[];
+    for (const invocationId of requests) {
       void api.getSubflowInvocation(runId, invocationId).then(
         (evidence) => {
           if (current) setLoaded((previous) => new Map(previous).set(invocationId, evidence));
@@ -174,7 +176,7 @@ export function useRunSubflows(run: RunDetail) {
     return () => {
       current = false;
     };
-  }, [refreshKey, runId]);
+  }, [events, intents, pinned, refreshKey, runId, subflows]);
 
   const inspectInvocation = (invocation: SubflowInvocation) => {
     setError("");

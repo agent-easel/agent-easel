@@ -188,6 +188,7 @@ export interface RunThreadBinding {
   readonly link: string | null;
   readonly id: string;
   readonly blockId: string;
+  readonly blockName?: string;
   readonly environmentId: string;
   readonly threadId: string;
   readonly role: "worker" | "descendant";

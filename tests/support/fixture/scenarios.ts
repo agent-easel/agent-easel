@@ -12,6 +12,7 @@ import {
   resultReported,
   resultReleasedToSecondWorker,
   resultReleasedToTwoWorkers,
+  resultReleasedToSameWorker,
   resultReleasedToWait,
   blockWorkerLaunched,
   conditionBlock,
@@ -29,12 +30,14 @@ import {
   settled,
   workerAtWork,
   workerHandle,
+  sentTurnBegins,
   generatedTitleApplied,
   humanStep,
   observeFor,
   twoWorkersStarted,
 } from "../../../apps/backend/test/support/scenarios.ts";
 import { promptAnswered, promptSent } from "../../../apps/backend/test/support/continuation.ts";
+import { ending, subflowBlock, toEnding } from "../../../apps/backend/test/support/subflow.ts";
 import type { RunDetail } from "../../../packages/contracts/src/index.ts";
 import { effectiveExits } from "../../../packages/domain-validation/src/index.ts";
 import { seedScenario, settlementUnresolved } from "../../../scripts/dev/seed.ts";
@@ -112,6 +115,11 @@ function runTransitions(context: Context) {
         exit: exitOf(run),
         ...(message === undefined ? {} : { message }),
       }),
+    "release notes ready for revisit": (run: RunDetail) =>
+      resultReported(context, workerHandle(context, run, "notes"), {
+        exit: "Logged",
+        message: "Previous release notes logged.",
+      }),
     "Continuation response reported": async (run: RunDetail, message?: string) => {
       const worker = workerOf(context, run);
       await promptAnswered(context, worker, await promptSent(context, worker), message);
@@ -142,6 +150,95 @@ function runTransitions(context: Context) {
     "stopped turns ended": (run: RunDetail) =>
       t3.threads.finishHeldStops(run.threadBindings.map((binding) => binding.threadId)),
   };
+}
+
+async function serialSubflowReview(context: Context, agentId: string, keyNamespace: string) {
+  const { factory } = context;
+  const leaf = await saveFlow(factory, "UI · Review checks", {
+    flowInput: flowInput("reviewer"),
+    blocks: [
+      agentBlock(
+        "reviewer",
+        "Code reviewer",
+        agentId,
+        { x: 320, y: 100 },
+        [],
+        [
+          blockExit("repeat", "Recheck", "Run a second check."),
+          blockExit("approve", "Approve", "Accept the change."),
+        ],
+      ),
+    ],
+    connections: [
+      connection("reviewer", "repeat", "reviewer"),
+      toEnding("reviewer", "approve", "approved"),
+    ],
+    finish: { position: { x: 630, y: 100 }, endings: [ending("approved", "Approved")] },
+  });
+  const panel = await saveFlow(factory, "UI · Serial review panel", {
+    flowInput: flowInput("checks"),
+    blocks: [subflowBlock("checks", "Review checks", leaf, { x: 320, y: 100 })],
+    connections: [toEnding("checks", "approved", "approved")],
+    finish: { position: { x: 1350, y: 100 }, endings: [ending("approved", "Approved")] },
+  });
+  const flow = await saveFlow(factory, "UI · Serial reviews and notes", {
+    flowInput: flowInput("worker", "second", "notes"),
+    blocks: [
+      agentBlock("worker", "First change", agentId, { x: 310, y: 100 }),
+      agentBlock("second", "Second change", agentId, { x: 310, y: 360 }),
+      subflowBlock("panel", "Review panel", panel, { x: 630, y: 100 }),
+      agentBlock(
+        "notes",
+        "Release notes",
+        agentId,
+        { x: 2150, y: 100 },
+        [],
+        [blockExit("logged", "Logged", "Notes recorded.")],
+      ),
+    ],
+    connections: [
+      connection("worker", "review", "panel"),
+      connection("second", "review", "panel"),
+      connection("panel", "approved", "notes"),
+    ],
+  });
+  const started = requireSuccess(
+    await factory.startRun(
+      await demoStart(
+        context,
+        flow,
+        "subflow-serial",
+        "UI worker · Serial reviews and notes",
+        "Review the search changes and update release notes.",
+        undefined,
+        { titlePrefix: "", keyNamespace },
+      ),
+    ),
+  );
+  const first = await blockWorkerLaunched(context, started.id, "worker");
+  const second = await blockWorkerLaunched(context, started.id, "second");
+  await blockWorkerLaunched(context, started.id, "notes");
+  await resultReported(context, first, { exit: "review", message: "First search change." });
+  const active = await observeFor("observe first nested reviewer", context, started.id, (run) =>
+    run.blocks.some((block) => block.templateBlockId === "reviewer" && block.executionId),
+  );
+  const leafBlock = active.blocks.find((block) => block.templateBlockId === "reviewer")!;
+  const reviewer = workerHandle(context, active, leafBlock.blockId);
+  await resultReported(context, second, { exit: "review", message: "Second search change." });
+  await resultReported(context, reviewer, { exit: "Recheck", message: "Review again." });
+  await resultReleasedToSameWorker(context, reviewer);
+  await resultReported(context, sentTurnBegins(context, reviewer), {
+    exit: "Approve",
+    message: "First change approved on the second visit.",
+  });
+  await observeFor(
+    "second review active while the first return waits for its recipient",
+    context,
+    started.id,
+    (run) =>
+      run.subflows?.find((item) => item.blockId === "panel")?.defaultInvocation?.number === 2,
+  );
+  return started.id;
 }
 
 /** A Run state a journey applies to an existing Run. */
@@ -714,6 +811,10 @@ export async function scenariosFixture(host: Host) {
   });
   /** The fixture's scenario copy, prepared on a journey's first request. */
   const refreshPrepared = scenarioCopy("UI worker · ", "ui-worker", [
+    [
+      "subflow-serial",
+      (keyNamespace) => serialSubflowReview(context, world.agents.worker, keyNamespace),
+    ],
     [
       "parallel-decision",
       async (keyNamespace) => {

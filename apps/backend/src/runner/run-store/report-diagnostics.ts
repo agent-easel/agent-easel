@@ -16,7 +16,12 @@ export function recordReportVerdict(
 ) {
   return Effect.gen(function* () {
     const diagnostic = reportDiagnostic(reply);
-    if (reply.code === "INVOCATION_CLOSED" || !run.gate_open || !block.execution_id)
+    if (
+      run.archived_at ||
+      !run.gate_open ||
+      reply.code === "INVOCATION_CLOSED" ||
+      !block.execution_id
+    )
       return diagnostic;
     const [binding] = yield* sql<{
       id: string;

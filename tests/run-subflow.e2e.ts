@@ -1,7 +1,14 @@
-import { expect } from "e2e";
+import { expect, type Screen } from "e2e";
 import { test } from "./support/test.ts";
-import { prepareScenario } from "./support/scenarios.ts";
-import { readHistoryRun } from "./support/run-history.ts";
+import { applyRunState, prepareScenario } from "./support/scenarios.ts";
+import { readHistoryRun, readInvocationHistory } from "./support/run-history.ts";
+
+async function openInvocationHistory(screen: Screen) {
+  const inspector = screen.getByRole("complementary", "Run inspector");
+  await inspector.getByRole("button", "Show history", { exact: true }).tap();
+  const history = inspector.getByRole("region", "Invocation history", { exact: true });
+  return { inspector, history };
+}
 
 test("a Stop acknowledgment leaves the chosen Subflow ending held", async ({
   app,
@@ -52,9 +59,7 @@ test("selecting a returned invocation from history shows its recipient and produ
   await app.open(`/runs/${id}`);
   await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
   await screen.getByRole("button", "Inspect Subflow invocation 1", { exact: true }).tap();
-  const inspector = screen.getByRole("complementary", "Run inspector");
-  await inspector.getByRole("button", "Show history", { exact: true }).tap();
-  const history = inspector.getByRole("region", "Invocation history", { exact: true });
+  const { inspector, history } = await openInvocationHistory(screen);
   const worker = run.threadBindings.find(
     (item) => item.threadId === invocation?.ending?.origin?.threadId,
   );
@@ -100,6 +105,71 @@ test("an expanded Subflow can collapse and reopen its captured input", async ({
   // Assert
   await expect(canvas.getByText("Search is ready for review.", { exact: true })).toBeVisible();
   await expect(canvas.getByRole("article", "Block Code review", { exact: true })).toBeVisible();
+});
+
+test("an older pinned invocation updates its live recipient beside the same default invocation", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await browser.setViewport({ width: 1920, height: 1080 });
+  const { id } = await prepareScenario(app, "subflow-serial");
+  const before = await readHistoryRun(app.baseUrl, id);
+  const placement = before.subflows?.find((item) => item.blockId === "panel");
+  const defaultId = placement?.defaultInvocation?.id;
+  expect(placement?.defaultInvocation).toMatchObject({ number: 2, state: "active" });
+  const prior = await readInvocationHistory(app.baseUrl, id, "panel");
+  const old = prior.invocations[1]!;
+  expect(old.ending?.recipients).toEqual([
+    { blockId: "notes", targetEndingId: null, disposition: "pending" },
+  ]);
+  expect(before.blocks.some((item) => item.threadId === old.ending?.origin?.threadId)).toBe(false);
+  await app.open(`/runs/${id}`);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  const canvas = screen.getByRole("region", "Execution canvas");
+  const group = canvas.getByRole("article", "Subflow Review panel", { exact: true });
+  await group.getByRole("button", "Inspect Subflow invocation 2", { exact: true }).tap();
+  const { inspector, history } = await openInvocationHistory(screen);
+  const first = history.getByRole("button", "Invocation 1 · Approved", { exact: true });
+  const second = history.getByRole("button", "Invocation 2 · Running", { exact: true });
+  await first.tap();
+  await second.tap();
+  await expect(second).toHaveAttribute("aria-current", "true");
+  await first.tap();
+  const recipients = inspector.getByRole("region", "Recipients", { exact: true });
+  await expect(recipients).toContainText("Pending");
+  await app.screenshot("older-invocation-recipient-pending");
+
+  // Act
+  await applyRunState(app, id, "release notes ready for revisit");
+
+  // Assert
+  await expect
+    .poll(async () => {
+      const page = await readInvocationHistory(app.baseUrl, id, "panel");
+      return page.invocations[1]?.ending?.recipients[0]?.disposition;
+    })
+    .toBe("acknowledged");
+  const after = await readHistoryRun(app.baseUrl, id);
+  expect(after.subflows?.find((item) => item.blockId === "panel")?.defaultInvocation?.id).toBe(
+    defaultId,
+  );
+  const summary =
+    "Invocation 1 · Approved · Released · Worker Code reviewer · Visit 2 · Release notes acknowledged";
+  await expect(first).toHaveAttribute("aria-current", "true");
+  await expect(recipients).toContainText("Acknowledged");
+  await expect(inspector).toContainText("Code reviewer · Visit 2");
+  await expect(
+    group.getByRole("button", "Inspect Subflow invocation 1", { exact: true }),
+  ).toHaveAttribute("title", summary);
+  await expect(screen.getByRole("region", "Timeline", { exact: true })).toContainText(summary);
+  expect(
+    after.threadBindings.find((item) => item.threadId === old.ending?.origin?.threadId),
+  ).toMatchObject({
+    blockName: "Code reviewer",
+  });
+  await app.screenshot("older-invocation-recipient-acknowledged");
 });
 
 test("Auto-arrange moves the expanded Run view while preserving captured positions", async ({

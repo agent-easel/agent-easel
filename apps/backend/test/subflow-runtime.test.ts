@@ -25,12 +25,165 @@ import {
   ending,
   composition,
   heavyWriters,
+  parallelFinish,
   resave,
   placingGraph,
   reviewPanelGraph,
   savedFlow,
   toEnding,
 } from "./support/subflow.ts";
+
+it("a late inner report after Archive leaves the Run history unchanged", async (c) => {
+  // Arrange
+  const { f, runId, inner } = await parallelFinish(c);
+  const archived = assertOk(await f.archiveRun(runId));
+  const request = {
+    arguments: { blockId: inner.blockId, to: "finished", exit: "done", message: "Late" },
+  };
+
+  // Act
+  const reply = await f.runtime.submit(request);
+
+  // Assert
+  expect(reply.code).toBe("RUN_ARCHIVED");
+  const run = assertOk(await f.getRun(runId));
+  expect(run.events).toEqual(archived.events);
+  expect(run.generation).toBe(archived.generation);
+});
+
+it("an inner report while manual Settle is stopping workers records nothing", async (c) => {
+  // Arrange
+  const { f, runId, inner } = await parallelFinish(c);
+  assertOk(await f.settleRun(runId, { stopWorkers: true }));
+  assertOk(await f.reconcileRuns());
+  const stopping = assertOk(await f.getRun(runId));
+  const request = {
+    arguments: { blockId: inner.blockId, to: "finished", exit: "done", message: "Late" },
+  };
+
+  // Act
+  const reply = await f.runtime.submit(request);
+
+  // Assert
+  expect(reply.code).toBe("RUN_SETTLING");
+  const run = assertOk(await f.getRun(runId));
+  expect(run.events).toEqual(stopping.events);
+  expect(run.generation).toBe(stopping.generation);
+});
+
+it("a late inner report after root Finish leaves the settled Run history unchanged", async (c) => {
+  // Arrange
+  const { f, runId, root, inner, t3, world } = await parallelFinish(c);
+  t3.threads.stopsEndThreads();
+  await resultReported(world, root, { message: "Root result" });
+  const finished = await observeFor(
+    "settled after root Finish",
+    world,
+    runId,
+    (run) => run.lifecycle === "settled",
+  );
+  const request = {
+    arguments: { blockId: inner.blockId, to: "finished", exit: "done", message: "Late" },
+  };
+
+  // Act
+  const reply = await f.runtime.submit(request);
+
+  // Assert
+  expect(finished.result?.output).toBe("Root result");
+  expect(reply.code).toBe("RUN_SETTLED");
+  const run = assertOk(await f.getRun(runId));
+  expect(run.events).toEqual(finished.events);
+  expect(run.generation).toBe(finished.generation);
+});
+
+it("a first Handoff to a root Agent keeps its result and feedback in a composed Run", async (c) => {
+  // Arrange
+  const { f, t3, input, agent, world } = await prepared(c);
+  const child = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
+  const graph = placingGraph(child.id);
+  const parent = await savedFlow(f, {
+    name: "Parallel Handoff",
+    graph: {
+      ...graph,
+      flowInput: flowInput("root", "inner-0"),
+      blocks: [
+        agentBlock("root", "Root worker", agent.id),
+        agentBlock("recipient", "Root recipient", agent.id, { x: 400, y: 0 }),
+        ...graph.blocks,
+      ],
+      connections: [connection("root", "done", "recipient"), toEnding("recipient", "done", "done")],
+    },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const root = await blockWorkerLaunched(world, started.id, "root");
+
+  // Act
+  await resultReported(world, root, { message: "Review evidence" });
+
+  // Assert
+  const recipient = await blockWorkerLaunched(world, started.id, "recipient");
+  const launch = [...t3.threads.launches.values()].find(
+    ({ reference }) => reference.threadId === recipient.threadId,
+  );
+  expect(launch?.payload.message).not.toContain("Flow input:");
+  const block = await f.runtime.block({ arguments: { blockId: recipient.blockId } });
+  expect(block.inputs).toMatchObject({
+    feedback: "Review evidence",
+    results: [{ blockId: "root", message: "Review evidence" }],
+  });
+});
+
+it("an empty Human approval becomes Flow input through nested entry placements", async (c) => {
+  // Arrange
+  const { f, t3, input, agent, world } = await prepared(c);
+  const leaf = await savedFlow(f, { name: "Review", graph: reviewPanelGraph(agent.id) });
+  const panel = await savedFlow(f, {
+    name: "Panel",
+    graph: { ...placingGraph(leaf.id), connections: [toEnding("inner-0", "approved", "done")] },
+  });
+  const graph = placingGraph(panel.id);
+  const parent = await savedFlow(f, {
+    name: "Human approval",
+    graph: {
+      ...graph,
+      flowInput: flowInput("root"),
+      blocks: [
+        agentBlock("root", "Root worker", agent.id),
+        humanStep("approval", "Approve review", { x: 300, y: 0 }),
+        ...graph.blocks,
+      ],
+      connections: [
+        connection("root", "done", "approval"),
+        connection("approval", "approve", "inner-0"),
+        toEnding("inner-0", "done", "done"),
+      ],
+    },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const root = await blockWorkerLaunched(world, started.id, "root");
+  await resultReported(world, root, { message: "Approval context" });
+  const awaiting = await observeFor("approval pending", world, started.id, (run) =>
+    run.humanOccurrences.some((item) => item.state === "pending"),
+  );
+
+  // Act
+  assertOk(await f.answerHumanOccurrence(awaiting.humanOccurrences[0]!.id, { exitId: "approve" }));
+
+  // Assert
+  const run = await observeFor(
+    "nested entry workers launched",
+    world,
+    started.id,
+    (detail) => detail.blocks.filter((block) => block.invocationId && block.threadId).length === 2,
+  );
+  expect(run.subflows?.map((item) => item.defaultInvocation?.input)).toEqual(["", ""]);
+  const launched = [...t3.threads.launches.values()].find(({ payload }) =>
+    payload.title.includes("Security reviewer"),
+  );
+  expect(launched?.payload.message.endsWith("\n\nFlow input:\n")).toBe(true);
+  expect(launched?.payload.attachments).toBeUndefined();
+});
 
 it("starts a saved child on the same Run and replays Start after the child is removed", async (c) => {
   // Arrange
@@ -331,8 +484,12 @@ it("starts an entry-only worktree chain with the saved first Agent and all origi
   ]);
   expect(launches.map((payload) => payload.attachments?.length)).toEqual([3, 3]);
   expect(launches.map((payload) => payload.message)).toEqual([
-    expect.stringContaining("Fix the header shown in [Image 1: screenshot.png].\nKeep the footer."),
-    expect.stringContaining("Fix the header shown in [Image 1: screenshot.png].\nKeep the footer."),
+    expect.stringContaining(
+      "Flow input:\nFix the header shown in [Image 1: screenshot.png].\nKeep the footer.",
+    ),
+    expect.stringContaining(
+      "Flow input:\nFix the header shown in [Image 1: screenshot.png].\nKeep the footer.",
+    ),
   ]);
   expect(originalImage).toMatchObject({ code: "IMAGE", data: screenshots.red.data });
 });
@@ -547,6 +704,107 @@ it("advances a quiet invocation as Nothing returned without waking its parent re
     state: "nothing-returned",
   });
   expect(run.intents.filter((intent) => intent.targetEndingId === "done")).toEqual([]);
+});
+
+it("a threadless inner launch error holds the next invocation at the same placement", async (c) => {
+  // Arrange
+  const { f, t3, input, agent, world } = await prepared(c);
+  const child = await savedFlow(f, { name: "Panel", graph: reviewPanelGraph(agent.id) });
+  const graph = placingGraph(child.id);
+  const parent = await savedFlow(f, {
+    name: "Serial panel",
+    graph: {
+      ...graph,
+      flowInput: flowInput("first", "second"),
+      blocks: [
+        agentBlock("first", "First", agent.id),
+        agentBlock("second", "Second", agent.id),
+        ...graph.blocks,
+      ],
+      connections: [
+        connection("first", "done", "inner-0"),
+        connection("second", "done", "inner-0"),
+        toEnding("inner-0", "approved", "done"),
+      ],
+    },
+  });
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+  const {
+    workers: [first, second],
+  } = await launchedWorkers(world, started.id);
+  t3.threads.rejectLaunch = true;
+  await resultReported(world, first!, { message: "First review" });
+  await observeFor(
+    "inner launches rejected",
+    world,
+    started.id,
+    (run) =>
+      run.blocks.filter((block) => block.invocationId && block.state === "error").length === 2,
+  );
+  await resultHeld(world, second!, { message: "Second review" });
+
+  // Act
+  allTurnsEnd(world, second!);
+
+  // Assert
+  const run = await observeFor(
+    "second input reached the placement",
+    world,
+    started.id,
+    (detail) => detail.subflows?.[0]?.total === 2,
+  );
+  expect(run.subflows?.[0]).toMatchObject({
+    queued: 1,
+    defaultInvocation: { number: 1, state: "active", ending: null },
+  });
+  expect(run.intents).toContainEqual(
+    expect.objectContaining({
+      kind: "launch",
+      state: "cancelled",
+      problem: "T3 rejected the worker launch.",
+    }),
+  );
+  expect(run.events.map((event) => event.kind)).not.toContain("subflow-nothing-returned");
+});
+
+it("a worktree creator failure holds its invocation and records the waiting worker's error", async (c) => {
+  // Arrange
+  const { f, t3, input, agent, world } = await prepared(c);
+  const child = await savedFlow(f, { name: "Panel", graph: reviewPanelGraph(agent.id) });
+  const parent = await savedFlow(f, {
+    name: "Worktree panel",
+    workspace: { mode: "worktree", base: { kind: "default" } },
+    graph: {
+      ...placingGraph(child.id),
+      connections: [toEnding("inner-0", "approved", "done")],
+    },
+  });
+  t3.threads.rejectLaunch = true;
+
+  // Act
+  const started = assertOk(await f.startRun({ ...input, flowId: parent.id }));
+
+  // Assert
+  const run = await observeFor(
+    "worktree creator rejected",
+    world,
+    started.id,
+    (detail) => detail.workspace.mode === "worktree" && detail.workspace.state === "failed",
+  );
+  expect(run.subflows?.[0]?.defaultInvocation).toMatchObject({
+    state: "active",
+    ending: null,
+    blocks: [
+      { state: "error", threadId: null, problem: "T3 rejected the worker launch." },
+      {
+        state: "error",
+        threadId: null,
+        problem:
+          "T3 rejected the worker that creates the Run worktree. This worker was not launched.",
+      },
+    ],
+  });
+  expect(run.events.map((event) => event.kind)).not.toContain("subflow-nothing-returned");
 });
 
 it("retains an accepted child ending with cancelled delivery when Archive cuts off its Stop", async (c) => {

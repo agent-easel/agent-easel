@@ -1,4 +1,5 @@
 import { invocationBlockPath, useRunSubflows } from "../run-subflows.ts";
+import { inspectedInvocationSummary } from "../components/run-subflow.tsx";
 import { T3LinksAvailable } from "../components/open-in-t3.tsx";
 import { CanvasLayout } from "../components/screen-layout.tsx";
 import { RunConversationAction, RunConversationNotice } from "../components/run-conversation.tsx";
@@ -258,10 +259,7 @@ function useRunCanvasInspection(
   const [pause, setPause] = useState(0);
   const navigationRequestRef = useRef(0);
   const [reveal, setReveal] = useState<{ path: string; request: number } | null>(null);
-  const selectedLocation =
-    typeof selected === "string" ? subflows.byBlock.get(selected) : undefined;
-  const placement = selectedLocation && subflows.placements.get(selectedLocation.path);
-  const inspectedInvocation = placement?.invocation ?? selectedLocation?.scope.invocation;
+  const inspectedSummary = inspectedInvocationSummary(subflows, selected);
   const updateCollapsed = (path: string, closed: boolean) =>
     setCollapsed((previous) => {
       const next = new Set(previous);
@@ -315,7 +313,7 @@ function useRunCanvasInspection(
   }, [routedAttention, inspectAttention]);
   return {
     selected,
-    inspectedInvocation,
+    inspectedSummary,
     subflows,
     collapsed,
     updateCollapsed,
@@ -353,7 +351,7 @@ function RunDetailView({
   const inspectorOpen = useRunInspectorOpen();
   const {
     selected,
-    inspectedInvocation,
+    inspectedSummary,
     subflows,
     collapsed,
     updateCollapsed,
@@ -419,7 +417,7 @@ function RunDetailView({
               <RunAttentionDetails run={run} onInspect={inspectAttention} />
             </div>
           )}
-          <RunTimeline run={run} selectedBlockId={selected} invocation={inspectedInvocation} />
+          <RunTimeline run={run} selectedBlockId={selected} invocationSummary={inspectedSummary} />
         </div>
         {inspectorOpen && (
           <RunInspector
