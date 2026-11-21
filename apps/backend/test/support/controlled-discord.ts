@@ -66,7 +66,7 @@ type Answer = {
   /** No answer arrives until the server closes. */
   readonly held?: boolean;
   /** No answer arrives until `releaseMessages`; then Discord handles the request normally. */
-  readonly paused?: "deliver" | "fail";
+  readonly paused?: "deliver" | "fail" | "lose";
 };
 
 /**
@@ -85,7 +85,8 @@ export type MessageFault =
   | "failed"
   | "held"
   | "paused"
-  | "paused-failure";
+  | "paused-failure"
+  | "paused-lost";
 
 /**
  * Faults that leave one create unproven on Factory's first request and on both re-attempts it
@@ -512,7 +513,9 @@ export async function startControlledDiscord() {
         if (thread?.locked && !bot.manageThreads) return locked;
         // A post Discord accepts reopens an archived thread, locked ones included.
         if (thread) thread.archived = false;
-        return { status: 200, body: createdOnce(match[1]!, fields, bot), lost: fault === "lost" };
+        const body = createdOnce(match[1]!, fields, bot);
+        if (fault === "paused-lost") return { status: 200, body, lost: true, paused: "lose" };
+        return { status: 200, body, lost: fault === "lost" };
       },
     ],
     [
@@ -783,6 +786,10 @@ export async function startControlledDiscord() {
       };
       const answer = route(request.method ?? "", path, token, body);
       if (!answer.paused) return respond(answer);
+      if (answer.paused === "lose") {
+        pausedCreates.push(() => respond(answer));
+        return changed.notify();
+      }
       pausedCreates.push(() =>
         respond(
           answer.paused === "fail"

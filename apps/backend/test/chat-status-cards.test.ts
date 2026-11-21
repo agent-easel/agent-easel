@@ -34,6 +34,7 @@ import {
   humanReviewFlow,
   largeStatusCardFlow,
   launchedWorkers,
+  longEntryNamesFlow,
   missingReport,
   observeFor,
   parallelWaitFlow,
@@ -49,6 +50,7 @@ import { cardProblem, messageShows, chatStartedRun } from "./support/status-card
 
 const NOTICE =
   "_Factory's Discord application changed. Messages the previous bot posted in this thread are no longer updated; this card replaces its status card._";
+const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
 const CORRECTIONS = {
   locked:
     "The thread is locked, and Factory never unlocks threads. Unlock it in Discord, then retry.",
@@ -437,6 +439,22 @@ it("compacting finished Blocks keeps every actionable row when the card fits exa
   expect(rows.at(-1)).toBe("⚙️ **X** — working");
 });
 
+it("a finished summary covering every Block shows no overflow line", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, longEntryNamesFlow);
+  const { runId, card } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  await Promise.all(workers.map((worker) => resultReported(world.world, worker)));
+
+  // Act
+  const reconciled = await world.factory.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok, JSON.stringify(reconciled));
+  const shown = await messageShows(world.discord, card, /✅ 12 Blocks finished/);
+  expect(shown.content.split("\n").slice(1)).toEqual(["✅ 12 Blocks finished"]);
+});
+
 it("Snooze keeps the card reported, and a failing language model does not stop it", async (c) => {
   // Arrange
   const world = await startingWorld(c);
@@ -759,7 +777,41 @@ it("a card create Discord may already have performed is not repeated and is show
   expect(statusCardsIn(world.discord)).toHaveLength(1);
 });
 
-it("the warned Retry of an unknown card create posts it once more with the current state and never starts another Run", async (c) => {
+it("a Status card accepted before revocation stays unknown when its response is lost after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const known = await chatStartedRun(world);
+  const button = await proposedStart(world, "600000000000000002", 4);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  world.discord.faultMessages("paused-lost");
+  await clicked(world.discord, button, "610000000000000002", 2);
+  await world.discord.createdWhere(isStatusCard, 2);
+  const posts = world.discord.requested("POST", MESSAGES).length;
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  world.discord.nonceWindowPassed();
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assert((await world.factory.snoozeRun(known.runId)).ok);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, known.card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toStrictEqual([
+    expect.objectContaining({
+      purpose: "status-card",
+      state: "unknown",
+      threadId: THREAD,
+      message: CORRECTIONS.unknown,
+    }),
+  ]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts);
+  expect(statusCardsIn(world.discord)).toHaveLength(2);
+});
+
+it("after revocation and regrant, warned Retry of an unknown card posts the current state without starting another Run", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const button = await proposedStart(world, "600000000000000001", 2);
@@ -770,6 +822,22 @@ it("the warned Retry of an unknown card create posts it once more with the curre
   const navigation = await world.factory.listRunNavigation();
   assert(navigation.ok);
   assert((await world.factory.snoozeRun(navigation.value[0]!.id)).ok);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  const revokedRetry = await world.factory.retryChatDelivery({
+    deliveryId: problem!.id,
+    duplicateRiskAccepted: true,
+  });
+  assert(!revokedRetry.ok);
+  expect(revokedRetry.error.message).toBe("Access no longer permits this destination.");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  const unwarnedRetry = await world.factory.retryChatDelivery({
+    deliveryId: problem!.id,
+    duplicateRiskAccepted: false,
+  });
+  assert(!unwarnedRetry.ok);
+  expect(unwarnedRetry.error.code).toBe("validation");
+  expect(statusCardsIn(world.discord)).toHaveLength(1);
 
   // Act
   const retried = await world.factory.retryChatDelivery({

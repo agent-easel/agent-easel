@@ -1,6 +1,32 @@
-import { isNotice, noticesIn } from "./chat-actions.ts";
-import type { ControlledDiscord } from "./controlled-discord.ts";
-import { observeFor, type ScenarioWorld, type WorkerHandle } from "./scenarios.ts";
+import { assert } from "@effect/vitest";
+import { isNotice, noticesIn, type startingWorld } from "./chat-actions.ts";
+import { COLLABORATOR_ID, savedAccess, THREAD } from "./chat-conversation.ts";
+import { addedProject } from "./chat-runs.ts";
+import { type ControlledDiscord, PARTICIPANT_ID } from "./controlled-discord.ts";
+import {
+  observeFor,
+  settleUnresolved,
+  type ScenarioWorld,
+  type WorkerHandle,
+} from "./scenarios.ts";
+
+type World = Awaited<ReturnType<typeof startingWorld>>;
+const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
+
+export async function revokedNoticeCreate(world: World, runId: string, ordinal: number) {
+  await world.discord.request("POST", MESSAGES, ordinal);
+  const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+  await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  assert((await world.factory.snoozeRun(runId)).ok);
+}
+
+export async function pausedSettlementProblem(world: World, worker: WorkerHandle) {
+  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
+  world.discord.faultMessages("paused");
+  await settleUnresolved(world.world, worker);
+  await world.discord.request("POST", MESSAGES, ordinal);
+}
 
 /** Resolves with the `ordinal`-th notice Discord shows (1 is the first) once it exists. */
 export async function noticeCreated(discord: ControlledDiscord, ordinal = 1) {

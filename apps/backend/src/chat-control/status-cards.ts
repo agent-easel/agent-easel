@@ -125,7 +125,8 @@ function fitRemainingRows(head: string[], rows: string[], tail: string[]) {
       return [...head, ...shown.slice(0, kept), ...overflow, ...tail].join("\n");
     length -= shown[kept - 1]!.length + 1;
   }
-  return [...head, `… and ${shown.length + alreadyOmitted} more Blocks`, ...tail].join("\n");
+  const omitted = shown.length + alreadyOmitted;
+  return [...head, ...(omitted > 0 ? [`… and ${omitted} more Blocks`] : []), ...tail].join("\n");
 }
 
 function fitCard(head: string[], rows: string[]) {

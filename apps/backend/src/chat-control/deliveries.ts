@@ -96,11 +96,14 @@ const MAX_BACKOFF_MS = 300_000;
 const backoffMs = (attempts: number) =>
   Math.min(1000 * 2 ** Math.max(0, attempts - 1), MAX_BACKOFF_MS);
 
+export const UNKNOWN_CREATE_PROBLEM =
+  "Factory cannot tell whether Discord created the message. Retrying may post it twice.";
+
 const PROBLEMS: Record<SendFailure, string> = {
   transient: "Discord asked Factory to slow down. Factory retries automatically.",
   rejected:
     "Discord refused the message. Check that the thread still exists, is not locked or archived beyond reach, and that the bot can view it and send messages there, then retry.",
-  unknown: "Factory cannot tell whether Discord created the message. Retrying may post it twice.",
+  unknown: UNKNOWN_CREATE_PROBLEM,
 };
 
 /** Corrections Factory can name from Discord's error code; others get the general refusal. */
@@ -613,6 +616,8 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
             ],
           );
         if (!(yield* destinationPermitted(sql, row))) {
+          if (row.purpose === "status-card" && row.state === "unknown")
+            return failure("conflict", "Access no longer permits this destination.");
           yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id=${row.id}`;
           return failure(
             "conflict",

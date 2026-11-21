@@ -21,6 +21,8 @@ import {
   nativeRequestAnswered,
   nativeRequestShown,
   noticeCreated,
+  pausedSettlementProblem,
+  revokedNoticeCreate,
 } from "./support/report-notices.ts";
 import {
   fanOutFlow,
@@ -137,13 +139,6 @@ async function reviewPending(world: World) {
 
 const turnedOff = async (world: Pick<World, "factory">) =>
   assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
-
-async function pauseNoticeCreate(world: World, worker: Worker, catchUp: boolean) {
-  if (catchUp) await turnedOff(world);
-  world.discord.faultMessages("paused-failure");
-  await nativeRequestShown(world.world, worker);
-  if (catchUp) await turnedOn(world.factory, world.discord, 2);
-}
 
 /**
  * A chat-started Run of the Fan-out Flow that, while Chat control was Off, got a native request on
@@ -693,36 +688,51 @@ it("resolving a hidden catch-up matter edits the existing message and removes th
   expect(noticesIn(world.discord)).toHaveLength(1);
 });
 
-it.for([
-  { kind: "attention", catchUp: false },
-  { kind: "catch-up", catchUp: true },
-])(
-  "a nonce retry cannot post a $kind notice cancelled by Project revocation, even after regrant",
-  async ({ catchUp }, c) => {
-    // Arrange
-    const world = await startingWorld(c);
-    const { runId, worker, card } = await chatStartedRun(world);
-    const other = await addedProject({ f: world.factory, h: world.harness }, "other");
-    const posts = world.discord.requested("POST", MESSAGES).length;
-    await pauseNoticeCreate(world, worker, catchUp);
-    await world.discord.request("POST", MESSAGES, posts + 1);
-    await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
-    await savedAccess(
-      world.factory,
-      [PARTICIPANT_ID, COLLABORATOR_ID],
-      [world.project.id, other.id],
-    );
-    assert((await world.factory.snoozeRun(runId)).ok);
+it("a nonce retry cannot post an attention notice cancelled by Project revocation, even after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, worker, card } = await chatStartedRun(world);
+  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
+  world.discord.faultMessages("paused-failure");
+  await nativeRequestShown(world.world, worker);
+  await revokedNoticeCreate(world, runId, ordinal);
 
-    // Act
-    world.discord.releaseMessages();
+  // Act
+  world.discord.releaseMessages();
 
-    // Assert
-    await messageShows(world.discord, card, /· 💤 Snoozed · /);
-    expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts + 1);
-    expect(noticesIn(world.discord)).toEqual([]);
-  },
-);
+  // Assert
+  await messageShows(world.discord, card, /· 💤 Snoozed · /);
+  const posts = world.discord.requested("POST", MESSAGES);
+  expect(posts).toHaveLength(ordinal);
+  expect(posts.at(-1)?.body).toMatchObject({
+    content: expect.stringMatching(/^🙋 .* needs input\n/),
+  });
+  expect(noticesIn(world.discord)).toEqual([]);
+});
+
+it("a nonce retry cannot post a catch-up notice cancelled by Project revocation, even after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, worker, card } = await chatStartedRun(world);
+  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
+  await turnedOff(world);
+  await nativeRequestShown(world.world, worker);
+  world.discord.faultMessages("paused-failure");
+  await turnedOn(world.factory, world.discord, 2);
+  await revokedNoticeCreate(world, runId, ordinal);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, card, /· 💤 Snoozed · /);
+  const posts = world.discord.requested("POST", MESSAGES);
+  expect(posts).toHaveLength(ordinal);
+  expect(posts.at(-1)?.body).toMatchObject({
+    content: expect.stringMatching(/^📬 .* · while Factory could not post in this thread:/),
+  });
+  expect(noticesIn(world.discord)).toEqual([]);
+});
 
 it("a rate-limited catch-up survives a restart and pings the requester once when turned back on", async (c) => {
   // Arrange
@@ -779,9 +789,10 @@ it("a Problem after regrant posts without replaying attention from the revoked i
 
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
   await messageShows(world.discord, card, /\n🙋 /);
+  await pausedSettlementProblem(world, worker);
 
   // Act
-  await settleUnresolved(world.world, worker);
+  world.discord.releaseMessages();
 
   // Assert
   const notice = await noticeCreated(world.discord);
@@ -824,12 +835,14 @@ it("a later Problem posts without recreating a deleted notice whose matter resol
 
   await nativeRequestAnswered(world.world, worker);
   await world.discord.request("PATCH", new RegExp(`/messages/${notice.id}$`));
+  await pausedSettlementProblem(world, worker);
 
   // Act
-  await settleUnresolved(world.world, worker);
+  world.discord.releaseMessages();
 
   // Assert
   const problem = await noticeCreated(world.discord, 2);
+  expect(problem.content).toContain("• Settle could not stop workers");
   expect(noticesIn(world.discord)).toStrictEqual([
     expect.objectContaining({ id: notice.id, deleted: true }),
     problem,

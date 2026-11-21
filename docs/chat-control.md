@@ -646,7 +646,7 @@ nonce that stays the same for that message, and Factory asks Discord to enforce 
 returns the message an earlier create with the same nonce made, for a few minutes, instead of creating
 another. When the connection dropped or Discord answered with a server error, so the outcome is
 unproven, Factory asks again with the same nonce at most twice, within one minute of the first
-request. Revoking the destination's Project grant cancels those re-attempts. A returned message ID
+request. For queued deliveries, revoking the destination's Project grant cancels those re-attempts. A returned message ID
 reconciles that create. A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
 window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
@@ -705,7 +705,10 @@ the same application can still edit them.
 An Access save that stops the thread's channel granting the Run's Project cancels the card's owed
 update and nothing accrues while it stays revoked. After a regrant, Factory corrects a card it already
 posted to the Run's current state without a new message, and posts a card it never managed to post only
-if the Run is Active or Snoozed or has pending Needs input or Problems. Removing the requester from Access
+if the Run is Active or Snoozed or has pending Needs input or Problems. A create still sending when
+the grant is revoked becomes unknown unless Discord confirms it with a message ID. Unknown creates
+keep their warning through revocation and regrant. Retry requires both the restored grant and the
+host's acceptance of the duplicate risk. Removing the requester from Access
 does not stop the card: it depends on the channel's grant and the bot's access.
 
 Editing in an archived thread needs it unarchived: when Discord refuses the edit because the thread is

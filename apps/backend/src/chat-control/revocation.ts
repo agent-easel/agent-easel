@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
+import { now } from "../time.ts";
+import { UNKNOWN_CREATE_PROBLEM } from "./deliveries.ts";
 
 /** An Access save's channels and the Projects each grants. */
 type Channels = readonly { readonly channelId: string; readonly projectIds: readonly string[] }[];
@@ -51,8 +53,15 @@ export const applyAccessRevocation = (
     const cancelled = owed.filter((row) =>
       ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );
-    if (cancelled.length > 0)
-      yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL WHERE id IN ${sql.in(cancelled.map((row) => row.id))}`;
+    if (cancelled.length > 0) {
+      const ids = sql.in(cancelled.map((row) => row.id));
+      const at = yield* now;
+      yield* sql`UPDATE chat_deliveries SET state='unknown',next_attempt_at=NULL,
+          problem=${UNKNOWN_CREATE_PROBLEM},problem_at=${at}
+        WHERE id IN ${ids} AND purpose='status-card' AND state='sending'`;
+      yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL
+        WHERE id IN ${ids} AND NOT (purpose='status-card' AND state='unknown')`;
+    }
     // A chat-started Run whose originating channel loses its Project accrues no notices; after a
     // regrant its notices start from its state then, without narrating the revoked interval.
     const origins = yield* sql<{
