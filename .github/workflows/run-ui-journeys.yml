@@ -37,8 +37,10 @@ jobs:
       - name: Restore UI build cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: apps/frontend/dist
-          key: ui-build-${{ steps.ui_sig.outputs.sig }}
+          path: |
+            apps/frontend/dist
+            packages/*/dist
+          key: ui-build-v2-${{ steps.ui_sig.outputs.sig }}
       - run: pnpm e2e:prepare
       - name: Resolve Playwright version
         id: pw
