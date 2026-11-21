@@ -48,6 +48,7 @@ export interface ConditionRule {
   /** A whole number from 1 to `CONDITION_ARRIVAL_MAX`; null while the draft has none. */
   readonly fromArrival: number | null;
 }
+export type AgentRevisitContext = "keep" | "fresh";
 /**
  * An Agent block exposes its Agent's exits, minus those this Flow hides, plus its Flow-local
  * exits and may carry a Revisit instruction. A Human block has the fixed Approve and Request
@@ -56,7 +57,6 @@ export interface ConditionRule {
  * it and has one fixed, unnamed output. A Condition routes each arrival by its arrival number: the
  * first matching rule selects that rule's output, else the fixed last Otherwise output.
  */
-export type AgentRevisitContext = "keep" | "fresh";
 export type FlowBlock = BlockBase &
   (
     | {

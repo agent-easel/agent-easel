@@ -669,7 +669,7 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 3, whatever the definition holds:
+Every export writes portable document format version 4, whatever the definition holds:
 
 ```json
 {

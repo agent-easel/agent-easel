@@ -14,12 +14,18 @@ CREATE TABLE flow_revision_blocks_with_revisit_context (
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
   kind TEXT NOT NULL CHECK (kind IN ('agent', 'human', 'continuation', 'wait', 'condition')),
   name TEXT NOT NULL,
+  -- Unresolved by design: drafts may name a missing Agent, and history outlives the Agent.
   agent_id TEXT CHECK (kind = 'agent' OR agent_id IS NULL),
+  -- The prompt a Continuation sends once per Run; empty only in a draft.
   prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),
+  -- The instruction an Agent block's later visits receive, stored trimmed; empty when unset.
   revisit_instruction TEXT CHECK ((kind = 'agent') = (revisit_instruction IS NOT NULL)),
+  -- Whether an Agent block's later visits keep or clear provider context ('keep' or 'fresh').
   revisit_context TEXT CHECK ((kind = 'agent') = (revisit_context IS NOT NULL)) CHECK (revisit_context IS NULL OR revisit_context IN ('keep', 'fresh')),
   x REAL NOT NULL,
   y REAL NOT NULL,
+  -- A Wait's duration; both are null while the draft has none. Any finite amount saves:
+  -- readiness owns the range, judged on the normalized duration.
   wait_amount REAL,
   wait_unit TEXT CHECK (wait_unit IS NULL OR wait_unit IN ('minutes', 'hours', 'days')),
   CHECK ((wait_amount IS NULL) = (wait_unit IS NULL)),

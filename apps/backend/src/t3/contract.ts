@@ -264,7 +264,10 @@ export function contractSupport(ready: boolean, tools: T3Contract["tools"]): T3S
     launch: launchSupport(objectReady("t3_thread_launch"), schema("t3_thread_launch")),
     attachmentLimit: attachmentLimit(ready, tools, schema("t3_thread_launch")),
     send,
-    freshContextSend: send.supported && propertiesOf(sendSchema).freshContext?.type === "boolean",
+    freshContextSend:
+      send.supported &&
+      propertiesOf(sendSchema).freshContext?.type === "boolean" &&
+      !(Array.isArray(sendSchema?.required) && sendSchema.required.includes("freshContext")),
     settle: settleSupport(objectReady("t3_thread_organize"), schema("t3_thread_organize")),
     stop: stopSupport(objectReady("t3_thread_interrupt"), schema("t3_thread_interrupt")),
     reportReads: ready && supportsReportReads(schema("t3_thread_read")),
