@@ -123,7 +123,7 @@ A beta build is a signed prerelease of `main` for installations on the beta upda
 last published beta; a manual dispatch from `main` always builds. Its build number is the workflow run number, so its version is `<major>.<minor>.<patch+1>-beta.<run number>` of the current product version and its tag is
 `v<version>`. release-please ignores these tags: it locates the last Release by the version in its manifest.
 
-Before packaging, Beta reuses a successful **Quality** push run for the exact commit on `main` and a successful full Chromium suite from the merged PR when the tree tested by the shards matches the Beta tree. A PR check that skipped the suite cannot certify the tree. For any missing result, Beta runs the corresponding gate on Ubuntu, using the same three isolated shards as PRs for browser journeys.
+Before packaging, Beta reuses a successful **Quality** push run for the exact commit on `main` (or a passing PR **Quality gate** whose tested tree matches the Beta tree) and a successful full Chromium suite from the merged PR when the tree tested by the shards matches the Beta tree. A PR check that skipped the suite cannot certify the tree. For any missing result, Beta runs the corresponding gate on Ubuntu, using the same eight isolated shards as PRs for browser journeys.
 
 The **Desktop build** job runs the Chromium keyboard shortcut journeys on macOS and verifies the signed, notarized package with Gatekeeper and the packaged probe. It writes `beta-mac.yml` for the Beta update feed. The
 `publish` job of the Beta workflow then creates a draft prerelease targeting the built commit with notes generated since the previous beta, uploads the complete asset set, compares SHA-256 digests and publishes it

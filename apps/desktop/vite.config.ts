@@ -3,6 +3,18 @@ import { fileURLToPath } from "node:url";
 import { defaultServerConditions, defineConfig } from "vite-plus";
 
 export default defineConfig({
+  run: {
+    tasks: {
+      build: {
+        command: "node scripts/bundle.mjs",
+        dependsOn: [{ task: "build", from: ["dependencies", "devDependencies"] }],
+        cache: {
+          input: [{ auto: true }, "!build/**"],
+          output: ["build/**"],
+        },
+      },
+    },
+  },
   // This config serves only the rule tests; the shipped bundle comes from
   // scripts/bundle.mjs, which resolves compiled workspace output.
   ssr: { resolve: { conditions: ["factory-source", ...defaultServerConditions] } },

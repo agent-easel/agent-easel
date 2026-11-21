@@ -41,18 +41,47 @@ export default defineConfig({
           "format:check",
           "check:e2e-configs",
           "check:scenarios",
-          "fallow",
+          "gate:fallow",
           "lint:workspace",
-          "typecheck",
+          "gate:typecheck",
         ],
         cache: false,
       },
-      "lint:workspace": { command: "vp lint", dependsOn: ["lint:comments"] },
+      "gate:fallow": {
+        command: "true",
+        dependsOn: ["fallow:dead-code", "fallow:dupes", "fallow:complexity"],
+        cache: false,
+      },
+      "gate:typecheck": {
+        command: "true",
+        dependsOn: [
+          "typecheck:root",
+          "@t3-factory/contracts#typecheck",
+          "@t3-factory/domain-validation#typecheck",
+          "@t3-factory/flow-layout#typecheck",
+          "@t3-factory/backend#typecheck:src",
+          "@t3-factory/backend#typecheck:test",
+          "@t3-factory/frontend#typecheck",
+          "@t3-factory/desktop#typecheck",
+          "@t3-factory/landing#typecheck",
+        ],
+        cache: false,
+      },
+      "lint:oxlint": { command: "vp lint" },
+      "lint:workspace": {
+        command: "true",
+        dependsOn: ["lint:comments", "lint:oxlint"],
+        cache: false,
+      },
       "lint:comments": { command: "node scripts/check-comments.mjs", cache: false },
       // Tests and the build start only after the static checks pass: they would compete with
       // them for CPU, and a static failure makes their result moot.
       "gate:dynamic": { command: "true", dependsOn: ["test", "build"], cache: false },
-      "gate:check": { command: "vp run gate:static && vp run gate:dynamic", cache: false },
+      "gate:check": {
+        command:
+          "vp run --concurrency-limit 8 gate:static && vp run --concurrency-limit 8 gate:dynamic",
+        cache: false,
+      },
     },
   },
   // Pre-commit: format, then fix lint, only the staged files. `vp staged` stashes unstaged hunks

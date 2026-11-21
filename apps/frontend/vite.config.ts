@@ -37,6 +37,7 @@ export default defineConfig(({ command }) => ({
   test: {
     environment: "node",
     include: ["test/*.test.ts"],
+    isolate: false,
     // Parallel workspace runners must not clear or write each other's module cache.
     fsModuleCachePath: fileURLToPath(new URL("./node_modules/.vitest-cache", import.meta.url)),
   },

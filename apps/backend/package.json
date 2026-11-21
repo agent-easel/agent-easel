@@ -21,8 +21,8 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node ../../scripts/copy-migrations.mjs",
-    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json",
+    "typecheck:src": "tsc -p tsconfig.json",
+    "typecheck:test": "tsc -p test/tsconfig.json",
     "test": "vp test run",
     "schema:update": "vp test run test/schema-snapshot.test.ts -u",
     "start": "node dist/main.js",

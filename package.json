@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "vp run -r build",
-    "typecheck": "vp run -r typecheck && tsc -p tsconfig.json",
+    "typecheck:root": "tsc -p tsconfig.json",
+    "typecheck": "vp run --concurrency-limit 8 gate:typecheck",
     "test": "vp run --filter @t3-factory/backend --filter @t3-factory/desktop --filter @t3-factory/frontend test && vp run test:scripts",
     "test:scripts": "node --conditions=factory-source --test scripts/*.test.mjs scripts/dev/scenario-catalog.test.ts",
     "start": "pnpm --filter @t3-factory/backend start",
@@ -15,7 +16,7 @@
     "scenarios:catalog": "node --conditions=factory-source scripts/dev/scenario-catalog.ts",
     "check:scenarios": "node --conditions=factory-source scripts/dev/scenario-catalog.ts --check",
     "db:reset": "node --conditions=factory-source scripts/dev/server.ts --reset",
-    "e2e:prepare": "node scripts/ui-build.ts || pnpm --filter @t3-factory/frontend... run build",
+    "e2e:prepare": "node scripts/ui-build.ts || vp run --filter @t3-factory/frontend... build",
     "test:e2e": "pnpm e2e:prepare && e2e run",
     "test:e2e:affected": "node scripts/select-ui-journeys.mjs --affected --run",
     "desktop:package": "pnpm build && pnpm --filter @t3-factory/desktop package",
@@ -29,13 +30,16 @@
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "lint": "vp run lint:workspace",
-    "fallow": "fallow dead-code --fail-on-issues --quiet --no-cache && fallow dupes --fail-on-issues --quiet --no-cache && fallow health --complexity --fail-on-issues --quiet --no-cache",
+    "fallow:dead-code": "fallow dead-code --fail-on-issues --quiet --no-cache",
+    "fallow:dupes": "fallow dupes --fail-on-issues --quiet --no-cache",
+    "fallow:complexity": "fallow health --complexity --fail-on-issues --quiet --no-cache",
+    "fallow": "vp run --concurrency-limit 8 gate:fallow",
     "check:e2e-configs": "node scripts/check-e2e-configs.mjs",
     "check:git-attribution": "node scripts/check-git-attribution.mjs",
     "check:ui-evidence": "node scripts/check-ui-evidence.mjs",
     "prepare": "vp config --no-agent",
-    "check:static": "vp run gate:static",
-    "check": "vp run gate:check"
+    "check:static": "vp run --concurrency-limit 8 gate:static",
+    "check": "vp run --concurrency-limit 8 gate:check"
   },
   "devDependencies": {
     "@e2e-dev/web": "0.15.4",
