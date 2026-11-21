@@ -24,6 +24,7 @@ type DeliveryState =
 const MATTERS_PER_NOTICE = 8;
 /** Entries a notice lists before summarizing the rest, shrunk until it fits one message. */
 const NOTICE_LIMITS = [Infinity, 8, 4, 2, 1, 0] as const;
+const NOTICE_TEXT_LIMIT = MESSAGE_LIMIT - "<@99999999999999999999> ".length;
 
 const NEEDS_INPUT = new Set<MatterKind>(["human", "native-request", "conversation-waiting"]);
 
@@ -86,11 +87,6 @@ function attentionHeading(heading: string, matters: readonly MatterRow[]) {
   return `${emoji} ${heading} ${subject}${resolved}`;
 }
 
-/**
- * A notice's text from what it records: the matters it announced (resolved ones shown struck
- * through once the message exists, left out before), and for a catch-up, that it reports what
- * accrued while Factory could not post here. Nobody is mentioned and every name is inert.
- */
 function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   const heading = runHeading(notice.reference, notice.title);
   const render = (limit: number) => {
@@ -105,9 +101,9 @@ function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   };
   for (const limit of NOTICE_LIMITS) {
     const text = render(limit).join("\n");
-    if (text.length <= MESSAGE_LIMIT) return text;
+    if (text.length <= NOTICE_TEXT_LIMIT) return text;
   }
-  return clip(render(0).join("\n"), MESSAGE_LIMIT);
+  return clip(render(0).join("\n"), NOTICE_TEXT_LIMIT);
 }
 
 /**
@@ -314,13 +310,19 @@ const mergedCatchUp = (sql: SqlClient.SqlClient, notices: readonly NoticeRow[]) 
 export const catchUpNotices = (sql: SqlClient.SqlClient) =>
   sql.withTransaction(
     Effect.gen(function* () {
-      const owed = yield* sql<NoticeRow>`SELECT ${sql.literal(NOTICE_COLUMNS)}
+      const unposted = yield* sql<NoticeRow>`SELECT ${sql.literal(NOTICE_COLUMNS)}
         FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
-        JOIN chat_run_reporting r ON r.run_id=n.run_id WHERE ${sql.literal(OPEN)}
+        JOIN chat_run_reporting r ON r.run_id=n.run_id
+        WHERE d.message_id IS NULL AND d.state IN ('owed','failed','unknown')
+          AND d.purpose IN ('attention','catch-up')
         ORDER BY d.created_at,d.rowid`;
       const byRun = new Map<string, NoticeRow[]>();
-      for (const notice of owed)
-        byRun.set(notice.run_id, [...(byRun.get(notice.run_id) ?? []), notice]);
+      for (const notice of unposted) {
+        if (notice.state === "owed")
+          byRun.set(notice.run_id, [...(byRun.get(notice.run_id) ?? []), notice]);
+        else if (notice.text.length > NOTICE_TEXT_LIMIT)
+          yield* refreshNotice(sql, notice.delivery_id);
+      }
       for (const notices of byRun.values()) yield* mergedCatchUp(sql, notices);
     }),
   );

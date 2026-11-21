@@ -228,7 +228,7 @@ export async function runsOf(factory: Pick<Factory, "listRunNavigation">) {
 const STATUS_CARD =
   /^(?:_[^\n]+_\n\n)?\*\*Run [^\n]+\*\* · (?:🟢 Active|💤 Snoozed|✅ Settled|🗄️ Archived) · 🔀 /;
 /** A status card or notice: its first line names the Run in bold, after an emoji for notices. */
-const RUN_REPORT = /^(?:_[^\n]+_\n\n)?(?:\S+ )?\*\*Run \S+ · [^\n]+\*\* /;
+const RUN_REPORT = /^(?:_[^\n]+_\n\n)?(?:\S+ (?:<@\d+> )?)?\*\*Run \S+ · [^\n]+\*\* /;
 
 /** Whether Discord shows `message` as a Run's status card: its first line names the Run. */
 export const isStatusCard = (message: Pick<CreatedMessage, "content">) =>

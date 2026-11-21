@@ -236,15 +236,3 @@ export const statusCards = (sql: SqlClient.SqlClient): ReportConsumer => {
       }),
   };
 };
-
-/**
- * The Run a message identifies: a status card this application posted in this thread. Only the
- * Run ID is returned; the card's content is never read back.
- */
-export const publishedRun =
-  (sql: SqlClient.SqlClient, applicationId: string) => (threadId: string, messageId: string) =>
-    Effect.map(
-      sql<{ run_id: string }>`SELECT run_id FROM chat_deliveries WHERE purpose='status-card'
-        AND thread_id=${threadId} AND message_id=${messageId} AND sent_by_application_id=${applicationId}`,
-      ([row]) => row?.run_id,
-    );

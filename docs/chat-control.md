@@ -400,9 +400,9 @@ never Run content. Because a turn keeps its newest compact facts first, the late
 survive into the next invocation, so a search or read that needs more tool calls than one invocation
 allows continues in the next one.
 
-A reply to a Factory message that identifies a Run will give the model only that Run's ID for a fresh
-read, never the message's content. No message Factory publishes identifies a Run yet, so replying to a
-bot message adds nothing to the request.
+Replying to a Status card, attention notice or catch-up from the operating application in the same
+thread gives the model only the Run's ID for a fresh read. Factory reads within the current Project
+grants for the thread's channel and keeps the referenced message's text out of the model input.
 
 ### Shared conversation
 
@@ -734,10 +734,14 @@ answering still goes through the complete review and the requester's confirmatio
 
 Each pending matter has exactly one notice. Matters that appear together share one notice, each on its
 own short line with its Block, up to eight per notice; the settlement Problem is about the
-Run and names no Block, and a retried Settle keeps its one notice. When a matter resolves, Factory
-edits the notice that announced it to show that line resolved, without posting anything. Notices
-mention nobody: every Factory message allows no mentions, and an `@` in a Run title or Block name is
-followed by an invisible space so it cannot read as a user, role or mass mention.
+Run and names no Block, and a retried Settle keeps its one notice. When Factory posts an attention
+notice or catch-up, it mentions only the user who confirmed the Run's Start, if that user is still
+allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
+notice still posts to a permitted thread when the requester has been removed. When any matter
+resolves, Factory edits the line in place and removes the heading's mention without notifying anyone.
+An `@` in a Run title, Flow name or Block name is followed by an invisible space so it cannot form a
+user, role or mass mention. An idle or overdue worker shown as awaiting review in T3 does not create
+an attention notice unless the Run records an attention matter.
 
 Factory captures notices with the card from the Run's committed facts, comparing the Run's pending
 matters with what its notices already accounted for. So a matter that appeared and resolved between

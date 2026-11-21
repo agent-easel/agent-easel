@@ -26,7 +26,7 @@ import {
 } from "./support/chat-conversation.ts";
 import { addedProject, calls, readRun } from "./support/chat-runs.ts";
 import { PARTICIPANT_ID, unproven } from "./support/controlled-discord.ts";
-import { resultHeld, resultReported, settled } from "./support/scenarios.ts";
+import { resultReported, settled } from "./support/scenarios.ts";
 import { cardProblem, messageShows, chatStartedRun } from "./support/status-cards.ts";
 
 const NOTICE =
@@ -278,13 +278,14 @@ it("an archived, unlocked thread is reopened to edit the card, without posting a
 it("a locked thread is never unlocked: the card edit shows as a failed delivery with its correction", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker } = await chatStartedRun(world);
+  const { runId } = await chatStartedRun(world);
   world.discord.archiveThread(THREAD, { locked: true });
 
   // Act
-  await resultHeld(world.world, worker);
+  const snoozed = await world.factory.snoozeRun(runId);
 
   // Assert
+  assert(snoozed.ok, JSON.stringify(snoozed));
   const settings = await cardProblem(world.factory, "failed");
   expect(settings.delivery.problems).toStrictEqual([
     expect.objectContaining({
