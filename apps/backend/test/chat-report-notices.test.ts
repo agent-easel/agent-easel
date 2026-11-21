@@ -21,6 +21,7 @@ import {
   nativeRequestAnswered,
   nativeRequestShown,
   noticeCreated,
+  pausedAttentionCreate,
   pausedSettlementProblem,
   revokedNoticeCreate,
 } from "./support/report-notices.ts";
@@ -348,6 +349,28 @@ it("Retry refuses a locked-thread completion after the Project is revoked and re
 
   // Assert
   expect(retried).toMatchObject({ ok: false, error: { code: "conflict" } });
+  expect(completions(world.discord)).toEqual([]);
+});
+
+it("Project revocation cancels an unconfirmed completion without replaying that settlement after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { worker } = await chatStartedRun(world);
+  const known = await chatStartedRun(world, 2);
+  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
+  world.discord.faultMessages("paused-failure");
+  await finished(world, worker);
+  await revokedNoticeCreate(world, known.runId, ordinal);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, known.card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(ordinal);
   expect(completions(world.discord)).toEqual([]);
 });
 
@@ -688,13 +711,10 @@ it("resolving a hidden catch-up matter edits the existing message and removes th
   expect(noticesIn(world.discord)).toHaveLength(1);
 });
 
-it("a nonce retry cannot post an attention notice cancelled by Project revocation, even after regrant", async (c) => {
+it("Project revocation stops a notice nonce retry even after regrant", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { runId, worker, card } = await chatStartedRun(world);
-  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
-  world.discord.faultMessages("paused-failure");
-  await nativeRequestShown(world.world, worker);
+  const { runId, card, ordinal } = await pausedAttentionCreate(world, "paused-failure");
   await revokedNoticeCreate(world, runId, ordinal);
 
   // Act
@@ -710,7 +730,7 @@ it("a nonce retry cannot post an attention notice cancelled by Project revocatio
   expect(noticesIn(world.discord)).toEqual([]);
 });
 
-it("a nonce retry cannot post a catch-up notice cancelled by Project revocation, even after regrant", async (c) => {
+it("Project revocation stops a catch-up nonce retry even after regrant", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { runId, worker, card } = await chatStartedRun(world);
@@ -731,6 +751,56 @@ it("a nonce retry cannot post a catch-up notice cancelled by Project revocation,
   expect(posts.at(-1)?.body).toMatchObject({
     content: expect.stringMatching(/^📬 .* · while Factory could not post in this thread:/),
   });
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toStrictEqual([
+    expect.objectContaining({ purpose: "catch-up", state: "unknown" }),
+  ]);
+  expect(noticesIn(world.discord)).toEqual([]);
+});
+
+it("an attention notice accepted before revocation keeps its duplicate warning when the response is lost after regrant", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, card, ordinal } = await pausedAttentionCreate(world, "paused-lost");
+  const notice = await noticeCreated(world.discord);
+  world.discord.nonceWindowPassed();
+  await revokedNoticeCreate(world, runId, ordinal);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toStrictEqual([
+    expect.objectContaining({
+      purpose: "attention",
+      state: "unknown",
+      threadId: THREAD,
+      message: expect.stringContaining("Retrying may post it twice."),
+    }),
+  ]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(ordinal);
+  expect(noticesIn(world.discord)).toStrictEqual([notice]);
+});
+
+it("a definite refusal across revocation and regrant leaves no notice to retry", async (c) => {
+  // Arrange
+  const world = await startingWorld(c);
+  const { runId, card, ordinal } = await pausedAttentionCreate(world, "paused-refusal");
+  await revokedNoticeCreate(world, runId, ordinal);
+
+  // Act
+  world.discord.releaseMessages();
+
+  // Assert
+  await messageShows(world.discord, card, /· 💤 Snoozed · /);
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok);
+  expect(settings.value.delivery.problems).toEqual([]);
+  expect(world.discord.requested("POST", MESSAGES)).toHaveLength(ordinal);
   expect(noticesIn(world.discord)).toEqual([]);
 });
 
@@ -935,12 +1005,14 @@ it("Retry still delivers a notice without a ping if the requester lost Access wh
   );
 });
 
-it("a collaborator replying to an attention notice gives the model the Run ID without the notice text", async (c) => {
+it("a reply identifies the Run when the attention notice's message ID arrived after revocation and regrant", async (c) => {
   // Arrange
   const world = await startingWorld(c);
-  const { worker, runId } = await chatStartedRun(world);
-  await nativeRequestShown(world.world, worker);
+  const { runId, card, ordinal } = await pausedAttentionCreate(world, "paused");
+  await revokedNoticeCreate(world, runId, ordinal);
+  world.discord.releaseMessages();
   const notice = await noticeCreated(world.discord);
+  await messageShows(world.discord, card, /· 💤 Snoozed · /);
   world.model.script({ text: "Reading it." });
   const requests = world.model.requests.length;
 

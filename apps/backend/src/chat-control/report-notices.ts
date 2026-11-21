@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { newId } from "../ids.ts";
 import { now } from "../time.ts";
+import { UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 import type { ReportConsumer, ReportOrigin, RunReport } from "./run-reports.ts";
 import { runReference } from "./run-tools.ts";
 import { clip, MESSAGE_LIMIT, name, runHeading } from "./status-cards.ts";
@@ -148,7 +149,8 @@ const refreshNotice = (sql: SqlClient.SqlClient, id: string) =>
   });
 
 /** A notice message never created and not being sent: new content may still join it. */
-const OPEN = "d.state='owed' AND d.message_id IS NULL";
+const openNotice = (sql: SqlClient.SqlClient) =>
+  sql`d.state='owed' AND d.message_id IS NULL AND d.problem IS NOT ${UNKNOWN_CREATE_PROBLEM}`;
 
 export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
   const insertNotice = (
@@ -188,7 +190,7 @@ export const reportNotices = (sql: SqlClient.SqlClient): ReportConsumer => {
       const [open] = yield* sql<{ id: string; purpose: MatterNoticePurpose; count: number }>`
         SELECT d.id,d.purpose,(SELECT COUNT(*) FROM chat_report_matters m WHERE m.notice_id=d.id) AS count
         FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
-        WHERE n.run_id=${origin.runId} AND ${sql.literal(OPEN)} AND d.purpose IN ('attention','catch-up')
+        WHERE n.run_id=${origin.runId} AND ${openNotice(sql)} AND d.purpose IN ('attention','catch-up')
         ORDER BY d.created_at DESC,d.rowid DESC LIMIT 1`;
       if (open) {
         const room = open.purpose === "catch-up" ? queue.length : MATTERS_PER_NOTICE - open.count;
@@ -329,7 +331,10 @@ const mergedCatchUp = (sql: SqlClient.SqlClient, notices: readonly NoticeRow[]) 
 export const catchUpNotices = (sql: SqlClient.SqlClient) =>
   sql.withTransaction(
     Effect.gen(function* () {
-      const unposted = yield* sql<NoticeRow>`SELECT ${sql.literal(NOTICE_COLUMNS)}
+      const unposted = yield* sql<
+        NoticeRow & { mergeable: number }
+      >`SELECT ${sql.literal(NOTICE_COLUMNS)},
+          (${openNotice(sql)}) AS mergeable
         FROM chat_report_notices n JOIN chat_deliveries d ON d.id=n.delivery_id
         JOIN chat_run_reporting r ON r.run_id=n.run_id
         WHERE d.message_id IS NULL AND d.state IN ('owed','failed','unknown')
@@ -337,7 +342,7 @@ export const catchUpNotices = (sql: SqlClient.SqlClient) =>
         ORDER BY d.created_at,d.rowid`;
       const byRun = new Map<string, NoticeRow[]>();
       for (const notice of unposted) {
-        if (notice.state === "owed")
+        if (notice.mergeable === 1)
           byRun.set(notice.run_id, [...(byRun.get(notice.run_id) ?? []), notice]);
         else if (notice.text.length > NOTICE_TEXT_LIMIT)
           yield* refreshNotice(sql, notice.delivery_id);

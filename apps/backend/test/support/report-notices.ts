@@ -2,16 +2,28 @@ import { assert } from "@effect/vitest";
 import { isNotice, noticesIn, type startingWorld } from "./chat-actions.ts";
 import { COLLABORATOR_ID, savedAccess, THREAD } from "./chat-conversation.ts";
 import { addedProject } from "./chat-runs.ts";
-import { type ControlledDiscord, PARTICIPANT_ID } from "./controlled-discord.ts";
+import { type ControlledDiscord, type MessageFault, PARTICIPANT_ID } from "./controlled-discord.ts";
 import {
   observeFor,
   settleUnresolved,
   type ScenarioWorld,
   type WorkerHandle,
 } from "./scenarios.ts";
+import { chatStartedRun } from "./status-cards.ts";
 
 type World = Awaited<ReturnType<typeof startingWorld>>;
 const MESSAGES = new RegExp(`^/api/v10/channels/${THREAD}/messages$`);
+
+export async function pausedAttentionCreate(
+  world: World,
+  fault: Extract<MessageFault, `paused${string}`>,
+) {
+  const started = await chatStartedRun(world);
+  const ordinal = world.discord.requested("POST", MESSAGES).length + 1;
+  world.discord.faultMessages(fault);
+  await nativeRequestShown(world.world, started.worker);
+  return { ...started, ordinal };
+}
 
 export async function revokedNoticeCreate(world: World, runId: string, ordinal: number) {
   await world.discord.request("POST", MESSAGES, ordinal);

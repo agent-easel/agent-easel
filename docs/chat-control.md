@@ -646,8 +646,12 @@ nonce that stays the same for that message, and Factory asks Discord to enforce 
 returns the message an earlier create with the same nonce made, for a few minutes, instead of creating
 another. When the connection dropped or Discord answered with a server error, so the outcome is
 unproven, Factory asks again with the same nonce at most twice, within one minute of the first
-request. For queued deliveries, revoking the destination's Project grant cancels those re-attempts. A returned message ID
-reconciles that create. A refusal after an earlier unproven attempt
+request. For queued deliveries, revoking the destination's Project grant stops those re-attempts,
+even if the grant returns before Discord answers. A returned message ID reconciles the create.
+An in-flight receipt, Status card, attention notice or catch-up with an unproven outcome keeps its
+duplicate warning in Settings. Retry requires the Project grant and the host's acceptance of the
+duplicate risk. A definite first refusal of a revoked create cancels that delivery.
+A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
 window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
 and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Discord lists

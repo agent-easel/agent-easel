@@ -1,7 +1,7 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import { now } from "../time.ts";
-import { REVOKED_CARD_CREATE, UNKNOWN_CREATE_PROBLEM } from "./deliveries.ts";
+import { REVOKED_CREATE, UNKNOWN_CREATE_PROBLEM } from "./delivery-problems.ts";
 
 /** An Access save's channels and the Projects each grants. */
 type Channels = readonly { readonly channelId: string; readonly projectIds: readonly string[] }[];
@@ -57,12 +57,12 @@ export const applyAccessRevocation = (
       const ids = sql.in(cancelled.map((row) => row.id));
       const at = yield* now;
       yield* sql`UPDATE chat_deliveries SET next_attempt_at=NULL,
-          problem=${REVOKED_CARD_CREATE},problem_at=${at}
-        WHERE id IN ${ids} AND purpose='status-card' AND state='sending'`;
+          problem=${REVOKED_CREATE},problem_at=${at}
+        WHERE id IN ${ids} AND purpose<>'completion' AND state='sending'`;
       yield* sql`UPDATE chat_deliveries SET state='unknown',next_attempt_at=NULL
-        WHERE id IN ${ids} AND purpose='status-card' AND state='owed' AND problem=${UNKNOWN_CREATE_PROBLEM}`;
+        WHERE id IN ${ids} AND purpose<>'completion' AND state='owed' AND problem=${UNKNOWN_CREATE_PROBLEM}`;
       yield* sql`UPDATE chat_deliveries SET state='cancelled',next_attempt_at=NULL
-        WHERE id IN ${ids} AND NOT (purpose='status-card' AND state IN ('sending','unknown'))`;
+        WHERE id IN ${ids} AND (purpose='completion' OR state NOT IN ('sending','unknown'))`;
     }
     // A chat-started Run whose originating channel loses its Project accrues no notices; after a
     // regrant its notices start from its state then, without narrating the revoked interval.
