@@ -311,13 +311,20 @@ export function parseLayoutPositions(graph: FlowGraph, laidOut: ElkNode): FlowLa
   };
 }
 
+type ElkConstructor = new () => ELK;
+
+function elkConstructor(
+  value: ElkConstructor | { readonly default: ElkConstructor },
+): ElkConstructor {
+  return typeof value === "function" ? value : value.default;
+}
+
 export async function arrangeFlow<B extends LayoutBlock>(
   graph: LayoutGraph<B>,
   dimensions: FlowLayoutDimensions<B>,
 ): Promise<FlowLayoutPositions> {
-  const { default: Elk } = (await import("elkjs/lib/elk.bundled.js")) as unknown as {
-    readonly default: new () => ELK;
-  };
+  const { default: bundle } = await import("elkjs/lib/elk.bundled.js");
+  const Elk = elkConstructor(bundle);
   const elk = new Elk();
   return parseLayoutPositions(graph, await elk.layout(buildElkGraph(graph, dimensions)));
 }
