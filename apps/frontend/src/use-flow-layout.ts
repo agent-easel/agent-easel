@@ -19,15 +19,15 @@ type PendingRequest = {
   readonly resolve: (result: FlowLayoutResult | null) => void;
 };
 
-function useFlowLayoutWorker(dimensions: FlowLayoutDimensions) {
+function useFlowLayoutWorker(getDimensions: () => FlowLayoutDimensions) {
   const worker = useRef<Worker | null>(null);
   const generation = useRef(0);
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRequest = useRef<PendingRequest | null>(null);
-  const dimensionsRef = useRef(dimensions);
+  const dimensionsRef = useRef(getDimensions);
   useLayoutEffect(() => {
-    dimensionsRef.current = dimensions;
-  }, [dimensions]);
+    dimensionsRef.current = getDimensions;
+  }, [getDimensions]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,7 +81,7 @@ function useFlowLayoutWorker(dimensions: FlowLayoutDimensions) {
           instance.onerror = (event) => fail(event.message || "Auto-arrange failed. Try again.");
           instance.onmessageerror = () => fail("Could not read the arranged Flow. Try again.");
           void elk
-            .layout(buildElkGraph(canvasGraph(graph, agents), dimensionsRef.current))
+            .layout(buildElkGraph(canvasGraph(graph, agents), dimensionsRef.current()))
             .then((laidOut) => {
               if (pendingRequest.current?.generation !== id) return;
               const result = parseElkLayout(graph, laidOut);
@@ -115,7 +115,7 @@ type FlowLayoutSessionOptions = {
   readonly graph: FlowGraph;
   readonly agents: LayoutAgents;
   /** The block geometry of the graph's blocks, as the canvas draws them. */
-  readonly dimensions: FlowLayoutDimensions;
+  readonly getDimensions: () => FlowLayoutDimensions;
   /** Omit for local, read-only Run presentation. */
   readonly authoring?: AuthoringPolicy | undefined;
 };
@@ -154,11 +154,11 @@ function explicitGraph(layout: AcceptedLayout | null) {
 
 /** Owns request validity and commits positions and routes together, then the arranged positions. */
 export function useFlowLayoutSession(options: FlowLayoutSessionOptions) {
-  const { scope, graph, agents, dimensions, authoring } = options;
+  const { scope, graph, agents, getDimensions, authoring } = options;
   const basisKey = useMemo(() => JSON.stringify(graph), [graph]);
   // Authoring edits invalidate even equal-content graph replacements. Run polls do not.
   const basis = authoring ? graph : basisKey;
-  const worker = useFlowLayoutWorker(dimensions);
+  const worker = useFlowLayoutWorker(getDimensions);
   const { arrange: compute, cancel: cancelWorker } = worker;
   const generation = useRef(0);
   const live = useRef({ options, basisKey });

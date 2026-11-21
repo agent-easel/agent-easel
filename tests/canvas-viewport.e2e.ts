@@ -3,9 +3,16 @@ import { expect } from "e2e";
 import {
   expectFollowingReview,
   manualRunView,
+  openFollowedLargeRun,
   openFollowedReviewRun,
+  openLargeFlow,
+  openLargeFlowPannedToFillers,
+  openLargeFlowWithReturnedFiller,
+  PAN_INTO_FILLERS,
+  panFlowCanvas,
   runCanvasCenterOffset,
   runCanvasHorizontalOffset,
+  wireEnds,
 } from "./support/canvas.ts";
 import { liveStates, liveRun } from "./support/live.ts";
 import { renameFlow, saveFlowCopy } from "./support/flows.ts";
@@ -243,4 +250,154 @@ test("saving a Run's Flow after Start shows the revision badge on the open Run",
   await expect(badge).toContainText("Flow edited since Start");
   await expect(badge).toContainText("this Run keeps the revision captured");
   await app.screenshot("run-canvas-flow-edited-since-start");
+});
+
+const CROSSING_WIRE = "Connection exit from Filler 0 to Filler 100";
+
+test("a large Flow panned into its filler rows draws only the Blocks near the view and the wires crossing it", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlow({ app, screen, browser });
+
+  // Act
+  await panFlowCanvas(browser, PAN_INTO_FILLERS);
+
+  // Assert
+  await expect(screen.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("article", "Block Filler 100", { exact: true })).toHaveCount(0);
+  await expect(screen.getByRole("button", CROSSING_WIRE, { exact: true })).toHaveCount(1);
+  expect(
+    await browser.evaluate<number>('document.querySelectorAll("[data-block-id]").length'),
+  ).toBeLessThan(80);
+  await app.screenshot("large-flow-culled-view");
+});
+
+test("a Block returning to view finds its wires exactly where they were drawn while it was away", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlowPannedToFillers({ app, screen, browser });
+  const away = await wireEnds(browser, CROSSING_WIRE, "Filler 0", "Filler 100");
+
+  // Act
+  await panFlowCanvas(browser, -PAN_INTO_FILLERS);
+
+  // Assert
+  await expect(screen.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(1);
+  const back = await wireEnds(browser, CROSSING_WIRE, "Filler 0", "Filler 100");
+  expect(away).not.toBeNull();
+  expect(back?.d).toBe(away?.d);
+  expect(back?.start).toBeLessThanOrEqual(0.5);
+  expect(back?.end).toBeNull();
+  const neighbour = await wireEnds(
+    browser,
+    "Connection exit from Filler 0 to Filler 1",
+    "Filler 0",
+    "Filler 1",
+  );
+  expect(neighbour?.start).toBeLessThanOrEqual(0.5);
+  expect(neighbour?.end).toBeLessThanOrEqual(0.5);
+  await app.screenshot("large-flow-block-back-in-view");
+});
+
+test("a Block that returned to view opens its settings when pressed", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlowWithReturnedFiller({ app, screen, browser });
+
+  // Act
+  await screen.getByRole("button", "Wait Filler 0", { exact: true }).tap();
+
+  // Assert
+  await expect(
+    screen.getByRole("complementary", "Block settings").getByLabel("Name", { exact: true }),
+  ).toHaveValue("Filler 0");
+});
+
+test("dragging a Block that returned to view moves it and its wires", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlowWithReturnedFiller({ app, screen, browser });
+  const press = (await screen.getByRole("button", "Wait Filler 0", { exact: true }).boundingBox())!;
+  const x = press.x + press.width / 2;
+  const y = press.y + press.height / 2;
+
+  // Act
+  await browser.mouse.move(x, y);
+  await browser.mouse.down();
+  await browser.mouse.move(x + 40, y - 120);
+  await browser.mouse.up();
+
+  // Assert
+  await expect
+    .poll(
+      async () =>
+        (await screen.getByRole("button", "Wait Filler 0", { exact: true }).boundingBox())!.y,
+    )
+    .toBeLessThan(y - 100 - press.height / 2);
+  const wire = await wireEnds(
+    browser,
+    "Connection exit from Filler 0 to Filler 1",
+    "Filler 0",
+    "Filler 1",
+  );
+  expect(wire?.start).toBeLessThanOrEqual(0.5);
+  expect(wire?.end).toBeLessThanOrEqual(0.5);
+});
+
+test("a Block that returned to view can be rewired by dragging its output port", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  await openLargeFlowWithReturnedFiller({ app, screen, browser });
+  const newWire = screen.getByRole("button", "Connection exit from Filler 0 to Filler 4", {
+    exact: true,
+  });
+  await expect(newWire).toHaveCount(0);
+
+  // Act
+  await screen
+    .getByRole("button", "Connect output of Filler 0", { exact: true })
+    .dragTo(screen.getByRole("article", "Block Filler 4", { exact: true }));
+
+  // Assert
+  await expect(newWire).toHaveCount(1);
+});
+
+test("following a large Run brings its offscreen active Block into view without drawing the Blocks between", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const canvas = await openFollowedLargeRun(app, screen, browser, "large-follow");
+  await expect(
+    canvas.getByRole("article", "Block Review implementation", { exact: true }),
+  ).toHaveCount(0);
+
+  // Act
+  await liveStates(
+    app,
+    "large-follow",
+    ["result reported", "result released to a second worker"],
+    "Ready for review.",
+  );
+
+  // Assert
+  await expectFollowingReview(screen);
+  await expect(canvas.getByRole("article", "Block Filler 0", { exact: true })).toHaveCount(0);
+  await app.screenshot("large-run-followed-to-offscreen-reviewer");
 });
