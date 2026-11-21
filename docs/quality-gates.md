@@ -79,9 +79,11 @@ alternative; delete it, because `pnpm check:static` fails while one exists.
 
 `pnpm check` is the working-tree gate command, used by the pre-push hook and
 `.github/workflows/quality.yml`. The **Quality gate** check runs full code checks
-on PR open, reopen, source synchronization and base-branch retargets, and pushes
-to `main`, with pinned Node and pnpm versions and a frozen lockfile. Requiring that check before merge
-is a GitHub ruleset setting; adding a workflow alone does not enable that requirement.
+(static checks, build with fast workspace/script suites, and three backend test
+shards in parallel) on PR open, reopen, source synchronization and base-branch
+retargets, and pushes to `main`, with pinned Node and pnpm versions and a frozen
+lockfile. Requiring that check before merge is a GitHub ruleset setting; adding a
+workflow alone does not enable that requirement.
 
 Every Quality run reports the same **Quality gate** job name. On a title/body-only
 edit, it reads the newest full code validation for the same repository, PR, base
@@ -118,7 +120,7 @@ validation for pushes to `main` runs inside the Quality workflow.
 controlled Chromium suite, or reports an explicit not-applicable success for
 documentation/review-only changes; see [PR journey check](testing.md#pr-journey-check).
 [Beta builds](release.md#beta-builds) reuse a passing full suite for the same
-tree or run the same three shards before packaging.
+tree or run the same eight shards before packaging.
 
 For frontend changes, **UI evidence attachments** runs
 `scripts/check-ui-evidence.mjs --pr <number>` to check that a row of the PR body's

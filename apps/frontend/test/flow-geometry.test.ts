@@ -34,6 +34,31 @@ it("execution graph bounds enclose the status footers a block draws", () => {
   expect(bounds).toStrictEqual({ minX: -100, minY: 0, width: 740, height: 456.5 });
 });
 
+it("the execution Finish block reserves no activity line, and its ending ports agree with the layout", () => {
+  // Arrange
+  const ending = (id: string) =>
+    ({ id, name: id, description: "", output: "none", outputDescription: "" }) as const;
+  const graph = {
+    ...geometryGraph(),
+    finish: { position: { x: 800, y: 0 }, endings: [ending("delivered"), ending("blocked")] },
+  };
+  const geometry = createCanvasGeometry(graph, EXECUTION_DIMENSIONS, { finish: true });
+
+  // Act
+  const finishPorts = buildElkGraph(
+    graph,
+    createFlowLayoutDimensions(graph, EXECUTION_DIMENSIONS),
+  ).children?.find((node) => node.id === "finish")?.ports;
+
+  // Assert
+  expect(geometry.finishBox).toStrictEqual({ x: 800, y: 0, width: 240, height: 123 });
+  expect([geometry.endingPoint(0), geometry.endingPoint(1)]).toStrictEqual([
+    { x: 800, y: 83.5 },
+    { x: 800, y: 105.5 },
+  ]);
+  expect(finishPorts?.map((port) => port.y)).toStrictEqual([83.5, 105.5]);
+});
+
 it("incoming ports keep Flow input first, then connections in graph order, 18 px apart", () => {
   // Arrange
   const graph = geometryGraph();
@@ -54,6 +79,44 @@ it("incoming ports keep Flow input first, then connections in graph order, 18 px
     x: 400,
     y: 413,
   });
+});
+
+it("the laid-out wires to an ordinary Block and an ending keep separate routes", () => {
+  // Arrange
+  const base = geometryGraph();
+  const graph = {
+    ...base,
+    blocks: [{ ...base.blocks[0]!, id: "finish:done", name: "Review" }, base.blocks[1]!],
+    flowInput: { ...base.flowInput, targetBlockIds: [] },
+    connections: [
+      { sourceBlockId: "source-0", exitId: "done", targetBlockId: "finish:done" },
+      {
+        sourceBlockId: "source-0",
+        exitId: "done",
+        targetBlockId: "finish",
+        targetEndingId: "done",
+      },
+    ],
+    finish: {
+      ...base.finish,
+      endings: [
+        { id: "done", name: "Delivered", output: "none", description: "", outputDescription: "" },
+      ],
+    },
+  } as const;
+  const layout = buildElkGraph(graph, createFlowLayoutDimensions(graph, AUTHORING_DIMENSIONS));
+  const geometry = createCanvasGeometry(graph, AUTHORING_DIMENSIONS, { finish: true });
+
+  // Act
+  const [review, delivered] = exitWires(graph, "orthogonal", geometry, undefined, true);
+
+  // Assert
+  expect(review?.key).not.toBe(delivered?.key);
+  expect([review?.target, delivered?.target]).toStrictEqual(["Review", "Finish · Delivered"]);
+  expect(layout.edges).toMatchObject([
+    { id: review?.key, targets: ["in:finish:done:0"] },
+    { id: delivered?.key, targets: ["ending:0"] },
+  ]);
 });
 
 it("a block grows to hold its last incoming port", () => {

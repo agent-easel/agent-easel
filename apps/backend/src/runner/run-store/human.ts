@@ -1,5 +1,5 @@
 import type { Result } from "@t3-factory/contracts";
-import { HUMAN_EXITS } from "@t3-factory/domain-validation";
+import { handoffRecipients, HUMAN_EXITS } from "@t3-factory/domain-validation";
 import * as Effect from "effect/Effect";
 import { failure } from "../../result.ts";
 import type { HumanRow } from "../runner-types.ts";
@@ -91,15 +91,7 @@ export function openRunHuman(database: RunnerDatabase) {
               return settledAnswer(occurrence, runId, { content, requestId });
             const time = yield* now;
             const graph = runRow.definitions.flow.graph;
-            const recipients = [
-              ...new Set(
-                graph.connections
-                  .filter(
-                    (edge) => edge.sourceBlockId === occurrence.block_id && edge.exitId === exit.id,
-                  )
-                  .map((edge) => edge.targetBlockId),
-              ),
-            ];
+            const recipients = handoffRecipients(graph.connections, occurrence.block_id, exit.id);
             yield* sql`UPDATE human_occurrences SET state='answered',pending_context=NULL,settled_at=${time},exit_id=${exit.id},answer_fingerprint=${content},answer_request_id=${requestId ?? null} WHERE id=${id} AND state='pending'`;
             yield* createHandoffs(sql, runRow, {
               kind: "human",

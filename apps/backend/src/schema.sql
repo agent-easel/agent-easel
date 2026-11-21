@@ -557,18 +557,39 @@ CREATE TABLE "flow_revision_connections" (
   ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
   source_block_id TEXT NOT NULL,
   exit_id TEXT NOT NULL,
-  target_block_id TEXT NOT NULL,
+  target_block_id TEXT,
+  target_ending_id TEXT,
+  CHECK ((target_block_id IS NULL) <> (target_ending_id IS NULL)),
   PRIMARY KEY (flow_revision_id, ordinal),
   UNIQUE (flow_revision_id, source_block_id, exit_id, target_block_id),
+  UNIQUE (flow_revision_id, source_block_id, exit_id, target_ending_id),
   FOREIGN KEY (flow_revision_id, source_block_id)
     REFERENCES flow_revision_blocks(flow_revision_id, block_id),
   FOREIGN KEY (flow_revision_id, target_block_id)
-    REFERENCES flow_revision_blocks(flow_revision_id, block_id)
+    REFERENCES flow_revision_blocks(flow_revision_id, block_id),
+  FOREIGN KEY (flow_revision_id, target_ending_id)
+    REFERENCES flow_revision_endings(flow_revision_id, ending_id)
 );
 
 CREATE TRIGGER immutable_flow_revision_connection_delete BEFORE DELETE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_connection_update BEFORE UPDATE ON flow_revision_connections BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_endings (
+  flow_revision_id TEXT NOT NULL REFERENCES flow_revision_finish(flow_revision_id),
+  ending_id TEXT NOT NULL,
+  ordinal INTEGER NOT NULL CHECK (ordinal >= 0),
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  output TEXT NOT NULL CHECK (output IN ('none', 'optional', 'required')),
+  output_description TEXT NOT NULL,
+  PRIMARY KEY (flow_revision_id, ending_id),
+  UNIQUE (flow_revision_id, ordinal)
+);
+
+CREATE TRIGGER immutable_flow_revision_ending_delete BEFORE DELETE ON flow_revision_endings BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_ending_update BEFORE UPDATE ON flow_revision_endings BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE flow_revision_exits (
   flow_revision_id TEXT NOT NULL,
@@ -586,6 +607,16 @@ CREATE TABLE flow_revision_exits (
 CREATE TRIGGER immutable_flow_revision_exit_delete BEFORE DELETE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TRIGGER immutable_flow_revision_exit_update BEFORE UPDATE ON flow_revision_exits BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TABLE flow_revision_finish (
+  flow_revision_id TEXT PRIMARY KEY NOT NULL REFERENCES flow_revisions(id),
+  x REAL NOT NULL,
+  y REAL NOT NULL
+);
+
+CREATE TRIGGER immutable_flow_revision_finish_delete BEFORE DELETE ON flow_revision_finish BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
+
+CREATE TRIGGER immutable_flow_revision_finish_update BEFORE UPDATE ON flow_revision_finish BEGIN SELECT RAISE(ABORT, 'Flow revisions are immutable'); END;
 
 CREATE TABLE flow_revision_hidden_exits (
   flow_revision_id TEXT NOT NULL,
@@ -939,6 +970,26 @@ CREATE TABLE run_presentation (
   CHECK(NOT (snoozed=1 AND woke=1))
 );
 
+CREATE TABLE run_results (
+  run_id TEXT PRIMARY KEY NOT NULL REFERENCES runs(id),
+  ending_id TEXT NOT NULL,
+  ending_name TEXT NOT NULL,
+  output TEXT,
+  output_missing INTEGER NOT NULL CHECK (output_missing IN (0, 1)),
+  source_block_id TEXT NOT NULL,
+  exit_id TEXT NOT NULL,
+  author_block_id TEXT NOT NULL,
+  binding_id TEXT REFERENCES run_thread_bindings(id),
+  origin_activation_id TEXT REFERENCES run_activations(id),
+  intent_id TEXT NOT NULL UNIQUE REFERENCES operation_intents(id),
+  accepted_at TEXT NOT NULL,
+  CHECK (output IS NOT NULL OR output_missing = 0)
+);
+
+CREATE TRIGGER immutable_run_result_delete BEFORE DELETE ON run_results BEGIN SELECT RAISE(ABORT, 'Run results are immutable'); END;
+
+CREATE TRIGGER immutable_run_result_update BEFORE UPDATE ON run_results BEGIN SELECT RAISE(ABORT, 'Run results are immutable'); END;
+
 CREATE TABLE run_root_cancelled_controls (
   run_id TEXT NOT NULL REFERENCES run_coordinators(run_id),
   source_execution_id TEXT NOT NULL,
@@ -984,7 +1035,7 @@ CREATE TABLE run_settlements (
   attempt_owner TEXT NOT NULL,
   attempted_at TEXT NOT NULL,
   stop_pass_at TEXT
-);
+, reason TEXT NOT NULL DEFAULT 'manual' CHECK (reason IN ('manual', 'finish')));
 
 CREATE TABLE run_snooze_attention (
   run_id TEXT NOT NULL REFERENCES run_presentation(run_id),

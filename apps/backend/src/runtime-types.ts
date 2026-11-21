@@ -2,7 +2,9 @@ import type {
   BlockExit,
   ConditionArrivalEvidence,
   ConditionSummary,
+  FlowEnding,
   RunImageMimeType,
+  RunResult,
 } from "@t3-factory/contracts";
 
 type RuntimeImage = {
@@ -38,7 +40,11 @@ export type RuntimeReply = {
   readonly revisitInstruction?: string;
   /** How the Revisit instruction relates to the Agent's requirements; given with it. */
   readonly revisitRule?: string;
-  readonly exits?: readonly BlockExit[];
+  readonly exits?: readonly (BlockExit & { readonly endings: readonly FlowEnding[] })[];
+  readonly output?: {
+    readonly messageRequired: boolean;
+    readonly endings: readonly FlowEnding[];
+  };
   readonly inputs?: {
     readonly input: string;
     readonly images: readonly RuntimeImage[];
@@ -65,6 +71,7 @@ export type RuntimeReply = {
   }[];
   /** The Run's constant-size Condition summaries, not their histories. */
   readonly conditions?: readonly ConditionSummary[];
+  readonly result?: RunResult | null;
   /** One Condition evidence page: its arrivals, window high-water and next cursor. */
   readonly arrivals?: readonly ConditionArrivalEvidence[];
   readonly highWater?: number;

@@ -29,15 +29,15 @@ and restricted OAuth credentials live outside project repositories.
   execution, recovery and Run history read these revisions, so later edits and removals
   cannot rewrite history.
   External skill files are not frozen. Agent revisions hold the Agent's exits and Flow revisions
-  hold each Agent block's hidden and Flow-local exits and its Revisit instruction and each
-  Condition's ordered rules, so a Run's block exits, Revisit instructions and Condition rules come
-  from the same frozen revisions. Migration `072` converted
+  hold each Agent block's hidden and Flow-local exits and its Revisit instruction, each
+  Condition's ordered rules and the Finish block with its ordered endings, so a Run's block exits,
+  Revisit instructions, Condition rules and endings come from the same frozen revisions. Migration `072` converted
   every stored Flow revision, including those Runs captured: Agents started with no exits, Agent
   block exits became Flow-local with the same IDs, and Human exits became Approve or Request
   changes by their feedback flag, with their wires, answers and handoffs following. Earlier Human
   exit names are not kept. Migration `081` gave every Agent block of every stored Flow revision,
   including those Runs captured, an empty Revisit instruction in place; other block kinds have
-  none. Migration `113` added `revisit_context` (`keep` or `fresh`) to `flow_revision_blocks`
+  none. Migration `116` added `revisit_context` (`keep` or `fresh`) to `flow_revision_blocks`
   under the same restored immutability guards, defaulting every existing Agent block to `keep` and
   leaving other block kinds null. Migration `094` made an Agent revision's execution columns nullable together (all present
   or all null, with the non-empty and JSON checks kept for present values), rebuilding the table under
@@ -49,7 +49,11 @@ and restricted OAuth credentials live outside project repositories.
   per-Condition count and arrival numbers from 1 to 9,007,199,254,740,991, each selection naming only its matched captured
   rule (or Otherwise), and the Condition arrival on each delivery a selection creates; it changes no existing row and
   starts the count of any Condition a Run already captured at 0. Migration `101` adds an index for reading an arrival's
-  recipient deliveries and changes no row.
+  recipient deliveries and changes no row. Migration `114` gave every stored Flow revision,
+  including those Runs captured, an immutable empty Finish block 80 px right of its rightmost Flow
+  input or block and level with the Flow input (within the canvas limit), added immutable ending
+  rows, and rebuilt the connection table under its restored immutability guards so a connection
+  enters exactly one block or one ending of its revision, with every stored wire unchanged.
 - A committed [import](studio.md#import) writes an import receipt in the transaction that creates its definitions: the client's request id,
   a versioned SHA-256 fingerprint of the canonical document, the reviewed selections and the import target (JSON with object keys sorted at every level and array order kept, so a reordered file still replays; the decoded document keeps its file's format version, so a version-1 commit retried after an upgrade still matches its receipt), the created Agent ids by document key and, for a Flow file,
   the created Flow id. A commit reads receipts before the T3 catalog and the target's availability, so a retry replays without T3 and after its target Project became unavailable: the same id and fingerprint return the
@@ -120,6 +124,14 @@ and restricted OAuth credentials live outside project repositories.
   from other model-supplied references.
   Attention settlement and the Run's Settled and Archived states remain separate, with cancelled Human work never
   represented as an answer.
+- Every settlement records its reason: `automatic`, `manual` or `finish` on the Run's `run-settled` timeline event, and
+  `manual` or `finish` on the confirmed stop-and-settle record that stops a Run's workers. The stop-and-settle
+  takes its authorization (the user's confirmation, or the Flow) and its reason together, and a retry keeps the
+  recorded reason. Migration `113` adds the reason to settlement records and backfills every existing one as
+  `manual`, since only the user's confirmed Settle existed; no settlement history changes.
+- A Run has at most one [Run result](runner.md#reaching-an-ending), recorded once and never updated or deleted, and
+  each accepted delivery fixes at most one. Migration `115` adds that table and writes no row, so historical Runs have no
+  result.
 
 **Transactions and restart.** One backend owns a database. Start, reports, Human answers,
 delivery reservations, settling and Archive have atomic durable boundaries before their effects
@@ -136,7 +148,8 @@ its outcome, deadline and deduplication identity stay. A Condition arrival follo
 for its number its text stays only in the incoming delivery, and its number, selection, provenance and deduplication identity
 stay. Other message payloads persist only while needed for pending Human context,
 uncertain delivery or recovery, then are cleared while keys, fingerprints and references
-remain. Initial input, including its images, and revision prompts are intentional exceptions;
+remain. Initial input, including its images, revision prompts and the [Run result](runner.md#reaching-an-ending), which
+keeps its text through Archive unless its ending's output is None, are intentional exceptions;
 staged images no Run references are deleted after 24 hours. The only other image removal is manual
 deletion from **Settings → Run images** of an image whose every Run is Settled or Archived. Factory
 rechecks that rule at deletion and removes only the bytes; manifest, staging row and history stay. A

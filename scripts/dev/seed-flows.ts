@@ -11,8 +11,9 @@ import {
   conditionRule,
   OTHERWISE,
 } from "../../apps/backend/test/support/scenarios.ts";
+import { FINISH_BLOCK_ID } from "../../packages/contracts/src/index.ts";
 import type { Factory } from "../../apps/backend/src/index.ts";
-import type { FlowGraph, FlowWorkspace } from "../../packages/contracts/src/index.ts";
+import type { FlowGraphInput, FlowWorkspace } from "../../packages/contracts/src/index.ts";
 import { requireSuccess } from "./seed-support.ts";
 import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 
@@ -20,7 +21,7 @@ import type { DemoAgents, DemoFlows } from "./seed-scenarios.ts";
 export async function saveFlow(
   factory: Factory,
   name: string,
-  graph: FlowGraph,
+  graph: FlowGraphInput,
   workspace: FlowWorkspace = { mode: "checkout" },
 ) {
   const flow = requireSuccess(await factory.createFlow({ name }));
@@ -148,7 +149,59 @@ export async function createDemoFlows(factory: Factory, agents: DemoAgents): Pro
     continuation,
     ...(await createWaitFlows(factory, agents)),
     ...(await createConditionFlows(factory, agents)),
+    endings: await createEndingsFlow(factory, agents),
   };
+}
+
+function createEndingsFlow(factory: Factory, agents: DemoAgents) {
+  const done = [blockExit("done", "Done", "Done")];
+  return saveFlow(factory, "Demo · Ship or drop", {
+    flowInput: flowInput(["worker", "reviewer"], { x: 40, y: 180 }),
+    blocks: [
+      agentBlock("worker", "Ship the fix", agents.worker, { x: 320, y: 40 }, [], done),
+      agentBlock(
+        "reviewer",
+        "Explore an alternative",
+        agents.reviewer,
+        { x: 320, y: 320 },
+        [],
+        done,
+      ),
+    ],
+    connections: [
+      {
+        sourceBlockId: "worker",
+        exitId: "done",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "shipped",
+      },
+      {
+        sourceBlockId: "reviewer",
+        exitId: "done",
+        targetBlockId: FINISH_BLOCK_ID,
+        targetEndingId: "dropped",
+      },
+    ],
+    finish: {
+      position: { x: 700, y: 180 },
+      endings: [
+        {
+          id: "shipped",
+          name: "Shipped",
+          description: "The fix is in a pull request.",
+          output: "required",
+          outputDescription: "URL of the pull request.",
+        },
+        {
+          id: "dropped",
+          name: "Dropped",
+          description: "The alternative was abandoned.",
+          output: "none",
+          outputDescription: "",
+        },
+      ],
+    },
+  });
 }
 
 /** Review rounds that return changes to the worker until arrival 3 escalates to you, parallel

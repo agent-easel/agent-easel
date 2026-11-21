@@ -45,7 +45,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_block",
     description:
-      "Read your Block's current visit: state, why it was activated, its inputs, exits {id, name, description, messageRequired} and allowed reports. inputs.images is an ordered manifest {imageId, ordinal, name, mimeType, sizeBytes}; ordinal N matches [Image N: name] in the Run input. Fetch an image with factory_get_run_image; this read carries no image bytes. On a later visit of a Block with a Revisit instruction, revisitInstruction and revisitRule restate it.",
+      "Read your Block's current visit: state, why it was activated, its inputs, exits {id, name, description, messageRequired, endings} and allowed reports. An exit's endings [{id, name, description, output, outputDescription}] are the Run endings it enters; output none, optional or required says whether the message becomes the Run result, and messageRequired already includes a required ending. A prompted Continuation lists no exits; its output {messageRequired, endings} describes the same for its result. inputs.images is an ordered manifest {imageId, ordinal, name, mimeType, sizeBytes}; ordinal N matches [Image N: name] in the Run input. Fetch an image with factory_get_run_image; this read carries no image bytes. On a later visit of a Block with a Revisit instruction, revisitInstruction and revisitRule restate it.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },
@@ -73,7 +73,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_run",
     description:
-      "Read the Run your Block belongs to (id, number, title, input, state, startedAt), with each Block's state and latest result, and each Condition's summary {blockId, arrivals, pending, latest} without its arrival history.",
+      "Read the Run your Block belongs to (id, number, title, input, state, startedAt), with each Block's state and latest result, each Condition's summary {blockId, arrivals, pending, latest} without its arrival history, and the Run result once the Run reached an ending: result {endingId, endingName, output (null when the ending takes no output), outputMissing, sourceBlockId, exitId, authorBlockId, origin, deliveryId, acceptedAt}, else null.",
     inputSchema: {
       type: "object",
       properties: { blockId: blockIdProperty },
@@ -84,7 +84,7 @@ const tools: Tool[] = [
   {
     name: "factory_get_condition_arrivals",
     description:
-      "Read one page of a Condition's numbered arrivals in your Block's Run, oldest first: each arrival's number, acceptance time, source block and worker, matched rule {id, name} or null for Otherwise, selected output, and each recipient's current disposition (pending, acknowledged or cancelled; none when the output is unwired). A selected route is not proof its recipient received it. The first page fixes the window at the highest arrival number then; pass its nextCursor to continue that window, and omit cursor to see newer arrivals. Read-only and safe to repeat.",
+      "Read one page of a Condition's numbered arrivals in your Block's Run, oldest first: each arrival's number, acceptance time, source block and worker, matched rule {id, name} or null for Otherwise, selected output, and each recipient's blockId, targetEndingId (null for an ordinary block), and current disposition (pending, acknowledged or cancelled; none when the output is unwired). A selected route is not proof its recipient received it. The first page fixes the window at the highest arrival number then; pass its nextCursor to continue that window, and omit cursor to see newer arrivals. Read-only and safe to repeat.",
     inputSchema: {
       type: "object",
       properties: {

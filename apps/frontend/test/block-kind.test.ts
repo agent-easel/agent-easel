@@ -40,7 +40,12 @@ const flowWith = (
   connections: FlowConnection[] = [],
   agents: AgentDefinition[] = [],
 ): { graph: FlowGraph; agents: AgentDefinition[] } => ({
-  graph: { blocks, connections, flowInput: { position, targetBlockIds: [] } },
+  graph: {
+    blocks,
+    connections,
+    flowInput: { position, targetBlockIds: [] },
+    finish: { position, endings: [] },
+  },
   agents,
 });
 

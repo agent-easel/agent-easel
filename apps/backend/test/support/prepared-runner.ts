@@ -15,7 +15,7 @@ import { startServer } from "../../src/server.ts";
 import { writeReportingState } from "./reporting-home.ts";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { factoryHarness } from "./factory.ts";
+import { factoryHarness, seedTemplateDatabase } from "./factory.ts";
 import { ControlledT3 } from "./controlled-t3.ts";
 import { ControlledGit } from "./controlled-git.ts";
 import { ControlledGitHub } from "./controlled-github.ts";
@@ -184,6 +184,7 @@ export function preparedService(
 export async function preparedServer(c: TestContext) {
   const h = await factoryHarness(c);
   const { root, t3, reportingStateDirectory } = await preparedHomes(h.processHome);
+  await seedTemplateDatabase(h.databasePath);
   const server = await startServer(
     await loadConfiguration({ FACTORY_HOME: h.processHome, FACTORY_PORT: "0" }),
     {

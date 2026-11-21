@@ -7,22 +7,32 @@ import {
   type RefObject,
 } from "react";
 import { GripVertical, RotateCcw } from "lucide-react";
-import type { AgentDefinition, FlowBlock, FlowGraph, ValidationIssue } from "@t3-factory/contracts";
+import {
+  FINISH_BLOCK_ID,
+  type AgentDefinition,
+  type FlowBlock,
+  type FlowGraph,
+  type ValidationIssue,
+} from "@t3-factory/contracts";
 import { cn } from "@/lib/utils";
 import {
   addWire,
+  FINISH_SELECTION,
+  type CanvasBlockSelection,
   canConnect,
   exitRecipients,
   type BlockPosition,
   type CanvasBlock,
   type CanvasNode,
   type FlowWire,
+  type WireTarget,
 } from "../flow-graph.ts";
 import { AUTHORING_DIMENSIONS, type WireSource } from "@t3-factory/flow-layout";
 import {
   CanvasSurface,
   IdentityRows,
   type CanvasBlockContent,
+  type CanvasFinishContent,
   type CanvasFlowInputContent,
   type CanvasGesture,
   type CanvasPoints,
@@ -88,12 +98,6 @@ function useMoveDrag(
   };
 }
 
-/**
- * A wire being drawn from an exit's port or the Flow input's port. The whole target block is
- * the drop zone; an exit may reach any block, including its own block and earlier blocks,
- * and the Flow input only Agent blocks. The draft changes once, on a drop over a block that
- * the source may reach and does not already reach; any other drop, or a cancel, keeps it.
- */
 function useConnectDrag(
   surface: RefObject<HTMLElement | null>,
   points: RefObject<CanvasPoints | null>,
@@ -107,8 +111,14 @@ function useConnectDrag(
     // Releasing over the source port itself is a no-op, not a self-connection.
     if (!hit || !surface.current?.contains(hit) || port.current?.contains(hit)) return null;
     const targetBlockId = hit.closest<HTMLElement>("[data-block-id]")?.dataset.blockId;
-    if (!targetBlockId || !canConnect(graph, source, targetBlockId)) return null;
-    return targetBlockId;
+    const targetEndingId = hit.closest<HTMLElement>("[data-ending-id]")?.dataset.endingId;
+    const target: WireTarget | null = targetEndingId
+      ? { targetBlockId: FINISH_BLOCK_ID, targetEndingId }
+      : targetBlockId
+        ? { targetBlockId }
+        : null;
+    if (!target) return null;
+    return canConnect(graph, source, target) ? target : null;
   }
   return {
     connect,
@@ -116,7 +126,7 @@ function useConnectDrag(
       const follow = (x: number, y: number) => {
         const pointer = points.current?.at(x, y);
         if (!pointer) return;
-        setConnect({ kind: "connect", source, pointer, targetBlockId: targetAt(x, y, source) });
+        setConnect({ kind: "connect", source, pointer, target: targetAt(x, y, source) });
       };
       return {
         onDragStart: (_origin, button) => {
@@ -124,10 +134,10 @@ function useConnectDrag(
         },
         onDragMove: follow,
         onDrop: (x, y) => {
-          const targetBlockId = targetAt(x, y, source);
+          const target = targetAt(x, y, source);
           port.current = null;
           setConnect(null);
-          if (targetBlockId) onChange(addWire(graph, { source, targetBlockId }));
+          if (target) onChange(addWire(graph, { source, ...target }));
         },
         onDragCancel: () => {
           port.current = null;
@@ -147,6 +157,10 @@ function moveGraphNode(
 ) {
   if (moved.kind === "flow-input") {
     onChange({ ...graph, flowInput: { ...graph.flowInput, position } });
+    return;
+  }
+  if (moved.kind === "finish") {
+    onChange({ ...graph, finish: { ...graph.finish, position } });
     return;
   }
   const block = graph.blocks.find((item) => item.id === moved.blockId);
@@ -237,12 +251,12 @@ function connectionHandle(
 /** A hidden or removed wired exit keeps its own endpoint but cannot start a connection. */
 const unavailablePort: CanvasPort = { className: "border-[1.5px] border-attention bg-background" };
 
-/** `accepting` marks an input a wire being drawn from the Flow input may reach. */
 const incomingPort =
-  (accepting: boolean) =>
+  (accepting: boolean, problem = false) =>
   (pending: boolean): CanvasPort => ({
     className: cn(
       "border-[1.5px] border-muted-foreground bg-background transition-[width,height,top,left]",
+      problem && "border-destructive",
       accepting && "border-primary",
       pending && "border-2 border-primary ring-4 ring-primary/25",
     ),
@@ -362,7 +376,7 @@ function blockFrameClass({
   dragging,
   connectTarget,
 }: {
-  kind: FlowBlock["kind"];
+  kind: FlowBlock["kind"] | "finish";
   selected: boolean;
   issue: boolean;
   /** A wire from the Flow input can't reach this block. */
@@ -370,7 +384,7 @@ function blockFrameClass({
   dragging: boolean;
   connectTarget: boolean;
 }) {
-  const { dashedFrame } = BLOCK_KINDS[kind];
+  const dashedFrame = kind !== "finish" && BLOCK_KINDS[kind].dashedFrame;
   const selectedOnly = selected && !issue;
   return cn(
     "group bg-card transition-[background-color,border-color] hover:border-border-hover hover:bg-accent",
@@ -492,6 +506,62 @@ function authoringBlock({
   };
 }
 
+function authoringFinish({
+  marks,
+  selected,
+  dragging,
+  connectTarget,
+  pendingSource,
+  onSelect,
+  drag,
+}: {
+  marks: ReadinessMarks;
+  selected: boolean;
+  dragging: boolean;
+  connectTarget: boolean;
+  pendingSource: WireSource | null;
+  onSelect: () => void;
+  drag: DragHandlers;
+}): CanvasFinishContent {
+  const issue = marks.finish[0]?.issue;
+  const issueId = "finish-issue";
+  return {
+    state: { kind: "authoring", unconnected: marks.unconnectedEndings },
+    className: blockFrameClass({
+      kind: "finish",
+      selected,
+      issue: issue !== undefined,
+      dimmed: pendingSource?.kind === "flow-input",
+      dragging,
+      connectTarget,
+    }),
+    press: (rows) => (
+      <DragButton
+        className={cn(dragPressClass, "rounded-t-lg")}
+        aria-label="Finish"
+        aria-describedby={issue ? issueId : undefined}
+        aria-pressed={selected}
+        {...drag}
+        onClick={onSelect}
+      >
+        {rows}
+      </DragButton>
+    ),
+    trailing: (
+      <>
+        {issue && (
+          <StatusBadge id={issueId} kind="error">
+            {issueTag(issue)}
+          </StatusBadge>
+        )}
+        {grip(selected)}
+      </>
+    ),
+    endingPort: (ending, pending) =>
+      incomingPort(false, marks.unconnectedEndings.has(ending.id))(pending),
+  };
+}
+
 /** The identity rows of a new block as this canvas draws them, for the block library's drag ghost. */
 export function BlockPreview({
   kind,
@@ -530,7 +600,8 @@ function blockGesture(drag: MoveDrag | null, connect: ConnectDrag | null, blockI
   const source = connect?.source;
   return {
     dragging: drag?.node.kind === "block" && drag.node.blockId === blockId,
-    connectTarget: connect?.targetBlockId === blockId,
+    connectTarget:
+      connect?.target?.targetEndingId === undefined && connect?.target?.targetBlockId === blockId,
     connectingExitId:
       source?.kind === "exit" && source.sourceBlockId === blockId ? source.exitId : null,
   };
@@ -542,18 +613,17 @@ type FlowCanvasProps = {
   agents: readonly AgentDefinition[];
   /** Where readiness issues mark the Flow input, Blocks and Condition outputs. */
   marks: ReadinessMarks;
-  selected: string | null;
+  selected: CanvasBlockSelection | null;
   selectedWire: FlowWire | null;
   /** Blocks the view keeps visible: the selected Block and the next one. */
-  reveal: readonly string[];
+  reveal: readonly CanvasBlockSelection[];
   /** Scopes the view: a new Flow opens at its entry view. */
   flowId: string;
   savedGraph: FlowGraph | undefined;
   busy: boolean;
   /** Returns placement without exposing the canvas view transform to the library. */
   placementRef: RefObject<DropAt | null>;
-  /** A block or the Flow input, or null for empty canvas, which clears every selection. */
-  onSelect: (blockId: string | null) => void;
+  onSelect: (blockId: CanvasBlockSelection | null) => void;
   onSelectWire: (wire: FlowWire) => void;
   onDeleteWire: (wire: FlowWire) => void;
   onEdit: (block: FlowBlock) => void;
@@ -605,6 +675,15 @@ function authoringContent({
       drag: move.handlers({ kind: "flow-input" }),
       connectFrom: connect.handlers({ kind: "flow-input" }),
     }),
+    finish: authoringFinish({
+      marks,
+      selected: selected === FINISH_SELECTION,
+      dragging: move.drag?.node.kind === "finish",
+      connectTarget: connect.connect?.target?.targetEndingId !== undefined,
+      pendingSource: connect.connect?.source ?? null,
+      onSelect: () => onSelect(FINISH_SELECTION),
+      drag: move.handlers({ kind: "finish" }),
+    }),
     block: (block: CanvasBlock) =>
       authoringBlock({
         graph,
@@ -655,6 +734,7 @@ export function FlowCanvas({
       dimensions={AUTHORING_DIMENSIONS}
       reservedFooters={0}
       flowInput={content.flowInput}
+      finish={content.finish}
       block={content.block}
       wires={{
         kind: "curved",

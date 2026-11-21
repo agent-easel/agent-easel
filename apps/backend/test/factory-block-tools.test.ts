@@ -4,6 +4,7 @@ import { launchedBlockId, workerMessage } from "./support/run-worker.ts";
 import {
   REVISIT_INSTRUCTION,
   blockExit,
+  endingFlow,
   finishedReport,
   handoffFlow,
   launchUncertain,
@@ -63,8 +64,8 @@ it("factory_get_block lists the Agent's visible exits, then the Flow's local exi
 
   // Assert
   expect(result.exits).toStrictEqual([
-    { id: "done", name: "Done", description: "Completed", messageRequired: false },
-    { id: "escalate", name: "Escalate", description: "", messageRequired: true },
+    { id: "done", name: "Done", description: "Completed", messageRequired: false, endings: [] },
+    { id: "escalate", name: "Escalate", description: "", messageRequired: true, endings: [] },
   ]);
 });
 
@@ -672,4 +673,72 @@ it("a finished report without a message is refused when that exit requires a mes
 
   // Assert
   expect(result).toMatchObject({ code: "FEEDBACK_REQUIRED" });
+});
+
+const SHIPPED = (output: string) => ({
+  id: "shipped",
+  name: "Shipped",
+  description: "The work is merged.",
+  output,
+  outputDescription: "The merge commit.",
+});
+
+it("factory_get_block lists the endings an exit is wired to, and a Required one makes the exit message-required", async (c) => {
+  // Arrange
+  const setup = await prepared(c, endingFlow("required"));
+  const fixture = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+
+  // Act
+  const result = await fixture.f.runtime.block({ arguments: { blockId: fixture.blockId } });
+
+  // Assert
+  expect(result.exits).toStrictEqual([
+    {
+      id: "done",
+      name: "Done",
+      description: "Completed",
+      messageRequired: true,
+      endings: [SHIPPED("required")],
+    },
+  ]);
+});
+
+it("factory_get_block keeps an exit's own message requirement when its wired ending needs no output", async (c) => {
+  // Arrange
+  const setup = await prepared(c, endingFlow("optional"));
+  const fixture = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+
+  // Act
+  const result = await fixture.f.runtime.block({ arguments: { blockId: fixture.blockId } });
+
+  // Assert
+  expect(result.exits).toMatchObject([{ messageRequired: false, endings: [SHIPPED("optional")] }]);
+});
+
+it("a blank finished report on an exit wired to a Required ending is refused with FEEDBACK_REQUIRED", async (c) => {
+  // Arrange
+  const required = await prepared(c, endingFlow("required"));
+  const requiredWorker = { ...required, ...(await workerAtWork(required.world, required.input)) };
+
+  // Act
+  const refused = await requiredWorker.f.runtime.submit({
+    arguments: { blockId: requiredWorker.blockId, to: "finished", exit: "Done", message: "  " },
+  });
+
+  // Assert
+  expect(refused).toMatchObject({ code: "FEEDBACK_REQUIRED" });
+});
+
+it("the same Agent in a Flow without that wire is unaffected by a Required ending elsewhere", async (c) => {
+  // Arrange
+  const setup = await prepared(c, endingFlow("optional"));
+  const fixture = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+
+  // Act
+  const result = await fixture.f.runtime.submit({
+    arguments: { blockId: fixture.blockId, to: "finished", exit: "Done" },
+  });
+
+  // Assert
+  expect(result.code).toBe("ACCEPTED");
 });

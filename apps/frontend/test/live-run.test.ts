@@ -26,6 +26,7 @@ const headerOf = (run: RunDetail): RunHeader => ({
   runCoordinator: run.runCoordinator,
   gateOpen: run.gateOpen,
   settlement: run.settlement,
+  result: run.result,
 });
 
 it("a committed Run update preserves entity order and untouched identities without duplicating history", () => {

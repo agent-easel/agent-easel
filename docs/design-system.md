@@ -225,10 +225,15 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   or without groups, icons, descriptions, badges, disabled reasons and pinned search; long names
   wrap. A menu that combines a choice with actions or a submenu (the Project picker, the Flow
   workspace control) keeps its menu, and the app never shows a native OS select. SegmentedChoice
-  for a short exclusive choice that stays visible.
+  for a short exclusive choice that stays visible; in a labelled row it fills the row in equal
+  segments, as a Finish ending's Output.
 - **Agent-written text**: AgentTextPreview, the clamped Markdown preview with its read link and
   the shared reader, in its result or Needs input size; AgentTextReader when a card opens the
   reader without a preview. Human-written text and Factory messages stay plain text.
+- **Run result**: ResultSection (Figma Run/ResultSection), the Run overview's Result: the
+  reached ending's name with the flag icon, its output, Output missing tag or neither, its From,
+  By when the author differs from the worker, Worker when known, and At facts, the Stopping tag while the Run stops its workers, and No result yet
+  or No result before a result. The Finish block's inspector shows the same output and facts.
 - **Way out to T3**: OpenInT3, the "Open in T3 ↗" TextLink; its filled button form is only for
   an Attention card whose action is going to T3.
 - **Stored secret**: SecretField, with Stored, Replace and Remove; a blank field never clears it.
@@ -250,6 +255,12 @@ first, then use it; a one-off styled at the call site becomes the next consisten
   and its install status badge, as a group named after the harness. Rows sit in a grouped Surface.
 - **Canvas**: the canvas surface, which owns block geometry, ports, wires and the dot grid for
   both the Flow editor and the execution canvas.
+- **Finish block**: FinishBlock (Figma Studio/FinishBlock), drawn by the canvas surface like a
+  block: the Flag kind icon, **FINISH**, **Finish** and its ending count, then one row per ending
+  with its own input port on the left edge. Its state is the Flow editor's (an unconnected ending's
+  name and port in the Error colour) or a Run's: neutral before an ending is reached, the reached
+  row filled with **Reached · *time*** and **Not reached** on the others, or **No ending reached**.
+  Without endings the editor shows its one hint row and a Run its header only.
 
 ## Changing the design system
 

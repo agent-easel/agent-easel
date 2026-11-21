@@ -1,9 +1,12 @@
 import {
   CONDITION_ARRIVAL_MAX,
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type CreateFlowInput,
   type DuplicateFlowInput,
+  type EndingOutput,
   type FlowDuplicateAgentChoice,
+  type FlowConnection,
   type FlowGraphInput,
   type FlowWorkspace,
   type PreviewFlowDuplicateInput,
@@ -296,13 +299,66 @@ const conditionExitIds = (rules: unknown): ReadonlySet<string> =>
     CONDITION_OTHERWISE_ID,
   ]);
 
-const GRAPH_FIELDS = ["blocks", "connections", "flowInput"];
+const GRAPH_FIELDS = ["blocks", "connections", "flowInput", "finish"];
 const FLOW_INPUT_FIELDS = ["position", "targetBlockIds"];
+const FINISH_FIELDS = ["position", "endings"];
+const ENDING_FIELDS = ["id", "name", "description", "output", "outputDescription"];
+const ENDING_OUTPUTS: readonly unknown[] = [
+  "none",
+  "optional",
+  "required",
+] satisfies EndingOutput[];
+const ENDING_LIMIT = 100;
+const ENDING_TEXT_LIMIT = 4000;
+
+function checkEnding(ending: unknown, path: string, ids: Set<string>, issue: IssueReporter) {
+  if (!isRecord(ending)) {
+    issue("invalid_ending", path, "Supply an ending with an ID, name and output setting.");
+    return;
+  }
+  if (Object.keys(ending).some((key) => !ENDING_FIELDS.includes(key)))
+    issue(
+      "ending_fields_forbidden",
+      path,
+      "An ending has only an ID, name, description, output and output description.",
+    );
+  if (!isId(ending.id) || ids.has(ending.id))
+    issue("invalid_ending_id", `${path}.id`, "Ending IDs must be non-empty and unique.");
+  else ids.add(ending.id);
+  if (typeof ending.name !== "string" || ending.name.trim().length > 200)
+    issue("invalid_ending_name", `${path}.name`, "Use an ending name up to 200 characters.");
+  for (const field of ["description", "outputDescription"])
+    if (typeof ending[field] !== "string" || ending[field].length > ENDING_TEXT_LIMIT)
+      issue(
+        "invalid_ending_description",
+        `${path}.${field}`,
+        `Use a description up to ${ENDING_TEXT_LIMIT} characters.`,
+      );
+  if (!ENDING_OUTPUTS.includes(ending.output))
+    issue("invalid_ending_output", `${path}.output`, "Choose none, optional or required output.");
+}
+
+function checkFinish(finish: unknown, issue: IssueReporter): ReadonlySet<string> {
+  const ids = new Set<string>();
+  if (finish === undefined) return ids;
+  const path = "graph.finish";
+  if (!isRecord(finish) || !Array.isArray(finish.endings) || finish.endings.length > ENDING_LIMIT) {
+    issue("invalid_finish", path, `Supply the Finish block with up to ${ENDING_LIMIT} endings.`);
+    return ids;
+  }
+  if (Object.keys(finish).some((key) => !FINISH_FIELDS.includes(key)))
+    issue("finish_fields_forbidden", path, "The Finish block has only a position and endings.");
+  if (finish.position !== undefined && !isCanvasPosition(finish.position))
+    issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
+  finish.endings.forEach((ending, i) => checkEnding(ending, `${path}.endings.${i}`, ids, issue));
+  return ids;
+}
 
 /** The Flow input may target only existing Agent or Wait blocks, each at most once; a Wait target
  * is a readiness gap, not a save error. */
 function checkFlowInput(
   flowInput: unknown,
+  blockIds: ReadonlySet<string>,
   targetableBlockIds: ReadonlySet<string>,
   issue: IssueReporter,
 ) {
@@ -321,7 +377,13 @@ function checkFlowInput(
     issue("invalid_position", `${path}.position`, CANVAS_COORD_MESSAGE);
   const targets = new Set<string>();
   flowInput.targetBlockIds.forEach((target, i) => {
-    if (!isId(target) || targets.has(target) || !targetableBlockIds.has(target))
+    if (target === FINISH_BLOCK_ID && !blockIds.has(target))
+      issue(
+        "flow_input_finish",
+        `${path}.targetBlockIds.${i}`,
+        "The Flow input cannot connect to Finish: a Run cannot end before any work happens.",
+      );
+    else if (!isId(target) || targets.has(target) || !targetableBlockIds.has(target))
       issue(
         "invalid_flow_input_target",
         `${path}.targetBlockIds.${i}`,
@@ -337,9 +399,34 @@ const connectable = (exits: ConnectableExits, source: unknown, exitId: unknown) 
   return allowed === "inherited" ? isId(exitId) : typeof exitId === "string" && allowed.has(exitId);
 };
 
+export function connectionKey(
+  connection: Omit<FlowConnection, "targetEndingId"> & {
+    readonly targetEndingId?: string | undefined;
+  },
+): string {
+  return JSON.stringify([
+    connection.sourceBlockId,
+    connection.exitId,
+    connection.targetBlockId,
+    connection.targetEndingId ?? null,
+  ]);
+}
+
+const validTarget = (
+  edge: Record<string, unknown>,
+  blockIds: ReadonlySet<string>,
+  endingIds: ReadonlySet<string>,
+) =>
+  edge.targetEndingId === undefined
+    ? typeof edge.targetBlockId === "string" && blockIds.has(edge.targetBlockId)
+    : edge.targetBlockId === FINISH_BLOCK_ID &&
+      typeof edge.targetEndingId === "string" &&
+      endingIds.has(edge.targetEndingId);
+
 function checkConnections(
   connections: readonly unknown[],
   blockIds: ReadonlySet<string>,
+  endingIds: ReadonlySet<string>,
   exits: ConnectableExits,
   issue: IssueReporter,
 ) {
@@ -349,20 +436,74 @@ function checkConnections(
     if (
       !isRecord(edge) ||
       !connectable(exits, edge.sourceBlockId, edge.exitId) ||
-      typeof edge.targetBlockId !== "string" ||
-      !blockIds.has(edge.targetBlockId)
+      !validTarget(edge, blockIds, endingIds)
     ) {
-      issue("invalid_connection", path, "Connect an existing source exit to an existing block.");
+      issue(
+        "invalid_connection",
+        path,
+        `Connect an existing source exit to an existing block, or to an existing ending with targetBlockId "${FINISH_BLOCK_ID}" and its targetEndingId.`,
+      );
       return;
     }
-    const key = JSON.stringify([edge.sourceBlockId, edge.exitId, edge.targetBlockId]);
+    const key = connectionKey(edge as unknown as FlowConnection);
     if (edges.has(key))
-      issue("duplicate_connection", path, "This exit is already connected to that block.");
+      issue("duplicate_connection", path, "This exit is already connected to that target.");
     edges.add(key);
   });
 }
 
-function checkGraph(graph: unknown, issue: IssueReporter) {
+const MAX_ORDINARY_BLOCKS = 500;
+const ORDINARY_BLOCK_LIMIT_WITH_FINISH = MAX_ORDINARY_BLOCKS - 1;
+type BlockLimit = number | "portable";
+
+function portableBlockLimit(finish: unknown) {
+  const empty =
+    finish === undefined ||
+    (isRecord(finish) && Array.isArray(finish.endings) && !finish.endings.length);
+  return empty ? MAX_ORDINARY_BLOCKS : ORDINARY_BLOCK_LIMIT_WITH_FINISH;
+}
+
+function graphSizeIssue(
+  blocks: number,
+  connections: number,
+  ordinaryBlockLimit: number,
+): ValidationIssue | undefined {
+  if (blocks <= ordinaryBlockLimit && connections <= 5000) return;
+  return {
+    code: "graph_too_large",
+    path: "graph",
+    message:
+      ordinaryBlockLimit === MAX_ORDINARY_BLOCKS
+        ? "Use at most 500 ordinary blocks and 5000 connections."
+        : "Use at most 500 blocks, including Finish, and 5000 connections.",
+  };
+}
+
+export function portableFlowSizeIssue(
+  graph: Pick<FlowGraphInput, "blocks" | "connections" | "finish">,
+) {
+  return graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    portableBlockLimit(graph.finish),
+  );
+}
+
+export function flowEditSizeRefusal(
+  graph: FlowGraphInput,
+  saved: FlowGraphInput,
+): Result<never> | undefined {
+  const issue = graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    Math.max(ORDINARY_BLOCK_LIMIT_WITH_FINISH, saved.blocks.length),
+  );
+  if (issue)
+    return { ok: false, error: { code: "validation", message: issue.message, issues: [issue] } };
+  return undefined;
+}
+
+function checkGraph(graph: unknown, blockLimit: BlockLimit, issue: IssueReporter) {
   if (!isRecord(graph) || !Array.isArray(graph.blocks) || !Array.isArray(graph.connections)) {
     issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
     return;
@@ -371,12 +512,16 @@ function checkGraph(graph: unknown, issue: IssueReporter) {
     issue(
       "graph_fields_forbidden",
       "graph",
-      "A Flow graph has only blocks, connections and the Flow input block.",
+      "A Flow graph has only blocks, connections, the Flow input block and the Finish block.",
     );
   const blockIds = new Set<string>();
   const exits: ConnectableExits = new Map();
-  if (graph.blocks.length > 500 || graph.connections.length > 5000)
-    issue("graph_too_large", "graph", "Use at most 500 blocks and 5000 connections.");
+  const sizeIssue = graphSizeIssue(
+    graph.blocks.length,
+    graph.connections.length,
+    blockLimit === "portable" ? portableBlockLimit(graph.finish) : blockLimit,
+  );
+  if (sizeIssue) issue(sizeIssue.code, sizeIssue.path, sizeIssue.message);
   graph.blocks.forEach((block, i) =>
     checkBlock(block, `graph.blocks.${i}`, blockIds, exits, issue),
   );
@@ -387,8 +532,8 @@ function checkGraph(graph: unknown, issue: IssueReporter) {
         : [],
     ),
   );
-  checkFlowInput(graph.flowInput, targetableBlockIds, issue);
-  checkConnections(graph.connections, blockIds, exits, issue);
+  checkFlowInput(graph.flowInput, blockIds, targetableBlockIds, issue);
+  checkConnections(graph.connections, blockIds, checkFinish(graph.finish, issue), exits, issue);
 }
 
 const WORKSPACE_REF_LIMIT = 255;
@@ -424,9 +569,8 @@ function checkWorkspace(raw: unknown, issue: IssueReporter): FlowWorkspace | und
   return undefined;
 }
 
-/** A graph supplied at creation is validated exactly as a saved graph. */
 /** Checks a create or save body in one pass, so a reply lists every defect at once. */
-function checkFlowBody(input: unknown, required: boolean) {
+function checkFlowBody(input: unknown, required: boolean, blockLimit: BlockLimit) {
   const name = validateFlowName(input);
   if (!name.ok) return name;
   const raw = input as Record<string, unknown>;
@@ -437,7 +581,7 @@ function checkFlowBody(input: unknown, required: boolean) {
     (!Number.isSafeInteger(raw.expectedRevision) || (raw.expectedRevision as number) < 1)
   )
     issue("invalid_revision", "expectedRevision", "Include the revision you opened.");
-  if (raw.graph !== undefined) checkGraph(raw.graph, issue);
+  if (raw.graph !== undefined) checkGraph(raw.graph, blockLimit, issue);
   else if (required)
     issue("invalid_graph", "graph", "Supply blocks, connections and the Flow input block.");
   const workspace = raw.workspace === undefined ? undefined : checkWorkspace(raw.workspace, issue);
@@ -456,15 +600,22 @@ function checkFlowBody(input: unknown, required: boolean) {
     expectedRevision: raw.expectedRevision as number,
   };
 }
-export function validateCreateFlow(input: unknown): Result<CreateFlowInput> {
-  const checked = checkFlowBody(input, false);
+export function validateCreateFlow(
+  input: unknown,
+  source: "authoring" | "portable" = "authoring",
+): Result<CreateFlowInput> {
+  const checked = checkFlowBody(
+    input,
+    false,
+    source === "portable" ? "portable" : ORDINARY_BLOCK_LIMIT_WITH_FINISH,
+  );
   if (!checked.ok) return checked;
   const projectId = parseOwningProject(input);
   if (!projectId.ok) return projectId;
   return { ok: true, value: { ...checked.value, projectId: projectId.value } };
 }
 export function validateUpdateFlow(input: unknown): Result<UpdateFlowInput> {
-  const checked = checkFlowBody(input, true);
+  const checked = checkFlowBody(input, true, MAX_ORDINARY_BLOCKS);
   if (!checked.ok) return checked;
   const expectedProjectId = parseExpectedOwner(input);
   if (!expectedProjectId.ok) return expectedProjectId;
@@ -550,14 +701,15 @@ export function validateDuplicateFlow(input: unknown): Result<DuplicateFlowInput
   };
 }
 
-/**
- * Local exit names are stored trimmed, as Agent exit names are, so reports match them exactly;
- * Condition rule names likewise; Continuation prompts and Revisit instructions are stored trimmed,
- * as Agent prompts are.
- */
 function trimGraphText(graph: FlowGraphInput): FlowGraphInput {
   return {
     ...graph,
+    ...(graph.finish && {
+      finish: {
+        ...graph.finish,
+        endings: graph.finish.endings.map((ending) => ({ ...ending, name: ending.name.trim() })),
+      },
+    }),
     blocks: graph.blocks.map((block) => {
       if (block.kind === "agent")
         return {

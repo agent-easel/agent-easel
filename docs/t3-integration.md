@@ -413,8 +413,8 @@ A `waiting` report from an outdated instruction is refused with `WAITING_RETIRED
 Any harness session with Factory MCP registered can author definitions without a Block id or an active Run:
 
 - `factory_list_agents`, `factory_get_agent`, `factory_create_agent` and `factory_save_agent` list, read, create and save Agents, including a global Agent's [Project overrides](studio.md#agent-definitions); `factory_save_agent` requires the complete `projectOverrides` list.
-- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction` and `revisitContext` (`"keep"` or `"fresh"`), and Condition blocks their ordered `rules` and fixed `otherwise`, under the same [graph shape](studio.md#graph-shape) rules as Studio; the graph description explains arrival numbering, first-match selection and the Condition readiness rules.
-- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's live readiness, including `agent_model_required` for a block whose Agent Needs a model and the Condition rule-row and cycle findings. Studio checks that readiness as the draft changes and has no Check readiness button. The tool does not validate an unsaved draft or establish live execution readiness.
+- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction` and `revisitContext` (`"keep"` or `"fresh"`), Condition blocks their ordered `rules` and fixed `otherwise`, and the graph its [Finish block](studio.md#finish-block) `finish` with ordered `endings` and wires that enter an ending by `targetEndingId`, under the same [graph shape](studio.md#graph-shape) rules as Studio. Create and read keep ending IDs and per-ending wires unchanged; the graph description explains arrival numbering, first-match selection, the ending fields and the Condition and ending readiness rules.
+- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's live readiness, including `agent_model_required` for a block whose Agent Needs a model, the Condition rule-row and cycle findings, and the Finish ending findings. Studio checks that readiness as the draft changes and has no Check readiness button. The tool does not validate an unsaved draft or establish live execution readiness.
 - `factory_remove_agent` and `factory_remove_flow` remove an Agent or a Flow by id, exactly as Studio's [Agent removal](studio.md#agent-definitions) and [Flow removal](studio.md#removing-a-flow).
 - `factory_change_agent_owner` and `factory_change_flow_owner` take the id, `expectedProjectId` and the new `projectId` and perform [Change owner](studio.md#ownership).
 - `factory_preview_flow_duplicate` (`flowId`, optional `projectId`) answers a [Flow Duplicate](studio.md#ownership) plan and writes nothing; `factory_duplicate_flow` (`flowId`, optional `name`, the plan's `projectId`, `expectedRevision` and every planned Agent with its `choice`) commits it. `factory_duplicate_agent` (`agentId`, optional `name` and `projectId`) duplicates an Agent. An omitted `projectId` on the preview or Agent Duplicate keeps the source's owning Project.
@@ -540,10 +540,14 @@ Factory-launched Block workers report for their Block from any turn of their thr
 
 `factory_get_block({ blockId })` returns the Block's current visit, reason, exits, inputs and allowed transitions, also while
 Factory is still confirming the worker's launch. `exits` lists the exits the worker may finish with, each
-`{ id, name, description, messageRequired }`: its captured Agent revision's exits not hidden in the Flow, then the Flow-local
-exits. For a
+`{ id, name, description, messageRequired, endings }`: its captured Agent revision's exits not hidden in the Flow, then the Flow-local
+exits. `endings` lists the Finish endings the exit is wired directly to, each
+`{ id, name, description, output, outputDescription }`; an exit wired to a Required ending reports
+`messageRequired: true` for this Flow, and a blank `finished` report on it is `FEEDBACK_REQUIRED`. Endings reached through
+another Block are not listed. For a
 Continuation the reason is `continuation`, `prompt` is its captured prompt and `exits` is empty: the worker finishes
-it without an exit, with its response as the message. On a visit after the first to an Agent block whose
+it without an exit, with its response as the message; `output: { messageRequired, endings }` carries the same ending
+information for its single output. On a visit after the first to an Agent block whose
 [Revisit instruction](runner.md#revisit-instructions) is set, `revisitInstruction` is the captured instruction and
 `revisitRule` the conflict rule its message states, worded in
 [Revisit instructions](runner.md#revisit-instructions). Both are omitted on a first visit or when the instruction is
@@ -570,8 +574,10 @@ declaration is required, and Factory does not automatically fetch linked artifac
 format when the next step needs one; the reporting contract's message requirements still apply.
 
 `factory_get_run({ blockId })` returns the Run `id`, `number`, `title`, `input`, `state`, `startedAt` and each Block's state and latest result, plus each
-Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history.
-It grants no routing authority.
+Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history,
+and `result`: the [Run result](runner.md#reaching-an-ending) once the Run reached an ending, else null. A result holds
+`endingId`, `endingName`, `output` (the delivered text, null for an ending whose output is None), `outputMissing`,
+`sourceBlockId`, `exitId`, `authorBlockId`, `origin`, `deliveryId` and `acceptedAt`. It grants no routing authority.
 
 `factory_get_condition_arrivals({ blockId, conditionBlockId, limit?, cursor? })` reads one page of
 [Condition evidence](runs.md#conditions) for a Condition of the calling Block's Run: the same page, window, cursor and limits as

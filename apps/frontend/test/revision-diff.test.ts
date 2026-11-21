@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import type { FlowContent } from "../src/flow-draft.ts";
 import { comparedFlowLines } from "../src/flow-revision-content.ts";
+import type { FlowEnding } from "@t3-factory/contracts";
 
 import { diffRevisionLines } from "../src/revision-diff.ts";
 
@@ -44,6 +45,7 @@ it("a new Flow revision exposes Wait, Continuation and Condition edits in the co
     workspace: { mode: "checkout" },
     graph: {
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+      finish: { position: { x: 800, y: 0 }, endings: [] },
       connections: [],
       blocks: [
         { ...blocks[0], kind: "wait", duration: { amount, unit: "minutes" } },
@@ -78,6 +80,7 @@ it("a new Flow revision exposes an Agent block's revisitContext change in the co
     workspace: { mode: "checkout" },
     graph: {
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["poll"] },
+      finish: { position: { x: 800, y: 0 }, endings: [] },
       connections: [],
       blocks: [
         {
@@ -103,5 +106,49 @@ it("a new Flow revision exposes an Agent block's revisitContext change in the co
   // Assert
   expect(theirs.filter((_, index) => theirsChanged[index])).toStrictEqual([
     "    On revisit  Fresh context",
+  ]);
+});
+
+it("the compared revisions expose edits to Finish position and the ending contract", () => {
+  // Arrange
+  const oldEnding: FlowEnding = {
+    id: "delivered",
+    name: "Delivered",
+    description: "Work is ready",
+    output: "optional",
+    outputDescription: "Reviewer name",
+  };
+  const flow = (x: number, ending: FlowEnding): FlowContent => ({
+    name: "Delivery",
+    workspace: { mode: "checkout" },
+    graph: {
+      flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
+      finish: { position: { x, y: 0 }, endings: [ending] },
+      blocks: [],
+      connections: [],
+    },
+  });
+  const mine = comparedFlowLines(flow(600, oldEnding), []);
+  const theirs = comparedFlowLines(
+    flow(800, {
+      ...oldEnding,
+      name: "In review",
+      description: "PR opened",
+      output: "required",
+      outputDescription: "PR URL",
+    }),
+    [],
+  );
+
+  // Act
+  const { theirsChanged } = diffRevisionLines(mine, theirs);
+
+  // Assert
+  expect(theirs.filter((_, index) => theirsChanged[index])).toStrictEqual([
+    "    Position  800, 0",
+    expect.objectContaining({ text: "    Ending  In review" }),
+    "      PR opened",
+    "    Output  required",
+    "      PR URL",
   ]);
 });

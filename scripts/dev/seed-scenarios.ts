@@ -15,7 +15,8 @@ export type DemoFlows = Record<
   | "parallelWait"
   | "humanWait"
   | "conditionRounds"
-  | "firstApproval",
+  | "firstApproval"
+  | "endings",
   string
 >;
 type Repository = NonNullable<ThreadFacts["repository"]>;
@@ -63,6 +64,7 @@ export type SeedScenario = {
       /** The result of the Agent the Condition hands later approvals to. */
       extraApproval: Report;
     }
+  | { state: "ending reached"; result: Report }
   | { state: "delegated work pending"; repository: Repository; delegations: number }
   | ({ grill: Report; approval: string } & (
       | { state: "continuation prompt sent" }
@@ -404,6 +406,18 @@ export const seedScenarioList: readonly SeedScenario[] = [
     extraApproval: {
       exit: "Done",
       message: "Noted the accessibility approval in the share dialog release notes.",
+    },
+  },
+  {
+    key: "ending-reached",
+    title: "Ended · Shipped while an alternative was stopped",
+    flow: "endings",
+    state: "ending reached",
+    prompt:
+      "Ship the Atlas search ranking fix. One worker ships it while another explores an alternative; whichever finishes first ends the Run.",
+    result: {
+      exit: "Done",
+      message: "https://github.com/example/atlas/pull/44",
     },
   },
   {

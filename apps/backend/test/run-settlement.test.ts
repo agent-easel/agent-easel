@@ -455,7 +455,7 @@ it("an unresolved manual settlement refuses Human answers without asking for inp
   });
 });
 
-it("confirming Settle stops every worker and settles the Run once fresh reads show them finished", async (c) => {
+it("confirming Settle stops every worker and records manual settlement once fresh reads show them finished", async (c) => {
   // Arrange
   const setup = await prepared(c, fanOutFlow);
   const [first, second] = await twoWorkersStarted(setup.world, setup.input);
@@ -491,6 +491,7 @@ it("confirming Settle stops every worker and settles the Run once fresh reads sh
     ["worker-stopped", "second"],
     ["run-settled", null],
   ]);
+  expect(run.value.events.find((event) => event.kind === "run-settled")?.causeId).toBe("manual");
   expect(run.value.attention).toStrictEqual([]);
 });
 

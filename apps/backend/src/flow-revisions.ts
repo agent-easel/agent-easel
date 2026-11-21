@@ -2,7 +2,9 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/sql/SqlClient";
 import {
   CONDITION_OTHERWISE_ID,
+  FINISH_BLOCK_ID,
   type AgentRevisitContext,
+  type EndingOutput,
   type FlowBlock,
   type FlowGraph,
   type FlowWorkspace,
@@ -64,7 +66,17 @@ type ConnectionRow = {
   flow_revision_id: string;
   source_block_id: string;
   exit_id: string;
-  target_block_id: string;
+  target_block_id: string | null;
+  target_ending_id: string | null;
+};
+type FinishRow = { flow_revision_id: string; x: number; y: number };
+type EndingRow = {
+  flow_revision_id: string;
+  ending_id: string;
+  name: string;
+  description: string;
+  output: EndingOutput;
+  output_description: string;
 };
 type TargetRow = { flow_revision_id: string; block_id: string };
 
@@ -141,11 +153,24 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
       }),
     { discard: true },
   );
+  yield* sql`INSERT INTO flow_revision_finish (flow_revision_id, x, y)
+    VALUES (${revisionId}, ${graph.finish.position.x}, ${graph.finish.position.y})`;
+  yield* Effect.forEach(
+    graph.finish.endings,
+    (ending, ordinal) =>
+      sql`INSERT INTO flow_revision_endings (flow_revision_id, ending_id, ordinal, name, description, output, output_description)
+        VALUES (${revisionId}, ${ending.id}, ${ordinal}, ${ending.name}, ${ending.description},
+          ${ending.output}, ${ending.outputDescription})`,
+    { discard: true },
+  );
   yield* Effect.forEach(
     graph.connections,
-    (connection, ordinal) =>
-      sql`INSERT INTO flow_revision_connections (flow_revision_id, ordinal, source_block_id, exit_id, target_block_id)
-        VALUES (${revisionId}, ${ordinal}, ${connection.sourceBlockId}, ${connection.exitId}, ${connection.targetBlockId})`,
+    (connection, ordinal) => {
+      const toFinish = connection.targetEndingId !== undefined;
+      return sql`INSERT INTO flow_revision_connections (flow_revision_id, ordinal, source_block_id, exit_id, target_block_id, target_ending_id)
+        VALUES (${revisionId}, ${ordinal}, ${connection.sourceBlockId}, ${connection.exitId},
+          ${toFinish ? null : connection.targetBlockId}, ${connection.targetEndingId ?? null})`;
+    },
     { discard: true },
   );
   yield* Effect.forEach(
@@ -310,20 +335,26 @@ const readGraphs = Effect.fnUntraced(function* (
 ) {
   if (!revisions.length) return new Map<string, FlowGraph>();
   const ids = sql.in(revisions.map((revision) => revision.id));
-  const [blocks, exits, hidden, rules, connections, targets] = yield* Effect.all([
-    sql<BlockRow>`SELECT * FROM flow_revision_blocks WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-    sql<ExitRow>`SELECT * FROM flow_revision_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-    sql<HiddenExitRow>`SELECT * FROM flow_revision_hidden_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-    sql<ConditionRuleRow>`SELECT * FROM flow_revision_condition_rules WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-    sql<ConnectionRow>`SELECT * FROM flow_revision_connections WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-    sql<TargetRow>`SELECT * FROM flow_revision_input_targets WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
-  ]);
+  const [blocks, exits, hidden, rules, connections, targets, finishes, endings] = yield* Effect.all(
+    [
+      sql<BlockRow>`SELECT * FROM flow_revision_blocks WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<ExitRow>`SELECT * FROM flow_revision_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<HiddenExitRow>`SELECT * FROM flow_revision_hidden_exits WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<ConditionRuleRow>`SELECT * FROM flow_revision_condition_rules WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<ConnectionRow>`SELECT * FROM flow_revision_connections WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<TargetRow>`SELECT * FROM flow_revision_input_targets WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+      sql<FinishRow>`SELECT * FROM flow_revision_finish WHERE flow_revision_id IN ${ids}`,
+      sql<EndingRow>`SELECT * FROM flow_revision_endings WHERE flow_revision_id IN ${ids} ORDER BY ordinal`,
+    ],
+  );
   const blocksByRevision = groupBy(blocks, byRevision);
   const exitsByBlock = groupBy(exits, byBlock);
   const hiddenByBlock = groupBy(hidden, byBlock);
   const rulesByBlock = groupBy(rules, byBlock);
   const connectionsByRevision = groupBy(connections, byRevision);
   const targetsByRevision = groupBy(targets, byRevision);
+  const finishByRevision = new Map(finishes.map((finish) => [finish.flow_revision_id, finish]));
+  const endingsByRevision = groupBy(endings, byRevision);
   return new Map(
     revisions.map((revision): [string, FlowGraph] => [
       revision.id,
@@ -339,7 +370,9 @@ const readGraphs = Effect.fnUntraced(function* (
         connections: (connectionsByRevision.get(revision.id) ?? []).map((connection) => ({
           sourceBlockId: connection.source_block_id,
           exitId: connection.exit_id,
-          targetBlockId: connection.target_block_id,
+          ...(connection.target_block_id === null
+            ? { targetBlockId: FINISH_BLOCK_ID, targetEndingId: connection.target_ending_id! }
+            : { targetBlockId: connection.target_block_id }),
         })),
         flowInput: {
           position: { x: revision.input_x, y: revision.input_y },
@@ -347,10 +380,28 @@ const readGraphs = Effect.fnUntraced(function* (
             (target) => target.block_id,
           ),
         },
+        finish: finishOf(
+          finishByRevision.get(revision.id),
+          endingsByRevision.get(revision.id) ?? [],
+        ),
       },
     ]),
   );
 });
+
+function finishOf(row: FinishRow | undefined, endings: readonly EndingRow[]): FlowGraph["finish"] {
+  if (!row) throw new Error("A Flow revision has no Finish block");
+  return {
+    position: { x: row.x, y: row.y },
+    endings: endings.map((ending) => ({
+      id: ending.ending_id,
+      name: ending.name,
+      description: ending.description,
+      output: ending.output,
+      outputDescription: ending.output_description,
+    })),
+  };
+}
 
 /** The current saved revision number, absent once the Flow is removed. */
 export const currentFlowRevisionNumber = Effect.fnUntraced(function* (

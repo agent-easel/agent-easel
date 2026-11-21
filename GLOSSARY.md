@@ -58,7 +58,7 @@ Where all workers of one Run work, fixed at Start: the project checkout, or for 
 _Avoid_: A worktree per worker.
 
 **Flow block**:
-A constituent element of a flow: the Flow input block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
+A constituent element of a flow: the Flow input block, the Finish block, an agent block, a human step, a Wait, a Continuation or a Condition. An agent block may carry a Revisit instruction.
 _Avoid_: Puzzle as the canonical name; agent when referring to all block types.
 
 **Agent**:
@@ -137,7 +137,7 @@ An agent's explicit report of its block's state and, where applicable, a selecte
 The newest accepted `finished` report for one Block activation, sent from any turn of
 the Block's worker thread with its Block id. A later `finished` report for the same activation replaces it as a new
 version; earlier versions stay in the Run's history unchanged. Acceptance and the worker thread being finished are
-separate facts.
+separate facts. It is a Block's result, never the Run's outcome; see Run result.
 
 **Run coordinator**:
 Retired. Factory no longer saves a model selection for a primary Run conversation. A closed Run may still display one when it was stored before this contract.
@@ -262,6 +262,18 @@ _Avoid_: Initial input, initial prompt as a separate concept
 The single, always-present Flow block representing the Flow input. It has one unnamed output and no input; the Agent blocks it connects to are the ones that start a Run, independently and in parallel.
 _Avoid_: Start block, entry, entry Agent
 
+**Finish block**:
+The single, always-present Flow block on which the author declares the Flow's endings, placed right of the other blocks by default. It cannot be removed, has the fixed label Finish, has no worker and no exits, and the Flow input never connects to it. A Flow with no endings keeps its unconnected exits as its only branch ends.
+_Avoid_: End block, Join block, terminal block
+
+**Ending**:
+One declared way a Flow can end, in the Finish block's ordered list: a stable id, a name, an optional description and an output setting (None, Optional or Required) with a description of the expected output. Wires from any exit or output, Condition Otherwise included, enter a specific ending by its id, so renaming keeps them; several wires may enter one ending. A blank, duplicate or unwired ending is a readiness gap. An ending is not a Block exit, and an unconnected exit is not an ending.
+_Avoid_: outcome, result type, terminal exit, End
+
+**Run result**:
+A Run's one accepted outcome: the first released delivery into an ending that the Run accepts. It records the ending with its captured name, the delivered text exactly (none for an ending whose output is None), whether a Required ending got blank text (Output missing), the source block and exit or output, the block that wrote the text (a Human step for its answer, also after forwarding), worker provenance, the delivery and the acceptance time. It is never changed by a later report and is kept through Archive. A Run with no endings, or one that ended without reaching one, has no Run result.
+_Avoid_: Final result (a Block activation's result), Run output, Finished
+
 **Authorization context**:
 A durable Factory reference binding accepted work to one T3 endpoint, OAuth grant
 lineage and environment. Reconnection and refresh preserve it; changed grants,
@@ -279,7 +291,7 @@ pending on that Block; acceptance alone does not start work. A held handoff is c
 replaced before release. Each recipient and repeated arrival proceeds independently, using the routing rules of the Run's captured Flow revision.
 
 **Handoff gate**:
-A Run's switch that permits releasing Handoffs, forwarding Wait arrivals and dispatching new work. It is open from Start; a confirmed manual settlement and Archive close it for good, and automatic settlement leaves it open so owed Handoffs are still delivered.
+A Run's switch that permits releasing Handoffs, forwarding Wait arrivals and dispatching new work. It is open from Start; a confirmed manual settlement, Archive and accepting the Run result close it for good, and automatic settlement leaves it open so owed Handoffs are still delivered.
 _Avoid_: Treating Settled as a closed gate.
 
 **Run generation**:
@@ -301,7 +313,8 @@ visited Block has its Final result with no later working report, every Human
 occurrence is answered, no Wait arrival is pending, nothing is owed or pending and every
 worker thread is finished; any accepted report from one of its Blocks then returns it to
 Active, while chat without a report does not. The user can also settle an Active or Snoozed
-Run by manual settlement, which ends its automatic work for good. Navigation groups Settled
+Run by manual settlement, which ends its automatic work for good. A Run that reaches an ending
+stops and settles the same way with reason `finish`, without a dialog, and never returns to Active. Navigation groups Settled
 Runs together. On a Run, settled attention matters no longer await attention and keep
 their appearance and settlement times and reasons; settling attention does not settle the Run.
 _Avoid_: Finished (the retired permanent outcome).
@@ -315,7 +328,8 @@ every worker finished. Until then the Run stays Active and its settlement is **s
 or **unresolved** with the affected workers and a retry. Settling cancels owed automatic
 work, pending Human occurrences and pending Wait arrivals without inventing answers,
 settles pending attention as `manual-settlement` and shows unfinished Blocks as stopped. Later reports change nothing and never return the
-Run to Active.
+Run to Active. Reaching an ending runs the same confirmed path, authorized by the Flow, and records
+`finish` instead of `manual`, also on pending attention.
 _Avoid_: Stop Run, Stopped, pause, Resume (none exist; an unresolved settlement is not a lifecycle state).
 
 **T3 thread settlement**:

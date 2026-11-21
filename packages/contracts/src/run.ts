@@ -460,8 +460,8 @@ export interface RunDetail extends RunSummary {
   readonly workspace: RunWorkspaceDetail;
   readonly activations: readonly RunActivation[];
   readonly threadBindings: readonly RunThreadBinding[];
-  /** Closed by Archive and by accepting a manual settlement. */
   readonly gateOpen: boolean;
+  readonly result: RunResult | null;
   /** The confirmed manual settlement in progress; null once Settled, when Archived or never. */
   readonly settlement: RunSettlement | null;
   readonly generation: number;
@@ -510,6 +510,7 @@ export interface RunDetail extends RunSummary {
   readonly intents: readonly {
     readonly id: string;
     readonly blockId: string;
+    readonly targetEndingId: string | null;
     readonly reportId: string | null;
     readonly occurrenceId: string | null;
     readonly sourceBlockId: string | null;
@@ -715,6 +716,19 @@ export interface WorkerProvenance {
   readonly threadId: string;
 }
 
+export interface RunResult {
+  readonly endingId: string;
+  readonly endingName: string;
+  readonly output: string | null;
+  readonly outputMissing: boolean;
+  readonly sourceBlockId: string;
+  readonly exitId: string;
+  readonly authorBlockId: string;
+  readonly origin: WorkerProvenance | null;
+  readonly deliveryId: string;
+  readonly acceptedAt: string;
+}
+
 /**
  * One accepted delivery to a Wait, held until its own deadline and then forwarded unchanged to
  * every recipient of the Wait's output. Parallel and repeated arrivals stay independent.
@@ -782,6 +796,7 @@ export interface ConditionArrivalEvidence extends ConditionSelection {
   /** Every recipient of the selected output; empty when that output is unwired. */
   readonly recipients: readonly {
     readonly blockId: string;
+    readonly targetEndingId: string | null;
     readonly disposition: ConditionRecipientDisposition;
   }[];
 }

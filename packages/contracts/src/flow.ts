@@ -89,6 +89,20 @@ export interface FlowConnection {
   readonly sourceBlockId: string;
   readonly exitId: string;
   readonly targetBlockId: string;
+  readonly targetEndingId?: string;
+}
+export type EndingOutput = "none" | "optional" | "required";
+export interface FlowEnding {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly output: EndingOutput;
+  readonly outputDescription: string;
+}
+export const FINISH_BLOCK_ID = "finish";
+export interface FlowFinishBlock {
+  readonly position: { readonly x: number; readonly y: number };
+  readonly endings: readonly FlowEnding[];
 }
 /** The single, always-present source of a Flow; its targets start a Run in parallel. */
 export interface FlowInputBlock {
@@ -101,6 +115,7 @@ export interface FlowGraph {
   readonly blocks: readonly FlowBlock[];
   readonly connections: readonly FlowConnection[];
   readonly flowInput: FlowInputBlock;
+  readonly finish: FlowFinishBlock;
 }
 type OptionalPosition<B extends { readonly position: FlowBlock["position"] }> = B extends unknown
   ? Omit<B, "position"> & { readonly position?: B["position"] }
@@ -118,6 +133,7 @@ export interface FlowGraphInput {
   readonly blocks: readonly FlowBlockInput[];
   readonly connections: readonly FlowConnection[];
   readonly flowInput: OptionalPosition<FlowInputBlock>;
+  readonly finish?: OptionalPosition<FlowFinishBlock>;
 }
 /** Where a new worktree starts: the Project repository's default branch or a named Git ref. */
 export type FlowWorkspaceBase =

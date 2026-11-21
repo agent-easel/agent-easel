@@ -3,6 +3,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import { cancelTitleGeneration } from "./title-generations.ts";
 import type { HumanRow } from "../runner-types.ts";
 import { settleAttention } from "./attention.ts";
+import { CANCELLED_ON_FINISH } from "./endings.ts";
 import { writeBlockState } from "./blocks.ts";
 import { clearSpentArrivalMessages } from "./handoffs.ts";
 import type { DeliveryRecord } from "./records.ts";
@@ -12,10 +13,10 @@ import { appendTimelineEvent } from "./steps.ts";
 const pending: DeliveryState = "pending";
 const cancelled: DeliveryState = "cancelled";
 
-/** The user action that ends a Run's automatic work, with the reasons it records. */
 const CUTOFFS = {
   archive: { intentProblem: "cancelled-on-Archive", attentionReason: "archived" },
   settle: { intentProblem: "cancelled-on-Settle", attentionReason: "manual-settlement" },
+  finish: { intentProblem: CANCELLED_ON_FINISH, attentionReason: "finish" },
 } as const;
 
 /** Nothing unsent leaves the Run any more: pending launches, sends and handoffs are cancelled,
@@ -98,7 +99,6 @@ export function cancelOwedWork(
       { problem: null },
     );
     // Archive clears every Wait and Condition message, including those kept for their recipients;
-    // manual settlement keeps the ones a recipient's visit still reads. Outcomes, deadlines,
     // numbers, selections and identities stay.
     if (cutoff === "archive") {
       yield* sql`UPDATE wait_arrivals SET message=NULL WHERE run_id=${id}`;

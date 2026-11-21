@@ -54,6 +54,7 @@ export function comparedFlowLines(
   agents: readonly AgentDefinition[],
 ): RevisionLine[] {
   const blocks = new Map(graph.blocks.map((block) => [block.id, block]));
+  const endings = new Map(graph.finish.endings.map((ending) => [ending.id, ending.name]));
   const byAgentId = new Map(agents.map((agent) => [agent.id, agent]));
   const agentFor = (block: FlowBlock) =>
     block.kind === "agent" && block.agentId ? byAgentId.get(block.agentId) : undefined;
@@ -77,6 +78,14 @@ export function comparedFlowLines(
       `    Position  ${positionLabel(block.position)}`,
       ...blockSettings(block, agentFor(block)),
     ]),
+    "  Finish",
+    `    Position  ${positionLabel(graph.finish.position)}`,
+    ...graph.finish.endings.flatMap((ending) => [
+      revisionLine(`    Ending  ${ending.name || "Unnamed ending"}`, ending.id),
+      ...textLines("Description", ending.description),
+      `    Output  ${ending.output}`,
+      ...textLines("Output description", ending.outputDescription),
+    ]),
     "",
     "Connections",
     ...graph.flowInput.targetBlockIds.map((id) =>
@@ -90,10 +99,11 @@ export function comparedFlowLines(
         (source?.kind === "wait" || source?.kind === "continuation"
           ? "Output"
           : "Unavailable exit");
-      return revisionLine(
-        `  ${blockName(source)} · ${output} → ${blockName(blocks.get(wire.targetBlockId))}`,
-        wire,
-      );
+      const target =
+        wire.targetEndingId !== undefined
+          ? `Finish · ${endings.get(wire.targetEndingId) || "Unnamed ending"}`
+          : blockName(blocks.get(wire.targetBlockId));
+      return revisionLine(`  ${blockName(source)} · ${output} → ${target}`, wire);
     }),
   ];
 }

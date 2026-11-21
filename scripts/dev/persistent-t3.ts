@@ -23,6 +23,7 @@ type SavedState = Omit<Snapshot, "version" | "settledThreads" | "unendedStops"> 
 /** A local simulated engine. Its accepted keys outlive the Factory process. */
 export class PersistentT3 extends ControlledT3 {
   private readonly statePath: string;
+  private readonly persist: boolean;
   declare readonly threads: PersistentT3Threads;
 
   protected override makeProjects() {
@@ -33,9 +34,10 @@ export class PersistentT3 extends ControlledT3 {
     return new PersistentT3Threads(this.connection, projectWorkspace, () => this.save());
   }
 
-  constructor(home: string, restore: boolean) {
+  constructor(home: string, restore: boolean, persist = true) {
     super();
     this.statePath = join(home, "demo-engine.json");
+    this.persist = persist;
     this.connection.authorized = true;
     this.connection.authorize = async () => {
       this.connection.authorized = true;
@@ -96,6 +98,7 @@ export class PersistentT3 extends ControlledT3 {
   }
 
   save() {
+    if (!this.persist) return;
     writeState(this.statePath, this.snapshot());
   }
 }
@@ -179,9 +182,10 @@ class PersistentT3Threads extends ControlledT3Threads {
   }
 
   async advance() {
+    let changed = false;
     for (const { payload, reference } of this.sends.values())
-      this.startQueuedSend(payload.threadId, reference.runId);
-    this.save();
+      if (this.startQueuedSend(payload.threadId, reference.runId)) changed = true;
+    if (changed) this.save();
   }
 
   override async stopThread(

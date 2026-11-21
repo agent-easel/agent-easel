@@ -11,6 +11,7 @@ export function geometryGraph(): CanvasGraph {
   };
   return {
     flowInput: { position: { x: -100, y: 0 }, targetBlockIds: ["target"] },
+    finish: { position: { x: 800, y: 0 }, endings: [] },
     blocks: [
       block,
       ...Array.from({ length: 9 }, (_, index): CanvasBlock => ({
@@ -57,6 +58,7 @@ export function wiringGraph(): CanvasGraph {
   return canvasGraph(
     {
       flowInput: { position: { x: -300, y: 0 }, targetBlockIds: ["target", "target", "a"] },
+      finish: { position: { x: 800, y: 0 }, endings: [] },
       blocks: [
         { id: "target", name: "Target", kind: "human", position: { x: 600, y: 300 } },
         agentBlock("a:b", "c", 0),
@@ -103,6 +105,7 @@ export function sizeLimitConditionGraph(): CanvasGraph {
   return canvasGraph(
     {
       flowInput: { position: { x: 40, y: 60 }, targetBlockIds: ["worker"] },
+      finish: { position: { x: 800, y: 0 }, endings: [] },
       blocks: [
         { ...agentBlock("worker", "done", 80), position: { x: 80, y: 260 } },
         {
