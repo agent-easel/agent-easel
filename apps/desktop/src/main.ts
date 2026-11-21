@@ -341,6 +341,11 @@ function saveWindowBounds(): Promise<unknown> {
   return store.update({ windowBounds }).catch(() => undefined);
 }
 
+function persistWindowBounds(): Promise<void> {
+  void saveWindowBounds();
+  return store.settled();
+}
+
 function trayImage() {
   const image = nativeImage.createFromPath(join(here, "resources", "trayTemplate.png"));
   image.setTemplateImage(true);
@@ -495,9 +500,9 @@ async function installUpdate(): Promise<DesktopResult> {
   installingUpdate = true;
   try {
     await backend.stop();
+    await persistWindowBounds();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
-    await saveWindowBounds();
     quitting = true;
     updates.install();
     return { ok: true };
@@ -695,7 +700,7 @@ if (!app.requestSingleInstanceLock()) {
     if (quitting) return;
     event.preventDefault();
     const finish = () =>
-      void saveWindowBounds().then(() => {
+      void persistWindowBounds().then(() => {
         stopAttention();
         approvedClient.close();
         quitting = true;
@@ -761,7 +766,7 @@ async function start() {
     void backend
       .stop()
       .catch(() => undefined)
-      .then(saveWindowBounds)
+      .then(persistWindowBounds)
       .finally(() => {
         stopAttention();
         approvedClient.close();

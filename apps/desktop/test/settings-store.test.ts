@@ -109,3 +109,23 @@ it("a stored window position keeps only its size and position, never other windo
   // Assert
   expect(store.get().windowBounds).toStrictEqual({ x: 10, y: 20, width: 1000, height: 700 });
 });
+
+it("waiting for saved settings also waits for a change made while an earlier save is still being written", async (context) => {
+  // Arrange
+  const directory = await profileDirectory(context);
+  const store = await SettingsStore.open(directory);
+  void store.update({ windowBounds: { x: 0, y: 0, width: 1000, height: 700 } });
+  const settled = store.settled();
+  void store.update({ windowBounds: { x: 300, y: 140, width: 1180, height: 760 } });
+
+  // Act
+  await settled;
+
+  // Assert
+  expect((await SettingsStore.open(directory)).get().windowBounds).toStrictEqual({
+    x: 300,
+    y: 140,
+    width: 1180,
+    height: 760,
+  });
+});

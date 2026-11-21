@@ -152,4 +152,12 @@ export class SettingsStore {
     this.writes = write.catch(() => undefined);
     return write;
   }
+
+  async settled(): Promise<void> {
+    let pending: Promise<unknown>;
+    do {
+      pending = this.writes;
+      await pending;
+    } while (pending !== this.writes);
+  }
 }
