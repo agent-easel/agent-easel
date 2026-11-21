@@ -1,5 +1,65 @@
 # Changelog
 
+## [0.9.0](https://github.com/alimek/t3-factory/compare/v0.8.0...v0.9.0) (2026-11-21)
+
+
+### Features
+
+* **agents:** Project overrides of a global Agent's Worker ([#491](https://github.com/alimek/t3-factory/issues/491)) ([cc114af](https://github.com/alimek/t3-factory/commit/cc114afc488fc1b32356bbe2ddb09c33ec68fc57))
+* **appearance:** follow the system appearance by default ([#513](https://github.com/alimek/t3-factory/issues/513)) ([#590](https://github.com/alimek/t3-factory/issues/590)) ([dda7ee3](https://github.com/alimek/t3-factory/commit/dda7ee308b06fd754d23cab97d9c45789e76f276))
+* **definitions:** Project-owned Flows and Agents ([#484](https://github.com/alimek/t3-factory/issues/484)) ([3e29672](https://github.com/alimek/t3-factory/commit/3e2967244fcf5eac8a8d7633f82c92a79c02f2c8))
+* **e2e:** contact-sheet diff for Before/After UI evidence ([#592](https://github.com/alimek/t3-factory/issues/592)) ([603c29e](https://github.com/alimek/t3-factory/commit/603c29ee4692806c7e8c1961cafc8e89f52a0858))
+* **flows:** expose Run id/startedAt in factory_get_run and add fresh-context revisits ([#645](https://github.com/alimek/t3-factory/issues/645)) ([05307af](https://github.com/alimek/t3-factory/commit/05307afc728829cc05dc1d5ff572d8dfbe199cdc))
+* **flows:** Finish block with named endings and one Run result ([#634](https://github.com/alimek/t3-factory/issues/634)) ([aae6cb1](https://github.com/alimek/t3-factory/commit/aae6cb14d85689b1172ebf39aaf3770226cc912c))
+* **pr:** show UI evidence as a side-by-side Before | After table ([#568](https://github.com/alimek/t3-factory/issues/568)) ([2efefee](https://github.com/alimek/t3-factory/commit/2efefee35e7770a3897c0f2208c9efd8efaf3a87))
+* **reporting:** install Factory reporting for Antigravity ([#635](https://github.com/alimek/t3-factory/issues/635)) ([c2ba340](https://github.com/alimek/t3-factory/commit/c2ba340552660ff783f350febe0ebab36b0f7d3d))
+* **reporting:** install Factory reporting for Mistral Vibe ([#641](https://github.com/alimek/t3-factory/issues/641)) ([f9c0cae](https://github.com/alimek/t3-factory/commit/f9c0caefb131dc0fe25348330aed4db327734e86))
+* **runner:** synchronize T3 worker titles with Runs ([#643](https://github.com/alimek/t3-factory/issues/643)) ([8cda5fc](https://github.com/alimek/t3-factory/commit/8cda5fcca86cf18cf7314b692e23db282d650a01))
+* **runs:** highlight a card's outgoing connections on the Execution canvas ([#521](https://github.com/alimek/t3-factory/issues/521)) ([#576](https://github.com/alimek/t3-factory/issues/576)) ([7ff59bf](https://github.com/alimek/t3-factory/commit/7ff59bffa0ba867665b8e29be29bc8ddd81aef68))
+* **runs:** render Agent-written text as Markdown, with readable Needs input cards ([#541](https://github.com/alimek/t3-factory/issues/541)) ([#554](https://github.com/alimek/t3-factory/issues/554)) ([6ced339](https://github.com/alimek/t3-factory/commit/6ced3394fd1f3f6a5ed6ba869cd3b61b221b45c7))
+* **runs:** surface overdue Block progress and warn before starting completed issues ([#596](https://github.com/alimek/t3-factory/issues/596)) ([8fd72ca](https://github.com/alimek/t3-factory/commit/8fd72ca5d979b3f7d72e1f765aed7a851a844b00))
+* **setup:** guided First-run setup for T3 connection and agent install ([#606](https://github.com/alimek/t3-factory/issues/606)) ([69bbf92](https://github.com/alimek/t3-factory/commit/69bbf922bee7b5f6071999e94f3d81e407789cef))
+* **studio:** quieter Agent editor with a header model picker, and a tidier Flow library ([#497](https://github.com/alimek/t3-factory/issues/497)) ([91b29b9](https://github.com/alimek/t3-factory/commit/91b29b9c24577bff575e7c36c5f13b7e9e47f466))
+* **triggers:** Factory MCP tools to inspect, manage and check Triggers ([#616](https://github.com/alimek/t3-factory/issues/616)) ([d05c9de](https://github.com/alimek/t3-factory/commit/d05c9de00acaec10492a7a43e88afcf0e6b6bc3e))
+* **triggers:** start Runs from GitHub issues marked ready ([#485](https://github.com/alimek/t3-factory/issues/485)) ([af27f14](https://github.com/alimek/t3-factory/commit/af27f143d7154f97a62c96268d3f6a5d389ad20f))
+* **ui:** ChoiceMenu for every dropdown and SecretField for the address-changed key ([#534](https://github.com/alimek/t3-factory/issues/534)) ([#562](https://github.com/alimek/t3-factory/issues/562)) ([cd268e6](https://github.com/alimek/t3-factory/commit/cd268e6f5331dfafc133962198b73c60258ce720))
+* **ui:** one design system across Runs, Studio and Settings (UI review [#506](https://github.com/alimek/t3-factory/issues/506)) ([#539](https://github.com/alimek/t3-factory/issues/539)) ([d56e551](https://github.com/alimek/t3-factory/commit/d56e5515888d9846cc3058898613386f15b38d71))
+* **ui:** one shared EmptyState for every dashed empty state ([#535](https://github.com/alimek/t3-factory/issues/535)) ([#569](https://github.com/alimek/t3-factory/issues/569)) ([087bb97](https://github.com/alimek/t3-factory/commit/087bb97d48c3662d65cb438b3df7eda5c7a9ae08))
+* **ui:** one shared focus ring and a NavRow primitive ([#532](https://github.com/alimek/t3-factory/issues/532)) ([#591](https://github.com/alimek/t3-factory/issues/591)) ([03234c1](https://github.com/alimek/t3-factory/commit/03234c10bccb172d6a7c43ed74a940eaa6625985))
+* **ui:** one shared Studio editor header ([#533](https://github.com/alimek/t3-factory/issues/533)) ([#561](https://github.com/alimek/t3-factory/issues/561)) ([d48762f](https://github.com/alimek/t3-factory/commit/d48762f2cf70e03925a028128b412dbed4733634))
+* **ui:** one shared TextLink for text links and link-style actions ([#531](https://github.com/alimek/t3-factory/issues/531)) ([#553](https://github.com/alimek/t3-factory/issues/553)) ([9e08e58](https://github.com/alimek/t3-factory/commit/9e08e58db2552195c6795690c6bf2aadd4ade27d))
+* **ui:** one Surface primitive for bordered cards and containers ([#538](https://github.com/alimek/t3-factory/issues/538)) ([#577](https://github.com/alimek/t3-factory/issues/577)) ([d06b2d4](https://github.com/alimek/t3-factory/commit/d06b2d40ecbb5cf29bceae028d635a3efff69289))
+* **ui:** shortcuts sheet on the shared wide dialog size ([#537](https://github.com/alimek/t3-factory/issues/537)) ([#570](https://github.com/alimek/t3-factory/issues/570)) ([9a0d6eb](https://github.com/alimek/t3-factory/commit/9a0d6eb555d4709c858d6cd9d6fc892388602ea0))
+* **ui:** TextLink takes any trailing icon; reader links on TextLink; drop Button link variant ([#552](https://github.com/alimek/t3-factory/issues/552)) ([#588](https://github.com/alimek/t3-factory/issues/588)) ([301f64c](https://github.com/alimek/t3-factory/commit/301f64c36a9a1c82ef6b5a3897da7e0c104c12ed))
+
+
+### Bug Fixes
+
+* **backend:** prevent T3 schema validator memory growth ([#540](https://github.com/alimek/t3-factory/issues/540)) ([4821b91](https://github.com/alimek/t3-factory/commit/4821b9106579c4d9526f4c3d377b3c9bb781a8da))
+* **backend:** release expired request and operation state ([#546](https://github.com/alimek/t3-factory/issues/546)) ([581a5e0](https://github.com/alimek/t3-factory/commit/581a5e027cd790891490e58ef29fa60ec50eb9d2))
+* **canvas:** draw selected authoring blocks and image prompts at their reserved height ([#503](https://github.com/alimek/t3-factory/issues/503)) ([a529bef](https://github.com/alimek/t3-factory/commit/a529befbab7e975d85aca4357ab1fcd70df5cb87))
+* **ci:** pass comment ratchet base in beta and desktop build workflows ([#631](https://github.com/alimek/t3-factory/issues/631)) ([5411ef1](https://github.com/alimek/t3-factory/commit/5411ef17547ecc756bd8b6fa94bdcbb2cf16d583))
+* **desktop:** account for First-run setup in the packaged probe ([#617](https://github.com/alimek/t3-factory/issues/617)) ([d0f0faa](https://github.com/alimek/t3-factory/commit/d0f0faa6a588545ceba2e48c6c743446b6b7cd3c))
+* **desktop:** open Studio below the title bar that holds the macOS window controls ([#609](https://github.com/alimek/t3-factory/issues/609)) ([83c08bb](https://github.com/alimek/t3-factory/commit/83c08bbb45844ea459824c52f59b79d36f069816))
+* **flow-layout:** resolve the bundled ELK constructor without a type assertion ([#644](https://github.com/alimek/t3-factory/issues/644)) ([99812ff](https://github.com/alimek/t3-factory/commit/99812ffe71f706fe6ebdcbd9ee311b2f277686d4))
+* **runner:** a queued turn cancelled before it started no longer fails a finished Block ([#514](https://github.com/alimek/t3-factory/issues/514)) ([#587](https://github.com/alimek/t3-factory/issues/587)) ([b7102a8](https://github.com/alimek/t3-factory/commit/b7102a8268e3dc75dc272a820802df326fa26832))
+* **runner:** invoke the Block skill only on worker launch ([#593](https://github.com/alimek/t3-factory/issues/593)) ([8150328](https://github.com/alimek/t3-factory/commit/815032859edb996048b4d86f7140a52e7c7b826e))
+* **runs:** keep a newly opened Run live when the previous one is released ([#504](https://github.com/alimek/t3-factory/issues/504)) ([7c3217e](https://github.com/alimek/t3-factory/commit/7c3217e16b4cf670d000897cd525307d0c4eb8d7))
+* **runs:** wait for worker completion before offering Request report ([#610](https://github.com/alimek/t3-factory/issues/610)) ([9cb98e4](https://github.com/alimek/t3-factory/commit/9cb98e472bb39beb7002cf65e0d50373c6ca1bde))
+* **studio:** ask before leaving an edited Flow for any Studio page ([#490](https://github.com/alimek/t3-factory/issues/490)) ([8f78426](https://github.com/alimek/t3-factory/commit/8f78426ae930f029b6157352fe8aff7c93d9ba39))
+* **studio:** Escape steps back to the list; breadcrumbs clickable over the desktop title bar ([#611](https://github.com/alimek/t3-factory/issues/611)) ([d092d51](https://github.com/alimek/t3-factory/commit/d092d51487d0b81767746209ef1f9675db23fdfe))
+* **studio:** offer only available Projects in owner menus ([#489](https://github.com/alimek/t3-factory/issues/489)) ([ce393d8](https://github.com/alimek/t3-factory/commit/ce393d88fd2fde6d67470f7beacffa2ff3e974c1))
+* **studio:** return from a Trigger page through breadcrumbs and a back link ([#488](https://github.com/alimek/t3-factory/issues/488)) ([e702827](https://github.com/alimek/t3-factory/commit/e70282771e07b7678771353610cadddca6a7b1b7))
+* **studio:** show model IDs when T3 omits display names ([#646](https://github.com/alimek/t3-factory/issues/646)) ([71a18ae](https://github.com/alimek/t3-factory/commit/71a18aefd4df944335ca35addc6c389f0caa488a))
+* **ui:** type-scale sizes for palette, shortcut rows and key chips ([#536](https://github.com/alimek/t3-factory/issues/536)) ([#566](https://github.com/alimek/t3-factory/issues/566)) ([4a46454](https://github.com/alimek/t3-factory/commit/4a46454f74b09436666c7e30eb02d041941c08cd))
+* validate E2E UI builds by input content ([#487](https://github.com/alimek/t3-factory/issues/487)) ([7ae1d45](https://github.com/alimek/t3-factory/commit/7ae1d45b48078b38d40b97bb05a43d531286b081))
+
+
+### Performance Improvements
+
+* **ci:** speed up quality gate, test suites, UI journeys and beta builds ([#642](https://github.com/alimek/t3-factory/issues/642)) ([3f8743b](https://github.com/alimek/t3-factory/commit/3f8743b2a14df74c0942e6ae941d989bc9eee0ad))
+* **e2e:** reuse a current frontend build for journeys ([#594](https://github.com/alimek/t3-factory/issues/594)) ([e6a3137](https://github.com/alimek/t3-factory/commit/e6a313755dbbb1adab5c9e30457fcb0d323d6224))
+
 ## [0.8.0](https://github.com/alimek/t3-factory/compare/v0.7.1...v0.8.0) (2026-11-16)
 
 
