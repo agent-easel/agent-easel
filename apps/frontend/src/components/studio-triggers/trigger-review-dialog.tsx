@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CirclePause, CircleX, ExternalLink } from "lucide-react";
-import type { TriggerDefinition, TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
+import type { TriggerPreview, TriggerPreviewIssue } from "@t3-factory/contracts";
 import { MutationGate } from "@/client-gate";
 import { ProblemCard } from "../problem-card.tsx";
 import { StatusBadge } from "../status-badge.tsx";
@@ -17,8 +17,7 @@ export interface TriggerReview {
   /** Project · repository · Flow · schedule · limit. */
   readonly summary: string;
   readonly repository: string;
-  readonly watchers: readonly TriggerDefinition[];
-  readonly confirmLabel: "Enable and check" | "Apply and check";
+  readonly confirmLabel: "Enable and check" | "Apply and check" | "Check now";
   /** Asks Factory what a check with the reviewed settings would start now. */
   readonly load: () => Promise<TriggerPreview>;
   /** Create offers saving without enabling instead. */
@@ -34,11 +33,6 @@ type PreviewRead =
 
 const captionClass = "text-2xs leading-tight tracking-label text-subtle-foreground";
 
-/**
- * Figma T04: the issues a check would start now, oldest first, marked Starts now or Waits, before
- * enabling a Trigger or applying an edit that widens what can start. Nothing starts until the
- * author confirms; confirming also runs the first check.
- */
 export function TriggerReviewDialog({
   review,
   busy,
@@ -123,14 +117,18 @@ function ReviewBody({
       }
     >
       {review.notice && <ProblemCard tone="attention" title={review.notice} />}
-      <SharedRepositoryCard repository={review.repository} watchers={review.watchers} />
       {read.status === "loading" && (
         <div role="status" className="rounded-lg border bg-background px-3.5 py-2.5">
           <StatusBadge kind="checking">Checking which issues would start…</StatusBadge>
         </div>
       )}
       {read.status === "failed" && <ProblemCard tone="error" icon={CircleX} title={read.message} />}
-      {read.status === "answered" && <PreviewResult preview={read.preview} />}
+      {read.status === "answered" && (
+        <>
+          <SharedRepositoryCard repository={review.repository} warnings={read.preview.warnings} />
+          <PreviewResult preview={read.preview} />
+        </>
+      )}
     </DialogContent>
   );
 }

@@ -54,11 +54,13 @@ export interface JsonBodyLimit {
   readonly tooLarge?: string;
   /** When set, a body whose read failed for another reason answers with this message. */
   readonly unreadable?: string;
+  readonly optional?: true;
 }
 export const standardBody: JsonBodyLimit = {
   bytes: 16_384,
   message: "Send valid JSON up to 16 KiB with application/json.",
 };
+export const optionalStandardBody: JsonBodyLimit = { ...standardBody, optional: true };
 export const definitionBody: JsonBodyLimit = {
   bytes: DEFINITION_REQUEST_LIMIT_BYTES,
   message: "Send valid JSON up to 2 MB with application/json.",
@@ -120,14 +122,16 @@ export function readJsonBody(
 > {
   return Effect.gen(function* () {
     const contentType = request.headers["content-type"]?.toLowerCase() ?? "";
-    if (!contentType.startsWith("application/json")) {
-      return {
-        kind: "invalid" as const,
-        response: resultResponse(failure("validation", limit.message)),
-      };
-    }
+    const refused = {
+      kind: "invalid" as const,
+      response: resultResponse(failure("validation", limit.message)),
+    };
+    const json = contentType.startsWith("application/json");
+    if (!json && !(limit.optional && contentType === "")) return refused;
     const body = yield* boundedRead(request.text, limit);
     if (body.kind === "invalid") return body;
+    if (limit.optional && body.value === "") return { kind: "ok" as const, value: undefined };
+    if (!json) return refused;
     try {
       return { kind: "ok" as const, value: JSON.parse(body.value) };
     } catch {
