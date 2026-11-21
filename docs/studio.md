@@ -496,8 +496,8 @@ focus returns to ⋯ when an item's dialog closes.
 
 **Save** follows the [one Save rule](design-system.md#components-and-interaction). It
 accepts structurally valid incomplete graphs, increments the revision and shows **Saved** separately from readiness. There is no autosave. **⌘Z** (Ctrl+Z
-elsewhere) undoes the last structural edit until Save: a removed block together with its wires, a removed Finish ending together with its wires, or a removed
-wire; edits made since are kept, and a text field keeps its own undo.
+elsewhere) undoes the last structural removal until Save. It restores a removed block, Finish block, ending or wire and reconnects wires whose endpoints
+are still available. Edits made since are kept, **Keep my edits** retains undo history, and a text field keeps its own undo.
 
 Readiness is live: an unsaved draft is checked through the backend shortly after each change, with no Check readiness button, and again after a newer saved
 revision, keeping the local draft against one, a change to an Agent the draft places or a change of the Flow's owner. A check result applies only to the
@@ -716,7 +716,7 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 4,
+  "formatVersion": 5,
   "kind": "flow",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",

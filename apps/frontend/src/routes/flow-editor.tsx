@@ -266,12 +266,18 @@ type Removal = { readonly before: FlowGraph; readonly after: FlowGraph };
  */
 function useStructuralUndo(
   scope: RefObject<HTMLElement | null>,
-  draft: { graph: FlowGraph; baseline: string; busy: boolean; change: (next: FlowGraph) => void },
+  draft: {
+    graph: FlowGraph;
+    undoScope: symbol;
+    agents: readonly AgentDefinition[];
+    busy: boolean;
+    change: (next: FlowGraph) => void;
+  },
 ) {
   const [removals, setRemovals] = useState<readonly Removal[]>([]);
-  const [baseline, setBaseline] = useState(draft.baseline);
-  if (baseline !== draft.baseline) {
-    setBaseline(draft.baseline);
+  const [undoScope, setUndoScope] = useState(draft.undoScope);
+  if (undoScope !== draft.undoScope) {
+    setUndoScope(draft.undoScope);
     setRemovals([]);
   }
   const latest = useRef({ ...draft, removals });
@@ -283,12 +289,12 @@ function useStructuralUndo(
       if (!matchesShortcut(event, fixedShortcuts.undoFlowEdit)) return;
       if (event.defaultPrevented || isEditing(event.target)) return;
       if (!inEditorLayer(scope.current, event.target)) return;
-      const { graph, busy, change, removals: stack } = latest.current;
+      const { graph, agents, busy, change, removals: stack } = latest.current;
       const last = stack.at(-1);
       if (busy || !last) return;
       event.preventDefault();
       setRemovals(stack.slice(0, -1));
-      change(undoRemoval(graph, last.before, last.after));
+      change(undoRemoval(graph, last.before, last.after, agents));
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -525,7 +531,8 @@ export function FlowDetail({
   const { change, editBlock } = graphEdits(draft, graph);
   const remove = useStructuralUndo(canvas, {
     graph,
-    baseline: savedBaseline(saved),
+    undoScope: state.undoScope,
+    agents,
     busy: state.busy,
     change,
   });
@@ -708,8 +715,6 @@ function useBlockAdding(
     dropAt: ((x, y, grab) => placement.current?.(x, y, grab) ?? null) satisfies DropAt,
   };
 }
-
-const savedBaseline = (saved: FlowDraft | null) => (saved ? `${saved.id}:${saved.revision}` : "");
 
 /** The saved graph of the Flow this editor opened, once Studio holds it. */
 const savedGraphOf = (saved: FlowDraft, id: string) => (saved.id === id ? saved.graph : undefined);

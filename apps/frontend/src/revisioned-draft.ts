@@ -137,12 +137,11 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
   readonly isRevisionConflict?: (cause: ApiError) => boolean;
   /** While true, a clean draft waits to adopt a newer revision; `reconcile` adopts it later. */
   readonly hold?: () => boolean;
-  /** Runs whenever a saved revision replaces the draft. */
-  readonly onAdopt?: () => void;
+  readonly onBaselineReset?: () => void;
   /** Runs whenever the owning Project the draft shows changes, including by its own Change owner. */
   readonly onOwnerChange?: () => void;
 }) {
-  const { contentOf, list, read, view, hold, onAdopt, onOwnerChange } = config;
+  const { contentOf, list, read, view, hold, onBaselineReset, onOwnerChange } = config;
   let saved = config.saved;
   let content = config.content;
   let baseline = content;
@@ -248,7 +247,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     baseline = content;
     closeConflict();
     showError("");
-    onAdopt?.();
+    onBaselineReset?.();
   }
   /** Shows why Factory refused a save; a stale save also enters the revision conflict. */
   function refused(cause: unknown, fallback: string) {
@@ -323,6 +322,7 @@ export function createRevisionedDraft<D extends Revisioned, C extends object, S>
     else {
       saved = latest;
       baseline = contentOf(latest);
+      onBaselineReset?.();
     }
     lastSave = { ...lastSave, outcome: "succeeded" };
     showError("");

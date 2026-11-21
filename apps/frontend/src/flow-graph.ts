@@ -363,7 +363,12 @@ export function blockExitRecipients(graph: FlowGraph, blockId: string) {
   return (exitId: string): readonly (string | undefined)[] => recipients.get(exitId) ?? [];
 }
 
-export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGraph): FlowGraph {
+export function undoRemoval(
+  current: FlowGraph,
+  before: FlowGraph,
+  after: FlowGraph,
+  agents: readonly Pick<AgentDefinition, "id" | "exits">[],
+): FlowGraph {
   const removedBy =
     <T>(list: readonly T[], key: (item: T) => string) =>
     (item: T) =>
@@ -377,12 +382,15 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
     byId,
     removedBy(after.finish?.endings ?? [], byId),
   );
-  const exists = (id: string) => blocks.some((b) => b.id === id);
-  const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
-    targetEndingId !== undefined
-      ? endings.some((ending) => ending.id === targetEndingId)
-      : exists(targetBlockId);
-  const restorable = (wire: FlowWire) => !hasWire(after, wire) && targetExists(wire);
+  const restored = { ...current, blocks, ...(finish && { finish: { ...finish, endings } }) };
+  const exits = new Map(
+    blocks.map((block) => [
+      block.id,
+      new Set(effectiveExits(block, agents).map((exit) => exit.id)),
+    ]),
+  );
+  const restorable = (wire: FlowWire) =>
+    !hasWire(after, wire) && canConnect(restored, wire.source, wire);
   const targetBlockIds = restoreInOrder(
     current.flowInput.targetBlockIds,
     before.flowInput.targetBlockIds,
@@ -393,12 +401,12 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
     current.connections,
     before.connections,
     connectionKey,
-    (connection) => exists(connection.sourceBlockId) && restorable(connectionWire(connection)),
+    (connection) =>
+      exits.get(connection.sourceBlockId)?.has(connection.exitId) === true &&
+      restorable(connectionWire(connection)),
   );
   return {
-    ...current,
-    blocks,
-    ...(finish && { finish: { ...finish, endings } }),
+    ...restored,
     flowInput: { ...current.flowInput, targetBlockIds },
     connections,
   };

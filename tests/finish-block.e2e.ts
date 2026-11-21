@@ -326,6 +326,35 @@ test("undo brings back a Finish block added and removed before saving, with its 
   await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
 });
 
+test("keeping local edits after another client saves preserves undo for a removed Finish", async ({
+  app,
+  screen,
+  browser,
+}) => {
+  // Arrange
+  const flowId = await saveDeliveredFlow(app.baseUrl, "Keep the local Finish removal");
+  const flow = await readFlow(app.baseUrl, flowId);
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await screen.getByRole("button", "Remove block", { exact: true }).tap();
+  await expect(finishBlock(screen)).toHaveCount(0);
+  const latest = await saveFlowElsewhere(app.baseUrl, flow, { name: "Rename in another client" });
+  await screen.getByRole("button", "Compare latest revision", { exact: true }).tap();
+  const comparison = screen.getByRole("dialog", `Compare with revision ${latest.revision}`);
+  const undo = await browser.evaluate(
+    '/Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "Meta+z" : "Control+z"',
+  );
+
+  // Act
+  await comparison.getByRole("button", "Keep my edits", { exact: true }).tap();
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await browser.keyboard.press(undo as string);
+
+  // Assert
+  await expect(finishBlock(screen)).toContainText("Delivered");
+  await expect(screen.getByRole("button", "Save", { exact: true })).toBeEnabled();
+});
+
 test("a started Run has no result yet, then shows the reached ending on the canvas, inspector, overview and Timeline", async ({
   app,
   screen,

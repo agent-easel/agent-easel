@@ -122,4 +122,5 @@ ending **Delivered** (Output Optional), Start a Run, report its result and obser
 **Plain review** with the same Agent block and no `finish`, which that release saved with an empty Finish block, Start a Run on it, report
 **Done** and observe it settle. The first Flow's earlier revision also holds an empty Finish block. Factory was closed, then table and index
 DDL, triggers as post-data schema and named-column rows were captured, excluding `runner_owner` and SQLite's internal tables. Of the adapter, its
-identity, authorization and project catalog are kept. The capture script and logs stay outside Git.
+identity, authorization and project catalog are kept. The disposable workspace path was replaced consistently with
+`/fixtures/optional-finish/neutral`. The capture script and logs stay outside Git.

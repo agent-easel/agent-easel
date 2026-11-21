@@ -19,6 +19,7 @@ export type FlowDraftOperations = Pick<typeof api, "validateFlow" | "getFlow">;
 
 export interface FlowDraftSnapshot extends RevisionedDraftState<FlowDraft, FlowContent> {
   readonly status: "loading" | "failed" | "loaded";
+  readonly undoScope: symbol;
   /** A save is in flight; edits wait for it. */
   readonly busy: boolean;
   /** Null while readiness is unknown. */
@@ -84,6 +85,7 @@ export function createFlowDraft(
   let interactions = 0;
   /** This editor's removal was accepted; readiness is unknown even before Studio delivers it. */
   let removedHere = false;
+  let undoScope = Symbol();
 
   /** The Flow as Studio's saved definitions hold it now; undefined while unknown or absent. */
   function latest() {
@@ -103,7 +105,10 @@ export function createFlowDraft(
     read: (flowId) => operations.getFlow(flowId),
     // Only adoption into a clean draft waits for an interaction; it would replace the graph.
     hold: () => interactions > 0,
-    onAdopt: forgetCheck,
+    onBaselineReset() {
+      undoScope = Symbol();
+      forgetCheck();
+    },
     // Readiness judges the draft under the Flow's owner, which the validation answer does not name.
     onOwnerChange: forgetCheck,
     view(state): FlowDraftSnapshot {
@@ -124,6 +129,7 @@ export function createFlowDraft(
       return {
         ...state,
         status,
+        undoScope,
         busy: busy && !state.removed,
         readiness,
         checkDue:
