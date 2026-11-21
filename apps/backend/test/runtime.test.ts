@@ -3,6 +3,8 @@ import { changeReportSupportAtCapabilityRead } from "./support/controlled-t3-pro
 import { runtimeReadinessFixture } from "./support/boundaries-setup.ts";
 import { claudeRuntimeConfig } from "./support/boundaries-setup.ts";
 import { readdir } from "node:fs/promises";
+import { driverHomes, installFirstReportingTarget } from "./support/reporting.ts";
+import { controlledExecution } from "./support/scenarios.ts";
 
 it("missing user installation blocks readiness without launching setup work", async (c) => {
   // Arrange
@@ -142,6 +144,42 @@ it("a Cursor provider is not rejected as an unsupported harness", async (c) => {
   assert(check.ok);
   expect(check.value.issues.some((issue) => issue.code === "harness_unsupported")).toBe(false);
   expect(check.value.issues.some((issue) => issue.code === "reporting_installation")).toBe(true);
+});
+
+it("an installed Mistral Vibe instance is ready to run", async (context) => {
+  // Arrange
+  const { factory, home, t3 } = await driverHomes(context, {
+    "vibe-worker": { driver: "acpRegistry", config: { agentId: "mistral-vibe" } },
+  });
+  t3.projects.controlledProviders.push({
+    ...t3.projects.controlledProviders[0]!,
+    providerInstanceId: "vibe-worker",
+    driverKind: "acpRegistry",
+  });
+  const project = await factory.addRepository({ path: home });
+  assert(project.ok);
+  const agent = await factory.createAgent({
+    name: "Vibe worker",
+    prompt: "Work",
+    execution: controlledExecution(t3.connection.environmentId, {
+      providerInstanceId: "vibe-worker",
+      modelOptions: [],
+    }),
+    exits: [],
+  });
+  assert(agent.ok);
+  await installFirstReportingTarget(factory);
+
+  // Act
+  const result = await factory.recheckRuntime({
+    projectId: project.value.id,
+    agentId: agent.value.id,
+  });
+
+  // Assert
+  assert(result.ok);
+  expect(result.value.ready).toBe(true);
+  expect(result.value.issues).toEqual([]);
 });
 
 it("a saved Agent's provider that T3 later offers as an unsupported harness stays visible and blocks runtime readiness", async (c) => {

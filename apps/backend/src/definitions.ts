@@ -57,6 +57,7 @@ import {
   validateUpdateFlow,
 } from "@t3-factory/domain-validation";
 import { emptyCapabilities, readyCapabilities, unsupportedReportingFailure } from "./agents.ts";
+import { readVibeReportingInstances } from "./reporting-discovery.ts";
 import type { T3Projects } from "./t3/projects.ts";
 import type { EffectOperations } from "./effect-operations.ts";
 import type { LiveChanges } from "./live-changes.ts";
@@ -251,6 +252,7 @@ export const makeDefinitions = (
   connection: Pick<EffectOperations<FactoryOperations>, "getConnection">,
   projects: { readCatalog(): Effect.Effect<Result<ProjectCatalog>, unknown> },
   changes: LiveChanges,
+  t3StateDirectory: string,
   /** Recorded in exported files for information only. */
   factoryVersion: string,
 ) =>
@@ -441,7 +443,10 @@ export const makeDefinitions = (
       return yield* Effect.gen(function* () {
         const environment = yield* Effect.tryPromise(() => t3.readEnvironment({ endpoint }));
         const providers = yield* Effect.tryPromise(() => t3.orchestratorCapabilities({ endpoint }));
-        return readyCapabilities([environment], providers, yield* currentTime);
+        const vibe = providers.some(({ driverKind }) => driverKind === "acpRegistry")
+          ? yield* readVibeReportingInstances(t3StateDirectory, status.value)
+          : undefined;
+        return readyCapabilities([environment], providers, yield* currentTime, vibe);
       }).pipe(
         Effect.catch(() =>
           currentTime.pipe(

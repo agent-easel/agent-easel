@@ -201,7 +201,7 @@ it("report support rejects a public schema whose read bounds cannot cover the re
   });
 
   // Act
-  const support = reportSupport((await t3.contract.inspect({ endpoint })).support, "codex");
+  const support = reportSupport((await t3.contract.inspect({ endpoint })).support);
 
   // Assert
   expect(support.supported).toBe(false);
