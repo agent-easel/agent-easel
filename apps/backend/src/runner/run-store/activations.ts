@@ -7,9 +7,8 @@ import { fingerprint, intactPayload } from "../../fingerprint.ts";
 import { launchStrategy, type RunWorkspace } from "../run-workspace.ts";
 import { now } from "../../time.ts";
 import {
-  agentRevisitMessage,
+  agentRevisitPayload,
   workerLaunchPayload,
-  workerRevisitPayload,
   type LaunchImage,
   type StoredLaunchPayload,
 } from "../worker-payloads.ts";
@@ -190,11 +189,13 @@ export function openRunActivations(database: RunnerDatabase) {
         const kind: DeliveryKind = previousVisit ? "send" : "launch";
         const body = JSON.stringify(
           previousVisit
-            ? workerRevisitPayload(
+            ? agentRevisitPayload(
+                current.definitions,
+                handoff.block_id,
                 target,
                 previousVisit.thread_id,
                 handoff.request_key,
-                agentRevisitMessage(current.definitions, handoff.block_id, message),
+                message,
                 block!.public_id,
               )
             : launched,

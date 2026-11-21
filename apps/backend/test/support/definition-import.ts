@@ -89,7 +89,7 @@ export const agentFile = (agent: unknown = exportedAgent(), envelope: object = {
  * A Flow file as Definition export writes it, or as an earlier release did with `formatVersion: 1`:
  * a Code review block of `exportedAgent()` whose pass reaches a Human step.
  */
-export const flowFile = (envelope: object = {}) => ({
+export const flowFile = (envelope: { formatVersion?: number } = {}) => ({
   ...agentFile(exportedAgent(), envelope),
   kind: "flow",
   flow: {
@@ -105,11 +105,17 @@ export const flowFile = (envelope: object = {}) => ({
           hiddenExitIds: [],
           localExits: [],
           revisitInstruction: "",
+          ...(envelope.formatVersion !== undefined && envelope.formatVersion >= 4
+            ? { revisitContext: "keep" as const }
+            : {}),
         },
         { id: "approve", name: "Approve", kind: "human", position: { x: 480, y: 0 } },
       ],
       connections: [{ sourceBlockId: "review", exitId: "pass", targetBlockId: "approve" }],
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["review"] },
+      ...(envelope.formatVersion !== undefined && envelope.formatVersion >= 3
+        ? { finish: { position: { x: 800, y: 0 }, endings: [] } }
+        : {}),
     },
     workspace: { mode: "worktree", base: { kind: "default" } },
   },

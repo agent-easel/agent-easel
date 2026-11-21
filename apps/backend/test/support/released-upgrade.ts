@@ -102,6 +102,7 @@ const currentBlock = ({ exits, ...block }: ReleasedBlock): FlowBlock =>
           messageRequired: requiresFeedback,
         })),
         revisitInstruction: "",
+        revisitContext: "keep",
       };
 
 const upgradedFinishPosition = ({ flowInput, blocks }: ReleasedFlow["graph"]) => ({

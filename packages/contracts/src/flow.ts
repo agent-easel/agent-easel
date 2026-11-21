@@ -48,6 +48,7 @@ export interface ConditionRule {
   /** A whole number from 1 to `CONDITION_ARRIVAL_MAX`; null while the draft has none. */
   readonly fromArrival: number | null;
 }
+export type AgentRevisitContext = "keep" | "fresh";
 /**
  * An Agent block exposes its Agent's exits, minus those this Flow hides, plus its Flow-local
  * exits and may carry a Revisit instruction. A Human block has the fixed Approve and Request
@@ -67,6 +68,7 @@ export type FlowBlock = BlockBase &
         readonly localExits: readonly BlockExit[];
         /** Sent on every visit to this block after the first; stored trimmed, empty when unset. */
         readonly revisitInstruction: string;
+        readonly revisitContext: AgentRevisitContext;
       }
     | { readonly kind: "human" }
     | { readonly kind: "wait"; readonly duration: WaitDuration | null }
@@ -120,7 +122,10 @@ type OptionalPosition<B extends { readonly position: FlowBlock["position"] }> = 
   : never;
 /** An omitted Revisit instruction saves empty. */
 type OptionalRevisitInstruction<B> = B extends { readonly kind: "agent" }
-  ? Omit<B, "revisitInstruction"> & { readonly revisitInstruction?: string }
+  ? Omit<B, "revisitInstruction" | "revisitContext"> & {
+      readonly revisitInstruction?: string;
+      readonly revisitContext?: AgentRevisitContext;
+    }
   : B;
 export type FlowBlockInput = OptionalRevisitInstruction<OptionalPosition<FlowBlock>>;
 /** Save/create input only: if any position is omitted, the server arranges the whole graph. */

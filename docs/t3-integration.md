@@ -309,7 +309,10 @@ and needs the separate [qualification procedure](installation.md#bounded-live-ve
   boolean `timedOut`; `resultRun` is ignored. How the two reads combine is the
   [worker thread completion](runner.md#worker-thread-completion) rule.
 - **Send.** Work targets an exact thread with `mode: queue`, a stable request key and fixed
-  message. Returned thread/message/execution references must match. Send replay requires its
+  message. Agent blocks with `revisitContext: "fresh"` also send `freshContext: true` so T3
+  starts a fresh provider session on that worker thread without earlier context; Start and
+  dispatch require T3's `t3_thread_send` schema to advertise boolean `freshContext` for those
+  Flows, while ordinary sends omit the field. Returned thread/message/execution references must match. Send replay requires its
   own continuity proof; launch replay support is insufficient.
 - **Stop.** Archive and [manual settlement](runner.md#manual-settlement) stop worker threads with
   `t3_thread_interrupt`, `stop: true` and a request key, but no run ID: T3 acts on the thread and
@@ -412,8 +415,8 @@ A `waiting` report from an outdated instruction is refused with `WAITING_RETIRED
 Any harness session with Factory MCP registered can author definitions without a Block id or an active Run:
 
 - `factory_list_agents`, `factory_get_agent`, `factory_create_agent` and `factory_save_agent` list, read, create and save Agents, including a global Agent's [Project overrides](studio.md#agent-definitions); `factory_save_agent` requires the complete `projectOverrides` list.
-- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction`, Condition blocks their ordered `rules` and fixed `otherwise`, and the graph its [Finish block](studio.md#finish-block) `finish` with ordered `endings` and wires that enter an ending by `targetEndingId`, under the same [graph shape](studio.md#graph-shape) rules as Studio. Create and read keep ending IDs and per-ending wires unchanged; the graph description explains arrival numbering, first-match selection, the ending fields and the Condition and ending readiness rules.
-- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's live readiness, including `agent_model_required` for a block whose Agent Needs a model the Condition rule-row and cycle findings, and the Finish ending findings. Studio checks that readiness as the draft changes and has no Check readiness button. The tool does not validate an unsaved draft or establish live execution readiness.
+- `factory_list_flows`, `factory_get_flow`, `factory_create_flow` and `factory_save_flow` do the same for Flows. Saves replace the whole graph; [Flow creation and layout](studio.md#validation-contract) support a graph and workspace in one creation and optional positions. Agent blocks read and write their optional `revisitInstruction` and `revisitContext` (`"keep"` or `"fresh"`), Condition blocks their ordered `rules` and fixed `otherwise`, and the graph its [Finish block](studio.md#finish-block) `finish` with ordered `endings` and wires that enter an ending by `targetEndingId`, under the same [graph shape](studio.md#graph-shape) rules as Studio. Create and read keep ending IDs and per-ending wires unchanged; the graph description explains arrival numbering, first-match selection, the ending fields and the Condition and ending readiness rules.
+- `factory_check_flow` checks the latest saved Flow's readiness using the same graph and saved-Agent checks as Studio's live readiness, including `agent_model_required` for a block whose Agent Needs a model, the Condition rule-row and cycle findings, and the Finish ending findings. Studio checks that readiness as the draft changes and has no Check readiness button. The tool does not validate an unsaved draft or establish live execution readiness.
 - `factory_remove_agent` and `factory_remove_flow` remove an Agent or a Flow by id, exactly as Studio's [Agent removal](studio.md#agent-definitions) and [Flow removal](studio.md#removing-a-flow).
 - `factory_change_agent_owner` and `factory_change_flow_owner` take the id, `expectedProjectId` and the new `projectId` and perform [Change owner](studio.md#ownership).
 - `factory_preview_flow_duplicate` (`flowId`, optional `projectId`) answers a [Flow Duplicate](studio.md#ownership) plan and writes nothing; `factory_duplicate_flow` (`flowId`, optional `name`, the plan's `projectId`, `expectedRevision` and every planned Agent with its `choice`) commits it. `factory_duplicate_agent` (`agentId`, optional `name` and `projectId`) duplicates an Agent. An omitted `projectId` on the preview or Agent Duplicate keeps the source's owning Project.
@@ -580,7 +583,7 @@ The result message is plain text: it can describe decisions, include artifact UR
 declaration is required, and Factory does not automatically fetch linked artifacts. An Agent's prompt can specify an expected
 format when the next step needs one; the reporting contract's message requirements still apply.
 
-`factory_get_run({ blockId })` returns the Run number, title, input, state and each Block's state and latest result, plus each
+`factory_get_run({ blockId })` returns the Run `id`, `number`, `title`, `input`, `state`, `startedAt` and each Block's state and latest result, plus each
 Condition's constant-size [summary](runs.md#conditions) (`blockId`, `arrivals`, `pending`, `latest`) without its arrival history,
 and `result`: the [Run result](runner.md#reaching-an-ending) once the Run reached an ending, else null. A result holds
 `endingId`, `endingName`, `output` (the delivered text, null for an ending whose output is None), `outputMissing`,

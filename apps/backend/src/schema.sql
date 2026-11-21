@@ -523,6 +523,8 @@ CREATE TABLE "flow_revision_blocks" (
   prompt TEXT CHECK ((kind = 'continuation') = (prompt IS NOT NULL)),
   -- The instruction an Agent block's later visits receive, stored trimmed; empty when unset.
   revisit_instruction TEXT CHECK ((kind = 'agent') = (revisit_instruction IS NOT NULL)),
+  -- Whether an Agent block's later visits keep or clear provider context ('keep' or 'fresh').
+  revisit_context TEXT CHECK ((kind = 'agent') = (revisit_context IS NOT NULL)) CHECK (revisit_context IS NULL OR revisit_context IN ('keep', 'fresh')),
   x REAL NOT NULL,
   y REAL NOT NULL,
   -- A Wait's duration; both are null while the draft has none. Any finite amount saves:

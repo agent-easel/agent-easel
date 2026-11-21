@@ -3,6 +3,7 @@ import type * as SqlClient from "effect/sql/SqlClient";
 import {
   CONDITION_OTHERWISE_ID,
   FINISH_BLOCK_ID,
+  type AgentRevisitContext,
   type EndingOutput,
   type FlowBlock,
   type FlowGraph,
@@ -38,6 +39,7 @@ type BlockRow = {
   agent_id: string | null;
   prompt: string | null;
   revisit_instruction: string | null;
+  revisit_context: AgentRevisitContext | null;
   x: number;
   y: number;
   wait_amount: number | null;
@@ -117,11 +119,12 @@ export const appendFlowRevision = Effect.fnUntraced(function* (
     (block, ordinal) =>
       Effect.gen(function* () {
         const duration = block.kind === "wait" ? block.duration : null;
-        yield* sql`INSERT INTO flow_revision_blocks (flow_revision_id, block_id, ordinal, kind, name, agent_id, prompt, revisit_instruction, x, y, wait_amount, wait_unit)
+        yield* sql`INSERT INTO flow_revision_blocks (flow_revision_id, block_id, ordinal, kind, name, agent_id, prompt, revisit_instruction, revisit_context, x, y, wait_amount, wait_unit)
         VALUES (${revisionId}, ${block.id}, ${ordinal}, ${block.kind}, ${block.name},
           ${block.kind === "agent" ? block.agentId : null},
           ${block.kind === "continuation" ? block.prompt : null},
-          ${block.kind === "agent" ? block.revisitInstruction : null}, ${block.position.x}, ${block.position.y},
+          ${block.kind === "agent" ? block.revisitInstruction : null},
+          ${block.kind === "agent" ? block.revisitContext : null}, ${block.position.x}, ${block.position.y},
           ${duration?.amount ?? null}, ${duration?.unit ?? null})`;
         if (block.kind === "condition")
           yield* Effect.forEach(
@@ -232,6 +235,7 @@ const toBlock = (
       messageRequired: exit.message_required === 1,
     })),
     revisitInstruction: row.revisit_instruction ?? "",
+    revisitContext: row.revisit_context ?? "keep",
   };
 };
 

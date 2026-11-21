@@ -58,9 +58,11 @@ export type RuntimeReply = {
     }[];
     readonly feedback: string | null;
   };
+  readonly id?: string;
   readonly number?: number | null;
   readonly title?: string;
   readonly input?: string;
+  readonly startedAt?: string;
   readonly blocks?: readonly {
     readonly blockId: string;
     readonly name: string;

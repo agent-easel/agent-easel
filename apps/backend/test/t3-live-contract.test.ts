@@ -337,3 +337,28 @@ it.each([{ enum: [{}] }, { const: {} }])(
     expect(support.rename.supported).toBe(false);
   },
 );
+
+it("send contract advertises freshContextSend only when t3_thread_send exposes a boolean freshContext field", async (c) => {
+  // Arrange
+  const fields = ["environmentId", "threadId", "clientRequestId", "message"];
+  const sendSchema = {
+    type: "object",
+    properties: {
+      ...Object.fromEntries(fields.map((f) => [f, { type: "string" }])),
+      mode: { type: "string", enum: ["queue"] },
+      freshContext: { type: "boolean" },
+    },
+  };
+  const { live, endpoint } = await authorizedLiveOAuth(c, {
+    sendSchema,
+    send: () => ({}),
+    readSchema: reportReadSchema,
+  });
+
+  // Act
+  const inspection = await live.contract.inspect({ endpoint });
+
+  // Assert
+  expect(inspection.support.send.supported).toBe(true);
+  expect(inspection.support.freshContextSend).toBe(true);
+});

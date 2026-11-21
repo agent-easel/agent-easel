@@ -369,7 +369,7 @@ it; wires follow live and the draft changes once, on drop. Escape cancels any dr
 Selecting a block (click, or focus + Enter) docks its settings panel at the editor's right (360 px): the canvas narrows and pans the least distance that keeps
 the selected block and the next block it connects to in view. The panel's header holds the kind icon and name, **Esc** and ✕ (while it is open the Esc chip
 shows on the panel only), and its footer **Remove block**. It holds no explanatory text or position fields. An Agent block's panel holds **Name**, the
-**Agent** picker with the Agent's model summary and **Open Agent**, **Revisit instruction (optional)**, **Exits** with each exit's targets and **Hide** /
+**Agent** picker with the Agent's model summary and **Open Agent**, **On revisit** (**Keep context** or **Fresh context**), **Revisit instruction (optional)**, **Exits** with each exit's targets and **Hide** /
 **Show**, and **Local exits** with **Add local exit**. The picker lists only the Agents this Flow may place, those without a model disabled at the bottom.
 Prompts, execution settings and exits belong to the Agent, and two blocks may share a definition. Besides Flow-local and hidden exits, a block's
 one override is its optional [Revisit instruction](../GLOSSARY.md#revisit-instruction): two blocks sharing a reviewer Agent can play different loop roles, such as a single check and a
@@ -378,11 +378,11 @@ override, so any other variant is a new or duplicated Agent. Clicking empty canv
 name in the secondary text colour; neither wires nor exit rows carry type or `exit → recipient` labels, and multiple incoming connections each anchor to their own
 input port (Flow input first, at least 18 px apart).
 
-An Agent block's panel always shows the optional **Revisit instruction** plain-text field, edited like a Continuation's prompt (up to 120,000 characters; surrounding whitespace is
+An Agent block's panel always shows **On revisit** (**Keep context** by default, or **Fresh context** to start each revisit in a fresh provider session without earlier context) and the optional **Revisit instruction** plain-text field, edited like a Continuation's prompt (up to 120,000 characters; surrounding whitespace is
 dropped on save, and whitespace alone saves as empty). The field never cuts input short: longer text stays in the draft and Save reports the error at the block's field. It is sent on every visit to the block after the first, with the incoming message; the Agent prompt still applies,
 and the instruction decides that visit's scope but never waives the Agent's criteria, a required check or a defect with evidence. Edits are unsaved draft changes like any other. A block with a
-non-empty instruction shows a small neutral **Revisit instruction** tag in its canvas header, never the text and never styled as an execution state. New Agent blocks start empty, and swapping
-the block's Agent or copying the Flow's graph keeps the value. Delivery is described in the [Runner](runner.md#revisit-instructions).
+non-empty instruction or **Fresh context** shows a small neutral tag in its canvas header (**Revisit instruction**, **Fresh context**, or **Fresh · Revisit instruction**), never the text and never styled as an execution state. New Agent blocks start empty with **Keep context**, and swapping
+the block's Agent or copying the Flow's graph keeps both values. Delivery is described in the [Runner](runner.md#revisit-instructions).
 
 A **Continuation** block is configured with only a name and a required **Prompt**; it has no Agent, settings or exits to configure. Its canvas block reads
 **continues *Agent*'s thread**, naming the nearest Agent on its incoming paths (walking back through Human steps, Waits, Conditions and Continuations), or **the incoming Agent's thread** when
@@ -669,12 +669,12 @@ a Flow is saved when it is created. With unsaved changes Studio first asks "Expo
 (**Export saved revision** / **Keep editing**); either way the editor and its draft are unchanged. `GET /api/agents/:id/export` and
 `GET /api/flows/:id/export` answer `{document, driverKindOmitted}`.
 
-Every export writes portable document format version 3, whatever the definition holds:
+Every export writes portable document format version 4, whatever the definition holds:
 
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 3,
+  "formatVersion": 4,
   "kind": "agent",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -708,7 +708,7 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
 ```json
 {
   "format": "t3-factory/definitions",
-  "formatVersion": 3,
+  "formatVersion": 4,
   "kind": "flow",
   "factoryVersion": "0.42.0",
   "exportedAt": "2026-11-14T10:00:00.000Z",
@@ -724,7 +724,8 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
           "agentKey": "agent-1",
           "hiddenExitIds": [],
           "localExits": [],
-          "revisitInstruction": ""
+          "revisitInstruction": "",
+          "revisitContext": "keep"
         },
         {
           "id": "gate",
@@ -772,15 +773,15 @@ Export refuses a file another installation could not import. A definition save r
 Version-3 import and export allow 500 ordinary blocks when Finish has no endings. A Finish with endings counts toward the
 500-block limit. An existing Flow at the former block limit remains editable at that size.
 
-**Format versions.** Import reads versions 1, 2 and 3, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
+**Format versions.** Import reads versions 1, 2, 3 and 4, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
 endings and the connections entering them; a version-1 or version-2 file holding `finish` or `targetEndingId` is rejected at that field as
-unknown, and a version-3 Flow file without `finish` is rejected as missing it. Files exported before version 3 import unchanged, and their
-Flows arrive with an empty Finish block placed right of every block. A newer version is refused and asks to update Factory. Writing version 3
-for every export is an intentional compatibility break: an installation that reads only versions 1 and 2 refuses every newly exported file,
-even an ordinary Agent or a Flow without endings, and asks to be updated before it can import it; it refuses before creating anything.
-Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt fingerprint covers the document under
-the file's own version, so retrying an earlier-version commit still replays its receipt.
+unknown, and a version-3 or version-4 Flow file without `finish` is rejected as missing it. Version 4 adds `revisitContext` on Agent blocks;
+version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Files exported before version 3 arrive with an empty Finish
+block placed right of every block. A newer version is refused and asks to update Factory. Writing version 4 for every export is an intentional
+compatibility break: an installation that reads only earlier versions refuses every newly exported file and asks to be updated before it can
+import it; it refuses before creating anything. Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt
+fingerprint covers the document under the file's own version, so retrying an earlier-version commit still replays its receipt.
 
 ### Import
 
@@ -850,9 +851,9 @@ issues use `workspace.*` paths. A save that omits `workspace` keeps the saved se
 
 Blocks have stable IDs, position and name. On create or save, positions are optional for every block, the Flow input and the Finish block. If any position is omitted, the backend arranges the whole graph with the same ELK layout as [Auto-arrange](#automatic-layout-and-canvas-view), replacing even the supplied positions. Fully positioned graphs are saved as given. Saved graphs always include all positions; Studio sends them all, so its saves preserve the draft's layout.
 
-An Agent block adds `agentId`, `hiddenExitIds` (inherited exit IDs it hides), `localExits` and `revisitInstruction`, its
+An Agent block adds `agentId`, `hiddenExitIds` (inherited exit IDs it hides), `localExits`, `revisitInstruction` and `revisitContext`. `revisitInstruction` is its
 [Revisit instruction](../GLOSSARY.md#revisit-instruction): plain text up to 120,000 characters, optional on create and save, stored trimmed,
-and empty when omitted or whitespace-only. Readiness never requires it or warns about it, even on a block that cannot be revisited. A Human block has
+and empty when omitted or whitespace-only. `revisitContext` is `"keep"` (the default when omitted) or `"fresh"`, choosing whether later visits continue the existing provider session or start a fresh session on the worker thread without earlier context. Readiness never requires either or warns about them, even on a block that cannot be revisited. A Human block has
 no exit fields. A Wait block adds `duration`: `{amount, unit}` with any finite number as `amount` and `unit` `minutes`,
 `hours` or `days`, or `null` while the draft has none; a Continuation adds `prompt` (stored trimmed, up to 120,000 characters, empty only in a draft). Each has one fixed, unnamed exit with ID `output`. An exit is `{id, name, description, messageRequired}`, with IDs scoped to their block; runtime consumers enforce a non-empty message when
 `messageRequired` is true. A Condition adds `rules`, an ordered array of `{id, name, fromArrival}`, and
@@ -885,7 +886,7 @@ positions, Flow input targets, dangling or duplicate edges, a Human or Wait conn
 blank or repeated ending ID (`invalid_ending_id`), an ending name over 200 characters after trimming, a description or output
 description over 4,000 characters, an unknown output setting, extra Finish or ending fields, a wire into Finish without one of its
 ending IDs or a `targetEndingId` on a wire into a block (`invalid_connection`), two wires from the same exit into the same ending
-(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. Limits: 500 blocks with the Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
+(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. A `revisitContext` that is not `"keep"` or `"fresh"`, or is on a block other than an Agent block, is refused at that block's `revisitContext` path. Limits: 500 blocks with the Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
 A Condition has no rule or output quota of its own and does not borrow the Agent exit limit: it counts as one block, each actual wire
 from any of its outputs, including fan-out and Otherwise wires, is one connection, unwired outputs cost nothing, and its rule IDs,
 names and thresholds count toward the 2 MB body.

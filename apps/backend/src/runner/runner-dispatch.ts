@@ -57,7 +57,8 @@ function storedTarget(
     target.projectId !== runRow.t3_project_id ||
     target.workspaceRoot !== runRow.workspace_root ||
     payload.threadId !== target.threadId ||
-    payload.mode !== "queue"
+    payload.mode !== "queue" ||
+    (payload.freshContext !== undefined && payload.freshContext !== true)
   )
     return unverified("Stored operation target cannot be verified.");
   return verified(target);
@@ -241,6 +242,8 @@ export function openRunnerDispatch(
       if (!payload.ok) return payload;
       const { send } = snapshot.support;
       if (!send.supported) return unverified(send.explanation ?? SEND_UNCERTAIN);
+      if (payload.value.freshContext && !snapshot.support.freshContextSend)
+        return unverified("T3 send schema does not support fresh-context revisits.");
       if (replayUnproven(intent, send.retryScope))
         return unverified(
           "Same-key replay continuity/retention is unproven; operation remains unresolved.",

@@ -260,8 +260,69 @@ it("a revisit without a Revisit instruction is the incoming result alone, as bef
   assert((await fixture.f.reconcileRuns()).ok);
 
   // Assert
-  expect([...fixture.t3.threads.sends.values()][0]?.payload.message).toBe(
+  const send = [...fixture.t3.threads.sends.values()][0]?.payload;
+  expect(send?.freshContext).toBeUndefined();
+  expect(send?.message).toBe(
     `Factory Block id: ${fixture.blockId}.\n\nImplemented the requested result.`,
+  );
+});
+
+it("a fresh-context revisit queues with freshContext and resends the skill header, Agent prompt and incoming message", async (c) => {
+  // Arrange
+  const setup = await prepared(c, { revisit: true, revisitContext: "fresh" });
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const fixture = { ...setup, ...(await resultReported(setup.world, atWork)) };
+
+  // Act
+  assert((await fixture.f.reconcileRuns()).ok);
+
+  // Assert
+  const send = [...fixture.t3.threads.sends.values()][0]?.payload;
+  expect(send?.freshContext).toBe(true);
+  expect(send?.message).toBe(
+    "$factory-block\n\n" +
+      `Factory Block id: ${fixture.blockId}. Pass it as blockId to factory_get_block, factory_get_run, factory_get_run_image and factory_update_block.\n\n` +
+      "Follow repository instructions.\n\nIncoming message:\nImplemented the requested result.",
+  );
+});
+
+it("a fresh-context revisit with a Revisit instruction includes the Agent prompt, the instruction and the incoming message", async (c) => {
+  // Arrange
+  const setup = await prepared(c, {
+    revisit: true,
+    revisitContext: "fresh",
+    revisitInstruction: REVISIT_INSTRUCTION,
+  });
+  const atWork = await workerAtWork(setup.world, setup.input);
+  const fixture = { ...setup, ...(await resultReported(setup.world, atWork)) };
+
+  // Act
+  assert((await fixture.f.reconcileRuns()).ok);
+
+  // Assert
+  const send = [...fixture.t3.threads.sends.values()][0]?.payload;
+  expect(send?.freshContext).toBe(true);
+  expect(send?.message).toBe(
+    "$factory-block\n\n" +
+      `Factory Block id: ${fixture.blockId}. Pass it as blockId to factory_get_block, factory_get_run, factory_get_run_image and factory_update_block.\n\n` +
+      "Follow repository instructions.\n\n" +
+      "Revisit instruction for this later visit of your Block. It decides the scope of this visit; your Agent's role, criteria, exits and reporting rules still apply. A narrower scope never permits skipping a required check or accepting a defect that has evidence; if you cannot reconcile the two, say so in your report. Your Block's previous finished result is available from factory_get_run.\n" +
+      "Verify the fixes and the newly affected scope.\n\nIncoming message:\nImplemented the requested result.",
+  );
+});
+
+it("starting a Flow with a fresh-context revisit block is refused when T3 does not support freshContext", async (c) => {
+  // Arrange
+  const fixture = await prepared(c, { revisit: true, revisitContext: "fresh" });
+  fixture.t3.contract.support.freshContextSend = false;
+
+  // Act
+  const result = await fixture.f.startRun(fixture.input);
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues).toContainEqual(
+    expect.objectContaining({ code: "fresh_context_unsupported", path: "connection.contract" }),
   );
 });
 
@@ -382,6 +443,8 @@ it("factory_get_run returns the Run of the named Block and each Block's state", 
   // Arrange
   const setup = await prepared(c);
   const fixture = { ...setup, ...(await workerAtWork(setup.world, setup.input)) };
+  const run = await fixture.f.getRun(fixture.runId);
+  assert(run.ok);
 
   // Act
   const result = await fixture.f.runtime.run({ arguments: { blockId: fixture.blockId } });
@@ -389,10 +452,12 @@ it("factory_get_run returns the Run of the named Block and each Block's state", 
   // Assert
   expect(result).toMatchObject({
     code: "RUN",
+    id: fixture.runId,
     number: 1,
     title: "Improve search",
     input: "Improve search\nKeep it accessible.",
     state: "active",
+    startedAt: run.value.startedAt,
     blocks: [{ blockId: "worker", name: "Entry worker", state: "working", result: null }],
   });
 });

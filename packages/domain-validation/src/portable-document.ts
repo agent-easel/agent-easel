@@ -121,10 +121,19 @@ const VERSION_2: FormatReader = {
   kindChoice: "an Agent, Human, Wait, Continuation or Condition block",
 };
 
-const VERSION_3: FormatReader = { ...VERSION_2, version: PORTABLE_DOCUMENT_VERSION, finish: true };
+const VERSION_3: FormatReader = { ...VERSION_2, version: 3, finish: true };
+
+const VERSION_4: FormatReader = {
+  ...VERSION_3,
+  version: PORTABLE_DOCUMENT_VERSION,
+  kindFields: new Map([
+    ...VERSION_3.kindFields,
+    ["agent", ["agentKey", "hiddenExitIds", "localExits", "revisitInstruction", "revisitContext"]],
+  ]),
+};
 
 const READERS: ReadonlyMap<unknown, FormatReader> = new Map(
-  [VERSION_1, VERSION_2, VERSION_3].map((reader) => [reader.version, reader]),
+  [VERSION_1, VERSION_2, VERSION_3, VERSION_4].map((reader) => [reader.version, reader]),
 );
 
 type Issues = ValidationIssue[];
@@ -686,7 +695,11 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
 function portableBlock(block: FlowBlockInput): PortableFlowBlock {
   if (block.kind !== "agent") return block as PortableFlowBlock;
   const { agentId, ...rest } = block;
-  return { ...rest, agentKey: agentId } as PortableFlowBlock;
+  return {
+    ...rest,
+    revisitContext: block.revisitContext ?? "keep",
+    agentKey: agentId,
+  } as PortableFlowBlock;
 }
 
 /** A created Agent's id has this length, so the Flow's save request is measured exactly. */

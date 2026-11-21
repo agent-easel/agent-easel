@@ -28,6 +28,7 @@ export class ControlledT3Contract implements T3ContractReader {
     launchProofFails: false,
     attachmentLimit: 8 as number | null,
     send: true,
+    freshContextSend: true,
     sendRetryScope: "controlled-durable-send-1" as string | null,
     sendProofFails: false,
     settle: true,
@@ -71,7 +72,7 @@ export class ControlledT3Contract implements T3ContractReader {
               "workspaceStrategy",
             ],
             t3_thread_send: this.runtimeContractComplete
-              ? ["threadId", "clientRequestId", "mode"]
+              ? ["threadId", "clientRequestId", "mode", "freshContext"]
               : ["threadId", "clientRequestId"],
             t3_thread_read: ["threadId", "view", "afterPosition"],
             t3_queue: ["action", "queuedRunId"],
@@ -87,7 +88,7 @@ export class ControlledT3Contract implements T3ContractReader {
                     type:
                       f === "afterPosition"
                         ? "integer"
-                        : f === "stop"
+                        : f === "stop" || f === "freshContext"
                           ? "boolean"
                           : f === "modelSelection" || f === "workspaceStrategy"
                             ? "object"
@@ -136,6 +137,7 @@ export class ControlledT3Contract implements T3ContractReader {
               retryScope: support.sendRetryScope,
               explanation: "Controlled queue replay lifetime",
             },
+      freshContextSend: support.send && support.freshContextSend,
       settle: { supported: support.settle, explanation: "Controlled settlement support" },
       stop: { supported: support.stop, explanation: "Controlled Stop support" },
       rename: {

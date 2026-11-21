@@ -639,6 +639,82 @@ it("a Revisit instruction that is not text is refused at its field path", async 
   ]);
 });
 
+it("an Agent block's fresh revisitContext is saved and read back after restart", async (context) => {
+  // Arrange
+  const { harness, factory, created, unconnectedGraph } = await flowWithAgent(context);
+  const [coder, human] = unconnectedGraph.blocks;
+  const saved = await factory.updateFlow(created.value.id, {
+    name: created.value.name,
+    expectedRevision: 1,
+    expectedProjectId: null,
+    workspace: created.value.workspace,
+    graph: {
+      ...unconnectedGraph,
+      blocks: [{ ...coder!, revisitContext: "fresh" }, human!],
+    },
+  });
+  assert(saved.ok);
+  await factory.close();
+
+  // Act
+  const recovered = await readFlowAfterRestart(harness, created.value.id);
+
+  // Assert
+  expect(saved.value.graph.blocks[0]).toMatchObject({ kind: "agent", revisitContext: "fresh" });
+  expect(recovered).toStrictEqual(saved);
+});
+
+it("a revisitContext on a Human step is refused at its field path and appends no revision", async (context) => {
+  // Arrange
+  const { factory, created, block } = await validationFlow(context);
+  const graph = {
+    flowInput: flowInput("a"),
+    blocks: [block, { ...humanStep("review", "Review"), revisitContext: "fresh" }],
+    connections: [],
+  };
+
+  // Act
+  const result = await factory.updateFlow(created.value.id, {
+    name: "Validation",
+    expectedRevision: 1,
+    expectedProjectId: null,
+    workspace: created.value.workspace,
+    graph,
+  });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map((issue) => [issue.code, issue.path])).toStrictEqual([
+    ["invalid_revisit_context", "graph.blocks.1.revisitContext"],
+  ]);
+  expect(await factory.getFlow(created.value.id)).toStrictEqual(created);
+});
+
+it("an unknown revisitContext value on an Agent block is refused at its field path", async (context) => {
+  // Arrange
+  const { factory, created, block } = await validationFlow(context);
+  const graph = {
+    flowInput: flowInput("a"),
+    blocks: [{ ...block, revisitContext: "reset" }],
+    connections: [],
+  };
+
+  // Act
+  const result = await factory.updateFlow(created.value.id, {
+    name: "Validation",
+    expectedRevision: 1,
+    expectedProjectId: null,
+    workspace: created.value.workspace,
+    graph: graph as never,
+  });
+
+  // Assert
+  assert(!result.ok);
+  expect(result.error.issues.map((issue) => [issue.code, issue.path])).toStrictEqual([
+    ["invalid_revisit_context", "graph.blocks.0.revisitContext"],
+  ]);
+});
+
 /** One Agent block placing `agentId`, wired from the Flow input. */
 const placing = (agentId: string) => ({
   flowInput: flowInput("worker"),

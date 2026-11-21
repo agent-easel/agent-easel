@@ -497,8 +497,8 @@ fixed Human exits their old exits were mapped to.
   same panel under **‹ Overview Esc**, its icon, name, reference and state: its Attention card first, without a status row or
   Technical details (answers and Problem actions work here), its working report,
   the results handed off to an Agent block (**Received**), activations, the Agent block's
-  [Revisit instruction](../GLOSSARY.md#revisit-instruction) as captured at Start (read-only, and only when it is non-empty;
-  the execution canvas never shows it, and the exact composed turn stays in the worker thread), exits with each one's
+  [Revisit instruction](../GLOSSARY.md#revisit-instruction) and fresh-context revisit setting as captured at Start (read-only, and only when set;
+  the execution canvas never shows them, and the exact composed turn stays in the worker thread), exits with each one's
   consequence (**ends branch** or **→ *Block***), and its T3 thread, execution, pending Problem reasons and observation under a
   closed **Technical details** section at the bottom. Pressing the Flow input's
   [Run title](#run-title-generation) line shows the Run title there instead; it selects no block.

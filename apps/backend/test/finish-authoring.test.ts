@@ -32,6 +32,7 @@ function finishGraph(agentId: string, endings: readonly object[], connections: r
         hiddenExitIds: [],
         localExits: [],
         revisitInstruction: "",
+        revisitContext: "keep",
         position: { x: 300, y: 0 },
       },
       { id: "review", kind: "human", name: "Review", position: { x: 600, y: 0 } },
