@@ -716,6 +716,9 @@ CREATE UNIQUE INDEX human_occurrences_answer_request ON human_occurrences(answer
   WHERE answer_request_id IS NOT NULL
 ;
 
+CREATE TABLE installed_update_receipts (receipt_id TEXT PRIMARY KEY NOT NULL) WITHOUT ROWID
+;
+
 CREATE TABLE operation_intents (
   id TEXT PRIMARY KEY,
   run_id TEXT NOT NULL REFERENCES runs(id),

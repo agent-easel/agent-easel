@@ -1,10 +1,18 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/sql/SqlClient";
-import type { DetectedT3, FirstRunSetup, Result } from "@t3-factory/contracts";
+import type {
+  DetectedT3,
+  FirstRunSetup,
+  ReportingInstallation,
+  Result,
+  T3Connection,
+} from "@t3-factory/contracts";
 import { parseEndpoint } from "./connection.ts";
 import { reportingDriversOffInT3 } from "./reporting-discovery.ts";
+import { telemetryDuration, type Telemetry } from "./telemetry.ts";
 
 /**
  * T3's runtime file is T3's internal state, not a published contract, and may be stale or drift:
@@ -33,9 +41,15 @@ async function detectT3(stateDirectory: string): Promise<DetectedT3 | null> {
 }
 
 /** Setup completion is durable installation state; detection reads the shared T3 state directory. */
-export const makeFirstRunSetup = (stateDirectory: string) =>
+export const makeFirstRunSetup = (
+  stateDirectory: string,
+  telemetry: Telemetry,
+  getConnection: () => Effect.Effect<Result<T3Connection>>,
+  getInstallations: () => Effect.Effect<Result<readonly ReportingInstallation[]>, unknown>,
+) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
+    const started = yield* Clock.currentTimeMillis;
     const read = Effect.gen(function* (): Effect.fn.Return<Result<FirstRunSetup>, unknown> {
       const rows = yield* sql<{
         completed: number;
@@ -48,12 +62,42 @@ export const makeFirstRunSetup = (stateDirectory: string) =>
         value: { completed: rows[0]?.completed === 1, detectedT3, harnessesOffInT3 },
       };
     });
+    const recordCompletion = Effect.fn(function* () {
+      if (!telemetry.enabled) return;
+      const duration = telemetryDuration((yield* Clock.currentTimeMillis) - started);
+      const connection = yield* getConnection();
+      const installations = yield* getInstallations().pipe(Effect.option);
+      const t3Connection =
+        connection.ok && connection.value.state === "ready"
+          ? "completed"
+          : connection.ok && connection.value.endpoint
+            ? "incomplete"
+            : "skipped";
+      const targets =
+        installations._tag === "Some" && installations.value.ok ? installations.value.value : [];
+      const listed = targets.filter(
+        (target) => target.kind === "instance" && target.status !== "unsupported",
+      );
+      const agentInstallation =
+        listed.length > 0 && listed.every((target) => target.status === "installed")
+          ? "completed"
+          : t3Connection !== "skipped" && targets.some((target) => target.kind !== "none-enabled")
+            ? "incomplete"
+            : "skipped";
+      yield* telemetry.record("setup.completed", {
+        duration,
+        t3Connection,
+        agentInstallation,
+      });
+    });
     return {
       getFirstRunSetup: () => read,
       /** Host only (enforced by the route). */
       completeFirstRunSetup: () =>
         Effect.gen(function* () {
-          yield* sql`UPDATE first_run_setup SET completed = 1 WHERE singleton = 1`;
+          const changed =
+            yield* sql`UPDATE first_run_setup SET completed = 1 WHERE singleton = 1 AND completed = 0 RETURNING singleton`;
+          if (changed.length) yield* telemetry.recordLater(recordCompletion());
           return yield* read;
         }),
     };

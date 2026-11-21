@@ -5,6 +5,7 @@ import type { T3Threads } from "../t3/threads.ts";
 import { NO_T3_SUPPORT, type T3ContractSnapshot } from "../t3/contract.ts";
 import type { ContractSnapshots } from "../connection.ts";
 import { failure } from "../result.ts";
+import { telemetryCount, telemetryDuration, type Telemetry } from "../telemetry.ts";
 import { threadHref } from "../thread-link.ts";
 import type { BoundWorker, RunStore, SettlementWorkerRecord } from "./run-store/run-store.ts";
 import { runTarget, type RunnerLifecycle, type RunRow } from "./runner-types.ts";
@@ -87,7 +88,38 @@ export function openRunnerSettle(
   lifecycle: RunnerLifecycle,
   freshSnapshot: ContractSnapshots["fresh"],
   ownedThreads: OwnedThreads,
+  telemetry: Telemetry,
 ) {
+  function recordFinished(id: string, terminal: "settled" | "cancelled") {
+    if (!telemetry.enabled) return Effect.void;
+    return Effect.gen(function* () {
+      const detail = yield* lifecycle.getRun(id);
+      if (!detail.ok) return;
+      const run = detail.value;
+      const status = run.result
+        ? "completed"
+        : terminal === "cancelled"
+          ? "cancelled"
+          : run.attention.some(
+                (item) =>
+                  item.kind === "execution-failed" &&
+                  (item.settledAt === null || item.settlementReason === "manual-settlement"),
+              )
+            ? "failed"
+            : "completed";
+      const executed = yield* store.executedBlockCount(id);
+      const finishedAt = yield* Clock.currentTimeMillis;
+      yield* telemetry.record("run.finished", {
+        status,
+        duration: telemetryDuration(finishedAt - Date.parse(run.startedAt)),
+        executedBlockCount: telemetryCount(executed + Number(run.result !== null)),
+        hadHumanWait:
+          run.humanOccurrences.length > 0 ||
+          run.waitArrivals.some((entry) => entry.forwardedBy === "user"),
+        usedContinuation: run.continuationVisits.some((entry) => entry.kind === "prompt"),
+      });
+    }).pipe(Effect.catch(() => Effect.void));
+  }
   /** A worker thread T3 cannot read now keeps the Run Active until a later sweep. */
   function threadsFinished(run: RunRow, threads: readonly string[]) {
     return recoverOperation(
@@ -111,8 +143,10 @@ export function openRunnerSettle(
       if (!threads || !(yield* threadsFinished(run, threads))) return;
       const snapshot = yield* freshSnapshot();
       if (snapshot.contextId !== run.context_id) return;
-      if (yield* store.settleAutomatically(run))
+      if (yield* store.settleAutomatically(run)) {
+        yield* recordFinished(id, "settled");
         yield* settleWorkerThreads(run, Effect.succeed(snapshot));
+      }
     });
   }
 
@@ -305,7 +339,8 @@ export function openRunnerSettle(
           };
         }),
       );
-      if (settled)
+      if (settled) {
+        yield* recordFinished(run.id, run.gate_open ? "settled" : "cancelled");
         yield* lifecycle.fork(
           recoverOperation(
             Effect.flatMap(store.readRun(run.id), (row) =>
@@ -314,6 +349,7 @@ export function openRunnerSettle(
             () => Effect.void,
           ),
         );
+      }
       return settled;
     });
   }
@@ -447,6 +483,7 @@ export function openRunnerSettle(
   }
 
   return {
+    recordFinished,
     settleIfFinished,
     currentOutcome,
     advanceSettlement,

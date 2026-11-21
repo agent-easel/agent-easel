@@ -1,3 +1,4 @@
+import type { Telemetry } from "../telemetry.ts";
 import { createHash } from "node:crypto";
 import type { JSONValue } from "ai";
 import * as Clock from "effect/Clock";
@@ -282,6 +283,7 @@ export function makeChatActions(
   /** Told after a Human answer review became confirmable, failed or ended, so the Run's own answer
    * form shows whether a Discord confirmation is waiting. */
   answerReviewChanged: (runId: string) => void,
+  telemetry: Telemetry,
 ) {
   const byName = new Map(operations.map((operation) => [operation.name, operation]));
   const buttons = confirmationButtons(sql);
@@ -533,6 +535,12 @@ export function makeChatActions(
       performing.add(actionId);
       const operation = byName.get(row.operation)!;
       const parameters = JSON.parse(row.parameters_json) as JSONValue;
+      if (row.operation === "start" || row.operation === "human-answer") {
+        yield* telemetry.record("chat_control.used", {
+          platform: "discord",
+          command: row.operation === "start" ? "start_run" : "human_reply",
+        });
+      }
       const executed = yield* Effect.result(
         operation.execute(actionId, parameters, acceptance(row, click)),
       );

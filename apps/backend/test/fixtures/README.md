@@ -71,7 +71,7 @@ migration keeps the snapshot's endpoint, environment, resolver pin, theme and bo
 the upgraded host shows those colors and declares that source from its first status while T3 is unreachable.
 
 [`optional-finish-upgrade-data.json`](optional-finish-upgrade-data.json) holds Finish blocks with and without endings, which the
-baseline predates; migration `123` hides those without endings and preserves their stored positions. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)
+baseline predates; migration `124` hides those without endings and preserves their stored positions. [`optional-finish-migration.test.ts`](../optional-finish-migration.test.ts)
 checks through public reads that a Flow saved without endings, and the definitions its settled Run captured, have no Finish block,
 while a Flow's configured ending, its wire and the result its Run reached are kept.
 

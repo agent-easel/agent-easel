@@ -1,3 +1,4 @@
+import type { Telemetry } from "../telemetry.ts";
 import { DiscordAdapter } from "@chat-adapter/discord";
 import { Message as ChatMessage, type Thread } from "chat";
 import { Events, type Client, type Interaction, type Message } from "discord.js";
@@ -295,6 +296,7 @@ export const makeDiscordOperation = (
   gateway: DiscordGateway,
   credentials: ChatCredentials,
   conversation: {
+    readonly telemetry: Telemetry;
     readonly model: ConversationalModelAccess;
     readonly tools: readonly ChatTool[];
     readonly actions: ChatActions;
@@ -379,6 +381,7 @@ export const makeDiscordOperation = (
           applicationId,
           generations,
           model: conversation.model,
+          telemetry: conversation.telemetry,
           tools: conversation.tools,
           operating: () => !released(),
           post,

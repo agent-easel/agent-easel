@@ -921,20 +921,20 @@ it("refuses an over-budget shared diamond through public Start", async (c) => {
 it.for([
   {
     label: "starts at the 2,000-block limit without Finish",
-    finish: undefined,
+    finishFields: {},
     ready: true,
     outcome: { ok: true },
   },
   {
     label: "refuses 2,001 blocks when the root adds an empty Finish",
-    finish: { position: { x: 500, y: 0 }, endings: [] },
+    finishFields: { finish: { position: { x: 500, y: 0 }, endings: [] } },
     ready: false,
     outcome: {
       ok: false,
       error: { issues: [{ code: "subflow_expanded_blocks_exceeded", budget: { total: "2001" } }] },
     },
   },
-] as const)("$label", async ({ finish, ready, outcome }, c) => {
+] as const)("$label", async ({ finishFields, ready, outcome }, c) => {
   // Arrange
   const { f, input, agent } = await prepared(c);
   const child = await savedFlow(f, {
@@ -964,7 +964,7 @@ it.for([
         ...Array.from({ length: 3 }, (_, i) => connection(`root-${i}`, "done", `root-${i + 1}`)),
         ...placements.map((placement) => connection("root-3", "done", placement.id)),
       ],
-      finish,
+      ...finishFields,
     },
   });
 

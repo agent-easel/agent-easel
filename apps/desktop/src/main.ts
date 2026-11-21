@@ -3,6 +3,7 @@
  * local backend (server role) or one pinned remote server (client role). Business rules
  * stay in the backend's public operations.
  */
+import { hostReceiptPath, reportClientUpdates, stageUpdate } from "./update-receipts.ts";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -189,6 +190,7 @@ function followAttention() {
   pendingRoute = null;
   attentionHost = store.get().role === "server" ? attentionHostBase() : null;
   attentionSubscription.follow(attentionSelection());
+  reportClientUpdate();
 }
 
 /** Quit: alerts stop with the process; delivered notifications stay in Notification Center. */
@@ -493,6 +495,19 @@ async function setAppearance(preference: unknown): Promise<DesktopResult> {
   return { ok: true };
 }
 
+function reportClientUpdate() {
+  const settings = store.get();
+  if (!app.isPackaged || settings.role !== "client" || !settings.server) return;
+  const connection = approvedClient.capture();
+  if (connection)
+    void reportClientUpdates(
+      app.getPath("userData"),
+      clientServer(settings.server),
+      app.getVersion(),
+      connection,
+    ).catch(() => undefined);
+}
+
 /** Confirmed in the upgrade review; the backend still shuts down in order before replacement. */
 async function installUpdate(): Promise<DesktopResult> {
   if (installingUpdate) return failed("Update installation is already in progress.");
@@ -503,6 +518,17 @@ async function installUpdate(): Promise<DesktopResult> {
     await persistWindowBounds();
     if (updates.current.state !== "downloaded")
       throw new Error("The update is no longer ready. Check for updates again.");
+    const settings = store.get();
+    const server =
+      settings.role === "client" && settings.server ? clientServer(settings.server) : null;
+    if (app.isPackaged && updates.current.version && (settings.role === "server" || server)) {
+      await stageUpdate(
+        app.getPath("userData"),
+        server,
+        app.getVersion(),
+        updates.current.version,
+      ).catch(() => undefined);
+    }
     quitting = true;
     updates.install();
     return { ok: true };
@@ -734,7 +760,9 @@ async function start() {
     join(here, "backend-host.js"),
     {
       FACTORY_UI_DIRECTORY: uiDirectory,
+      FACTORY_UPDATE_RECEIPT: hostReceiptPath(app.getPath("userData")),
       FACTORY_APPLICATION_VERSION: app.getVersion(),
+      FACTORY_DESKTOP_PACKAGED: String(app.isPackaged),
     },
     (state) => {
       if (state.state !== "running") closeLive("The Factory server stopped.");
@@ -787,7 +815,10 @@ async function start() {
   attentionSubscription = new AttentionSubscription(attention);
   // No window is needed: a grant made in System Settings is noticed here and catches up.
   const checkPermission = () => void attention.checkPermission();
-  permissionCheck = setInterval(checkPermission, 60_000);
+  permissionCheck = setInterval(() => {
+    checkPermission();
+    reportClientUpdate();
+  }, 60_000);
   app.on("did-become-active", checkPermission);
   powerMonitor.on("resume", checkPermission);
   app.on("browser-window-focus", () => attention.focus(true));

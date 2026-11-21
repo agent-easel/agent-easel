@@ -35,6 +35,7 @@ import {
 import type { EffectOperations } from "../effect-operations.ts";
 import { isLocalEndpoint } from "../endpoint-local.ts";
 import { newId } from "../ids.ts";
+import type { Telemetry } from "../telemetry.ts";
 import type { LiveChanges } from "../live-changes.ts";
 import { failure } from "../result.ts";
 import { now } from "../time.ts";
@@ -266,6 +267,7 @@ export const makeTriggers = (
   deps: Pick<EffectOperations<FactoryOperations>, "listProjects" | "getFlow"> &
     Pick<TriggerCheckDeps, "startTextRun" | "startBlockers">,
   changes: LiveChanges,
+  telemetry: Telemetry,
 ) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
@@ -446,7 +448,17 @@ export const makeTriggers = (
         ),
       );
 
+    const saved = (write: Effect.Effect<Result<TriggerSave>, unknown>) =>
+      published(write).pipe(
+        Effect.tap((result) =>
+          result.ok
+            ? telemetry.record("trigger.saved", { kind: result.value.trigger.kind })
+            : Effect.void,
+        ),
+      );
+
     const triggerCheck = makeTriggerCheck({
+      telemetry,
       sql,
       github,
       getFlow: deps.getFlow,
@@ -532,13 +544,13 @@ export const makeTriggers = (
           ),
       createTrigger(input) {
         const validated = validateCreateTrigger(input);
-        return validated.ok ? published(save(validated.value, null)) : Effect.succeed(validated);
+        return validated.ok ? saved(save(validated.value, null)) : Effect.succeed(validated);
       },
       updateTrigger(id, input) {
         const validated = validateUpdateTrigger(input);
         if (!validated.ok) return Effect.succeed(validated);
         const { expectedRevision, ...settings } = validated.value;
-        return published(save(settings, { id, expectedRevision })).pipe(
+        return saved(save(settings, { id, expectedRevision })).pipe(
           Effect.tap((result) =>
             result.ok ? schedule.follow(id, result.value.trigger) : Effect.void,
           ),
