@@ -31,6 +31,7 @@ export type WorkerTitleSyncClaim = {
   readonly revision: number;
   readonly title: string;
   readonly requestId: string;
+  readonly lastDispatchedKey: string | null;
   readonly contextId: string;
   readonly authorizationIdentity: string;
   readonly endpoint: string;
@@ -111,23 +112,36 @@ export function cancelWorkerTitleSync(sql: SqlClient.SqlClient, runId: string) {
 export function resumeWorkerTitleClaims(sql: SqlClient.SqlClient) {
   return sql`UPDATE run_thread_bindings SET title_sync_state='pending',
     title_disposition=CASE WHEN title_inflight_request_id IS NULL THEN title_disposition ELSE 'unavailable' END,
+    title_last_dispatched_key=COALESCE(title_inflight_request_id,title_last_dispatched_key),
     title_inflight_revision=NULL,title_inflight_request_id=NULL WHERE title_sync_state='inflight'`;
 }
+
+type ClaimState = {
+  title_attempt: number;
+  title_target_revision: number;
+  title_target: string;
+  title_acknowledged: string | null;
+  title_disposition: string | null;
+};
 
 function finishRename(
   sql: SqlClient.SqlClient,
   claim: WorkerTitleSyncClaim,
-  acknowledged: boolean,
+  row: ClaimState,
+  acknowledged: string | null,
 ) {
+  const satisfied = row.title_target === acknowledged;
+  const pending = row.title_target_revision > claim.revision && !satisfied;
+  const syncedRevision = satisfied ? row.title_target_revision : claim.revision;
   return sql`UPDATE run_thread_bindings SET
-    title_acknowledged=CASE WHEN ${Number(acknowledged)} THEN ${claim.title} ELSE title_acknowledged END,
-    title_synced_revision=CASE WHEN ${Number(acknowledged)} THEN ${claim.revision} ELSE title_synced_revision END,
-    title_sync_state=CASE WHEN title_target_revision>${claim.revision} THEN 'pending' END,
+    title_acknowledged=COALESCE(${acknowledged},title_acknowledged),
+    title_synced_revision=CASE WHEN ${acknowledged} IS NOT NULL THEN ${syncedRevision} ELSE title_synced_revision END,
+    title_sync_state=${pending ? "pending" : null},
     title_inflight_revision=NULL,title_inflight_request_id=NULL,title_attempt=0,title_not_before=NULL,
-    title_disposition=${acknowledged ? null : "superseded"},
-    title_target=CASE WHEN title_target_revision>${claim.revision} THEN title_target END,
-    title_request_id=CASE WHEN title_target_revision>${claim.revision} THEN title_request_id END,
-    title_target_revision=CASE WHEN title_target_revision>${claim.revision} THEN title_target_revision END
+    title_disposition=${acknowledged === null ? "superseded" : null},
+    title_target=CASE WHEN ${Number(pending)} THEN title_target END,
+    title_request_id=CASE WHEN ${Number(pending)} THEN title_request_id END,
+    title_target_revision=CASE WHEN ${Number(pending)} THEN title_target_revision END
     WHERE id=${claim.bindingId}`;
 }
 
@@ -174,7 +188,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
           const [claim] = yield* sql<WorkerTitleSyncClaim>`
             SELECT b.id AS bindingId,b.run_id AS runId,b.thread_id AS threadId,
               b.title_inflight_revision AS revision,b.title_target AS title,b.title_request_id AS requestId,
-              r.context_id AS contextId,c.authorization_identity AS authorizationIdentity,
+              b.title_last_dispatched_key AS lastDispatchedKey,r.context_id AS contextId,c.authorization_identity AS authorizationIdentity,
               c.endpoint,c.environment_id AS environmentId
             FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id
             JOIN t3_authorization_contexts c ON c.id=r.context_id WHERE b.id=${bindingId}`;
@@ -186,8 +200,8 @@ export function openWorkerTitles(database: RunnerDatabase) {
 
   function currentClaim(sql: SqlClient.SqlClient, claim: WorkerTitleSyncClaim) {
     return Effect.map(
-      sql<{ title_attempt: number; title_target_revision: number }>`
-      SELECT b.title_attempt,b.title_target_revision FROM run_thread_bindings b
+      sql<ClaimState>`
+      SELECT b.title_attempt,b.title_target_revision,b.title_target,b.title_acknowledged,b.title_disposition FROM run_thread_bindings b
       JOIN runs r ON r.id=b.run_id JOIN runner_owner o ON o.singleton=1 JOIN t3_connection c ON c.singleton=1
       WHERE b.id=${claim.bindingId} AND b.title_sync_state='inflight' AND b.title_inflight_revision=${claim.revision}
       AND r.archived_at IS NULL AND c.context_id=${claim.contextId} AND o.token=${database.owner.token}`,
@@ -199,11 +213,12 @@ export function openWorkerTitles(database: RunnerDatabase) {
     claim: WorkerTitleSyncClaim,
     disposition:
       | "acknowledged"
-      | "superseded"
+      | "different-title"
       | "thread-not-found"
       | "unavailable"
       | "unclassified"
       | "capability-denied",
+    dispatched: boolean,
   ) =>
     database.mutate(
       claim.runId,
@@ -211,8 +226,24 @@ export function openWorkerTitles(database: RunnerDatabase) {
         Effect.gen(function* () {
           const row = yield* currentClaim(sql, claim);
           if (!row) return;
-          if (disposition === "acknowledged" || disposition === "superseded") {
-            yield* finishRename(sql, claim, disposition === "acknowledged");
+          if (
+            !dispatched &&
+            row.title_disposition === null &&
+            row.title_target === row.title_acknowledged
+          ) {
+            yield* finishRename(sql, claim, row, row.title_acknowledged);
+            return;
+          }
+          if (
+            disposition === "acknowledged" ||
+            (disposition === "different-title" && claim.lastDispatchedKey === claim.requestId)
+          ) {
+            yield* finishRename(
+              sql,
+              claim,
+              row,
+              disposition === "acknowledged" ? claim.title : null,
+            );
             return;
           }
           if (disposition === "thread-not-found") {
@@ -226,7 +257,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
               : null;
           const blocked = disposition === "capability-denied" ? claim.contextId : null;
           const state = disposition === "capability-denied" ? "paused" : "pending";
-          yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},title_disposition=${disposition},title_blocked_context=${blocked},title_inflight_revision=NULL,title_inflight_request_id=NULL,title_not_before=${retryAt} WHERE id=${claim.bindingId}`;
+          yield* sql`UPDATE run_thread_bindings SET title_sync_state=${state},title_last_dispatched_key=CASE WHEN ${Number(dispatched)} THEN ${claim.requestId} ELSE title_last_dispatched_key END,title_disposition=CASE WHEN ${Number(dispatched)} THEN ${disposition === "different-title" ? "unclassified" : disposition} ELSE title_disposition END,title_blocked_context=${blocked},title_inflight_revision=NULL,title_inflight_request_id=NULL,title_not_before=${retryAt} WHERE id=${claim.bindingId}`;
         }),
       () => false,
     );

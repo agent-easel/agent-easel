@@ -425,6 +425,7 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     if (fence) {
       if (!(await fence.authorizeDispatch())) throw new T3Failure("refused", "Dispatch cancelled.");
       this.dispatchCredentials(endpoint);
+      fence.onDispatch();
     }
     try {
       return await fetch(input, {

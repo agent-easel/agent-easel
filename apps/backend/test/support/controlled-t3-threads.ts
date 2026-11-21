@@ -115,12 +115,16 @@ export class ControlledT3Threads implements T3Threads {
   readonly renameReceipts = new Map<string, { threadId: string; title: string }>();
   readonly deletedThreads = new Set<string>();
   loseRenameReply = false;
-  private renameReply: Promise<void> | undefined;
+  afterRename?: () => Promise<void>;
   holdRenameReply() {
     let release = () => {};
-    this.renameReply = new Promise<void>((resolve) => {
+    const reply = new Promise<void>((resolve) => {
       release = resolve;
     });
+    this.afterRename = () => {
+      delete this.afterRename;
+      return reply;
+    };
     return release;
   }
   compactRenameKeys = new Set<string>();
@@ -145,6 +149,7 @@ export class ControlledT3Threads implements T3Threads {
       this.connection.identity !== target.authorizationIdentity
     )
       return { kind: "unavailable" };
+    target.onDispatch();
     this.renames.push(request);
     for (const notify of this.renameWaiters.splice(0)) notify(request);
     if (this.renameDisposition) return this.renameDisposition;
@@ -158,16 +163,14 @@ export class ControlledT3Threads implements T3Threads {
         title: request.title,
       });
     }
-    const reply = this.renameReply;
-    this.renameReply = undefined;
-    await reply;
+    await this.afterRename?.();
     if (this.loseRenameReply) return { kind: "unavailable" };
     const title = this.compactRenameKeys.has(request.clientRequestId)
       ? (this.threadTitle(request.threadId) ?? request.title)
       : (receipt?.title ?? request.title);
     return title === request.title
       ? { kind: "acknowledged", threadId: request.threadId, title }
-      : { kind: "superseded", threadId: request.threadId, title };
+      : { kind: "different-title", threadId: request.threadId, title };
   }
   private launchedThread(threadId: string) {
     return [...this.launches.values()].find((entry) => entry.reference.threadId === threadId);

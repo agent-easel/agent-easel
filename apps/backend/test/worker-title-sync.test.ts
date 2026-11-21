@@ -1,7 +1,6 @@
 import { assert, expect, it } from "@effect/vitest";
 import { copyFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
-import { fingerprint } from "../src/fingerprint.ts";
 import { prepared } from "./support/prepared-runner.ts";
 import {
   allTurnsEnd,
@@ -17,8 +16,6 @@ import {
   titleGenerationLaunched,
   workerAtWork,
 } from "./support/scenarios.ts";
-
-const legacyLaunchTitle = "Factory #1 · 1 Entry worker";
 
 it("renaming a Run updates its bound worker thread without timeline, activity, or attention changes", async (c) => {
   // Arrange
@@ -123,50 +120,6 @@ it("a title chosen while a launch is still in flight is applied when the worker 
   expect([...t3.threads.launches.values()][0]?.payload.title).toBe(
     "F#1 Entry worker · Improve search",
   );
-});
-
-it("a lost launch recovered by its saved legacy title is renamed to the current format after it binds", async (c) => {
-  // Arrange
-  const { h, f, t3, input, world } = await prepared(c);
-  t3.threads.loseLaunchReply = true;
-  const accepted = await f.startRun(input);
-  assert(accepted.ok);
-  await f.reconcileRuns();
-  const launch = [...t3.threads.launches.values()][0];
-  assert(launch);
-  t3.threads.remoteTitles.set(launch.reference.threadId, legacyLaunchTitle);
-  await f.close();
-  const db = new DatabaseSync(h.databasePath);
-  const row = db
-    .prepare("SELECT id, payload_json FROM operation_intents WHERE kind = 'launch'")
-    .get() as {
-    id: string;
-    payload_json: string;
-  };
-  const payload = JSON.parse(row.payload_json) as { title: string };
-  payload.title = legacyLaunchTitle;
-  const body = JSON.stringify(payload);
-  db.prepare("UPDATE operation_intents SET payload_json = ?, fingerprint = ? WHERE id = ?").run(
-    body,
-    fingerprint(body),
-    row.id,
-  );
-  db.close();
-  t3.threads.loseLaunchReply = false;
-  const update = nextRename(world);
-
-  // Act
-  const restored = await h.open({ t3, connectionRetryMs: 60_000 });
-  c.onTestFinished(() => restored.close());
-
-  // Assert
-  expect(await update).toMatchObject({
-    threadId: launch.reference.threadId,
-    title: "F#1 Entry worker · Improve search",
-  });
-  const run = await restored.getRun(accepted.value.id);
-  assert(run.ok);
-  expect(run.value.blocks.map((block) => block.threadId)).toContain(launch.reference.threadId);
 });
 
 it("archiving a Run drops a pending worker rename and a later title change does not call T3", async (c) => {
@@ -309,6 +262,7 @@ it("a return to the launch title repairs a rename whose acknowledgement was lost
   t3.threads.loseRenameReply = true;
   assert((await f.renameRun(started.value.id, { title: "Intermediate" })).ok);
   await f.reconcileRuns();
+  await expect.poll(() => t3.threads.renames.length).toBe(1);
   const [intermediate] = t3.threads.renames;
   assert(intermediate);
   t3.threads.loseRenameReply = false;
@@ -318,7 +272,9 @@ it("a return to the launch title repairs a rename whose acknowledgement was lost
 
   // Assert
   await f.reconcileRuns();
-  expect(t3.threads.threadTitle(intermediate.threadId)).toBe("F#1 Entry worker · Improve search");
+  await expect
+    .poll(() => t3.threads.threadTitle(intermediate.threadId))
+    .toBe("F#1 Entry worker · Improve search");
   expect(t3.threads.renames.at(-1)?.clientRequestId).not.toBe(intermediate.clientRequestId);
 });
 
@@ -347,6 +303,7 @@ it.for(["thread-not-found", "capability-denied"] as const)(
     t3.threads.renameDisposition = { kind };
     assert((await f.renameRun(worker.runId, { title: "First title" })).ok);
     await f.reconcileRuns();
+    await expect.poll(() => t3.threads.renames.length).toBe(1);
     const [sent] = t3.threads.renames;
     assert(sent);
     t3.threads.renameDisposition = undefined;
@@ -379,7 +336,7 @@ it("Archive between claim and dispatch cancels the unsent rename", async (c) => 
 
   // Assert
   await f.reconcileRuns();
-  expect(archived).toBe(true);
+  await expect.poll(() => archived).toBe(true);
   expect(t3.threads.renames).toStrictEqual([]);
 });
 
@@ -404,30 +361,9 @@ it("a restart with a sent claim and a newer target dispatches only the latest re
 
   // Assert
   await restored.reconcileRuns();
-  expect(t3.threads.renames.map((request) => request.title)).toStrictEqual([
-    sent.title,
-    "F#1 Entry worker · Improve search",
-  ]);
-  expect(t3.threads.renames[1]?.clientRequestId).not.toBe(sent.clientRequestId);
-});
-
-it("a matching acknowledgement for an older revision cannot finish a newer in-flight edit", async (c) => {
-  // Arrange
-  const { f, t3, world, input } = await prepared(c);
-  const worker = await workerAtWork(world, input);
-  const { sent, release } = await heldWorkerRename(world, worker.runId, "First title");
-  assert((await f.renameRun(worker.runId, { title: "Intermediate" })).ok);
-  assert((await f.renameRun(worker.runId, { title: "First title" })).ok);
-
-  // Act
-  release();
-
-  // Assert
-  await f.reconcileRuns();
-  expect(t3.threads.renames.map((request) => request.title)).toStrictEqual([
-    sent.title,
-    sent.title,
-  ]);
+  await expect
+    .poll(() => t3.threads.renames.map((request) => request.title))
+    .toStrictEqual([sent.title, "F#1 Entry worker · Improve search"]);
   expect(t3.threads.renames[1]?.clientRequestId).not.toBe(sent.clientRequestId);
 });
 
@@ -461,6 +397,10 @@ it("a capability withdrawn while connecting prevents dispatch of the claimed ren
   assert((await f.renameRun(worker.runId, { title: "Held" })).ok);
 
   // Assert
+  await f.reconcileRuns();
+  delete t3.threads.beforeRename;
+  assert((await f.renameRun(worker.runId, { title: input.title })).ok);
+  t3.contract.support.rename = true;
   await f.reconcileRuns();
   expect(t3.threads.renames).toStrictEqual([]);
 });

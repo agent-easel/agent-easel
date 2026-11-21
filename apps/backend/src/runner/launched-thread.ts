@@ -11,14 +11,21 @@ function unavailableLaunch(): LaunchDiscovery {
 type LaunchScope = Pick<RunRow, "endpoint" | "environment_id" | "t3_project_id" | "workspace_root">;
 
 /** The only thread in the project that carries the saved launch title, if exactly one does. */
-function soleTitledCandidate(t3: T3Threads, scope: LaunchScope, title: string) {
+function soleTitledCandidate(
+  t3: T3Threads,
+  scope: LaunchScope,
+  title: string,
+  bound: ReadonlySet<string>,
+) {
   return Effect.tryPromise({
     try: () => t3.discoverLaunchCandidates(runTarget(scope), title).catch(unavailableLaunch),
     catch: unavailableLaunch,
   }).pipe(
     Effect.map((discovery) => {
       if (!discovery.available) return undefined;
-      const titled = discovery.candidates.filter((candidate) => candidate.title === title);
+      const titled = discovery.candidates.filter(
+        (candidate) => candidate.title === title && !bound.has(candidate.threadId),
+      );
       return titled.length === 1 ? titled[0] : undefined;
     }),
   );
@@ -29,9 +36,14 @@ function soleTitledCandidate(t3: T3Threads, scope: LaunchScope, title: string) {
  * thread in the project with the saved title, top-level with the saved workspace and settings,
  * and exactly one matching execution. Undefined when evidence is missing, ambiguous or incomplete.
  */
-export function verifiedLaunchedThread(t3: T3Threads, scope: LaunchScope, payload: LaunchPayload) {
+export function verifiedLaunchedThread(
+  t3: T3Threads,
+  scope: LaunchScope,
+  payload: LaunchPayload,
+  bound: ReadonlySet<string> = new Set(),
+) {
   return Effect.gen(function* () {
-    const candidate = yield* soleTitledCandidate(t3, scope, payload.title);
+    const candidate = yield* soleTitledCandidate(t3, scope, payload.title, bound);
     if (!candidate || !sameWorkerSettings(payload, scope, candidate)) return undefined;
     const executions = matchingExecutions(payload, candidate);
     if (executions.length !== 1) return undefined;

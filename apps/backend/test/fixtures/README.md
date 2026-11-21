@@ -101,3 +101,11 @@ read the connection and theme-color source, close Factory, and capture schema DD
 row is excluded as transient process ownership. Of the controlled adapter only its availability, authorization,
 compatibility, grant identity and environment are kept; its theme-color double, which held the stand-in grant, is not. The
 capture holds no credential: the grant appears only as its opaque id and expiry inside the stored presentation.
+
+`worker-title-upgrade-data.json` records two Starts from released `v0.8.1-beta.36`
+(`5411ef17547ecc756bd8b6fa94bdcbb2cf16d583`, migration 112). Both use the same
+captured single-Agent Flow and controlled T3 project. The first launch bound normally.
+T3 accepted the second launch and lost its reply while discovery was unavailable.
+The fixture retains the schema, ledger, execution and definition rows, and controlled
+T3 launch references and payloads. Reopening it exercises recovery and the first
+post-upgrade Rename without starting a second copy of either worker.

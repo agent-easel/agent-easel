@@ -316,7 +316,7 @@ function renameSupport(ready: boolean, schema: ToolSchema): RenameSupport {
     plainString(props.title, 5, 200) &&
     plainString(props.clientRequestId, 64, 64) &&
     (props.environmentId === undefined || environmentId) &&
-    !["propertyNames", "patternProperties", "minProperties", "maxProperties"].some(
+    !["enum", "const", "propertyNames", "patternProperties", "minProperties", "maxProperties"].some(
       (key) => key in schema!,
     ) &&
     required.every((field) => typeof field === "string" && allowed.has(field));

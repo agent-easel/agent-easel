@@ -77,23 +77,13 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
       });
       yield* fork(titles.reconcileTitleGeneration(runId));
     });
-  const titleLanes = makeOperationLanes();
-  const syncRun = (runId: string) =>
-    titleLanes.serial(runId, () =>
-      recoverOperation(
-        Effect.gen(function* () {
-          if (closed) return;
-          yield* syncWorkerTitles(store, t3, snapshots, runId);
-        }),
-        () => Effect.logWarning("Worker title synchronization failed", { runId }),
-      ),
-    );
   const titleSync = Latch.makeUnsafe(false);
   const titleRuns = new Set<string>();
-  yield* changes.onRunChanged((runId) => {
+  const queueTitleRun = (runId: string) => {
     titleRuns.add(runId);
     titleSync.openUnsafe();
-  });
+  };
+  yield* changes.onRunChanged(queueTitleRun);
   const titleWorker = yield* Effect.forkIn(
     Effect.forever(
       Effect.gen(function* () {
@@ -101,10 +91,17 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
         titleSync.closeUnsafe();
         const ids = [...titleRuns];
         for (const id of ids) titleRuns.delete(id);
-        yield* Effect.forEach(ids, (id) => syncRun(id), {
-          concurrency: "unbounded",
-          discard: true,
-        }).pipe(Effect.uninterruptible);
+        yield* Effect.forEach(
+          ids,
+          (id) =>
+            recoverOperation(syncWorkerTitles(store, t3, snapshots, id), () =>
+              Effect.logWarning("Worker title synchronization failed", { runId: id }),
+            ),
+          {
+            concurrency: "unbounded",
+            discard: true,
+          },
+        );
       }),
     ),
     scope,
@@ -247,12 +244,7 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           });
           // Title generations run beside their Runs, also Archived ones still owing cleanup.
           yield* titles.reconcileTitleGenerations();
-          yield* Effect.forEach(
-            yield* store.runsPendingWorkerTitleSync(),
-            (run) => syncRun(run.id),
-            { concurrency: "unbounded", discard: true },
-          );
-          yield* titleLanes.drain();
+          for (const run of yield* store.runsPendingWorkerTitleSync()) queueTitleRun(run.id);
           // Include dispatches queued by reports while the sweep observed its Runs' workers.
           yield* drives.drain(ids.map((run) => run.id));
           return { ok: true as const, value: undefined };
@@ -274,7 +266,6 @@ export const makeRunner = Effect.fn("Runner.make")(function* (
           yield* sweeps.withPermit(Effect.void);
           yield* Fiber.awaitAll(detached);
           yield* drives.drain();
-          yield* titleLanes.drain();
           yield* store.drain();
         }),
       )

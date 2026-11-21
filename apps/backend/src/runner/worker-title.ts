@@ -29,20 +29,28 @@ function labelHeading(label: string) {
   return (label ? ` ${label}` : "") + separator;
 }
 
-function reserveShorterHeadings(labels: readonly string[]) {
-  const reserved = new Set<string>();
-  for (const label of labels) {
-    const heading = labelHeading(label);
-    const finalSeparator = heading.length - separator.length;
-    for (let index = heading.indexOf(separator); index < finalSeparator;) {
-      reserved.add(heading.slice(0, index + separator.length));
-      index = heading.indexOf(separator, index + 1);
+const capturedLabels = new WeakMap<readonly TitleBlock[], ReadonlyMap<string, string>>();
+
+function ordinalLabel(name: string, used: Set<string>, ordinals: Map<string, number>) {
+  for (let digits = 1; ; digits++) {
+    const stem = clip(name, blockLabelLimit - digits - 3);
+    let ordinal = ordinals.get(stem) ?? 1;
+    ordinal = Math.max(ordinal, 10 ** (digits - 1));
+    while (ordinal < 10 ** digits && used.has((stem + ` (${ordinal})`).trimStart())) ordinal++;
+    if (ordinal >= 10 ** digits) {
+      ordinals.set(stem, ordinal);
+      continue;
     }
+    ordinals.set(stem, ordinal + 1);
+    const label = (stem + ` (${ordinal})`).trimStart();
+    used.add(label);
+    return label;
   }
-  return reserved;
 }
 
 function blockLabels(blocks: readonly TitleBlock[]) {
+  const cached = capturedLabels.get(blocks);
+  if (cached) return cached;
   const agents = blocks
     .filter((block) => block.kind === "agent")
     .map((block) => {
@@ -51,24 +59,18 @@ function blockLabels(blocks: readonly TitleBlock[]) {
     });
   const counts = new Map<string, number>();
   for (const { base } of agents) counts.set(base, (counts.get(base) ?? 0) + 1);
-  const reservedHeadings = reserveShorterHeadings([...counts.keys()]);
   const used = new Set(agents.map(({ base }) => base.replace(/(^| )\(0+(?=\d+\)$)/u, "$1(")));
   const ordinals = new Map<string, number>();
-  return new Map(
-    agents.map(({ id, name, base }) => {
-      if (counts.get(base) === 1 && !reservedHeadings.has(labelHeading(base)))
-        return [id, base] as const;
-      let ordinal = ordinals.get(base) ?? 0;
-      let label: string;
-      do {
-        const suffix = ` (${++ordinal})`;
-        label = `${clip(name, blockLabelLimit - suffix.length)}${suffix}`.trimStart();
-      } while (used.has(label) || reservedHeadings.has(labelHeading(label)));
-      used.add(label);
-      ordinals.set(base, ordinal);
-      return [id, label] as const;
-    }),
-  );
+  const labels = new Map<string, string>();
+  for (const { id, name, base } of agents) {
+    if (counts.get(base) === 1) {
+      labels.set(id, base);
+      continue;
+    }
+    labels.set(id, ordinalLabel(name, used, ordinals));
+  }
+  capturedLabels.set(blocks, labels);
+  return labels;
 }
 
 export function workerTitleRequestId(runId: string, threadId: string, revision: number) {

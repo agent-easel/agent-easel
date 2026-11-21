@@ -152,7 +152,8 @@ function searchLaunchedWorker(
       current,
       retryNotBefore(current, launch.recovery_attempt + 1),
     );
-    const launched = yield* verifiedLaunchedThread(t3, runRow, payload);
+    const bound = yield* store.boundWorkerThreads(runRow.environment_id);
+    const launched = yield* verifiedLaunchedThread(t3, runRow, payload, bound);
     if (!launched) return yield* miss;
     yield* store.bindLaunchedWorker(runRow, launch, launched);
   });

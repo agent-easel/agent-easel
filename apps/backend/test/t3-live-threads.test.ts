@@ -483,6 +483,7 @@ it("a rename reply that echoes the sent title is acknowledged", async (c) => {
   const target = {
     endpoint,
     authorizationIdentity,
+    onDispatch: () => {},
     authorizeDispatch: async () => true,
     signal: new AbortController().signal,
   };
@@ -513,6 +514,7 @@ it("an installed plain-text missing-thread error retires that rename as thread-n
   const target = {
     endpoint,
     authorizationIdentity,
+    onDispatch: () => {},
     authorizeDispatch: async () => true,
     signal: new AbortController().signal,
   };
@@ -558,7 +560,7 @@ it("installed plain-text errors identify a missing thread and a denied capabilit
   expect(unclassified).toStrictEqual({ kind: "unclassified" });
 });
 
-it("a replayed rename that returns a different current title is superseded", () => {
+it("a rename reply reports the different title returned by T3", () => {
   // Arrange
   const answer = {
     isError: false,
@@ -570,7 +572,7 @@ it("a replayed rename that returns a different current title is superseded", () 
 
   // Assert
   expect(disposition).toStrictEqual({
-    kind: "superseded",
+    kind: "different-title",
     threadId: "thread-1",
     title: "F#1 Entry worker · Other",
   });
@@ -588,6 +590,7 @@ it.for([
     endpoint,
     authorizationIdentity: identity(authorizationIdentity),
     signal: new AbortController().signal,
+    onDispatch: () => {},
     authorizeDispatch: async () => current,
   };
 

@@ -322,3 +322,18 @@ it.each([
   // Assert
   expect(support.rename.supported).toBe(false);
 });
+
+it.each([{ enum: [{}] }, { const: {} }])(
+  "object constraints excluding rename disable support",
+  (constraint) => {
+    // Arrange
+    const [tool] = renameTool(renameProperties);
+    const restricted = { ...tool!, inputSchema: { ...tool!.inputSchema, ...constraint } };
+
+    // Act
+    const support = contractSupport(true, [restricted]);
+
+    // Assert
+    expect(support.rename.supported).toBe(false);
+  },
+);

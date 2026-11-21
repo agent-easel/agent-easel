@@ -1164,6 +1164,17 @@ export const fanOutFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "follow-up")],
   }));
 
+export const separatorLaunchFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Overlapping launch titles", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [
+      entryWorker(agentId),
+      agentBlock("second", "A", agentId),
+      agentBlock("later", "A · B", agentId),
+    ],
+    connections: [connection("worker", "done", "later")],
+  }));
+
 export const collidingEntryFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Colliding entry names", (agentId) => ({
     flowInput: flowInput("worker", "second"),

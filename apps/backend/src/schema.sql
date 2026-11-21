@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: worker_title_sync
+-- Newest applied migration: worker_title_dispatch
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),
@@ -1009,7 +1009,7 @@ CREATE TABLE "run_thread_bindings" (
   title_disposition IS NULL OR title_disposition IN (
     'thread-not-found', 'capability-denied', 'superseded', 'unavailable', 'unclassified'
   )
-), title_blocked_context TEXT, title_attempt INTEGER NOT NULL DEFAULT 0, title_not_before TEXT,
+), title_blocked_context TEXT, title_attempt INTEGER NOT NULL DEFAULT 0, title_not_before TEXT, title_last_dispatched_key TEXT,
   UNIQUE(run_id,environment_id,thread_id),
   FOREIGN KEY(run_id,block_id) REFERENCES run_blocks(run_id,block_id)
 );

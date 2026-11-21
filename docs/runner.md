@@ -61,11 +61,11 @@ reporting protocol.
   one line and clips on grapheme boundaries with an ellipsis, within 24 code points for
   the Block label and 200 for the entire title. Agent Blocks whose labels would be identical
   receive ordinals in captured Flow order. Factory makes room for the ordinals within the label
-  budget and skips reserved literal or already assigned labels. A shorter label also receives
-  an ordinal if a literal separator in a longer label could make their complete titles equal
-  across Run title changes.
+  budget and skips reserved literal or already assigned labels. Distinct rendered labels retain their names.
 - The formatted title is saved in the launch payload. Launch recovery searches for that exact
-  title, even if a Run title or the live Flow definition has since changed.
+  title, even if a Run title or the live Flow definition has since changed. Recovery excludes
+  threads Factory already bound in the environment. An uncertain launch holds a later launch
+  of the same Run with the same saved title until Factory resolves ownership.
 - Start mints a **Block id** for each Agent Block and Continuation. The first message starts with
   `$factory-block`, then a `Factory Block id: <id>.` line; every later visit and Request
   report message repeats the same id. The worker passes it to `factory_get_block`, then
@@ -553,7 +553,7 @@ Direct launch acknowledgement and exact-title recovery both bind the physical wo
 
 Each committed title change advances the Run title revision. Factory keeps the latest desired revision per worker and skips a rendered title identical to its acknowledged baseline while that baseline is certain. A worker's manual T3 title therefore survives edits confined to the clipped tail. Once a write may have reached T3, returning to an earlier title requires a new command.
 
-The Runner serializes attempts, coalesces unsent revisions and resumes pending or interrupted claims on startup. A revision keeps its request key across retries. A newer revision gets its own key, even if an older in-flight command had the same title. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
+A background worker serializes attempts per binding, coalesces unsent revisions and resumes pending or interrupted claims on startup. Startup and execution sweeps schedule eligible bindings and proceed independently of remote renames. Each pass attempts a due binding at most once. A revision keeps its request key across retries. An acknowledgement satisfies the latest revision when it renders the same title. A refusal before delivery preserves the previous baseline certainty. A different returned title is retryable on first dispatch and closes a revision only on replay of a previously dispatched key. After a transient failure the next eligible sweep retries with exponential backoff from one second to one minute. A local attempt times out after 15 seconds. These cosmetic writes follow latest-state best-effort delivery outside the execution-turn replay-retention freeze for launches and queued sends.
 
 Archive cancels unsent work and discards late results. T3 supplies no remote cancellation or conditional ordering guarantee for an already dispatched rename. It can still apply after Archive or after Factory times out and sends a newer title.
 

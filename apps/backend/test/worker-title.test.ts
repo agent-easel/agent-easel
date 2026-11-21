@@ -112,13 +112,27 @@ it("ordinals remain unique when distinct clipped labels become equal after makin
   expect(title).toBe("F#42 abcdefghijklmnopqrs… (4) · Ship search");
 });
 
-it("ordinals keep a literal separator in a Block name from disguising an older Run title", () => {
+it("distinct labels with a literal separator keep their captured names", () => {
   // Arrange
-  const blocks = [agent("short", "A"), agent("long", "A · A"), agent("literal", "A (1) · A")];
+  const blocks = [agent("short", "A"), agent("long", "A · B")];
 
   // Act
-  const title = workerThreadTitle({ ...run, title: "A · Ship search" }, blocks, "short");
+  const titles = blocks.map(({ id }) => workerThreadTitle({ ...run, title: "Ship" }, blocks, id));
 
   // Assert
-  expect(title).toBe("F#42 A (2) · A · Ship search");
+  expect(titles).toStrictEqual(["F#42 A · Ship", "F#42 A · B · Ship"]);
+});
+
+it("500 Agents sharing ordinal-width prefixes keep distinct titles in captured order", () => {
+  // Arrange
+  const blocks = Array.from({ length: 500 }, (_, index) =>
+    agent(String(index), "abcdefghijklmnopqrst" + String(index >> 1).padStart(3, "0") + " worker"),
+  );
+
+  // Act
+  const titles = blocks.map(({ id }) => workerThreadTitle(run, blocks, id));
+
+  // Assert
+  expect(new Set(titles).size).toBe(500);
+  expect(titles.at(-1)).toBe("F#42 abcdefghijklmnopq… (500) · Ship search");
 });

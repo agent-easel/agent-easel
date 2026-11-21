@@ -36,7 +36,7 @@ function successDisposition(
     return { kind: "unclassified" };
   return body.title === request.title
     ? { kind: "acknowledged", threadId: request.threadId, title: body.title }
-    : { kind: "superseded", threadId: request.threadId, title: body.title };
+    : { kind: "different-title", threadId: request.threadId, title: body.title };
 }
 
 export function workerTitleRenameDisposition(

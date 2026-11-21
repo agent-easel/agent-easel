@@ -51,6 +51,15 @@ export function openRunReads(database: RunnerDatabase) {
           (rows) => rows[0],
         ),
       ),
+    boundWorkerThreads: (environmentId: string) =>
+      transaction((sql) =>
+        Effect.map(
+          sql<{
+            thread_id: string;
+          }>`SELECT thread_id FROM run_thread_bindings WHERE environment_id=${environmentId}`,
+          (rows) => new Set(rows.map((row) => row.thread_id)),
+        ),
+      ),
     blocksWithWorkers: (runId: string) =>
       run(
         Effect.gen(function* () {

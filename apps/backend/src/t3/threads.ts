@@ -43,7 +43,7 @@ export interface WorkerTitleRenameRequest {
 
 export type WorkerTitleRenameDisposition =
   | { readonly kind: "acknowledged"; readonly threadId: string; readonly title: string }
-  | { readonly kind: "superseded"; readonly threadId: string; readonly title: string }
+  | { readonly kind: "different-title"; readonly threadId: string; readonly title: string }
   | { readonly kind: "thread-not-found" }
   | { readonly kind: "capability-denied" }
   | { readonly kind: "unavailable" }

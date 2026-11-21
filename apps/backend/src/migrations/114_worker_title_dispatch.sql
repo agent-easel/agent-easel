@@ -1,0 +1,1 @@
+ALTER TABLE run_thread_bindings ADD COLUMN title_last_dispatched_key TEXT

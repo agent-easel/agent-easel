@@ -481,7 +481,7 @@ On a ready connection Factory inspects the optional `t3_thread_update` schema fo
 
 The live context must match the Run's accepted context through credential selection and dispatch. New approval never transfers outstanding work to the replacement grant. A missing thread permanently retires synchronization for its binding. A capability denial pauses work under that grant without timed retries. Other failures leave a backend diagnostic and follow the [Runner retry rules](runner.md#worker-title-synchronization).
 
-Factory checks the thread ID, action and returned title. A retained receipt and event can replay the original acknowledgement even after a manual edit. After event compaction T3 can instead return the current projection. A different title closes that revision as superseded and leaves newer revisions eligible. A matching title acknowledges the command without proving what T3 currently displays.
+Factory checks the thread ID, action and returned title. A retained receipt and event can replay the original acknowledgement even after a manual edit. After event compaction T3 can instead return the current projection. A different title on first dispatch leaves the revision eligible for retry. On replay of a previously dispatched key, a different title closes that revision as superseded and leaves newer revisions eligible. A matching title acknowledges the command without proving what T3 currently displays.
 
 ## Title threads
 

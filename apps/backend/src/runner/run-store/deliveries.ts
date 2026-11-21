@@ -146,6 +146,9 @@ export function openRunDeliveries(database: RunnerDatabase) {
           SELECT 1 FROM report_recoveries rr JOIN run_executions e ON e.run_id=rr.run_id AND e.block_id=rr.block_id AND e.execution_id=rr.source_execution_id
           JOIN run_blocks b ON b.run_id=rr.run_id AND b.block_id=rr.block_id
           WHERE rr.intent_id=${delivery.id} AND e.engine_status='completed' AND e.report_status IS NOT 'finished' AND b.execution_id=e.execution_id AND b.pending_request_count=0))
+        AND NOT EXISTS(SELECT 1 FROM operation_intents other WHERE other.run_id=${runRow.id}
+          AND other.state='uncertain' AND other.kind='launch' AND operation_intents.kind='launch'
+          AND json_extract(other.payload_json,'$.title')=json_extract(operation_intents.payload_json,'$.title'))
         AND NOT EXISTS(SELECT 1 FROM operation_intents WHERE run_id=${runRow.id} AND state='reserved' AND id!=${delivery.id}) RETURNING id`;
         if (changed.length) yield* advanceGeneration(sql, runRow.id);
         return changed.length > 0;
