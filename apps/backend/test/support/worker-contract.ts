@@ -38,7 +38,11 @@ export const settledAnswer = (runId: string): Record<string, unknown> => ({
 
 /** The worker's thread reads and delegated waits cross the live HTTP adapter using captured
  * thread metadata; launches, sends and engine progress stay controlled. */
-export async function wireWorker(c: TestContext, wait: (runId: string) => Record<string, unknown>) {
+export async function wireWorker(
+  c: TestContext,
+  wait: (runId: string) => Record<string, unknown>,
+  thread?: Record<string, unknown>,
+) {
   const setup = await prepared(c, handoffFlow);
   const worker = await workerAtWork(setup.world, setup.input);
   const f = { ...setup, ...worker, worker };
@@ -50,6 +54,7 @@ export async function wireWorker(c: TestContext, wait: (runId: string) => Record
         ...workerActivity,
         thread: {
           ...workerActivity.thread,
+          ...thread,
           projectId: f.project.projectId,
           activeRunId: observation.activeRunId,
           latestRunId: observation.latestRunId,

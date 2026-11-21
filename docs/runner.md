@@ -305,18 +305,19 @@ Factory trusts T3 to say when a Block's worker thread is finished. One shared ru
 and handoff release, missing report, automatic settlement and Request report all use it. A worker
 thread is finished when all of these hold:
 
-- the `t3_thread_read` of the thread shows no active run and zero pending native requests;
+- the `t3_thread_read` of the thread shows no active run, zero pending native requests, a thread status other than `waiting`, and no awaited `pendingBackgroundTasks`;
 - `t3_thread_wait` for its latest run, with `timeoutMs: 0` and
   `untilDelegatedWorkSettled: true`, answers that thread and run with a terminal status
   (`completed`, `failed`, `cancelled`, `interrupted` or `rolled_back`) and `timedOut: false`.
 
 T3's `resultRun` is informational only: it names the run T3 answered from, which can be an
 earlier run when a notification resumed the thread, so Factory never compares it with the
-waited run. A timed-out wait, an active run, a pending native request, a wait answered for
+waited run. A timed-out wait, an active run, a pending native request, a `waiting` thread status,
+an awaited background task (such as a pull-request watch), a wait answered for
 another thread or run, or a read without a valid pending-request count keeps the thread
 unfinished. Factory keeps no model of descendants, subagents, queues, peers or individual
 executions and verifies no provider or model at final; delegated and background work count
-only through T3's wait answer. Reads across threads are not an atomic cutoff: direct chat
+only through T3's thread read and wait answer. Reads across threads are not an atomic cutoff: direct chat
 can start a new run between Factory's read and its local decision.
 
 ## Observation and attention

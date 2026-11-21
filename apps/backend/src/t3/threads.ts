@@ -125,6 +125,11 @@ export interface ThreadIdentityRead {
   readonly model: string;
   readonly executions: readonly LaunchCandidateExecution[];
 }
+export interface PendingBackgroundTask {
+  readonly taskId: string;
+  readonly kind: string;
+  readonly awaited: boolean;
+}
 export interface ExecutionObservation {
   /** Absent when the upstream thread read supplies no repository metadata; a null branch is a
    * thread T3 shows no branch for. */
@@ -134,11 +139,13 @@ export interface ExecutionObservation {
   };
   readonly projectId: string;
   readonly threadId: string;
+  readonly status?: string;
   readonly activeRunId: string | null;
   readonly link: string | null;
   /** T3's `worktreePath`: null is the project checkout. */
   readonly workspaceRoot: string | null;
   readonly pendingRequestCount: number;
+  readonly pendingBackgroundTasks?: readonly PendingBackgroundTask[];
   readonly latestRunId?: string | null;
   readonly recentRuns: readonly {
     readonly runId: string;
