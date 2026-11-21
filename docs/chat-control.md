@@ -646,7 +646,8 @@ nonce that stays the same for that message, and Factory asks Discord to enforce 
 returns the message an earlier create with the same nonce made, for a few minutes, instead of creating
 another. When the connection dropped or Discord answered with a server error, so the outcome is
 unproven, Factory asks again with the same nonce at most twice, within one minute of the first
-request. A returned message ID reconciles that create. A refusal after an earlier unproven attempt
+request. Revoking the destination's Project grant cancels those re-attempts. A returned message ID
+reconciles that create. A refusal after an earlier unproven attempt
 leaves the earlier create unknown and still requires the duplicate warning on host Retry. Beyond that
 window, when the session ends meanwhile or after Factory stopped while sending, the create is unknown
 and never repeated automatically; identical text or a missing copy is never taken as proof. Settings → Discord lists
@@ -698,7 +699,8 @@ or changes the Run. While Off, during a Discord outage or while the backend is s
 update waits; once a session serves again, Factory edits the card to the Run's current state rather
 than replaying what happened meanwhile. A card the Run owes, because it was never posted or shows an
 older state, stays owed however old it is; a card that already shows a Settled or Archived Run gets
-nothing more.
+nothing more. An upgrade to the all-Block layout refreshes existing Archived cards in place when
+the same application can still edit them.
 
 An Access save that stops the thread's channel granting the Run's Project cancels the card's owed
 update and nothing accrues while it stays revoked. After a regrant, Factory corrects a card it already
@@ -743,7 +745,8 @@ Run and names no Block, and a retried Settle keeps its one notice. When Factory 
 notice or catch-up, it mentions only the user who confirmed the Run's Start, if that user is still
 allowed in saved Access when the message is sent. Factory checks Access again on every retry. The
 notice still posts to a permitted thread when the requester has been removed. When any matter
-resolves, Factory edits the line in place and removes the heading's mention without notifying anyone.
+resolves, Factory updates its line or the compacted count in place and removes the heading's
+mention without notifying anyone.
 An `@` in a Run title, Flow name or Block name is followed by an invisible space so it cannot form a
 user, role or mass mention. An idle or overdue worker shown as awaiting review in T3 does not create
 an attention notice unless the Run records an attention matter.

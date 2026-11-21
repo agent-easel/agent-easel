@@ -26,7 +26,9 @@ import {
   fanOutFlow,
   humanReviewFlow,
   launchedWorkers,
+  longEntryNamesFlow,
   missingReport,
+  observeFor,
   optionalEndingFlow,
   resultHeld,
   resultReleasedToHumanReview,
@@ -136,6 +138,13 @@ async function reviewPending(world: World) {
 const turnedOff = async (world: Pick<World, "factory">) =>
   assert((await world.factory.setChatControlEnabled({ enabled: false })).ok);
 
+async function pauseNoticeCreate(world: World, worker: Worker, catchUp: boolean) {
+  if (catchUp) await turnedOff(world);
+  world.discord.faultMessages("paused-failure");
+  await nativeRequestShown(world.world, worker);
+  if (catchUp) await turnedOn(world.factory, world.discord, 2);
+}
+
 /**
  * A chat-started Run of the Fan-out Flow that, while Chat control was Off, got a native request on
  * Second entry that was answered again, a native request on Entry worker and a missing report on
@@ -168,9 +177,10 @@ it("automatic settlement posts one plain completion notice to the requester in t
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
+  await resultReported(world.world, worker, { message: "Implemented the requested result." });
 
   // Act
-  await finished(world, worker);
+  assert((await world.factory.reconcileRuns()).ok);
 
   // Assert
   const notice = await completionCreated(world.discord);
@@ -186,9 +196,10 @@ it("reaching Finish posts a completion notice without disclosing the chosen endi
   // Arrange
   const world = await startingWorld(c, optionalEndingFlow);
   const { worker } = await chatStartedRun(world);
+  await resultReported(world.world, worker, { message: "Implemented the requested result." });
 
   // Act
-  await finished(world, worker);
+  assert((await world.factory.reconcileRuns()).ok);
 
   // Assert
   const notice = await completionCreated(world.discord);
@@ -206,9 +217,10 @@ it("a Run posts a new completion when it settles again, even after its first not
   const first = await completionCreated(world.discord);
   world.discord.deleteMessage(first.id);
   expect((await world.factory.runtime.submit(workerWorking(worker.blockId))).code).toBe("ACCEPTED");
+  await resultReported(world.world, worker);
 
   // Act
-  await finished(world, worker);
+  assert((await world.factory.reconcileRuns()).ok);
 
   // Assert
   const second = await completionCreated(world.discord, 2);
@@ -240,7 +252,7 @@ it("reactivating a Run retires its completion waiting for a rate-limit retry", a
   expect(completions(world.discord)).toEqual([]);
 });
 
-it("archiving a Settled Run removes an unproven completion from diagnostics and retires its Retry", async (c) => {
+it("Retry refuses an unproven completion after its Run was Archived", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker, runId } = await chatStartedRun(world);
@@ -248,16 +260,20 @@ it("archiving a Settled Run removes an unproven completion from diagnostics and 
   await finished(world, worker);
   const problem = await completionProblem(world.factory, "unknown");
 
-  // Act
   const archived = await world.factory.archiveRun(runId);
-
-  // Assert
   assert(archived.ok, JSON.stringify(archived));
+
+  // Act
   const retried = await world.factory.retryChatDelivery({
     deliveryId: problem.id,
     duplicateRiskAccepted: true,
   });
+
+  // Assert
   expect(retried).toMatchObject({ ok: false, error: { code: "conflict" } });
+  const settings = await world.factory.getDiscordSettings();
+  assert(settings.ok, JSON.stringify(settings));
+  expect(settings.value.delivery.problems.map(({ id }) => id)).not.toContain(problem.id);
   expect(completions(world.discord)).toEqual([]);
 });
 
@@ -303,9 +319,10 @@ it("regrant reports a later settlement without replaying a Run that settled duri
   await finished(world, revoked.worker);
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
   await messageShows(world.discord, revoked.card, /· ✅ Settled · /);
+  await resultReported(world.world, later.worker);
 
   // Act
-  await finished(world, later.worker);
+  assert((await world.factory.reconcileRuns()).ok);
 
   // Assert
   const notice = await completionCreated(world.discord);
@@ -314,7 +331,7 @@ it("regrant reports a later settlement without replaying a Run that settled duri
   expect(completions(world.discord)).toHaveLength(1);
 });
 
-it("revoking the Project grant cancels a locked-thread completion through regrant", async (c) => {
+it("Retry refuses a locked-thread completion after the Project is revoked and regranted", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
@@ -326,14 +343,15 @@ it("revoking the Project grant cancels a locked-thread completion through regran
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
   world.discord.unlockThread(THREAD);
 
-  // Act
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
 
-  // Assert
+  // Act
   const retried = await world.factory.retryChatDelivery({
     deliveryId: problem.id,
     duplicateRiskAccepted: false,
   });
+
+  // Assert
   expect(retried).toMatchObject({ ok: false, error: { code: "conflict" } });
   expect(completions(world.discord)).toEqual([]);
 });
@@ -631,6 +649,81 @@ it("resolving one matter of a catch-up edits only its own line in place", async 
   expectSilentEdit(world.discord, shown);
 });
 
+it("resolving a hidden catch-up matter edits the existing message and removes the requester mention", async (c) => {
+  // Arrange
+  const world = await startingWorld(c, longEntryNamesFlow);
+  const { runId } = await chatStartedRun(world);
+  const { workers } = await launchedWorkers(world.world, runId);
+  const hidden = workers.at(-1)!;
+  await turnedOff(world);
+  workers
+    .slice(0, -1)
+    .map((worker) =>
+      world.t3.threads.recordThreadFacts(worker.threadId, { pendingRequestCount: 1 }),
+    );
+  await observeFor(
+    "capture the earlier T3 requests",
+    world.world,
+    runId,
+    (run) => run.attention.filter((matter) => matter.kind === "native-request").length === 11,
+  );
+  world.t3.threads.recordThreadFacts(hidden.threadId, { pendingRequestCount: 1 });
+  await observeFor(
+    "capture the last T3 request",
+    world.world,
+    runId,
+    (run) => run.attention.filter((matter) => matter.kind === "native-request").length === 12,
+  );
+  await turnedOn(world.factory, world.discord, 2);
+  const notice = await noticeCreated(world.discord);
+  expectNoticePing(world.discord, notice);
+  expect(notice.content).toContain("and 4 more");
+  expect(notice.content).not.toContain("Worker 11");
+  const visibleBefore = notice.content.split("\n").slice(1, -1);
+  world.t3.threads.recordThreadFacts(hidden.threadId, { pendingRequestCount: 0 });
+
+  // Act
+  const reconciled = await world.factory.reconcileRuns();
+
+  // Assert
+  assert(reconciled.ok, JSON.stringify(reconciled));
+  const shown = await messageShows(world.discord, notice, /and 4 more \(1 resolved\)/);
+  expect(shown.content.split("\n").slice(1, -1)).toEqual(visibleBefore);
+  expectSilentEdit(world.discord, shown);
+  expect(noticesIn(world.discord)).toHaveLength(1);
+});
+
+it.for([
+  { kind: "attention", catchUp: false },
+  { kind: "catch-up", catchUp: true },
+])(
+  "a nonce retry cannot post a $kind notice cancelled by Project revocation, even after regrant",
+  async ({ catchUp }, c) => {
+    // Arrange
+    const world = await startingWorld(c);
+    const { runId, worker, card } = await chatStartedRun(world);
+    const other = await addedProject({ f: world.factory, h: world.harness }, "other");
+    const posts = world.discord.requested("POST", MESSAGES).length;
+    await pauseNoticeCreate(world, worker, catchUp);
+    await world.discord.request("POST", MESSAGES, posts + 1);
+    await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
+    await savedAccess(
+      world.factory,
+      [PARTICIPANT_ID, COLLABORATOR_ID],
+      [world.project.id, other.id],
+    );
+    assert((await world.factory.snoozeRun(runId)).ok);
+
+    // Act
+    world.discord.releaseMessages();
+
+    // Assert
+    await messageShows(world.discord, card, /· 💤 Snoozed · /);
+    expect(world.discord.requested("POST", MESSAGES)).toHaveLength(posts + 1);
+    expect(noticesIn(world.discord)).toEqual([]);
+  },
+);
+
 it("a rate-limited catch-up survives a restart and pings the requester once when turned back on", async (c) => {
   // Arrange
   const world = await startingWorld(c);
@@ -676,7 +769,7 @@ it("Archive edits the pending matter's notice to resolved and the card to Archiv
   expect(world.discord.created).toHaveLength(messages);
 });
 
-it("while the thread's Project is revoked nothing accrues, and a regrant posts no notice for what happened meanwhile", async (c) => {
+it("a Problem after regrant posts without replaying attention from the revoked interval", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker, card } = await chatStartedRun(world);
@@ -684,14 +777,13 @@ it("while the thread's Project is revoked nothing accrues, and a regrant posts n
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [other.id]);
   await nativeRequestShown(world.world, worker);
 
-  // Act
   await savedAccess(world.factory, [PARTICIPANT_ID, COLLABORATOR_ID], [world.project.id, other.id]);
+  await messageShows(world.discord, card, /\n🙋 /);
+
+  // Act
+  await settleUnresolved(world.world, worker);
 
   // Assert
-  // Once the card shows the request, the regrant was captured; a later Problem's notice comes
-  // after anything the regrant would have posted.
-  await messageShows(world.discord, card, /\n🙋 /);
-  await settleUnresolved(world.world, worker);
   const notice = await noticeCreated(world.discord);
   expect(notice.content).toMatch(
     new RegExp(`^⚠️ ${REQUESTER_MENTION} \\*\\*Run #1 · Improve search\\*\\* has a Problem\\n`),
@@ -722,7 +814,7 @@ it("after the Discord application is replaced, the old bot's notice is not edite
   expect(world.discord.requested("PATCH", new RegExp(`/messages/${notice.id}$`))).toEqual([]);
 });
 
-it("a notice Discord proved deleted is not recreated when its matter resolves", async (c) => {
+it("a later Problem posts without recreating a deleted notice whose matter resolved", async (c) => {
   // Arrange
   const world = await startingWorld(c);
   const { worker } = await chatStartedRun(world);
@@ -730,13 +822,13 @@ it("a notice Discord proved deleted is not recreated when its matter resolves", 
   const notice = await noticeCreated(world.discord);
   world.discord.deleteMessage(notice.id);
 
-  // Act
   await nativeRequestAnswered(world.world, worker);
+  await world.discord.request("PATCH", new RegExp(`/messages/${notice.id}$`));
+
+  // Act
+  await settleUnresolved(world.world, worker);
 
   // Assert
-  await world.discord.request("PATCH", new RegExp(`/messages/${notice.id}$`));
-  // A later Problem orders its notice after anything the lost notice would have posted.
-  await settleUnresolved(world.world, worker);
   const problem = await noticeCreated(world.discord, 2);
   expect(noticesIn(world.discord)).toStrictEqual([
     expect.objectContaining({ id: notice.id, deleted: true }),

@@ -88,6 +88,7 @@ function observation(block: Block) {
     block.observation === "unknown" &&
     (block.state === "working" ||
       block.state === "sent" ||
+      block.state === "stopped" ||
       block.needsInput === "T3" ||
       (block.problem !== null && (block.kind === "agent" || block.kind === "continuation")))
   )
@@ -115,21 +116,16 @@ function fitRemainingRows(head: string[], rows: string[], tail: string[]) {
   const priorOmission = /^… and (\d+) more Blocks$/.exec(rows.at(-1) ?? "");
   const alreadyOmitted = priorOmission ? Number(priorOmission[1]) : 0;
   const shown = priorOmission ? rows.slice(0, -1) : rows;
-  let length = [...head, ...tail].join("\n").length;
-  for (const [index, row] of shown.entries()) {
-    length += row.length + 1;
-    const omitted = shown.length - index + alreadyOmitted;
-    const overflow = `… and ${omitted} more Blocks`;
-    const reserve = omitted > 1 ? overflow.length + 1 : 0;
-    if (length + reserve > MESSAGE_LIMIT)
-      return [...head, ...shown.slice(0, index), overflow, ...tail].join("\n");
+  let length = [...head, ...shown, ...tail].join("\n").length;
+  for (let kept = shown.length; kept > 0; kept--) {
+    const omitted = shown.length - kept + alreadyOmitted;
+    const overflow = omitted > 0 ? [`… and ${omitted} more Blocks`] : [];
+    const reserve = overflow.length > 0 ? overflow[0]!.length + 1 : 0;
+    if (length + reserve <= MESSAGE_LIMIT)
+      return [...head, ...shown.slice(0, kept), ...overflow, ...tail].join("\n");
+    length -= shown[kept - 1]!.length + 1;
   }
-  return [
-    ...head,
-    ...shown,
-    ...(alreadyOmitted > 0 ? [`… and ${alreadyOmitted} more Blocks`] : []),
-    ...tail,
-  ].join("\n");
+  return [...head, `… and ${shown.length + alreadyOmitted} more Blocks`, ...tail].join("\n");
 }
 
 function fitCard(head: string[], rows: string[]) {

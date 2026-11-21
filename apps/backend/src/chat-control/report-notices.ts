@@ -91,8 +91,12 @@ function noticeText(notice: NoticeRow, matters: readonly MatterRow[]) {
   const heading = runHeading(notice.reference, notice.title);
   const render = (limit: number) => {
     const lines = matters.slice(0, limit).map(matterLine);
-    const rest = matters.length - lines.length;
-    if (rest > 0) lines.push(`• and ${rest} more; the status card shows what is pending`);
+    const hidden = matters.slice(lines.length);
+    if (hidden.length > 0) {
+      const resolved = hidden.filter((matter) => matter.resolved === 1).length;
+      const progress = resolved > 0 ? ` (${resolved} resolved)` : "";
+      lines.push(`• and ${hidden.length} more${progress}; the status card shows what is pending`);
+    }
     const first =
       notice.purpose === "attention"
         ? attentionHeading(heading, matters)

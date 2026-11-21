@@ -208,7 +208,7 @@ export const createDeduplicated = (
   destination: Destination,
   text: string,
   options: Omit<CreateMessageOptions, "requesterId">,
-  noticeAccess: Effect.Effect<
+  createAccess: Effect.Effect<
     Pick<CreateMessageOptions, "requesterId"> | false,
     unknown
   > = Effect.succeed({}),
@@ -217,7 +217,7 @@ export const createDeduplicated = (
     const firstAt = yield* Clock.currentTimeMillis;
     let unproven = false;
     for (let requests = 1; ; requests++) {
-      const access = yield* noticeAccess;
+      const access = yield* createAccess;
       if (access === false) return { withdrawn: true };
       const sent = yield* Effect.result(
         bounded(() => sender.create(destination, text, { ...options, ...access })),
@@ -246,14 +246,14 @@ const REQUESTER_NOTICE_PURPOSES: readonly DeliveryRow["purpose"][] = [
   "completion",
 ];
 
-const noticeCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
+const deliveryCreateAccess = (sql: SqlClient.SqlClient, deliveryId: string) =>
   Effect.map(
     sql<{ user_id: string | null }>`SELECT (
       SELECT u.user_id FROM chat_run_origins o
       JOIN chat_actions a ON a.id=o.action_id
       JOIN chat_proposals p ON p.id=a.proposal_id
       JOIN chat_access_users u ON u.user_id=p.requester_id
-      WHERE o.run_id=d.run_id
+      WHERE o.run_id=d.run_id AND d.purpose IN ${sql.in(REQUESTER_NOTICE_PURPOSES)}
     ) AS user_id FROM chat_deliveries d WHERE d.id=${deliveryId} AND d.state='sending'`,
     ([access]) => {
       if (!access) return false as const;
@@ -510,9 +510,7 @@ export const makeChatDeliveries = (sql: SqlClient.SqlClient) =>
           destinationOf(row),
           row.text,
           { nonce: nonceOf("delivery", row.id) },
-          REQUESTER_NOTICE_PURPOSES.includes(row.purpose)
-            ? noticeCreateAccess(sql, row.id)
-            : undefined,
+          deliveryCreateAccess(sql, row.id),
         ).pipe(
           Effect.onInterrupt(() => record(row.id, { state: "unknown", problem: INTERRUPTED })),
         );

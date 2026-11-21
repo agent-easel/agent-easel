@@ -1383,6 +1383,32 @@ export const manyEntryWorkers: ReadyFlowShape = (world) =>
     return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
   });
 
+export const longEntryNamesFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Long entry names", (agentId) => {
+    const blocks = Array.from({ length: 12 }, (_, index) =>
+      agentBlock(`worker-${index}`, `Worker ${index} ${"🧱".repeat(90)}`, agentId),
+    );
+    return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
+  });
+
+export const exactLimitCardFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Exact-limit Flow", (agentId) => {
+    const blocks = [
+      agentBlock("first", "A".repeat(100), agentId),
+      agentBlock("second", "B".repeat(100), agentId),
+      ...Array.from({ length: 8 }, (_, index) =>
+        agentBlock(
+          `long-${index}`,
+          "🧱".repeat(99) + String.fromCodePoint(0x1f600 + index),
+          agentId,
+        ),
+      ),
+      agentBlock("penultimate", "🧱".repeat(69), agentId),
+      agentBlock("last", "X", agentId),
+    ];
+    return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
+  });
+
 export const clippedEntryFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Overlapping entry titles", (agentId) => ({
     flowInput: flowInput("worker", "second"),

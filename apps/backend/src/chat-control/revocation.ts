@@ -47,7 +47,7 @@ export const applyAccessRevocation = (
       parent_channel_id: string;
       project_ids_json: string;
     }>`SELECT id,parent_channel_id,project_ids_json FROM chat_deliveries
-        WHERE state IN ('owed','failed','unknown') OR (purpose='completion' AND state='sending')`;
+        WHERE state IN ('owed','failed','unknown') OR (message_id IS NULL AND state='sending')`;
     const cancelled = owed.filter((row) =>
       ungranted(access.channels, row.parent_channel_id, row.project_ids_json),
     );

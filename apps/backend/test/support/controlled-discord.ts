@@ -66,7 +66,7 @@ type Answer = {
   /** No answer arrives until the server closes. */
   readonly held?: boolean;
   /** No answer arrives until `releaseMessages`; then Discord handles the request normally. */
-  readonly paused?: boolean;
+  readonly paused?: "deliver" | "fail";
 };
 
 /**
@@ -84,7 +84,8 @@ export type MessageFault =
   | "lost"
   | "failed"
   | "held"
-  | "paused";
+  | "paused"
+  | "paused-failure";
 
 /**
  * Faults that leave one create unproven on Factory's first request and on both re-attempts it
@@ -494,7 +495,8 @@ export async function startControlledDiscord() {
       /^\/api\/v10\/channels\/(\d+)\/messages$/,
       ({ match, fields, bot, resumed }) => {
         const fault = resumed ? undefined : messageFaults.shift();
-        if (fault === "paused") return { status: 0, paused: true };
+        if (fault === "paused") return { status: 0, paused: "deliver" };
+        if (fault === "paused-failure") return { status: 0, paused: "fail" };
         const faulted = faultAnswer(fault);
         if (faulted) return faulted;
         if (deletedThreads.has(match[1]!)) return unknownChannel;
@@ -589,7 +591,7 @@ export async function startControlledDiscord() {
       "GET",
       /^\/api\/v10\/channels\/(\d+)$/,
       ({ match, resumed }) => {
-        if (channelLookupsPaused && !resumed) return { status: 0, paused: true };
+        if (channelLookupsPaused && !resumed) return { status: 0, paused: "deliver" };
         if (deletedThreads.has(match[1]!)) return unknownChannel;
         const thread = threads.get(match[1]!);
         if (thread) return { status: 200, body: threadPayload(thread) };
@@ -781,7 +783,13 @@ export async function startControlledDiscord() {
       };
       const answer = route(request.method ?? "", path, token, body);
       if (!answer.paused) return respond(answer);
-      pausedCreates.push(() => respond(route(request.method ?? "", path, token, body, true)));
+      pausedCreates.push(() =>
+        respond(
+          answer.paused === "fail"
+            ? faultAnswer("failed")!
+            : route(request.method ?? "", path, token, body, true),
+        ),
+      );
       changed.notify();
     });
   });

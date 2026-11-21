@@ -63,6 +63,12 @@ SELECT o.run_id,c.sequence FROM chat_run_origins o JOIN chat_settled_cycles c ON
 WHERE true
 ON CONFLICT(run_id) DO UPDATE SET completion_sequence=excluded.completion_sequence
 -- statement-breakpoint
+-- Refresh the original message for Archived Runs whose status cards used the old layout.
+UPDATE chat_status_cards SET final=0
+WHERE final=1 AND delivery_id IN (
+  SELECT id FROM chat_deliveries WHERE state='delivered' AND message_id IS NOT NULL
+)
+-- statement-breakpoint
 -- Retirement commits with the lifecycle change, before any later dispatch or retry can claim
 -- stale work. An already dispatched create can still return its message ID as provenance.
 CREATE TRIGGER chat_retire_completion
