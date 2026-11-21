@@ -480,11 +480,15 @@ it("a rename reply that echoes the sent title is acknowledged", async (c) => {
 
   const { authorizationIdentity } = await live.contract.inspect({ endpoint });
   assert(authorizationIdentity);
+  let calls = 0;
+  let refusals = 0;
   const target = {
     endpoint,
     authorizationIdentity,
-    onDispatch: () => {},
-    authorizeDispatch: async () => true,
+    refuseDispatch: async () => {
+      refusals++;
+    },
+    authorizeDispatch: async () => ++calls === 1,
     signal: new AbortController().signal,
   };
 
@@ -492,6 +496,7 @@ it("a rename reply that echoes the sent title is acknowledged", async (c) => {
   const disposition = await threads.renameThread(target, renameRequest);
 
   // Assert
+  expect([calls, refusals]).toStrictEqual([1, 0]);
   expect(disposition).toStrictEqual({
     kind: "acknowledged",
     threadId: "thread-1",
@@ -514,7 +519,7 @@ it("an installed plain-text missing-thread error retires that rename as thread-n
   const target = {
     endpoint,
     authorizationIdentity,
-    onDispatch: () => {},
+    refuseDispatch: async () => {},
     authorizeDispatch: async () => true,
     signal: new AbortController().signal,
   };
@@ -590,7 +595,7 @@ it.for([
     endpoint,
     authorizationIdentity: identity(authorizationIdentity),
     signal: new AbortController().signal,
-    onDispatch: () => {},
+    refuseDispatch: async () => {},
     authorizeDispatch: async () => current,
   };
 
@@ -601,4 +606,113 @@ it.for([
   expect(
     external.sessionRequests.filter((request) => request.tool === "t3_thread_update"),
   ).toStrictEqual([]);
+});
+
+it.for([
+  {
+    scenario: "failed handshake",
+    failHandshake: true,
+    retry: true,
+    sent: false,
+    attempts: 1,
+    sessions: 0,
+  },
+  {
+    scenario: "fenced retry",
+    failHandshake: false,
+    retry: false,
+    sent: false,
+    attempts: 2,
+    sessions: 1,
+  },
+  {
+    scenario: "executed retry",
+    failHandshake: false,
+    retry: true,
+    sent: true,
+    attempts: 2,
+    sessions: 1,
+  },
+])(
+  "an expired MCP session records executable rename delivery after a $scenario",
+  async (row, c) => {
+    // Arrange
+    const { threads, endpoint, external, live } = await authorizedLiveOAuth(c, {
+      updateSchema,
+      update: () => ({
+        content: [],
+        structuredContent: {
+          threadId: renameRequest.threadId,
+          action: "rename",
+          title: renameRequest.title,
+        },
+      }),
+    });
+    const { authorizationIdentity } = await live.contract.inspect({ endpoint });
+    assert(authorizationIdentity);
+    const sessions = external.openedSessions;
+    const handshakes = external.handshakeAttempts;
+    external.dropSessions(row.failHandshake);
+    let attempts = 0;
+    let sent = false;
+    const target = {
+      endpoint,
+      authorizationIdentity,
+      signal: new AbortController().signal,
+      authorizeDispatch: async () => {
+        const authorized = ++attempts === 1 || row.retry;
+        sent ||= authorized;
+        return authorized;
+      },
+      refuseDispatch: async () => {
+        sent = false;
+      },
+    };
+
+    // Act
+    const result = await threads.renameThread(target, renameRequest);
+
+    // Assert
+    expect(external.handshakeAttempts - handshakes).toBe(1);
+    expect(sent).toBe(row.sent);
+    expect(attempts).toBe(row.attempts);
+    expect(external.openedSessions - sessions).toBe(row.sessions);
+    expect(external.sessionRequests.filter((r) => r.tool === "t3_thread_update")).toHaveLength(
+      Number(row.sent),
+    );
+    expect(result.kind === "acknowledged").toBe(row.sent);
+  },
+);
+
+it("an interrupted HTTP reply keeps the rename dispatch uncertain without reconnecting", async (c) => {
+  // Arrange
+  const { threads, endpoint, external, live } = await authorizedLiveOAuth(c, { updateSchema });
+  const { authorizationIdentity } = await live.contract.inspect({ endpoint });
+  assert(authorizationIdentity);
+  const sessions = external.openedSessions;
+  external.cutNextToolReply();
+  let sent = false;
+  const target = {
+    endpoint,
+    authorizationIdentity,
+    signal: new AbortController().signal,
+    authorizeDispatch: async () => {
+      sent = true;
+      return true;
+    },
+    refuseDispatch: async () => {
+      sent = false;
+    },
+  };
+
+  // Act
+  const disposition = await threads.renameThread(target, renameRequest);
+
+  // Assert
+  expect(disposition.kind).toBe("unavailable");
+  expect(sent).toBe(true);
+  expect(external.openedSessions).toBe(sessions);
+  expect(
+    external.sessionRequests.filter((request) => request.tool === "t3_thread_update"),
+  ).toHaveLength(1);
 });

@@ -1,9 +1,12 @@
+import { expiredRenameSession } from "./support/worker-thread-wire.ts";
 import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 import { preparedService } from "./support/prepared-runner.ts";
 import {
   fanOutFlow,
+  manyEntryWorkers,
+  holdRunRenames,
   twoWorkersStarted,
   heldWorkerRename,
   workerAtWork,
@@ -21,34 +24,28 @@ it.effect(
         threadId: worker.threadId,
         title: "Unexpected",
       };
-      f.t3.threads.beforeRename = async () => {
-        f.t3.contract.support.rename = false;
-        await f.world.factory.recheckConnection();
-      };
+      const refusal = yield* Effect.promise(() => expiredRenameSession(c, f.t3.threads));
       const dispatched = f.t3.threads.nextRename();
       assert((yield* f.factory.renameRun(worker.runId, { title: "New subject" })).ok);
-      yield* TestClock.adjust(0);
-      expect(f.t3.threads.renames).toHaveLength(0);
-      expect(f.t3.contract.support.rename).toBe(false);
-      delete f.t3.threads.beforeRename;
-      f.t3.contract.support.rename = true;
+      yield* f.factory.awaitWorkerTitles();
+      expect(refusal.executed()).toHaveLength(0);
+      refusal.restore();
       yield* TestClock.adjust(1000);
       yield* f.factory.reconcileRuns();
       const sent = yield* Effect.promise(() => dispatched);
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toHaveLength(1);
       yield* f.close;
       yield* TestClock.adjust(60_000);
 
-      // Act
       const replay = f.t3.threads.nextRename();
+
+      // Act
       const reopened = yield* f.reopen;
 
       // Assert
       yield* Effect.promise(() => replay);
-      yield* TestClock.adjust(60_000);
-      yield* reopened.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* reopened.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent, sent]);
     }),
 );
@@ -58,7 +55,7 @@ it.effect("a timed-out rename releases its lane and coalesces unsent revisions",
     // Arrange
     const f = yield* preparedService(c);
     const worker = yield* Effect.promise(() => workerAtWork(f.world, f.input));
-    const { sent, release } = yield* Effect.promise(() =>
+    const { sent } = yield* Effect.promise(() =>
       heldWorkerRename(f.world, worker.runId, "Intermediate"),
     );
     assert((yield* f.factory.renameRun(worker.runId, { title: "Unsent" })).ok);
@@ -69,9 +66,7 @@ it.effect("a timed-out rename releases its lane and coalesces unsent revisions",
     yield* TestClock.adjust(15_000);
 
     // Assert
-    yield* f.factory.reconcileRuns();
-    yield* TestClock.adjust(0);
-    release();
+    yield* f.factory.awaitWorkerTitles();
     expect(f.t3.threads.renames.map(({ title }) => title)).toStrictEqual([
       "F#1 Entry worker · Intermediate",
       "F#1 Entry worker · Improve search",
@@ -91,16 +86,16 @@ it.effect(
       const dispatched = f.t3.threads.nextRename();
       assert((yield* f.factory.renameRun(worker.runId, { title: "Intermediate" })).ok);
       const sent = yield* Effect.promise(() => dispatched);
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       f.t3.threads.loseRenameReply = false;
       f.t3.threads.compactRenameKeys.add(sent.clientRequestId);
       f.t3.threads.remoteTitles.set(worker.threadId, "Edited in T3");
       yield* TestClock.adjust(1000);
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       yield* TestClock.adjust(60_000);
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent, sent]);
       expect(f.t3.threads.threadTitle(worker.threadId)).toBe("Edited in T3");
 
@@ -108,8 +103,7 @@ it.effect(
       assert((yield* f.factory.renameRun(worker.runId, { title: f.input.title })).ok);
 
       // Assert
-      yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.threadTitle(worker.threadId)).toBe("F#1 Entry worker · Improve search");
       expect(f.t3.threads.renames[2]?.clientRequestId).not.toBe(sent.clientRequestId);
     }),
@@ -126,22 +120,22 @@ it.effect(
       const dispatched = f.t3.threads.nextRename();
       assert((yield* f.factory.renameRun(worker.runId, { title: "Delayed" })).ok);
       const sent = yield* Effect.promise(() => dispatched);
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       yield* TestClock.adjust(1000);
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       yield* TestClock.adjust(1999);
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent, sent]);
       f.t3.threads.renameDisposition = undefined;
       yield* TestClock.adjust(1);
 
       // Act
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
 
       // Assert
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent, sent, sent]);
       expect(f.t3.threads.threadTitle(worker.threadId)).toBe("F#1 Entry worker · Delayed");
     }),
@@ -158,11 +152,11 @@ it.effect(
       const dispatched = f.t3.threads.nextRename();
       assert((yield* f.factory.renameRun(worker.runId, { title: "Denied" })).ok);
       const sent = yield* Effect.promise(() => dispatched);
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       f.t3.threads.renameDisposition = undefined;
       yield* TestClock.adjust(120_000);
       yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent]);
       f.t3.connection.approve("replacement");
       assert((yield* f.factory.recheckConnection()).ok);
@@ -171,14 +165,13 @@ it.effect(
       assert((yield* f.factory.renameRun(worker.runId, { title: "After approval" })).ok);
 
       // Assert
-      yield* f.factory.reconcileRuns();
-      yield* TestClock.adjust(0);
+      yield* f.factory.awaitWorkerTitles();
       expect(f.t3.threads.renames).toStrictEqual([sent]);
       expect(f.t3.threads.threadTitle(worker.threadId)).toBe("F#1 Entry worker · Improve search");
     }),
 );
 
-it.effect("restart and unrelated launches proceed while multiple worker renames time out", (c) =>
+it.effect("an unrelated Run starts while worker renames recovered on restart are blocked", (c) =>
   Effect.gen(function* () {
     // Arrange
     const f = yield* preparedService(c, fanOutFlow);
@@ -187,24 +180,19 @@ it.effect("restart and unrelated launches proceed while multiple worker renames 
     assert((yield* f.factory.renameRun(worker.runId, { title: "Pending" })).ok);
     yield* f.close;
     f.t3.contract.support.rename = true;
-    let release = () => {};
-    const waiting = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const waiting = new Promise<void>(() => {});
     f.t3.threads.afterRename = () => waiting;
     const first = f.t3.threads.nextRename();
 
-    // Act
     const reopened = yield* f.reopen;
     yield* Effect.promise(() => first);
+
+    // Act
     const next = yield* reopened.startRun({ ...f.input, requestId: "another" });
-    assert(next.ok);
-    yield* reopened.reconcileRuns();
 
     // Assert
-    expect(f.t3.threads.launches.size).toBe(4);
-    yield* TestClock.adjust(30_000);
-    release();
+    assert(next.ok);
+    yield* Effect.promise(() => expect.poll(() => f.t3.threads.launches.size).toBe(4));
     expect(f.t3.threads.renames).toHaveLength(2);
   }),
 );
@@ -218,24 +206,22 @@ it.effect("a refused retry preserves uncertainty from a dispatched rename", (c) 
     const first = f.t3.threads.nextRename();
     assert((yield* f.factory.renameRun(worker.runId, { title: "Intermediate" })).ok);
     yield* Effect.promise(() => first);
+    yield* f.factory.awaitWorkerTitles();
+    const refusal = yield* Effect.promise(() => expiredRenameSession(c, f.t3.threads));
     yield* TestClock.adjust(1000);
-    f.t3.threads.beforeRename = async () => {
-      f.t3.contract.support.rename = false;
-      await f.world.factory.recheckConnection();
-    };
     yield* f.factory.reconcileRuns();
-    yield* TestClock.adjust(0);
-    expect(f.t3.contract.support.rename).toBe(false);
-    delete f.t3.threads.beforeRename;
+    yield* f.factory.awaitWorkerTitles();
+    expect(refusal.executed()).toHaveLength(0);
+    refusal.restore();
     f.t3.threads.loseRenameReply = false;
+    yield* f.close;
+    const reopened = yield* f.reopen;
 
     // Act
-    assert((yield* f.factory.renameRun(worker.runId, { title: f.input.title })).ok);
-    f.t3.contract.support.rename = true;
-    yield* f.factory.reconcileRuns();
-    yield* TestClock.adjust(0);
+    assert((yield* reopened.renameRun(worker.runId, { title: f.input.title })).ok);
 
     // Assert
+    yield* reopened.awaitWorkerTitles();
     expect(f.t3.threads.renames.map((request) => request.title)).toStrictEqual([
       "F#1 Entry worker · Intermediate",
       "F#1 Entry worker · Improve search",
@@ -256,11 +242,33 @@ it.effect("an acknowledgement satisfies a newer revision with the same rendered 
 
     // Act
     release();
-    yield* TestClock.adjust(60_000);
 
     // Assert
-    yield* f.factory.reconcileRuns();
-    yield* TestClock.adjust(0);
+    yield* f.factory.awaitWorkerTitles();
     expect(f.t3.threads.renames).toStrictEqual([sent]);
+  }),
+);
+
+it.effect("a later Run renames its worker while an earlier Run still has blocked workers", (c) =>
+  Effect.gen(function* () {
+    // Arrange
+    const f = yield* preparedService(c, manyEntryWorkers);
+    const early = yield* f.factory.startRun(f.input);
+    const later = yield* f.factory.startRun({ ...f.input, requestId: "later" });
+    assert(early.ok && later.ok);
+    yield* f.factory.reconcileRuns();
+    expect(f.t3.threads.launchCalls).toBe(24);
+    const held = holdRunRenames(f.world, "F#1 ", 4);
+    c.onTestFinished(held.release);
+    assert((yield* f.factory.renameRun(early.value.id, { title: "Blocked" })).ok);
+    yield* Effect.promise(() => held.reached);
+    const updated = f.t3.threads.nextRename();
+
+    // Act
+    assert((yield* f.factory.renameRun(later.value.id, { title: "Healthy" })).ok);
+
+    // Assert
+    expect((yield* Effect.promise(() => updated)).title).toContain("Healthy");
+    expect(held.count()).toBe(4);
   }),
 );

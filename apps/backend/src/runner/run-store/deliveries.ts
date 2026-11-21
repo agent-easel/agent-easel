@@ -374,6 +374,14 @@ export function openRunDeliveries(database: RunnerDatabase) {
     runsToReconcile,
     dispatchable,
     noteUnresolved,
+    launchTitleHeld: (runId: string, title: string) =>
+      database.transaction((sql) =>
+        Effect.map(
+          sql`SELECT 1 FROM operation_intents WHERE run_id=${runId} AND kind='launch'
+          AND state='uncertain' AND json_extract(payload_json,'$.title')=${title} LIMIT 1`,
+          (rows) => rows.length > 0,
+        ),
+      ),
     reserveDelivery,
     acknowledgeSend,
     bindLaunchedWorker,

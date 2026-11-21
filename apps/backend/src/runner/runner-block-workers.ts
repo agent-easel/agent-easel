@@ -77,6 +77,7 @@ function sendPendingLaunch(context: LaunchContext, stored: StoredLaunchPayload) 
       return;
     }
     const { images: launchImages = [], ...payload } = stored;
+    if (launchImages.length && (yield* store.launchTitleHeld(runRow.id, payload.title))) return;
     const attachments = yield* uploadLaunchImages(context, launchImages);
     if (!attachments) return;
     if (!(yield* store.reserveDelivery(runRow, launch, support.retryScope))) return;

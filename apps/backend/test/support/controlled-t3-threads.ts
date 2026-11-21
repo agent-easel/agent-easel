@@ -143,13 +143,11 @@ export class ControlledT3Threads implements T3Threads {
   ): Promise<WorkerTitleRenameDisposition> {
     this.connection.requireConnection();
     await this.beforeRename?.(request);
-    if (
-      !(await target.authorizeDispatch()) ||
-      target.signal.aborted ||
-      this.connection.identity !== target.authorizationIdentity
-    )
+    if (!(await target.authorizeDispatch())) return { kind: "unavailable" };
+    if (target.signal.aborted || this.connection.identity !== target.authorizationIdentity) {
+      await target.refuseDispatch();
       return { kind: "unavailable" };
-    target.onDispatch();
+    }
     this.renames.push(request);
     for (const notify of this.renameWaiters.splice(0)) notify(request);
     if (this.renameDisposition) return this.renameDisposition;

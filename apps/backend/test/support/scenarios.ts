@@ -1318,6 +1318,21 @@ export const fanOutFlow: ReadyFlowShape = (world) =>
     connections: [connection("worker", "done", "follow-up")],
   }));
 
+export const manyEntryWorkers: ReadyFlowShape = (world) =>
+  workerShape(world, "Many entry workers", (agentId) => {
+    const blocks = Array.from({ length: 12 }, (_, n) =>
+      agentBlock("worker-" + n, "Worker " + n, agentId),
+    );
+    return { blocks, flowInput: flowInput(...blocks.map((block) => block.id)), connections: [] };
+  });
+
+export const clippedEntryFlow: ReadyFlowShape = (world) =>
+  workerShape(world, "Overlapping entry titles", (agentId) => ({
+    flowInput: flowInput("worker", "second"),
+    blocks: [agentBlock("worker", "A", agentId), agentBlock("second", "A · B", agentId)],
+    connections: [],
+  }));
+
 export const separatorLaunchFlow: ReadyFlowShape = (world) =>
   workerShape(world, "Overlapping launch titles", (agentId) => ({
     flowInput: flowInput("worker", "second"),
@@ -2215,3 +2230,21 @@ export function solidPng(red: number, green: number, blue: number): Uint8Array {
 }
 
 export const sha256Hex = (data: Uint8Array) => createHash("sha256").update(data).digest("hex");
+
+export function holdRunRenames(world: ScenarioWorld, prefix: string, limit: number) {
+  let release = () => {};
+  let ready = () => {};
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  let count = 0;
+  world.t3.threads.beforeRename = async (request) => {
+    if (!request.title.startsWith(prefix)) return;
+    if (++count === limit) ready();
+    await hold;
+  };
+  return { release, reached, count: () => count };
+}

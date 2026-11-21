@@ -17,6 +17,7 @@ export interface Factory extends FactoryOperations {
   /** Scoped live observation; each stream needs no services and runs on any Effect runtime. */
   readonly live: LiveStreams;
   setRuntimeBackendUrl(url: string): void;
+  awaitWorkerTitles(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -58,8 +59,7 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     throw error;
   }
   const { runtime: reports, startTextRun, setRuntimeBackendUrl, live, ...operations } = service;
-  // Assigning to FactoryOperations proves the derived facade still matches the public contract.
-  const facade: FactoryOperations = promiseOperations(runtime, operations);
+  const facade = promiseOperations(runtime, operations);
   let closing: Promise<void> | undefined;
   return {
     ...facade,

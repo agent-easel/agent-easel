@@ -31,6 +31,7 @@ export type WorkerTitleSyncClaim = {
   readonly revision: number;
   readonly title: string;
   readonly requestId: string;
+  readonly attempt: number;
   readonly lastDispatchedKey: string | null;
   readonly contextId: string;
   readonly authorizationIdentity: string;
@@ -117,6 +118,7 @@ export function resumeWorkerTitleClaims(sql: SqlClient.SqlClient) {
 }
 
 type ClaimState = {
+  title_inflight_request_id: string | null;
   title_attempt: number;
   title_target_revision: number;
   title_target: string;
@@ -188,7 +190,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
           const [claim] = yield* sql<WorkerTitleSyncClaim>`
             SELECT b.id AS bindingId,b.run_id AS runId,b.thread_id AS threadId,
               b.title_inflight_revision AS revision,b.title_target AS title,b.title_request_id AS requestId,
-              b.title_last_dispatched_key AS lastDispatchedKey,r.context_id AS contextId,c.authorization_identity AS authorizationIdentity,
+              b.title_attempt AS attempt,b.title_last_dispatched_key AS lastDispatchedKey,r.context_id AS contextId,c.authorization_identity AS authorizationIdentity,
               c.endpoint,c.environment_id AS environmentId
             FROM run_thread_bindings b JOIN runs r ON r.id=b.run_id
             JOIN t3_authorization_contexts c ON c.id=r.context_id WHERE b.id=${bindingId}`;
@@ -201,7 +203,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
   function currentClaim(sql: SqlClient.SqlClient, claim: WorkerTitleSyncClaim) {
     return Effect.map(
       sql<ClaimState>`
-      SELECT b.title_attempt,b.title_target_revision,b.title_target,b.title_acknowledged,b.title_disposition FROM run_thread_bindings b
+      SELECT b.title_inflight_request_id,b.title_attempt,b.title_target_revision,b.title_target,b.title_acknowledged,b.title_disposition FROM run_thread_bindings b
       JOIN runs r ON r.id=b.run_id JOIN runner_owner o ON o.singleton=1 JOIN t3_connection c ON c.singleton=1
       WHERE b.id=${claim.bindingId} AND b.title_sync_state='inflight' AND b.title_inflight_revision=${claim.revision}
       AND r.archived_at IS NULL AND c.context_id=${claim.contextId} AND o.token=${database.owner.token}`,
@@ -218,7 +220,6 @@ export function openWorkerTitles(database: RunnerDatabase) {
       | "unavailable"
       | "unclassified"
       | "capability-denied",
-    dispatched: boolean,
   ) =>
     database.mutate(
       claim.runId,
@@ -226,6 +227,7 @@ export function openWorkerTitles(database: RunnerDatabase) {
         Effect.gen(function* () {
           const row = yield* currentClaim(sql, claim);
           if (!row) return;
+          const dispatched = row.title_inflight_request_id === claim.requestId;
           if (
             !dispatched &&
             row.title_disposition === null &&
@@ -267,11 +269,28 @@ export function openWorkerTitles(database: RunnerDatabase) {
     runsPendingWorkerTitleSync,
     claimWorkerTitleSync,
     recordWorkerTitleSync,
+    refuseWorkerTitleDispatch: (claim: WorkerTitleSyncClaim) =>
+      database.transaction((sql) =>
+        Effect.gen(function* () {
+          const row = yield* currentClaim(sql, claim);
+          if (
+            !row ||
+            (row.title_target_revision === claim.revision && row.title_attempt !== claim.attempt)
+          )
+            return;
+          if (row.title_disposition === null && row.title_target === row.title_acknowledged) {
+            yield* finishRename(sql, claim, row, row.title_acknowledged);
+            return;
+          }
+          yield* sql`UPDATE run_thread_bindings SET title_inflight_request_id=NULL WHERE id=${claim.bindingId}`;
+        }),
+      ),
     authorizeWorkerTitleDispatch: (claim: WorkerTitleSyncClaim) =>
       database.transaction((sql) =>
         Effect.gen(function* () {
           const row = yield* currentClaim(sql, claim);
-          if (row?.title_target_revision !== claim.revision) return false;
+          if (row?.title_target_revision !== claim.revision || row.title_attempt !== claim.attempt)
+            return false;
           yield* sql`UPDATE run_thread_bindings SET title_inflight_request_id=${claim.requestId} WHERE id=${claim.bindingId}`;
           return true;
         }),

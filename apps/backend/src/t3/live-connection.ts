@@ -422,13 +422,24 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
     stream: boolean,
   ) {
     const fence = currentCall.getStore()?.fence;
-    if (fence) {
+    const toolCall =
+      fence &&
+      init?.method === "POST" &&
+      typeof init.body === "string" &&
+      new URL(input instanceof Request ? input.url : input).href === new URL(endpoint).href &&
+      JSON.parse(init.body).method === "tools/call";
+    if (fence && !toolCall) this.dispatchCredentials(endpoint);
+    if (toolCall) {
       if (!(await fence.authorizeDispatch())) throw new T3Failure("refused", "Dispatch cancelled.");
-      this.dispatchCredentials(endpoint);
-      fence.onDispatch();
+      try {
+        this.dispatchCredentials(endpoint);
+      } catch (error) {
+        await fence.refuseDispatch();
+        throw error;
+      }
     }
     try {
-      return await fetch(input, {
+      const response = await fetch(input, {
         ...init,
         signal: AbortSignal.any([
           ...(init?.signal ? [init.signal] : []),
@@ -436,6 +447,8 @@ export class LiveT3Connection implements T3Authorization, T3Calls {
           ...(stream ? [] : [AbortSignal.timeout(10_000)]),
         ]),
       });
+      if (toolCall && [401, 403, 404].includes(response.status)) await fence.refuseDispatch();
+      return response;
     } catch {
       markCallUnavailable();
       // SDK refresh warnings include error messages. Never let URLs/bodies reach them.

@@ -1,6 +1,7 @@
 import { assert, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
+import { imageStart, screenshots, stageImageEffects } from "./support/run-images.ts";
 import { prepared, preparedService } from "./support/prepared-runner.ts";
 import {
   launchUncertain,
@@ -8,6 +9,7 @@ import {
   blockWorkerLaunched,
   observeFor,
   separatorLaunchFlow,
+  clippedEntryFlow,
   resultReported,
 } from "./support/scenarios.ts";
 
@@ -168,16 +170,19 @@ it("launch recovery excludes a bound worker carrying the lost launch's exact tit
   t3.threads.loseLaunchReply = true;
   const lost = await f.startRun({ ...input, requestId: "next" });
   assert(lost.ok);
+  await expect
+    .poll(() => f.getRun(lost.value.id))
+    .toMatchObject({
+      ok: true,
+      value: { intents: expect.arrayContaining([expect.objectContaining({ state: "uncertain" })]) },
+    });
 
   // Act
   await f.reconcileRuns();
 
   // Assert
   await expect
-    .poll(async () => {
-      await f.reconcileRuns();
-      return f.getRun(lost.value.id);
-    })
+    .poll(() => f.getRun(lost.value.id))
     .toMatchObject({ ok: true, value: { blocks: [{ threadId: "thread-2" }] } });
   expect(t3.threads.launchCalls).toBe(2);
 });
@@ -230,5 +235,38 @@ it.effect(
         "F#1 A · B · Ship",
         "F#1 A · B · Ship",
       ]);
+    }),
+);
+
+it.effect(
+  "a launch held by an uncertain title uploads its images once after discovery recovers",
+  (c) =>
+    Effect.gen(function* () {
+      // Arrange
+      const f = yield* preparedService(c, clippedEntryFlow);
+      yield* stageImageEffects(f.factory, Object.values(screenshots));
+      f.t3.threads.discoverAvailable = false;
+      f.t3.threads.loseLaunchReply = true;
+      const started = yield* f.factory.startRun(
+        imageStart({ ...f.input, title: "B · ".repeat(60).trim() }),
+      );
+      assert(started.ok);
+      yield* f.factory.reconcileRuns();
+      yield* f.factory.reconcileRuns();
+      expect(f.t3.threads.launchCalls).toBe(1);
+      expect(f.t3.threads.uploadCalls).toBe(3);
+      f.t3.threads.discoverAvailable = true;
+      f.t3.threads.loseLaunchReply = false;
+      yield* TestClock.adjust(5000);
+
+      // Act
+      yield* f.factory.reconcileRuns();
+
+      // Assert
+      expect(f.t3.threads.launchCalls).toBe(2);
+      expect(f.t3.threads.uploadCalls).toBe(6);
+      const run = yield* f.factory.getRun(started.value.id);
+      assert(run.ok);
+      expect(run.value.blocks.map((b) => b.threadId)).toStrictEqual(["thread-1", "thread-2"]);
     }),
 );

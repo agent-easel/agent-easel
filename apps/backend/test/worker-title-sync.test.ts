@@ -1,3 +1,4 @@
+import { authorizedLiveOAuth } from "./support/boundaries-setup.ts";
 import { assert, expect, it } from "@effect/vitest";
 import { copyFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
@@ -59,10 +60,13 @@ it("a manual title chosen before Start launches the worker and does not rename i
     title: "Manual title",
     titleProvenance: "manual",
   });
-  assert(started.ok);
-  await f.reconcileRuns();
 
   // Assert
+  assert(started.ok);
+  await expect
+    .poll(() => f.getRun(started.value.id))
+    .toMatchObject({ ok: true, value: { blocks: [{ threadId: "thread-1" }] } });
+  await f.awaitWorkerTitles();
   expect([...t3.threads.launches.values()].map((launch) => launch.payload.title)).toStrictEqual([
     "F#1 Entry worker · Manual title",
   ]);
@@ -136,9 +140,9 @@ it("archiving a Run drops a pending worker rename and a later title change does 
 
   // Act
   const renamed = await f.renameRun(started.value.id, { title: "Archived title" });
-  await f.reconcileRuns();
 
   // Assert
+  await f.awaitWorkerTitles();
   assert(renamed.ok);
   expect(t3.threads.renames).toStrictEqual([]);
   expect(t3.threads.threadTitle([...t3.threads.launches.values()][0]!.reference.threadId)).toBe(
@@ -187,14 +191,14 @@ it("editing only the clipped tail of a Run title does not call T3 again", async 
   const first = nextRename(world);
   assert((await f.renameRun(started.value.id, { title: "a".repeat(300) })).ok);
   const sent = await first;
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
   t3.threads.remoteTitles.set(sent.threadId, "Manually chosen in T3");
 
   // Act
   assert((await f.renameRun(started.value.id, { title: `${"a".repeat(299)}b` })).ok);
-  await f.reconcileRuns();
 
   // Assert
+  await f.awaitWorkerTitles();
   expect(t3.threads.renames.map((rename) => rename.title)).toStrictEqual([sent.title]);
   expect(t3.threads.threadTitle(sent.threadId)).toBe("Manually chosen in T3");
 });
@@ -230,9 +234,9 @@ it("an older T3 without rename support still accepts a Run rename and skips the 
 
   // Act
   const renamed = await f.renameRun(started.value.id, { title: "Polish search" });
-  await f.reconcileRuns();
 
   // Assert
+  await f.awaitWorkerTitles();
   assert(renamed.ok);
   expect(renamed.value.title).toBe("Polish search");
   expect(t3.threads.renames).toStrictEqual([]);
@@ -271,7 +275,7 @@ it("a return to the launch title repairs a rename whose acknowledgement was lost
   assert((await f.renameRun(started.value.id, { title: input.title })).ok);
 
   // Assert
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
   await expect
     .poll(() => t3.threads.threadTitle(intermediate.threadId))
     .toBe("F#1 Entry worker · Improve search");
@@ -288,7 +292,8 @@ it("a replacement grant selected after the claim cannot dispatch the old Run's r
   assert((await f.renameRun(worker.runId, { title: "New subject" })).ok);
 
   // Assert
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
+  expect(t3.connection.identity).toBe("replacement-grant");
   expect(t3.threads.renames).toStrictEqual([]);
 });
 
@@ -312,7 +317,7 @@ it.for(["thread-not-found", "capability-denied"] as const)(
     assert((await f.renameRun(worker.runId, { title: "Second title" })).ok);
 
     // Assert
-    await f.reconcileRuns();
+    await f.awaitWorkerTitles();
     expect(t3.threads.renames).toStrictEqual([sent]);
     const after = await f.getRun(worker.runId);
     assert(after.ok);
@@ -335,7 +340,7 @@ it("Archive between claim and dispatch cancels the unsent rename", async (c) => 
   assert((await f.renameRun(worker.runId, { title: "Cancelled title" })).ok);
 
   // Assert
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
   await expect.poll(() => archived).toBe(true);
   expect(t3.threads.renames).toStrictEqual([]);
 });
@@ -360,7 +365,7 @@ it("a restart with a sent claim and a newer target dispatches only the latest re
   const restored = await h.open({ t3 });
 
   // Assert
-  await restored.reconcileRuns();
+  await restored.awaitWorkerTitles();
   await expect
     .poll(() => t3.threads.renames.map((request) => request.title))
     .toStrictEqual([sent.title, "F#1 Entry worker · Improve search"]);
@@ -374,12 +379,13 @@ it("Archive ignores an already dispatched result and discards its queued success
   const { sent, release } = await heldWorkerRename(world, worker.runId, "Already sent");
   assert((await f.renameRun(worker.runId, { title: "Unsent" })).ok);
 
-  // Act
   assert((await f.archiveRun(worker.runId)).ok);
 
-  // Assert
+  // Act
   release();
-  await f.reconcileRuns();
+
+  // Assert
+  await f.awaitWorkerTitles();
   expect(t3.threads.renames).toStrictEqual([sent]);
   expect(t3.threads.threadTitle(worker.threadId)).toBe(sent.title);
 });
@@ -397,11 +403,8 @@ it("a capability withdrawn while connecting prevents dispatch of the claimed ren
   assert((await f.renameRun(worker.runId, { title: "Held" })).ok);
 
   // Assert
-  await f.reconcileRuns();
-  delete t3.threads.beforeRename;
-  assert((await f.renameRun(worker.runId, { title: input.title })).ok);
-  t3.contract.support.rename = true;
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
+  expect(t3.contract.support.rename).toBe(false);
   expect(t3.threads.renames).toStrictEqual([]);
 });
 
@@ -419,7 +422,55 @@ it("returning to the acknowledged title before dispatch preserves the worker's m
   assert((await f.renameRun(worker.runId, { title: "Never sent" })).ok);
 
   // Assert
-  await f.reconcileRuns();
+  await f.awaitWorkerTitles();
   expect(t3.threads.renames).toStrictEqual([]);
+  expect(t3.threads.beforeRename).toBeUndefined();
   expect(t3.threads.threadTitle(worker.threadId)).toBe("Manual T3 title");
+});
+
+it("restart after an expired session refusal preserves the manual title when the target returned to baseline", async (c) => {
+  // Arrange
+  const { h, f, t3, world, input } = await prepared(c);
+  const worker = await workerAtWork(world, input);
+  t3.threads.remoteTitles.set(worker.threadId, "Chosen in T3");
+  const wire = await authorizedLiveOAuth(c);
+  const { authorizationIdentity } = await wire.live.contract.inspect({ endpoint: wire.endpoint });
+  assert(authorizationIdentity);
+  wire.external.dropSessions(true);
+  const snapshot = h.databasePath + ".after-refusal";
+  const controlled = t3.threads.renameThread.bind(t3.threads);
+  t3.threads.renameThread = (target, request) =>
+    wire.threads.renameThread(
+      {
+        ...target,
+        endpoint: wire.endpoint,
+        authorizationIdentity,
+        authorizeDispatch: async () => {
+          const allowed = await target.authorizeDispatch();
+          assert(allowed);
+          assert((await f.renameRun(worker.runId, { title: input.title })).ok);
+          return true;
+        },
+        refuseDispatch: async () => {
+          await target.refuseDispatch();
+          const db = new DatabaseSync(h.databasePath);
+          db.prepare("VACUUM INTO ?").run(snapshot);
+          db.close();
+        },
+      },
+      request,
+    );
+  assert((await f.renameRun(worker.runId, { title: "Intermediate" })).ok);
+  await f.awaitWorkerTitles();
+  await f.close();
+  await copyFile(snapshot, h.databasePath);
+  t3.threads.renameThread = controlled;
+
+  // Act
+  const restored = await h.open({ t3 });
+
+  // Assert
+  await restored.awaitWorkerTitles();
+  expect(t3.threads.renames).toStrictEqual([]);
+  expect(t3.threads.threadTitle(worker.threadId)).toBe("Chosen in T3");
 });

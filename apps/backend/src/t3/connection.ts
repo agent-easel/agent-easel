@@ -10,7 +10,7 @@ export interface T3Target {
 export interface DispatchFence {
   readonly authorizationIdentity: string;
   readonly signal: AbortSignal;
-  readonly onDispatch: () => void;
+  readonly refuseDispatch: () => Promise<void>;
   readonly authorizeDispatch: () => Promise<boolean>;
 }
 export type T3Endpoint = Pick<T3Target, "endpoint">;
