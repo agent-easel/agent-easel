@@ -308,12 +308,14 @@ export const makeDefinitions = (
           }),
         };
         const graph: FlowGraph = {
-          ...input,
+          connections: input.connections,
           ...placed,
-          finish: {
-            endings: input.finish?.endings ?? [],
-            position: input.finish?.position ?? unplacedFinishPosition(placed),
-          },
+          ...(input.finish && {
+            finish: {
+              endings: input.finish.endings,
+              position: input.finish.position ?? unplacedFinishPosition(placed),
+            },
+          }),
         };
         if (
           input.flowInput.position !== undefined &&
@@ -338,7 +340,9 @@ export const makeDefinitions = (
               value: {
                 ...graph,
                 flowInput: { ...graph.flowInput, position: positions.flowInput },
-                finish: { ...graph.finish, position: positions.finish },
+                ...(graph.finish && {
+                  finish: { ...graph.finish, position: positions.finish ?? graph.finish.position },
+                }),
                 blocks,
               },
             };
@@ -548,14 +552,7 @@ export const makeDefinitions = (
         id,
         revision: 1,
         name: flow.name,
-        graph: {
-          ...flow.graph,
-          blocks,
-          finish: flow.graph.finish ?? {
-            endings: [],
-            position: unplacedFinishPosition({ ...flow.graph, blocks }),
-          },
-        },
+        graph: { ...flow.graph, blocks },
         workspace: flow.workspace,
         savedAt: now,
       });

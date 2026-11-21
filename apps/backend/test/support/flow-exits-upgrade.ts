@@ -94,6 +94,5 @@ export const upgradedGraph = (agentId: string, flowInput: FlowGraph["flowInput"]
       { sourceBlockId: "review", exitId: "approve", targetBlockId: "notify" },
       { sourceBlockId: "review", exitId: "request-changes", targetBlockId: "worker" },
     ],
-    finish: { position: { x: 1120, y: flowInput.position.y }, endings: [] },
   };
 };

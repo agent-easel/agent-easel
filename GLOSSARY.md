@@ -263,7 +263,7 @@ The single, always-present Flow block representing the Flow input. It has one un
 _Avoid_: Start block, entry, entry Agent
 
 **Finish block**:
-The single, always-present Flow block on which the author declares the Flow's endings, placed right of the other blocks by default. It cannot be removed, has the fixed label Finish, has no worker and no exits, and the Flow input never connects to it. A Flow with no endings keeps its unconnected exits as its only branch ends.
+The optional Flow block, at most one per Flow, on which the author declares the Flow's endings. The author adds it from the block library, where it is placed right of the other blocks by default, and can remove it together with its endings and their wires. It has the fixed label Finish, has no worker and no exits, and the Flow input never connects to it. A Flow without a Finish block or without endings keeps its unconnected exits as its only branch ends.
 _Avoid_: End block, Join block, terminal block
 
 **Ending**:

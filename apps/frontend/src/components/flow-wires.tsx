@@ -84,16 +84,16 @@ function blocksById(graph: CanvasGraph) {
 
 function wireEnds(graph: CanvasGraph, geometry: Geometry, finish: boolean) {
   const blocks = blocksById(graph);
-  const endings = new Map(graph.finish.endings.map((ending, index) => [ending.id, index]));
-  const finishBottom = geometry.finishBox.y + geometry.finishBox.height;
+  const endings = new Map(graph.finish?.endings.map((ending, index) => [ending.id, index]));
+  const box = geometry.finishBox;
   return (connection: FlowConnection): (WireEnd & { name: string }) | null => {
     if (connection.targetEndingId !== undefined) {
       const index = endings.get(connection.targetEndingId);
-      if (!finish || index === undefined) return null;
-      const name = graph.finish.endings[index]?.name || "Unnamed ending";
+      if (!finish || !box || index === undefined) return null;
+      const name = graph.finish?.endings[index]?.name || "Unnamed ending";
       return {
         input: geometry.endingPoint(index),
-        bottom: finishBottom,
+        bottom: box.y + box.height,
         lane: 0,
         name: `Finish · ${name}`,
       };

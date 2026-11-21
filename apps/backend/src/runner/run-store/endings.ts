@@ -76,7 +76,7 @@ export function openRunEndings(database: RunnerDatabase) {
         const arriving = yield* arrivingHandoff(sql, ownerToken, current.id, handoff, generation);
         if (!arriving) return undefined;
         const { endingId } = JSON.parse(arriving.record.target_json) as StoredTarget;
-        const ending = current.definitions.flow.graph.finish.endings.find(
+        const ending = current.definitions.flow.graph.finish?.endings.find(
           (entry) => entry.id === endingId,
         );
         if (!ending || !handoff.source_block_id || !handoff.exit_id)

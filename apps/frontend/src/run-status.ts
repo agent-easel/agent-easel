@@ -68,6 +68,6 @@ export function runFreshness(run: RunDetail, observationsUnavailable: boolean): 
 
 export function runResultState(run: RunDetail) {
   if (run.result) return "reached";
-  if (!run.definitions.flow.graph.finish.endings.length) return "none";
+  if (!run.definitions.flow.graph.finish?.endings.length) return "none";
   return run.lifecycle === "active" && run.gateOpen ? "not-yet" : "not-reached";
 }

@@ -30,8 +30,9 @@ No Subflow field is stored by the Finish block delivery.
 
 ## Implementation constraints
 
-- The Finish block is always present and counts toward the limit for authored Flows. In version-3 imports and exports,
-  Finish counts when it has endings. This lets full-size legacy Flows be shared with all their blocks and an empty Finish.
+- The Finish block is optional: a Flow whose Runs need a result, and a Flow a Subflow invokes, adds it; any other Flow
+  leaves it out. When present it counts toward the limit for authored Flows. In version-3 imports and exports, Finish
+  counts when it has endings.
   Version-1 and version-2 imports and already-saved Flows can keep up to 500 ordinary Blocks. An ending delivery has its
   own target identity, so an ordinary Block with the ID `finish` keeps its wires and runtime history. Canvas selection
   and layout identify the Finish block and its ports separately from ordinary Blocks.
@@ -49,8 +50,8 @@ No Subflow field is stored by the Finish block delivery.
   keeps its own setting. A wire to an intervening Block does not impose the ending's message requirement. Human,
   Wait and Condition outputs can reach a Required ending with blank text, which is recorded as missing.
 - A Finish block nothing placed goes one layout layer gap right of the rightmost Flow input or block, level with the
-  Flow input and within the canvas limits. Migration 114 and format 1 and 2 imports give upgraded Flows an empty Finish
-  block at that position.
+  Flow input and within the canvas limits. Migration 119 removed the empty Finish blocks migration 114 had given every
+  Flow revision, and format 1 and 2 imports arrive without one.
 
 ## Considered Options
 

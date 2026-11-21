@@ -72,7 +72,6 @@ export function memoryFactory(): MemoryFactory {
       ],
       connections: [],
       flowInput: { position: { x: 0, y: 0 }, targetBlockIds: ["review"] },
-      finish: { position: { x: 800, y: 0 }, endings: [] },
     },
     workspace: { mode: "checkout" },
     createdAt: "2026-11-10T08:00:00.000Z",

@@ -394,8 +394,9 @@ first message sends the prompt to that conversation and waits for its response, 
 Every Flow has one **Flow input block** (**FLOW INPUT** / **Flow input** / **Run prompt**): one output port, no input or exits, and it cannot be removed; selecting it
 opens its settings with a **Starts** target select. The Agent blocks it connects to start a Run, each with the same prompt in its own session; no block is marked "entry".
 
-Every Flow also has one **Finish block** (**FINISH** / **Finish** / *N* endings), placed right of the other blocks by default. It is not in the
-library, has no Remove block and is moved like a block. Each [ending](../GLOSSARY.md#ending) is a row with its own labelled input port on the
+A Flow can also have one **Finish block** (**FINISH** / **Finish** / *N* endings). It is optional: **Finish** in the library's Steps adds it
+while the Flow has none, at the drop point or, when activated, right of the other blocks, and selects it. It is moved like a block, and
+**Remove block** in its settings removes it with its endings and their wires; ⌘Z restores them. A Flow without one has no endings. Each [ending](../GLOSSARY.md#ending) is a row with its own labelled input port on the
 left edge, in ending order: the one exception to one input port per incoming wire, so several wires converge on their ending's port. Without
 endings the block reads **No endings** with the hint **Add endings in its settings**. Selecting it opens **Finish** settings: a short
 explanation, one card per ending with **Name**, **Description**, **Output** (**None**, **Optional** or **Required**), **Output desc.** (hidden
@@ -765,7 +766,7 @@ A Flow document has `kind: "flow"` and a `flow` beside `agents`:
   unfinished draft keeps its gaps, such as a Wait without a duration or a rule with `"fromArrival": null`.
 - `graph.finish` is the [Finish block](#finish-block): its `position` and its `endings` (`id`, `name`, `description`, `output`,
   `outputDescription`) in order. A wire into an ending is a connection with `targetBlockId: "finish"` and the ending's `targetEndingId`.
-  Ending ids are document-local like exit ids and are kept as saved. A version-3 Flow always carries `finish`, even with no endings.
+  Ending ids are document-local like exit ids and are kept as saved. A Flow without a Finish block has no `finish`.
 - Each distinct Agent the blocks use is bundled once, keyed `agent-1`, `agent-2`, … in the order the blocks first place it. An Agent block
   carries a required `agentKey` instead of a local Agent id: a bundled Agent's key, or `null` when the block has no Agent or its Agent is
   missing or removed. There is no fallback to local ids or names.
@@ -777,9 +778,9 @@ Version-3 import and export allow 500 ordinary blocks when Finish has no endings
 **Format versions.** Import reads versions 1, 2, 3 and 4, each with its own strict reader. Version 2 is version 1 plus the Condition block; a
 version-1 file holding a Condition is rejected at that block as an unknown block kind. Version 3 is version 2 plus the Finish block with its
 endings and the connections entering them; a version-1 or version-2 file holding `finish` or `targetEndingId` is rejected at that field as
-unknown, and a version-3 or version-4 Flow file without `finish` is rejected as missing it. Version 4 adds `revisitContext` on Agent blocks;
-version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Files exported before version 3 arrive with an empty Finish
-block placed right of every block. A newer version is refused and asks to update Factory. Writing version 4 for every export is an intentional
+unknown, and a version-3 or version-4 Flow file without `finish` imports without a Finish block. Version 4 adds `revisitContext` on Agent blocks;
+version-1, version-2 and version-3 Flow files import with `revisitContext: "keep"`. Files exported before version 3 arrive without a Finish
+block. A newer version is refused and asks to update Factory. Writing version 4 for every export is an intentional
 compatibility break: an installation that reads only earlier versions refuses every newly exported file and asks to be updated before it can
 import it; it refuses before creating anything. Version-1 and version-2 imports retain the former limit of 500 ordinary blocks. The receipt
 fingerprint covers the document under the file's own version, so retrying an earlier-version commit still replays its receipt.
@@ -869,15 +870,15 @@ Every graph carries exactly one `flowInput`: a canvas `position` and the `target
 
 #### Finish block
 
-Every saved graph carries exactly one `finish`: a canvas `position` and its ordered `endings`, each
+A saved graph carries at most one `finish`: a canvas `position` and its ordered `endings`, each
 `{id, name, description, output, outputDescription}` ([Ending](../GLOSSARY.md#ending)). `output` is `none`, `optional` or
 `required`; `outputDescription` says what the output should contain and is empty when unset. A wire into an ending is
 `{sourceBlockId, exitId, targetBlockId: "finish", targetEndingId}`; the API uses `targetEndingId` to distinguish an ending
 from an ordinary Block target, including a Block whose ID is `finish`. Any exit or output may enter an ending, including Human **Approve** and **Request changes**, Wait and
 Continuation outputs and every Condition output with Otherwise, several wires may enter one ending, and a rename keeps the wires
-because they enter by ID. A create or save that omits `finish` saves no endings and places the Finish block one layer right of
-every block, level with the Flow input; Flows saved before the Finish block existed received the same empty, rightmost Finish block on
-upgrade, with every wire unchanged. A Flow with no endings is ready. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
+because they enter by ID. A create or save that omits `finish` saves the Flow without a Finish block, so wires into endings are refused;
+a `finish` without a `position` is placed one layer right of every block, level with the Flow input. Upgrading removed every stored
+Finish block without endings, which held no wire. A Flow with no endings is ready. Reaching an ending ends the Run ([Reaching an ending](runner.md#reaching-an-ending)). Studio edits the Finish block as described in
 [Canvas and block configuration](#canvas-and-block-configuration).
 
 ### Validation
@@ -887,7 +888,7 @@ positions, Flow input targets, dangling or duplicate edges, a Human or Wait conn
 blank or repeated ending ID (`invalid_ending_id`), an ending name over 200 characters after trimming, a description or output
 description over 4,000 characters, an unknown output setting, extra Finish or ending fields, a wire into Finish without one of its
 ending IDs or a `targetEndingId` on a wire into a block (`invalid_connection`), two wires from the same exit into the same ending
-(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. A `revisitContext` that is not `"keep"` or `"fresh"`, or is on a block other than an Agent block, is refused at that block's `revisitContext` path. Limits: 500 blocks with the Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
+(`duplicate_connection`) and a Flow input directed to Finish (`flow_input_finish`). A Condition is refused, never coerced, rounded or reordered, for a threshold that is not a number, not whole, below 1 or beyond the largest exact integer (`invalid_condition_threshold`), a repeated rule ID or one equal to `otherwise` (`invalid_condition_rule_id`), a missing or altered Otherwise (`invalid_condition_otherwise`), extra rule fields and a wire from an output it does not have. A `revisitInstruction` that is not a string, is longer than 120,000 characters after trimming, or is on a block other than an Agent block is refused at that block's `revisitInstruction` path. A `revisitContext` that is not `"keep"` or `"fresh"`, or is on a block other than an Agent block, is refused at that block's `revisitContext` path. Limits: 500 blocks with a Finish block counted as one, 100 endings, 100 local exits and 100 hide entries per block, 100 exits per Agent, 5000 connections, coordinates −10000 to 10000, bodies up to 2 MB. See [portable definition limits](#definition-export) for legacy files and Flows at the former block limit.
 A Condition has no rule or output quota of its own and does not borrow the Agent exit limit: it counts as one block, each actual wire
 from any of its outputs, including fan-out and Otherwise wires, is one connection, unwired outputs cost nothing, and its rule IDs,
 names and thresholds count toward the 2 MB body.

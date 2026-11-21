@@ -120,7 +120,7 @@ function runWithEnding() {
       ...run.definitions,
       flow: {
         ...run.definitions.flow,
-        graph: { ...graph, finish: { ...graph.finish, endings: [ending] } },
+        graph: { ...graph, finish: { position: { x: 800, y: 0 }, endings: [ending] } },
       },
     },
   };

@@ -8,6 +8,7 @@ import {
   exitRecipients,
   removeBlock,
   removeEnding,
+  removeFinish,
   replaceBlock,
   undoRemoval,
 } from "../src/flow-graph.ts";
@@ -36,7 +37,6 @@ function conditionFlow(rules: readonly ConditionRule[], wired: readonly string[]
     blocks: [condition(rules), { id: "next", name: "Next", position, kind: "human" }],
     connections: wired.map((exitId) => ({ sourceBlockId: "gate", exitId, targetBlockId: "next" })),
     flowInput: { position, targetBlockIds: [] },
-    finish: { position: { x: 800, y: 0 }, endings: [] },
   };
 }
 
@@ -110,7 +110,7 @@ it("undoing a Block removal brings back its wires into Finish endings unchanged"
       },
     ],
     finish: {
-      ...wired.finish,
+      position: { x: 800, y: 0 },
       endings: [
         { id: "done", name: "Done", description: "", output: "none", outputDescription: "" },
       ],
@@ -146,7 +146,7 @@ function endingFlow(): FlowGraph {
         targetEndingId: "delivered",
       },
     ],
-    finish: { ...wired.finish, endings: [ending("delivered"), ending("blocked")] },
+    finish: { position: { x: 800, y: 0 }, endings: [ending("delivered"), ending("blocked")] },
   };
 }
 
@@ -161,9 +161,24 @@ it("undoing an ending removal brings the ending back in its place with its wires
 
   // Assert
   expect(after.connections).toStrictEqual(before.connections.slice(0, 1));
-  expect(undone.finish.endings).toStrictEqual(before.finish.endings);
+  expect(undone.finish?.endings).toStrictEqual(before.finish?.endings);
   expect(undone.connections).toStrictEqual(before.connections);
   expect(undone.flowInput.position).toStrictEqual({ x: 90, y: 40 });
+});
+
+it("removing the Finish block takes the wires into its endings, and undo brings both back", () => {
+  // Arrange
+  const before = endingFlow();
+  const after = removeFinish(before);
+
+  // Act
+  const undone = undoRemoval(after, before, after);
+
+  // Assert
+  expect(after).not.toHaveProperty("finish");
+  expect(after.connections).toStrictEqual(before.connections.slice(0, 1));
+  expect(undone.finish).toStrictEqual(before.finish);
+  expect(undone.connections).toStrictEqual(before.connections);
 });
 
 it("an exit reaches each ending at most once, and the Flow input reaches no ending", () => {

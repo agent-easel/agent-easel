@@ -291,10 +291,11 @@ function SurfaceFinish({
   pendingEnding: string | null;
 }) {
   const rows = dimensions.block;
+  const box = geometry.finishBox;
+  if (!graph.finish || !box) return null;
   const { endings } = graph.finish;
   const { state } = content;
   const identity = finishIdentity(state, endings.length, content.trailing);
-  const box = geometry.finishBox;
   return (
     <article
       aria-label="Finish block"
@@ -445,7 +446,10 @@ function gestureGraph(graph: CanvasGraph, gesture: CanvasGesture | null) {
     if (node.kind === "flow-input")
       return { graph: { ...graph, flowInput: { ...graph.flowInput, position } }, pending: null };
     if (node.kind === "finish")
-      return { graph: { ...graph, finish: { ...graph.finish, position } }, pending: null };
+      return {
+        graph: graph.finish ? { ...graph, finish: { ...graph.finish, position } } : graph,
+        pending: null,
+      };
     const blocks = graph.blocks.map((b) => (b.id === node.blockId ? { ...b, position } : b));
     return { graph: { ...graph, blocks }, pending: null };
   }
@@ -484,7 +488,7 @@ function targetPoint(
   { source, target, pointer }: Extract<CanvasGesture, { kind: "connect" }>,
 ) {
   if (target?.targetEndingId !== undefined) {
-    const index = graph.finish.endings.findIndex((e) => e.id === target.targetEndingId);
+    const index = graph.finish?.endings.findIndex((e) => e.id === target.targetEndingId) ?? -1;
     return index < 0 ? pointer : geometry.endingPoint(index);
   }
   const block = graph.blocks.find((b) => b.id === target?.targetBlockId);
@@ -590,7 +594,6 @@ function useSurfaceGraph({
   dimensions,
   reservedFooters,
   flowInput,
-  finish,
   block: blockContent,
   wires,
   emptyGraphSize,
@@ -607,7 +610,6 @@ function useSurfaceGraph({
     footerCount: (item: CanvasBlock) => content(item).footers.length,
     reservedFooterCount: reservedFooters,
     emptyGraphSize,
-    finish: finish !== undefined,
   };
   const layout = useFlowLayoutSession({
     scope,

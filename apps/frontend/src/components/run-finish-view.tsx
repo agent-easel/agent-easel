@@ -129,7 +129,7 @@ export function RunFinishView({ run, onBack }: { run: RunDetail; onBack: () => v
         )
       )}
       <InspectorSection title="Endings">
-        {run.definitions.flow.graph.finish.endings.length ? (
+        {run.definitions.flow.graph.finish?.endings.length ? (
           <ul className="flex flex-col text-sm text-muted-foreground">
             {run.definitions.flow.graph.finish.endings.map((ending) => (
               <li key={ending.id}>{endingLine(ending, result)}</li>

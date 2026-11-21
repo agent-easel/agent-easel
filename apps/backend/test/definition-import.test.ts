@@ -583,7 +583,7 @@ it("retrying a commit with the same request id and content returns the original 
   expect(assertOk(await factory.listAgents())).toHaveLength(1);
 });
 
-it("a full-size version-1 Flow still imports with its ordinary finish block and wires", async (context) => {
+it("a full-size version-1 Flow still imports with its ordinary finish block and wires and no Finish block", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const file = fullLegacyFlowFile(1);
@@ -605,9 +605,9 @@ it("a full-size version-1 Flow still imports with its ordinary finish block and 
     graph: {
       flowInput: file.flow.graph.flowInput,
       connections: file.flow.graph.connections,
-      finish: { endings: [] },
     },
   });
+  expect(flow.graph).not.toHaveProperty("finish");
   expect(flow.graph.blocks).toHaveLength(500);
   expect(flow.graph.blocks[0]).toMatchObject({
     id: "finish",
@@ -666,7 +666,7 @@ it("a version-4 Flow file preserves fresh revisitContext on import", async (cont
   expect(flow.graph.blocks[0]).toMatchObject({ id: "review", revisitContext: "fresh" });
 });
 
-it("a full-size version-2 Flow imports with an empty Finish block placed right of its blocks", async (context) => {
+it("a full-size version-2 Flow imports without a Finish block", async (context) => {
   // Arrange
   const { factory } = await openFactoryWithApprovedT3(context);
   const file = fullLegacyFlowFile();
@@ -683,8 +683,7 @@ it("a full-size version-2 Flow imports with an empty Finish block placed right o
   // Assert
   const flow = assertOk(await factory.getFlow(committed.flowId!));
   expect(flow.graph.blocks).toHaveLength(500);
-  expect(flow.graph.finish.endings).toStrictEqual([]);
-  expect(flow.graph.finish.position.x).toBeGreaterThan(480);
+  expect(flow.graph).not.toHaveProperty("finish");
 });
 
 it("renaming a Flow at the former block limit keeps its entire graph", async (context) => {
@@ -707,7 +706,7 @@ it("renaming a Flow at the former block limit keeps its entire graph", async (co
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(flow.graph);
 });
 
-it("a full-size Flow with an empty Finish can be exported and reimported as version 4", async (context) => {
+it("a full-size Flow without a Finish can be exported and reimported as version 4", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
   const { document } = assertOk(await factory.exportFlow(flow.id));
@@ -727,6 +726,8 @@ it("a full-size Flow with an empty Finish can be exported and reimported as vers
     blocks: remapAgentPlacements(flow.graph.blocks, placedAgents),
   });
 });
+
+const emptyFinish = { position: { x: 960, y: 0 }, endings: [] };
 
 const finishWithEnding = {
   position: { x: 960, y: 0 },
@@ -779,12 +780,15 @@ it("version-3 export refuses a 500-block Flow with an ending while preserving th
   expect(assertOk(await factory.getFlow(flow.id)).graph).toStrictEqual(saved.graph);
 });
 
-it("newly authored Flows must count the Finish block toward the block limit", async (context) => {
+it("newly authored Flows must count an added Finish block toward the block limit", async (context) => {
   // Arrange
   const { factory, flow } = await importFullLegacyFlow(context);
 
   // Act
-  const created = await factory.createFlow({ name: "Too many blocks", graph: flow.graph });
+  const created = await factory.createFlow({
+    name: "Too many blocks",
+    graph: { ...flow.graph, finish: emptyFinish },
+  });
 
   // Assert
   assert(!created.ok);
@@ -792,7 +796,7 @@ it("newly authored Flows must count the Finish block toward the block limit", as
   expect(assertOk(await factory.listFlows())).toHaveLength(1);
 });
 
-it("saving a newly authored Flow cannot exceed the block limit by adding one block", async (context) => {
+it("saving a newly authored Flow with a Finish block cannot exceed the block limit by adding one block", async (context) => {
   // Arrange
   const {
     factory,
@@ -801,7 +805,7 @@ it("saving a newly authored Flow cannot exceed the block limit by adding one blo
   const created = assertOk(
     await factory.createFlow({
       name: "At the authoring limit",
-      graph: { ...graph, blocks: graph.blocks.slice(0, -1) },
+      graph: { ...graph, blocks: graph.blocks.slice(0, -1), finish: emptyFinish },
     }),
   );
 
@@ -810,7 +814,7 @@ it("saving a newly authored Flow cannot exceed the block limit by adding one blo
     name: created.name,
     expectedRevision: created.revision,
     expectedProjectId: created.projectId,
-    graph,
+    graph: { ...graph, finish: emptyFinish },
   });
 
   // Assert

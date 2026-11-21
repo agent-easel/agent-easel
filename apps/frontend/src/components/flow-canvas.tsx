@@ -41,6 +41,7 @@ import {
   type Placement,
 } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
+import { finishIdentity } from "./finish-block.tsx";
 import { StatusBadge } from "./status-badge.tsx";
 import { blockIdentity, conditionRoutes, exitDisplayName } from "./flow-block.tsx";
 import { BLOCK_KINDS, blockReference, isSingleOutput, type ReferenceTone } from "../block-kind.ts";
@@ -160,7 +161,7 @@ function moveGraphNode(
     return;
   }
   if (moved.kind === "finish") {
-    onChange({ ...graph, finish: { ...graph.finish, position } });
+    if (graph.finish) onChange({ ...graph, finish: { ...graph.finish, position } });
     return;
   }
   const block = graph.blocks.find((item) => item.id === moved.blockId);
@@ -591,6 +592,26 @@ export function BlockPreview({
       style={{ ...style, width: rows.width, borderWidth: rows.border }}
     >
       <IdentityRows rows={rows} header={identity.header} title={identity.title} />
+    </div>
+  );
+}
+
+const NO_UNCONNECTED_ENDINGS: ReadonlySet<string> = new Set();
+
+export function FinishPreview({ className, style }: { className?: string; style?: CSSProperties }) {
+  const rows = AUTHORING_DIMENSIONS.block;
+  const identity = finishIdentity({ kind: "authoring", unconnected: NO_UNCONNECTED_ENDINGS }, 0);
+  return (
+    <div
+      aria-hidden
+      className={cn("rounded-lg bg-card", className)}
+      style={{ ...style, width: rows.width, borderWidth: rows.border }}
+    >
+      <IdentityRows
+        rows={{ header: rows.header, title: AUTHORING_DIMENSIONS.finish.title }}
+        header={identity.header}
+        title={identity.title}
+      />
     </div>
   );
 }

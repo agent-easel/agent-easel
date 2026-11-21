@@ -11,7 +11,6 @@ const flow = (id: string, createdAt: string): FlowDraft => ({
     blocks: [],
     connections: [],
     flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
-    finish: { position: { x: 800, y: 0 }, endings: [] },
   },
   workspace: { mode: "checkout" },
   createdAt,

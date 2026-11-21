@@ -80,6 +80,7 @@ import { useDefinitionExport } from "../definition-export.ts";
 import { Page } from "../components/page.tsx";
 import {
   addEnding,
+  addFinish,
   addWire,
   FINISH_SELECTION,
   type CanvasBlockSelection,
@@ -87,6 +88,7 @@ import {
   newBlock,
   removeBlock,
   removeEnding,
+  removeFinish,
   removeWire,
   replaceBlock,
   replaceEnding,
@@ -313,8 +315,9 @@ function useCanvasSelection(
   if (
     selected !== null &&
     selected !== FLOW_INPUT &&
-    selected !== FINISH_SELECTION &&
-    !graph.blocks.some((block) => block.id === selected)
+    (selected === FINISH_SELECTION
+      ? !graph.finish
+      : !graph.blocks.some((block) => block.id === selected))
   )
     setSelected(null);
   /** Selects a block or the Flow input, or with null clears every selection. */
@@ -341,8 +344,8 @@ function useCanvasSelection(
     if (wire) deleteWire(wire);
   });
   /** Removes a block with its wires and closes its settings. */
-  function deleteBlock(blockId: string) {
-    draft.remove(removeBlock(graph, blockId));
+  function deleteBlock(blockId: CanvasBlockSelection) {
+    draft.remove(blockId === FINISH_SELECTION ? removeFinish(graph) : removeBlock(graph, blockId));
     select(null);
   }
   return { selected, wire, select, selectWire, deleteWire, deleteBlock } as const;
@@ -536,7 +539,7 @@ export function FlowDetail({
   const { readiness, folderMissing, marks } = useEditorReadiness(state.readiness, owner, graph);
   // A Project that left T3 leaves its Flow read-only until it is moved or removed.
   const readOnly = owner.gone;
-  const { add, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
+  const { add, addFinishBlock, dropAt, placement } = useBlockAdding(graph, change, selectBlock);
   if (!saved) return <FlowLoadState error={error} />;
   return (
     <CanvasLayout>
@@ -572,7 +575,9 @@ export function FlowDetail({
           projects={projects}
           capabilities={blockAgents.capabilities}
           agentError={agentError}
+          finishPlaced={graph.finish !== undefined}
           onAdd={add}
+          onAddFinish={addFinishBlock}
           dropAt={dropAt}
         />
         <div className="relative flex min-w-0 flex-1" {...interactions.fields}>
@@ -615,7 +620,7 @@ export function FlowDetail({
             onAdd: () => {
               const next = addEnding(graph);
               change(next);
-              return next.finish.endings.at(-1)!.id;
+              return next.finish!.endings.at(-1)!.id;
             },
             onEdit: (ending) => change(replaceEnding(graph, ending)),
             onRemove: (endingId) => remove(removeEnding(graph, endingId)),
@@ -681,7 +686,7 @@ function EditorBody({
 function useBlockAdding(
   graph: FlowGraph,
   change: (next: FlowGraph) => void,
-  select: (blockId: string) => void,
+  select: (blockId: CanvasBlockSelection) => void,
 ) {
   /** The canvas fills it with the placement of a drop point. */
   const placement = useRef<DropAt | null>(null);
@@ -691,6 +696,10 @@ function useBlockAdding(
       const next = newBlock(graph, kind, agent, position);
       change({ ...graph, blocks: [...graph.blocks, next] });
       select(next.id);
+    },
+    addFinishBlock(position?: BlockPosition) {
+      change(addFinish(graph, position));
+      select(FINISH_SELECTION);
     },
     dropAt: ((x, y, grab) => placement.current?.(x, y, grab) ?? null) satisfies DropAt,
   };
@@ -744,7 +753,7 @@ function EditorSettings({
   onClose: (selection: null) => void;
   onEdit: (block: FlowBlock) => void;
   onWireChange: (wire: FlowWire, connected: boolean) => void;
-  onRemove: (blockId: string) => void;
+  onRemove: (blockId: CanvasBlockSelection) => void;
 }) {
   const close = () => onClose(null);
   if (selected === FLOW_INPUT)
@@ -774,6 +783,7 @@ function EditorSettings({
         icon={Flag}
         iconClassName="text-muted-foreground"
         onClose={close}
+        footer={<RemoveBlockButton onClick={() => onRemove(FINISH_SELECTION)} />}
       >
         <FinishSettings graph={graph} agents={agents.all} issues={marks.finish} {...finish} />
       </SettingsPanel>
@@ -786,15 +796,7 @@ function EditorSettings({
       title={BLOCK_KINDS[block.kind].name}
       icon={BLOCK_KINDS[block.kind].Icon}
       onClose={close}
-      footer={
-        <Button
-          variant="outline"
-          className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={() => onRemove(block.id)}
-        >
-          Remove block
-        </Button>
-      }
+      footer={<RemoveBlockButton onClick={() => onRemove(block.id)} />}
     >
       <BlockConfiguration
         key={block.id}
@@ -808,6 +810,18 @@ function EditorSettings({
         onWireChange={onWireChange}
       />
     </SettingsPanel>
+  );
+}
+
+function RemoveBlockButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="outline"
+      className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
+      onClick={onClick}
+    >
+      Remove block
+    </Button>
   );
 }
 

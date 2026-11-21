@@ -9,7 +9,7 @@ export function blockName(run: RunDetail, blockId: string) {
 }
 
 export function capturedEnding(run: RunDetail, endingId: string) {
-  return run.definitions.flow.graph.finish.endings.find((ending) => ending.id === endingId);
+  return run.definitions.flow.graph.finish?.endings.find((ending) => ending.id === endingId);
 }
 
 export function deliveryRecipientName(

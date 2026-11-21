@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { ChevronRight, Flag, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
 import type {
   AgentCapabilities,
   AgentDefinition,
@@ -19,7 +19,7 @@ import { BLOCK_KINDS, blockReference } from "../block-kind.ts";
 import { newBlock, type BlockPosition } from "../flow-graph.ts";
 import type { GrabOffset } from "./canvas-surface.tsx";
 import { DragButton } from "./drag-button.tsx";
-import { BlockPreview, type DropAt } from "./flow-canvas.tsx";
+import { BlockPreview, FinishPreview, type DropAt } from "./flow-canvas.tsx";
 import { NeedsModel } from "./needs-model.tsx";
 import { ownerGroups } from "../studio-definitions.ts";
 
@@ -29,6 +29,14 @@ const STEPS = [
   { kind: "continuation", name: "Continuation", detail: "Same thread, new prompt" },
   { kind: "condition", name: "Condition", detail: "Routes by arrival number" },
 ] as const satisfies readonly { kind: FlowBlock["kind"]; name: string; detail: string }[];
+
+const FINISH_STEP = {
+  kind: "finish",
+  name: "Finish",
+  detail: "Ends the Run with a result",
+} as const;
+
+type LibraryKind = FlowBlock["kind"] | "finish";
 
 const headingClass = "text-label tracking-label text-muted-foreground";
 
@@ -51,7 +59,9 @@ export function BlockLibrary({
   projects,
   capabilities,
   agentError,
+  finishPlaced,
   onAdd,
+  onAddFinish,
   dropAt,
 }: {
   open: boolean;
@@ -62,13 +72,16 @@ export function BlockLibrary({
   projects: readonly FactoryProject[];
   capabilities: AgentCapabilities | null;
   agentError: string;
+  finishPlaced: boolean;
   onAdd: (kind: FlowBlock["kind"], agent?: AgentDefinition, position?: BlockPosition) => void;
+  onAddFinish: (position?: BlockPosition) => void;
   dropAt: DropAt;
 }) {
   const [query, setQuery] = useState("");
   const searching = query.trim() !== "";
   const matches = (name: string) => name.toLowerCase().includes(query.trim().toLowerCase());
   const steps = STEPS.filter((step) => matches(step.name));
+  const finish = !finishPlaced && matches(FINISH_STEP.name);
   const shown = agents.filter((agent) => matches(agent.name));
   const groups = ownerGroups(shown, projects, { kind: "all" });
   const summaries = new Map(
@@ -133,22 +146,16 @@ export function BlockLibrary({
           <TooltipContent side="right">Collapse library</TooltipContent>
         </Tooltip>
       </div>
-      {searching && !steps.length && !shown.length && (
+      {searching && !steps.length && !finish && !shown.length && (
         <p className="px-1.5 text-sm text-muted-foreground">No matching steps or Agents</p>
       )}
-      {steps.length > 0 && (
-        <section aria-label="Steps" className="flex flex-col gap-1">
-          <h3 className={cn(headingClass, "px-1.5 py-1")}>Steps</h3>
-          {steps.map((step) => (
-            <LibraryItem
-              key={step.kind}
-              {...step}
-              dropAt={dropAt}
-              onAdd={(position) => onAdd(step.kind, undefined, position)}
-            />
-          ))}
-        </section>
-      )}
+      <LibrarySteps
+        steps={steps}
+        finish={finish}
+        dropAt={dropAt}
+        onAdd={(kind, position) => onAdd(kind, undefined, position)}
+        onAddFinish={onAddFinish}
+      />
       {agentError && (
         <p role="alert" className="text-xs text-destructive">
           {agentError}
@@ -201,6 +208,36 @@ export function BlockLibrary({
   );
 }
 
+function LibrarySteps({
+  steps,
+  finish,
+  dropAt,
+  onAdd,
+  onAddFinish,
+}: {
+  steps: readonly (typeof STEPS)[number][];
+  finish: boolean;
+  dropAt: DropAt;
+  onAdd: (kind: FlowBlock["kind"], position?: BlockPosition) => void;
+  onAddFinish: (position?: BlockPosition) => void;
+}) {
+  if (!steps.length && !finish) return null;
+  return (
+    <section aria-label="Steps" className="flex flex-col gap-1">
+      <h3 className={cn(headingClass, "px-1.5 py-1")}>Steps</h3>
+      {steps.map((step) => (
+        <LibraryItem
+          key={step.kind}
+          {...step}
+          dropAt={dropAt}
+          onAdd={(position) => onAdd(step.kind, position)}
+        />
+      ))}
+      {finish && <LibraryItem {...FINISH_STEP} dropAt={dropAt} onAdd={onAddFinish} />}
+    </section>
+  );
+}
+
 /** The ghost hangs from the pointer near its header's left edge, where a canvas block is grabbed. */
 const GHOST_GRAB: GrabOffset = { x: 28, y: 15 };
 
@@ -222,7 +259,7 @@ function LibraryItem({
 }: {
   name: string;
   detail: ReactNode;
-  kind: FlowBlock["kind"];
+  kind: LibraryKind;
   agent?: AgentDefinition;
   /** An Agent without a model is listed but can't be placed. */
   disabled?: boolean;
@@ -230,7 +267,7 @@ function LibraryItem({
   onAdd: (position?: BlockPosition) => void;
 }) {
   const [ghost, setGhost] = useState<Ghost | null>(null);
-  const { Icon } = BLOCK_KINDS[kind];
+  const Icon = kind === "finish" ? Flag : BLOCK_KINDS[kind].Icon;
   const icon = (
     <span
       aria-hidden
@@ -286,12 +323,13 @@ function LibraryItem({
   );
 }
 
-const LIBRARY_ICON_TILES: Record<FlowBlock["kind"], string> = {
+const LIBRARY_ICON_TILES: Record<LibraryKind, string> = {
   agent: "bg-brand-soft text-link",
   human: "border border-dashed bg-muted text-muted-foreground",
   wait: "border border-dashed bg-muted text-muted-foreground",
   continuation: "border bg-muted text-brand-cyan",
   condition: "border bg-muted text-muted-foreground",
+  finish: "border bg-muted text-muted-foreground",
 };
 
 /** The ghost previews the block a drop would add as it reads before it is connected. */
@@ -299,7 +337,6 @@ const UNCONNECTED: FlowGraph = {
   blocks: [],
   connections: [],
   flowInput: { position: { x: 0, y: 0 }, targetBlockIds: [] },
-  finish: { position: { x: 800, y: 0 }, endings: [] },
 };
 
 /** A compact, non-interactive preview of the block a library drag would add. */
@@ -310,10 +347,17 @@ function BlockGhost({
   agent,
 }: {
   ghost: Ghost;
-  kind: FlowBlock["kind"];
+  kind: LibraryKind;
   name: string;
   agent: AgentDefinition | undefined;
 }) {
+  const ghostClass = cn(
+    "pointer-events-none fixed z-50 pb-1.5 shadow-lift",
+    ghost.overCanvas ? "opacity-90" : "opacity-50",
+  );
+  const style = { left: ghost.left, top: ghost.top };
+  if (kind === "finish")
+    return createPortal(<FinishPreview className={ghostClass} style={style} />, document.body);
   const { label, value } = blockReference(newBlock(UNCONNECTED, kind, agent), {
     graph: UNCONNECTED,
     agents: agent ? [agent] : [],
@@ -324,11 +368,8 @@ function BlockGhost({
       name={name}
       label={label}
       value={value}
-      className={cn(
-        "pointer-events-none fixed z-50 pb-1.5 shadow-lift",
-        ghost.overCanvas ? "opacity-90" : "opacity-50",
-      )}
-      style={{ left: ghost.left, top: ghost.top }}
+      className={ghostClass}
+      style={style}
     />,
     document.body,
   );

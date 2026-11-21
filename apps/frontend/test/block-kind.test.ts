@@ -44,7 +44,6 @@ const flowWith = (
     blocks,
     connections,
     flowInput: { position, targetBlockIds: [] },
-    finish: { position, endings: [] },
   },
   agents,
 });

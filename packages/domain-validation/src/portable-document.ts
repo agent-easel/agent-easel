@@ -345,8 +345,14 @@ function checkFlowShape(flow: unknown, reader: FormatReader, issues: Issues) {
   const fields = checkFields(flow, "flow", FLOW_FIELDS, [], subject, issues);
   if (!fields) return;
   if ("graph" in fields) {
-    const graphFields = reader.finish ? [...GRAPH_FIELDS, "finish"] : GRAPH_FIELDS;
-    const graph = checkFields(fields.graph, "flow.graph", graphFields, [], subject, issues);
+    const graph = checkFields(
+      fields.graph,
+      "flow.graph",
+      GRAPH_FIELDS,
+      reader.finish ? ["finish"] : [],
+      subject,
+      issues,
+    );
     checkList(graph?.blocks, "flow.graph.blocks", subject, issues).forEach((block, index) =>
       checkBlockShape(
         block,
@@ -639,7 +645,7 @@ function flowDocument(
 ): Result<ImportedDocument> {
   const agents = decodeAgents(entries);
   if (!agents.ok) return agents;
-  const flow = decodeFlow(fields.flow as Record<string, unknown>, reader);
+  const flow = decodeFlow(fields.flow as Record<string, unknown>);
   if (!flow.ok) return flow;
   return {
     ok: true,
@@ -657,7 +663,7 @@ function flowIssue(entry: ValidationIssue, blocks: readonly unknown[]): Validati
 }
 
 /** The Flow domain validator over the file's Flow, with each Agent block's key in its id's place. */
-function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result<PortableFlow> {
+function decodeFlow(flow: Record<string, unknown>): Result<PortableFlow> {
   const blocks = flowBlocks(flow);
   const validated = validateCreateFlow(
     {
@@ -685,7 +691,7 @@ function decodeFlow(flow: Record<string, unknown>, reader: FormatReader): Result
       flowInput: graph!.flowInput as FlowInputBlock,
       connections: graph!.connections,
       blocks: graph!.blocks.map(portableBlock),
-      ...(reader.finish ? { finish: graph!.finish as FlowFinishBlock } : {}),
+      ...(graph!.finish && { finish: graph!.finish as FlowFinishBlock }),
     },
   };
   const oversized = flowSizeIssue(decoded);

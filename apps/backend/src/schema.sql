@@ -1,6 +1,6 @@
 -- Generated current-schema snapshot. Do not edit by hand.
 -- Regenerate: pnpm --filter @t3-factory/backend schema:update
--- Newest applied migration: worker_title_dispatch
+-- Newest applied migration: optional_finish_block
 
 CREATE TABLE "activation_messages" (
   activation_id TEXT PRIMARY KEY REFERENCES run_activations(id),

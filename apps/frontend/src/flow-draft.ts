@@ -40,7 +40,6 @@ const unloaded: FlowContent = {
     blocks: [],
     connections: [],
     flowInput: { position: { x: 40, y: 50 }, targetBlockIds: [] },
-    finish: { position: { x: 800, y: 0 }, endings: [] },
   },
 };
 

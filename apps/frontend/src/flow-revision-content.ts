@@ -1,4 +1,4 @@
-import type { AgentDefinition, FlowBlock } from "@t3-factory/contracts";
+import type { AgentDefinition, FlowBlock, FlowFinishBlock } from "@t3-factory/contracts";
 import { effectiveExits } from "@t3-factory/domain-validation";
 import { BLOCK_KINDS } from "./block-kind.ts";
 import type { FlowContent } from "./flow-draft.ts";
@@ -48,13 +48,26 @@ function blockSettings(block: FlowBlock, agent: AgentDefinition | undefined): Re
   }
 }
 
+function finishLines(finish: FlowFinishBlock): RevisionLine[] {
+  return [
+    "  Finish",
+    `    Position  ${positionLabel(finish.position)}`,
+    ...finish.endings.flatMap((ending) => [
+      revisionLine(`    Ending  ${ending.name || "Unnamed ending"}`, ending.id),
+      ...textLines("Description", ending.description),
+      `    Output  ${ending.output}`,
+      ...textLines("Output description", ending.outputDescription),
+    ]),
+  ];
+}
+
 /** The Flow revision's workspace, positioned Blocks with their settings, and every wire. */
 export function comparedFlowLines(
   { name, workspace, graph }: FlowContent,
   agents: readonly AgentDefinition[],
 ): RevisionLine[] {
   const blocks = new Map(graph.blocks.map((block) => [block.id, block]));
-  const endings = new Map(graph.finish.endings.map((ending) => [ending.id, ending.name]));
+  const endings = new Map(graph.finish?.endings.map((ending) => [ending.id, ending.name]));
   const byAgentId = new Map(agents.map((agent) => [agent.id, agent]));
   const agentFor = (block: FlowBlock) =>
     block.kind === "agent" && block.agentId ? byAgentId.get(block.agentId) : undefined;
@@ -78,14 +91,7 @@ export function comparedFlowLines(
       `    Position  ${positionLabel(block.position)}`,
       ...blockSettings(block, agentFor(block)),
     ]),
-    "  Finish",
-    `    Position  ${positionLabel(graph.finish.position)}`,
-    ...graph.finish.endings.flatMap((ending) => [
-      revisionLine(`    Ending  ${ending.name || "Unnamed ending"}`, ending.id),
-      ...textLines("Description", ending.description),
-      `    Output  ${ending.output}`,
-      ...textLines("Output description", ending.outputDescription),
-    ]),
+    ...(graph.finish ? finishLines(graph.finish) : []),
     "",
     "Connections",
     ...graph.flowInput.targetBlockIds.map((id) =>

@@ -101,7 +101,7 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
     blocks: [first, second, missing],
     connections: [connection("first", "done", "second")],
   };
-  const saved = assertOk(
+  assertOk(
     await factory.updateFlow(created.id, {
       name: created.name,
       expectedRevision: created.revision,
@@ -132,7 +132,6 @@ it("an exported Flow bundles a shared Agent once and gives a block without a sav
           name: "Two passes",
           graph: {
             ...graph,
-            finish: saved.graph.finish,
             blocks: [
               portable(first, "agent-1"),
               portable(second, "agent-1"),

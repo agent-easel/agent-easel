@@ -47,7 +47,7 @@ async function saveDeliveredFlow(
         flowInput: { ...flow.graph.flowInput, targetBlockIds: [worker.id, legacyAgent.id] },
       }),
       finish: {
-        ...flow.graph.finish,
+        position: { x: 700, y: 60 },
         endings: [
           {
             id: "delivered",
@@ -195,7 +195,7 @@ test("a Block with the stored ID finish keeps its own settings next to Finish", 
   await app.screenshot("finish-legacy-review-approve");
 });
 
-test("endings wired in Studio keep a renamed ending's wire and drop a removed ending's wire after Save and reload", async ({
+test("a Finish block added from the library takes endings wired in Studio, keeping a renamed ending's wire and dropping a removed ending's wire after Save and reload", async ({
   app,
   screen,
   browser,
@@ -209,7 +209,9 @@ test("endings wired in Studio keep a renamed ending's wire and drop a removed en
     y: 60,
   });
   await app.open(`/studio/flows/${flowId}`);
-  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await expect(finishBlock(screen)).toHaveCount(0);
+  await app.screenshot("finish-absent-library-offers-finish");
+  await screen.getByRole("button", "Add Finish", { exact: true }).tap();
   await expect(screen.getByText("No endings yet", { exact: true })).toBeVisible();
   await addEnding(screen, "Shipped");
   await ending(screen, "Shipped").getByRole("radio", "Required").tap();
@@ -250,8 +252,8 @@ test("endings wired in Studio keep a renamed ending's wire and drop a removed en
   await expect(ending(screen, "Dropped")).toHaveCount(0);
   await app.screenshot("finish-renamed-ending-after-reload");
   const saved = await readFlow(app.baseUrl, flowId);
-  const [delivered] = saved.graph.finish.endings;
-  expect(saved.graph.finish.endings).toEqual([
+  const [delivered] = saved.graph.finish?.endings ?? [];
+  expect(saved.graph.finish?.endings).toEqual([
     {
       id: delivered?.id,
       name: "Delivered",
@@ -268,6 +270,31 @@ test("endings wired in Studio keep a renamed ending's wire and drop a removed en
       targetEndingId: delivered?.id,
     },
   ]);
+});
+
+test("removing the Finish block takes its endings and their wires, and the library offers Finish again", async ({
+  app,
+  screen,
+}) => {
+  // Arrange
+  const flowId = await saveDeliveredFlow(app.baseUrl, "Ship without a Finish");
+  await app.open(`/studio/flows/${flowId}`);
+  await screen.getByRole("button", "Fit Flow", { exact: true }).tap();
+  await screen.getByRole("button", "Finish", { exact: true }).tap();
+  await app.screenshot("finish-settings-remove-block");
+
+  // Act
+  await screen.getByRole("button", "Remove block", { exact: true }).tap();
+
+  // Assert
+  await expect(finishBlock(screen)).toHaveCount(0);
+  await expect(screen.getByRole("button", "Add Finish", { exact: true })).toBeVisible();
+  await screen.getByRole("button", "Save", { exact: true }).tap();
+  await expectFlowSaved(screen);
+  const saved = await readFlow(app.baseUrl, flowId);
+  expect(saved.graph.finish).toBeUndefined();
+  expect(saved.graph.connections).toEqual([]);
+  await app.screenshot("finish-removed-library-offers-finish");
 });
 
 test("a started Run has no result yet, then shows the reached ending on the canvas, inspector, overview and Timeline", async ({

@@ -1,4 +1,9 @@
-import type { CanvasGraph, WireSource } from "@t3-factory/flow-layout";
+import {
+  AUTHORING_DIMENSIONS,
+  defaultFinishPosition,
+  type CanvasGraph,
+  type WireSource,
+} from "@t3-factory/flow-layout";
 import {
   CONDITION_OTHERWISE_ID,
   FINISH_BLOCK_ID,
@@ -169,7 +174,7 @@ export function canConnect(graph: FlowGraph, source: WireSource, target: WireTar
     return (
       source.kind === "exit" &&
       target.targetBlockId === FINISH_BLOCK_ID &&
-      graph.finish.endings.some((ending) => ending.id === target.targetEndingId)
+      !!graph.finish?.endings.some((ending) => ending.id === target.targetEndingId)
     );
   const block = graph.blocks.find((b) => b.id === target.targetBlockId);
   if (!block) return false;
@@ -233,6 +238,30 @@ export function removeBlock(graph: FlowGraph, blockId: string): FlowGraph {
   };
 }
 
+export function addFinish(graph: FlowGraph, position?: BlockPosition): FlowGraph {
+  if (graph.finish) return graph;
+  const placed =
+    position ??
+    defaultFinishPosition(graph, {
+      flowInputWidth: AUTHORING_DIMENSIONS.flowInput.width,
+      blockWidth: AUTHORING_DIMENSIONS.block.width,
+    });
+  return { ...graph, finish: { position: placed, endings: [] } };
+}
+
+export function removeFinish({ finish: _removed, ...graph }: FlowGraph): FlowGraph {
+  return { ...graph, connections: graph.connections.filter((c) => c.targetEndingId === undefined) };
+}
+
+function withEndings(
+  graph: FlowGraph,
+  edit: (endings: readonly FlowEnding[]) => readonly FlowEnding[],
+): FlowGraph {
+  return graph.finish
+    ? { ...graph, finish: { ...graph.finish, endings: edit(graph.finish.endings) } }
+    : graph;
+}
+
 export function addEnding(graph: FlowGraph): FlowGraph {
   const ending: FlowEnding = {
     id: uid(),
@@ -241,26 +270,18 @@ export function addEnding(graph: FlowGraph): FlowGraph {
     output: "none",
     outputDescription: "",
   };
-  return { ...graph, finish: { ...graph.finish, endings: [...graph.finish.endings, ending] } };
+  return withEndings(graph, (endings) => [...endings, ending]);
 }
 
 export function replaceEnding(graph: FlowGraph, next: FlowEnding): FlowGraph {
-  return {
-    ...graph,
-    finish: {
-      ...graph.finish,
-      endings: graph.finish.endings.map((ending) => (ending.id === next.id ? next : ending)),
-    },
-  };
+  return withEndings(graph, (endings) =>
+    endings.map((ending) => (ending.id === next.id ? next : ending)),
+  );
 }
 
 export function removeEnding(graph: FlowGraph, endingId: string): FlowGraph {
   return {
-    ...graph,
-    finish: {
-      ...graph.finish,
-      endings: graph.finish.endings.filter((ending) => ending.id !== endingId),
-    },
+    ...withEndings(graph, (endings) => endings.filter((ending) => ending.id !== endingId)),
     connections: graph.connections.filter(
       (c) => c.targetBlockId !== FINISH_BLOCK_ID || c.targetEndingId !== endingId,
     ),
@@ -298,7 +319,7 @@ function recipientNames(graph: FlowGraph) {
   const names = new Map<string, string>();
   for (const block of graph.blocks) if (!names.has(block.id)) names.set(block.id, block.name);
   const endings = new Map<string, string>();
-  for (const ending of graph.finish.endings)
+  for (const ending of graph.finish?.endings ?? [])
     if (!endings.has(ending.id)) endings.set(ending.id, ending.name);
   return ({ targetBlockId, targetEndingId }: FlowConnection) => {
     if (targetEndingId === undefined) return names.get(targetBlockId);
@@ -338,11 +359,14 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
     ...current.blocks,
     ...before.blocks.filter((b) => !has(after, b.id) && !has(current, b.id)),
   ];
-  const endings = restoredEndings(
-    current.finish.endings,
-    before.finish.endings,
-    after.finish.endings,
-  );
+  const finish = current.finish ?? (after.finish ? undefined : before.finish);
+  const endings = finish
+    ? restoredEndings(
+        current.finish?.endings ?? [],
+        before.finish?.endings ?? [],
+        after.finish?.endings ?? [],
+      )
+    : [];
   const exists = (id: string) => blocks.some((b) => b.id === id);
   const targetExists = ({ targetBlockId, targetEndingId }: FlowWire) =>
     targetEndingId !== undefined
@@ -350,7 +374,7 @@ export function undoRemoval(current: FlowGraph, before: FlowGraph, after: FlowGr
       : exists(targetBlockId);
   const restored = (graph: FlowGraph, wire: FlowWire) =>
     !hasWire(after, wire) && !hasWire(graph, wire) && targetExists(wire);
-  let next: FlowGraph = { ...current, blocks, finish: { ...current.finish, endings } };
+  let next: FlowGraph = { ...current, blocks, ...(finish && { finish: { ...finish, endings } }) };
   for (const targetBlockId of before.flowInput.targetBlockIds) {
     const wire: FlowWire = { source: { kind: "flow-input" }, targetBlockId };
     if (restored(next, wire)) next = addWire(next, wire);
