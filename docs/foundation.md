@@ -176,6 +176,14 @@ issues. Storage failures are sanitized at this boundary. Validate untrusted inpu
 keep transports limited to translating requests and responses. Product routes are shared
 by host and approved clients, with explicit [host-only boundaries](desktop-and-clients.md#two-listeners-two-trust-domains).
 
+## Anonymous product analytics
+
+The backend validates each analytics event against a closed catalog before buffering it. The catalog accepts only the values declared for that event. The backend supplies the installation hash and build metadata itself. `app.started` records whether First-run setup is still pending and reports only the bucketed totals for Projects, active Flows and active Agents.
+
+The backend creates its random installation identity in `FACTORY_HOME/telemetry-id` with owner-only permissions when analytics is available. The UUID stays on disk and only its SHA-256 hash is sent. A damaged or inaccessible identity disables delivery. Events are held in memory, and retries keep the same event UUID and timestamp so PostHog can deduplicate them. Delivery uses a bounded background queue and a one-second best-effort flush at shutdown.
+
+Packaged Release and Beta builds use the public PostHog EU project token embedded at packaging time. `FACTORY_POSTHOG_KEY` overrides that token and `FACTORY_TELEMETRY_HOST` overrides the default `https://t3factory.app/ingest` destination. An absent token disables delivery. Source runs and development packages require `FACTORY_TELEMETRY_ENABLED=true` to send, and `FACTORY_TELEMETRY_ENABLED=false` always disables delivery. Factory disables PostHog person profiles and GeoIP enrichment on each event. The production project must also discard client IP data from stored events. [PostHog data storage controls](https://posthog.com/docs/privacy/data-storage#discarding-ip-addresses-at-project-level)
+
 ## Live delivery
 
 Run detail, sidebar navigation, shared T3 connection status, [theme colors](t3-integration.md#theme-colors),

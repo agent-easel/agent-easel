@@ -58,7 +58,14 @@ export async function openFactory(options: FactoryOptions): Promise<Factory> {
     await runtime.dispose();
     throw error;
   }
-  const { runtime: reports, startTextRun, setRuntimeBackendUrl, live, ...operations } = service;
+  const {
+    runtime: reports,
+    startTextRun,
+    setRuntimeBackendUrl,
+    live,
+    telemetry: _telemetry,
+    ...operations
+  } = service;
   const facade = promiseOperations(runtime, operations);
   let closing: Promise<void> | undefined;
   return {

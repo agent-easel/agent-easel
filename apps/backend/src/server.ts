@@ -752,6 +752,7 @@ export interface ServerOptions {
   readonly discordApiUrl?: FactoryOptions["discordApiUrl"];
   /** Reported by the handshake; desktop builds pass their release, source runs say `source`. */
   readonly applicationVersion?: string;
+  readonly telemetry?: Omit<NonNullable<FactoryOptions["telemetry"]>, "home">;
   /** Another release's protocol range, for compatibility tests of mixed installations. */
   readonly protocol?: Pick<ProtocolDescriptor, "protocol" | "minimumPeerProtocol">;
   /** The desktop server's updater, which approved clients may operate. */
@@ -765,6 +766,7 @@ function factoryOptions(config: Configuration, options: ServerOptions): FactoryO
   return {
     databasePath: config.databasePath,
     credentialsDirectory: config.credentialsDirectory,
+    telemetry: { ...options.telemetry, home: config.home },
     ...(options.reportingStateDirectory
       ? { reportingStateDirectory: options.reportingStateDirectory }
       : {}),

@@ -735,6 +735,7 @@ async function start() {
     {
       FACTORY_UI_DIRECTORY: uiDirectory,
       FACTORY_APPLICATION_VERSION: app.getVersion(),
+      FACTORY_DESKTOP_PACKAGED: String(app.isPackaged),
     },
     (state) => {
       if (state.state !== "running") closeLive("The Factory server stopped.");

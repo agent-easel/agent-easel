@@ -43,6 +43,7 @@ import { failure } from "./result.ts";
 import { makeLiveChanges } from "./live-changes.ts";
 import { makeLiveStreams, type LiveStreams } from "./live-streams.ts";
 import { makeTriggers } from "./triggers/triggers.ts";
+import { makeTelemetry, telemetryCount, type Telemetry } from "./telemetry.ts";
 
 /** Public Effect service shared by HTTP, background workers and controlled-clock tests. */
 export class FactoryService extends Context.Service<
@@ -54,6 +55,7 @@ export class FactoryService extends Context.Service<
     readonly startTextRun: (input: unknown) => Effect.Effect<Result<RunDetail>>;
     readonly setRuntimeBackendUrl: (url: string) => void;
     readonly live: LiveStreams;
+    readonly telemetry: Telemetry;
   }
 >()("factory/FactoryService") {}
 
@@ -99,6 +101,11 @@ export const makeFactoryService = (
     const intervalMs = options.connectionRetryMs ?? 5_000;
     const changes = makeLiveChanges();
     const sql = yield* SqlClient.SqlClient;
+    const telemetry = yield* makeTelemetry(
+      dirname(options.databasePath),
+      options.applicationVersion,
+      options.telemetry,
+    );
     const connection = yield* makeConnection(
       { connection: t3.connection, contract: t3.contract, close: () => t3.close() },
       intervalMs,
@@ -337,6 +344,7 @@ export const makeFactoryService = (
     const guarded = guardOperations(operations);
     const factory: FactoryService["Service"] = {
       ...guarded,
+      telemetry,
       awaitWorkerTitles: () => runner.awaitWorkerTitles(),
       runtime: runtimeReports,
       startTextRun: (input) => guard(runner.startTextRun(input)),
@@ -388,5 +396,28 @@ export const makeFactoryService = (
     yield* chatActions.recover;
     // Automatic reporting reads Runs through the Runner, so it starts once the Runner owns them.
     yield* Effect.forkScoped(reportCapture.run);
+    if (telemetry.enabled) {
+      yield* Effect.gen(function* () {
+        const [usage] = yield* sql<{
+          setupCompleted: number;
+          projects: number;
+          flows: number;
+          agents: number;
+        }>`SELECT
+          (SELECT completed FROM first_run_setup WHERE singleton = 1) AS setupCompleted,
+          (SELECT count(*) FROM projects) AS projects,
+          (SELECT count(*) FROM flows WHERE removed_at IS NULL) AS flows,
+          (SELECT count(*) FROM agents WHERE removed_at IS NULL) AS agents`;
+        if (!usage) return;
+        yield* telemetry.record("app.started", {
+          isFirstRun: usage.setupCompleted !== 1,
+          projectCount: telemetryCount(usage.projects),
+          flowCount: telemetryCount(usage.flows),
+          agentCount: telemetryCount(usage.agents),
+        });
+      }).pipe(
+        Effect.catch(() => Effect.logWarning("Anonymous analytics could not record startup.")),
+      );
+    }
     return factory;
   });
